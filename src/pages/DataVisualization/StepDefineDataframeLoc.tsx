@@ -9,7 +9,7 @@ import CircleIcon from "@mui/icons-material/Circle";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { DataFrame, fromCSV, IDataFrame, ISeries } from "data-forge";
-import { useSetAtom, atom } from "jotai";
+import { useSetAtom, atom, useAtom } from "jotai";
 import React from "react";
 import { SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
 import { DataVizLoadDFSchema } from "../../common/schemas/DataVizLoadDFSchema";
@@ -30,8 +30,11 @@ import {
   atomDataVizCurrentStep,
   atomDataVizDF,
   atomDataVizDFDTypes,
+  atomDataVizLoadSettings,
+  atomNivoGraphDataVariablesSchema,
   atomOfAtomMRIData,
   atomOfAtomsDataVizSubsetOperations,
+  defaultNivoGraphDataVariablesSchema,
   loadDataFrameDataVizDefaults,
 } from "../../stores/DataFrameVisualizationStore";
 import { atomDataVizModuleSnackbar } from "../../stores/SnackbarStore";
@@ -142,15 +145,18 @@ function handleCleanRawDF(df: DataFrame | IDataFrame) {
 function StepDefineDataframeLoc() {
   const { api } = window;
   const setDataVizCurrentStep = useSetAtom(atomDataVizCurrentStep);
+  const [dataVizLoadSettings, setDataVizLoadSettings] = useAtom(atomDataVizLoadSettings);
   const setDataVizDF = useSetAtom(atomDataVizDF);
   const setDataVizDFDTypes = useSetAtom(atomDataVizDFDTypes);
   const setDataVizSubsetOps = useSetAtom(atomOfAtomsDataVizSubsetOperations);
   const setDataVizSnackbar = useSetAtom(atomDataVizModuleSnackbar);
+  const setGraphDataVariables = useSetAtom(atomNivoGraphDataVariablesSchema);
   const setCurrentMRIViewSubject = useSetAtom(atomCurrentMRIViewSubject);
   const setAtomsMRIData = useSetAtom(atomOfAtomMRIData);
 
   const { control, handleSubmit } = useForm({
-    defaultValues: loadDataFrameDataVizDefaults,
+    // defaultValues: loadDataFrameDataVizDefaults,
+    defaultValues: dataVizLoadSettings,
     resolver: YupResolverFactoryBase(DataVizLoadDFSchema),
   });
 
@@ -215,9 +221,8 @@ function StepDefineDataframeLoc() {
         return;
       }
       MetadataDF = fromCSV(fetchMetaDF.data, { dynamicTyping: true });
+      console.log("Step 'Define Runtime Envs' -- MetadataDF: ", MetadataDF.toArray());
     } // End of if statement
-
-    console.log("Step 'Define Runtime Envs' -- MetadataDF: ", MetadataDF.toArray());
 
     /**
      * Part 3: Merge the ExploreASL and Metadata dataframes
@@ -245,10 +250,25 @@ function StepDefineDataframeLoc() {
 
     console.log("Step 'Define Runtime Envs' -- Merged Dataframe: ", mergedDF.toArray());
 
+    if (mergedDF.count() === 0 && MetadataDF != null) {
+      setDataVizSnackbar({
+        severity: "error",
+        title: "Invalid Merge with Metadata",
+        message: [
+          "The ExploreASL and Metadata spreadsheet do not have any overlapping subjects.",
+          "Ensure that the Metadata spreadsheet contains a SUBJECT column with the same subjects as the ExploreASL spreadsheet.",
+          "Subject names are based on the subject folders located within the rawdata folder.",
+        ],
+      });
+      return;
+    }
+
     /**
      * Part 4: Clean the dataframe and set the fields
      */
     const [dtypeMapping, cleanDF] = handleCleanRawDF(mergedDF);
+    setDataVizLoadSettings(values); // Save the settings that were used to load the dataframe
+    setGraphDataVariables(defaultNivoGraphDataVariablesSchema); // Reset the graph data variables
     setDataVizDF(cleanDF); // Set the new dataframe
     setDataVizDFDTypes(dtypeMapping); // Set the new dataframe dtypes
     setDataVizSubsetOps([]); // Reset subset operations

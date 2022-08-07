@@ -63,14 +63,18 @@ function EASLScatterplot() {
 
   async function handleLoadSubject(subjectToLoad: string) {
     if (subjectToLoad === currentMRIViewSubject) return; // Early return if the subject is already loaded
+
+    // console.log(`Loading subject ${subjectToLoad}`);
+    // console.log(`Loading subject with dataLoadSettings: ${JSON.stringify(dataLoadSettings)}`);
+
     const popPath = api.path.asPath(dataLoadSettings.StudyRootPath, "derivatives", "ExploreASL", "Population");
     if (!(await api.path.filepathExists(popPath.path))) return;
 
-    console.log("handleLoadSubject -- found popPath: ", popPath.path);
+    // console.log("handleLoadSubject -- found popPath: ", popPath.path);
     const qCBFFiles = await api.path.glob(popPath.path, `qCBF_${subjectToLoad}_*.nii*`);
     if (qCBFFiles.length === 0) return;
 
-    console.log("handleLoadSubject -- found qCBFFiles: ", qCBFFiles);
+    // console.log("handleLoadSubject -- found qCBFFiles: ", qCBFFiles);
     const niftiData = await api.invoke("NIFTI:load", qCBFFiles[0].path);
     if (!niftiData) return;
 
@@ -79,7 +83,7 @@ function EASLScatterplot() {
     const coronalData = niftiToNivoCoronal(niftiData);
     const sagittalData = niftiToNivoSagittal(niftiData);
 
-    console.log("Determined the maximum value of the data:", maximumValue);
+    // console.log("Determined the maximum value of the data:", maximumValue);
 
     setMRIData([atom(axialData), atom(coronalData), atom(sagittalData)]);
     setMRIDataStats({ max: maximumValue, min: minimumValue });

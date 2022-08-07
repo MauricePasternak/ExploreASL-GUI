@@ -154,7 +154,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
               <ListItemIcon>
                 <CircleIcon sx={{ fontSize: "0.75rem" }} />
               </ListItemIcon>
-              <ListItemText>Processing Parameters</ListItemText>
+              <ListItemText>Run ExploreASL</ListItemText>
             </ListItemButton>
             <ListItemButton
               disableGutters
@@ -170,7 +170,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
               <ListItemIcon>
                 <CircleIcon sx={{ fontSize: "0.75rem" }} />
               </ListItemIcon>
-              <ListItemText>Processing Parameters</ListItemText>
+              <ListItemText>Prepare A Re-Run</ListItemText>
             </ListItemButton>
           </List>
         </Collapse>

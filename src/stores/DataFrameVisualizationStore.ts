@@ -135,15 +135,17 @@ export const atomDataVizSubsetDF = atom<DataFrame>(get => {
  */
 export const atomNivoGraphType = atom<NivoGraphType>("Scatterplot");
 
-/**
- * Atom for the nivo plot variables schema.
- */
-export const atomNivoGraphDataVariablesSchema = atom<NivoPlotVariablesSchema>({
+export const defaultNivoGraphDataVariablesSchema = {
   YAxisVar: "",
   XAxisVar: "",
   GroupingVar: "",
-  HoverVariables: [],
-});
+  HoverVariables: [] as string[],
+};
+
+/**
+ * Atom for the nivo plot variables schema.
+ */
+export const atomNivoGraphDataVariablesSchema = atom<NivoPlotVariablesSchema>(defaultNivoGraphDataVariablesSchema);
 
 export const atomCurrentMRIViewSubject = atom<string>("");
 export const atomMRIDataStats = atom<{ max: number; min: number }>({ max: 0, min: 0 });
