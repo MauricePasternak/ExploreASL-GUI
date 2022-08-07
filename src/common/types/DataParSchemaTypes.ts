@@ -1,0 +1,1 @@
+export type DataParTabOption = "ProcessParameters" | "SequenceParameters" | "StudyParameters"
