@@ -1,8 +1,9 @@
 {
   "name": "ExploreASLJS",
   "productName": "ExploreASLJS",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A user interface for the analysis of arterial spin labeling (ASL) images",
+  "repository": "https://github.com/MauricePasternak/ExploreASLJS",
   "main": ".webpack/main",
   "scripts": {
     "start": "electron-forge start",
@@ -44,7 +45,8 @@
           "name": "@electron-forge/maker-squirrel",
           "config": {
             "name": "ExploreASLJS",
-            "iconUrl": "https://raw.githubusercontent.com/MauricePasternak/ExploreASLJS/main/src/assets/appIcons/ExploreASLIcon.ico"
+            "iconUrl": "https://raw.githubusercontent.com/MauricePasternak/ExploreASLJS/main/src/assets/appIcons/ExploreASLIcon.ico",
+            "setupIcon": "src/assets/appIcons/ExploreASLIcon.ico"
           }
         },
         {
@@ -71,6 +73,16 @@
           "config": {
             "icon": "src/assets/appIcons/ExploreASLIcon.png",
             "overwrite": true
+          }
+        }
+      ],
+      "publishers": [
+        {
+          "name": "@electron-forge/publisher-github",
+          "config": {
+            "owner": "MauricePasternak",
+            "repo": "ExploreASLJS",
+            "prerelease": true
           }
         }
       ],

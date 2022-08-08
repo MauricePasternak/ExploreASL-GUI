@@ -20,7 +20,7 @@ import {
   formatErrorsForDisplay,
   parseNestedFormattedYupErrors,
   YupResolverFactoryBase,
-  YupValidate
+  YupValidate,
 } from "../../common/utilityFunctions/formFunctions";
 import { stringArrToRegex } from "../../common/utilityFunctions/stringFunctions";
 import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
@@ -82,7 +82,7 @@ function DataParPage() {
       setDataParSnackbar({
         severity: "success",
         title: "Data Parameters saved successfully",
-        message: ["Saved the data parameters to:", dataParFilePath_1],
+        message: ["Saved the data parameters to:", api.path.osSpecificString(dataParFilePath_1)],
       });
     } catch (error) {
       setDataParSnackbar({

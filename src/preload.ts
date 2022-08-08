@@ -43,6 +43,14 @@ const pathOperations = {
     };
   },
   /**
+   * Resolves a filepath to be os-specific.
+   * @param filePath Filepath to be converted.
+   * @returns A string representation of the filepath that is correct to the operating system.
+   */
+  osSpecificString: (...filePath: string[]) => {
+    return new Path(...filePath).toString(true);
+  },
+  /**
    *
    * @param filePath Filepath to be assessed.
    * @returns A boolean of whether the filepath exists or not.

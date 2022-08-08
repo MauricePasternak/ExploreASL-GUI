@@ -1,16 +1,16 @@
-import React, { useCallback, useState, useEffect } from "react";
-import TextField, { TextFieldProps } from "@mui/material/TextField";
-import { Controller, FieldValues, Path } from "react-hook-form";
-import { useDebouncedCallback } from "use-debounce";
+import ClearIcon from "@mui/icons-material/Clear";
 import Box from "@mui/material/Box";
 import Button, { ButtonProps } from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
-import ClearIcon from "@mui/icons-material/Clear";
 import FormHelperText from "@mui/material/FormHelperText";
+import IconButton from "@mui/material/IconButton";
+import TextField, { TextFieldProps } from "@mui/material/TextField";
 import { OpenDialogOptions } from "electron";
-import { RHFFieldAndFieldStateType, RHFControlAndNameType } from "../../common/types/formTypes";
+import React, { useCallback, useEffect, useState } from "react";
+import { Controller, FieldValues, Path } from "react-hook-form";
+import { useDebouncedCallback } from "use-debounce";
+import { RHFFieldAndFieldStateType, RHFInterDepBaseProps, RHFTriggerType } from "../../common/types/formTypes";
 
-type ControlledFilepathTextFieldBaseProps = {
+type ControlledInterDepFPTextFieldBaseProps = {
   filepathType: "file" | "dir" | "other" | "all";
   includeButton?: boolean;
   dialogOptions?: OpenDialogOptions;
@@ -23,24 +23,32 @@ type ControlledFilepathTextFieldBaseProps = {
 // To avoid conflict with the "field" prop coming from the Controller render
 type RestrictedTextFieldProps = Omit<TextFieldProps, "name" | "value" | "onChange" | "onBlur">;
 
-type ControlledFilepathTextFieldProps<
+type InterDepControlledFilepathTextFieldProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledFilepathTextFieldBaseProps & RHFFieldAndFieldStateType<TValues, TName> & RestrictedTextFieldProps;
+> = RHFFieldAndFieldStateType<TValues, TName> & // field and fieldState
+  RHFTriggerType<TValues, TName> & // trigger and triggerTarget
+  ControlledInterDepFPTextFieldBaseProps &
+  RestrictedTextFieldProps;
 
 type ControlledFilepathTextFieldPropsNoField<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = Omit<ControlledFilepathTextFieldProps<TValues, TName>, "field" | "fieldState">;
+> = Omit<InterDepControlledFilepathTextFieldProps<TValues, TName>, "field" | "fieldState">;
 
 type RHFFilepathTextFieldProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledFilepathTextFieldPropsNoField<TValues, TName> & RHFControlAndNameType<TValues, TName>;
+> = ControlledFilepathTextFieldPropsNoField<TValues, TName> & RHFInterDepBaseProps<TValues, TName>;
 
-export function ControlledFilepathTextField<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
+export function InterDepControlledFilepathTextField<
+  TValues extends FieldValues,
+  TName extends Path<TValues> = Path<TValues>
+>({
   field,
   fieldState,
+  trigger,
+  triggerTarget,
   variant,
   helperText,
   buttonProps,
@@ -51,24 +59,11 @@ export function ControlledFilepathTextField<TValues extends FieldValues, TName e
   buttonText = "Browse",
   debounceTime = 500,
   ...textFieldProps
-}: ControlledFilepathTextFieldProps<TValues, TName>) {
+}: InterDepControlledFilepathTextFieldProps<TValues, TName>) {
   const { api } = window;
   const [innerVal, setInnerVal] = useState(field.value);
   const hasError = !!fieldState.error;
   const errorMessage = hasError ? fieldState.error?.message : "";
-  const debouncedHandleChange = useDebouncedCallback(field.onChange, debounceTime);
-
-  // console.log(`RHFFilepathTextField with name ${field.name} has field.value and innerValue: `, field.value, innerVal);
-
-  /**
-   * Necessary workaround for cases where a manual `reset` is called on the form.
-   * This will force the component to update.
-   */
-  useEffect(() => {
-    if (field.value !== innerVal) {
-      setInnerVal(field.value);
-    }
-  }, [field.value]);
 
   // Setup default dialog options if a dialogOptions object was not provided and a button is to be presented
   if (!dialogOptions && includeButton) {
@@ -84,11 +79,33 @@ export function ControlledFilepathTextField<TValues extends FieldValues, TName e
 
   // Sanity checks regarding the dialogOptions object
   if (dialogOptions && filepathType === "file" && dialogOptions.properties.includes("openDirectory")) {
-    throw new Error("RHFFilepathTextField: Cannot use openDirectory with filepathType=file");
+    throw new Error("RHFInterdepFilepathTextField: Cannot use openDirectory with filepathType=file");
   }
   if (dialogOptions && filepathType === "dir" && dialogOptions.properties.includes("openFile")) {
-    throw new Error("RHFFilepathTextField: Cannot use openFile with filepathType=dir");
+    throw new Error("RHFInterdepFilepathTextField: Cannot use openFile with filepathType=dir");
   }
+
+  /**
+   * useEffect handler for responding to external changes to `field.value`
+   * 1) Updates the internal value if it doesn't match field.value
+   * 2) Triggers the validation of other fields
+   */
+  useEffect(() => {
+    if (field.value === innerVal) return;
+
+    // Update self and trigger target validation
+    console.log(`InterdepFPTextfield ${field.name} is syncing with field.value and triggering ${triggerTarget}`);
+    setInnerVal(field.value);
+    trigger(triggerTarget);
+  }, [field.value]);
+
+  /**
+   * Debounced callback for updating the field.value and triggering validation in targets
+   */
+  const debouncedHandleChange = useDebouncedCallback((values: any) => {
+    field.onChange(values);
+    trigger(triggerTarget);
+  }, debounceTime);
 
   /**
    * Main handler for communicating changes to the field and updating the current inner value.
@@ -233,7 +250,11 @@ function RHFFilepathTextField<TValues extends FieldValues, TName extends Path<TV
       name={name}
       render={({ field, fieldState }) => {
         return (
-          <ControlledFilepathTextField field={field} fieldState={fieldState} {...controlledFilepathTextFieldProps} />
+          <InterDepControlledFilepathTextField
+            field={field}
+            fieldState={fieldState}
+            {...controlledFilepathTextFieldProps}
+          />
         );
       }}
     />

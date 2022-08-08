@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import { isEmpty as lodashIsEmpty } from "lodash";
 import React from "react";
 import { Controller, FieldValues, Path } from "react-hook-form";
-import { ControllerFieldPropType, UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFFieldAndFieldStateType, RHFControlAndNameType } from "../../common/types/formTypes";
 import DebouncedInput from "../DebouncedComponents/DebouncedInput";
 
 export type ControlledCardInputMappingBaseProps = {
@@ -23,7 +23,7 @@ export type ControlledCardInputMappingBaseProps = {
 export type ControlledCardInputMappingProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledCardInputMappingBaseProps & ControllerFieldPropType<TValues, TName>;
+> = ControlledCardInputMappingBaseProps & RHFFieldAndFieldStateType<TValues, TName>;
 
 type ControlledCardInputMappingPropsNoField<
   TValues extends FieldValues,
@@ -33,7 +33,7 @@ type ControlledCardInputMappingPropsNoField<
 export type RHFCardInputMappingProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = UseControllerPropsBaseType<TValues, TName> & ControlledCardInputMappingPropsNoField<TValues, TName>;
+> = RHFControlAndNameType<TValues, TName> & ControlledCardInputMappingPropsNoField<TValues, TName>;
 
 function ControlledCardInputMapping<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
   field,

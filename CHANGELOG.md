@@ -8,6 +8,25 @@ Dates are in format: `YYYY-MM-DD`
 
 ---
 
+## [0.2.1] - 2022-08-08
+
+Additional information added to README and reformatted RunImportModule visuals.
+
+### Fixed
+
+- Fixed a bug where saving a DataPar.json file in Define Parameters resulting in snackbar feedback that did not respect OS-specific filepath delimiters
+
+### Added
+
+- Added some initial RHFInterDep components to begin addressing the issues of interdependent fields w.r.t validation.
+- Started adding some configuration for the auto-update feature in `package.json`.
+
+### Changed
+
+- Reformatted the RunImportModule aesthetic to be more in line with the previous steps (i.e card header).
+
+---
+
 ## [0.2.0] - 2022-08-07
 
 Important bugfixes and successful deployment on Windows 10.

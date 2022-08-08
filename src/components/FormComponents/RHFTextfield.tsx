@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import TextField, { TextFieldProps } from "@mui/material/TextField";
 import { Controller, FieldValues, Path } from "react-hook-form";
 import { useDebouncedCallback } from "use-debounce";
-import { ControllerFieldPropType, FieldValueType, UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFFieldAndFieldStateType, RHFFieldValueType, RHFControlAndNameType } from "../../common/types/formTypes";
 import IconButton from "@mui/material/IconButton";
 import ClearIcon from "@mui/icons-material/Clear";
 
@@ -10,11 +10,11 @@ type ControlledTextFieldBaseProps<TValues extends FieldValues, TName extends Pat
   /**
    * Optional function which converts the field value to the component's inner string value.
    */
-  handleFieldToInner?: (fieldValue: FieldValueType<TValues, TName>, ...args: any[]) => string;
+  handleFieldToInner?: (fieldValue: RHFFieldValueType<TValues, TName>, ...args: any[]) => string;
   /**
    * Optional function which converts the component's inner string value to the field value.
    */
-  handleInnerToField?: (innerValue: string, ...args: any[]) => FieldValueType<TValues, TName>;
+  handleInnerToField?: (innerValue: string, ...args: any[]) => RHFFieldValueType<TValues, TName>;
   /**
    * The number of milliseconds to delay the update of the textfield's inner value to the overhead form.
    * @default 1000 (1 second)
@@ -34,7 +34,7 @@ type RestrictedTextFieldProps = Omit<TextFieldProps, "name" | "value" | "onChang
 type ControlledTextFieldProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledTextFieldBaseProps<TValues, TName> & ControllerFieldPropType<TValues, TName> & RestrictedTextFieldProps;
+> = ControlledTextFieldBaseProps<TValues, TName> & RHFFieldAndFieldStateType<TValues, TName> & RestrictedTextFieldProps;
 
 type ControlledTextFieldPropsNoField<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> = Omit<
   ControlledTextFieldProps<TValues, TName>,
@@ -44,7 +44,7 @@ type ControlledTextFieldPropsNoField<TValues extends FieldValues, TName extends 
 type RHFTextfieldProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledTextFieldPropsNoField<TValues, TName> & UseControllerPropsBaseType<TValues, TName>;
+> = ControlledTextFieldPropsNoField<TValues, TName> & RHFControlAndNameType<TValues, TName>;
 
 function ControlledTextField<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
   field,

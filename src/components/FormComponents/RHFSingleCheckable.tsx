@@ -5,11 +5,11 @@ import Checkbox, { CheckboxProps } from "@mui/material/Checkbox";
 import Box from "@mui/material/Box";
 import FormHelperText from "@mui/material/FormHelperText";
 import FormControlLabel, { FormControlLabelProps } from "@mui/material/FormControlLabel";
-import { ControllerFieldPropType, UseControllerPropsBaseType, FieldValueType } from "../../common/types/formTypes";
+import { RHFFieldAndFieldStateType, RHFControlAndNameType, RHFFieldValueType } from "../../common/types/formTypes";
 
 interface ControlledSwitchProps<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> {
-  valWhenChecked: FieldValueType<TValues, TName>;
-  valWhenUnchecked: FieldValueType<TValues, TName>;
+  valWhenChecked: RHFFieldValueType<TValues, TName>;
+  valWhenUnchecked: RHFFieldValueType<TValues, TName>;
   label: React.ReactNode;
   helperText?: string;
   isSwitch?: true;
@@ -17,8 +17,8 @@ interface ControlledSwitchProps<TValues extends FieldValues, TName extends Path<
 }
 
 interface ControlledCheckboxProps<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> {
-  valWhenChecked: FieldValueType<TValues, TName>;
-  valWhenUnchecked: FieldValueType<TValues, TName>;
+  valWhenChecked: RHFFieldValueType<TValues, TName>;
+  valWhenUnchecked: RHFFieldValueType<TValues, TName>;
   label: React.ReactNode;
   helperText?: string;
   isSwitch?: false;
@@ -38,7 +38,7 @@ type ControlledCheckableBaseProps<
 type ControlledCheckableProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledCheckableBaseProps<TValues, TName> & ControllerFieldPropType<TValues, TName>;
+> = ControlledCheckableBaseProps<TValues, TName> & RHFFieldAndFieldStateType<TValues, TName>;
 
 type ControlledCheckablesPropsNoField<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> = Omit<
   ControlledCheckableProps<TValues, TName>,
@@ -48,7 +48,7 @@ type ControlledCheckablesPropsNoField<TValues extends FieldValues, TName extends
 type RHFCheckablesProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = UseControllerPropsBaseType<TValues, TName> & ControlledCheckablesPropsNoField<TValues, TName>;
+> = RHFControlAndNameType<TValues, TName> & ControlledCheckablesPropsNoField<TValues, TName>;
 
 function ControlledCheckable<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
   field,

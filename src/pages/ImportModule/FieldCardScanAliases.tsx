@@ -11,9 +11,9 @@ import Typography from "@mui/material/Typography";
 import React from "react";
 import { Controller } from "react-hook-form";
 import { ImportScanType, ImportSchemaType } from "../../common/types/ImportSchemaTypes";
-import { UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFControlAndNameType } from "../../common/types/formTypes";
 
-type FieldCardScanAliasesProps = UseControllerPropsBaseType<ImportSchemaType, "MappingScanAliases">;
+type FieldCardScanAliasesProps = RHFControlAndNameType<ImportSchemaType, "MappingScanAliases">;
 
 function FieldCardScanAliases({ control, name }: FieldCardScanAliasesProps) {
   return (

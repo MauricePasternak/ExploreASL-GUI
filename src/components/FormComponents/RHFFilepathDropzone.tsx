@@ -14,7 +14,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FormHelperText from "@mui/material/FormHelperText";
-import { ControllerFieldPropType, FieldValueType, UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFFieldAndFieldStateType, RHFFieldValueType, RHFControlAndNameType } from "../../common/types/formTypes";
 import FastIsEqual from "fast-deep-equal";
 
 type ControlledFilepathDropzoneBaseProps<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> = {
@@ -54,11 +54,11 @@ type ControlledFilepathDropzoneBaseProps<TValues extends FieldValues, TName exte
   /**
    * A function to use when converting from the form field value into this component's string array inner value.
    */
-  handleFieldToInnerVal?: (fieldValue: FieldValueType<TValues, TName>, ...args: any[]) => string[];
+  handleFieldToInnerVal?: (fieldValue: RHFFieldValueType<TValues, TName>, ...args: any[]) => string[];
   /**
    * A function to use when converting from this component's inner string array value to the form field value.
    */
-  handleInnerValToField?: (innerVal: string[], ...args: any[]) => FieldValueType<TValues, TName>;
+  handleInnerValToField?: (innerVal: string[], ...args: any[]) => RHFFieldValueType<TValues, TName>;
   /**
    * An optional additional function to use to filter out unwanted file paths. Is expected to take in a string filepath (full absolute path)
    * and return true if the filepath should be included in the list of file paths.
@@ -91,7 +91,7 @@ type ControlledFilepathDropzoneBaseProps<TValues extends FieldValues, TName exte
 type ControlledFilepathDropzoneProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledFilepathDropzoneBaseProps<TValues, TName> & ControllerFieldPropType<TValues, TName> & BoxProps;
+> = ControlledFilepathDropzoneBaseProps<TValues, TName> & RHFFieldAndFieldStateType<TValues, TName> & BoxProps;
 
 type ControlledFilepathDropzonePropsNoField<
   TValues extends FieldValues,
@@ -101,7 +101,7 @@ type ControlledFilepathDropzonePropsNoField<
 type RHFFilepathDropzoneProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledFilepathDropzonePropsNoField<TValues, TName> & UseControllerPropsBaseType<TValues, TName>;
+> = ControlledFilepathDropzonePropsNoField<TValues, TName> & RHFControlAndNameType<TValues, TName>;
 
 const customGradient =
   "linear-gradient(60deg, hsl(224, 85%, 66%), hsl(269, 85%, 66%), hsl(314, 85%, 66%), hsl(359, 85%, 66%), hsl(44, 85%, 66%), hsl(89, 85%, 66%), hsl(134, 85%, 66%), hsl(179, 85%, 66%))";

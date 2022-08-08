@@ -5,7 +5,7 @@ import InputLabel from "@mui/material/InputLabel";
 import MenuItem, { MenuItemProps } from "@mui/material/MenuItem";
 import Select, { SelectProps } from "@mui/material/Select";
 import { Controller, FieldValues, Path, PathValue } from "react-hook-form";
-import { ControllerFieldPropType, UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFFieldAndFieldStateType, RHFControlAndNameType } from "../../common/types/formTypes";
 
 type RHFSelectOptionBase<
   TValues extends FieldValues,
@@ -39,7 +39,9 @@ export type ControlledSelectProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>,
   TValue = PathValue<TValues, TName>
-> = ControlledSelectPropsBase<TValues, TName, TValue> & ControllerFieldPropType<TValues, TName> & RestrictedSelectProps;
+> = ControlledSelectPropsBase<TValues, TName, TValue> &
+  RHFFieldAndFieldStateType<TValues, TName> &
+  RestrictedSelectProps;
 
 type ControlledSelectPropsNoField<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> = Omit<
   ControlledSelectProps<TValues, TName>,
@@ -49,7 +51,7 @@ type ControlledSelectPropsNoField<TValues extends FieldValues, TName extends Pat
 export type RHFSelectProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = UseControllerPropsBaseType<TValues, TName> & ControlledSelectPropsNoField<TValues, TName>;
+> = RHFControlAndNameType<TValues, TName> & ControlledSelectPropsNoField<TValues, TName>;
 
 export function ControlledSelect<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
   field,

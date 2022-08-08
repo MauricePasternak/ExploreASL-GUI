@@ -6,7 +6,7 @@ import FormLabel from "@mui/material/FormLabel";
 import Radio, { RadioProps } from "@mui/material/Radio";
 import RadioGroup from "@mui/material/RadioGroup";
 import { Controller, FieldValues, Path } from "react-hook-form";
-import { ControllerFieldPropType, UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFFieldAndFieldStateType, RHFControlAndNameType } from "../../common/types/formTypes";
 
 type RestrictedFormControlLabelRadioProps = Omit<FormControlLabelProps, "label" | "control" | "onChange">;
 
@@ -26,7 +26,7 @@ type ControlledRadioButtonsBaseProps = {
 type ControlledRadioButtonsProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledRadioButtonsBaseProps & ControllerFieldPropType<TValues, TName>;
+> = ControlledRadioButtonsBaseProps & RHFFieldAndFieldStateType<TValues, TName>;
 
 type ControlledRadioButtonsPropsNoField<
   TValues extends FieldValues,
@@ -36,7 +36,7 @@ type ControlledRadioButtonsPropsNoField<
 type RHFRatioButtonsProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = UseControllerPropsBaseType<TValues, TName> & ControlledRadioButtonsPropsNoField<TValues, TName>;
+> = RHFControlAndNameType<TValues, TName> & ControlledRadioButtonsPropsNoField<TValues, TName>;
 
 function ControlledRadioButtons<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
   field,

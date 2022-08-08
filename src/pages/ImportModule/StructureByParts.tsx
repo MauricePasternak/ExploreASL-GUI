@@ -10,10 +10,10 @@ import Typography from "@mui/material/Typography";
 import { dropRight as lodashDropRight, range as lodashRange } from "lodash";
 import React, { useEffect } from "react";
 import { useController, UseFormTrigger, useWatch } from "react-hook-form";
-import { UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFControlAndNameType } from "../../common/types/formTypes";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 
-type StructureByPartsProps = UseControllerPropsBaseType<ImportSchemaType, "SourcedataStructure"> & {
+type StructureByPartsProps = RHFControlAndNameType<ImportSchemaType, "SourcedataStructure"> & {
   trigger: UseFormTrigger<ImportSchemaType>;
 };
 
@@ -24,6 +24,7 @@ function StructureByParts({ control, name, trigger }: StructureByPartsProps) {
 
   // Allow for reaction to errors in the StudyRootPath field
   const studyRootPath = useWatch({ control: control, name: "StudyRootPath" });
+
   useEffect(() => {
     if (!studyRootPath) return;
     trigger("SourcedataStructure");
@@ -49,7 +50,7 @@ function StructureByParts({ control, name, trigger }: StructureByPartsProps) {
 
   return (
     <Stack rowGap={5}>
-      <FormControl>
+      <FormControl variant="standard">
         <FormLabel>Number of Folders between Sourcedata and DICOM files</FormLabel>
         <Slider
           value={field.value.length}

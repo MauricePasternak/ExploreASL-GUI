@@ -19,6 +19,13 @@ import {
   ImportModuleChannelName,
 } from "../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
+import Card from "@mui/material/Card";
+import CardHeader from "@mui/material/CardHeader";
+import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
+import Avatar from "@mui/material/Avatar";
+import SvgIcon from "@mui/material/SvgIcon";
+import CardContent from "@mui/material/CardContent";
+import Divider from "@mui/material/Divider";
 
 type StepRunImportModuleProps = RHFMultiStepReturnProps<ImportSchemaType>;
 
@@ -191,46 +198,60 @@ function StepRunImportModule({
   return (
     <form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
       <Box mt={3} pb={5}>
-        <Typography variant="h5">Run ExploreASL Import Module</Typography>
-        <Box display="flex" justifyContent="center">
-          {procStatus === "Running" && <CircularProgress />}
-        </Box>
-        <Box>
-          <Typography variant="subtitle1">ExploreASL Progress Feedback</Typography>
-          <IPCQuill channelName={ImportModuleChannelName} />
-        </Box>
-        <ButtonGroup variant="contained" fullWidth color="inherit">
-          <Button
-            className="ImportSubmoduleResumeButton"
-            disabled={procStatus !== "Paused" || isSubmitting}
-            onClick={handleResume}
-            endIcon={<PlayCircleOutlineIcon />}
-            variant="contained"
-            color="success"
-          >
-            Resume
-          </Button>
-          <Button
-            className="ImportSubmodulePauseButton"
-            disabled={procStatus !== "Running" || isSubmitting}
-            onClick={handlePause}
-            endIcon={<PauseCircleOutlineIcon />}
-            variant="contained"
-            color="warning"
-          >
-            Pause
-          </Button>
-          <Button
-            className="ImportSubmoduleKillButton"
-            disabled={procStatus === "Standby" || isSubmitting}
-            onClick={handleTerminate}
-            endIcon={<StopCircleIcon />}
-            variant="contained"
-            color="error"
-          >
-            Terminate
-          </Button>
-        </ButtonGroup>
+        <Card>
+          <CardHeader
+            title={<Typography variant="h4">Run Import Module</Typography>}
+            subheader={<Typography>Run ExploreASL's Import Module and view progress</Typography>}
+            avatar={
+              procStatus === "Running" ? (
+                <CircularProgress />
+              ) : (
+                <Avatar>
+                  <SvgIcon component={ExploreASLIcon} inheritViewBox />
+                </Avatar>
+              )
+            }
+          />
+          <Divider />
+          <CardContent>
+            <Box>
+              <Typography variant="subtitle1">ExploreASL Progress Feedback</Typography>
+              <IPCQuill channelName={ImportModuleChannelName} />
+            </Box>
+            <ButtonGroup variant="contained" fullWidth color="inherit">
+              <Button
+                className="ImportSubmoduleResumeButton"
+                disabled={procStatus !== "Paused" || isSubmitting}
+                onClick={handleResume}
+                endIcon={<PlayCircleOutlineIcon />}
+                variant="contained"
+                color="success"
+              >
+                Resume
+              </Button>
+              <Button
+                className="ImportSubmodulePauseButton"
+                disabled={procStatus !== "Running" || isSubmitting}
+                onClick={handlePause}
+                endIcon={<PauseCircleOutlineIcon />}
+                variant="contained"
+                color="warning"
+              >
+                Pause
+              </Button>
+              <Button
+                className="ImportSubmoduleKillButton"
+                disabled={procStatus === "Standby" || isSubmitting}
+                onClick={handleTerminate}
+                endIcon={<StopCircleIcon />}
+                variant="contained"
+                color="error"
+              >
+                Terminate
+              </Button>
+            </ButtonGroup>
+          </CardContent>
+        </Card>
         <RHFMultiStepButtons
           currentStep={currentStep}
           setCurrentStep={setCurrentStep}

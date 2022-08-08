@@ -7,7 +7,7 @@ import FormLabel from "@mui/material/FormLabel";
 import Switch, { SwitchProps } from "@mui/material/Switch";
 import React, { useEffect, useState } from "react";
 import { Controller, FieldError, FieldValues, Path, PathValue } from "react-hook-form";
-import { ControllerFieldPropType, UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFFieldAndFieldStateType, RHFControlAndNameType } from "../../common/types/formTypes";
 import FastIsEqual from "fast-deep-equal";
 
 type RestrictedFormControlLabelCheckablesProps = Omit<
@@ -47,7 +47,7 @@ type ControlledCheckablesProps<
   TCheckable extends "switch" | "checkbox",
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledCheckablesBaseProps<TCheckable, TValues, TName> & ControllerFieldPropType<TValues, TName>;
+> = ControlledCheckablesBaseProps<TCheckable, TValues, TName> & RHFFieldAndFieldStateType<TValues, TName>;
 
 type ControlledCheckablesPropsNoField<
   TCheckable extends "switch" | "checkbox",
@@ -59,7 +59,7 @@ type RHFCheckableProps<
   TCheckable extends "switch" | "checkbox",
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = UseControllerPropsBaseType<TValues, TName> & ControlledCheckablesPropsNoField<TCheckable, TValues, TName>;
+> = RHFControlAndNameType<TValues, TName> & ControlledCheckablesPropsNoField<TCheckable, TValues, TName>;
 
 export function ControlledCheckables<
   TCheckable extends "switch" | "checkbox",

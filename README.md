@@ -134,6 +134,11 @@ that they are using `yarn` as their package manager.
 
 Head on over to the [Releases](https://github.com/MauricePasternak/ExploreASLJS/releases) and download the appropriate version for your operating system
 
+#### For Windows
+
+
+
+
 ### Uninstallation Instructions For Users
 
 #### For Windows
@@ -162,21 +167,63 @@ Go to the Applications folder and drag & drop the ExploreASLJS.app application t
 
 ### Import Your Dataset
 
+As a first step, you'll have to convert the output from your DICOM scanner(s) into proper BIDS format.
+This is accomplish via a 3-step procedure (first step shown below):
+
+1. You'll have to define the information contained at each folder level. Do folder names correspond to subjects, scans, etc?
+2. For visits and sessions, you'll have the option to specify the alias name output. For scans, you'll have to specify which scan folders pertain to which imaging modality
+3. You'll specify the nature/context of the ASL acquistion(s) (i.e. how many volumes are contained in a series, are they an alternating control-label set, etc.). You should specify a separate context for every different vendor/sequence used.
+
+You'll then be brought to the run page where you can get text feedback as to the import progress occurring. You'll have the option to pause/resume/terminate the import process as well.
+
 <img src="./src/assets/img/READMEImages/ImportModule.png" style="width: max(400px, 50%)" />
-<br />
-<br />
 
 ### Define Processing Parameters
 
+As a second step, you'll have to define the overall (global) settings that should be taken into account when processing a dataset. In general these fall under 3 subcategories:
+
+1. The study parameters (where is the study, what is its name, which subjects should be processed specifically, etc.)
+2. The ASL sequence parameters. While this is somewhat redundant from what the Import section did earlier, it is important to understand that a lot datasets contain anonymized data. Anonymization sometimes removes crucial fields needed for CBF quantification. Therefore, by defining values to fallback on, you would allow ExploreASL to continue with the analysis.
+3. The ExploreASL pipeline parameters (which atlases to use when quantifying CBF ROIs, motion control, etc.)
+
+When done, your values will be saved as a data parameters file (DataPar.json) at the root of your dataset. This is the central file that ExploreASL uses to analyze your dataset. If you'd like to change a particular parameter at a later time, you can always re-load any existing DataPar.json file, change what values you wish, and save it again.
+
 <img src="./src/assets/img/READMEImages/DefineDataParametersModule.png" style="width: max(400px, 50%)"  />
-<br />
-<br />
 
 ### Run ExploreASL
+
+In the third step, you can specify the datasets you'd like processed. Each is assumed to have been already imported and have a valid DataPar.json file at its root. Some neat features you should be aware of:
+
+- You can make the most of your workstation by alloting additional computer cores that will process studies & subjects within those studies in parallel.
+- As with the Import module, you'll be given the option to pause/resume/terminate studies being run independently. Forceful temrination will always result in an error, as the program gives feedback for steps that were or were not completed.
+- As steps complete, you'll also be given visual feedback for your quality control procedures.
+
+In a separate tab, you'll have the option to indicate any particular modules/subjects/exact steps that you'd like to re-run for a given study.
+
+Run the ExploreASL modules as per your needs and proceed to the next step for any study which has successfully completed the Population module.
 
 <img src="./src/assets/img/READMEImages/RunExploreASLModule.png" style="width: max(400px, 50%)"  />
 
 ### Visualize Your Dataset
+
+In the optional & final step, you can visualize your completed studies. As with the Import Module, there are first some preparatory steps to complete:
+
+1. You'll have to specify which study should be visualized, the atlases containing your ROIs, and with the added benefit of merging your own metadata spread sheet.
+2. The result of the previous step will form a single spreadsheet in-memory and you'll have to clarify the type of variable that each column contains. Namely, Categorical or Continuous. This assists the program in ascertaining which variables to suggest for each axis when plotting.
+
+You'll now have access to the main plotting page (example image below). There are two main plot types supported:
+
+- Scatterplot, for Continuous by Continuous comparisons
+- Swarmplot, for Categorical by Continuous comparisons
+
+Regardless, the point-like nature of these plots will allow you to click on datapoints and load the CBF image corresponding to that particular point. Perform QC analysis as required.
+
+Additional features to keep in mind:
+
+- Both Scatterplot and Swarmplot allow for significant customization of plot visuals, if you're looking to get a graph out for a figure. Unfortunately, at the current time there is no image export feature available, so you'll have to settle for a screenshot.
+- By default, only axes values are added to the data hover tooltip. However, you can specify additional variables to include if you're using this program for an interactive presentation.
+- You can hover over a particular pixel in the CBF image to get its CBF value.
+- For large datasets, you can subset the data to single-datapoint precision using a combination of subsetting filters.
 
 <img src="./src/assets/img/READMEImages/DataVisualizationModule.png" style="width: max(700px, 60%)" />
 
@@ -192,12 +239,14 @@ Go to the Applications folder and drag & drop the ExploreASLJS.app application t
 - [x] Add Image Feedback during processing.
 - [x] Support multiple ASL Import contexts. \*
 - [x] Create a Data Visualization Module.
+- [x] Add plot settings for plot legends (i.e. legend text fontsize, positioning, etc.) within the DataVisualization Module.
 - [ ] Add help information on the steps within the Data Visualization Module.
-- [ ] Add plot settings for plot legends (i.e. legend text fontsize, positioning, etc.) within the DataVisualization Module.
 - [ ] Add plot settings for renaming axis main labels within the Data Visualization Module.
 - [ ] Add Multiprocessing Capability to the Import Module as well. \*\*
 - [ ] Add a submodule to Process Studies where users can pin-point change the JSON sidecars of individual subjects/visits/sessions.
 - [ ] Add auto-update capability to the software so that users don't have to manually install new versions.
+- [ ] Allow for plots to be exported as PNG files in the Data Visualization Module.
+- [ ] Allow for the Data Visualization module to save/load a JSON parameters file to skip the hassle of repeating steps and re-adjusting sliders each time. Just load the json file and have it all done for you.
 
 \* This is only partially the case. The GUI goes through extensive logical gymnastics to get ExploreASL to import different subsets of your dataset. The official ExploreASL application does not support this as of version 1.10.0.
 

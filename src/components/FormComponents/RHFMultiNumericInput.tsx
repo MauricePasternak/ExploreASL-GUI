@@ -5,7 +5,7 @@ import FormLabel from "@mui/material/FormLabel";
 import { isNumber as lodashIsNumber } from "lodash";
 import React from "react";
 import { Controller, FieldValues, Path } from "react-hook-form";
-import { ControllerFieldPropType, UseControllerPropsBaseType } from "../../common/types/formTypes";
+import { RHFFieldAndFieldStateType, RHFControlAndNameType } from "../../common/types/formTypes";
 import DebouncedInput from "../DebouncedComponents/DebouncedInput";
 
 type ControlledMultiNumericInputBaseProps = {
@@ -18,7 +18,7 @@ type ControlledMultiNumericInputBaseProps = {
 type ControlledMultiNumericInputProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledMultiNumericInputBaseProps & ControllerFieldPropType<TValues, TName>;
+> = ControlledMultiNumericInputBaseProps & RHFFieldAndFieldStateType<TValues, TName>;
 
 type ControlledMultiNumericInputPropsNoField<
   TValues extends FieldValues,
@@ -28,7 +28,7 @@ type ControlledMultiNumericInputPropsNoField<
 type RHFMultiNumericInputProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = ControlledMultiNumericInputPropsNoField<TValues, TName> & UseControllerPropsBaseType<TValues, TName>;
+> = ControlledMultiNumericInputPropsNoField<TValues, TName> & RHFControlAndNameType<TValues, TName>;
 
 const isNumberArray = (values: any): values is number[] => {
   return values && Array.isArray(values) && values.every(val => lodashIsNumber(val));
