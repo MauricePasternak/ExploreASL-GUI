@@ -1,9 +1,9 @@
 module.exports = [
   // Add support for native node modules
-  {
-    test: /\.node$/,
-    use: "node-loader",
-  },
+  // {
+  //   test: /\.node$/,
+  //   use: "node-loader",
+  // },
   {
     test: /\.(m?js|node)$/,
     parser: { amd: false },
@@ -11,6 +11,7 @@ module.exports = [
       loader: "@vercel/webpack-asset-relocator-loader",
       options: {
         outputAssetBase: "native_modules",
+        debugLog: true,
       },
     },
   },

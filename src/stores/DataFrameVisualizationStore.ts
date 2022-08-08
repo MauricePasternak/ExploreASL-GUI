@@ -10,6 +10,7 @@ import {
 import { LoadEASLDataFrameSchema, NivoGraphType, NivoPlotVariablesSchema } from "../common/types/DataVizSchemaTypes";
 import {
   NivoHeatmapData,
+  NivoLegendProps,
   NivoScatterPlotProps,
   NivoScatterPlotUpdateOp,
   NivoSwarmPlotProps,
@@ -206,6 +207,8 @@ export const atomEASLSwarmplotSettings = atom<NivoSwarmPlotProps>({
     axisLegendTextColor: "#333",
 
     gridLineWidth: 1,
+
+    legendTextFontSize: 14,
   },
 });
 
@@ -214,6 +217,28 @@ export const atomSetEASLSwarmplotSettings = atom(null, (get, set, update: NivoSw
   const newSettings = lodashSet(settings, update.path, update.value);
   set(atomEASLSwarmplotSettings, { ...newSettings }); // Needs a copy...why?
 });
+
+const EASLScatterPlotLegend: NivoLegendProps = {
+  anchor: "right",
+  direction: "column",
+  justify: false,
+  translateX: 130,
+  translateY: 0,
+  itemsSpacing: 5,
+  symbolSize: 12,
+  itemWidth: 100,
+  itemHeight: 12,
+  itemDirection: "left-to-right",
+  symbolShape: "square",
+  effects: [
+    {
+      on: "hover",
+      style: {
+        itemOpacity: 0.7,
+      },
+    },
+  ],
+};
 
 export const atomEASLScatterplotSettings = atom<NivoScatterPlotProps>({
   margins: { top: 40, right: 130, bottom: 60, left: 90 },
@@ -254,7 +279,10 @@ export const atomEASLScatterplotSettings = atom<NivoScatterPlotProps>({
     axisLegendTextColor: "#333",
 
     gridLineWidth: 1,
+
+    legendTextFontSize: 18,
   },
+  legends: [EASLScatterPlotLegend],
 });
 
 export const atomSetEASLScatterplotSettings = atom(null, (get, set, update: NivoScatterPlotUpdateOp) => {

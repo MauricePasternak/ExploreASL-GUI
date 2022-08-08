@@ -25,6 +25,8 @@ function SwarmPlotVisualsSettings() {
   const EASLPlotSettings = useAtomValue(atomEASLSwarmplotSettings);
   const setEASLPlotSettings = useSetAtom(atomSetEASLSwarmplotSettings);
 
+  // TODO: Add settings to allow for renaming axis labels & logic to reset names when an axis variable is changed
+
   return (
     <Card elevation={1} sx={{ margin: 0.5, pr: 1 }}>
       <CardHeader

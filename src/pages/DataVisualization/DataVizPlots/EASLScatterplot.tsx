@@ -122,21 +122,22 @@ function EASLScatterplot() {
       }}
       legends={[
         {
-          anchor: "right",
-          direction: "column",
-          justify: false,
-          translateX: 118,
-          translateY: 0,
-          itemWidth: 100,
-          itemHeight: 12,
-          itemsSpacing: 5,
-          itemDirection: "left-to-right",
-          symbolSize: 12,
+          anchor: scatterplotSettings.legends[0].anchor,
+          direction: scatterplotSettings.legends[0].direction,
+          justify: true,
+          translateX: scatterplotSettings.legends[0].translateX,
+          translateY: scatterplotSettings.legends[0].translateY,
+          itemsSpacing: scatterplotSettings.legends[0].itemsSpacing,
+          symbolSize: scatterplotSettings.legends[0].symbolSize,
+          itemWidth: scatterplotSettings.legends[0].itemWidth,
+          itemHeight: scatterplotSettings.legends[0].itemHeight,
+          itemDirection: scatterplotSettings.legends[0].itemDirection,
+          symbolShape: "circle",
           effects: [
             {
               on: "hover",
               style: {
-                itemOpacity: 1,
+                itemOpacity: 0.7,
               },
             },
           ],
@@ -189,6 +190,11 @@ function EASLScatterplot() {
             },
           },
         },
+        legends: {
+          text: {
+            fontSize: scatterplotSettings.theme.legendTextFontSize,
+          }
+        }
       }}
       onClick={async ({ data }) => {
         if (!("SUBJECT" in data)) return;

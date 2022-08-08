@@ -7,6 +7,8 @@ import Collapse from "@mui/material/Collapse";
 import FormControl from "@mui/material/FormControl";
 import FormLabel from "@mui/material/FormLabel";
 import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
@@ -25,6 +27,8 @@ function ScatterPlotVisualsSettings() {
   const [expanded, setExpanded] = React.useState(true);
   const EASLPlotSettings = useAtomValue(atomEASLScatterplotSettings);
   const setEASLPlotSettings = useSetAtom(atomSetEASLScatterplotSettings);
+
+  // TODO: Add settings to allow for renaming axis labels & logic to reset names when an axis variable is changed
 
   return (
     <Card elevation={1} sx={{ margin: 0.5, pr: 1 }}>
@@ -71,7 +75,7 @@ function ScatterPlotVisualsSettings() {
               <ControlledLabelSlider
                 label="Size"
                 labelwidth="150px"
-                max={30}
+                max={50}
                 valueLabelDisplay="auto"
                 value={EASLPlotSettings.nodeSize}
                 onChange={(e, v) =>
@@ -87,7 +91,8 @@ function ScatterPlotVisualsSettings() {
               <ControlledLabelSlider
                 label="Left"
                 labelwidth="100px"
-                max={200}
+                min={-100}
+                max={500}
                 valueLabelDisplay="auto"
                 value={EASLPlotSettings.margins.left}
                 onChange={(e, v) =>
@@ -100,7 +105,8 @@ function ScatterPlotVisualsSettings() {
               <ControlledLabelSlider
                 label="Top"
                 labelwidth="100px"
-                max={200}
+                min={-100}
+                max={500}
                 valueLabelDisplay="auto"
                 value={EASLPlotSettings.margins.top}
                 onChange={(e, v) =>
@@ -113,7 +119,8 @@ function ScatterPlotVisualsSettings() {
               <ControlledLabelSlider
                 label="Right"
                 labelwidth="100px"
-                max={200}
+                min={-100}
+                max={500}
                 valueLabelDisplay="auto"
                 value={EASLPlotSettings.margins.right}
                 onChange={(e, v) =>
@@ -126,7 +133,8 @@ function ScatterPlotVisualsSettings() {
               <ControlledLabelSlider
                 label="Bottom"
                 labelwidth="100px"
-                max={200}
+                min={-100}
+                max={500}
                 valueLabelDisplay="auto"
                 value={EASLPlotSettings.margins.bottom}
                 onChange={(e, v) =>
@@ -366,6 +374,180 @@ function ScatterPlotVisualsSettings() {
                   })
                 }
               />
+            </FormControl>
+
+            <FormControl fullWidth>
+              <FormLabel>Legend Settings</FormLabel>
+
+              <Stack spacing={2} mt={2}>
+                <FormControl fullWidth>
+                  <InputLabel>Main Anchor</InputLabel>
+                  <Select
+                    fullWidth
+                    label="Main Anchor"
+                    value={EASLPlotSettings.legends[0].anchor}
+                    onChange={e => {
+                      setEASLPlotSettings({
+                        path: "legends.0.anchor",
+                        value: e.target.value as "top" | "bottom" | "left" | "right",
+                      });
+                    }}
+                  >
+                    <MenuItem value="top">Top</MenuItem>
+                    <MenuItem value="left">Left</MenuItem>
+                    <MenuItem value="bottom">Bottom</MenuItem>
+                    <MenuItem value="right">Right</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl fullWidth>
+                  <InputLabel>Legend Direction</InputLabel>
+                  <Select
+                    fullWidth
+                    label="Legend Direction"
+                    value={EASLPlotSettings.legends[0].direction}
+                    onChange={e => {
+                      setEASLPlotSettings({
+                        path: "legends.0.direction",
+                        value: e.target.value as "row" | "column",
+                      });
+                    }}
+                  >
+                    <MenuItem value="row">Row</MenuItem>
+                    <MenuItem value="column">Column</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl fullWidth>
+                  <InputLabel>Item Packing Order</InputLabel>
+                  <Select
+                    fullWidth
+                    label="Item Packing Order"
+                    value={EASLPlotSettings.legends[0].itemDirection}
+                    onChange={e => {
+                      setEASLPlotSettings({
+                        path: "legends.0.itemDirection",
+                        value: e.target.value as "left-to-right" | "right-to-left" | "top-to-bottom" | "bottom-to-top",
+                      });
+                    }}
+                  >
+                    <MenuItem value="left-to-right">Left-To-Right</MenuItem>
+                    <MenuItem value="right-to-left">Right-To-Left</MenuItem>
+                    <MenuItem value="top-to-bottom">Top-To-Bottom</MenuItem>
+                    <MenuItem value="bottom-to-top">Bottom-To-Top</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl>
+                  <ControlledLabelSlider
+                    label="Translate X"
+                    labelwidth="160px"
+                    valueLabelDisplay="auto"
+                    min={-300}
+                    max={300}
+                    value={EASLPlotSettings.legends[0].translateX}
+                    onChange={(e, v) =>
+                      setEASLPlotSettings({
+                        path: "legends.0.translateX",
+                        value: v as number,
+                      })
+                    }
+                  />
+                  <ControlledLabelSlider
+                    label="Translate Y"
+                    labelwidth="160px"
+                    valueLabelDisplay="auto"
+                    min={-300}
+                    max={300}
+                    value={EASLPlotSettings.legends[0].translateY}
+                    onChange={(e, v) =>
+                      setEASLPlotSettings({
+                        path: "legends.0.translateY",
+                        value: v as number,
+                      })
+                    }
+                  />
+                  <ControlledLabelSlider
+                    label="Items Spacing"
+                    labelwidth="160px"
+                    valueLabelDisplay="auto"
+                    min={0}
+                    max={300}
+                    value={EASLPlotSettings.legends[0].itemsSpacing}
+                    onChange={(e, v) =>
+                      setEASLPlotSettings({
+                        path: "legends.0.itemsSpacing",
+                        value: v as number,
+                      })
+                    }
+                  />
+
+                  <ControlledLabelSlider
+                    label="Legend Item Width"
+                    labelwidth="160px"
+                    valueLabelDisplay="auto"
+                    min={0}
+                    max={300}
+                    value={EASLPlotSettings.legends[0].itemWidth}
+                    onChange={(e, v) =>
+                      setEASLPlotSettings({
+                        path: "legends.0.itemWidth",
+                        value: v as number,
+                      })
+                    }
+                  />
+
+                  <ControlledLabelSlider
+                    label="Legend Item Height"
+                    labelwidth="160px"
+                    valueLabelDisplay="auto"
+                    min={0}
+                    max={300}
+                    value={EASLPlotSettings.legends[0].itemHeight}
+                    onChange={(e, v) =>
+                      setEASLPlotSettings({
+                        path: "legends.0.itemHeight",
+                        value: v as number,
+                      })
+                    }
+                  />
+                </FormControl>
+              </Stack>
+              <FormControl fullWidth sx={{ mt: 2 }}>
+                <FormLabel>Legend Symbol Properties</FormLabel>
+
+                <Stack spacing={2}>
+                  <ControlledLabelSlider
+                    label="Symbol Size"
+                    labelwidth="160px"
+                    valueLabelDisplay="auto"
+                    min={0}
+                    max={30}
+                    value={EASLPlotSettings.legends[0].symbolSize}
+                    onChange={(e, v) =>
+                      setEASLPlotSettings({
+                        path: "legends.0.symbolSize",
+                        value: v as number,
+                      })
+                    }
+                  />
+                </Stack>
+
+                <ControlledLabelSlider
+                  label="Label Font Size"
+                  labelwidth="160px"
+                  valueLabelDisplay="auto"
+                  min={0}
+                  max={50}
+                  value={EASLPlotSettings.theme.legendTextFontSize}
+                  onChange={(e, v) =>
+                    setEASLPlotSettings({
+                      path: "theme.legendTextFontSize",
+                      value: v as number,
+                    })
+                  }
+                />
+              </FormControl>
             </FormControl>
           </Stack>
         </CardContent>

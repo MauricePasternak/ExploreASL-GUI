@@ -12,6 +12,9 @@ import { reverse as reverseLodash } from "lodash";
 import { sleep } from "../common/utilityFunctions/sleepFunctions";
 import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
 
+declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
+
+
 // TYPES
 /**
  * The return type of backend handlers which alter the state of a child process.
@@ -43,7 +46,13 @@ let ntsuspend: null | ntSuspendModule;
 async function InitializeNtSuspend() {
   // Until Electron can support optional Dependencies imports, we have to comment the line out on Linux and Mac.
   // then comment it back in on Windows. UGH!
-  // ntsuspend = createRequire(import.meta.url)("ntsuspend");
+  try {
+    ntsuspend = createRequire(import.meta.url)("./win32-x64_lib.node");
+    // ntsuspend = await import("ntsuspend");
+    console.log("Initialized ntsuspend module.", ntsuspend);
+  } catch (error) {
+    console.warn("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\nFailed to initialize ntsuspend module. Error:\n", error);
+  }
 }
 
 function asyncTreeKill(
@@ -79,6 +88,7 @@ if (process.platform === "win32") {
     for (const childPid of [...pidsReverse, pid]) {
       try {
         const suspendResult = ntsuspend.suspend(childPid);
+        // const suspendResult = await suspend(childPid);
         exitsWereSuccess.push(suspendResult);
         console.log(`Attempted to pause child process with PID ${childPid}. Success? ${suspendResult}`);
       } catch (error) {
@@ -118,7 +128,9 @@ if (process.platform === "win32") {
     const pidsForward = getWindowsPIDS(pid);
     for (const childPid of [pid, ...pidsForward]) {
       try {
-        ntsuspend.resume(childPid);
+        const resumeResult = ntsuspend.resume(childPid);
+        // const resumeResult = await resume(childPid);
+        console.log(`Attempted to resume child process with PID ${childPid}. Success? ${resumeResult}`);
       } catch (error) {
         console.warn(`Could not resume PID #${childPid} due to error: ${error}`);
         errors.push(`Could not resume PID #${childPid} due to error: ${error}`);
@@ -146,7 +158,7 @@ if (process.platform === "win32") {
     }
   };
 } else {
-  ntsuspend = null;
+  // ntsuspend = null;
   handleProcessPauseWindows = null;
   handleProcessResumeWindows = null;
 }

@@ -12,6 +12,7 @@ import { RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
 import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
 import { createGUIMessage } from "../common/utilityFunctions/GUIMessageFunctions";
 import { buildSourceStructureJSON, buildStudyParJSON } from "./runImportModuleHelperFunctions";
+import { sleep } from "../common/utilityFunctions/sleepFunctions";
 
 export async function handleRunImportModule(
   event: IpcMainInvokeEvent,

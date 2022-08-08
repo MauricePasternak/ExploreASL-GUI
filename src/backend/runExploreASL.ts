@@ -12,14 +12,10 @@ import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import { RunEASLStudySetupType } from "../common/types/ProcessStudiesTypes";
 import { calculatePercent } from "../common/utilityFunctions/numberFunctions";
 import { sleep } from "../common/utilityFunctions/sleepFunctions";
-import { matlabEscapeBlockChar } from "../common/utilityFunctions/stringFunctions";
+import { matlabEscapeBlockChar, Regex } from "../common/utilityFunctions/stringFunctions";
 import { Lock } from "../common/utilityFunctions/threadingFunctions";
 import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
-import {
-  calculateWorkload,
-  createRuntimeEnvironment,
-  getMATLABPathAndVersion,
-} from "./runExploreASLHelperFunctions";
+import { calculateWorkload, createRuntimeEnvironment, getMATLABPathAndVersion } from "./runExploreASLHelperFunctions";
 
 export async function handleRunExploreASL(
   event: IpcMainInvokeEvent,
@@ -242,15 +238,21 @@ export async function handleRunExploreASL(
   studyFilepathWatcher.on("addDir", async (path, stats) => {
     // Early Exit. Event fires twice; ignore the first time (no stats is provided)
     if (!stats) return;
-
-    console.debug(`Watcher's "addDir" event got path: ${path}`);
     const asPath = new Path(path);
+
+    console.debug(`Watcher's "addDir" event got path: ${asPath.path}`);
     if (regexImageFile.test(asPath.basename)) {
       // THIS IS AN IMAGE FILE
       console.debug("This is an image file");
 
       // Get the data for the given image file
-      const { Axis, ImageType, Target } = regexImageFile.exec(asPath.basename)["groups"];
+      const regexResult = regexImageFile.exec(asPath.basename);
+      if (!("groups" in regexResult) || regexResult.groups == null) {
+        console.warn(`Could not parse image file ${asPath.path} ; regexResult: ${regexResult}`);
+        return;
+      }
+
+      const { Axis, ImageType, Target } = regexResult["groups"];
       const whichImageType = ImageTypeMapping[ImageType as keyof typeof ImageTypeMapping];
       const whichAxis = AxisTypeMapping[Axis as keyof typeof AxisTypeMapping];
       const statement = `Processed a ${whichAxis} ${whichImageType} image for ${Target}`;
@@ -265,27 +267,29 @@ export async function handleRunExploreASL(
 
       await unlock();
       return; // END OF IMAGE FILE SCENARIO
+    } else if (regexLockDir.test(asPath.path)) {
+      // Acquire lock, Respond to frontend, release lock
+      const { Module, Subject, Session } = regexLockDir.exec(asPath.path)["groups"];
+      const unlock = (await lock.lock()) as () => void | Promise<() => void>;
+      if (Module === "ASL") {
+        respondToIPCRenderer(
+          event,
+          `${channelName}:childProcessSTDOUT`,
+          `Starting ASL Module for Subject: ${Subject} -- Session: ${Session}`
+        );
+      } else if (Module === "Structural") {
+        respondToIPCRenderer(
+          event,
+          `${channelName}:childProcessSTDOUT`,
+          `Starting Structural Module for Subject: ${Subject}`
+        );
+      } else if (Module === "Population") {
+        respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, "Starting Population Module");
+      }
+      await unlock();
+    } else {
+      console.log(`Watcher's "addDir" path: ${asPath.path} ... did not match any regex`);
     }
-
-    // Acquire lock, Respond to frontend, release lock
-    const { Module, Subject, Session } = regexLockDir.exec(asPath.path)["groups"];
-    const unlock = (await lock.lock()) as () => void | Promise<() => void>;
-    if (Module === "ASL") {
-      respondToIPCRenderer(
-        event,
-        `${channelName}:childProcessSTDOUT`,
-        `Starting ASL Module for Subject: ${Subject} -- Session: ${Session}`
-      );
-    } else if (Module === "Structural") {
-      respondToIPCRenderer(
-        event,
-        `${channelName}:childProcessSTDOUT`,
-        `Starting Structural Module for Subject: ${Subject}`
-      );
-    } else if (Module === "Population") {
-      respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, "Starting Population Module");
-    }
-    await unlock();
   });
 
   // Handler for files
@@ -293,8 +297,8 @@ export async function handleRunExploreASL(
     // Early Exit. Event fires twice; ignore the first time (no stats is provided)
     if (!stats) return;
 
-    console.debug(`Watcher's "add" event got path: ${path}`);
     const asPath = new Path(path);
+    console.debug(`Watcher's "add" event got path: ${asPath.path}`);
 
     // Decide whether this is a status file or an image file
     if (regexStatusFile.test(asPath.path)) {
@@ -305,6 +309,11 @@ export async function handleRunExploreASL(
       if (!setOfAnticipatedFilepaths.has(asPath.path)) return;
 
       // Get the data for the given status file
+      const regexResult = regexStatusFile.exec(asPath.path);
+      if (!("groups" in regexResult) || regexResult.groups == null) {
+        console.warn(`Could not parse image file ${asPath.path} ; regexResult: ${regexResult}`);
+        return;
+      }
       const { Module, Subject, Session } = regexStatusFile.exec(asPath.path)["groups"];
       const statusFileCriteria = workloadMapping[asPath.basename];
 
@@ -487,8 +496,8 @@ export async function handleRunExploreASL(
     });
 
     child.stdout.on("data", data => {
-      const asString = matlabEscapeBlockChar(data);
-      console.error(`STDOUT: ${asString}`);
+      // const asString = matlabEscapeBlockChar(data);
+      // console.error(`STDOUT: ${asString}`);
     });
 
     // Process STDERR and forward it to the appropriate text display
@@ -509,6 +518,7 @@ export async function handleRunExploreASL(
 
       // The last child on its responsibilities go here
       if (pids.length === 1 && pids.includes(child.pid)) {
+        console.log(`Closing studyFilepathWatcher`);
         studyFilepathWatcher && (await studyFilepathWatcher.close());
 
         const allStatusFiles = await StudyDerivExploreASLDir.resolve("lock").glob("**/*.status", {

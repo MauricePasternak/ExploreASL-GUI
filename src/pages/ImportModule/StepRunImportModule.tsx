@@ -84,7 +84,11 @@ function StepRunImportModule({
   };
 
   const handleFeedbackProcessClose = async (pid: number, exitCode: number) => {
+    console.log(`Import Module Process Closed with Process ID: ${pid} and Exit Code: ${exitCode}.`);
+    console.log(`Prior to updating the currentTask, the currentTask is: ${currentTask.current}`);
+
     currentTask.current--; // Decrement the current task to allow for indexing the next task
+    console.log(`After updating the currentTask, the currentTask is: ${currentTask.current}`);
 
     // When the current task is negative, it means that all the tasks have been run
     if (currentTask.current < 0) {
@@ -94,6 +98,7 @@ function StepRunImportModule({
       return;
     }
 
+    console.log(`StepRunImportModule: Running the next task`);
     // Otherwise start up the next task
     await handleStartImportModule();
   };
@@ -101,12 +106,20 @@ function StepRunImportModule({
   const handleFeedbackProcessPaused = (message: string, failedToPause: boolean) => {
     console.log(`Import Module Process Paused with Message: ${message}`);
     console.log(`Import Module Process Paused with Error? ${failedToPause}`);
+    console.log(
+      `Import Module Process Paused with can set to Paused state? `,
+      procStatus !== "Paused" && !failedToPause
+    );
     procStatus !== "Paused" && !failedToPause && setProcStatus("Paused");
   };
 
   const handleFeedbackProcessResume = (message: string, failedToResume: boolean) => {
     console.log(`Import Module Process Resumed with Message: ${message}`);
     console.log(`Import Module Process Resumed with Error? ${failedToResume}`);
+    console.log(
+      `Import Module Process Resumed with can set to Running state? `,
+      procStatus !== "Running" && !failedToResume
+    );
     procStatus !== "Running" && !failedToResume && setProcStatus("Running");
   };
 
@@ -152,7 +165,7 @@ function StepRunImportModule({
       return;
     }
     // Send the pause command
-    await api.invoke("ChildProcess:Pause", currentProcPID.current);
+    await api.invoke("ChildProcess:Pause", currentProcPID.current, ImportModuleChannelName);
   };
 
   const handleResume = async () => {
@@ -162,7 +175,7 @@ function StepRunImportModule({
       return;
     }
     // Send the resume command
-    await api.invoke("ChildProcess:Resume", currentProcPID.current);
+    await api.invoke("ChildProcess:Resume", currentProcPID.current, ImportModuleChannelName);
   };
 
   const handleTerminate = async () => {
@@ -171,7 +184,7 @@ function StepRunImportModule({
       return;
     }
     // Send the terminate command and set the current PID to -1 in order to allow handleProcessClose to not start any followup tasks
-    await api.invoke("ChildProcess:Terminate", currentProcPID.current);
+    await api.invoke("ChildProcess:Terminate", currentProcPID.current, ImportModuleChannelName);
     currentProcPID.current = -1;
   };
 

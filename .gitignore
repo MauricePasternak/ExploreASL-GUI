@@ -90,3 +90,6 @@ out/
 
 # VSCode
 .vscode/
+
+# Inno Scripts
+*.iss

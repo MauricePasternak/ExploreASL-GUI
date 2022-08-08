@@ -15,6 +15,8 @@ export type NivoThemeProps = {
   axisLegendTextColor?: string;
 
   gridLineWidth: number;
+
+  legendTextFontSize: number;
 };
 
 export type NivoSingleAxisProps = {
@@ -25,11 +27,26 @@ export type NivoSingleAxisProps = {
   axisLabelTextOffset: number;
 };
 
+export type NivoLegendProps = {
+  anchor: "top" | "bottom" | "left" | "right";
+  direction: "column" | "row";
+  justify: boolean;
+  translateX: number;
+  translateY: number;
+  itemsSpacing: number;
+  itemWidth: number;
+  itemHeight: number;
+  itemDirection: "left-to-right" | "right-to-left" | "top-to-bottom" | "bottom-to-top";
+  symbolShape: "square" | "circle" | "triangle" | "diamond";
+  symbolSize: number;
+  effects: unknown;
+};
+
 export type NivoSwarmPlotProps = {
   plotLayout: "horizontal" | "vertical";
   margins: { top: number; right: number; bottom: number; left: number };
   interSeriesGap: number;
-  colorScheme: NivoColorPaletteNameType
+  colorScheme: NivoColorPaletteNameType;
 
   nodeSize: number;
   nodeBorderWidth: number;
@@ -54,7 +71,7 @@ export type NivoSwarmPlotUpdateOp<
 
 export type NivoScatterPlotProps = {
   margins: { top: number; right: number; bottom: number; left: number };
-  colorScheme: NivoColorPaletteNameType
+  colorScheme: NivoColorPaletteNameType;
 
   nodeSize: number;
 
@@ -64,6 +81,8 @@ export type NivoScatterPlotProps = {
   axisBottom: NivoSingleAxisProps;
   axisLeft: NivoSingleAxisProps;
   theme: NivoThemeProps;
+
+  legends: NivoLegendProps[];
 };
 
 export type NivoScatterPlotUpdateOp<

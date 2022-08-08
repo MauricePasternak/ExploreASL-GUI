@@ -19,7 +19,7 @@ import {
   atomDataVizCurrentStep,
   atomDataVizDFDTypes,
   atomSetDataVizDF,
-  DataFrameMainTypeOptions
+  DataFrameMainTypeOptions,
 } from "../../stores/DataFrameVisualizationStore";
 
 function StepClarifyDataTypes() {
@@ -35,26 +35,31 @@ function StepClarifyDataTypes() {
 
   console.log("StepClarifyDataTypes -- dataFrameTypes: ", dataFrameTypes);
 
+  // TODO: There needs to be help info on this page
+
+  // TODO: There should be logic wherein a Regex is used to automatically avoid the default ExploreASL numerical column
+  // names and some of the categorical ones such as SUBJECT and session.
+
   return (
     dataFrameTypes && (
       <>
         <Box p={2}>
           <Card elevation={2}>
-              <CardHeader
-                avatar={
-                  <Avatar sizes="large">
-                    <PersonSearchIcon />
-                  </Avatar>
-                }
-                title={<Typography variant="h4">Specify Datatypes</Typography>}
-                subheader={
-                  <Typography>
-                    Inform the program about whether columns are to be interpreted as Continuous or Categorical or
-                    outright Ignored
-                  </Typography>
-                }
-              />
-              <Divider />
+            <CardHeader
+              avatar={
+                <Avatar sizes="large">
+                  <PersonSearchIcon />
+                </Avatar>
+              }
+              title={<Typography variant="h4">Specify Datatypes</Typography>}
+              subheader={
+                <Typography>
+                  Inform the program about whether columns are to be interpreted as Continuous or Categorical or
+                  outright Ignored
+                </Typography>
+              }
+            />
+            <Divider />
             <CardContent>
               <List>
                 <ListItem>

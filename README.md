@@ -14,7 +14,7 @@
     <img src="./src/assets/appIcons/ExploreASLGUIIcon.png" fill="red" alt="Logo" width="80" height="80">
   </a>
 
-  <h3 align="center">ExploreASL GUI</h3>
+  <h3 align="center">ExploreASLJS</h3>
 
   <p align="center">
     Scanner To Publication User Interface for ASL Imaging
@@ -39,9 +39,10 @@
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
-        <li><a href="#installation-for-developers">Installation for Developers</a></li>
+        <li><a href="#installation-instructions-for-developers">Installation for Developers</a></li>
         <li><a href="#general-project-structure">General Structure</a></li>
-        <li><a href="#installation-for-users">Installation for Users</a></li>
+        <li><a href="#installation-instructions-for-users">Installation for Users</a></li>
+        <li><a href="#uninstallation-instructions-for-users">Uninstallation for Users</a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
@@ -59,7 +60,9 @@
 </details>
 
 ---
+
 ## <!-- ABOUT THE PROJECT -->
+
 ## About The Project
 
 This project wraps around [ExploreASL](https://exploreasl.github.io/Documentation/1.10.0beta/) to provide users with a friendly and modern interface for analyzing their arterial spin labeling datasets, including:
@@ -81,12 +84,19 @@ This project wraps around [ExploreASL](https://exploreasl.github.io/Documentatio
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ---
+
 <!-- GETTING STARTED -->
+
 ## Getting Started
 
-### Installation For Developers
+### Installation Instructions For Developers
 
-It is assumed that developers wishing to engage with this project will already have NodeJS installed on their system.
+It is assumed that developers wishing to engage with this project will already have NodeJS installed on their system and
+that they are using `yarn` as their package manager.
+
+[Click here](https://nodejs.org/en/) for more information on NodeJS installation.
+
+[Click here](https://classic.yarnpkg.com/en/docs/getting-started) for more information on yarn installation.
 
 1. Clone the repo
    ```sh
@@ -120,14 +130,34 @@ It is assumed that developers wishing to engage with this project will already h
     ... other files relate to project setup, package-handling, etc.
 ```
 
-### Installation For Users
+### Installation Instructions For Users
 
 Head on over to the [Releases](https://github.com/MauricePasternak/ExploreASLJS/releases) and download the appropriate version for your operating system
+
+### Uninstallation Instructions For Users
+
+#### For Windows
+
+In your search bar, look for "Add or remove programs". Select the application and click uninstall.
+
+#### For Linux
+
+Open a terminal and type in:
+
+```bash
+sudo apt remove exploreasljs
+```
+
+#### For MacOS
+
+Go to the Applications folder and drag & drop the ExploreASLJS.app application to the Trash bin.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ---
+
 ## <!-- USAGE EXAMPLES -->
+
 ## Usage
 
 ### Import Your Dataset
@@ -158,15 +188,20 @@ Head on over to the [Releases](https://github.com/MauricePasternak/ExploreASLJS/
 
 ## Roadmap
 
-- [x] Add Dark Mode
-- [x] Add Image Feedback during processing
-- [x] Support multiple ASL Import contexts \*\*
-- [x] Create a Data Visualization Module
-- [ ] Add Additional Templates w/ Examples
-- [ ] Add Multiprocessing Capability to the Import Module as well
-- [ ] Add a submodule to Process Studies where users can pin-point change the JSON sidecars of individual subjects/visits/sessions
+- [x] Add Dark Mode.
+- [x] Add Image Feedback during processing.
+- [x] Support multiple ASL Import contexts. \*
+- [x] Create a Data Visualization Module.
+- [ ] Add help information on the steps within the Data Visualization Module.
+- [ ] Add plot settings for plot legends (i.e. legend text fontsize, positioning, etc.) within the DataVisualization Module.
+- [ ] Add plot settings for renaming axis main labels within the Data Visualization Module.
+- [ ] Add Multiprocessing Capability to the Import Module as well. \*\*
+- [ ] Add a submodule to Process Studies where users can pin-point change the JSON sidecars of individual subjects/visits/sessions.
+- [ ] Add auto-update capability to the software so that users don't have to manually install new versions.
 
-\*\* This is only partially the case. The GUI goes through extensive logical gymnastics to get ExploreASL to import different subsets of your dataset. The official ExploreASL application does not support this as of version 1.10.0
+\* This is only partially the case. The GUI goes through extensive logical gymnastics to get ExploreASL to import different subsets of your dataset. The official ExploreASL application does not support this as of version 1.10.0.
+
+\*\* This will probably have to wait until the main ExploreASL program can handle multiple contexts.
 
 See the [open issues](https://github.com/othneildrew/Best-README-Template/issues) for a full list of proposed features (and known issues).
 
@@ -214,7 +249,9 @@ Project Link: [https://github.com/MauricePasternak/ExploreASLJS](https://github.
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ---
+
 ## <!-- ACKNOWLEDGMENTS -->
+
 ## Acknowledgments
 
 ### Support
@@ -243,15 +280,15 @@ For questions or concerns with the underlying ExploreASL program, the following 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 
-[contributors-shield]: https://img.shields.io/github/contributors/MauricePasternak/ExploreASL_GUI_JS.svg?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
 [contributors-url]: https://github.com/MauricePasternak/ExploreASLJS/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/MauricePasternak/ExploreASL_GUI_JS.svg?style=for-the-badge
+[forks-shield]: https://img.shields.io/github/forks/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
 [forks-url]: https://github.com/MauricePasternak/ExploreASLJS/network/members
-[stars-shield]: https://img.shields.io/github/stars/MauricePasternak/ExploreASL_GUI_JS.svg?style=for-the-badge
+[stars-shield]: https://img.shields.io/github/stars/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
 [stars-url]: https://github.com/MauricePasternak/ExploreASLJS/stargazers
-[issues-shield]: https://img.shields.io/github/issues/MauricePasternak/ExploreASL_GUI_JS.svg?style=for-the-badge
+[issues-shield]: https://img.shields.io/github/issues/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
 [issues-url]: https://github.com/MauricePasternak/ExploreASLJS/issues
-[license-shield]: https://img.shields.io/github/license/MauricePasternak/ExploreASL_GUI_JS.svg?style=for-the-badge
+[license-shield]: https://img.shields.io/github/license/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
 [license-url]: https://github.com/MauricePasternak/ExploreASLJS/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://www.linkedin.com/in/maurice-pasternak-238957207/

@@ -72,6 +72,11 @@ function IPCQuill({ channelName, defaultHeight = 530, scrollDownPerUpdate = fals
     quill.insertEmbed(quill.getLength(), "image", url);
   };
 
+  const handleStart = () => {
+    console.log(`IPCQuill: ${channelName} has spawned. Clearing text...`);
+    quill && quill.setText("");
+  };
+
   /**
    * useEffect for registering events related to text output coming from the backend
    */
@@ -81,12 +86,16 @@ function IPCQuill({ channelName, defaultHeight = 530, scrollDownPerUpdate = fals
     api.on(`${channelName}:childProcessSTDOUT`, handleIncomingText);
     api.on(`${channelName}:childProcessSTDERR`, handleIncomingText);
     api.on(`${channelName}:childProcessRequestsMediaDisplay`, handleDisplayMedia);
-    api.on(`${channelName}:childProcessHasSpawned`, () => quill.setText(""));
+    api.on(`${channelName}:childProcessHasSpawned`, handleStart);
     api.on(`${channelName}:childProcessHasClosed`, (pid, exitCode) => {
       const currentText = quill.getText();
-      const endingMessage = `Process has finished ${
-        exitCode != null ? `with exit code ${exitCode}` : "by forceful termination!"
-      }`;
+      const endingBlurb =
+        exitCode != null
+          ? exitCode === 0
+            ? "successfully!"
+            : `with errors (Error code: ${exitCode}`
+          : "forcefully due to termination by the user";
+      const endingMessage = `Process ${pid} has ended ${endingBlurb}`;
       currentText === "\n"
         ? quill.setText(endingMessage)
         : quill.insertText(quill.getLength(), endingMessage, { color: exitCode === 0 ? "green" : "red", bold: true });

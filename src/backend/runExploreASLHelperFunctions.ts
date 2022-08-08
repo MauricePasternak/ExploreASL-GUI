@@ -1,5 +1,5 @@
 import { exec } from "child_process";
-import { pickBy as lodashPickBy, sum as lodashSum } from "lodash";
+import { pickBy as lodashPickBy, sum as lodashSum, isEmpty as lodashIsEmpty } from "lodash";
 import Path from "pathlib-js";
 import { Regex } from "../common/utilityFunctions/stringFunctions";
 import { promisify } from "util";
@@ -191,7 +191,9 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
         const [statusBasename, info] = workloadMappingEntires[index];
         const statusFilepath = new Path(lockDirPath.path, statusBasename);
         if (await statusFilepath.exists()) continue;
-        console.log(`${statusFilepath.path} has not been created...adding to anticipated workload`);
+        console.log(
+          `${statusFilepath.path} has not been created...adding to anticipated workload and loadingBarValue of ${info.loadingBarValue}`
+        );
         structuralWorkload.anticipatedFilepaths.push(statusFilepath.path);
         structuralWorkload.anticipatedWorkload.push(info.loadingBarValue);
       }
@@ -209,7 +211,9 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
     //       |- perf
     //          |- ASL.nii.gz
     else {
-      visitPaths.forEach(async (visitPath, visitIndex) => {
+      for (let visitIndex = 0; visitIndex < visitPaths.length; visitIndex++) {
+        const visitPath = visitPaths[visitIndex];
+
         // Skip based on dataPar settings
         const { hasFLAIR, hasM0, hasASL } = await getSubjectImagetypes(visitPath, globMapping);
         if (
@@ -217,7 +221,7 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
           (!hasM0 && dataPar.x.settings.SkipIfNoM0) ||
           (!hasASL && dataPar.x.settings.SkipIfNoASL)
         ) {
-          return; // Early return
+          continue;
         }
 
         // Get the path of the directory that will hold the .status files; creating it if necessary
@@ -244,13 +248,17 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
           const statusFilepath = new Path(lockDirPath.path, statusBasename);
           if (await statusFilepath.exists()) continue;
 
-          console.log(`${statusFilepath.path} has not been created...adding to anticipated workload`);
+          console.log(
+            `${statusFilepath.path} has not been created...adding to anticipated workload and loadingBarValue of ${info.loadingBarValue}`
+          );
           structuralWorkload.anticipatedFilepaths.push(statusFilepath.path);
           structuralWorkload.anticipatedWorkload.push(info.loadingBarValue);
         }
-      });
+      }
     } // End of visits.length > 0
   } // End of for await (const subjectPath of pathRawData.readDirIter())
+
+  console.log(`calculateStructuralWorkload -- Structural workload:`, JSON.stringify(structuralWorkload, null, 2));
   return structuralWorkload;
 }
 
@@ -261,7 +269,13 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
   const pathDerivativesEASL = new Path(dataPar.x.GUI.StudyRootPath, "derivatives", "ExploreASL");
   const pathRawData = new Path(dataPar.x.GUI.StudyRootPath, "rawdata");
   const globMapping: GlobMapping = { GlobASL: "*/*_asl.nii*", GlobM0: "*/*_m0scan.nii", GlobFLAIR: "*FLAIR*.nii*" };
-  const regexSession = new Regex("run-(?<SessionName>[\\w_]+)_asl\\.json");
+  const regexMultiSession = new Regex("run-(?<SessionName>[\\w_]+)_asl\\.json");
+
+  // Determine the expected .status files from the version's workload
+  const filterSet = new Set(["ASL"]);
+  const filteredWorkloadMapping = lodashPickBy(workloadSubset, v => filterSet.has(v.module));
+  const workloadMappingEntires = Object.entries(filteredWorkloadMapping);
+  console.log(`calculateASLWorkload -- Filtered workload mapping: ${JSON.stringify(filteredWorkloadMapping, null, 2)}`);
 
   const aslWorkload = {
     anticipatedFilepaths: [] as string[],
@@ -279,7 +293,7 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
       continue;
     }
 
-    console.log(`Processing subject ${subjectPath.basename}`);
+    console.log(`calculateASLWorkload -- Processing subject ${subjectPath.basename}`);
 
     // Skip based on dataPar settings
     const { hasFLAIR } = await getSubjectImagetypes(subjectPath, globMapping);
@@ -302,52 +316,73 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
      *          |- sub-<subject>_asl.nii.gz
      */
     if (visitPaths.length === 0) {
-      // console.log(`Subject ${subjectPath.basename} has no explicit visits; assuming single visit`);
+      console.log(
+        `calculateASLWorkload -- Subject ${subjectPath.basename} has no explicit visits; assuming single visit`
+      );
       /**
        * Scenario A1: Multiple sessions with only one visit
        * EXPECTED BASENAMES: sub-<subject>_run-<session>_asl.json
        */
-      let sessionPaths = await subjectPath.glob("perf/*_run-*_asl.json", { onlyFiles: true });
+      const sessionPaths = await subjectPath.glob("perf/*_run-*_asl.json", { onlyFiles: true });
       /**
        * Scenario A2: Single session with only one visit
        * EXPECTED BASENAMES: sub-<subject>_asl.json
        */
-      if ((sessionPaths.length = 0)) {
+      const isMultiSession = sessionPaths.length > 0;
+
+      console.log(`calculateASLWorkload -- Subject ${subjectPath.basename} isMultiSession: ${isMultiSession}`);
+
+      if (!isMultiSession) {
+        console.log(
+          `calculateASLWorkload -- Subject ${subjectPath.basename} has no _run-*_asl.json files. Checking for _asl.json`
+        );
+
         const singleSessionBasename = `${subjectPath.basename}_asl.json`;
         const singleSessionPath = subjectPath.resolve(`perf/${singleSessionBasename}`);
+
+        console.log(`calculateASLWorkload -- Adding sessionPath: ${singleSessionPath.path}`);
+
         if (!(await singleSessionPath.exists())) {
           console.log(`Skipping subject ${subjectPath.basename} because no ASL data found`);
           continue;
         }
-        sessionPaths = [singleSessionPath]; // convert to length-1 array in order to keep consistency
+        sessionPaths.push(singleSessionPath); // convert to length-1 array in order to keep consistency
       }
+
+      console.log(
+        `calculateASLWorkload -- Subject ${subjectPath.basename} sessionPaths`,
+        JSON.stringify(sessionPaths, null, 2)
+      );
 
       // Now iterate over the sessions within each subject
       for await (const sessionFilepath of sessionPaths) {
-        const sessionMatch = regexSession.search(sessionFilepath.basename);
-        if (!sessionMatch) {
-          // console.log(`Could not match session name in ${sessionFilepath.basename}`);
-          continue;
+        let sessionName: string;
+        if (isMultiSession) {
+          const sessionMatch = regexMultiSession.search(sessionFilepath.basename);
+          if (!sessionMatch) {
+            console.log(`calculateASLWorkload -- Could not match session name in ${sessionFilepath.basename}`);
+            continue;
+          }
+          sessionName = sessionMatch.groupsObject.SessionName;
+        } else {
+          sessionName = "ASL_1"; // For single session, use a default session name of "ASL_1" from ExploreASL
         }
-        const sessionName = sessionMatch.groupsObject.SessionName;
 
         // Get the path of the directory that will hold the .status files; creating it if necessary
         const lockDirPath = new Path(
           pathDerivativesEASL.path,
           "lock",
           "xASL_module_ASL",
-          subjectPath.basename,
+          `${subjectPath.basename}_1`, // For a single default visit, append "_1"
           `xASL_module_ASL_${sessionName}`
         );
         if (!(await lockDirPath.exists())) {
           await lockDirPath.makeDir();
         }
-        // Determine the expected .status files from the version's workload
-        const filterSet = new Set(["ASL"]);
-        const filteredWorkloadMapping = lodashPickBy(workloadSubset, v => filterSet.has(v.module));
+
+        console.log(`calculateASLWorkload -- Checking existing .status files in ${lockDirPath.path}`);
 
         // Determine the workload based on the .status files not already existing
-        const workloadMappingEntires = Object.entries(filteredWorkloadMapping);
         for (let index = 0; index < workloadMappingEntires.length; index++) {
           const [statusBasename, info] = workloadMappingEntires[index];
           const statusFilepath = new Path(lockDirPath.path, statusBasename);
@@ -384,7 +419,8 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
          * Scenario B2: Single session and multiple visits
          * EXPECTED BASENAMES: sub-<subject>_ses-<visit>_asl.json
          */
-        if (sessionPaths.length === 0) {
+        const isMultiSession = sessionPaths.length > 0;
+        if (!isMultiSession) {
           const singleSessionBasename = `${subjectPath.basename}_${visitPath.basename}_asl.json`;
           const singleSessionPath = visitPath.resolve(`perf/${singleSessionBasename}`);
           if (!(await singleSessionPath.exists())) {
@@ -399,34 +435,36 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
         // console.log(`Sessions found for visit ${visitPath.basename}: ${sessionPaths.map(p => p.path)}`);
         // Now iterate over the sessions within each subject
         for await (const sessionFilepath of sessionPaths) {
-          const sessionMatch = regexSession.search(sessionFilepath.basename);
-          if (!sessionMatch) {
-            console.log(`Could not match session name in ${sessionFilepath.basename}`);
-            continue;
+          let sessionName: string;
+          if (isMultiSession) {
+            const sessionMatch = regexMultiSession.search(sessionFilepath.basename);
+            if (!sessionMatch) {
+              console.log(`calculateASLWorkload -- Could not match session name in ${sessionFilepath.basename}`);
+              continue;
+            }
+            sessionName = sessionMatch.groupsObject.SessionName;
+          } else {
+            sessionName = "ASL_1"; // For single session, use a default session name of "ASL_1" from ExploreASL
           }
-          const sessionName = sessionMatch.groupsObject.SessionName;
 
           // Get the path of the directory that will hold the .status files; creating it if necessary
           const lockDirPath = new Path(
             pathDerivativesEASL.path,
             "lock",
             "xASL_module_ASL",
-            `${subjectPath.basename}_${visitIndex}`,
+            `${subjectPath.basename}_${visitIndex + 1}`, // +1 to account for MATLAB indexing
             `xASL_module_ASL_${sessionName}`
           );
           if (!(await lockDirPath.exists())) {
             await lockDirPath.makeDir();
           }
-          // Determine the expected .status files from the version's workload
-          const filterSet = new Set(["ASL"]);
-          const filteredWorkloadMapping = lodashPickBy(workloadSubset, v => filterSet.has(v.module));
 
           // Determine the workload based on the .status files not already existing
-          const workloadMappingEntires = Object.entries(filteredWorkloadMapping);
           for (let index = 0; index < workloadMappingEntires.length; index++) {
             const [statusBasename, info] = workloadMappingEntires[index];
             const statusFilepath = new Path(lockDirPath.path, statusBasename);
             if (await statusFilepath.exists()) continue;
+            console.log(`calculateASLWorkload -- Adding ${statusFilepath.path} to workload`);
             aslWorkload.anticipatedFilepaths.push(statusFilepath.path);
             aslWorkload.anticipatedWorkload.push(info.loadingBarValue);
           }
@@ -481,91 +519,105 @@ export async function calculateWorkload(
   };
 
   // Calculate accordingly
-  switch (studySetup.whichModulesToRun) {
-    case "Structural":
-      try {
-        const { anticipatedWorkload: structuralWorkload, anticipatedFilepaths: structuralPaths } =
-          await calculateStructuralWorkload(dataPar, workloadMapping);
-        payload = {
-          anticipatedFilepaths: structuralPaths,
-          anticipatedWorkload: lodashSum(structuralWorkload),
-        };
-      } catch (error) {
-        return {
-          GUIMessage: {
-            title: "Failure to calculate the Structural Module Workload",
-            messages: [
-              "Something went wrong when trying to calculate the Structural Module Workload",
-              `Nature of the error: ${error}`,
-            ],
-            severity: "error",
-          },
-          payload: payload,
-        };
-      }
-      break;
-    case "ASL":
-      try {
-        const { anticipatedWorkload: aslWorkload, anticipatedFilepaths: aslPaths } = await calculateASLWorkload(
-          dataPar,
-          workloadMapping
-        );
-        payload = {
-          anticipatedFilepaths: aslPaths,
-          anticipatedWorkload: lodashSum(aslWorkload),
-        };
-      } catch (error) {
-        return {
-          GUIMessage: {
-            title: "Failure to calculate the ASL Module Workload",
-            messages: [
-              "Something went wrong when trying to calculate the ASL Module Workload",
-              `Nature of the error: ${error}`,
-            ],
-            severity: "error",
-          },
-          payload: payload,
-        };
-      }
-      break;
-    case "Both":
-      // eslint-disable-next-line
-      const [strucResult, aslResult] = await Promise.all([
-        calculateStructuralWorkload(dataPar, workloadMapping),
-        calculateASLWorkload(dataPar, workloadMapping),
-      ]);
+  /************
+   * Structural
+   ***********/
+  if (studySetup.whichModulesToRun === "Structural") {
+    try {
+      const { anticipatedWorkload: structuralWorkload, anticipatedFilepaths: structuralPaths } =
+        await calculateStructuralWorkload(dataPar, workloadMapping);
       payload = {
-        anticipatedFilepaths: [...strucResult.anticipatedFilepaths, ...aslResult.anticipatedFilepaths],
-        anticipatedWorkload: lodashSum([...strucResult.anticipatedWorkload, ...aslResult.anticipatedFilepaths]),
+        anticipatedFilepaths: structuralPaths,
+        anticipatedWorkload: lodashSum(structuralWorkload),
       };
-      break;
-    case "Population":
-      try {
-        const { anticipatedWorkload: popWorkload, anticipatedFilepaths: popPaths } = await calculatePopulationWorkload(
-          dataPar,
-          workloadMapping
-        );
-        payload = {
-          anticipatedFilepaths: popPaths,
-          anticipatedWorkload: lodashSum(popWorkload),
-        };
-      } catch (error) {
-        return {
-          GUIMessage: {
-            title: "Failure to calculate the Population Module Workload",
-            messages: [
-              "Something went wrong when trying to calculate the Population Module Workload",
-              `Nature of the error: ${error}`,
-            ],
-            severity: "error",
-          },
-          payload: payload,
-        };
-      }
-      break;
-    default:
-      throw new Error("Impossible studySetup whichModuleToRun provided");
+    } catch (error) {
+      return {
+        GUIMessage: {
+          title: "Failure to calculate the Structural Module Workload",
+          messages: [
+            "Something went wrong when trying to calculate the Structural Module Workload",
+            `Nature of the error: ${error}`,
+          ],
+          severity: "error",
+        },
+        payload: payload,
+      };
+    }
+    /*****
+     * ASL
+     ****/
+  } else if (studySetup.whichModulesToRun === "ASL") {
+    try {
+      const { anticipatedWorkload: aslWorkload, anticipatedFilepaths: aslPaths } = await calculateASLWorkload(
+        dataPar,
+        workloadMapping
+      );
+      payload = {
+        anticipatedFilepaths: aslPaths,
+        anticipatedWorkload: lodashSum(aslWorkload),
+      };
+    } catch (error) {
+      return {
+        GUIMessage: {
+          title: "Failure to calculate the ASL Module Workload",
+          messages: [
+            "Something went wrong when trying to calculate the ASL Module Workload",
+            `Nature of the error: ${error}`,
+          ],
+          severity: "error",
+        },
+        payload: payload,
+      };
+    }
+    /******
+     * Both
+     * ***/
+  } else if (studySetup.whichModulesToRun === "Both") {
+    // eslint-disable-next-line
+    const [strucResult, aslResult] = await Promise.all([
+      calculateStructuralWorkload(dataPar, workloadMapping),
+      calculateASLWorkload(dataPar, workloadMapping),
+    ]);
+    payload = {
+      anticipatedFilepaths: [...strucResult.anticipatedFilepaths, ...aslResult.anticipatedFilepaths],
+      anticipatedWorkload: lodashSum([...strucResult.anticipatedWorkload, ...aslResult.anticipatedFilepaths]),
+    };
+    /************
+     * Population
+     ***********/
+  } else if (studySetup.whichModulesToRun === "Population") {
+    try {
+      const { anticipatedWorkload: popWorkload, anticipatedFilepaths: popPaths } = await calculatePopulationWorkload(
+        dataPar,
+        workloadMapping
+      );
+      payload = {
+        anticipatedFilepaths: popPaths,
+        anticipatedWorkload: lodashSum(popWorkload),
+      };
+    } catch (error) {
+      return {
+        GUIMessage: {
+          title: "Failure to calculate the Population Module Workload",
+          messages: [
+            "Something went wrong when trying to calculate the Population Module Workload",
+            `Nature of the error: ${error}`,
+          ],
+          severity: "error",
+        },
+        payload: payload,
+      };
+    }
+    /*********************
+     * Impossible scenario
+     ********************/
+  } else {
+    throw new Error(`Impossible studySetup whichModuleToRun provided: ${studySetup.whichModulesToRun}`);
   }
+
+  console.log(`calculateWorkload -- payload.anticipatedWorkload: `, payload.anticipatedWorkload);
+  console.log(`calculateWorkload -- payload.anticipatedFilepaths: `, payload.anticipatedFilepaths);
+  console.log(`calculateWorkload -- payload.anticipatedFilepaths.length: `, payload.anticipatedFilepaths.length);
 
   if (payload.anticipatedFilepaths.length === 0) {
     return {

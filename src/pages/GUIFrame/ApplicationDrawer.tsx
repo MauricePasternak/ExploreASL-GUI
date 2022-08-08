@@ -70,7 +70,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
           <ListItemText>Import A Dataset</ListItemText>
         </ListItemButton>
 
-        <ListItem divider={!expandedDataPar}>
+        <ListItemButton onClick={() => setExpandedDataPar(!expandedDataPar)} divider={!expandedDataPar}>
           <ListItemIcon>
             <DynamicFormIcon fontSize="large" />
           </ListItemIcon>
@@ -78,7 +78,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
           <ExpandMore expand={expandedDataPar} onClick={() => setExpandedDataPar(!expandedDataPar)}>
             <ExpandMoreIcon />
           </ExpandMore>
-        </ListItem>
+        </ListItemButton>
         <Collapse in={expandedDataPar}>
           <List component="div" disablePadding>
             <ListItemButton
@@ -130,7 +130,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
           </List>
         </Collapse>
 
-        <ListItem divider={!expandedProcStudies}>
+        <ListItemButton onClick={() => setExpandedProcStudies(!expandedProcStudies)} divider={!expandedProcStudies}>
           <ListItemIcon>
             <SvgIcon component={BrainSvg} inheritViewBox fontSize="large" />
           </ListItemIcon>
@@ -138,7 +138,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
           <ExpandMore expand={expandedProcStudies} onClick={() => setExpandedProcStudies(!expandedProcStudies)}>
             <ExpandMoreIcon />
           </ExpandMore>
-        </ListItem>
+        </ListItemButton>
         <Collapse in={expandedProcStudies}>
           <List component="div" disablePadding>
             <ListItemButton
