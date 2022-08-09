@@ -126,47 +126,57 @@ function RunEASLSingleStudySetup({
     };
   }, [watch]);
 
+  function handleFeedbackProcessError(pid: number, err: Error | string) {
+    console.warn(`Study ${channelName} has received a childProcessHasErrored Event with error: ${err}`);
+    pids.includes(pid) && setPids(currentPids => currentPids.filter(p => p !== pid));
+  }
+
+  function handleFeedbackProcessClosed(pid: number, exitCode: number, runSummary: RunEASLChildProcSummary) {
+    const numUnsuccesfulProcs = lodashSum(runSummary.exitSummaries.map(summary => (summary.exitCode !== 0 ? 1 : 0)));
+    console.log(
+      `Study ${channelName} -- handleFeedbackProcessClosed callback has givens:\n`,
+      JSON.stringify({ pid, exitCode, runSummary, numUnsuccesfulProcs }, null, 2)
+    );
+    const reportError = numUnsuccesfulProcs > 0 || runSummary.numIncompleteSteps > 0;
+
+    if (reportError) {
+      setProcessStudiesSnackbar({
+        severity: "error",
+        title: numUnsuccesfulProcs > 0 ? "Errors in one or more cores" : "Finished with incomplete steps",
+        message: [
+          "Run Error Summary:",
+          `Number of alloted cores which reported an error: ${numUnsuccesfulProcs}`,
+          `Number of incomplete steps: ${runSummary.numIncompleteSteps}`,
+          "The following a general summary of which parts failed and when (some of these may be false-positives if this was due to a crash):",
+          ...runSummary.missedStepsMessages,
+          " ",
+          "Please refer to the logs directory located within derivatives/ExploreASL for this study to ascertain what errors occured.",
+        ],
+      });
+    } else {
+      setProcessStudiesSnackbar({
+        severity: "success",
+        title: "Successful ExploreASL Run",
+        message: [
+          "Completed all anticipated steps.",
+          "Please remember to cite this program if you intend to publish these results.",
+        ],
+      });
+    }
+
+    console.log(
+      `Study ${channelName} -- handleFeedbackProcessClosed will now reset status to Standby and clear its PIDS`
+    );
+    changeStatus({ studyIndex, status: "Standby" });
+    pids.length > 0 && setPids([]);
+  }
+
   /**
    * useEffects for api-related tasks
    */
   useEffect(() => {
-    api.on(`${channelName}:childProcessHasErrored`, (pid, err) => {
-      console.warn(`Study ${channelName} has received a childProcessHasErrored Event with error: ${err}`);
-      pids.includes(pid) && setPids(currentPids => currentPids.filter(p => p !== pid));
-    });
-
-    api.on(`${channelName}:childProcessHasClosed`, (pid: number, exitCode, runSummary: RunEASLChildProcSummary) => {
-      console.log(`${channelName}:childProcessHasClosed: pid: ${pid} exitCode: ${exitCode} runSummary: ${runSummary}`);
-
-      const numUnsuccesfulProcs = lodashSum(runSummary.exitSummaries.map(summary => (summary.exitCode !== 0 ? 1 : 0)));
-      console.log(`numUnsuccesfulProcs: ${numUnsuccesfulProcs}`);
-      const reportError = numUnsuccesfulProcs > 0 || runSummary.numIncompleteSteps > 0;
-
-      if (reportError) {
-        setProcessStudiesSnackbar({
-          severity: "error",
-          title: numUnsuccesfulProcs > 0 ? "Errors in one or more cores" : "Finished with incomplete steps",
-          message: [
-            "Run Error Summary:",
-            `Number of alloted cores which reported an error: ${numUnsuccesfulProcs}`,
-            `Number of incomplete steps: ${runSummary.numIncompleteSteps}`,
-            "Please refer to the logs directory located within derivatives/ExploreASL for this study to ascertain what errors occured.",
-          ],
-        });
-      } else {
-        setProcessStudiesSnackbar({
-          severity: "success",
-          title: "Successful ExploreASL Run",
-          message: [
-            "Completed all anticipated steps.",
-            "Please remember to cite this program if you intend to publish these results.",
-          ],
-        });
-      }
-      changeStatus({ studyIndex, status: "Standby" });
-      pids.length > 0 && setPids([]);
-    });
-
+    api.on(`${channelName}:childProcessHasErrored`, handleFeedbackProcessError);
+    api.on(`${channelName}:childProcessHasClosed`, handleFeedbackProcessClosed);
     // On unmount, remove the event listeners
     return () => {
       api.removeAllListeners(`${channelName}:childProcessHasErrored`);

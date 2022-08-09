@@ -42,7 +42,7 @@ function DataParPage() {
     resolver: YupResolverFactoryBase(SchemaDataPar),
     reValidateMode: "onChange",
   });
-  const { control, handleSubmit, reset } = bag;
+  const { control, handleSubmit, reset, trigger } = bag;
 
   /**
    * Handler for saving the data par values to a DataPar.json file located at the indicated Study Root Path
@@ -185,8 +185,8 @@ function DataParPage() {
       <AtomicSnackbarMessage atomConfig={atomDataParModuleSnackbar} />
       <DataParTabs {...bag} />
       <Box className="DataPar__TabContentContainer" pb={7.5}>
-        {currentDataParTab === "StudyParameters" && <TabStudyParameters control={control} />}
-        {currentDataParTab === "SequenceParameters" && <TabSequenceParameters control={control} />}
+        {currentDataParTab === "StudyParameters" && <TabStudyParameters control={control} trigger={trigger} />}
+        {currentDataParTab === "SequenceParameters" && <TabSequenceParameters control={control} trigger={trigger} />}
         {currentDataParTab === "ProcessParameters" && <TabProcessingParameters control={control} />}
       </Box>
       <Paper

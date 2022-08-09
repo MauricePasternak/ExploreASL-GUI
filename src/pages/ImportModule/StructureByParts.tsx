@@ -45,7 +45,9 @@ function StructureByParts({ control, name, trigger }: StructureByPartsProps) {
 
   const handleFieldChange = (e: SelectChangeEvent, index: number) => {
     const newFields = field.value.map((v, i) => (i === index ? e.target.value : v));
+    console.log(`StuctureByParts handleFieldChange -- newFields,`, newFields);
     field.onChange(newFields);
+    trigger(field.name); // Due to the nature of the field, triggering has to be done manually
   };
 
   return (
@@ -79,6 +81,7 @@ function StructureByParts({ control, name, trigger }: StructureByPartsProps) {
                   <FormControl variant="outlined" error={hasError}>
                     <Select
                       variant="outlined"
+                      name={field.name}
                       // disabled={StudyRootPathIsInvalid}
                       onBlur={field.onBlur}
                       value={folderInfo}

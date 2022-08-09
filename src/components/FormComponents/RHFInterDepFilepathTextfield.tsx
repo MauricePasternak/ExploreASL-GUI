@@ -226,20 +226,25 @@ export function InterDepControlledFilepathTextField<
 
 /**
  * An altered MaterialUI TextField that allows for filepaths to be dragged and dropped (or click-selected) within
- * and is controlled by a React Hook Form controller. Contains all the same props as a regular `TextField`, plus the
- * following props:
+ * and is controlled by a RHF. This component triggers the validation of other fields:
  *
- * @param control - The control coming from useForm to tie the component to the form state.
- * @param name - The name of the field so that the component can update the appropriate field.
- * @param includeButton - Whether or not to include a button to open the filepath dialogue.
- * @param buttonText - The text to display on the button.
- * @param buttonProps - Any props to pass to the button.
- * @param dialogOptions - The options to pass to the filepath dialogue. These are based off Electron's dialog API.
- * @param filepathType - The type of filepath to accept. Can be one of "file", "dir", "other", or "all".
- * @param onValidateDrop - A function to validate the filepath that was dropped.
- * @param debounceTime - The time to debounce the onChange event.
+ * Fundamental Properties:
+ * - `control` - the RHF control object returned by useForm().
+ * - `name` - the name of the field this component is responsible for.
+ * - `trigger` - the RHF trigger function returned by useForm().
+ * - `triggerTarget` - the name of the field(s) to trigger validation on when this form changes.
+ * ---
+ *
+ * Additional Properties:
+ * - `includeButton` - Whether or not to include a button to open the filepath dialogue.
+ * - `buttonText` - The text to display on the button.
+ * - `buttonProps` - Any props to pass to the button.
+ * - `dialogOptions` - The options to pass to the filepath dialogue. These are based off Electron's dialog API.
+ * - `filepathType` - The type of filepath to accept. Can be one of "file", "dir", "other", or "all".
+ * - `onValidateDrop` - A function to validate the filepath that was dropped.
+ * - `debounceTime` - The time to debounce the onChange event.
  */
-function RHFFilepathTextField<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
+function RHFInterDepFilepathTextField<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
   control,
   name,
   ...controlledFilepathTextFieldProps
@@ -261,4 +266,4 @@ function RHFFilepathTextField<TValues extends FieldValues, TName extends Path<TV
   );
 }
 
-export default RHFFilepathTextField;
+export default RHFInterDepFilepathTextField;

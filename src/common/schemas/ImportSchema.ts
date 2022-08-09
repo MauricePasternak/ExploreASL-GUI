@@ -65,6 +65,7 @@ export const SchemaImportStepDefineRuntimeEnvs: Yup.SchemaOf<ImportRuntimeEnvsSc
       "IsValidStructure",
       "Invalid sourcedata filepath structure",
       async (folderStruct: SourcedataFolderType[], helpers: Yup.TestContext<ImportSchemaType>) => {
+        console.log("ImportSchema --- SourcedataStructure validation triggered: ", folderStruct);
         if (!folderStruct) return false;
 
         // Blank fields are not allowed
@@ -93,6 +94,20 @@ export const SchemaImportStepDefineRuntimeEnvs: Yup.SchemaOf<ImportRuntimeEnvsSc
         // Assuming a valid root path, check for existence of filepaths at the given depth
         const globPattern = folderStruct.map(() => "*").join("/") + "/*"; // Extra * to match all files in the final folder level
         const fp = studyRootPath + "/sourcedata";
+
+        console.log(
+          `ImportSchema -- SourcedataStructure is validating the following:`,
+          JSON.stringify(
+            {
+              folderStruct,
+              globPattern,
+              fp,
+            },
+            null,
+            2
+          )
+        );
+
         const dicomFiles = await api.path.glob(fp, globPattern, {
           onlyDirectories: false,
           onlyFiles: true,

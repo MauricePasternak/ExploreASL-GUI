@@ -4,7 +4,8 @@ import Grid from "@mui/material/Grid";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import React from "react";
-import { Control } from "react-hook-form";
+import { Control, UseFormTrigger } from "react-hook-form";
+import RHFInterDepFilepathTextField from "../../components/FormComponents/RHFInterDepFilepathTextfield";
 import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
 import RHFFilepathDropzone from "../../components/FormComponents/RHFFilepathDropzone";
 import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
@@ -12,7 +13,13 @@ import RHFSelect from "../../components/FormComponents/RHFSelect";
 import RHFTextfield from "../../components/FormComponents/RHFTextfield";
 import OutlinedGroupBox from "../../components/OutlinedGroupBox";
 
-function TabStudyParameters({ control }: { control: Control<DataParValuesType> }) {
+function TabStudyParameters({
+  control,
+  trigger,
+}: {
+  control: Control<DataParValuesType>;
+  trigger: UseFormTrigger<DataParValuesType>;
+}) {
   const { api } = window;
 
   return (
@@ -65,9 +72,11 @@ function TabStudyParameters({ control }: { control: Control<DataParValuesType> }
         <OutlinedGroupBox label="Study-Specific Parameters" mt={2}>
           <Grid container rowSpacing={3} columnSpacing={3} marginTop={0} padding={2}>
             <Grid item xs={12} md={6}>
-              <RHFFilepathTextField
+              <RHFInterDepFilepathTextField
                 control={control}
                 name="x.GUI.StudyRootPath"
+                trigger={trigger}
+                triggerTarget="x.GUI.SUBJECTS"
                 filepathType="dir"
                 dialogOptions={{ properties: ["openDirectory"] }}
                 fullWidth

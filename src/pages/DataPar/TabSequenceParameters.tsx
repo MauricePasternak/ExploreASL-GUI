@@ -5,7 +5,10 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { partialRight as lodashPartialRight, range as lodashRange } from "lodash";
 import React from "react";
-import { Control } from "react-hook-form";
+import { Control, UseFormTrigger } from "react-hook-form";
+import RHFInterDepSelect, {
+  RHFInterDepControlledSelectOption,
+} from "../../components/FormComponents/RHFInterDepSelect";
 import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
 import { getNumbersFromDelimitedString } from "../../common/utilityFunctions/stringFunctions";
 import RHFCheckables, { RHFCheckablesOption } from "../../components/FormComponents/RHFCheckables";
@@ -15,8 +18,8 @@ import RHFSlider from "../../components/FormComponents/RHFSlider";
 import RHFTextfield from "../../components/FormComponents/RHFTextfield";
 import OutlinedGroupBox from "../../components/OutlinedGroupBox";
 
-const M0Options: RHFControlledSelectOption<DataParValuesType, "x.Q.M0">[] = [
-  { label: "M0 Scan is present in the dataset", value: "separate_scan" },
+const M0Options: RHFInterDepControlledSelectOption<DataParValuesType, "x.Q.M0">[] = [
+  { label: "M0 Scan is already present in the dataset", value: "separate_scan" },
   { label: "Use mean of control ASL scans as an M0 substitute", value: "UseControlAsM0" },
 ];
 
@@ -77,7 +80,13 @@ const nCompartmentsOptions: RHFControlledSelectOption<DataParValuesType, "x.Q.nC
   { label: "Dual Compartment", value: 2 },
 ];
 
-function TabSequenceParameters({ control }: { control: Control<DataParValuesType> }) {
+function TabSequenceParameters({
+  control,
+  trigger,
+}: {
+  control: Control<DataParValuesType>;
+  trigger: UseFormTrigger<DataParValuesType>;
+}) {
   return (
     <Fade in>
       <Box display="flex" flexDirection="column" gap={4} position="relative" padding={2}>
@@ -121,9 +130,11 @@ function TabSequenceParameters({ control }: { control: Control<DataParValuesType
               />
             </Grid>
             <Grid item xs={12} md={6} xl={4}>
-              <RHFSelect
+              <RHFInterDepSelect
                 control={control}
                 name="x.Q.M0"
+                trigger={trigger}
+                triggerTarget="x.Q.BackgroundSuppressionPulseTime"
                 options={M0Options}
                 label="M0 Strategy"
                 helperText="Was there an M0 scan acquired or should a substitute be made?"

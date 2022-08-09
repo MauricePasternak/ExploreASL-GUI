@@ -15,7 +15,12 @@ import { sleep } from "../common/utilityFunctions/sleepFunctions";
 import { matlabEscapeBlockChar, Regex } from "../common/utilityFunctions/stringFunctions";
 import { Lock } from "../common/utilityFunctions/threadingFunctions";
 import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
-import { calculateWorkload, createRuntimeEnvironment, getMATLABPathAndVersion } from "./runExploreASLHelperFunctions";
+import {
+  calculateWorkload,
+  createRuntimeEnvironment,
+  getExploreASLExitSummary,
+  getMATLABPathAndVersion,
+} from "./runExploreASLHelperFunctions";
 
 export async function handleRunExploreASL(
   event: IpcMainInvokeEvent,
@@ -383,7 +388,12 @@ export async function handleRunExploreASL(
     if (!stats) return;
 
     const asPath = new Path(path);
-    if (!regexImageFile.test(asPath.basename) || SentImages.has(asPath.path)) return;
+    if (
+      !regexImageFile.test(asPath.basename) ||
+      SentImages.has(asPath.path) ||
+      studySetup.whichModulesToRun === "Population"
+    )
+      return;
 
     // THIS IS AN IMAGE FILE
     console.debug("This is an image file");
@@ -427,6 +437,7 @@ export async function handleRunExploreASL(
   const RunEASLExitSummaries: RunEASLChildProcSummary = {
     exitSummaries: [],
     numIncompleteSteps: 0,
+    missedStepsMessages: [],
   };
 
   for (let index = 0; index < rangeArg.length; index++) {
@@ -509,30 +520,32 @@ export async function handleRunExploreASL(
     });
 
     // On process closure, the following needs to happen:
-    // The studyFilepathWatcher needs to be closed (last pid only)
-    // The frontend needs to be informed of the end result (last pid only)
-    // Local and Global pids need to be removed from their respective lists
+    // 1) The studyFilepathWatcher needs to be closed (last pid only)
+    // 2) The frontend needs to be informed of the end result (last pid only)
+    // 3) Local and Global pids need to be removed from their respective lists
     child.on("close", async (code, signal) => {
       console.debug(`child process exited with code ${code} and signal ${signal}`);
       RunEASLExitSummaries.exitSummaries.push({ pid: child.pid, exitCode: code });
 
       // The last child on its responsibilities go here
       if (pids.length === 1 && pids.includes(child.pid)) {
-        console.log(`Closing studyFilepathWatcher`);
+        console.log(`EASL Process ${channelName} -- Last ChildProc onClose: Run Closing studyFilepathWatcher`);
         studyFilepathWatcher && (await studyFilepathWatcher.close());
 
-        const allStatusFiles = await StudyDerivExploreASLDir.resolve("lock").glob("**/*.status", {
-          onlyFiles: true,
-          onlyDirectories: false,
-        });
-        const incompleteSteps = lodashDiff(
-          Array.from(setOfAnticipatedFilepaths),
-          lodashUniq(allStatusFiles.map(p => p.path))
+        const { missedStatusFiles, missedStepsMessages } = await getExploreASLExitSummary(
+          StudyDerivExploreASLDir,
+          setOfAnticipatedFilepaths,
+          workloadMapping
         );
 
-        console.debug("Incomplete Steps", incompleteSteps);
+        console.debug(`EASL Process ${channelName} -- Last ChildProc onClose: Incomplete Steps`, missedStatusFiles);
 
-        RunEASLExitSummaries.numIncompleteSteps = incompleteSteps.length;
+        RunEASLExitSummaries.numIncompleteSteps = missedStatusFiles.length;
+        RunEASLExitSummaries.missedStepsMessages = missedStepsMessages;
+        console.debug(
+          `EASL Process ${channelName} -- Last ChildProc onClose: Will communicate the following RunEASLExistSummaries:`,
+          RunEASLExitSummaries
+        );
         respondToIPCRenderer(event, `${channelName}:childProcessHasClosed`, child.pid, code, RunEASLExitSummaries);
       }
 

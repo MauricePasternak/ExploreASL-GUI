@@ -12,7 +12,7 @@ import { useSetAtom } from "jotai";
 import { atomDrawerIsOpen } from "../../stores/GUIFrameStore";
 
 function ApplicationBar() {
-  const setDrawerOpen = useSetAtom(atomDrawerIsOpen)
+  const setDrawerOpen = useSetAtom(atomDrawerIsOpen);
 
   return (
     <AppBar className="GUI__AppBar" position="fixed" sx={{ boxShadow: "none" }}>

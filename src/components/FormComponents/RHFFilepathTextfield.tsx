@@ -23,7 +23,7 @@ type ControlledFilepathTextFieldBaseProps = {
 // To avoid conflict with the "field" prop coming from the Controller render
 type RestrictedTextFieldProps = Omit<TextFieldProps, "name" | "value" | "onChange" | "onBlur">;
 
-type ControlledFilepathTextFieldProps<
+type InterDepControlledFilepathTextFieldProps<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
 > = ControlledFilepathTextFieldBaseProps & RHFFieldAndFieldStateType<TValues, TName> & RestrictedTextFieldProps;
@@ -31,7 +31,7 @@ type ControlledFilepathTextFieldProps<
 type ControlledFilepathTextFieldPropsNoField<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = Omit<ControlledFilepathTextFieldProps<TValues, TName>, "field" | "fieldState">;
+> = Omit<InterDepControlledFilepathTextFieldProps<TValues, TName>, "field" | "fieldState">;
 
 type RHFFilepathTextFieldProps<
   TValues extends FieldValues,
@@ -51,7 +51,7 @@ export function ControlledFilepathTextField<TValues extends FieldValues, TName e
   buttonText = "Browse",
   debounceTime = 500,
   ...textFieldProps
-}: ControlledFilepathTextFieldProps<TValues, TName>) {
+}: InterDepControlledFilepathTextFieldProps<TValues, TName>) {
   const { api } = window;
   const [innerVal, setInnerVal] = useState(field.value);
   const hasError = !!fieldState.error;

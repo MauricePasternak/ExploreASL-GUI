@@ -64,6 +64,7 @@ export interface RunEASLChildProcSummary extends Record<string, unknown> {
     exitCode: number;
   }[];
   numIncompleteSteps: number;
+  missedStepsMessages: string[];
 }
 
 /**

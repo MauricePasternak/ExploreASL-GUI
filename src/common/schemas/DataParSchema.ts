@@ -174,7 +174,7 @@ const SchemaDataParASLSequenceParams = Yup.object().shape<YupShape<ASLSequencePa
     .typeError("Invalid readout dimension specified")
     .oneOf(["2D", "3D"], "Invalid dimension type specified")
     .test("DimensionMatchesSequence", "Dimension does not match sequence", (readoutDim, helpers) => {
-      console.log("DimensionMatchesSequence");
+      // console.log("DimensionMatchesSequence");
       if (helpers.parent.Sequence === "2D_EPI" && readoutDim === "3D") {
         return helpers.createError({
           path: helpers.path,

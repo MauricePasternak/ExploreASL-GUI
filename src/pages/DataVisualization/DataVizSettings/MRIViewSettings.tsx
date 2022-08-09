@@ -50,21 +50,14 @@ function MRIViewSettings() {
         <CardContent>
           <Stack spacing={2}>
             {atomsMRISlices.map((atomMRISlice, idx) => {
-              let orientation, marks
-              if (idx === 0) {
-                orientation = "axial"
-                marks = {
-                  
-                }
-              }
-
-
+              const orientation = idx === 0 ? "Axial" : idx === 1 ? "Coronal" : "Sagittal";
+              const maxPermitted = orientation === "Coronal" ? 144 : 120; // 1 less due to indexing
               return (
                 <MRIViewSlider
                   key={`${atomMRISlice}`}
                   atomMRISlice={atomMRISlice}
-                  label={idx === 0 ? "Axial" : idx === 1 ? "Coronal" : "Sagittal"}
-                  max={idx === 1 ? 145 : 121}
+                  label={orientation}
+                  max={maxPermitted}
                 />
               );
             })}

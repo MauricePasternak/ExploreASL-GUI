@@ -16,10 +16,17 @@ Additional information added to README and reformatted RunImportModule visuals.
 
 - Fixed a bug where saving a DataPar.json file in Define Parameters resulting in snackbar feedback that did not respect OS-specific filepath delimiters
 
+- Fixed a bug in MRIViewSettings where the maximum value exceeded the possible indexable value of MRI slices by 1 due to Javascript's zero-based indexing vs MNI space indexing discrepancy, causing crashes.
+
+- Fixed a bug in StructureByParts where selecting a new value in the Select components did not trigger validation for that field. Changing any of the selects now forces validation.
+
 ### Added
 
 - Added some initial RHFInterDep components to begin addressing the issues of interdependent fields w.r.t validation.
+
 - Started adding some configuration for the auto-update feature in `package.json`.
+
+- Modules that fail to complete will now give some feedback to the particular subjects/visits/sessions and the step where they did not complete.
 
 ### Changed
 

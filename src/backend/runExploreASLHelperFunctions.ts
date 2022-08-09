@@ -1,5 +1,11 @@
 import { exec } from "child_process";
-import { pickBy as lodashPickBy, sum as lodashSum, isEmpty as lodashIsEmpty } from "lodash";
+import {
+  pickBy as lodashPickBy,
+  sum as lodashSum,
+  isEmpty as lodashIsEmpty,
+  difference as lodashDiff,
+  uniq as lodashUniq,
+} from "lodash";
 import Path from "pathlib-js";
 import { Regex } from "../common/utilityFunctions/stringFunctions";
 import { promisify } from "util";
@@ -146,7 +152,7 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
       continue;
     }
 
-    console.log(`${subjectPath.path} is a subject to check`);
+    // console.log(`${subjectPath.path} is a subject to check`);
 
     // Behavior differs based on whether there are visits or not
     const visitPaths = await subjectPath.glob("ses-*", { onlyDirectories: true });
@@ -191,9 +197,9 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
         const [statusBasename, info] = workloadMappingEntires[index];
         const statusFilepath = new Path(lockDirPath.path, statusBasename);
         if (await statusFilepath.exists()) continue;
-        console.log(
-          `${statusFilepath.path} has not been created...adding to anticipated workload and loadingBarValue of ${info.loadingBarValue}`
-        );
+        // console.log(
+        //   `${statusFilepath.path} has not been created...adding to anticipated workload and loadingBarValue of ${info.loadingBarValue}`
+        // );
         structuralWorkload.anticipatedFilepaths.push(statusFilepath.path);
         structuralWorkload.anticipatedWorkload.push(info.loadingBarValue);
       }
@@ -232,7 +238,7 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
           `${subjectPath.basename}_${visitIndex + 1}`, // +1 to account for MATLAB indexing
           "xASL_module_Structural"
         );
-        console.log(`Making lock dir: ${lockDirPath.path}`);
+        // console.log(`Making lock dir: ${lockDirPath.path}`);
         if (!(await lockDirPath.exists())) {
           await lockDirPath.makeDir();
         }
@@ -248,9 +254,9 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
           const statusFilepath = new Path(lockDirPath.path, statusBasename);
           if (await statusFilepath.exists()) continue;
 
-          console.log(
-            `${statusFilepath.path} has not been created...adding to anticipated workload and loadingBarValue of ${info.loadingBarValue}`
-          );
+          // console.log(
+          //   `${statusFilepath.path} has not been created...adding to anticipated workload and loadingBarValue of ${info.loadingBarValue}`
+          // );
           structuralWorkload.anticipatedFilepaths.push(statusFilepath.path);
           structuralWorkload.anticipatedWorkload.push(info.loadingBarValue);
         }
@@ -258,7 +264,7 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
     } // End of visits.length > 0
   } // End of for await (const subjectPath of pathRawData.readDirIter())
 
-  console.log(`calculateStructuralWorkload -- Structural workload:`, JSON.stringify(structuralWorkload, null, 2));
+  // console.log(`calculateStructuralWorkload -- Structural workload:`, JSON.stringify(structuralWorkload, null, 2));
   return structuralWorkload;
 }
 
@@ -275,7 +281,7 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
   const filterSet = new Set(["ASL"]);
   const filteredWorkloadMapping = lodashPickBy(workloadSubset, v => filterSet.has(v.module));
   const workloadMappingEntires = Object.entries(filteredWorkloadMapping);
-  console.log(`calculateASLWorkload -- Filtered workload mapping: ${JSON.stringify(filteredWorkloadMapping, null, 2)}`);
+  // console.log(`calculateASLWorkload -- Filtered workload mapping: ${JSON.stringify(filteredWorkloadMapping, null, 2)}`);
 
   const aslWorkload = {
     anticipatedFilepaths: [] as string[],
@@ -293,7 +299,7 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
       continue;
     }
 
-    console.log(`calculateASLWorkload -- Processing subject ${subjectPath.basename}`);
+    // console.log(`calculateASLWorkload -- Processing subject ${subjectPath.basename}`);
 
     // Skip based on dataPar settings
     const { hasFLAIR } = await getSubjectImagetypes(subjectPath, globMapping);
@@ -316,9 +322,9 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
      *          |- sub-<subject>_asl.nii.gz
      */
     if (visitPaths.length === 0) {
-      console.log(
-        `calculateASLWorkload -- Subject ${subjectPath.basename} has no explicit visits; assuming single visit`
-      );
+      // console.log(
+      //   `calculateASLWorkload -- Subject ${subjectPath.basename} has no explicit visits; assuming single visit`
+      // );
       /**
        * Scenario A1: Multiple sessions with only one visit
        * EXPECTED BASENAMES: sub-<subject>_run-<session>_asl.json
@@ -330,29 +336,29 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
        */
       const isMultiSession = sessionPaths.length > 0;
 
-      console.log(`calculateASLWorkload -- Subject ${subjectPath.basename} isMultiSession: ${isMultiSession}`);
+      // console.log(`calculateASLWorkload -- Subject ${subjectPath.basename} isMultiSession: ${isMultiSession}`);
 
       if (!isMultiSession) {
-        console.log(
-          `calculateASLWorkload -- Subject ${subjectPath.basename} has no _run-*_asl.json files. Checking for _asl.json`
-        );
+        // console.log(
+        //   `calculateASLWorkload -- Subject ${subjectPath.basename} has no _run-*_asl.json files. Checking for _asl.json`
+        // );
 
         const singleSessionBasename = `${subjectPath.basename}_asl.json`;
         const singleSessionPath = subjectPath.resolve(`perf/${singleSessionBasename}`);
 
-        console.log(`calculateASLWorkload -- Adding sessionPath: ${singleSessionPath.path}`);
+        // console.log(`calculateASLWorkload -- Adding sessionPath: ${singleSessionPath.path}`);
 
         if (!(await singleSessionPath.exists())) {
-          console.log(`Skipping subject ${subjectPath.basename} because no ASL data found`);
+          // console.log(`Skipping subject ${subjectPath.basename} because no ASL data found`);
           continue;
         }
         sessionPaths.push(singleSessionPath); // convert to length-1 array in order to keep consistency
       }
 
-      console.log(
-        `calculateASLWorkload -- Subject ${subjectPath.basename} sessionPaths`,
-        JSON.stringify(sessionPaths, null, 2)
-      );
+      // console.log(
+      //   `calculateASLWorkload -- Subject ${subjectPath.basename} sessionPaths`,
+      //   JSON.stringify(sessionPaths, null, 2)
+      // );
 
       // Now iterate over the sessions within each subject
       for await (const sessionFilepath of sessionPaths) {
@@ -380,7 +386,7 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
           await lockDirPath.makeDir();
         }
 
-        console.log(`calculateASLWorkload -- Checking existing .status files in ${lockDirPath.path}`);
+        // console.log(`calculateASLWorkload -- Checking existing .status files in ${lockDirPath.path}`);
 
         // Determine the workload based on the .status files not already existing
         for (let index = 0; index < workloadMappingEntires.length; index++) {
@@ -464,7 +470,7 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
             const [statusBasename, info] = workloadMappingEntires[index];
             const statusFilepath = new Path(lockDirPath.path, statusBasename);
             if (await statusFilepath.exists()) continue;
-            console.log(`calculateASLWorkload -- Adding ${statusFilepath.path} to workload`);
+            // console.log(`calculateASLWorkload -- Adding ${statusFilepath.path} to workload`);
             aslWorkload.anticipatedFilepaths.push(statusFilepath.path);
             aslWorkload.anticipatedWorkload.push(info.loadingBarValue);
           }
@@ -615,9 +621,9 @@ export async function calculateWorkload(
     throw new Error(`Impossible studySetup whichModuleToRun provided: ${studySetup.whichModulesToRun}`);
   }
 
-  console.log(`calculateWorkload -- payload.anticipatedWorkload: `, payload.anticipatedWorkload);
-  console.log(`calculateWorkload -- payload.anticipatedFilepaths: `, payload.anticipatedFilepaths);
-  console.log(`calculateWorkload -- payload.anticipatedFilepaths.length: `, payload.anticipatedFilepaths.length);
+  // console.log(`calculateWorkload -- payload.anticipatedWorkload: `, payload.anticipatedWorkload);
+  // console.log(`calculateWorkload -- payload.anticipatedFilepaths: `, payload.anticipatedFilepaths);
+  // console.log(`calculateWorkload -- payload.anticipatedFilepaths.length: `, payload.anticipatedFilepaths.length);
 
   if (payload.anticipatedFilepaths.length === 0) {
     return {
@@ -642,4 +648,62 @@ export async function calculateWorkload(
       payload: payload,
     };
   }
+}
+
+/**
+ * Prepares the messages to be displayed in the GUI regarding possibly missed .status files
+ * @param StudyDerivExploreASLDir The derivatives/ExploreASL directory as a Path instance.
+ * @param setOfAnticipatedFilepaths A set of filepaths that are anticipated to be created.
+ * @param workloadMapping The workloadMapping for this study.
+ * @returns An object with properties:
+ * - missedStatusFiles: The filepaths that were anticipated but were not created.
+ * - missedStepsMessages: The messages to display to the user for the missed steps.
+ */
+export async function getExploreASLExitSummary(
+  StudyDerivExploreASLDir: Path,
+  setOfAnticipatedFilepaths: Set<string>,
+  workloadMapping: EASLWorkload
+): Promise<{ missedStatusFiles: string[]; missedStepsMessages: string[] }> {
+  const allStatusFiles = await StudyDerivExploreASLDir.resolve("lock").glob("**/*.status", {
+    onlyFiles: true,
+    onlyDirectories: false,
+  });
+  const missedStatusFiles = lodashDiff(
+    Array.from(setOfAnticipatedFilepaths),
+    lodashUniq(allStatusFiles.map(p => p.path))
+  );
+  // Early exit if all is in order
+  if (missedStatusFiles.length === 0) return { missedStatusFiles, missedStepsMessages: [] };
+
+  const missedStepsMessages: string[] = [];
+  const regexStatusFile = new Regex(
+    "lock\\/xASL_module_(?<Module>ASL|Structural|Population)\\/?(?<Subject>.*)?\\/xASL_module_(?:ASL|Structural|Population)_?(?<Session>.*)\\/(?<StatusBasename>(?<StatusCode>\\d{3}).*\\.status)$"
+  );
+  const seenItems = new Set<string>();
+  for (const statusFP of missedStatusFiles) {
+    const match = regexStatusFile.search(statusFP);
+    if (!match) continue;
+    const { Module, Subject, Session, StatusBasename } = match.groupsObject;
+    if (!(StatusBasename in workloadMapping)) continue;
+
+    // Population module is a special case, prompting an early return
+    if (Module === "Population") {
+      missedStepsMessages.push(
+        `Module: ${Module} ...failed at earliest step: ${workloadMapping[StatusBasename].description}`
+      );
+      return { missedStatusFiles, missedStepsMessages };
+    }
+
+    if (seenItems.has(`${Subject}${Session}`) || !(StatusBasename in workloadMapping)) continue;
+
+    const item = Session
+      ? `Module: ${Module}, Subject/Visit: ${Subject}, Session: ${Session}`
+      : `Module: ${Module}, Subject/Visit: ${Subject}`;
+    const description = `...failed at earliest step: ${workloadMapping[StatusBasename].description}`;
+    const message = `${item} ${description}`;
+    missedStepsMessages.push(message);
+    seenItems.add(`${Subject}${Session}`);
+  }
+
+  return { missedStatusFiles, missedStepsMessages };
 }
