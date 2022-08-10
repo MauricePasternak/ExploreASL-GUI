@@ -3,13 +3,14 @@ import Stack from "@mui/material/Stack";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { ResponsiveSwarmPlotCanvas } from "@nivo/swarmplot";
-import { useAtomValue, useSetAtom, atom } from "jotai";
+import { useAtomValue, useSetAtom, atom, useAtom } from "jotai";
 import React from "react";
 import {
   toNivoSwarmPlotDataGroupBy,
   toNivoSwarmPlotDataSingle,
 } from "../../../common/utilityFunctions/dataFrameFunctions";
 import {
+  atomCurrentMRIViewSubject,
   atomDataVizLoadSettings,
   atomDataVizSubsetDF,
   atomEASLSwarmplotSettings,
@@ -23,6 +24,7 @@ import {
   niftiToNivoCoronal,
   niftiToNivoSagittal,
 } from "../../../common/utilityFunctions/nivoFunctions";
+import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
 
 function EASLSwarmplot() {
   const { api } = window;
@@ -32,13 +34,21 @@ function EASLSwarmplot() {
   const dataLoadSettings = useAtomValue(atomDataVizLoadSettings);
   const setMRIData = useSetAtom(atomOfAtomMRIData);
   const setMRIDataStats = useSetAtom(atomMRIDataStats);
+  const [currentMRIViewSubject, setMRICurrentViewSubject] = useAtom(atomCurrentMRIViewSubject);
   const swarmplotSettings = useAtomValue(atomEASLSwarmplotSettings);
+
+  const [YMin, YMax, YCount, YSum] = getMinMaxCountSum(dataFrame.getSeries(dataVarsSchema.YAxisVar).toArray());
+  const YMean = YSum / YCount;
+
+  const SubjectSessionSpread = dataFrame.hasSeries("session") ? ["SUBJECT", "session"] : ["SUBJECT"];
+
   const [groups, data] = dataVarsSchema.XAxisVar
     ? toNivoSwarmPlotDataGroupBy(
         dataFrame,
-        "SUBJECT",
+        SubjectSessionSpread,
         dataVarsSchema.YAxisVar,
         dataVarsSchema.XAxisVar,
+        ...SubjectSessionSpread,
         ...dataVarsSchema.HoverVariables
       )
     : toNivoSwarmPlotDataSingle(
@@ -46,6 +56,7 @@ function EASLSwarmplot() {
         "SUBJECT",
         dataVarsSchema.YAxisVar,
         dataVarsSchema.XAxisVar,
+        ...SubjectSessionSpread,
         ...dataVarsSchema.HoverVariables
       );
 
@@ -53,11 +64,13 @@ function EASLSwarmplot() {
   console.log("EASLSwarmplot rendered with data:", data);
 
   async function handleLoadSubject(subjectToLoad: string) {
+    if (subjectToLoad === currentMRIViewSubject) return; // Early return if the subject is already loaded
+
     const popPath = api.path.asPath(dataLoadSettings.StudyRootPath, "derivatives", "ExploreASL", "Population");
     if (!(await api.path.filepathExists(popPath.path))) return;
 
     console.log("handleLoadSubject -- found popPath: ", popPath.path);
-    const qCBFFiles = await api.path.glob(popPath.path, `qCBF_${subjectToLoad}_*.nii*`);
+    const qCBFFiles = await api.path.glob(popPath.path, `qCBF_${subjectToLoad}*.nii*`);
     if (qCBFFiles.length === 0) return;
 
     console.log("handleLoadSubject -- found qCBFFiles: ", qCBFFiles);
@@ -73,6 +86,7 @@ function EASLSwarmplot() {
 
     setMRIData([atom(axialData), atom(coronalData), atom(sagittalData)]);
     setMRIDataStats({ max: maximumValue, min: minimumValue });
+    setMRICurrentViewSubject(subjectToLoad);
   }
 
   return (
@@ -88,6 +102,12 @@ function EASLSwarmplot() {
         from: "color",
         modifiers: [["darker", 0.6]],
       }}
+      valueScale={{
+        type: "linear",
+        min: YMin - YMean * 0.1,
+        max: YMax + YMean * 0.1,
+      }}
+      layout={swarmplotSettings.plotLayout}
       size={swarmplotSettings.nodeSize}
       enableGridY={swarmplotSettings.enableGridY}
       enableGridX={swarmplotSettings.enableGridX}
@@ -97,7 +117,7 @@ function EASLSwarmplot() {
         tickSize: swarmplotSettings.axisBottom.tickHeight,
         tickPadding: swarmplotSettings.axisBottom.tickLabelPadding,
         tickRotation: swarmplotSettings.axisBottom.tickLabelRotation,
-        legend: dataVarsSchema.XAxisVar,
+        legend: swarmplotSettings.plotLayout === "vertical" ? dataVarsSchema.XAxisVar : dataVarsSchema.YAxisVar,
         legendPosition: "middle",
         legendOffset: swarmplotSettings.axisBottom.axisLabelTextOffset,
       }}
@@ -105,7 +125,7 @@ function EASLSwarmplot() {
         tickSize: swarmplotSettings.axisLeft.tickHeight,
         tickPadding: swarmplotSettings.axisLeft.tickLabelPadding,
         tickRotation: swarmplotSettings.axisLeft.tickLabelRotation,
-        legend: dataVarsSchema.YAxisVar,
+        legend: swarmplotSettings.plotLayout === "vertical" ? dataVarsSchema.YAxisVar : dataVarsSchema.XAxisVar,
         legendPosition: "middle",
         legendOffset: swarmplotSettings.axisLeft.axisLabelTextOffset,
       }}
@@ -113,9 +133,20 @@ function EASLSwarmplot() {
       tooltip={({ data }) => (
         <Paper elevation={2} sx={{ p: 1 }}>
           <Stack>
-            <Typography component={"strong"}>ID: {data.id}</Typography>
-            <Typography>X: {data.group}</Typography>
-            <Typography>Y: {data.value}</Typography>
+            {SubjectSessionSpread.length === 1 ? (
+              <Typography component={"strong"}>Subject/Visit: {data["SUBJECT" as "value"]}</Typography>
+            ) : (
+              <>
+                <Typography component={"strong"}>Subject/Visit: {data["SUBJECT" as "value"]}</Typography>
+                <Typography component={"strong"}>Session: {data["session" as "value"]}</Typography>
+              </>
+            )}
+            <Typography>
+              {dataVarsSchema.XAxisVar}: {data.group}
+            </Typography>
+            <Typography>
+              {dataVarsSchema.YAxisVar}: {data.value}
+            </Typography>
             {...dataVarsSchema.HoverVariables.map(varName => (
               <Typography key={varName}>
                 {varName}: {data[varName as "group"]}
@@ -157,7 +188,12 @@ function EASLSwarmplot() {
         },
       }}
       onClick={async ({ data }) => {
-        await handleLoadSubject(data["id"]);
+        console.log(data);
+        if (!("SUBJECT" in data)) return;
+        const subjectToLoad =
+          "session" in data ? `${data["SUBJECT" as "id"]}_${data["session" as "id"]}` : data["SUBJECT" as "id"];
+        console.log("Swarmplot trying to load in subject/session: ", subjectToLoad);
+        await handleLoadSubject(subjectToLoad);
       }}
     />
   );

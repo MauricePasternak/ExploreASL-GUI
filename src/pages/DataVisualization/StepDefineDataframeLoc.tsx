@@ -1,15 +1,21 @@
+import CircleIcon from "@mui/icons-material/Circle";
+import FolderIcon from "@mui/icons-material/Folder";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
+import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import CircleIcon from "@mui/icons-material/Circle";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { DataFrame, fromCSV, IDataFrame, ISeries } from "data-forge";
-import { useSetAtom, atom, useAtom } from "jotai";
+import { atom, useAtom, useSetAtom } from "jotai";
 import React from "react";
 import { SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
 import { DataVizLoadDFSchema } from "../../common/schemas/DataVizLoadDFSchema";
@@ -25,6 +31,7 @@ import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFuncti
 import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
 import RHFSelect, { RHFControlledSelectOption } from "../../components/FormComponents/RHFSelect";
 import OutlinedGroupBox from "../../components/OutlinedGroupBox";
+import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import {
   atomCurrentMRIViewSubject,
   atomDataVizCurrentStep,
@@ -35,15 +42,9 @@ import {
   atomOfAtomMRIData,
   atomOfAtomsDataVizSubsetOperations,
   defaultNivoGraphDataVariablesSchema,
-  loadDataFrameDataVizDefaults,
 } from "../../stores/DataFrameVisualizationStore";
 import { atomDataVizModuleSnackbar } from "../../stores/SnackbarStore";
-import Card from "@mui/material/Card";
-import CardHeader from "@mui/material/CardHeader";
-import Avatar from "@mui/material/Avatar";
-import CardContent from "@mui/material/CardContent";
-import FolderIcon from "@mui/icons-material/Folder";
-import Divider from "@mui/material/Divider";
+import HelpDataViz__StepDefineDataframeLoc from "../Help/HelpDataViz__StepDefineDataframeLoc";
 
 const atlasesOptions: RHFControlledSelectOption<LoadEASLDataFrameSchema, "Atlases">[] = [
   { label: "WholeBrain Grey Matter", value: "TotalGM" },
@@ -53,6 +54,15 @@ const atlasesOptions: RHFControlledSelectOption<LoadEASLDataFrameSchema, "Atlase
   { label: "Harvard-Oxford Cortical", value: "HOcort_CONN" },
   { label: "Harvard-Oxford Subcortical", value: "HOsub_CONN" },
   { label: "OASIS Atlas", value: "Mindboggle_OASIS_DKT31_CMA" },
+];
+
+const EASLColnamesNotPermittedInMetadata: string[] = [
+  "SubjectNList",
+  "GM_vol",
+  "WM_vol",
+  "CSF_vol",
+  "GM_ICVRatio",
+  "GMWM_ICVRatio",
 ];
 
 function renderLoadDFError(statistic: string, atlases: string[], pvc: boolean) {
@@ -154,8 +164,6 @@ function StepDefineDataframeLoc() {
   const setCurrentMRIViewSubject = useSetAtom(atomCurrentMRIViewSubject);
   const setAtomsMRIData = useSetAtom(atomOfAtomMRIData);
 
-  // TODO: There needs to be help info on this page
-
   const { control, handleSubmit } = useForm({
     // defaultValues: loadDataFrameDataVizDefaults,
     defaultValues: dataVizLoadSettings,
@@ -200,7 +208,8 @@ function StepDefineDataframeLoc() {
       // Otherwise, merge
       tmpIDF = innerJoin(tmpIDF, fromCSV(fetchDF.data, { dynamicTyping: true }).after(0), "SUBJECT");
     } // End of for loop
-    EASLDF = new DataFrame(tmpIDF.toArray());
+    // Drop Site column; it should be coming from a user's metadata
+    EASLDF = new DataFrame(tmpIDF.hasSeries("Site") ? tmpIDF.dropSeries("Site").toArray() : tmpIDF.toArray());
 
     console.log("Step 'Define Runtime Envs' -- EASLDF: ", EASLDF.toArray());
 
@@ -222,7 +231,17 @@ function StepDefineDataframeLoc() {
         });
         return;
       }
-      MetadataDF = fromCSV(fetchMetaDF.data, { dynamicTyping: true });
+      // Remove columns that may cause issues when merging
+      const initialMetadataDF = fromCSV(fetchMetaDF.data, { dynamicTyping: true });
+      const colsToDrop = [];
+      for (const colName of EASLColnamesNotPermittedInMetadata) {
+        if (initialMetadataDF.hasSeries(colName)) {
+          colsToDrop.push(colName);
+        }
+      }
+      MetadataDF =
+        colsToDrop.length > 0 ? new DataFrame(initialMetadataDF.dropSeries(colsToDrop).toArray()) : initialMetadataDF;
+
       console.log("Step 'Define Runtime Envs' -- MetadataDF: ", MetadataDF.toArray());
     } // End of if statement
 
@@ -231,8 +250,7 @@ function StepDefineDataframeLoc() {
      */
     let mergedDF: DataFrame = null;
     if (MetadataDF) {
-      // Sanity Check for merge column
-      // TODO: It may be worthwhile to any filter out invalid subjects that aren't present in rawdata...
+      // Sanity Check for main merge column existing
       if (!MetadataDF.getColumnNames().includes("SUBJECT")) {
         setDataVizSnackbar({
           severity: "error",
@@ -245,23 +263,63 @@ function StepDefineDataframeLoc() {
         });
         return;
       }
-      mergedDF = new DataFrame(outerLeftJoin(EASLDF, MetadataDF, "SUBJECT").toArray());
+
+      // Sanity Check for non-null values in merge columns
+      let nullItems: number;
+      if (!MetadataDF.hasSeries("session")) {
+        nullItems = MetadataDF.getSeries("SUBJECT")
+          .filter(val => val == null)
+          .count();
+      } else {
+        nullItems = MetadataDF.subset(["SUBJECT", "session"])
+          .filter(row => row["SUBJECT"] == null || row["session"] == null)
+          .count();
+      }
+      if (nullItems > 0) {
+        setDataVizSnackbar({
+          severity: "error",
+          title: "Empty values found in the SUBJECT and/or session columns of the Metadata dataframe",
+          message: [
+            `A proper merging of the ExploreASL and Metadata dataframes is impossible when there are empty values in the "SUBJECT" and/or "session" columns of the Metadata dataframe.`,
+            " ",
+            "Please remove rows with the empty values in this/these column(s) and try again.",
+          ],
+        });
+        return;
+      }
+
+      // Perform an outer-left join on the ExploreASL and Metadata dataframes;
+      // on SUBJECT and session if the latter is present; otherwise just on SUBJECT
+      mergedDF = new DataFrame(
+        outerLeftJoin(
+          EASLDF,
+          MetadataDF,
+          MetadataDF.hasSeries("session") ? ["SUBJECT", "session"] : "SUBJECT"
+        ).toArray()
+      );
     } else {
       mergedDF = EASLDF;
     }
 
-    console.log("Step 'Define Runtime Envs' -- Merged Dataframe: ", mergedDF.toArray());
+    console.log("Step 'Define Runtime Envs' -- Merged Dataframe: ", mergedDF.toString());
 
-    if (mergedDF.count() === 0 && MetadataDF != null) {
-      setDataVizSnackbar({
-        severity: "error",
-        title: "Invalid Merge with Metadata",
-        message: [
-          "The ExploreASL and Metadata spreadsheet do not have any overlapping subjects.",
-          "Ensure that the Metadata spreadsheet contains a SUBJECT column with the same subjects as the ExploreASL spreadsheet.",
-          "Subject names are based on the subject folders located within the rawdata folder.",
-        ],
-      });
+    if (mergedDF.count() === 0) {
+      MetadataDF != null
+        ? setDataVizSnackbar({
+            severity: "error",
+            title: "Invalid Merge with Metadata",
+            message: [
+              "The ExploreASL and Metadata spreadsheet do not have any overlapping subjects/sessions.",
+              "Ensure that the Metadata spreadsheet contains a SUBJECT column with the same subjects as the ExploreASL spreadsheet.",
+              `The Metadata spreadsheet can also contain a "session" column.`,
+              "Subject names are based on the subject folders located within the rawdata folder.",
+            ],
+          })
+        : setDataVizSnackbar({
+            severity: "error",
+            title: "Error while loading ExploreASL Data",
+            message: ["Failed to load and/or merge one or more ExploreASL spreadsheets."],
+          });
       return;
     }
 
@@ -286,7 +344,7 @@ function StepDefineDataframeLoc() {
   return (
     <form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
       <Box padding={2}>
-        <Card>
+        <Card sx={{ marginBottom: 4 }}>
           <CardHeader
             title={<Typography variant="h4">Load DataFrame</Typography>}
             subheader={
@@ -298,6 +356,11 @@ function StepDefineDataframeLoc() {
               <Avatar sizes="large">
                 <FolderIcon />
               </Avatar>
+            }
+            action={
+              <FabDialogWrapper maxWidth="xl" PaperProps={{ sx: { minWidth: "499px" } }} sx={{ marginTop: "40px" }}>
+                <HelpDataViz__StepDefineDataframeLoc />
+              </FabDialogWrapper>
             }
           />
           <Divider />

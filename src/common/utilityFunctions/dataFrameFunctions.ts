@@ -440,7 +440,7 @@ export function toNivoSwarmPlotDataSingle(df: DataFrame, id: string, value: stri
 
 export function toNivoSwarmPlotDataGroupBy(
   df: DataFrame,
-  id: string,
+  id: string | string[],
   value: string,
   group: string,
   ...other: string[]
@@ -448,14 +448,20 @@ export function toNivoSwarmPlotDataGroupBy(
   console.log(`toNivoSwarmPlotDataGroupBy invoked with id: ${id}, value: ${value}, group: ${group}, other: ${other}`);
 
   const groups = df.getSeries(group).distinct().toArray();
+  const iid = Array.isArray(id) ? id : [id];
   const data = df
-    .subset([id, value, group, ...other])
+    .subset([...iid, value, group, ...other])
     .toArray()
     .map(obj => {
       const groupName = obj[group];
       // const result = { ...lodashPick(obj, other), id: obj[id], value: obj[value], group: groupName };
       // return result;
-      return { ...lodashPick(obj, other), id: obj[id], value: obj[value], group: groupName };
+      return {
+        ...lodashPick(obj, other),
+        id: Array.isArray(id) ? `${obj[id[0]]}_${obj[id[1]]}` : obj[id],
+        value: obj[value],
+        group: groupName,
+      };
     });
   return [groups, data] as const;
 }

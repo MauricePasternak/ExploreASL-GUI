@@ -75,7 +75,10 @@ function HelpImport__StepDefineRuntimeEnvs() {
           </section>
 
           <section>
-            <Accordion expanded={expanded === "panel1"} onChange={handleAccordionChange("panel1")}>
+            <Accordion
+              expanded={expanded === " panel__whatisExploreASLType"}
+              onChange={handleAccordionChange(" panel__whatisExploreASLType")}
+            >
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography>What is ExploreASL Type?</Typography>
               </AccordionSummary>
@@ -110,7 +113,10 @@ function HelpImport__StepDefineRuntimeEnvs() {
           </section>
 
           <section>
-            <Accordion expanded={expanded === "panel2"} onChange={handleAccordionChange("panel2")}>
+            <Accordion
+              expanded={expanded === "panel__whatisExploreASLPath"}
+              onChange={handleAccordionChange("panel__whatisExploreASLPath")}
+            >
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography>What is ExploreASL Path?</Typography>
               </AccordionSummary>
@@ -150,7 +156,10 @@ function HelpImport__StepDefineRuntimeEnvs() {
           </section>
 
           <section>
-            <Accordion expanded={expanded === "panel3"} onChange={handleAccordionChange("panel3")}>
+            <Accordion
+              expanded={expanded === "panel__whatisMATLABRuntimePath"}
+              onChange={handleAccordionChange("panel__whatisMATLABRuntimePath")}
+            >
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography>What is MATLAB Runtime Path</Typography>
               </AccordionSummary>
@@ -184,7 +193,10 @@ function HelpImport__StepDefineRuntimeEnvs() {
           </section>
 
           <section>
-            <Accordion expanded={expanded === "panel4"} onChange={handleAccordionChange("panel4")}>
+            <Accordion
+              expanded={expanded === "panel__whatisStudyRootFolder"}
+              onChange={handleAccordionChange("panel__whatisStudyRootFolder")}
+            >
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography>What is the Study Root Folder?</Typography>
               </AccordionSummary>
@@ -279,7 +291,10 @@ function HelpImport__StepDefineRuntimeEnvs() {
           </section>
 
           <section>
-            <Accordion expanded={expanded === "panel6"} onChange={handleAccordionChange("panel6")}>
+            <Accordion
+              expanded={expanded === "panel__whatdoesIgnoremean"}
+              onChange={handleAccordionChange("panel__whatdoesIgnoremean")}
+            >
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography>What does Ignore mean?</Typography>
               </AccordionSummary>
@@ -301,7 +316,10 @@ function HelpImport__StepDefineRuntimeEnvs() {
           </section>
 
           <section>
-            <Accordion expanded={expanded === "panel7"} onChange={handleAccordionChange("panel7")}>
+            <Accordion
+              expanded={expanded === "panel__whatifafoldercontainstwopiecesofinfo"}
+              onChange={handleAccordionChange("panel__whatifafoldercontainstwopiecesofinfo")}
+            >
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography>What if a folder contains two pieces of information?</Typography>
               </AccordionSummary>
@@ -316,7 +334,6 @@ function HelpImport__StepDefineRuntimeEnvs() {
               </AccordionDetails>
             </Accordion>
           </section>
-          
         </Stack>
       </DialogContent>
     </>

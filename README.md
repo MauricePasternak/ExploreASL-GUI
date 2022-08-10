@@ -238,7 +238,7 @@ Additional features to keep in mind:
 - [x] Create a Data Visualization Module.
 - [x] Add plot settings for plot legends (i.e. legend text fontsize, positioning, etc.) within the DataVisualization Module.
 - [x] Add more helpful information in the Process Studies module for when a study does not fully complete.
-- [ ] Add help information on the steps within the Data Visualization Module.
+- [x] Add help information on the steps within the Data Visualization Module.
 - [ ] Add plot settings for renaming axis main labels within the Data Visualization Module.
 - [ ] Add Multiprocessing Capability to the Import Module as well. \*\*
 - [ ] Add a submodule to Process Studies where users can pin-point change the JSON sidecars of individual subjects/visits/sessions.

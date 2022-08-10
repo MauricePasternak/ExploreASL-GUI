@@ -88,12 +88,17 @@ function AtomicSnackbarMessage({
       return message.map((msg, idx) => {
         const key = `AtomicSnackbarMessageLine_${idx}`;
         // Array of strings
-        if (typeof msg === "string") return /^\s+$/gm.test(msg) ? <br /> : <Typography key={key}>{msg}</Typography>;
+        if (typeof msg === "string")
+          return /^\s+$/gm.test(msg) ? <br key={key} /> : <Typography key={key}>{msg}</Typography>;
         // Array of SnackbarMessageType objects
         return msg;
       });
     } else if (typeof message === "string") {
-      return /^\s+$/gm.test(message) ? <br /> : <Typography key={`AtomicSnackbarMessageLine`}>{message}</Typography>;
+      return /^\s+$/gm.test(message) ? (
+        <br key={`AtomicSnackbarMessageLine`} />
+      ) : (
+        <Typography key={`AtomicSnackbarMessageLine`}>{message}</Typography>
+      );
     } else {
       return message;
     }

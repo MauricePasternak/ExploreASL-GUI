@@ -1,5 +1,9 @@
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardHeader from "@mui/material/CardHeader";
+import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
@@ -16,6 +20,7 @@ import EASLScatterplot from "./DataVizPlots/EASLScatterplot";
 import EASLSwarmplot from "./DataVizPlots/EASLSwarmplot";
 import PlotSettingsDrawer from "./DataVizSettings/PlotSettingsDrawer";
 import MRIMultiView from "./MRIView/MRIMultiView";
+import ScatterPlotIcon from "@mui/icons-material/ScatterPlot";
 
 function PlotEASLMainView() {
   const graphType = useAtomValue(atomNivoGraphType);
@@ -45,7 +50,22 @@ function PlotEASLMainView() {
         }}
       >
         <Grid item xs={12}>
-          <Typography variant="h3">Data Visualization</Typography>
+          <Card>
+            <CardHeader
+              title={<Typography variant="h4">Data Visualization</Typography>}
+              subheader={
+                <Typography>
+                  Plot an interactive chart and load CBF volumes from individual subjects/visits/sessions by clicking on data points
+                </Typography>
+              }
+              avatar={
+                <Avatar sizes="large">
+                  <ScatterPlotIcon />
+                </Avatar>
+              }
+            />
+            <Divider />
+          </Card>
           <Box
             position={"relative"}
             display="flex"

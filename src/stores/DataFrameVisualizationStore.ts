@@ -168,7 +168,7 @@ export const atomEASLSwarmplotSettings = atom<NivoSwarmPlotProps>({
   plotLayout: "vertical",
   margins: { top: 40, right: 50, bottom: 60, left: 90 },
   interSeriesGap: 0,
-  colorScheme: "nivo",
+  colorScheme: "set1",
 
   nodeSize: 10,
   nodeBorderWidth: 1,
@@ -226,7 +226,7 @@ const EASLScatterPlotLegend: NivoLegendProps = {
   translateY: 0,
   itemsSpacing: 5,
   symbolSize: 12,
-  itemWidth: 100,
+  itemWidth: 120,
   itemHeight: 12,
   itemDirection: "left-to-right",
   symbolShape: "square",
@@ -242,7 +242,7 @@ const EASLScatterPlotLegend: NivoLegendProps = {
 
 export const atomEASLScatterplotSettings = atom<NivoScatterPlotProps>({
   margins: { top: 40, right: 130, bottom: 60, left: 90 },
-  colorScheme: "nivo",
+  colorScheme: "set1",
 
   nodeSize: 10,
 

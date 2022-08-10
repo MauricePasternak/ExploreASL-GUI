@@ -48,19 +48,13 @@ function StepDefineRuntimeEnvs({
               </Avatar>
             }
             action={
-              <FabDialogWrapper
-                maxWidth="xl"
-                // fabProps={{ sx: { position: "absolute", top: "100px", right: "1rem", zIndex: 1 } }}
-                PaperProps={{ sx: { minWidth: "499px" } }}
-                sx={{ marginTop: "40px" }}
-              >
+              <FabDialogWrapper maxWidth="xl" PaperProps={{ sx: { minWidth: "499px" } }} sx={{ marginTop: "40px" }}>
                 <HelpImport__StepDefineRuntimeEnvs />
               </FabDialogWrapper>
             }
           />
           <Divider />
           <CardContent>
-            
             <OutlinedGroupBox
               label="ExploreASL Runtime"
               labelBackgroundColor={theme => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}

@@ -14,6 +14,7 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
+import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import { DataFrameMainType } from "../../common/types/dataFrameTypes";
 import {
   atomDataVizCurrentStep,
@@ -21,6 +22,7 @@ import {
   atomSetDataVizDF,
   DataFrameMainTypeOptions,
 } from "../../stores/DataFrameVisualizationStore";
+import HelpDataViz__StepClarifyDataTypes from "../Help/HelpDataViz__StepClarifyDataTypes";
 
 function StepClarifyDataTypes() {
   const dataFrameTypes = useAtomValue(atomDataVizDFDTypes);
@@ -35,8 +37,6 @@ function StepClarifyDataTypes() {
 
   console.log("StepClarifyDataTypes -- dataFrameTypes: ", dataFrameTypes);
 
-  // TODO: There needs to be help info on this page
-
   // TODO: There should be logic wherein a Regex is used to automatically avoid the default ExploreASL numerical column
   // names and some of the categorical ones such as SUBJECT and session.
 
@@ -46,17 +46,22 @@ function StepClarifyDataTypes() {
         <Box p={2}>
           <Card elevation={2}>
             <CardHeader
-              avatar={
-                <Avatar sizes="large">
-                  <PersonSearchIcon />
-                </Avatar>
-              }
               title={<Typography variant="h4">Specify Datatypes</Typography>}
               subheader={
                 <Typography>
                   Inform the program about whether columns are to be interpreted as Continuous or Categorical or
                   outright Ignored
                 </Typography>
+              }
+              avatar={
+                <Avatar sizes="large">
+                  <PersonSearchIcon />
+                </Avatar>
+              }
+              action={
+                <FabDialogWrapper maxWidth="xl" PaperProps={{ sx: { minWidth: "499px" } }} sx={{ marginTop: "40px" }}>
+                  <HelpDataViz__StepClarifyDataTypes />
+                </FabDialogWrapper>
               }
             />
             <Divider />

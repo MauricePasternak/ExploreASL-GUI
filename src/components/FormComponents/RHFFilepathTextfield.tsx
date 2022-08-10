@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import TextField, { TextFieldProps } from "@mui/material/TextField";
 import { Controller, FieldValues, Path } from "react-hook-form";
 import { useDebouncedCallback } from "use-debounce";
@@ -57,7 +57,7 @@ export function ControlledFilepathTextField<TValues extends FieldValues, TName e
   const hasError = !!fieldState.error;
   const errorMessage = hasError ? fieldState.error?.message : "";
   const debouncedHandleChange = useDebouncedCallback(field.onChange, debounceTime);
-
+  const isDialogOpened = useRef(false);
   // console.log(`RHFFilepathTextField with name ${field.name} has field.value and innerValue: `, field.value, innerVal);
 
   /**
@@ -154,7 +154,10 @@ export function ControlledFilepathTextField<TValues extends FieldValues, TName e
   );
 
   const handleDialogueClick = async () => {
+    if (isDialogOpened.current) return;
+    isDialogOpened.current = true;
     const { canceled, filePaths } = await api.invoke("Dialog:OpenDialog", dialogOptions);
+    isDialogOpened.current = false;
     !canceled && handleChange(filePaths[0]);
   };
 

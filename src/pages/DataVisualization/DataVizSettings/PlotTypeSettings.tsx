@@ -20,9 +20,8 @@ import { NivoGraphType } from "../../../common/types/DataVizSchemaTypes";
 import {
   atomDataVizDFDTypes,
   atomNivoGraphDataVariablesSchema,
-  atomNivoGraphType
+  atomNivoGraphType,
 } from "../../../stores/DataFrameVisualizationStore";
-
 
 function PlotTypeSettings() {
   const [expanded, setExpanded] = React.useState(true);
@@ -41,7 +40,15 @@ function PlotTypeSettings() {
       .map(([colName, dtype], colIdx) => {
         if (colName === "SUBJECT" || (dtype !== permittedType && permittedType !== "Any")) return null;
         return (
-          <MenuItem key={`${prefix}__${colIdx}`} value={colName} disabled={disabledCondition.includes(colName)}>
+          <MenuItem
+            key={`${prefix}__${colIdx}`}
+            value={colName}
+            disabled={
+              disabledCondition.includes(colName) ||
+              colName === nivoGraphDataSchema.XAxisVar ||
+              colName === nivoGraphDataSchema.YAxisVar
+            }
+          >
             {colName}
           </MenuItem>
         );
@@ -53,7 +60,9 @@ function PlotTypeSettings() {
     <Card elevation={1} sx={{ margin: 0.5 }}>
       <CardHeader
         title={<Typography variant="h5">Plot Variables</Typography>}
-        subheader={<Typography variant="subtitle1">Define which columns should be plotted and the graph type</Typography>}
+        subheader={
+          <Typography variant="subtitle1">Define which columns should be plotted and the graph type</Typography>
+        }
         avatar={
           <Avatar>
             <SvgIcon component={FunctionVariableIcon} inheritViewBox />
@@ -80,7 +89,10 @@ function PlotTypeSettings() {
                 fullWidth
                 label="Graph Type"
                 value={nivoGraphType}
-                onChange={e => setNivoGraphType(e.target.value as NivoGraphType)}
+                onChange={e => {
+                  setNivoGraphType(e.target.value as NivoGraphType);
+                  setNivoGraphDataSchema({ ...nivoGraphDataSchema, XAxisVar: "", YAxisVar: "", GroupingVar: "" });
+                }}
               >
                 {(["Scatterplot", "Swarmplot"] as NivoGraphType[]).map((gType, gTypeIdx) => {
                   return (
@@ -99,7 +111,13 @@ function PlotTypeSettings() {
                 label="X Axis"
                 value={nivoGraphDataSchema.XAxisVar}
                 onChange={e => {
-                  setNivoGraphDataSchema({ ...nivoGraphDataSchema, XAxisVar: e.target.value as string });
+                  setNivoGraphDataSchema({
+                    ...nivoGraphDataSchema,
+                    HoverVariables: nivoGraphDataSchema.HoverVariables
+                      ? nivoGraphDataSchema.HoverVariables.filter(l => l !== e.target.value)
+                      : [],
+                    XAxisVar: e.target.value as string,
+                  });
                 }}
               >
                 {renderOptions(nivoGraphType === "Swarmplot" ? "Categorical" : "Continuous", "XAxisVar")}
@@ -113,7 +131,13 @@ function PlotTypeSettings() {
                 label="Y Axis"
                 value={nivoGraphDataSchema.YAxisVar}
                 onChange={e => {
-                  setNivoGraphDataSchema({ ...nivoGraphDataSchema, YAxisVar: e.target.value as string });
+                  setNivoGraphDataSchema({
+                    ...nivoGraphDataSchema,
+                    HoverVariables: nivoGraphDataSchema.HoverVariables
+                      ? nivoGraphDataSchema.HoverVariables.filter(l => l !== e.target.value)
+                      : [],
+                    YAxisVar: e.target.value as string,
+                  });
                 }}
               >
                 {renderOptions("Continuous", "YAxisVar")}

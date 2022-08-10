@@ -115,12 +115,13 @@ function SwarmPlotVisualsSettings() {
               <ControlledLabelSlider
                 label="Between-Groups Spacing"
                 labelwidth="150px"
-                max={20}
+                min={-300}
+                max={300}
                 valueLabelDisplay="auto"
-                value={EASLPlotSettings.nodeSize}
+                value={EASLPlotSettings.interSeriesGap}
                 onChange={(e, v) =>
                   setEASLPlotSettings({
-                    path: "nodeSize",
+                    path: "interSeriesGap",
                     value: v as number,
                   })
                 }

@@ -39,20 +39,23 @@ function EASLScatterplot() {
   const setMRIDataStats = useSetAtom(atomMRIDataStats);
   const [currentMRIViewSubject, setMRICurrentViewSubject] = useAtom(atomCurrentMRIViewSubject);
   const scatterplotSettings = useAtomValue(atomEASLScatterplotSettings);
+
+  const SubjectSessionSpread = dataFrame.hasSeries("session") ? ["SUBJECT", "session"] : ["SUBJECT"];
+
   const data = dataVarsSchema.GroupingVar
     ? toNivoScatterPlotDataGroupBy(
         dataFrame,
         dataVarsSchema.XAxisVar,
         dataVarsSchema.YAxisVar,
         dataVarsSchema.GroupingVar,
-        "SUBJECT",
+        ...SubjectSessionSpread,
         ...dataVarsSchema.HoverVariables
       )
     : toNivoScatterPlotDataSingle(
         dataFrame,
         dataVarsSchema.XAxisVar,
         dataVarsSchema.YAxisVar,
-        "SUBJECT",
+        ...SubjectSessionSpread,
         ...dataVarsSchema.HoverVariables
       );
 
@@ -71,7 +74,7 @@ function EASLScatterplot() {
     if (!(await api.path.filepathExists(popPath.path))) return;
 
     // console.log("handleLoadSubject -- found popPath: ", popPath.path);
-    const qCBFFiles = await api.path.glob(popPath.path, `qCBF_${subjectToLoad}_*.nii*`);
+    const qCBFFiles = await api.path.glob(popPath.path, `qCBF_${subjectToLoad}*.nii*`);
     if (qCBFFiles.length === 0) return;
 
     // console.log("handleLoadSubject -- found qCBFFiles: ", qCBFFiles);
@@ -147,9 +150,20 @@ function EASLScatterplot() {
         return (
           <Paper elevation={2} sx={{ p: 1 }}>
             <Stack>
-              <Typography component={"strong"}>ID: {data["SUBJECT" as "x"]}</Typography>
-              <Typography>X: {data.x}</Typography>
-              <Typography>Y: {data.y}</Typography>
+              {SubjectSessionSpread.length === 1 ? (
+                <Typography component={"strong"}>Subject/Visit: {data["SUBJECT" as "x"]}</Typography>
+              ) : (
+                <>
+                  <Typography component={"strong"}>Subject/Visit: {data["SUBJECT" as "x"]}</Typography>
+                  <Typography component={"strong"}>Session: {data["session" as "x"]}</Typography>
+                </>
+              )}
+              <Typography>
+                {dataVarsSchema.XAxisVar}: {data.x}
+              </Typography>
+              <Typography>
+                {dataVarsSchema.YAxisVar}: {data.y}
+              </Typography>
               {...dataVarsSchema.HoverVariables.map(varName => (
                 <Typography key={varName}>
                   {varName}: {data[varName as "x"]}
@@ -193,12 +207,15 @@ function EASLScatterplot() {
         legends: {
           text: {
             fontSize: scatterplotSettings.theme.legendTextFontSize,
-          }
-        }
+          },
+        },
       }}
       onClick={async ({ data }) => {
         if (!("SUBJECT" in data)) return;
-        await handleLoadSubject(data["SUBJECT" as "x"]);
+        const subjectToLoad =
+          "session" in data ? `${data["SUBJECT" as "x"]}_${data["session" as "y"]}` : data["SUBJECT" as "x"];
+        console.log("Scatterplot trying to load in subject/session: ", subjectToLoad);
+        await handleLoadSubject(subjectToLoad);
       }}
     />
   );

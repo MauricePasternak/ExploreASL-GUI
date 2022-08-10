@@ -5,7 +5,7 @@ import FormHelperText from "@mui/material/FormHelperText";
 import IconButton from "@mui/material/IconButton";
 import TextField, { TextFieldProps } from "@mui/material/TextField";
 import { OpenDialogOptions } from "electron";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Controller, FieldValues, Path } from "react-hook-form";
 import { useDebouncedCallback } from "use-debounce";
 import { RHFFieldAndFieldStateType, RHFInterDepBaseProps, RHFTriggerType } from "../../common/types/formTypes";
@@ -64,6 +64,7 @@ export function InterDepControlledFilepathTextField<
   const [innerVal, setInnerVal] = useState(field.value);
   const hasError = !!fieldState.error;
   const errorMessage = hasError ? fieldState.error?.message : "";
+  const isDialogOpened = useRef(false);
 
   // Setup default dialog options if a dialogOptions object was not provided and a button is to be presented
   if (!dialogOptions && includeButton) {
@@ -171,7 +172,10 @@ export function InterDepControlledFilepathTextField<
   );
 
   const handleDialogueClick = async () => {
+    if (isDialogOpened.current) return;
+    isDialogOpened.current = true;
     const { canceled, filePaths } = await api.invoke("Dialog:OpenDialog", dialogOptions);
+    isDialogOpened.current = false;
     !canceled && handleChange(filePaths[0]);
   };
 

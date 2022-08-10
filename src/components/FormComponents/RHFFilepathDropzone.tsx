@@ -162,6 +162,7 @@ function ControlledFilepathDropzone<TValues extends FieldValues, TName extends P
   const hasError = !!fieldState.error;
   const [isAcceptingDrop, setIsAcceptingDrop] = React.useState(false);
   const enterCounter = useRef(0); // We use this to keep track of enter/exit drop state
+  const isDialogOpened = useRef(false); // We use this to keep track of dialog state
 
   // console.log(
   //   `RHFFIlepathDropzone with fieldname ${field.name} has rendered with value and innerValue:`,
@@ -284,10 +285,13 @@ function ControlledFilepathDropzone<TValues extends FieldValues, TName extends P
   };
 
   const handleDialog = async () => {
+    if (isDialogOpened.current) return;
     if (!dialogOptions) throw new Error("dialogOptions were not specified");
 
     // Get the filepaths from the dialog and early exit if no files were selected
+    isDialogOpened.current = true;
     const { canceled, filePaths } = await api.invoke("Dialog:OpenDialog", dialogOptions);
+    isDialogOpened.current = false;
     if (canceled) return;
 
     // Filter the filepaths and update the innerVal state
