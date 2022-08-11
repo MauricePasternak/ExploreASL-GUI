@@ -2,6 +2,7 @@ import { FieldValues } from "react-hook-form";
 import { TestContext } from "yup";
 import { SUPPORTEDMATLABRUNTIMEVERSIONS } from "../GLOBALS";
 import { EASLWorkloadMapping } from "../schemas/ExploreASLWorkloads";
+import { DataParValuesType } from "../types/ExploreASLDataParTypes";
 import { EASLType } from "../types/ImportSchemaTypes";
 const { api } = window;
 
@@ -98,6 +99,7 @@ export async function IsValidStudyRoot(
   helpers: TestContext,
   expectedChildren: string[] = ["sourcedata"]
 ) {
+  console.log("IsValidStudyRoot", filepath);
   // Filepath must be a valid string
   if (!filepath) return false;
 
@@ -123,7 +125,7 @@ export async function IsValidStudyRoot(
  * @param helpers Helpers context & functions provided by Yup.
  * @returns A boolean or a Yup.ValidationError.
  */
-export async function AreValidSubjects(subjectBasenames: string[], helpers: TestContext) {
+export async function AreValidSubjects(subjectBasenames: string[], helpers: TestContext<DataParValuesType>) {
   if (!subjectBasenames || !Array.isArray(subjectBasenames) || !subjectBasenames.length) {
     return helpers.createError({
       path: helpers.path,
@@ -132,10 +134,8 @@ export async function AreValidSubjects(subjectBasenames: string[], helpers: Test
   }
 
   // Must first ascertain that
-  const StudyRootPath: string | undefined = helpers.parent.StudyRootPath;
-
-  // const test = await IsValidStudyRoot(StudyRootPath, helpers, ["sourcedata", "rawdata", "derivatives"]);
-  // console.log("test", test);
+  const StudyRootPath: string | undefined = helpers.options.context.x.GUI.StudyRootPath;
+  console.log(`AreValidSubjects: StudyRootPath: ${StudyRootPath}`);
 
   if (
     !StudyRootPath || // Cannot be falsy

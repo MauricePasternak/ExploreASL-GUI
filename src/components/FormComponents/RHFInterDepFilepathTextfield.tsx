@@ -6,7 +6,7 @@ import IconButton from "@mui/material/IconButton";
 import TextField, { TextFieldProps } from "@mui/material/TextField";
 import { OpenDialogOptions } from "electron";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Controller, FieldValues, Path } from "react-hook-form";
+import { Controller, FieldValues, Path, UseFormStateReturn } from "react-hook-form";
 import { useDebouncedCallback } from "use-debounce";
 import { RHFFieldAndFieldStateType, RHFInterDepBaseProps, RHFTriggerType } from "../../common/types/formTypes";
 
@@ -29,12 +29,12 @@ type InterDepControlledFilepathTextFieldProps<
 > = RHFFieldAndFieldStateType<TValues, TName> & // field and fieldState
   RHFTriggerType<TValues, TName> & // trigger and triggerTarget
   ControlledInterDepFPTextFieldBaseProps &
-  RestrictedTextFieldProps;
+  RestrictedTextFieldProps & { formState: UseFormStateReturn<TValues> };
 
 type ControlledFilepathTextFieldPropsNoField<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = Omit<InterDepControlledFilepathTextFieldProps<TValues, TName>, "field" | "fieldState">;
+> = Omit<InterDepControlledFilepathTextFieldProps<TValues, TName>, "field" | "fieldState" | "formState">;
 
 type RHFFilepathTextFieldProps<
   TValues extends FieldValues,
@@ -47,6 +47,7 @@ export function InterDepControlledFilepathTextField<
 >({
   field,
   fieldState,
+  formState,
   trigger,
   triggerTarget,
   variant,
@@ -105,7 +106,7 @@ export function InterDepControlledFilepathTextField<
    */
   const debouncedHandleChange = useDebouncedCallback((values: any) => {
     field.onChange(values);
-    trigger(triggerTarget);
+    formState.submitCount > 0 && trigger(triggerTarget);
   }, debounceTime);
 
   /**
@@ -257,11 +258,12 @@ function RHFInterDepFilepathTextField<TValues extends FieldValues, TName extends
     <Controller
       control={control}
       name={name}
-      render={({ field, fieldState }) => {
+      render={({ field, fieldState, formState }) => {
         return (
           <InterDepControlledFilepathTextField
             field={field}
             fieldState={fieldState}
+            formState={formState}
             {...controlledFilepathTextFieldProps}
           />
         );

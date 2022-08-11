@@ -173,7 +173,10 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
         // For the global context, there should be no subjectPaths
         const isGlobal = helpers.parent.IsGlobal ?? true;
 
-        // console.log("Validating Subjects -- isGlobal: ", isGlobal, subjectPaths);
+        // console.log("SchemaImportDefineContext -- Subjects -- isGlobal: ", {
+        //   isGlobal,
+        //   subjectPaths,
+        // });
 
         if (isGlobal && subjectPaths.length === 0) return true;
 
@@ -191,12 +194,16 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
         const globStars = SourcedataStructure.slice(0, nLevels + 1)
           .map(() => "*")
           .join("/");
+
+        console.log(`Searching for subjects at fullPath Pattern ${studyRootPath}/sourcedata/${globStars}`);
+
         const foundSubjectPaths = new Set(
           (await api.path.glob(`${studyRootPath}/sourcedata`, globStars, { onlyDirectories: true })).map(p => p.path)
         );
 
         for (const subjectPath of subjectPaths) {
-          if (!foundSubjectPaths.has(subjectPath))
+          const asPath = api.path.asPath(subjectPath); // Necessary to normalize to forward slashes in Windows
+          if (!foundSubjectPaths.has(asPath.path))
             return helpers.createError({
               path: helpers.path,
               message: `Subject ${subjectPath} does not exist in the folder structure you had previously specified`,
@@ -264,27 +271,24 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
   ASLSequence: Yup.string().optional().oneOf(["PASL", "CASL", "PCASL"], "Invalid ASL Sequence"),
   PostLabelingDelay: Yup.number().optional(),
   LabelingDuration: Yup.number().optional(),
-  BackgroundSuppression: Yup.boolean(),
-  BackgroundSuppressionNumberPulses: Yup.number().test(
-    "ValidNumberOfSuppressionPulses",
-    "Invalid Number of Pulses",
-    (numPulses, helpers) => {
-      const hasSuppression = helpers.parent.BackgroundSuppression;
-
-      if (hasSuppression && numPulses === 0)
-        return helpers.createError({
-          path: helpers.path,
-          message: "Background suppression could not have been used when there were no pulses",
-        });
-      if (!hasSuppression && numPulses > 0)
-        return helpers.createError({
-          path: helpers.path,
-          message: "Number of pulses must be 0 when background suppression is disabled",
-        });
-      return true;
-    }
-  ),
-  BackgroundSuppressionPulseTime: Yup.array().of(Yup.number().integer("Must be an integer")).optional(),
+  BackgroundSuppressionNumberPulses: Yup.number().integer("Must be an integer"),
+  BackgroundSuppressionPulseTime: Yup.array().when("BackgroundSuppressionNumberPulses", {
+    is: (nPulses: number) => nPulses > 0,
+    then: Yup.array()
+      .of(Yup.number())
+      .test(
+        "ValidPulseTimes",
+        "If provided, the number of timings specified must match number of pulses in the other field",
+        (pulseTimes, helpers: Yup.TestContext<ImportSchemaType>) => {
+          if (pulseTimes.length === 0) return true;
+          const nPulses: number = helpers.parent.BackgroundSuppressionNumberPulses;
+          return pulseTimes.length === nPulses;
+        }
+      ),
+    otherwise: Yup.array()
+      .of(Yup.number())
+      .max(0, "This field must be empty if there are no background suppression pulses indicated"),
+  }),
 });
 
 export const SchemaImportStepDefineMultiContext = Yup.object().shape<YupShape<ImportMultipleContextsSchemaType>>({

@@ -19,7 +19,7 @@ import {
   IsValidStudyRoot,
 } from "../utilityFunctions/EASLFunctions";
 import { YupShape } from "./ImportSchema";
-
+const { api } = window;
 const SchemaDataParDatasetParams: Yup.SchemaOf<DatasetParamsSchema> = Yup.object().shape({
   name: Yup.string().typeError("Invalid value").default(""),
   subjectRegexp: Yup.string().default(""),
@@ -88,8 +88,43 @@ const SchemaDataParGUIParams = Yup.object().shape<YupShape<GUIParamsSchema>>({
     .typeError("This value must be a collection of folder names")
     .of(Yup.string())
     .min(1, "At least one subject is required")
-    .test("AreValidSubjects", async (subjects, helpers: Yup.TestContext<DataParValuesType>) => {
-      return await AreValidSubjects(subjects, helpers);
+    .test("AreValidSubjects", async (subjectBasenames, helpers: Yup.TestContext<DataParValuesType>) => {
+      console.log(`DataParSchema -- SUBJECTS field -- subjectBasenames`, subjectBasenames);
+      if (!subjectBasenames || !Array.isArray(subjectBasenames) || !subjectBasenames.length) {
+        return helpers.createError({
+          path: helpers.path,
+          message: "Invalid value provided for the listing of subjects",
+        });
+      }
+
+      // Must first ascertain that
+      const StudyRootPath: string | undefined = helpers.options.context.x.GUI.StudyRootPath;
+      console.log(`DataParSchema -- SUBJECTS field -- StudyRootPath`, helpers.options.context.x.GUI.StudyRootPath);
+
+      if (
+        !StudyRootPath || // Cannot be falsy
+        typeof StudyRootPath !== "string" || // Must be a string
+        (await IsValidStudyRoot(StudyRootPath, helpers, ["sourcedata", "rawdata", "derivatives"])) !== true // Must be a valid study root
+      ) {
+        return helpers.createError({
+          path: helpers.path,
+          message: "Cannot validate the subjects because the Study Root Path itself is invalid",
+        });
+      }
+
+      // Must all exist in rawdata
+      const existenceChecks = await api.path.getFilepathsType(
+        subjectBasenames.map(subjectBasename => `${StudyRootPath}/rawdata/${subjectBasename}`)
+      );
+      console.log(`DataParSchema -- SUBJECTS field -- existenceChecks`, existenceChecks);
+      if (!existenceChecks.every(check => check === "dir")) {
+        return helpers.createError({
+          path: helpers.path,
+          message: "One or more of the provided subjects do not exist in the rawdata folder",
+        });
+      }
+
+      return true;
     }),
 });
 
@@ -290,7 +325,7 @@ const SchemaDataParASLQuantificationParams = Yup.object().shape<YupShape<ASLQuan
     .test(
       "ApplyQuantificationIsValid",
       "These should be a collection of five numbers, each of which can be 0 or 1",
-      (value) => {
+      value => {
         if (!Array.isArray(value) || !value.every(v => v === 0 || v === 1)) {
           return false;
         }

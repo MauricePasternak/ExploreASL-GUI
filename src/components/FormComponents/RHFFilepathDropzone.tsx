@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import { OpenDialogOptions } from "electron";
-import { Controller, FieldValues, Path, PathValue } from "react-hook-form";
+import { Controller, FieldValues, Path, PathValue, UseFormStateReturn } from "react-hook-form";
 import { styled } from "@mui/material/styles";
 import Paper from "@mui/material/Paper";
 import FormControl, { FormControlProps } from "@mui/material/FormControl";
@@ -96,7 +96,7 @@ type ControlledFilepathDropzoneProps<
 type ControlledFilepathDropzonePropsNoField<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
-> = Omit<ControlledFilepathDropzoneProps<TValues, TName>, "field" | "fieldState">;
+> = Omit<ControlledFilepathDropzoneProps<TValues, TName>, "field" | "fieldState" | "formState">;
 
 type RHFFilepathDropzoneProps<
   TValues extends FieldValues,
@@ -169,6 +169,7 @@ function ControlledFilepathDropzone<TValues extends FieldValues, TName extends P
   //   field.value,
   //   innerVal
   // );
+
 
   useEffect(() => {
     if (field.value != null && !FastIsEqual(field.value, innerVal)) {
@@ -422,7 +423,7 @@ function RHFFilepathDropzone<TValues extends FieldValues, TName extends Path<TVa
     <Controller
       control={control}
       name={name}
-      render={({ field, fieldState }) => {
+      render={({ field, fieldState, formState }) => {
         return (
           <ControlledFilepathDropzone field={field} fieldState={fieldState} {...controlledFilepathDropzoneProps} />
         );

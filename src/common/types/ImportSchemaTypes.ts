@@ -68,7 +68,6 @@ export type ImportContextSchemaType = {
   ASLSequence: ASLSequenceType;
   PostLabelingDelay?: number;
   LabelingDuration?: number;
-  BackgroundSuppression?: boolean;
   BackgroundSuppressionNumberPulses?: number;
   BackgroundSuppressionPulseTime?: number[];
 };

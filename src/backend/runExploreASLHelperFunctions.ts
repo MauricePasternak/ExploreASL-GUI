@@ -586,7 +586,7 @@ export async function calculateWorkload(
     ]);
     payload = {
       anticipatedFilepaths: [...strucResult.anticipatedFilepaths, ...aslResult.anticipatedFilepaths],
-      anticipatedWorkload: lodashSum([...strucResult.anticipatedWorkload, ...aslResult.anticipatedFilepaths]),
+      anticipatedWorkload: lodashSum([...strucResult.anticipatedWorkload, ...aslResult.anticipatedWorkload]),
     };
     /************
      * Population

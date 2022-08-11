@@ -215,7 +215,7 @@ export async function buildStudyParJSON(formValues: ImportSchemaType, whichConte
       M0: importContext.M0IsSeparate,
       PostLabelingDelay: importContext.PostLabelingDelay,
       LabelingDuration: importContext.LabelingDuration,
-      BackgroundSuppression: importContext.BackgroundSuppression,
+      BackgroundSuppression: importContext.BackgroundSuppressionNumberPulses > 0,
       BackgroundSuppressionNumberPulses: importContext.BackgroundSuppressionNumberPulses,
       BackgroundSuppressionPulseTime: importContext.BackgroundSuppressionPulseTime,
     };

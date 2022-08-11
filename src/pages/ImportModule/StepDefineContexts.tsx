@@ -22,6 +22,7 @@ function StepDefineContexts({
   currentStep,
   setCurrentStep,
   control,
+  trigger,
   handleSubmit,
 }: RHFMultiStepReturnProps<ImportSchemaType>) {
   const { api } = window;
@@ -93,7 +94,15 @@ function StepDefineContexts({
         <CardContent>
           <Stack spacing={1}>
             {fields.map((field, fieldIndex) => {
-              return <SingleImportContext key={field.id} contextIndex={fieldIndex} remove={remove} control={control} />;
+              return (
+                <SingleImportContext
+                  key={field.id}
+                  contextIndex={fieldIndex}
+                  remove={remove}
+                  control={control}
+                  trigger={trigger}
+                />
+              );
             })}
           </Stack>
         </CardContent>

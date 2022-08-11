@@ -18,7 +18,6 @@ export const DefaultImportSingleContext: ImportContextSchemaType = {
   ASLSequence: "PCASL",
   PostLabelingDelay: 1.525,
   LabelingDuration: 1.425,
-  BackgroundSuppression: true,
   BackgroundSuppressionNumberPulses: 5,
   BackgroundSuppressionPulseTime: [],
 };

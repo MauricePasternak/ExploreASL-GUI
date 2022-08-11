@@ -6,11 +6,14 @@ Versions are in format: `[MAJOR.MINOR.BUGFIX]`
 
 Dates are in format: `YYYY-MM-DD`
 
-## [0.2.2] - 2022-08-09
+## [0.2.2] - 2022-08-10
 
 Various improvements to the logic of the Data Visualization module and Dialog-based form components.
 
 ### Fixed
+
+- Fixed a typo in calculateWorkload which caused string values to be concatenated to the numerical value of the
+  anticipated workload.
 
 - Fixed a bug where multiple dialog windows could be opened for dialog-based components. A useRef was used to track
   the dialog's open state to prevent this.
@@ -19,6 +22,7 @@ Various improvements to the logic of the Data Visualization module and Dialog-ba
 
 - Fixed a bug where additional hover data permitted the selection of variables that were already dedicated to X/Y axis,
   causing a doubling effect to occur. This has been fixed twofold:
+
   - Variables that are already dedicated to X/Y are disabled in the "additional hover data" section.
   - Selecting a variable for X/Y that is already in "additional hover data" will cause it to be removed from the latter.
 
@@ -34,7 +38,11 @@ Various improvements to the logic of the Data Visualization module and Dialog-ba
 
 ### Changed
 
+- Removed BackgroundSuppression from Import-related schemas, as it can be automatically derived from the number of
+  suppressions
+
 - Hovering over datapoints in Data Visualization now has several changes:
+
   - Subject and session are explicitly stated in the hoverdata instead of the previous ambiguous "ID" label
   - Instead of X and Y, the variable names are now explicitly stated in the hoverlabel
 

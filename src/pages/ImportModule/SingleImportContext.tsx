@@ -11,7 +11,8 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { partialRight as lodashPartialRight, range as lodashRange } from "lodash";
 import React from "react";
-import { Control, UseFieldArrayRemove } from "react-hook-form";
+import { Control, UseFieldArrayRemove, UseFormTrigger } from "react-hook-form";
+import RHFInterDepSlider from "../../components/FormComponents/RHFInterDepSlider";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 import { getNumbersFromDelimitedString } from "../../common/utilityFunctions/stringFunctions";
 import ExpandMore from "../../components/ExpandMore";
@@ -26,9 +27,10 @@ type SingleImportContextProps = {
   contextIndex: number;
   control: Control<ImportSchemaType>;
   remove: UseFieldArrayRemove;
+  trigger: UseFormTrigger<ImportSchemaType>;
 };
 
-function SingleImportContext({ contextIndex, control, remove }: SingleImportContextProps) {
+function SingleImportContext({ contextIndex, control, remove, trigger }: SingleImportContextProps) {
   const isFirst = contextIndex === 0;
   const [expanded, setExpanded] = React.useState(true);
 
@@ -206,18 +208,11 @@ function SingleImportContext({ contextIndex, control, remove }: SingleImportCont
                 />
               </Grid>
               <Grid item xs={12} md={6} xl={3}>
-                <RHFSingleCheckable
-                  control={control}
-                  name={`ImportContexts.${contextIndex}.BackgroundSuppression`}
-                  label="Background Suppression was used"
-                  valWhenChecked={true}
-                  valWhenUnchecked={false}
-                />
-              </Grid>
-              <Grid item xs={12} md={6} xl={3}>
-                <RHFSlider
+                <RHFInterDepSlider
                   control={control}
                   name={`ImportContexts.${contextIndex}.BackgroundSuppressionNumberPulses`}
+                  trigger={trigger}
+                  triggerTarget={`ImportContexts.${contextIndex}.BackgroundSuppressionPulseTime`}
                   label="Number of Background Suppression Pulses"
                   min={0}
                   max={10}
