@@ -45,7 +45,7 @@ export async function handleRunImportModule(
   /***********************************************
    * Step 2: Determine the MATLAB Path and Version
    **********************************************/
-  const { matlabPath, matlabVersion } = await getMATLABPathAndVersion();
+  const { matlabPath, matlabVersion, message: getMatlabMessage } = await getMATLABPathAndVersion();
 
   // STEP 3: Ascertain the filepath of the executable to call (MATLAB or compile based)
   let executablePath = "";
@@ -54,12 +54,21 @@ export async function handleRunImportModule(
     // For Github, we the MATLAB executable path & Versions is mandatory
     if (!matlabPath || !matlabVersion)
       return {
-        GUIMessage: createGUIMessage("Could not locate MATLAB executable and/or its version. ", "Error", "error"),
+        GUIMessage: {
+          severity: "error",
+          title: "Unable to get MATLAB path and/or version",
+          messages: [
+            "Unable to determine the MATLAB path and/or version. Please ensure that MATLAB is installed and that the path to MATLAB is correctly configured.",
+            "The following error was encountered while attempting to determine the MATLAB path and version:",
+            " ",
+            getMatlabMessage,
+          ],
+        },
         payload: defaultPayload,
       };
     executablePath = matlabPath;
-    const matlabVersionNumber = Number(/\d{4}/gm.exec(matlabVersion)[0]);
-    if (matlabVersionNumber < 2016) {
+
+    if (matlabVersion < 2016) {
       return {
         GUIMessage: {
           title: "MATLAB Version Incompatible",
@@ -71,7 +80,7 @@ export async function handleRunImportModule(
         },
         payload: defaultPayload,
       };
-    } else if (matlabVersionNumber < 2019) {
+    } else if (matlabVersion < 2019) {
       MATLABGithubArgs = ["-nosplash", "-nodisplay", "-r"];
     }
     // End of Github Case
