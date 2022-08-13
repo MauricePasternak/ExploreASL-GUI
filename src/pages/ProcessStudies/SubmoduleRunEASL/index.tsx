@@ -66,8 +66,6 @@ function SubmoduleRunEASL() {
       />
       {studySetups.map((studySetup, studyIndex) => {
         const isDuplicate = hasStudyDuplicates[studySetup.studyRootPath] > 1 && studySetup.studyRootPath !== "";
-        console.log(`Study ${studyIndex} ${studySetup.studyRootPath} is duplicate? ${isDuplicate}`);
-
         return (
           <RunEASLSingleStudySetup
             key={`RunEASLSingleStudySetup_${studyIndex}`}

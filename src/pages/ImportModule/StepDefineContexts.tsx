@@ -32,7 +32,7 @@ function StepDefineContexts({
   const { api } = window;
   const { fields, append, remove } = useFieldArray({ control: control, name: "ImportContexts" });
 
-  console.log("Step 'Define Contexts' -- Render: fields", fields);
+  console.log("Step 'Define Contexts' -- rendered with fields", fields);
 
   const handleValidSubmit: SubmitHandler<ImportSchemaType> = async values => {
     console.log("Step 'Define Contexts' -- Valid Submit Values: ", values);
@@ -56,23 +56,33 @@ function StepDefineContexts({
   useEffect(() => {
     async function handleLoadImportPar() {
       const currentValues = getValues();
+      console.log(
+        "Step 'Define Contexts' -- useEffect -- searching for ImportPar.json in ",
+        currentValues.StudyRootPath
+      );
 
       try {
         const importParPath = api.path.asPath(currentValues.StudyRootPath, "ImportPar.json");
         if (!(await api.path.filepathExists(importParPath.path))) return;
+
+        console.log(
+          "Step 'Define Contexts' -- useEffect -- ImportPar.json found at ",
+          importParPath.path,
+          "...validating"
+        );
         const { payload, error } = await api.path.readJSONSafe(importParPath.path);
         if (!("ImportContexts" in payload) || error) return;
 
         // Validate the data
         const { errors, values } = await YupValidate(SchemaImportPar, payload as ImportSchemaType);
         if (Object.keys(errors).length > 0) {
-          console.log("Step 'Define Contexts' -- loaded ImportPar.json did not pass validation: ", errors);
+          console.log("Step 'Define Contexts' -- useEffect -- loaded ImportPar.json did not pass validation: ", errors);
           return;
         }
         setValue("ImportContexts", values.ImportContexts, { shouldValidate: false });
         return;
       } catch (error) {
-        console.warn(`Step 'Define Contexts' -- Error while loading/validating ImportPar.json: `, error);
+        console.warn(`Step 'Define Contexts' -- useEffect -- Error while loading/validating ImportPar.json: `, error);
         return;
       }
     }

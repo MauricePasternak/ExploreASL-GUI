@@ -58,8 +58,6 @@ function ControlledCardInputMapping<TValues extends FieldValues, TName extends P
     field.onChange(newValue);
   };
 
-  console.log(`RHFCardInputMapping for ${field.name}: ${JSON.stringify(field.value)} ${field.value.length > 0}`);
-
   return (
     !lodashIsEmpty(field.value) && (
       <Card>

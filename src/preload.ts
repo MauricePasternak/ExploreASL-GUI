@@ -32,7 +32,6 @@ const pathOperations = {
    * @returns A Path instance lacking the methods (as electron cannot include methods in the IPC transfer).
    */
   asPath: (...filePath: string[]) => {
-    console.log(`Preload asPath`, filePath);
     return new Path(...filePath).toJSON() as {
       path: string;
       root: string;
