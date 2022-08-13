@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
+import { app, BrowserWindow, ipcMain, protocol, shell, globalShortcut } from "electron";
 import { debounce as lodashDebounce } from "lodash";
 import treeKill from "tree-kill";
 import { sleep } from "./common/utilityFunctions/sleepFunctions";
@@ -13,10 +13,8 @@ import Path from "pathlib-js";
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 
-
 console.log(`MAIN_WINDOW_WEBPACK_ENTRY: ${MAIN_WINDOW_WEBPACK_ENTRY}`);
 console.log(`MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: ${MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY}`);
-
 
 // This turns off warnings in development mode
 process.env["ELECTRON_DISABLE_SECURITY_WARNINGS"] = "true";
@@ -59,6 +57,12 @@ const createWindow = (): void => {
 
   // and load the index.html of the app.
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+
+  // Remove the default menu
+  mainWindow.setMenu(null);
+
+  // While beta-testing, we want to be able to refresh the app if it encounters an error.
+  globalShortcut.register("CommandOrControl+R", () => mainWindow?.reload());
 
   // Open the DevTools in detached mode for less interference with CSS breakpoints.
   !app.isPackaged && mainWindow.webContents.openDevTools({ mode: "detach" });

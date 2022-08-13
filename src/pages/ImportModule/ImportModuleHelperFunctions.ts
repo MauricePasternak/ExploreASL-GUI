@@ -1,5 +1,4 @@
 import { uniq as lodashUniq } from "lodash";
-
 const { api } = window;
 
 /**
@@ -19,10 +18,6 @@ export async function getAliasBasenames(datasetRootDir: string, folderStructure:
     const visitDepth = folderStructure.indexOf("Visit") + 1;
     const sessionDepth = folderStructure.indexOf("Session") + 1;
 
-    console.log("scanDepth", scanDepth);
-    console.log("visitDepth", visitDepth);
-    console.log("sessionDepth", sessionDepth);
-
     if (scanDepth === -1) return false; // Scans must be present; something went wrong otherwise.
 
     // Next get the paths concurrently
@@ -37,10 +32,6 @@ export async function getAliasBasenames(datasetRootDir: string, folderStructure:
     const scanBasenames = lodashUniq(scanPaths.map(p => p.basename));
     const visitBasenames = visitDepth > 0 ? lodashUniq(visitPaths.map(p => p.basename)) : [];
     const sessionBasenames = sessionDepth > 0 ? lodashUniq(sessionPaths.map(p => p.basename)) : [];
-
-    // console.log("scanBasenames", scanBasenames);
-    // console.log("visitBasenames", visitBasenames);
-    // console.log("sessionBasenames", sessionBasenames);
 
     // Sort in-place
     scanBasenames.sort();

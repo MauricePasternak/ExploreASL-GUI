@@ -57,9 +57,9 @@ function StepDefineAliases({
     const updatedSessionAliases = assignSelfKeysOnly(defaultSessionAliases, MappingSessionAliases);
     const updatedVisitAliases = assignSelfKeysOnly(defaultVisitAliases, MappingVisitAliases);
 
-    console.log("updatedScanAliases", updatedScanAliases);
-    console.log("updatedSessionAliases", updatedSessionAliases);
-    console.log("updatedVisitAliases", updatedVisitAliases);
+    console.log("Step `DefineAliases` -- useEffect -- updatedScanAliases", updatedScanAliases);
+    console.log("Step `DefineAliases` -- useEffect -- updatedSessionAliases", updatedSessionAliases);
+    console.log("Step `DefineAliases` -- useEffect -- updatedVisitAliases", updatedVisitAliases);
 
     // Set the values in the form
     setValue("MappingScanAliases", updatedScanAliases);

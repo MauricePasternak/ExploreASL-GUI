@@ -85,7 +85,7 @@ function StepDefineRuntimeEnvs({
                     control={control}
                     name="EASLPath"
                     filepathType="dir"
-                    dialogOptions={{ properties: ["openDirectory"] }}
+                    dialogOptions={{ properties: ["openDirectory"], title: "Select ExploreASL Directory" }}
                     label="ExploreASL Path"
                     helperText="This is the folder that contains the ExploreASL executable."
                   />
