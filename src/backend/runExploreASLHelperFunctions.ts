@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import { difference as lodashDiff, pickBy as lodashPickBy, sum as lodashSum, uniq as lodashUniq } from "lodash";
 import Path from "pathlib-js";
+import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 import { promisify } from "util";
 import { DataParValuesType } from "../common/types/ExploreASLDataParTypes";
 import { EASLWorkload } from "../common/types/ExploreASLTypes";
@@ -117,7 +118,7 @@ export async function getMATLABPathAndVersion(): Promise<{
 
       console.log(`Looking for MATLAB in ${applicationsPath.path}...`);
       try {
-        for await (const matlabCandidatePath of applicationsPath.globIter("**/bin/matlab", { onlyFiles: true })) {
+        for await (const matlabCandidatePath of applicationsPath.globIter("MATLAB*/bin/matlab", { onlyFiles: true })) {
           const match = matlabVerRegex.search(matlabCandidatePath.path);
           if (!match) continue;
           matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
@@ -132,7 +133,7 @@ export async function getMATLABPathAndVersion(): Promise<{
           };
         }
       } catch (error) {
-        if (error.code === "EACCESS") {
+        if (error.code === "EACCESS" || error.code === "EPERM") {
           return {
             matlabPath,
             matlabVersion,
@@ -160,7 +161,9 @@ export async function getMATLABPathAndVersion(): Promise<{
       console.log(`Looking for MATLAB in ${programFilesPath.path}...`);
 
       try {
-        for await (const matlabCandidatePath of programFilesPath.globIter("**/bin/matlab.exe", { onlyFiles: true })) {
+        for await (const matlabCandidatePath of programFilesPath.globIter("MATLAB/**/bin/matlab.exe", {
+          onlyFiles: true,
+        })) {
           const match = matlabVerRegex.search(matlabCandidatePath.path);
           if (!match) continue;
           matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
@@ -184,7 +187,7 @@ export async function getMATLABPathAndVersion(): Promise<{
           message: `Could not find MATLAB as search location Program Files (x86) doesn't exist on this Windows operating system`,
         };
       try {
-        for await (const matlabCandidatePath of programFilesX86Path.globIter("**/bin/matlab.exe", {
+        for await (const matlabCandidatePath of programFilesX86Path.globIter("MATLAB/**/bin/matlab.exe", {
           onlyFiles: true,
         })) {
           const match = matlabVerRegex.search(matlabCandidatePath.path);
@@ -196,7 +199,7 @@ export async function getMATLABPathAndVersion(): Promise<{
           return { matlabPath, matlabVersion, matlabIsOnPath, message: `Successfully found matlab path and version.` };
         }
       } catch (error) {
-        if (error.code === "EACCESS") {
+        if (error.code === "EACCESS" || error.code === "EPERM") {
           return {
             matlabPath,
             matlabVersion,
@@ -223,7 +226,7 @@ export async function getMATLABPathAndVersion(): Promise<{
         };
       console.log(`Looking for MATLAB in ${usrLocalPath.path}...`);
       try {
-        for await (const matlabCandidatePath of usrLocalPath.globIter("**/bin/matlab", { onlyFiles: true })) {
+        for await (const matlabCandidatePath of usrLocalPath.globIter("MATLAB*/**/bin/matlab", { onlyFiles: true })) {
           const match = matlabVerRegex.search(matlabCandidatePath.path);
           if (!match) continue;
           matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
@@ -255,7 +258,7 @@ export async function getMATLABPathAndVersion(): Promise<{
           return { matlabPath, matlabVersion, matlabIsOnPath, message: `Successfully found matlab path and version.` };
         }
       } catch (error) {
-        if (error.code === "EACCESS") {
+        if (error.code === "EACCESS" || error.code === "EPERM") {
           return {
             matlabPath,
             matlabVersion,
@@ -285,7 +288,7 @@ export async function createRuntimeEnvironment(
   EASLType: EASLType,
   EASLPath: string,
   MATLABRuntimePath: string
-): Promise<NodeJS.ProcessEnv | false> {
+): Promise<NodeJS.ProcessEnv | CreateRuntimeError> {
   if (EASLType === "Github") return { ...process.env, MATLABPATH: EASLPath };
 
   const allEnvMappings = {
@@ -308,14 +311,24 @@ export async function createRuntimeEnvironment(
 
   const currentEnvMapping = allEnvMappings[process.platform as keyof typeof allEnvMappings];
   const currentPATH = currentEnvMapping.varname in process.env ? process.env[currentEnvMapping.varname] : "";
-  const runtimePaths = await new Path(MATLABRuntimePath).glob(`**/${currentEnvMapping.globItem}`, {
-    onlyDirectories: true,
-  });
-  if (runtimePaths.length === 0) return false;
-  const updatedPaths = currentPATH
-    ? currentPATH + currentEnvMapping.delimiter + runtimePaths.map(p => p.path).join(currentEnvMapping.delimiter)
-    : runtimePaths.map(p => p.path).join(currentEnvMapping.delimiter);
-  return { ...process.env, [currentEnvMapping.varname]: updatedPaths };
+
+  try {
+    const runtimePaths = await new Path(MATLABRuntimePath).glob(`**/${currentEnvMapping.globItem}`, {
+      onlyDirectories: true,
+    });
+    if (runtimePaths.length === 0)
+      return new CreateRuntimeError(
+        `Could not locate the expected executables for your operating system's MATLAB Runtime: ${currentEnvMapping.globItem}`
+      );
+    const updatedPaths = currentPATH
+      ? currentPATH + currentEnvMapping.delimiter + runtimePaths.map(p => p.path).join(currentEnvMapping.delimiter)
+      : runtimePaths.map(p => p.path).join(currentEnvMapping.delimiter);
+    return { ...process.env, [currentEnvMapping.varname]: updatedPaths };
+  } catch (error) {
+    return new CreateRuntimeError(
+      `Could not locate the expected executables for your operating system's MATLAB Runtime due to permission issues. Please ensure that your MATLAB Runtime is installed in an accessible location.`
+    );
+  }
 }
 
 interface GlobMapping {
