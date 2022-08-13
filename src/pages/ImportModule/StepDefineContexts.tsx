@@ -8,7 +8,7 @@ import Stack from "@mui/material/Stack";
 import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
 import { cloneDeep as lodashCloneDeep } from "lodash";
-import React from "react";
+import React, { useEffect } from "react";
 import { SubmitErrorHandler, SubmitHandler, useFieldArray } from "react-hook-form";
 import ContextIcon from "../../assets/svg/ContextIcon.svg";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
@@ -17,12 +17,16 @@ import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrappe
 import { DefaultImportSingleContext } from "../../stores/ImportPageStore";
 import HelpImport__StepDefineAdditionalContext from "../Help/HelpImport__StepDefineAdditionalContext";
 import SingleImportContext from "./SingleImportContext";
+import { YupValidate } from "../../common/utilityFunctions/formFunctions";
+import { SchemaImportPar } from "../../common/schemas/ImportSchema";
 
 function StepDefineContexts({
   currentStep,
   setCurrentStep,
   control,
   trigger,
+  getValues,
+  setValue,
   handleSubmit,
 }: RHFMultiStepReturnProps<ImportSchemaType>) {
   const { api } = window;
@@ -48,6 +52,33 @@ function StepDefineContexts({
 
   // TODO: During first render mount, there should be a useEffect here which loads an existing ImportPar.json file
   // created by the GUI and fills in the form fields with the values from the file.
+
+  useEffect(() => {
+    async function handleLoadImportPar() {
+      const currentValues = getValues();
+
+      try {
+        const importParPath = api.path.asPath(currentValues.StudyRootPath, "ImportPar.json");
+        if (!(await api.path.filepathExists(importParPath.path))) return;
+        const { payload, error } = await api.path.readJSONSafe(importParPath.path);
+        if (!("ImportContexts" in payload) || error) return;
+
+        // Validate the data
+        const { errors, values } = await YupValidate(SchemaImportPar, payload as ImportSchemaType);
+        if (Object.keys(errors).length > 0) {
+          console.log("Step 'Define Contexts' -- loaded ImportPar.json did not pass validation: ", errors);
+          return;
+        }
+        setValue("ImportContexts", values.ImportContexts, { shouldValidate: false });
+        return;
+      } catch (error) {
+        console.warn(`Step 'Define Contexts' -- Error while loading/validating ImportPar.json: `, error);
+        return;
+      }
+    }
+
+    handleLoadImportPar();
+  }, []);
 
   return (
     <form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>

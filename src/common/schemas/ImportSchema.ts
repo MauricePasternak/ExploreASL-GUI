@@ -1,17 +1,12 @@
 import { uniq as lodashUniq } from "lodash";
 import * as Yup from "yup";
 import { ObjectShape } from "yup/lib/object";
-import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../utilityFunctions/EASLFunctions";
 import {
   ASLSeriesPatternType,
-  EASLType,
-  ImportSchemaType,
-  ImportAliasesSchemaType,
-  ImportContextSchemaType,
-  ImportRuntimeEnvsSchemaType,
-  SourcedataFolderType,
-  ImportMultipleContextsSchemaType,
+  EASLType, ImportAliasesSchemaType,
+  ImportContextSchemaType, ImportMultipleContextsSchemaType, ImportRuntimeEnvsSchemaType, ImportSchemaType, SourcedataFolderType
 } from "../types/ImportSchemaTypes";
+import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../utilityFunctions/EASLFunctions";
 const { api } = window;
 
 type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never;
@@ -294,3 +289,7 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 export const SchemaImportStepDefineMultiContext = Yup.object().shape<YupShape<ImportMultipleContextsSchemaType>>({
   ImportContexts: Yup.array().of(SchemaImportDefineContext),
 });
+
+export const SchemaImportPar = SchemaImportStepDefineMultiContext.concat(SchemaImportStepDefineRuntimeEnvs).concat(
+  SchemaImportStepDefineAliases
+);
