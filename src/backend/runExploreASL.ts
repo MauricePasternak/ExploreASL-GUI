@@ -4,6 +4,7 @@ import spawn from "cross-spawn";
 import { IpcMainInvokeEvent } from "electron";
 import { difference as lodashDiff, range as lodashRange, uniq as lodashUniq } from "lodash";
 import Path from "pathlib-js";
+import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 import { GLOBAL_CHILD_PROCESSES } from "../common/GLOBALS";
 import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
 import { DataParValuesType } from "../common/types/ExploreASLDataParTypes";
@@ -149,14 +150,16 @@ export async function handleRunExploreASL(
     dataPar.x.GUI.EASLPath,
     dataPar.x.GUI.MATLABRuntimePath
   );
-  if (!EASLEnv)
+  if (EASLEnv instanceof CreateRuntimeError)
     return {
       GUIMessage: {
         title: "Could not create the ExploreASL Runtime Environment",
         severity: "error",
         messages: [
-          "An Error occurred while trying to create the ExploreASL Runtime Environment.",
-          "Ensure that you have the following environmental variables set depending on your operating system:",
+          "An Error occurred while trying to create the ExploreASL Runtime Environment:",
+          EASLEnv.message,
+          " ",
+          "Also ensure that you have the following environmental variables set depending on your operating system:",
           "- for Windows, PATH",
           "- for Mac, DYLD_LIBRARY_PATH",
           "- for Linux, LD_LIBRARY_PATH",

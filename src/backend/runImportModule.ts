@@ -13,6 +13,7 @@ import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
 import { createGUIMessage } from "../common/utilityFunctions/GUIMessageFunctions";
 import { buildSourceStructureJSON, buildStudyParJSON } from "./runImportModuleHelperFunctions";
 import { sleep } from "../common/utilityFunctions/sleepFunctions";
+import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 
 export async function handleRunImportModule(
   event: IpcMainInvokeEvent,
@@ -113,9 +114,22 @@ export async function handleRunImportModule(
    * Step 4: Prepare the runtime environment
    ****************************************/
   const EASLEnv = await createRuntimeEnvironment(formData.EASLType, formData.EASLPath, formData.MATLABRuntimePath);
-  if (!EASLEnv)
+  if (EASLEnv instanceof CreateRuntimeError)
     return {
-      GUIMessage: createGUIMessage("Could not create the runtime environment.", "Error", "error"),
+      GUIMessage: {
+        title: "Could not create the ExploreASL Runtime Environment",
+        severity: "error",
+        messages: [
+          "An Error occurred while trying to create the ExploreASL Runtime Environment:",
+          EASLEnv.message,
+          " ",
+          "Also ensure that you have the following environmental variables set depending on your operating system:",
+          "- for Windows, PATH",
+          "- for Mac, DYLD_LIBRARY_PATH",
+          "- for Linux, LD_LIBRARY_PATH",
+          "Contact your system's administrator about setting these variables.",
+        ],
+      },
       payload: defaultPayload,
     };
 
