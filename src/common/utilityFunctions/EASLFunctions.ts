@@ -99,7 +99,7 @@ export async function IsValidStudyRoot(
   helpers: TestContext,
   expectedChildren: string[] = ["sourcedata"]
 ) {
-  console.log("IsValidStudyRoot", filepath);
+  console.log("IsValidStudyRoot -- filepath: ", filepath);
   // Filepath must be a valid string
   if (!filepath) return false;
 
@@ -135,7 +135,7 @@ export async function AreValidSubjects(subjectBasenames: string[], helpers: Test
 
   // Must first ascertain that
   const StudyRootPath: string | undefined = helpers.options.context.x.GUI.StudyRootPath;
-  console.log(`AreValidSubjects: StudyRootPath: ${StudyRootPath}`);
+  console.log(`AreValidSubjects -- StudyRootPath: ${StudyRootPath}`);
 
   if (
     !StudyRootPath || // Cannot be falsy

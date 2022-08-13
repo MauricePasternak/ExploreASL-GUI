@@ -72,9 +72,9 @@ function IPCQuill({ channelName, defaultHeight = 530, scrollDownPerUpdate = fals
     quill.insertEmbed(quill.getLength(), "image", url);
   };
 
-  const handleStart = () => {
-    console.log(`IPCQuill: ${channelName} has spawned. Clearing text...`);
-    quill && quill.setText("");
+  const handleStart = (pid: number, shouldClearText: boolean = true) => {
+    console.log(`IPCQuill: ${channelName} has spawned as new childProcess. Clearing text...`);
+    quill && shouldClearText && quill.setText("");
   };
 
   /**

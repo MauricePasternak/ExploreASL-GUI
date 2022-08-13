@@ -1,6 +1,6 @@
+import { pickBy as lodashPickBy, range as lodashRange, uniq as lodashUniq } from "lodash";
 import Path from "pathlib-js";
 import { ImportContextSchemaType, ImportSchemaType, SourcedataFolderType } from "../common/types/ImportSchemaTypes";
-import { pickBy as lodashPickBy, uniq as lodashUniq, range as lodashRange } from "lodash";
 import { escapeRegExp, stringArrToRegex } from "../common/utilityFunctions/stringFunctions";
 
 /**
