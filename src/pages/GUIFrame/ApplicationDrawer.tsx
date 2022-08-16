@@ -7,6 +7,7 @@ import Collapse from "@mui/material/Collapse";
 import Drawer from "@mui/material/Drawer";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
+import BackupTableIcon from '@mui/icons-material/BackupTable';
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
@@ -129,6 +130,19 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
             </ListItemButton>
           </List>
         </Collapse>
+
+        <ListItemButton
+          divider
+          onClick={() => {
+            setCurrentModule("BIDSDatagrid");
+            setOpen(false);
+          }}
+        >
+          <ListItemIcon>
+            <BackupTableIcon fontSize="large" />
+          </ListItemIcon>
+          <ListItemText>Edit BIDS Sidecars</ListItemText>
+        </ListItemButton>
 
         <ListItemButton onClick={() => setExpandedProcStudies(!expandedProcStudies)} divider={!expandedProcStudies}>
           <ListItemIcon>

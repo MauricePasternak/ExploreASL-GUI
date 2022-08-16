@@ -12,6 +12,7 @@ import GUIFrame from "./GUIFrame";
 import ImportModulePage from "./ImportModule";
 import ProcessStudiesPage from "./ProcessStudies";
 import DataVisualizationPage from "./DataVisualization";
+import BIDSDatagrid from "./BIDSDatagrid";
 
 function Main() {
   const isDarkMode = useAtomValue(atomDarkMode);
@@ -61,9 +62,9 @@ function Main() {
       <Box
         className="currentMainPage"
         height={`calc(100% - ${APPBARHEIGHTPIXELS}px)`}
-        display={currentGUIPage === "About" ? "block" : "none"}
+        display={currentGUIPage === "BIDSDatagrid" ? "block" : "none"}
       >
-        <AboutPage />
+        <BIDSDatagrid />
       </Box>
       <Box
         className="currentMainPage"
@@ -72,9 +73,15 @@ function Main() {
       >
         <DataVisualizationPage />
       </Box>
+      <Box
+        className="currentMainPage"
+        height={`calc(100% - ${APPBARHEIGHTPIXELS}px)`}
+        display={currentGUIPage === "About" ? "block" : "none"}
+      >
+        <AboutPage />
+      </Box>
     </ThemeProvider>
   );
 }
-
 
 export default Main;
