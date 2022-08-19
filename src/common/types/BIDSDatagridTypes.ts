@@ -64,11 +64,21 @@ export type BIDSTextConfig = {
 
 export type BIDSTextSchemaType = Record<BIDSTextFieldNamesType, BIDSTextConfig>;
 
+/**
+ * BIDS-specific field name (i.e. PCASLType). This is NOT the prettified field name/description.
+ */
 export type BIDSFieldNamesType =
   | BIDSEnumFieldNamesType
   | BIDSNumericalFieldNamesType
   | BIDSBooleanFieldNamesType
   | BIDSTextFieldNamesType;
+
+/**
+ * Names that correspond to the `keys` of RDG `Column`s in the BIDS datagrid. These are used to add/remove columns.
+ * Most of these are BIDS-specific field names (i.e. PCASLType), but include the frozen column keys ID, File, and
+ * Basename
+ */
+export type BIDSColumnName = BIDSFieldNamesType | "ID" | "File" | "Basename";
 
 export type BIDSSchemaType = BIDSEnumSchemaType & BIDSNumericalSchemaType & BIDSBooleanSchemaType & BIDSTextSchemaType;
 
@@ -76,9 +86,12 @@ export type BIDSSchemaValueType<TKey extends keyof BIDSSchemaType> = {
   [K in keyof BIDSSchemaType]: BIDSSchemaType[K];
 }[TKey];
 
+/**
+ * Mapping of all the possible BIDS fields to the value type they map to (i.e. string, number, etc.)
+ */
 export type BIDSRow = {
   [K in keyof BIDSSchemaType]: BIDSSchemaType[K]["type"] extends "Enum"
-    ? "string"
+    ? unknown
     : BIDSSchemaType[K]["type"] extends "Numerical"
     ? number
     : BIDSSchemaType[K]["type"] extends "Boolean"
@@ -87,6 +100,7 @@ export type BIDSRow = {
 } & {
   ID: number;
   File: string;
+  Basename: string;
 };
 
 export type BIDSTypes = BIDSSchemaType[keyof BIDSSchemaType]["type"];

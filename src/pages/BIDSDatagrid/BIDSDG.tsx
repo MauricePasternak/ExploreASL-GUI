@@ -2,13 +2,18 @@ import { Skeleton } from "@mui/material";
 import Box from "@mui/material/Box";
 import { styled } from "@mui/material/styles";
 import { DataFrame } from "data-forge";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { isEmpty as lodashIsEmpty, sortBy as lodashSortBy } from "lodash";
 import React, { useEffect } from "react";
 import DataGrid, { RowsChangeData } from "react-data-grid";
-import { BIDSNames } from "../../common/schemas/BIDSDatagridSchema";
+import { BIDSNames } from "../../common/schemas/BIDSDatagridConfigurationSchemas";
 import { BIDSFieldNamesType, BIDSRow } from "../../common/types/BIDSDatagridTypes";
-import { atomBIDSDataframe, atomBIDSStudyRootPath, atomRDGColumns } from "../../stores/BIDSDatagridStore";
+import {
+  atomBIDSDataframe,
+  atomBIDSStudyRootPath,
+  atomDataframeColumns,
+  atomRDGColumns,
+} from "../../stores/BIDSDatagridStore";
 
 const RGDContainer = styled(Box)(({ theme }) => ({
   "& .rdg": {
@@ -21,10 +26,13 @@ const RGDContainer = styled(Box)(({ theme }) => ({
     color: theme.palette.text.primary,
     fontSize: theme.typography.htmlFontSize,
     borderRadius: 0,
+    paddingInline: 0
   },
   "& .rdg-header-row > *": {
     backgroundColor: theme.palette.primary.main,
     color: theme.palette.mode === "dark" ? "#333" : "white",
+    display: "flex",
+    minWidth: "200px",
   },
 }));
 
@@ -32,6 +40,7 @@ function BIDSDG() {
   const { api } = window;
   const [StudyRootPath, setStudyRootPath] = useAtom(atomBIDSStudyRootPath);
   const [dataframe, setDataframe] = useAtom(atomBIDSDataframe);
+  const setDataFrameColumns = useSetAtom(atomDataframeColumns);
   const columns = useAtomValue(atomRDGColumns);
 
   console.log("BIDSDG: StudyRootPath:", StudyRootPath);
@@ -69,6 +78,7 @@ function BIDSDG() {
       if (filteredJSONs.length === 0) return;
       const newDF = new DataFrame(filteredJSONs);
       setDataframe(newDF);
+      setDataFrameColumns(newDF.getColumnNames() as Array<BIDSFieldNamesType | "ID" | "File" | "Basename">);
     };
 
     fetchData();
@@ -84,7 +94,17 @@ function BIDSDG() {
   };
 
   return dataframe.count() > 0 ? (
-    <RGDContainer className="RGDMainContainer" height={"calc(100vh - 360px)"}>
+    <RGDContainer
+      className="RGDMainContainer"
+      height="calc(100vh - 370px)"
+      // height={{
+      //   xs: "calc(100vh - 550px)",
+      //   sm: "calc(100vh - 520px)",
+      //   md: "calc(100vh - 380px)",
+      //   lg: "calc(100vh - 350px)",
+      //   xl: "calc(100vh - 350px)",
+      // }}
+    >
       <DataGrid
         columns={columns}
         rows={dataframe.toArray()}
@@ -95,7 +115,19 @@ function BIDSDG() {
       />
     </RGDContainer>
   ) : (
-    <Skeleton variant="rectangular" height={"calc(100% - 290px)"} />
+    <Skeleton
+      variant="rectangular"
+      height="calc(100vh - 400px)"
+      // sx={{
+      //   height: {
+      //     xs: "calc(100vh - 550px)",
+      //     sm: "calc(100vh - 520px)",
+      //     md: "calc(100vh - 380px)",
+      //     lg: "calc(100vh - 370px)",
+      //     xl: "calc(100vh - 370px)",
+      //   },
+      // }}
+    />
   );
 }
 

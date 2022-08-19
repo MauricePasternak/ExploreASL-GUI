@@ -1,13 +1,15 @@
 import Button from "@mui/material/Button";
+import ButtonGroup from "@mui/material/ButtonGroup";
 import Paper from "@mui/material/Paper";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
 import { BIDSRow } from "../../common/types/BIDSDatagridTypes";
-import { atomBIDSDataframe } from "../../stores/BIDSDatagridStore";
+import { atomAddColumnDialogOpen, atomBIDSDataframe } from "../../stores/BIDSDatagridStore";
 
 function BIDSDataActions() {
   const { api } = window;
   const dataframe = useAtomValue(atomBIDSDataframe);
+  const setAddColumnDialogOpen = useSetAtom(atomAddColumnDialogOpen);
 
   async function handleWriteData() {
     try {
@@ -34,12 +36,17 @@ function BIDSDataActions() {
         width: "100%",
         borderRadius: 0,
         display: "flex",
-        justifyContent: "flex-start",
+        justifyContent: "center",
       }}
     >
-      <Button variant="outlined" onClick={handleWriteData} disabled={dataframe.count() === 0}>
-        Submit Altered BIDS Values
-      </Button>
+      <ButtonGroup>
+        <Button variant="outlined" onClick={handleWriteData} disabled={dataframe.count() === 0}>
+          Submit Altered BIDS Values
+        </Button>
+        <Button variant="outlined" onClick={() => setAddColumnDialogOpen(true)}>
+          Add a New BIDS Column
+        </Button>
+      </ButtonGroup>
     </Paper>
   );
 }

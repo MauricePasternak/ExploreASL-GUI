@@ -76,6 +76,7 @@ function Main() {
       <Box
         className="currentMainPage"
         height={`calc(100% - ${APPBARHEIGHTPIXELS}px)`}
+        overflow="hidden"
         display={currentGUIPage === "About" ? "block" : "none"}
       >
         <AboutPage />
