@@ -6,6 +6,28 @@ Versions are in format: `[MAJOR.MINOR.BUGFIX]`
 
 Dates are in format: `YYYY-MM-DD`
 
+---
+
+## [0.2.3] - 2022-08-20
+
+### Fixed
+
+- Fixed a bug where not having MATLAB on PATH resulted in crashes when trying the OS-specific `which matlab` command
+
+### Added
+
+- In the Import Module, the presence of an `ImportPar.json` file at the study's root filepath will be tested for.
+  If present, the step where the user defines multiple import contexts will auto-populate if the contents of
+  `ImportPar.json` are valid.
+
+### Changed
+
+- Significantly improved the fallback behavior of finding the path to the matlab executable when MATLAB is not on PATH.
+
+- Improved the general `console.log` output of the Import Module's steps, to assist with debugging future issues.
+
+---
+
 ## [0.2.2] - 2022-08-10
 
 Various improvements to the logic of the Data Visualization module and Dialog-based form components.
