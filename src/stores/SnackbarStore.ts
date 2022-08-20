@@ -28,3 +28,9 @@ export const atomDataVizModuleSnackbar = atom<SnackbarMessageConfig>({
   title: "",
   message: "",
 });
+
+export const atomBIDSDatagridSnackbar = atom<SnackbarMessageConfig>({
+  severity: "info",
+  title: "",
+  message: "",
+});

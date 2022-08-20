@@ -29,6 +29,7 @@ import {
 import { atomAddColumnDialogOpen, atomAddDataframeColumns, atomDataframeColumns } from "../../stores/BIDSDatagridStore";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
+import { atomBIDSDatagridSnackbar } from "../../stores/SnackbarStore";
 
 function BIDSAddColumnDialog() {
   const [open, setOpen] = useAtom(atomAddColumnDialogOpen);
@@ -36,12 +37,7 @@ function BIDSAddColumnDialog() {
   const addDataframeColumn = useSetAtom(atomAddDataframeColumns);
   const [selectedField, setSelectedField] = useState<BIDSFieldNamesType | "">("");
   const [defaultValue, setDefaultValue] = useState<unknown>(null);
-
   const handleClose = () => setOpen(false);
-
-  function filterSchema(value: BIDSTextConfig | BIDSBooleanConfig | BIDSEnumConfig | BIDSNumericalConfig) {
-    return !currentDFCols.includes(value.colName as BIDSFieldNamesType | "ID" | "File" | "Basename");
-  }
 
   const allowedTextSchemas = Object.entries(BIDSTextSchema).filter(
     ([bidsFieldName]) => !currentDFCols.includes(bidsFieldName as BIDSFieldNamesType)

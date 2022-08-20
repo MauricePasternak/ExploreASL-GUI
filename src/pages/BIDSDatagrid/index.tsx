@@ -11,6 +11,8 @@ import BIDSDataForm from "./BIDSDataForm";
 import BIDSDG from "./BIDSDG";
 import SvgIcon from "@mui/material/SvgIcon";
 import BIDSIcon from "../../assets/svg/BIDSIcon.svg";
+import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
+import { atomBIDSDatagridSnackbar } from "../../stores/SnackbarStore";
 
 function BIDSDataGrid() {
   return (
@@ -45,6 +47,7 @@ function BIDSDataGrid() {
       </Box>
       <BIDSAddColumnDialog />
       <BIDSDataActions />
+      <AtomicSnackbarMessage atomConfig={atomBIDSDatagridSnackbar} />
     </Box>
   );
 }
