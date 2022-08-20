@@ -4,6 +4,7 @@ import spawn from "cross-spawn";
 import { IpcMainInvokeEvent } from "electron";
 import { difference as lodashDiff, range as lodashRange, uniq as lodashUniq } from "lodash";
 import Path from "pathlib-js";
+import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 import { GLOBAL_CHILD_PROCESSES } from "../common/GLOBALS";
 import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
 import { DataParValuesType } from "../common/types/ExploreASLDataParTypes";
@@ -28,7 +29,7 @@ export async function handleRunExploreASL(
   dataPar: DataParValuesType,
   studySetup: Omit<RunEASLStudySetupType, "currentStatus">
 ): Promise<GUIMessageWithPayload<RunEASLStartupReturnType>> {
-  // console.debug(`EASLProcess ${channelName} -- dataPar:`, dataPar);
+  // console.log(`EASLProcess ${channelName} -- dataPar:`, dataPar);
   const defaultPayload = { pids: [-1], channelName };
   let MATLABGithubArgs = ["-nodesktop", "-nosplash", "-batch"];
 
@@ -54,18 +55,19 @@ export async function handleRunExploreASL(
   /************************************************************************
    * STEP 2: Get the MATLAB Versions and Calculate the anticipated Workload
    ***********************************************************************/
-  const [{ matlabPath, matlabVersion }, getWorkloadResult] = await Promise.all([
+  const [{ matlabPath, matlabVersion, message: getMatlabMessage }, getWorkloadResult] = await Promise.all([
     getMATLABPathAndVersion(),
     calculateWorkload(dataPar, studySetup, workloadMapping),
   ]);
 
-  console.debug(`EASL Process ${channelName} -- getMATLABResult`, { matlabPath, matlabVersion });
-  console.debug(`EASL Process ${channelName} -- getWorkloadResult`, getWorkloadResult);
+  console.log(`EASL Process ${channelName} -- getMATLABResult`, { matlabPath, matlabVersion });
+  console.log(`EASL Process ${channelName} -- getWorkloadResult`, getWorkloadResult);
   let executablePath = "";
 
   /************************************************************************************
    * STEP 3: Ascertain the filepath of the executable to call (MATLAB or compile based)
    ***********************************************************************************/
+  // For Github ExploreASL
   if (dataPar.x.GUI.EASLType === "Github") {
     if (!matlabPath || !matlabVersion) {
       return {
@@ -73,15 +75,17 @@ export async function handleRunExploreASL(
           title: "Could not locate MATLAB",
           severity: "error",
           messages: [
-            "Could not locate MATLAB or determine its version.",
-            "Please ensure that it is installed and that it is in the PATH.",
+            "Unable to determine the MATLAB path and/or version. Please ensure that MATLAB is installed and that the path to MATLAB is correctly configured.",
+            "The following error was encountered while attempting to determine the MATLAB path and version:",
+            " ",
+            getMatlabMessage,
           ],
         },
         payload: defaultPayload,
       };
     }
     executablePath = matlabPath;
-    const matlabVersionNumber = Number(/\d{4}/gm.exec(matlabVersion)[0]);
+    const matlabVersionNumber = matlabVersion;
 
     if (matlabVersionNumber < 2016) {
       return {
@@ -91,6 +95,8 @@ export async function handleRunExploreASL(
           messages: [
             "MATLAB must be at least version 2016b in order to be executed.",
             "Please contact your system's administrator about upgrading.",
+            " ",
+            "Note that if you have multiple versions of MATLAB installed, this error may be the result of an earlier version having priority on your system.",
           ],
         },
         payload: defaultPayload,
@@ -98,7 +104,7 @@ export async function handleRunExploreASL(
     } else if (matlabVersionNumber < 2019) {
       MATLABGithubArgs = ["-nosplash", "-nodisplay", "-r"];
     }
-    // For compiled
+    // For compiled ExploreASL
   } else {
     const xASL_latest_dir = new Path(dataPar.x.GUI.EASLPath);
     const xASL_latest_basename = process.platform === "win32" ? "xASL_latest.exe" : "run_xASL_latest.sh";
@@ -119,7 +125,7 @@ export async function handleRunExploreASL(
     }
     executablePath = xASL_runnable.path;
   }
-  console.debug(`EASL Process ${channelName} -- executablePath`, executablePath);
+  console.log(`EASL Process ${channelName} -- executablePath`, executablePath);
 
   /*************************************
    * STEP 4: Assess the workload results
@@ -144,14 +150,16 @@ export async function handleRunExploreASL(
     dataPar.x.GUI.EASLPath,
     dataPar.x.GUI.MATLABRuntimePath
   );
-  if (!EASLEnv)
+  if (EASLEnv instanceof CreateRuntimeError)
     return {
       GUIMessage: {
         title: "Could not create the ExploreASL Runtime Environment",
         severity: "error",
         messages: [
-          "An Error occurred while trying to create the ExploreASL Runtime Environment.",
-          "Ensure that you have the following environmental variables set depending on your operating system:",
+          "An Error occurred while trying to create the ExploreASL Runtime Environment:",
+          EASLEnv.message,
+          " ",
+          "Also ensure that you have the following environmental variables set depending on your operating system:",
           "- for Windows, PATH",
           "- for Mac, DYLD_LIBRARY_PATH",
           "- for Linux, LD_LIBRARY_PATH",
@@ -160,13 +168,13 @@ export async function handleRunExploreASL(
       },
       payload: defaultPayload,
     };
-  // console.debug(`EASL Process ${channelName} -- EASLEnv`, EASLEnv);
+  // console.log(`EASL Process ${channelName} -- EASLEnv`, EASLEnv);
 
   /********************************************
    * STEP 6: Delete any folders called "locked"
    *******************************************/
   const StudyDerivExploreASLDir = new Path(dataPar.x.GUI.StudyRootPath).resolve("derivatives", "ExploreASL");
-  console.debug(`EASL Process ${channelName} -- Proceeding to delete locked dirs for: ${StudyDerivExploreASLDir.path}`);
+  console.log(`EASL Process ${channelName} -- Proceeding to delete locked dirs for: ${StudyDerivExploreASLDir.path}`);
   for await (const filepath of StudyDerivExploreASLDir.globIter("**/locked", { onlyDirectories: true })) {
     try {
       await filepath.remove();
@@ -235,7 +243,7 @@ export async function handleRunExploreASL(
 
   // When ready, should be responsible for clearing the processbar
   studyFilepathWatcher.on("ready", () => {
-    console.debug(`Watcher for channel ${channelName} is ready`);
+    console.log(`Watcher for channel ${channelName} is ready`);
     respondToIPCRenderer(event, `${channelName}:progressBarReset`);
   });
 
@@ -245,10 +253,10 @@ export async function handleRunExploreASL(
     if (!stats) return;
     const asPath = new Path(path);
 
-    console.debug(`Watcher's "addDir" event got path: ${asPath.path}`);
+    console.log(`Watcher's "addDir" event got path: ${asPath.path}`);
     if (regexImageFile.test(asPath.basename)) {
       // THIS IS AN IMAGE FILE
-      console.debug("This is an image file");
+      console.log("This is an image file");
 
       // Get the data for the given image file
       const regexResult = regexImageFile.exec(asPath.basename);
@@ -303,7 +311,7 @@ export async function handleRunExploreASL(
     if (!stats) return;
 
     const asPath = new Path(path);
-    console.debug(`Watcher's "add" event got path: ${asPath.path}`);
+    console.log(`Watcher's "add" event got path: ${asPath.path}`);
 
     // Decide whether this is a status file or an image file
     if (regexStatusFile.test(asPath.path)) {
@@ -326,12 +334,12 @@ export async function handleRunExploreASL(
       const progressbarIncrementAmount =
         calculatePercent(statusFileCriteria.loadingBarValue, anticipatedWorkload, 4) * 100;
       debugCounter += statusFileCriteria.loadingBarValue;
-      console.debug(
+      console.log(
         `Incrementing progressbar by ${progressbarIncrementAmount}`,
         `based on a value of ${statusFileCriteria.loadingBarValue} `,
         `from a total of ${anticipatedWorkload}`
       );
-      console.debug(`The debug Counter post-addition is: ${debugCounter}`);
+      console.log(`The debug Counter post-addition is: ${debugCounter}`);
       respondToIPCRenderer(event, `${channelName}:progressBarIncrement`, progressbarIncrementAmount);
 
       // Acquire lock, Respond to frontend, release lock
@@ -359,7 +367,7 @@ export async function handleRunExploreASL(
       return; // END OF STATUS FILE SCENARIO
     } else if (regexImageFile.test(asPath.basename)) {
       // THIS IS AN IMAGE FILE
-      console.debug("This is an image file");
+      console.log("This is an image file");
 
       // Get the data for the given image file
       const { Axis, ImageType, Target } = regexImageFile.exec(asPath.basename)["groups"];
@@ -396,7 +404,7 @@ export async function handleRunExploreASL(
       return;
 
     // THIS IS AN IMAGE FILE
-    console.debug("This is an image file");
+    console.log("This is an image file");
 
     // Get the data for the given image file
     const { Axis, ImageType, Target } = regexImageFile.exec(asPath.basename)["groups"];
@@ -442,14 +450,14 @@ export async function handleRunExploreASL(
 
   for (let index = 0; index < rangeArg.length; index++) {
     const iWorker = rangeArg[index] + 1; // +1 due to MATLAB indexing rules
-    console.debug(
+    console.log(
       `EASL Process ${channelName} -- ExploreASL-specific command:`,
       `ExploreASL('${dataPar.x.GUI.StudyRootPath}', ${runImport}, ${whichModule}, ${bPause}, ${iWorker}, ${nWorkers})`
     );
     let child: ChildProcess;
 
     if (dataPar.x.GUI.EASLType === "Github") {
-      console.debug(
+      console.log(
         `EASL Process ${channelName} -- commandline input:\n`,
         `${executablePath}`,
         ...MATLABGithubArgs,
@@ -467,7 +475,7 @@ export async function handleRunExploreASL(
         }
       );
     } else {
-      console.debug(
+      console.log(
         `EASL Process ${channelName} -- commandline input:\n`,
         `${executablePath}`,
         dataPar.x.GUI.MATLABRuntimePath,
@@ -500,7 +508,7 @@ export async function handleRunExploreASL(
 
     // On successful spawn, add to the globalChildProcesses and clear the corresponding text display
     child.on("spawn", () => {
-      console.debug("ExploreASL process has spawned with PID", child.pid);
+      console.log("ExploreASL process has spawned with PID", child.pid);
       GLOBAL_CHILD_PROCESSES.push(child.pid);
       respondToIPCRenderer(event, `${channelName}:childProcessHasSpawned`, child.pid);
       respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, "STARTING UP MATLAB ExploreASL", { bold: true });
@@ -524,7 +532,7 @@ export async function handleRunExploreASL(
     // 2) The frontend needs to be informed of the end result (last pid only)
     // 3) Local and Global pids need to be removed from their respective lists
     child.on("close", async (code, signal) => {
-      console.debug(`child process exited with code ${code} and signal ${signal}`);
+      console.log(`child process exited with code ${code} and signal ${signal}`);
       RunEASLExitSummaries.exitSummaries.push({ pid: child.pid, exitCode: code });
 
       // The last child on its responsibilities go here
@@ -538,11 +546,11 @@ export async function handleRunExploreASL(
           workloadMapping
         );
 
-        console.debug(`EASL Process ${channelName} -- Last ChildProc onClose: Incomplete Steps`, missedStatusFiles);
+        console.log(`EASL Process ${channelName} -- Last ChildProc onClose: Incomplete Steps`, missedStatusFiles);
 
         RunEASLExitSummaries.numIncompleteSteps = missedStatusFiles.length;
         RunEASLExitSummaries.missedStepsMessages = missedStepsMessages;
-        console.debug(
+        console.log(
           `EASL Process ${channelName} -- Last ChildProc onClose: Will communicate the following RunEASLExistSummaries:`,
           RunEASLExitSummaries
         );
@@ -575,6 +583,6 @@ export async function handleRunExploreASL(
     },
   };
 
-  console.debug("EASL Process", channelName, "-- result:", result);
+  console.log("EASL Process", channelName, "-- result:", result);
   return result as GUIMessageWithPayload;
 }

@@ -1,69 +1,280 @@
 import { exec } from "child_process";
-import {
-  pickBy as lodashPickBy,
-  sum as lodashSum,
-  isEmpty as lodashIsEmpty,
-  difference as lodashDiff,
-  uniq as lodashUniq,
-} from "lodash";
+import { difference as lodashDiff, pickBy as lodashPickBy, sum as lodashSum, uniq as lodashUniq } from "lodash";
 import Path from "pathlib-js";
-import { Regex } from "../common/utilityFunctions/stringFunctions";
+import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 import { promisify } from "util";
 import { DataParValuesType } from "../common/types/ExploreASLDataParTypes";
 import { EASLWorkload } from "../common/types/ExploreASLTypes";
 import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import { EASLType } from "../common/types/ImportSchemaTypes";
 import { RunEASLStudySetupType } from "../common/types/ProcessStudiesTypes";
+import { Regex } from "../common/utilityFunctions/stringFunctions";
 const asyncExec = promisify(exec);
+
 /**
  * Ascertains the matlab executable filepath and version of the program and returns them.
- * @returns An Object with keys `matlabPath` and `matlabVersion`. Either of these can be a string or null`.
+ * Note that if multiple matlab versions are detected, it will proceed with the first glob result...
+ * @returns An Object with properties:
+ * - `matlabPath`: The path to the matlab executable
+ * - `matlabVersion`: The version of the matlab executable
+ * - `matlabIsOnPath`: Whether the matlab executable is on the system PATH variable
+ * - `message`: A message to display to the user, usually in case of an
  */
-export async function getMATLABPathAndVersion(): Promise<{ matlabPath: string | null; matlabVersion: string | null }> {
+export async function getMATLABPathAndVersion(): Promise<{
+  matlabPath: string | null;
+  matlabVersion: number | null;
+  matlabIsOnPath: boolean;
+  message: string;
+}> {
   const whichCommand = process.platform === "win32" ? "where" : "which";
-  const matlabVerRegex = /R\d{4}[ab]/gm;
-  let matlabVersion: string | null = null;
+  const matlabVerRegex = new Regex("R(?<VERSIONNUMBER>\\d{4})[ab]");
+  let matlabVersion: number | null = null;
   let matlabPath: string | null = null;
-  const { stdout } = await asyncExec(`${whichCommand} matlab`, { windowsHide: true });
-  matlabPath = stdout.trim();
+  let matlabIsOnPath = false;
 
-  if (matlabPath && matlabPath !== "" && (await new Path(matlabPath).exists())) {
-    // Test for instant version match in the filepath of the executable
-    if (matlabVerRegex.test(matlabPath)) {
-      matlabVersion = matlabPath.match(matlabVerRegex)[0];
-      console.log(`Success at finding version ${matlabVersion} from the executable's own filepath`);
-      return { matlabPath, matlabVersion };
+  try {
+    const { stdout } = await asyncExec(`${whichCommand} matlab`, { windowsHide: true });
+    matlabPath = stdout.trim();
+    matlabIsOnPath = true;
+    const match = matlabVerRegex.search(matlabPath);
+    if (match) {
+      /**
+       * Case: MATLAB is on PATH and the version is clearly specified in the path
+       */
+      matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
+      console.log(`MATLAB was found on PATH @ ${matlabPath} with version ${matlabVersion}`);
+      return { matlabPath, matlabVersion, matlabIsOnPath, message: `Successfully found matlab path and version.` };
+    } else {
+      /**
+       * Case: MATLAB is on PATH but the version is not clearly specified in the path; we can determine the version
+       * by running MATLAB itself
+       */
+      console.log(
+        `MATLAB was found on PATH @ ${matlabPath} but the version is not clear; attempting to determine version`
+      );
+      try {
+        const { stdout } = await asyncExec(`matlab -nosplash -nodesktop -batch "disp(version)"`, { windowsHide: true });
+        const matlabRawVersionString = stdout.trim();
+        const match = matlabVerRegex.search(matlabRawVersionString);
+        if (match) {
+          matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
+        }
+        console.log(`MATLAB version ${matlabVersion} was determined`);
+        return { matlabPath, matlabVersion, matlabIsOnPath, message: `Successfully found matlab path and version.` };
+      } catch (error) {
+        try {
+          // Might have failed because the version doesn't use the -batch flag; try again with -r flag
+          console.log(
+            `MATLAB version could not be determined using -batch`,
+            `...trying again with -r flag in case this is an older MATLAB`
+          );
+          const { stdout } = await asyncExec(`matlab -nosplash -nodesktop -r "disp(version)"`, { windowsHide: true });
+          const matlabRawVersionString = stdout.trim();
+          const match = matlabVerRegex.search(matlabRawVersionString);
+          if (match) {
+            matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
+            console.log(`MATLAB version ${matlabVersion} was determined`);
+            return {
+              matlabPath,
+              matlabVersion,
+              matlabIsOnPath,
+              message: `Successfully found matlab path and version.`,
+            };
+          }
+          return {
+            matlabPath,
+            matlabVersion,
+            matlabIsOnPath,
+            message: `MATLAB path was found to be ${matlabPath} but the version could not be determined.`,
+          };
+        } catch (error) {
+          // Out of options...return empty-handed
+          console.log(`MATLAB version could not be determined even though it was on PATH`);
+          return {
+            matlabPath,
+            matlabVersion,
+            matlabIsOnPath,
+            message: `MATLAB path was found to be ${matlabPath} but the version could not be determined.`,
+          };
+        }
+      }
     }
+  } catch (error) {
+    console.log("Could not find MATLAB on PATH. Attempting backup methods...");
+    matlabIsOnPath = false;
+    /**
+     * Case: MATLAB is not on PATH
+     */
+    // On MacOS, check Applications as the installation is typically /Applications/MATLAB_R20XXx.app/bin/matlab
+    if (process.platform === "darwin") {
+      const applicationsPath = new Path("/Applications");
+      if (!(await applicationsPath.exists()))
+        return {
+          matlabPath,
+          matlabVersion,
+          matlabIsOnPath,
+          message: `No MATLAB path found and could not search in the Applications folder as it did not exist`,
+        };
 
-    // If it's on PATH, we should be able to execute it for our benefit to get the version
-    console.log("Found matlab on PATH but it did not have the version in the filepath. Getting it via execution.");
-    const { stdout } = await asyncExec(`matlab -nosplash -nodesktop -batch "disp(version)"`, {
-      windowsHide: true,
-    });
-    const rawMATLABVer = stdout.trim();
-    matlabVersion = rawMATLABVer.match(matlabVerRegex)[0];
-    console.log(`The following matlabVersion was determined from executing MATLAB: ${matlabVersion}`);
-    return { matlabPath, matlabVersion };
-  }
+      console.log(`Looking for MATLAB in ${applicationsPath.path}...`);
+      try {
+        for await (const matlabCandidatePath of applicationsPath.globIter("MATLAB*/bin/matlab", { onlyFiles: true })) {
+          const match = matlabVerRegex.search(matlabCandidatePath.path);
+          if (!match) continue;
+          matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
+          matlabPath = matlabCandidatePath.path;
+          matlabIsOnPath = false;
+          console.log(`MATLAB was found @ ${matlabPath} with version ${matlabVersion}`);
+          return {
+            matlabPath,
+            matlabVersion,
+            matlabIsOnPath,
+            message: `Successfully found matlab path and version in Applications.`,
+          };
+        }
+      } catch (error) {
+        if (error.code === "EACCESS" || error.code === "EPERM") {
+          return {
+            matlabPath,
+            matlabVersion,
+            matlabIsOnPath,
+            message: `Could not locate MATLAB as this application was not granted permission to search for it in Applications`,
+          };
+        }
+      }
+      return {
+        matlabPath,
+        matlabVersion,
+        matlabIsOnPath,
+        message: `No MATLAB path found in Applications`,
+      }; // End of MacOS case
+    } else if (process.platform === "win32") {
+      // On Windows, we can check Program Files as the installation is typically C:\Program Files\MATLAB\R20XXx\bin\matlab.exe
+      const programFilesPath = new Path("C:/Program Files");
+      if (!(await programFilesPath.exists()))
+        return {
+          matlabPath,
+          matlabVersion,
+          matlabIsOnPath,
+          message: `Could not find MATLAB as search location Program Files doesn't exist on this Windows operating system`,
+        };
+      console.log(`Looking for MATLAB in ${programFilesPath.path}...`);
 
-  // Exit if not Mac
-  console.log("MATLAB was not on PATH");
-  if (process.platform !== "darwin") return { matlabPath, matlabVersion };
+      try {
+        for await (const matlabCandidatePath of programFilesPath.globIter("MATLAB/**/bin/matlab.exe", {
+          onlyFiles: true,
+        })) {
+          const match = matlabVerRegex.search(matlabCandidatePath.path);
+          if (!match) continue;
+          matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
+          matlabPath = matlabCandidatePath.path;
+          matlabIsOnPath = false;
+          console.log(`MATLAB was found @ ${matlabPath} with version ${matlabVersion}`);
+          return { matlabPath, matlabVersion, matlabIsOnPath, message: `Successfully found matlab path and version.` };
+        }
+      } catch (error) {
+        // Passthrough silently since Program Files (x86) is a backup and the proper EACCESS error will be captured there
+      }
 
-  // Last try if on macOS...we can try to find it via Applications
-  const applicationsPath = new Path("/Applications");
-  if (!(await applicationsPath.exists())) return { matlabPath, matlabVersion }; // Early exit if no Applications folder
+      // Otherwise, check Program Files (x86) as the installation is typically C:\Program Files (x86)\MATLAB\R20XXx\bin\matlab.exe
+      const programFilesX86Path = new Path("C:/Program Files (x86)");
+      console.log(`Looking for MATLAB in ${programFilesX86Path.path}...`);
+      if (!(await programFilesX86Path.exists()))
+        return {
+          matlabPath,
+          matlabVersion,
+          matlabIsOnPath,
+          message: `Could not find MATLAB as search location Program Files (x86) doesn't exist on this Windows operating system`,
+        };
+      try {
+        for await (const matlabCandidatePath of programFilesX86Path.globIter("MATLAB/**/bin/matlab.exe", {
+          onlyFiles: true,
+        })) {
+          const match = matlabVerRegex.search(matlabCandidatePath.path);
+          if (!match) continue;
+          matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
+          matlabPath = matlabCandidatePath.path;
+          matlabIsOnPath = false;
+          console.log(`MATLAB was found @ ${matlabPath} with version ${matlabVersion}`);
+          return { matlabPath, matlabVersion, matlabIsOnPath, message: `Successfully found matlab path and version.` };
+        }
+      } catch (error) {
+        if (error.code === "EACCESS" || error.code === "EPERM") {
+          return {
+            matlabPath,
+            matlabVersion,
+            matlabIsOnPath,
+            message: `Could not locate MATLAB as this application was not granted permission to search for it`,
+          };
+        }
+      }
+      return {
+        matlabPath,
+        matlabVersion,
+        matlabIsOnPath,
+        message: `No MATLAB path found in Program Files (x86) or Program Files`,
+      }; // End of Windows case
+    } else {
+      // On Linux, we can first try /usr/local as the installation is typically /usr/local/MATLAB/R20XXx/bin/matlab
+      const usrLocalPath = new Path("/usr/local");
+      if (!(await usrLocalPath.exists()))
+        return {
+          matlabPath,
+          matlabVersion,
+          matlabIsOnPath,
+          message: `Could not find MATLAB as search location /usr/local doesn't exist on this Linux operating system`,
+        };
+      console.log(`Looking for MATLAB in ${usrLocalPath.path}...`);
+      try {
+        for await (const matlabCandidatePath of usrLocalPath.globIter("MATLAB*/**/bin/matlab", { onlyFiles: true })) {
+          const match = matlabVerRegex.search(matlabCandidatePath.path);
+          if (!match) continue;
+          matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
+          matlabPath = matlabCandidatePath.path;
+          matlabIsOnPath = false;
+          return { matlabPath, matlabVersion, matlabIsOnPath, message: `Successfully found matlab path and version.` };
+        }
+      } catch (error) {
+        // Passthrough silently since /home/<username> is a backup and the proper EACCESS error will be captured there
+      }
 
-  for await (const path of applicationsPath.globIter("bin/matlab", { onlyFiles: true })) {
-    if (matlabVerRegex.test(path.path)) {
-      matlabPath = path.path;
-      matlabVersion = path.path.match(matlabVerRegex)[0];
-      return { matlabPath, matlabVersion };
-    }
-  }
-
-  // No luck on MacOS either
-  return { matlabPath, matlabVersion };
+      // Sometimes MATLAB can't be installed in /usr/local, so we can try /home/<username>/
+      const homePath = Path.home();
+      if (!(await homePath.exists()))
+        return {
+          matlabPath,
+          matlabVersion,
+          matlabIsOnPath,
+          message: `Could not find MATLAB as search location /home/<username> doesn't exist on this Linux operating system`,
+        };
+      console.log(`Looking for MATLAB in ${homePath.path}...`);
+      try {
+        for await (const matlabCandidatePath of homePath.globIter("**/bin/matlab", { onlyFiles: true })) {
+          const match = matlabVerRegex.search(matlabCandidatePath.path);
+          if (!match) continue;
+          matlabVersion = Number(match.groupsObject.VERSIONNUMBER);
+          matlabPath = matlabCandidatePath.path;
+          matlabIsOnPath = false;
+          return { matlabPath, matlabVersion, matlabIsOnPath, message: `Successfully found matlab path and version.` };
+        }
+      } catch (error) {
+        if (error.code === "EACCESS" || error.code === "EPERM") {
+          return {
+            matlabPath,
+            matlabVersion,
+            matlabIsOnPath,
+            message: `Could not locate MATLAB as this application was not granted permission to search for it in /home/<username>`,
+          };
+        }
+      }
+      return {
+        matlabPath,
+        matlabVersion,
+        matlabIsOnPath,
+        message: `No MATLAB path found in /home/<username> or /usr/local`,
+      };
+    } // End of else case (Linux)
+  } // End of try/catch with matlab not being on PATH
 }
 
 /**
@@ -77,7 +288,7 @@ export async function createRuntimeEnvironment(
   EASLType: EASLType,
   EASLPath: string,
   MATLABRuntimePath: string
-): Promise<NodeJS.ProcessEnv | false> {
+): Promise<NodeJS.ProcessEnv | CreateRuntimeError> {
   if (EASLType === "Github") return { ...process.env, MATLABPATH: EASLPath };
 
   const allEnvMappings = {
@@ -100,14 +311,24 @@ export async function createRuntimeEnvironment(
 
   const currentEnvMapping = allEnvMappings[process.platform as keyof typeof allEnvMappings];
   const currentPATH = currentEnvMapping.varname in process.env ? process.env[currentEnvMapping.varname] : "";
-  const runtimePaths = await new Path(MATLABRuntimePath).glob(`**/${currentEnvMapping.globItem}`, {
-    onlyDirectories: true,
-  });
-  if (runtimePaths.length === 0) return false;
-  const updatedPaths = currentPATH
-    ? currentPATH + currentEnvMapping.delimiter + runtimePaths.map(p => p.path).join(currentEnvMapping.delimiter)
-    : runtimePaths.map(p => p.path).join(currentEnvMapping.delimiter);
-  return { ...process.env, [currentEnvMapping.varname]: updatedPaths };
+
+  try {
+    const runtimePaths = await new Path(MATLABRuntimePath).glob(`**/${currentEnvMapping.globItem}`, {
+      onlyDirectories: true,
+    });
+    if (runtimePaths.length === 0)
+      return new CreateRuntimeError(
+        `Could not locate the expected executables for your operating system's MATLAB Runtime: ${currentEnvMapping.globItem}`
+      );
+    const updatedPaths = currentPATH
+      ? currentPATH + currentEnvMapping.delimiter + runtimePaths.map(p => p.path).join(currentEnvMapping.delimiter)
+      : runtimePaths.map(p => p.path).join(currentEnvMapping.delimiter);
+    return { ...process.env, [currentEnvMapping.varname]: updatedPaths };
+  } catch (error) {
+    return new CreateRuntimeError(
+      `Could not locate the expected executables for your operating system's MATLAB Runtime due to permission issues. Please ensure that your MATLAB Runtime is installed in an accessible location.`
+    );
+  }
 }
 
 interface GlobMapping {

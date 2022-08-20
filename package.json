@@ -1,7 +1,7 @@
 {
   "name": "ExploreASLJS",
   "productName": "ExploreASLJS",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "A user interface for the analysis of arterial spin labeling (ASL) images",
   "repository": "https://github.com/MauricePasternak/ExploreASLJS",
   "main": ".webpack/main",
