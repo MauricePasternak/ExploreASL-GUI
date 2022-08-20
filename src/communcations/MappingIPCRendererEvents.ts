@@ -28,6 +28,7 @@ import { QuillFormat } from "../common/types/quillExtraTypes";
  * - `FSWatcherEvent` - Inform the frontend about a child in a watched file structure.
  * - `progressBarIncrement` - Increment the value of a progressbar by a given amount.
  * - `progressBarReset` - Reset the value of a progressbar back to zero.
+ * - `shortcutTriggered` - Respond to the user clicking certain keyboard buttons/accelerators.
  */
 export type MappingIPCRendererEventsType = {
   childProcessHasBeenPaused: (message?: string, isError?: boolean) => void;
@@ -42,6 +43,7 @@ export type MappingIPCRendererEventsType = {
   FSWatcherEvent: (event: "add" | "addDir" | "change" | "unlink" | "unlinkDir", filepath: string) => void;
   progressBarIncrement: (amount: number) => void;
   progressBarReset: (resetTo?: number) => void;
+  shortcutTriggered: () => void;
 };
 
 /**
@@ -60,6 +62,7 @@ export type MappingIPCRendererEventsType = {
  * - `FSWatcherEvent` - Inform the frontend about a child in a watched file structure.
  * - `progressBarIncrement` - Increment the value of a progressbar by a given amount.
  * - `progressBarReset` - Reset the value of a progressbar back to zero.
+ * - `shortcutTriggered` - Respond to the user clicking certain keyboard buttons/accelerators.
  * @param args Additional arguments to return to IPCRenderer. Must match the expected signature in {@link MappingIPCRendererEventsType}
  * @example
  * ```

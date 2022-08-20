@@ -6,6 +6,7 @@
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
 [![LinkedIn][linkedin-shield]][linkedin-url]
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mauricepasq)
 
 <!-- PROJECT LOGO -->
 <br />
@@ -77,9 +78,11 @@ This project wraps around [ExploreASL](https://exploreasl.github.io/Documentatio
 
 <br/>
 
-- [![Electron][electronjs]][electron-url]
-- [![React][react.js]][react-url]
-- [![MaterialUI][mui.js]][mui-url]
+[![Electron][electronjs]][electron-url]
+
+[![React][react.js]][react-url]
+
+[![MaterialUI][mui.js]][mui-url]
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -109,6 +112,10 @@ that they are using `yarn` as their package manager.
 3. Start up the GUI with hot-reload and have a crack at it
    ```sh
    yarn start
+   ```
+4. If you'd like to package the application for your operating system:
+   ```sh
+   yarn make
    ```
 
 ### General Project Structure
@@ -162,20 +169,21 @@ Go to the Applications folder and drag & drop the ExploreASLJS.app application t
 
 ## Usage
 
-### Import Your Dataset
+### 1) Import Your Dataset
 
-As a first step, you'll have to convert the output from your DICOM scanner(s) into proper BIDS format.
-This is accomplish via a 3-step procedure (first step shown below):
+To start with, you'll have to convert the output from your DICOM scanner(s) into proper <a href="https://bids-specification.readthedocs.io/en/stable/"> Brain Imaging Data Structure (BIDS)</a> format.
 
-1. You'll have to define the information contained at each folder level. Do folder names correspond to subjects, scans, etc?
-2. For visits and sessions, you'll have the option to specify the alias name output. For scans, you'll have to specify which scan folders pertain to which imaging modality
+This is accomplished via a 3-step procedure:
+
+1. You'll have to define the information contained at each folder level (i.e. do folder names correspond to subjects, scans, etc?). The page this corresponds to is demonstrated in the image below.
+2. For visits and sessions, you'll have the option to specify the alias name output. For scans, you'll have to specify which scan folders pertain to which imaging modality.
 3. You'll specify the nature/context of the ASL acquistion(s) (i.e. how many volumes are contained in a series, are they an alternating control-label set, etc.). You should specify a separate context for every different vendor/sequence used.
 
-You'll then be brought to the run page where you can get text feedback as to the import progress occurring. You'll have the option to pause/resume/terminate the import process as well.
+You'll then be brought to the run page where you can get text feedback as to the import progress occurring. For long-running imports, you'll have the option to pause/resume/terminate the import process as well.
 
 <img src="./src/assets/img/READMEImages/ImportModule.png" style="width: max(400px, 50%)" />
 
-### Define Processing Parameters
+### 2) Define Processing Parameters
 
 As a second step, you'll have to define the overall (global) settings that should be taken into account when processing a dataset. In general these fall under 3 subcategories:
 
@@ -185,11 +193,35 @@ As a second step, you'll have to define the overall (global) settings that shoul
 
 When done, your values will be saved as a data parameters file (DataPar.json) at the root of your dataset. This is the central file that ExploreASL uses to analyze your dataset. If you'd like to change a particular parameter at a later time, you can always re-load any existing DataPar.json file, change what values you wish, and save it again.
 
+❗ If your dataset is complex and specific scans need to have their fields tweaked, the next module tackles the issue.
+
 <img src="./src/assets/img/READMEImages/DefineDataParametersModule.png" style="width: max(400px, 50%)"  />
 
-### Run ExploreASL
+### 3) Tweak BIDS Fields (Optional)
 
-In the third step, you can specify the datasets you'd like processed. Each is assumed to have been already imported and have a valid DataPar.json file at its root. Some neat features you should be aware of:
+Occasionally, it may be necessary to tweak very specific ASL-processing fields of certain scans that the global settings from the previous step do not encompass. This optional module allows users to tweak the <a href="https://bids-specification.readthedocs.io/en/stable/">BIDS-related ASL fields</a> for any imported dataset.
+
+⚠️ **It is assumed that users are familiar with BIDS if they intend to use this part of the program. In particular, they are expected to understand which fields are exclusionary with others.**
+
+Users will have to specify the root folder of the study they'd like to tweak. If valid, a spreadsheet will auto-populate with the BIDS fields. The following types of fields are supported:
+
+- Text-based fields
+- Numerical fields
+- Boolean (yes/no, true/false, etc.) fields
+- Option-based fields
+
+The appropriate widget will be present within each cell to allow users to set an appropriate value for that field.
+
+Due to the nature of datasets varying wildly between BIDS fields that are present (i.e. one set of scans is a PASL ASL sequence that needs a "PASL Type" field, another set is a PCASL sequence that needs a "PCASL Type" field), the following additional features allow users to specify their datasets accordingly.:
+- New BIDS columns can be added to the spreadsheet
+- Most columns can be removed from the spreadsheet if the field is not applicable to any scan.
+- Users can select a cell and make it "blank" by pressing Delete after having selected the cell. This has the effect of treating the BIDS field as if it doesn't exist for that particular scan. **If you have a complex dataset containing exclusionary fields across different scan subsets, this is the best way to avoid conflicts.**
+
+<img src="./src/assets/img/READMEImages/BIDSDatagridModule.png" style="width: max(400px, 50%)"  />
+
+### 4) Run ExploreASL
+
+With the dataset imported, global settings define, and any scan-specific tweaks implemented, the study can be analyzed by ExploreASL. Some neat features you should be aware of:
 
 - You can make the most of your workstation by alloting additional computer cores that will process studies & subjects within those studies in parallel.
 - As with the Import module, you'll be given the option to pause/resume/terminate studies being run independently. Forceful temrination will always result in an error, as the program gives feedback for steps that were or were not completed.
@@ -201,11 +233,11 @@ Run the ExploreASL modules as per your needs and proceed to the next step for an
 
 <img src="./src/assets/img/READMEImages/RunExploreASLModule.png" style="width: max(400px, 50%)"  />
 
-### Visualize Your Dataset
+### 5) Visualize Your Dataset (Optional)
 
-In the optional & final step, you can visualize your completed studies. As with the Import Module, there are first some preparatory steps to complete:
+Optionally, you visualize your completed studies. As with the Import Module, there are first some preparatory steps to complete:
 
-1. You'll have to specify which study should be visualized, the atlases containing your ROIs, and with the added benefit of merging your own metadata spread sheet.
+1. You'll have to specify which study should be visualized, the atlases containing your ROIs, and optionally, specifying your own metadata spread sheet to merge the ExploreASL data with.
 2. The result of the previous step will form a single spreadsheet in-memory and you'll have to clarify the type of variable that each column contains. Namely, Categorical or Continuous. This assists the program in ascertaining which variables to suggest for each axis when plotting.
 
 You'll now have access to the main plotting page (example image below). There are two main plot types supported:
@@ -241,7 +273,7 @@ Additional features to keep in mind:
 - [x] Add help information on the steps within the Data Visualization Module.
 - [ ] Add plot settings for renaming axis main labels within the Data Visualization Module.
 - [ ] Add Multiprocessing Capability to the Import Module as well. \*\*
-- [ ] Add a submodule to Process Studies where users can pin-point change the JSON sidecars of individual subjects/visits/sessions.
+- [x] Add a separate module where users can pin-point change the JSON sidecars of individual subjects/visits/sessions.
 - [ ] Add auto-update capability to the software so that users don't have to manually install new versions.
 - [ ] Allow for plots to be exported as PNG files in the Data Visualization Module.
 - [ ] Allow for the Data Visualization module to save/load a JSON parameters file to skip the hassle of repeating steps and re-adjusting sliders each time. Just load the json file and have it all done for you.

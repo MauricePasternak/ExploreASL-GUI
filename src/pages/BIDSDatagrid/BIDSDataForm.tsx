@@ -14,7 +14,7 @@ function BIDSDataForm() {
   const setBIDSDF = useSetAtom(atomBIDSDataframe);
   const { control, trigger, watch } = useForm({
     defaultValues: {
-      StudyRootPath: "",
+      StudyRootPath: "/home/mpasternak/Documents/EASLTest_SubjectAndVisit",
     },
     resolver: YupResolverFactoryBase(BIDSFormSchema),
   });

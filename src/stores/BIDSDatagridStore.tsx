@@ -1,6 +1,20 @@
-import React from "react";
-import { atom, useSetAtom } from "jotai";
+import CancelIcon from "@mui/icons-material/Cancel";
+import Box from "@mui/material/Box";
+import Checkbox from "@mui/material/Checkbox";
+import IconButton from "@mui/material/IconButton";
+import Typography from "@mui/material/Typography";
 import { DataFrame, Series } from "data-forge";
+import { atom, useSetAtom } from "jotai";
+import { isEmpty as lodashIsEmpty, range as lodashRange } from "lodash";
+import React from "react";
+import { CalculatedColumn, Column, FormatterProps } from "react-data-grid";
+import {
+  BIDSBooleanSet,
+  BIDSCompleteSchema,
+  BIDSEnumSet,
+  BIDSNumericalSet,
+  BIDSTextSet,
+} from "../common/schemas/BIDSDatagridConfigurationSchemas";
 import {
   BIDSBooleanFieldNamesType,
   BIDSColumnName,
@@ -8,37 +22,14 @@ import {
   BIDSFieldNamesType,
   BIDSNumericalFieldNamesType,
   BIDSRow,
-  BIDSSchemaValueType,
   BIDSTextFieldNamesType,
-  BIDSTypes,
 } from "../common/types/BIDSDatagridTypes";
-import { FieldPathValues } from "react-hook-form";
-import {
-  BIDSBooleanSet,
-  BIDSCompleteSchema,
-  BIDSEnumSchema,
-  BIDSEnumSet,
-  BIDSNames,
-  BIDSNumericalSet,
-  BIDSTextSet,
-} from "../common/schemas/BIDSDatagridConfigurationSchemas";
-import { Column, FormatterProps, CalculatedColumn } from "react-data-grid";
 import {
   BooleanEditorFactory,
   NumberEditorFactory,
   SelectEditorFactory,
   TextEditorFactory,
 } from "../pages/BIDSDatagrid/EditorFactories";
-import Checkbox from "@mui/material/Checkbox";
-import { isEmpty as lodashIsEmpty, range as lodashRange } from "lodash";
-import CancelIcon from "@mui/icons-material/Cancel";
-import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
-import Typography from "@mui/material/Typography";
-import Select from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
-import TextField from "@mui/material/TextField";
-import { Input, OutlinedInput } from "@mui/material";
 
 export function BIDSDatagridHeader({ column }: { column: CalculatedColumn<BIDSRow> }) {
   const removeColumn = useSetAtom(atomRemoveDataframeColumns);
@@ -67,7 +58,7 @@ export function BIDSDatagridHeader({ column }: { column: CalculatedColumn<BIDSRo
 /**
  * Atom that holds the StudyRootPath for the BIDS json files that will be loaded in by globbing.
  */
-export const atomBIDSStudyRootPath = atom<string>("/home/mpasternak/Documents/EASLTest_SubjectAndVisitAndSession");
+export const atomBIDSStudyRootPath = atom<string>("/home/mpasternak/Documents/EASLTest_SubjectAndVisit");
 
 /**
  * Atom that holds the loaded ASL BIDS data.
@@ -112,6 +103,29 @@ export const atomAddDataframeColumns = atom(
   }
 );
 
+/**
+ * Setter atom for setting specific values in the dataframe to `undefined`. This is necessary to allow certain
+ * exclusionary BIDS fields to not appear in exported files.
+ */
+export const atomDeleteDataframeCell = atom(
+  null,
+  (get, set, { cellRow, cellCol }: { cellRow: number; cellCol: BIDSColumnName }) => {
+    const currentDF = get(atomBIDSDataframe);
+    if (cellRow > currentDF.count() - 1 || !currentDF.hasSeries(cellCol)) return;
+
+    console.log(`atomDeleteDataframeCell:`, { cellRow, cellCol });
+
+    const newDF = new DataFrame(
+      currentDF
+        .withSeries({
+          [cellCol]: currentDF.getSeries(cellCol).map((val, rowIdx) => (rowIdx === cellRow ? undefined : val)),
+        })
+        .toArray()
+    );
+    set(atomBIDSDataframe, newDF);
+  }
+);
+
 export const atomAddColumnDialogOpen = atom<boolean>(false);
 
 /**
@@ -124,7 +138,11 @@ export const atomBIDSDrawerValues = atom<Partial<typeof BIDSCompleteSchema>[]>([
  */
 export const atomDataframeColumns = atom<BIDSColumnName[]>([]);
 
-export const atomRDGColumns = atom<Column<BIDSRow>[]>(get => {
+/**
+ * Derived atom for setting the `columns` prop for `DataGrid`. This is an array of `Column` objects that describe the
+ * configuration of the columns in the dataframe.
+ */
+export const atomRDGColumnConfigs = atom<Column<BIDSRow>[]>(get => {
   const colNames = get(atomDataframeColumns);
   const columns = colNames
     .map(colName => {
@@ -138,6 +156,7 @@ export const atomRDGColumns = atom<Column<BIDSRow>[]>(get => {
           minWidth: colName === "ID" ? 50 : 300,
           formatter: ({ row, column }: FormatterProps<BIDSRow>) => {
             const value = row[column.key as BIDSFieldNamesType];
+            if (value === undefined) return <div />;
             return <div style={{ paddingInline: "12px" }}>{`${value}`}</div>;
           },
           headerRenderer: BIDSDatagridHeader,
@@ -162,8 +181,16 @@ export const atomRDGColumns = atom<Column<BIDSRow>[]>(get => {
           // Formatter is necessary for Select due to discrepancy between the edit vs view states
           formatter: ({ row, column }: FormatterProps<BIDSRow>) => {
             const value = row[column.key as BIDSFieldNamesType];
+            if (value === undefined) return <div />;
+
             const enumSchema = BIDSCompleteSchema[column.key as BIDSEnumFieldNamesType];
             const displayValue = enumSchema.enumOptions.find(option => option.value === value);
+
+            // console.log(`enumFormatter:`, {
+            //   value,
+            //   row,
+            //   displayValue,
+            // });
 
             return <div style={{ paddingInline: "12px" }}>{displayValue.label}</div>;
           },
@@ -191,6 +218,7 @@ export const atomRDGColumns = atom<Column<BIDSRow>[]>(get => {
           headerRenderer: BIDSDatagridHeader,
           formatter: ({ row, column }: FormatterProps<BIDSRow>) => {
             const value = row[column.key as BIDSFieldNamesType];
+            if (value === undefined) return <div />;
             return <div style={{ paddingInline: "12px" }}>{`${value}`}</div>;
           },
         } as Column<BIDSRow>;
@@ -210,8 +238,9 @@ export const atomRDGColumns = atom<Column<BIDSRow>[]>(get => {
           },
           headerRenderer: BIDSDatagridHeader,
           formatter: ({ row, column }: FormatterProps<BIDSRow>) => {
-            const checked = !!row[column.key as BIDSFieldNamesType];
-            return <Checkbox checked={checked} />;
+            const value = row[column.key as BIDSFieldNamesType];
+            if (value === undefined) return <div />;
+            return <Checkbox checked={!!value} />;
           },
         } as Column<BIDSRow & { id: string }>;
         // TEXT columns
@@ -231,6 +260,7 @@ export const atomRDGColumns = atom<Column<BIDSRow>[]>(get => {
           headerRenderer: BIDSDatagridHeader,
           formatter: ({ row, column }: FormatterProps<BIDSRow>) => {
             const value = row[column.key as BIDSFieldNamesType];
+            if (value === undefined) return <div />;
             <div style={{ paddingInline: "12px" }}>{`${value}`}</div>;
           },
         } as Column<BIDSRow>;

@@ -19,7 +19,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "PCASL", value: "PCASL" },
       { label: "PASL", value: "PASL" },
     ],
-    mapValue: "PCASL",
+    defaultValue: "PCASL",
   },
   Manufacturer: {
     type: "Enum",
@@ -29,7 +29,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "Siemens", value: "Siemens" },
       { label: "Philips", value: "Philips" },
     ],
-    mapValue: "SIEMENS",
+    defaultValue: "SIEMENS",
   },
   M0Type: {
     type: "Enum",
@@ -40,7 +40,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "Single Value Estimate", value: "Estimate" },
       { label: "Use mean Control ASL as substitute", value: "Absent" },
     ],
-    mapValue: "Separate",
+    defaultValue: "Separate",
   },
   MRAcquisitionType: {
     type: "Enum",
@@ -49,7 +49,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "2D", value: "2D" },
       { label: "3D", value: "3D" },
     ],
-    mapValue: "3D",
+    defaultValue: "3D",
   },
   CASLType: {
     type: "Enum",
@@ -58,7 +58,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "Single Coil", value: "single-coil" },
       { label: "Double Coil", value: "double-coil" },
     ],
-    mapValue: "single-coil",
+    defaultValue: "single-coil",
   },
   PCASLType: {
     type: "Enum",
@@ -67,7 +67,17 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "Balanced", value: "balanced" },
       { label: "Unbalanced", value: "unbalanced" },
     ],
-    mapValue: "balanced",
+    defaultValue: "balanced",
+  },
+  PASLType: {
+    type: "Enum",
+    colName: "PASL Type",
+    enumOptions: [
+      { label: "FAIR", value: "FAIR" },
+      { label: "EPISTAR", value: "EPISTAR" },
+      { label: "PICORE", value: "PICORE" },
+    ],
+    defaultValue: "FAIR",
   },
   PhaseEncodingDirection: {
     type: "Enum",
@@ -80,7 +90,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "Second Axis in Reverse", value: "j-" },
       { label: "Third Axis in Reverse", value: "k-" },
     ],
-    mapValue: "k",
+    defaultValue: "k",
   },
   SliceEncodingDirection: {
     type: "Enum",
@@ -93,7 +103,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "Second Axis in Reverse", value: "j-" },
       { label: "Third Axis in Reverse", value: "k-" },
     ],
-    mapValue: "k",
+    defaultValue: "k",
   },
   BolusCutOffTechnique: {
     type: "Enum",
@@ -103,7 +113,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
       { label: "QUIPSS", value: "QUIPSS" },
       { label: "QUIPSSII", value: "QUIPSSII" },
     ],
-    mapValue: "Q2TIPS",
+    defaultValue: "Q2TIPS",
   },
 };
 
@@ -115,7 +125,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     min: 0.0001,
     max: 1000,
     step: 0.0001,
-    mapValue: 0.01,
+    defaultValue: 0.01,
   },
   RepetitionTime: {
     type: "Numerical",
@@ -124,7 +134,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     min: 0.0001,
     max: 1000,
     step: 0.0001,
-    mapValue: 4.5,
+    defaultValue: 4.5,
   },
   FlipAngle: {
     type: "Numerical",
@@ -133,7 +143,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     min: 0,
     max: 360,
     step: 1,
-    mapValue: 90,
+    defaultValue: 90,
   },
   MagneticFieldStrength: {
     type: "Numerical",
@@ -142,7 +152,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     min: 0.0001,
     max: 1000,
     step: 0.0001,
-    mapValue: 3,
+    defaultValue: 3,
   },
   PostLabelingDelay: {
     type: "Numerical",
@@ -151,7 +161,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     min: 0.0001,
     max: 1000,
     step: 0.0001,
-    mapValue: 1.8,
+    defaultValue: 1.8,
   },
   LabelingDuration: {
     type: "Numerical",
@@ -160,7 +170,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     min: 0.0001,
     max: 1000,
     step: 0.0001,
-    mapValue: 0.8,
+    defaultValue: 0.8,
   },
 
   M0_GMScaleFactor: {
@@ -170,7 +180,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     min: 0.0001,
     max: 10000000,
     step: 0.0001,
-    mapValue: 1,
+    defaultValue: 1,
   },
   M0Estimate: {
     type: "Numerical",
@@ -179,7 +189,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     min: 0.0001,
     max: 10000000,
     step: 0.0001,
-    mapValue: 1,
+    defaultValue: 1,
   },
 };
 
@@ -187,22 +197,22 @@ export const BIDSBooleanSchema: BIDSBooleanSchemaType = {
   BackgroundSuppression: {
     type: "Boolean",
     colName: "Background Suppression",
-    mapValue: true,
+    defaultValue: true,
   },
   BolusCutOffFlag: {
     type: "Boolean",
-    colName: "ASL Bolus Cut-off Technique Was Used?",
-    mapValue: true,
+    colName: "ASL Bolus Cut-off Technique Was Used",
+    defaultValue: true,
   },
   SkullStripped: {
     type: "Boolean",
     colName: "Skull Stripped?",
-    mapValue: false,
+    defaultValue: false,
   },
   VascularCrushing: {
     type: "Boolean",
     colName: "Vascular Crushing Was Used?",
-    mapValue: false,
+    defaultValue: false,
   },
 };
 
@@ -210,12 +220,12 @@ export const BIDSTextSchema: BIDSTextSchemaType = {
   AttenuationCorrection: {
     type: "Text",
     colName: "Attenuation Correction Description",
-    mapValue: "",
+    defaultValue: "",
   },
   BodyPart: {
     type: "Text",
     colName: "Body Part Scanned Description",
-    mapValue: "Brain",
+    defaultValue: "Brain",
   },
 };
 

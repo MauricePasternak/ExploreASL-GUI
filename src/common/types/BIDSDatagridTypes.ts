@@ -5,6 +5,7 @@ export type BIDSEnumFieldNamesType =
   | "MRAcquisitionType"
   | "CASLType"
   | "PCASLType"
+  | "PASLType"
   | "PhaseEncodingDirection"
   | "SliceEncodingDirection"
   | "BolusCutOffTechnique";
@@ -12,8 +13,8 @@ export type BIDSEnumFieldNamesType =
 export type BIDSEnumConfig = {
   type: "Enum";
   colName: string;
-  enumOptions: Array<{ label: string; value: string }>;
-  mapValue: unknown;
+  enumOptions: Array<{ label: string; value: string | null }>;
+  defaultValue: unknown;
 };
 
 export type BIDSEnumSchemaType = Record<BIDSEnumFieldNamesType, BIDSEnumConfig>;
@@ -35,7 +36,7 @@ export type BIDSNumericalConfig = {
   min: number;
   max: number;
   step: number;
-  mapValue: number;
+  defaultValue: number;
 };
 
 export type BIDSNumericalSchemaType = Record<BIDSNumericalFieldNamesType, BIDSNumericalConfig>;
@@ -49,7 +50,7 @@ export type BIDSBooleanFieldNamesType =
 export type BIDSBooleanConfig = {
   type: "Boolean";
   colName: string;
-  mapValue: boolean;
+  defaultValue: boolean;
 };
 
 export type BIDSBooleanSchemaType = Record<BIDSBooleanFieldNamesType, BIDSBooleanConfig>;
@@ -59,7 +60,7 @@ export type BIDSTextFieldNamesType = "AttenuationCorrection" | "BodyPart";
 export type BIDSTextConfig = {
   type: "Text";
   colName: string;
-  mapValue: string;
+  defaultValue: string;
 };
 
 export type BIDSTextSchemaType = Record<BIDSTextFieldNamesType, BIDSTextConfig>;

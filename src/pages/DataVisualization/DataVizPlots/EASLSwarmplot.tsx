@@ -74,7 +74,7 @@ function EASLSwarmplot() {
     if (qCBFFiles.length === 0) return;
 
     console.log("handleLoadSubject -- found qCBFFiles: ", qCBFFiles);
-    const niftiData = await api.invoke("NIFTI:load", qCBFFiles[0].path);
+    const niftiData = await api.invoke("NIFTI:Load", qCBFFiles[0].path);
     if (!niftiData) return;
 
     const [axialData, minimumValue, maximumValue] = niftiToNivoAxial(niftiData);

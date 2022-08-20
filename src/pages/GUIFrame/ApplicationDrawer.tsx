@@ -16,6 +16,7 @@ import SvgIcon from "@mui/material/SvgIcon";
 import { useAtom, useSetAtom } from "jotai";
 import React from "react";
 import BrainSvg from "../../assets/svg/Brain.svg";
+import BIDSIcon from "../../assets/svg/BIDSIcon.svg";
 import ScatterPlotIcon from "../../assets/svg/ScatterGraph.svg";
 import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import ExpandMore from "../../components/ExpandMore";
@@ -139,7 +140,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
           }}
         >
           <ListItemIcon>
-            <BackupTableIcon fontSize="large" />
+            <SvgIcon component={BIDSIcon} inheritViewBox fontSize="large" />
           </ListItemIcon>
           <ListItemText>Edit BIDS Sidecars</ListItemText>
         </ListItemButton>

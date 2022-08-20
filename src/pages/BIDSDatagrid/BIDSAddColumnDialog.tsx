@@ -59,7 +59,7 @@ function BIDSAddColumnDialog() {
   const handleSelectedFieldChange = (event: SelectChangeEvent<BIDSFieldNamesType>) => {
     const val = event.target.value as BIDSFieldNamesType;
     setSelectedField(val);
-    setDefaultValue(BIDSCompleteSchema[val].mapValue);
+    setDefaultValue(BIDSCompleteSchema[val].defaultValue);
   };
 
   const renderDefaultValueInput = () => {
@@ -90,7 +90,7 @@ function BIDSAddColumnDialog() {
           value={defaultValue}
           fullWidth
           onChange={e => {
-            const val = e.target.value as BIDSEnumConfig["mapValue"];
+            const val = e.target.value as BIDSEnumConfig["defaultValue"];
             setDefaultValue(val);
           }}
         >

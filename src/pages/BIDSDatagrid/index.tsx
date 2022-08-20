@@ -1,4 +1,3 @@
-import AppRegistrationIcon from "@mui/icons-material/AppRegistration";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -10,6 +9,8 @@ import BIDSAddColumnDialog from "./BIDSAddColumnDialog";
 import BIDSDataActions from "./BIDSDataActions";
 import BIDSDataForm from "./BIDSDataForm";
 import BIDSDG from "./BIDSDG";
+import SvgIcon from "@mui/material/SvgIcon";
+import BIDSIcon from "../../assets/svg/BIDSIcon.svg";
 
 function BIDSDataGrid() {
   return (
@@ -33,7 +34,7 @@ function BIDSDataGrid() {
             }
             avatar={
               <Avatar sizes="large">
-                <AppRegistrationIcon />
+                <SvgIcon component={BIDSIcon} inheritViewBox />
               </Avatar>
             }
           />
