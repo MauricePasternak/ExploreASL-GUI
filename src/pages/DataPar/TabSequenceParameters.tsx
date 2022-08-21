@@ -6,12 +6,12 @@ import Typography from "@mui/material/Typography";
 import { partialRight as lodashPartialRight, range as lodashRange } from "lodash";
 import React from "react";
 import { Control, UseFormTrigger } from "react-hook-form";
-import RHFInterDepSelect, {
-  RHFInterDepControlledSelectOption,
-} from "../../components/FormComponents/RHFInterDepSelect";
 import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
 import { getNumbersFromDelimitedString } from "../../common/utilityFunctions/stringFunctions";
 import RHFCheckables, { RHFCheckablesOption } from "../../components/FormComponents/RHFCheckables";
+import RHFInterDepSelect, {
+  RHFInterDepControlledSelectOption
+} from "../../components/FormComponents/RHFInterDepSelect";
 import RHFSelect, { RHFControlledSelectOption } from "../../components/FormComponents/RHFSelect";
 import RHFSingleCheckable from "../../components/FormComponents/RHFSingleCheckable";
 import RHFSlider from "../../components/FormComponents/RHFSlider";

@@ -36,7 +36,7 @@ export function NumberEditorFactory<Row = any>({ ...props }: NumberEditorFactory
         {...props}
         type="number"
         value={row[column.key as keyof typeof row]}
-        onChange={event => onRowChange({ ...row, [column.key]: event.target.value })}
+        onChange={event => onRowChange({ ...row, [column.key]: Number(event.target.value) })}
         onBlur={() => onClose(true)}
         inputRef={input => {
           input?.focus();

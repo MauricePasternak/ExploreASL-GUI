@@ -1,24 +1,18 @@
-import React from "react";
-import TuneIcon from "@mui/icons-material/Tune";
-import Card from "@mui/material/Card";
-import CardHeader from "@mui/material/CardHeader";
-import Typography from "@mui/material/Typography";
-import Avatar from "@mui/material/Avatar";
-import ExpandMore from "../../../components/ExpandMore";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import TuneIcon from "@mui/icons-material/Tune";
+import Avatar from "@mui/material/Avatar";
+import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
 import Collapse from "@mui/material/Collapse";
-import { useAtom, useAtomValue } from "jotai";
-import {
-  atomCurrentAxialSlice,
-  atomCurrentCoronalSlice,
-  atomCurrentSagittalSlice,
-  atomOfAtomMRISlices,
-} from "../../../stores/DataFrameVisualizationStore";
-import FormControl from "@mui/material/FormControl";
 import Stack from "@mui/material/Stack";
-import FormLabel from "@mui/material/FormLabel";
-import Slider from "@mui/material/Slider";
+import Typography from "@mui/material/Typography";
+import { useAtomValue } from "jotai";
+import React from "react";
+import ExpandMore from "../../../components/ExpandMore";
+import {
+  atomOfAtomMRISlices
+} from "../../../stores/DataFrameVisualizationStore";
 import MRIViewSlider from "./MRIViewSlider";
 
 function MRIViewSettings() {

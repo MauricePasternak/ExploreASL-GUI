@@ -1,18 +1,18 @@
-import React from "react";
-import VerticalSplitIcon from "@mui/icons-material/VerticalSplit";
-import Card from "@mui/material/Card";
-import CardHeader from "@mui/material/CardHeader";
-import Typography from "@mui/material/Typography";
-import Avatar from "@mui/material/Avatar";
-import ExpandMore from "../../../components/ExpandMore";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import VerticalSplitIcon from "@mui/icons-material/VerticalSplit";
+import Avatar from "@mui/material/Avatar";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
 import Collapse from "@mui/material/Collapse";
 import Stack from "@mui/material/Stack";
-import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
+import React from "react";
+import ExpandMore from "../../../components/ExpandMore";
 import { atomOfAtomsDataVizSubsetOperations, atomSetAddPredicate } from "../../../stores/DataFrameVisualizationStore";
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import SingleSubsetter from "./SingleSubsetter";
 
 function SubsettingSettings() {

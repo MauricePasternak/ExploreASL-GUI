@@ -19,7 +19,7 @@ import ExpandMore from "../../../components/ExpandMore";
 import { ControlledLabelSlider, ControlledLabelSwitch } from "../../../components/FormComponents/ControlLabelGrid";
 import {
   atomEASLScatterplotSettings,
-  atomSetEASLScatterplotSettings,
+  atomSetEASLScatterplotSettings
 } from "../../../stores/DataFrameVisualizationStore";
 import ColorSelect from "../ColorSelect";
 

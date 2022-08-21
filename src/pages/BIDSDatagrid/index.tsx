@@ -3,16 +3,18 @@ import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
+import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
 import React from "react";
+import BIDSIcon from "../../assets/svg/BIDSIcon.svg";
+import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
+import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
+import { atomBIDSDatagridSnackbar } from "../../stores/SnackbarStore";
+import HelpBIDSDatagrid__BIDSDatagrid from "../Help/HelpBIDSDatagrid__BIDSDatagrid";
 import BIDSAddColumnDialog from "./BIDSAddColumnDialog";
 import BIDSDataActions from "./BIDSDataActions";
 import BIDSDataForm from "./BIDSDataForm";
 import BIDSDG from "./BIDSDG";
-import SvgIcon from "@mui/material/SvgIcon";
-import BIDSIcon from "../../assets/svg/BIDSIcon.svg";
-import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
-import { atomBIDSDatagridSnackbar } from "../../stores/SnackbarStore";
 
 function BIDSDataGrid() {
   return (
@@ -22,9 +24,7 @@ function BIDSDataGrid() {
         flexDirection="column"
         gap={2}
         padding={2}
-        // mr={40}
         width="100%"
-        // width="calc(100% - 350px)"
       >
         <Card>
           <CardHeader
@@ -38,6 +38,11 @@ function BIDSDataGrid() {
               <Avatar sizes="large">
                 <SvgIcon component={BIDSIcon} inheritViewBox />
               </Avatar>
+            }
+            action={
+              <FabDialogWrapper maxWidth="xl" PaperProps={{ sx: { minWidth: "499px" } }} sx={{ marginTop: "40px" }}>
+                <HelpBIDSDatagrid__BIDSDatagrid />
+              </FabDialogWrapper>
             }
           />
           <Divider />

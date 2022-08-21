@@ -20,7 +20,7 @@ import {
   formatErrorsForDisplay,
   parseNestedFormattedYupErrors,
   YupResolverFactoryBase,
-  YupValidate,
+  YupValidate
 } from "../../common/utilityFunctions/formFunctions";
 import { stringArrToRegex } from "../../common/utilityFunctions/stringFunctions";
 import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";

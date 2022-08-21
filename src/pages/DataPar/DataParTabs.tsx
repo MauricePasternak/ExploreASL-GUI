@@ -1,20 +1,20 @@
 import CalculateIcon from "@mui/icons-material/Calculate";
 import ErrorIcon from "@mui/icons-material/Error";
 import PeopleIcon from "@mui/icons-material/People";
+import Paper from "@mui/material/Paper";
 import { styled } from "@mui/material/styles";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import { useAtom, useAtomValue } from "jotai";
 import React from "react";
 import { FieldValues, Path, UseFormReturn, useFormState } from "react-hook-form";
-import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import ProcessIcon from "../../assets/svg/ArrowsSpinSolid.svg";
+import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import { DataParTabOption } from "../../common/types/DataParSchemaTypes";
 import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
-import { atomDataParCurrentTab } from "../../stores/DataParStore";
-import Paper from "@mui/material/Paper";
-import { atomCurrentGUIPage } from "../../stores/GUIFrameStore";
 import { parseNestedFormattedYupErrors } from "../../common/utilityFunctions/formFunctions";
+import { atomDataParCurrentTab } from "../../stores/DataParStore";
+import { atomCurrentGUIPage } from "../../stores/GUIFrameStore";
 
 type DataParTabProps<TFV extends FieldValues> = {
   label: React.ReactNode;

@@ -1,12 +1,11 @@
 import { DataFrame } from "data-forge";
-import { useAtom, useSetAtom } from "jotai";
+import { useSetAtom } from "jotai";
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { BIDSFormSchema } from "../../common/schemas/BIDSFormSchema";
 import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
 import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
 import { atomBIDSDataframe, atomBIDSDrawerValues, atomBIDSStudyRootPath } from "../../stores/BIDSDatagridStore";
-
 
 function BIDSDataForm() {
   const setBIDSStudyRootPath = useSetAtom(atomBIDSStudyRootPath);
@@ -22,7 +21,7 @@ function BIDSDataForm() {
   useEffect(() => {
     const subscription = watch(async value => {
       const isValid = await trigger("StudyRootPath");
-      console.log("BIDSDataForm: StudyRootPath:", value.StudyRootPath, "isValid:", isValid);
+      console.log("BIDSDataForm's useEffect has triggered:", { isValid, value });
       if (isValid) {
         console.log("BIDSDataForm: Setting BIDSStudyRootPath:", value.StudyRootPath);
         setBIDSStudyRootPath(value.StudyRootPath);
@@ -30,7 +29,7 @@ function BIDSDataForm() {
         console.log("BIDSDataForm setting BIDS DF to empty");
         setBIDSStudyRootPath("");
         setBIDSDF(new DataFrame());
-        setBIDSDrawerValues([])
+        setBIDSDrawerValues([]);
       }
     });
     return () => subscription.unsubscribe();

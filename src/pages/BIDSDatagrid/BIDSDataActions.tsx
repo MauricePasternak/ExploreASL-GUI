@@ -22,7 +22,12 @@ function BIDSDataActions() {
           error: `File ending as ${Basename} does not exist in this study`,
         };
       // TODO: Add validation of the BIDS row here
-      await api.path.writeJSON(File, rest, { spaces: 1 });
+
+      // We load in the old values and overwrite them with the new ones; this approach keeps the exisitng datagrid as
+      // small as possible in order to accomodate larger datasets at the cost of longer export times.
+      const origValues = await api.path.readJSON(File);
+      const newValues = { ...origValues, ...rest };
+      await api.path.writeJSON(File, newValues, { spaces: 1 });
       return { success: true, error: null };
     } catch (error) {
       return {

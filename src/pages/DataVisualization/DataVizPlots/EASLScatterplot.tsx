@@ -2,13 +2,11 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import { useAtomValue, useSetAtom, useAtom, atom } from "jotai";
+import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import React from "react";
 import {
   toNivoScatterPlotDataGroupBy,
-  toNivoScatterPlotDataSingle,
-  toNivoSwarmPlotDataGroupBy,
-  toNivoSwarmPlotDataSingle,
+  toNivoScatterPlotDataSingle
 } from "../../../common/utilityFunctions/dataFrameFunctions";
 import {
   atomCurrentMRIViewSubject,
@@ -17,16 +15,16 @@ import {
   atomEASLScatterplotSettings,
   atomMRIDataStats,
   atomNivoGraphDataVariablesSchema,
-  atomOfAtomMRIData,
+  atomOfAtomMRIData
 } from "../../../stores/DataFrameVisualizationStore";
 
+import { ResponsiveScatterPlotCanvas } from "@nivo/scatterplot";
+import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
 import {
   niftiToNivoAxial,
   niftiToNivoCoronal,
-  niftiToNivoSagittal,
+  niftiToNivoSagittal
 } from "../../../common/utilityFunctions/nivoFunctions";
-import { ResponsiveScatterPlotCanvas } from "@nivo/scatterplot";
-import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
 
 function EASLScatterplot() {
   console.log("EASLScatterplot rendered");

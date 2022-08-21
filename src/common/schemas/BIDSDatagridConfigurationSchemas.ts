@@ -33,7 +33,7 @@ export const BIDSEnumSchema: BIDSEnumSchemaType = {
   },
   M0Type: {
     type: "Enum",
-    colName: "M0 Type",
+    colName: "M0 Scan Type",
     enumOptions: [
       { label: "Separate m0scan.nii", value: "Separate" },
       { label: "Inside asl.nii", value: "Included" },
@@ -127,7 +127,7 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     step: 0.0001,
     defaultValue: 0.01,
   },
-  RepetitionTime: {
+  RepetitionTimePreparation: {
     type: "Numerical",
     colName: "Repetition Time (TR)",
     unit: "s",
@@ -172,14 +172,13 @@ export const BIDSNumericalSchema: BIDSNumericalSchemaType = {
     step: 0.0001,
     defaultValue: 0.8,
   },
-
   M0_GMScaleFactor: {
     type: "Numerical",
-    colName: "M0 GM Scale Factor",
+    colName: "M0 Gray Matter Scale Factor",
     unit: "a.u.",
-    min: 0.0001,
+    min: 0.000001,
     max: 10000000,
-    step: 0.0001,
+    step: 0.000001,
     defaultValue: 1,
   },
   M0Estimate: {
@@ -234,7 +233,13 @@ export const BIDSNumericalSet = new Set(Object.keys(BIDSNumericalSchema)) as Set
 export const BIDSBooleanSet = new Set(Object.keys(BIDSBooleanSchema)) as Set<BIDSBooleanFieldNamesType>;
 export const BIDSTextSet = new Set(Object.keys(BIDSTextSchema)) as Set<BIDSTextFieldNamesType>;
 
-export const BIDSNames = [
+/**
+ * @description These are the names of BIDS fields (i.e. PASLType, PhaseEncodingDirection, etc.) that this program
+ * supports and will render as columns.
+ *
+ * These **DO NOT** include "ID", "File", and "Baseline"
+ */
+export const BIDSFieldNames = [
   ...Object.keys(BIDSEnumSchema),
   ...Object.keys(BIDSNumericalSchema),
   ...Object.keys(BIDSBooleanSchema),

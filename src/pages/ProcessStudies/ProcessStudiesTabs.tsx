@@ -1,15 +1,15 @@
-import { useAtom, useAtomValue } from "jotai";
-import React from "react";
-import { ProcessStudiesTabOption } from "../../common/types/ProcessStudiesTypes";
-import { atomProcStudyCurrentTab } from "../../stores/ProcessStudiesStore";
-import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
-import { styled } from "@mui/material/styles";
 import UndoIcon from "@mui/icons-material/Undo";
 import Paper from "@mui/material/Paper";
-import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
-import Tabs from "@mui/material/Tabs";
+import { styled } from "@mui/material/styles";
 import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import { useAtom, useAtomValue } from "jotai";
+import React from "react";
+import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
+import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
+import { ProcessStudiesTabOption } from "../../common/types/ProcessStudiesTypes";
 import { atomCurrentGUIPage } from "../../stores/GUIFrameStore";
+import { atomProcStudyCurrentTab } from "../../stores/ProcessStudiesStore";
 
 const TabExploreASLIcon = styled(ExploreASLIcon)(({ theme }) => ({
   height: "1.5rem",

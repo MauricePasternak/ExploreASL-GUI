@@ -13,14 +13,14 @@ import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
 import { useAtom, useAtomValue } from "jotai";
 import React from "react";
-import ExpandMore from "../../../components/ExpandMore";
 import FunctionVariableIcon from "../../../assets/svg/FunctionVariable.svg";
 import { DataFrameMainType } from "../../../common/types/dataFrameTypes";
 import { NivoGraphType } from "../../../common/types/DataVizSchemaTypes";
+import ExpandMore from "../../../components/ExpandMore";
 import {
   atomDataVizDFDTypes,
   atomNivoGraphDataVariablesSchema,
-  atomNivoGraphType,
+  atomNivoGraphType
 } from "../../../stores/DataFrameVisualizationStore";
 
 function PlotTypeSettings() {

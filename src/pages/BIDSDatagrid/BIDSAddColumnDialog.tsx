@@ -1,35 +1,30 @@
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import ListSubheader from "@mui/material/ListSubheader";
 import MenuItem from "@mui/material/MenuItem";
 import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import React, { useState } from "react";
-import DebouncedInput from "../../components/DebouncedComponents/DebouncedInput";
 import {
   BIDSBooleanSchema,
   BIDSCompleteSchema,
   BIDSEnumSchema,
   BIDSNumericalSchema,
-  BIDSTextSchema,
+  BIDSTextSchema
 } from "../../common/schemas/BIDSDatagridConfigurationSchemas";
 import {
-  BIDSBooleanConfig,
   BIDSEnumConfig,
-  BIDSFieldNamesType,
-  BIDSNumericalConfig,
-  BIDSTextConfig,
+  BIDSFieldNamesType
 } from "../../common/types/BIDSDatagridTypes";
+import DebouncedInput from "../../components/DebouncedComponents/DebouncedInput";
 import { atomAddColumnDialogOpen, atomAddDataframeColumns, atomDataframeColumns } from "../../stores/BIDSDatagridStore";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import Checkbox from "@mui/material/Checkbox";
-import { atomBIDSDatagridSnackbar } from "../../stores/SnackbarStore";
 
 function BIDSAddColumnDialog() {
   const [open, setOpen] = useAtom(atomAddColumnDialogOpen);
@@ -37,6 +32,7 @@ function BIDSAddColumnDialog() {
   const addDataframeColumn = useSetAtom(atomAddDataframeColumns);
   const [selectedField, setSelectedField] = useState<BIDSFieldNamesType | "">("");
   const [defaultValue, setDefaultValue] = useState<unknown>(null);
+  const [applyEmptyDefault, setApplyEmptyDefault] = useState(false);
   const handleClose = () => setOpen(false);
 
   const allowedTextSchemas = Object.entries(BIDSTextSchema).filter(
@@ -55,7 +51,8 @@ function BIDSAddColumnDialog() {
   const handleSelectedFieldChange = (event: SelectChangeEvent<BIDSFieldNamesType>) => {
     const val = event.target.value as BIDSFieldNamesType;
     setSelectedField(val);
-    setDefaultValue(BIDSCompleteSchema[val].defaultValue);
+    setDefaultValue(applyEmptyDefault ? undefined : BIDSCompleteSchema[val].defaultValue);
+    setApplyEmptyDefault(false);
   };
 
   const renderDefaultValueInput = () => {
@@ -66,6 +63,7 @@ function BIDSAddColumnDialog() {
       return (
         <DebouncedInput
           fullWidth
+          disabled={applyEmptyDefault}
           value={defaultValue}
           onChange={e => {
             const val = typeof e === "string" ? e : e.target.value;
@@ -77,6 +75,7 @@ function BIDSAddColumnDialog() {
       return (
         <FormControlLabel
           label={schema.colName}
+          disabled={applyEmptyDefault}
           control={<Checkbox checked={!!defaultValue} onChange={(e, checked) => setDefaultValue(checked)} />}
         />
       );
@@ -85,6 +84,7 @@ function BIDSAddColumnDialog() {
         <Select
           value={defaultValue}
           fullWidth
+          disabled={applyEmptyDefault}
           onChange={e => {
             const val = e.target.value as BIDSEnumConfig["defaultValue"];
             setDefaultValue(val);
@@ -100,6 +100,7 @@ function BIDSAddColumnDialog() {
     } else if (schema.type === "Numerical") {
       return (
         <DebouncedInput
+          disabled={applyEmptyDefault}
           value={defaultValue}
           fullWidth
           onChange={e => {
@@ -171,6 +172,14 @@ function BIDSAddColumnDialog() {
             ))}
           </Select>
           {renderDefaultValueInput()}
+          {selectedField && (
+            <FormControlLabel
+              label="Start with empty cells instead of applying the default value"
+              control={
+                <Checkbox checked={applyEmptyDefault} onChange={(e, checked) => setApplyEmptyDefault(checked)} />
+              }
+            />
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>

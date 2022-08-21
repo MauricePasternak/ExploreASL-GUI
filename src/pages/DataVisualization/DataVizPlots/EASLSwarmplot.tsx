@@ -3,11 +3,11 @@ import Stack from "@mui/material/Stack";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { ResponsiveSwarmPlotCanvas } from "@nivo/swarmplot";
-import { useAtomValue, useSetAtom, atom, useAtom } from "jotai";
+import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import React from "react";
 import {
   toNivoSwarmPlotDataGroupBy,
-  toNivoSwarmPlotDataSingle,
+  toNivoSwarmPlotDataSingle
 } from "../../../common/utilityFunctions/dataFrameFunctions";
 import {
   atomCurrentMRIViewSubject,
@@ -16,15 +16,15 @@ import {
   atomEASLSwarmplotSettings,
   atomMRIDataStats,
   atomNivoGraphDataVariablesSchema,
-  atomOfAtomMRIData,
+  atomOfAtomMRIData
 } from "../../../stores/DataFrameVisualizationStore";
 
+import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
 import {
   niftiToNivoAxial,
   niftiToNivoCoronal,
-  niftiToNivoSagittal,
+  niftiToNivoSagittal
 } from "../../../common/utilityFunctions/nivoFunctions";
-import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
 
 function EASLSwarmplot() {
   const { api } = window;

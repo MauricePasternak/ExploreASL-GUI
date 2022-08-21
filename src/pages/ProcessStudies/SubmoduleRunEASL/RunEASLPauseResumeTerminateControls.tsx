@@ -2,8 +2,8 @@ import Button from "@mui/material/Button";
 import ButtonGroup from "@mui/material/ButtonGroup";
 import { useAtom, useSetAtom } from "jotai";
 import React from "react";
-import { atomProcStudyPIDs, atomSetStatusForAStudy } from "../../../stores/ProcessStudiesStore";
 import { RunEASLStatusType } from "../../../common/types/ExploreASLTypes";
+import { atomProcStudyPIDs, atomSetStatusForAStudy } from "../../../stores/ProcessStudiesStore";
 import { atomProcessStudiesSnackbar } from "../../../stores/SnackbarStore";
 
 function RunEASLPauseResumeTerminateControls({

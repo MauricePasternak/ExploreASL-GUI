@@ -1,31 +1,30 @@
 import PauseCircleOutlineIcon from "@mui/icons-material/PauseCircleOutline";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
 import StopCircleIcon from "@mui/icons-material/StopCircle";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import ButtonGroup from "@mui/material/ButtonGroup";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
 import CircularProgress from "@mui/material/CircularProgress";
+import Divider from "@mui/material/Divider";
+import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
 import { useAtom, useSetAtom } from "jotai";
 import React, { useEffect, useRef } from "react";
 import { SubmitErrorHandler, SubmitHandler } from "react-hook-form";
-import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
+import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
+import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../components/FormComponents/RHFMultiStep";
 import IPCQuill from "../../components/IPCComponents/IPCQuill";
 import {
-  atomImportModuleCurrentProcPID,
   atomImportModuleCurrentProcStatus,
-  ImportModuleChannelName,
+  ImportModuleChannelName
 } from "../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
-import Card from "@mui/material/Card";
-import CardHeader from "@mui/material/CardHeader";
-import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
-import Avatar from "@mui/material/Avatar";
-import SvgIcon from "@mui/material/SvgIcon";
-import CardContent from "@mui/material/CardContent";
-import Divider from "@mui/material/Divider";
 
 type StepRunImportModuleProps = RHFMultiStepReturnProps<ImportSchemaType>;
 

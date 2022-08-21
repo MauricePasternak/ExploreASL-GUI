@@ -20,7 +20,7 @@ export type BIDSEnumConfig = {
 export type BIDSEnumSchemaType = Record<BIDSEnumFieldNamesType, BIDSEnumConfig>;
 
 export type BIDSNumericalFieldNamesType =
-  | "RepetitionTime"
+  | "RepetitionTimePreparation"
   | "EchoTime"
   | "FlipAngle"
   | "MagneticFieldStrength"

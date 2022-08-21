@@ -12,7 +12,6 @@ import React from "react";
 import ExploreASLWorkflowImage from "../../assets/img/EASLWorkflow.png";
 import ExploreASLBannerImage from "../../assets/img/ExploreASLBanner.png";
 import { BulletPointList } from "../Help/HelpStyledComponents";
-import FOO from "../../assets/giphy.gif";
 
 function AboutPage() {
   return (

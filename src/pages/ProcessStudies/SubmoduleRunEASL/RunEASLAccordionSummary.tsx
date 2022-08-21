@@ -1,9 +1,9 @@
-import AccordionSummary from "@mui/material/AccordionSummary";
-import React from "react";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
-import Box from "@mui/material/Box";
+import React from "react";
 import { RunEASLStatusType } from "../../../common/types/ExploreASLTypes";
 
 function RunEASLAccordionSummary({

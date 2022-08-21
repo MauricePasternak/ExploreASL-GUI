@@ -11,14 +11,14 @@ import { cloneDeep as lodashCloneDeep } from "lodash";
 import React, { useEffect } from "react";
 import { SubmitErrorHandler, SubmitHandler, useFieldArray } from "react-hook-form";
 import ContextIcon from "../../assets/svg/ContextIcon.svg";
+import { SchemaImportPar } from "../../common/schemas/ImportSchema";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
+import { YupValidate } from "../../common/utilityFunctions/formFunctions";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../components/FormComponents/RHFMultiStep";
 import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import { DefaultImportSingleContext } from "../../stores/ImportPageStore";
 import HelpImport__StepDefineAdditionalContext from "../Help/HelpImport__StepDefineAdditionalContext";
 import SingleImportContext from "./SingleImportContext";
-import { YupValidate } from "../../common/utilityFunctions/formFunctions";
-import { SchemaImportPar } from "../../common/schemas/ImportSchema";
 
 function StepDefineContexts({
   currentStep,
@@ -50,9 +50,9 @@ function StepDefineContexts({
     console.debug("Step 'Define Content' -- Invalid Submit Errors: ", errors);
   };
 
-  // TODO: During first render mount, there should be a useEffect here which loads an existing ImportPar.json file
-  // created by the GUI and fills in the form fields with the values from the file.
-
+  /**
+   * useEffect for populating fields from an existing ImportPar.json file if it is valid
+   */
   useEffect(() => {
     async function handleLoadImportPar() {
       const currentValues = getValues();

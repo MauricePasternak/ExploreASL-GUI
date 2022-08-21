@@ -1,13 +1,13 @@
+import Grid from "@mui/material/Grid";
+import Typography from "@mui/material/Typography";
+import { useAtomValue } from "jotai";
 import React from "react";
 import {
   atomCurrentMRIViewSubject,
   atomOfAtomMRIData,
-  atomOfAtomMRISlices,
+  atomOfAtomMRISlices
 } from "../../../stores/DataFrameVisualizationStore";
-import { useAtomValue } from "jotai";
-import Grid from "@mui/material/Grid";
 import MRISingleView from "./MRISingleView";
-import Typography from "@mui/material/Typography";
 
 function MRIMultiView() {
   const atomsMRISlices = useAtomValue(atomOfAtomMRISlices);

@@ -21,9 +21,9 @@
     Scanner To Publication User Interface for ASL Imaging
     <br />
     <br />
-    <a href="https://github.com/MauricePasternak/ExploreASLJS/issues">Report Bug</a>
+    <a href="https://github.com/MauricePasternak/ExploreASLJS/issues/new?assignees=MauricePasternak&labels=bug&template=bug_report.md&title=">Report Bug</a>
     ·
-    <a href="https://github.com/MauricePasternak/ExploreASLJS">Request Feature</a>
+    <a href="https://github.com/MauricePasternak/ExploreASLJS/issues/new?assignees=MauricePasternak&labels=enhancement&template=feature_request.md&title=">Request Feature</a>
   </p>
 </div>
 

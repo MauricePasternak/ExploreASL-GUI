@@ -8,7 +8,34 @@ Dates are in format: `YYYY-MM-DD`
 
 ---
 
+## [0.3.0] - 2022-08-21
+
+Introduction of the BIDSDataGrid Module. Module is responsible for editing BIDS fields taken from multiple asl.json
+BIDS sidecars.
+
+### Fixed
+
+- Event docstrings were not updated in MappingIPCRendererEvents.ts , MappingIPCMainEventsToHanders.ts , and preload.ts
+
+- Fixed the event names `NIFTI:Load` and `Dataframe:Load` to be title case for both parts of the name.
+
+### Added
+
+- Added the new BIDSDataGrid Module.
+
+- Added the `Shortcut:Register` and `Shortcut:Unregister` IPCMain events in order to have components register/unregister
+  keyboard shortcuts. The corresponding frontend channel is called `shortcutTriggered`.
+
+### Changed
+
+- Minor removal of unnecessary imports and other sorts of code refactoring.
+
+---
+
 ## [0.2.3] - 2022-08-20
+
+Improvements to the handling of finding a MATLAB executable as well as quality-of-life improvements to the Import
+Module.
 
 ### Fixed
 

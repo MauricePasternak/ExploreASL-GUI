@@ -89,7 +89,7 @@ export const BIDSRowSchema = Yup.object().shape<YupShape<Record<BIDSFieldNamesTy
   ),
   // Numerical fields
   EchoTime: Yup.number().moreThan(0, "Invalid Echo Time"),
-  RepetitionTime: Yup.number().moreThan(0, "Invalid Repetition Time"),
+  RepetitionTimePreparation: Yup.number().moreThan(0, "Invalid Repetition Time"),
   FlipAngle: Yup.number().min(0, "Invalid Flip Angle").max(360, "Invalid Flip Angle"),
   MagneticFieldStrength: Yup.number().moreThan(0, "Invalid Magnetic Field Strength"),
   PostLabelingDelay: Yup.number().moreThan(0, "Invalid Post Labeling Delay"),

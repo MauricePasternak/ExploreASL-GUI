@@ -6,14 +6,14 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { isEmpty as lodashIsEmpty, sortBy as lodashSortBy } from "lodash";
 import React, { useEffect, useRef } from "react";
 import DataGrid, { CalculatedColumn, RowsChangeData } from "react-data-grid";
-import { BIDSNames } from "../../common/schemas/BIDSDatagridConfigurationSchemas";
+import { BIDSFieldNames } from "../../common/schemas/BIDSDatagridConfigurationSchemas";
 import { BIDSColumnName, BIDSFieldNamesType, BIDSRow } from "../../common/types/BIDSDatagridTypes";
 import {
   atomBIDSDataframe,
   atomBIDSStudyRootPath,
   atomDataframeColumns,
   atomDeleteDataframeCell,
-  atomRDGColumnConfigs,
+  atomRDGColumnConfigs
 } from "../../stores/BIDSDatagridStore";
 
 const RGDContainer = styled(Box)(({ theme }) => ({
@@ -85,7 +85,9 @@ function BIDSDG() {
       if (error) return {};
       const data = Object.entries(payload).reduce(
         (acc, [key, value]) => {
-          if (!BIDSNames.includes(key as BIDSFieldNamesType)) return acc;
+          // We filter out keys that are not in the BIDSFieldNames in order to avoid adding extra overhead to processing
+          // the datagrid when it comes to enormous studies.
+          if (!BIDSFieldNames.includes(key as BIDSFieldNamesType)) return acc;
           acc[key] = value;
           return acc;
         },
