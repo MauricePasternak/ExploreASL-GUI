@@ -13,7 +13,7 @@ import {
   atomBIDSStudyRootPath,
   atomDataframeColumns,
   atomDeleteDataframeCell,
-  atomRDGColumnConfigs
+  atomRDGColumnConfigs,
 } from "../../stores/BIDSDatagridStore";
 
 const RGDContainer = styled(Box)(({ theme }) => ({
@@ -45,20 +45,13 @@ function BIDSDG() {
   const deleteDataFrameCell = useSetAtom(atomDeleteDataframeCell);
   const RDGColumnConfig = useAtomValue(atomRDGColumnConfigs);
   const selectedCell = useRef<{ selectedRow: number; selectedColumn: BIDSColumnName }>(null); // Keep track for deleting cells
+  const deleteIsRegistered = useRef(false);
 
   /**
    * useEffect for registering IPC events for the BIDS datagrid. At the current time, events include:
    * - `BIDSDataGridDeleteChannel` - for deleting the currently-selected cell when the delete key is pressed.
    */
   useEffect(() => {
-    async function RegisterDataGridEvents() {
-      await api.invoke("Shortcut:Register", "BIDSDataGridDeleteChannel", "Delete");
-    }
-    async function UnregisterDataGridEvents() {
-      await api.invoke("Shortcut:Unregister", "Delete");
-    }
-
-    RegisterDataGridEvents();
     api.on(`BIDSDataGridDeleteChannel:shortcutTriggered`, () => {
       // Sanity check
       if (selectedCell.current === null) return;
@@ -71,10 +64,29 @@ function BIDSDG() {
 
     // Cleanup
     return () => {
-      UnregisterDataGridEvents();
       api.removeAllListeners(`BIDSDataGridDeleteChannel:shortcutTriggered`);
     };
   }, []);
+
+  /**
+   * We only want the delete shortcut to be registered when the mouse is actively within the datagrid.
+   * Otherwise, this application will prevent its proper functionality in the OS.
+   */
+  const handleMouseEnter = async (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    !deleteIsRegistered.current && (await api.invoke("Shortcut:Register", "BIDSDataGridDeleteChannel", "Delete"));
+    deleteIsRegistered.current = true;
+  };
+
+  /**
+   * We want to unregister the delete shortcut when the mouse leaves the datagrid so that the OS can properly react to
+   * delete key events.
+   */
+  const handleMouseLeave = async (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    deleteIsRegistered.current && (await api.invoke("Shortcut:Unregister", "Delete"));
+    deleteIsRegistered.current = false;
+  };
 
   /**
    * useEffect for loading the dataframe from the BIDS json files whenever StudyRootPath changes.
@@ -136,7 +148,12 @@ function BIDSDG() {
   };
 
   return dataframe.count() > 0 ? (
-    <RGDContainer className="RGDMainContainer" height="calc(100vh - 370px)">
+    <RGDContainer
+      className="RGDMainContainer"
+      height="calc(100vh - 370px)"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <DataGrid
         columns={RDGColumnConfig}
         rows={dataframe.toArray()}

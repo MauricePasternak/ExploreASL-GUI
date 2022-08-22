@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, shell, globalShortcut } from "electron";
+import { app, BrowserWindow, ipcMain, protocol, shell, globalShortcut, BrowserWindowConstructorOptions } from "electron";
 import { debounce as lodashDebounce } from "lodash";
 import treeKill from "tree-kill";
 import { sleep } from "./common/utilityFunctions/sleepFunctions";
@@ -34,7 +34,7 @@ export let mainWindow: BrowserWindow | null;
 const createWindow = (): void => {
   sleep(100); // Hack; allows for other processes to start up before the window is created.
 
-  const mainWindowOptions = {
+  const mainWindowOptions: BrowserWindowConstructorOptions = {
     height: 750,
     width: 900,
     minWidth: 600, // Sanity dimensions

@@ -20,10 +20,7 @@ import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../components/FormComponents/RHFMultiStep";
 import IPCQuill from "../../components/IPCComponents/IPCQuill";
-import {
-  atomImportModuleCurrentProcStatus,
-  ImportModuleChannelName
-} from "../../stores/ImportPageStore";
+import { atomImportModuleCurrentProcStatus, ImportModuleChannelName } from "../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
 
 type StepRunImportModuleProps = RHFMultiStepReturnProps<ImportSchemaType>;
@@ -40,6 +37,7 @@ function StepRunImportModule({
   const [procStatus, setProcStatus] = useAtom(atomImportModuleCurrentProcStatus);
   const setImportModuleSnackbar = useSetAtom(atomImportModuleSnackbar);
   const currentProcPID = useRef(-1);
+  const wasTerminatedByUser = useRef(false);
 
   // Tracking the tasks performed
   const currentTask = useRef(0);
@@ -69,6 +67,7 @@ function StepRunImportModule({
     if (GUIMessage.severity === "success") {
       procStatus !== "Running" && setProcStatus("Running");
       currentProcPID.current = payload.pids[0];
+      wasTerminatedByUser.current = false;
       return;
     }
 
@@ -98,9 +97,23 @@ function StepRunImportModule({
 
     // When the current task is negative, it means that all the tasks have been run
     if (currentTask.current < 0) {
+      const values = getValues();
       console.log(`StepRunImportModule: All tasks completed. Resetting the current PID to -1`);
       resetRefs();
       setProcStatus("Standby");
+
+      // Only give snackbar info feedback if the user did not terminate the process
+      !wasTerminatedByUser.current &&
+        setImportModuleSnackbar({
+          severity: "info",
+          title: "Import Completed",
+          message: [
+            "All Import Contexts have been imported.",
+            `Before proceeding, you are recommended to review the contents of the following directories in order to verify import success:`,
+            `${api.path.osSpecificString(values.EASLPath, "rawdata")}`,
+            `${api.path.osSpecificString(values.EASLPath, "derivatives", "ExploreASL", "log")}`,
+          ],
+        });
       return;
     }
 
@@ -190,8 +203,9 @@ function StepRunImportModule({
       return;
     }
     // Send the terminate command and set the current PID to -1 in order to allow handleProcessClose to not start any followup tasks
-    await api.invoke("ChildProcess:Terminate", currentProcPID.current, ImportModuleChannelName);
     currentProcPID.current = -1;
+    wasTerminatedByUser.current = true;
+    await api.invoke("ChildProcess:Terminate", currentProcPID.current, ImportModuleChannelName);
   };
 
   return (

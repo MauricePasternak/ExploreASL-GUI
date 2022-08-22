@@ -5,15 +5,16 @@ import { useForm } from "react-hook-form";
 import { BIDSFormSchema } from "../../common/schemas/BIDSFormSchema";
 import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
 import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
-import { atomBIDSDataframe, atomBIDSDrawerValues, atomBIDSStudyRootPath } from "../../stores/BIDSDatagridStore";
+import { atomBIDSDataframe, atomBIDSStudyRootPath, atomDataframeColumns } from "../../stores/BIDSDatagridStore";
 
 function BIDSDataForm() {
   const setBIDSStudyRootPath = useSetAtom(atomBIDSStudyRootPath);
-  const setBIDSDrawerValues = useSetAtom(atomBIDSDrawerValues);
+  const setBIDSDataframeColumns = useSetAtom(atomDataframeColumns)
   const setBIDSDF = useSetAtom(atomBIDSDataframe);
+  
   const { control, trigger, watch } = useForm({
     defaultValues: {
-      StudyRootPath: "/home/mpasternak/Documents/EASLTest_SubjectAndVisit",
+      StudyRootPath: "",
     },
     resolver: YupResolverFactoryBase(BIDSFormSchema),
   });
@@ -29,7 +30,7 @@ function BIDSDataForm() {
         console.log("BIDSDataForm setting BIDS DF to empty");
         setBIDSStudyRootPath("");
         setBIDSDF(new DataFrame());
-        setBIDSDrawerValues([]);
+        setBIDSDataframeColumns([]);
       }
     });
     return () => subscription.unsubscribe();

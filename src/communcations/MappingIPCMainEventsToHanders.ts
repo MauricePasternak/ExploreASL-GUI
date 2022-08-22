@@ -13,7 +13,7 @@ import { DropFirstParameter } from "../common/types/utilityTypes";
 import { handleRunImportModule } from "../backend/runImportModule";
 import { handleRunExploreASL } from "../backend/runExploreASL";
 import { handleLoadNifti } from "../backend/niftiFuncs";
-import { IpcMainInvokeEvent, globalShortcut } from "electron";
+import { IpcMainInvokeEvent, globalShortcut, shell } from "electron";
 import { handleLoadDataframe } from "../backend/dataforgeFuncs";
 import { respondToIPCRenderer } from "./MappingIPCRendererEvents";
 /**
@@ -26,6 +26,7 @@ import { respondToIPCRenderer } from "./MappingIPCRendererEvents";
  *     * `App:Minimize` - Minimize the main window.
  *     * `App:Maximize` - Maximize the main window.
  *     * `App:Quit` - Quit the application.
+ *     * `App:SoundNotification` - Play a sound notification.
  *     * `Dialog:OpenDialog` - Open a file/folder dialogue and return filepaths.
  *     * `Dialog:OpenMessageBox` - Open a message box and return the response.
  *     * `FSWatcher:Initialize` - Initialize the filepath watcher.
@@ -44,6 +45,10 @@ const MappingIPCMainEventsToHanders = {
   "App:Minimize": () => mainWindow.minimize(),
   "App:Maximize": () => (mainWindow.isMaximized() ? mainWindow.restore() : mainWindow.maximize()),
   "App:Quit": () => mainWindow.close(),
+  "App:SoundNotification": () => {
+    console.log("App:SoundNotification");
+    shell.beep()
+  },
   "Dialog:OpenDialog": handleFilepathDialogue,
   "Dialog:OpenMessageBox": handleMessageBox,
   "FSWatcher:Initialize": handleInitializeWatcher,
@@ -62,7 +67,7 @@ const MappingIPCMainEventsToHanders = {
   "Shortcut:Unregister": (event: IpcMainInvokeEvent, accelerator: string) => {
     console.log(`Unregistering shortcut ${accelerator}`);
     globalShortcut.unregister(accelerator);
-  },
+  }
 };
 
 // These types will be used in the preload script

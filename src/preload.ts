@@ -1,15 +1,15 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { Options as FastGlobOptions } from "fast-glob";
+import { ReadOptions as ReadJSONOptions, WriteOptions as WriteJSONOptions } from "fs-extra";
 import { cpus } from "os";
 import { basename } from "path";
 import Path from "pathlib-js";
-import { ReadOptions as ReadJSONOptions, WriteOptions as WriteJSONOptions } from "fs-extra";
 import { getFilepathType, getTree, loadJSONSafe } from "./backend/filepathFunctions";
-import { Options as FastGlobOptions } from "fast-glob";
 // LOCAL IMPORTS
 import { ExtractChannelName } from "./common/types/utilityTypes";
 import MappingIPCMainEventsToHanders, {
   InvokeEventNames,
-  InvokeHandlerSignature,
+  InvokeHandlerSignature
 } from "./communcations/MappingIPCMainEventsToHanders";
 import { MappingIPCRendererEventsType } from "./communcations/MappingIPCRendererEvents";
 
@@ -47,7 +47,8 @@ const pathOperations = {
    * @returns A string representation of the filepath that is correct to the operating system.
    */
   osSpecificString: (...filePath: string[]) => {
-    return new Path(...filePath).toString(true);
+    const path = new Path(...filePath);
+    return process.platform === "win32" ? path.toString(true) : path.path;
   },
   /**
    *
@@ -183,6 +184,7 @@ const ApplicationProgramInterface = {
    * * `App:Minimize` - Minimize the main window.
    * * `App:Maximize` - Maximize the main window.
    * * `App:Quit` - Quit the application.
+   * * `App:SoundNotification` - Play a sound notification.
    * * `Dialog:OpenDialog` - Open a file/folder dialogue and return filepaths.
    * * `Dialog:OpenMessageBox` - Open a message box and return the response.
    * * `FSWatcher:Initialize` - Initialize the filepath watcher.

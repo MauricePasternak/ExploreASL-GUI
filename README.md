@@ -68,9 +68,11 @@
 
 This project wraps around [ExploreASL](https://exploreasl.github.io/Documentation/1.10.0beta/) to provide users with a friendly and modern interface for analyzing their arterial spin labeling datasets, including:
 
-- Importing their ASL datasets into BIDS standard
+- Importing their ASL datasets into [Brain Imaging Data Standard](https://bids.neuroimaging.io/) (BIDS) format
 - Defining and re-using data parameters across studies for easier troubleshooting
+- Adjusting BIDS-specific fields at the level of individual scans to cater to the specific needs of each dataset
 - Running ExploreASL's modules in a parallel manner using multiprocessing to split the workload within and between studies
+- Visualize and interact with the processed dataset using graphs that allow for loading in specific cerebral perfusion volumes when users click on datapoints
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 

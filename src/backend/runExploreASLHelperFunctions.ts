@@ -12,6 +12,27 @@ import { Regex } from "../common/utilityFunctions/stringFunctions";
 const asyncExec = promisify(exec);
 
 /**
+ * Gets the givens of the ExploreASL version.
+ * @param EASLPath The path to the ExploreASL directory.
+ * @returns Ascertains the path to the ExploreASL version file as we all the MajorMinor combined number.
+ */
+export async function getExploreASLVersion(EASLPath: string): Promise<{
+  EASLVersionPath: Path | null;
+  EASLVersionNumber: number | null;
+}> {
+  const EASLVersionRegex = new Regex("VERSION_(?<Major>\\d+)\\.(?<Minor>\\d+)\\.(?<Patch>\\d+)", "m");
+  const EASLVersionPath = (await new Path(EASLPath).glob("VERSION_*", { onlyFiles: true }))[0];
+  if (!EASLVersionPath) return { EASLVersionPath: null, EASLVersionNumber: null };
+
+  const EASLVersionMatch = EASLVersionRegex.search(EASLVersionPath.basename);
+  if (!EASLVersionMatch) return { EASLVersionPath, EASLVersionNumber: null };
+
+  const { Major, Minor } = EASLVersionMatch.groupsObject;
+  const EASLVersionNumber = parseInt(`${Major}${Minor}`, 10);
+  return { EASLVersionPath, EASLVersionNumber };
+}
+
+/**
  * Ascertains the matlab executable filepath and version of the program and returns them.
  * Note that if multiple matlab versions are detected, it will proceed with the first glob result...
  * @returns An Object with properties:
@@ -590,7 +611,7 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
             console.log(`calculateASLWorkload -- Could not match session name in ${sessionFilepath.basename}`);
             continue;
           }
-          sessionName = sessionMatch.groupsObject.SessionName;
+          sessionName = `ASL_${sessionMatch.groupsObject.SessionName}`;
         } else {
           sessionName = "ASL_1"; // For single session, use a default session name of "ASL_1" from ExploreASL
         }
@@ -669,7 +690,7 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
               console.log(`calculateASLWorkload -- Could not match session name in ${sessionFilepath.basename}`);
               continue;
             }
-            sessionName = sessionMatch.groupsObject.SessionName;
+            sessionName = `ASL_${sessionMatch.groupsObject.SessionName}`;
           } else {
             sessionName = "ASL_1"; // For single session, use a default session name of "ASL_1" from ExploreASL
           }
@@ -898,7 +919,8 @@ export async function getExploreASLExitSummary(
 
   const missedStepsMessages: string[] = [];
   const regexStatusFile = new Regex(
-    "lock\\/xASL_module_(?<Module>ASL|Structural|Population)\\/?(?<Subject>.*)?\\/xASL_module_(?:ASL|Structural|Population)_?(?<Session>.*)\\/(?<StatusBasename>(?<StatusCode>\\d{3}).*\\.status)$"
+    "lock\\/xASL_module_(?<Module>ASL|Structural|Population)\\/?(?<Subject>.*)?\\/xASL_module_(?:ASL|Structural|Population)_?(?<Session>.*)\\/(?<StatusBasename>(?<StatusCode>\\d{3}).*\\.status)$",
+    "m"
   );
   const seenItems = new Set<string>();
   for (const statusFP of missedStatusFiles) {
@@ -927,4 +949,35 @@ export async function getExploreASLExitSummary(
   }
 
   return { missedStatusFiles, missedStepsMessages };
+}
+
+/**
+ * Removes lock directories associated with subjects that are anticipated to be run
+ * @param BIDS2LegacyLockDir The directory containing the BIDS2Legacy lock files.
+ * @param anticipatedFilepaths An array of string filepaths of the .status files that are anticipated to be created.
+ * @returns void
+ */
+export async function RemoveBIDS2LegacyLockDirs(BIDS2LegacyLockDir: Path, anticipatedFilepaths: string[]) {
+  const regexStatusFile = new Regex(
+    "lock\\/xASL_module_(?<Module>ASL|Structural|Population)\\/?(?<Subject>.*)?\\/xASL_module_(?:ASL|Structural|Population)_?(?<Session>.*)\\/.*\\.status$",
+    "m"
+  );
+  return await Promise.all(
+    anticipatedFilepaths.map(async filepath => {
+      try {
+        const match = regexStatusFile.search(filepath);
+        if (!match) return;
+        const { Subject } = match.groupsObject;
+        if (!Subject) return; // Population Module returns an empty string
+
+        // Skip if the subject is not in the BIDS2LegacyLockDir
+        const BIDS2LegacySubjectLockDir = BIDS2LegacyLockDir.resolve(Subject);
+        if (!(await BIDS2LegacySubjectLockDir.exists())) return;
+        await BIDS2LegacySubjectLockDir.remove();
+      } catch (error) {
+        console.warn(`Failed to remove ${filepath}. Reason: ${error}`);
+        return;
+      }
+    })
+  );
 }

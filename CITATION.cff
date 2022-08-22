@@ -1,0 +1,54 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: ExploreASL GUI
+message: >-
+  Please cite this software using the metadata from
+  'preferred-citation'.
+type: software
+authors:
+  - given-names: Maurice Pasternak
+    name-particle: Maurice
+    family-names: Pasternak
+    email: maurice.pasternak@utoronto.ca
+    orcid: 'https://orcid.org/0000-0003-0647-172X'
+    affiliation: University of Toronto
+identifiers:
+  - type: url
+    value: >-
+      https://github.com/MauricePasternak/ExploreASLJS
+    description: Open source repository
+abstract: >-
+  This project wraps around the ExploreASL software
+  to provide users with a friendly and modern
+  interface for analyzing their arterial spin
+  labeling datasets, including:
+
+
+  - Importing their ASL datasets into Brain Imaging
+  Data Standard (BIDS) format
+
+  - Defining and re-using data parameters across
+  studies for easier troubleshooting
+
+  - Adjusting BIDS-specific fields at the level of
+  individual scans to cater to the specific needs of
+  each dataset
+
+  - Running ExploreASL's modules in a parallel manner
+  using multiprocessing to split the workload within
+  and between studies
+
+  - Visualize and interact with the processed dataset
+  using graphs that allow for loading in specific
+  cerebral perfusion volumes when users click on
+  datapoints
+keywords:
+  - Arterial Spin Labeling
+  - MRI Image Analysis
+  - Brain Imaging Data Standard
+  - Perfusion
+license: MIT
+version: 0.3.0
+date-released: '2022-08-25'

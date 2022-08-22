@@ -58,7 +58,7 @@ export function BIDSDatagridHeader({ column }: { column: CalculatedColumn<BIDSRo
 /**
  * Atom that holds the StudyRootPath for the BIDS json files that will be loaded in by globbing.
  */
-export const atomBIDSStudyRootPath = atom<string>("/home/mpasternak/Documents/EASLTest_SubjectAndVisit");
+export const atomBIDSStudyRootPath = atom<string>("");
 
 /**
  * Atom that holds the loaded ASL BIDS data.
@@ -127,11 +127,6 @@ export const atomDeleteDataframeCell = atom(
 );
 
 export const atomAddColumnDialogOpen = atom<boolean>(false);
-
-/**
- * Atom that holds the drawer cards for mapping a single value to all cells of a column.
- */
-export const atomBIDSDrawerValues = atom<Partial<typeof BIDSCompleteSchema>[]>([]);
 
 /**
  * Separate atom for the columns of the dataframe. This reduces re-renders when cells are edited.
