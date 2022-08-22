@@ -98,7 +98,7 @@ function BIDSDataActions() {
         <Button variant="outlined" onClick={handleWriteData} disabled={dataframe.count() === 0}>
           Submit Altered BIDS Values
         </Button>
-        <Button variant="outlined" onClick={() => setAddColumnDialogOpen(true)}>
+        <Button variant="outlined" onClick={() => setAddColumnDialogOpen(true)} disabled={dataframe.count() === 0}>
           Add a New BIDS Column
         </Button>
       </ButtonGroup>
