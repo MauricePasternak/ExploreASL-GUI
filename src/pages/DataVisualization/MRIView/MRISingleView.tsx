@@ -1,14 +1,14 @@
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Skeleton from "@mui/material/Skeleton";
+import Typography from "@mui/material/Typography";
 import { ResponsiveHeatMapCanvas } from "@nivo/heatmap";
 import { PrimitiveAtom, useAtomValue } from "jotai";
-import React from "react";
-import { atomMRIDataStats } from "../../../stores/DataFrameVisualizationStore";
-import { NivoHeatmapData } from "../../../common/types/nivoTypes";
-import Paper from "@mui/material/Paper";
-import Typography from "@mui/material/Typography";
 import { round as lodashRound } from "lodash";
-import Skeleton from "@mui/material/Skeleton";
-import Box from "@mui/material/Box";
+import React from "react";
+import { NivoHeatmapData } from "../../../common/types/nivoTypes";
 import ColorBar from "../../../components/ColorBar";
+import { atomMRIDataStats } from "../../../stores/DataFrameVisualizationStore";
 
 function hslToHex(h: number, s: number, l: number) {
   l /= 100;

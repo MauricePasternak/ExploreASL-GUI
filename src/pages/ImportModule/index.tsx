@@ -2,13 +2,12 @@ import Box from "@mui/material/Box";
 import { styled } from "@mui/material/styles";
 import React from "react";
 import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
-import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
 import {
-  SchemaImportDefineContext,
   SchemaImportStepDefineAliases,
   SchemaImportStepDefineMultiContext,
-  SchemaImportStepDefineRuntimeEnvs,
+  SchemaImportStepDefineRuntimeEnvs
 } from "../../common/schemas/ImportSchema";
+import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
 import RHFMultiStep, { RHFMultiStepStepper } from "../../components/FormComponents/RHFMultiStep";
 import { ImportModuleFormDefaultValues } from "../../stores/ImportPageStore";
 import StepDefineAliases from "./StepDefineAliases";
@@ -19,7 +18,6 @@ import StepRunImportModule from "./StepRunImportModule";
 const importModuleSchemas = [
   SchemaImportStepDefineRuntimeEnvs,
   SchemaImportStepDefineAliases,
-  // SchemaImportDefineContext,
   SchemaImportStepDefineMultiContext
 ];
 

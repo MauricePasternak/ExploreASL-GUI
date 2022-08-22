@@ -14,13 +14,13 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
-import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import { DataFrameMainType } from "../../common/types/dataFrameTypes";
+import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import {
   atomDataVizCurrentStep,
   atomDataVizDFDTypes,
   atomSetDataVizDF,
-  DataFrameMainTypeOptions,
+  DataFrameMainTypeOptions
 } from "../../stores/DataFrameVisualizationStore";
 import HelpDataViz__StepClarifyDataTypes from "../Help/HelpDataViz__StepClarifyDataTypes";
 

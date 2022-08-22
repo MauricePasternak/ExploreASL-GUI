@@ -8,7 +8,48 @@ Dates are in format: `YYYY-MM-DD`
 
 ---
 
+## [0.3.0] - 2022-08-21
+
+Introduction of the BIDSDataGrid Module. Module is responsible for editing BIDS fields taken from multiple asl.json
+BIDS sidecars.
+
+### Fixed
+
+- Event docstrings were not updated in MappingIPCRendererEvents.ts , MappingIPCMainEventsToHanders.ts , and preload.ts
+
+- Fixed the event names `NIFTI:Load` and `Dataframe:Load` to be title case for both parts of the name.
+
+- Fixed a naming bug in `calculateASLWorkload` where studies having multiple sessions did not correctly anticipate the
+  naming of .status files that should be created for the study.
+
+### Added
+
+- Added the new BIDSDataGrid Module.
+
+- Added the `Shortcut:Register` and `Shortcut:Unregister` IPCMain events in order to have components register/unregister
+  keyboard shortcuts. The corresponding frontend channel is called `shortcutTriggered`.
+
+- Added the `App:NotificationSound` IPCMain event. Some implementations added when running Process Studies section of
+  the application.
+
+### Changed
+
+- The Import Module now gives some info feedback when a study finishes import, as long as the user did not terminate
+  the process.
+
+- Prior to the running of Structural or ASL modules, the BIDS2Legacy lock folders are deleted for each subject that is
+  present in the anticipated filepaths.
+
+- Minor removal of unnecessary imports and other sorts of code refactoring.
+
+- Moved the logic of determining ExploreASL version to its own function `getExploreASLVersion`.
+
+---
+
 ## [0.2.3] - 2022-08-20
+
+Improvements to the handling of finding a MATLAB executable as well as quality-of-life improvements to the Import
+Module.
 
 ### Fixed
 

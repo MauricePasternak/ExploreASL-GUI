@@ -1,14 +1,14 @@
-import React from "react";
-import { useAtom } from "jotai";
-import { atomDarkMode } from "../../stores/DarkModeStore";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
+import { useAtom } from "jotai";
+import React from "react";
+import { atomDarkMode } from "../../stores/DarkModeStore";
 // ICONS
 import CloseIcon from "@mui/icons-material/Close";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import MinimizeIcon from "@mui/icons-material/Minimize";
 import DarkModeSharpIcon from "@mui/icons-material/DarkModeSharp";
 import LightModeSharpIcon from "@mui/icons-material/LightModeSharp";
+import MinimizeIcon from "@mui/icons-material/Minimize";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
 function WindowIcons() {
   const [isDarkMode, setIsDarkMode] = useAtom(atomDarkMode);

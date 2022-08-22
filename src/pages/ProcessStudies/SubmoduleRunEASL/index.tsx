@@ -4,13 +4,13 @@ import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import { countBy as lodashCountBy, range as lodashRange, sumBy as lodashSumBy } from "lodash";
 import React from "react";
-import { atomProcessStudiesSnackbar } from "../../../stores/SnackbarStore";
 import AtomicSnackbarMessage from "../../../components/AtomicSnackbarMessage";
 import LabelledSelect from "../../../components/LabelledSelect";
-import { atomAddOrRemoveStudy, atomProcStudySetups } from "../../../stores/ProcessStudiesStore";
-import RunEASLSingleStudySetup from "./RunEASLSingleStudySetup";
 import FabDialogWrapper from "../../../components/WrapperComponents/FabDialogWrapper";
+import { atomAddOrRemoveStudy, atomProcStudySetups } from "../../../stores/ProcessStudiesStore";
+import { atomProcessStudiesSnackbar } from "../../../stores/SnackbarStore";
 import HelpProcessStudies__RunEASL from "../../Help/HelpProcessStudies__RunEASL";
+import RunEASLSingleStudySetup from "./RunEASLSingleStudySetup";
 
 function SubmoduleRunEASL() {
   const studySetups = useAtomValue(atomProcStudySetups);

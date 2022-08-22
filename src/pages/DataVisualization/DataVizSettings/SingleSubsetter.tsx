@@ -1,23 +1,22 @@
+import CloseIcon from "@mui/icons-material/Close";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
+import FormControl from "@mui/material/FormControl";
+import IconButton from "@mui/material/IconButton";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
 import { PrimitiveAtom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import React from "react";
+import { predicateFormula } from "../../../common/types/dataFrameTypes";
+import DebouncedInput from "../../../components/DebouncedComponents/DebouncedInput";
 import {
   atomDataVizDF,
   atomDataVizDFDTypes,
-  atomSetRemovePredicate,
+  atomSetRemovePredicate
 } from "../../../stores/DataFrameVisualizationStore";
-import { predicateFormula } from "../../../common/types/dataFrameTypes";
-import Card from "@mui/material/Card";
-import CardHeader from "@mui/material/CardHeader";
-import CardContent from "@mui/material/CardContent";
-import IconButton from "@mui/material/IconButton";
-import CloseIcon from "@mui/icons-material/Close";
-import Stack from "@mui/material/Stack";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
-import Select, { SelectChangeEvent } from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
-import { useDebouncedCallback } from "use-debounce";
-import DebouncedInput from "../../../components/DebouncedComponents/DebouncedInput";
 
 interface SingleSubsetterProps {
   subsetterIndex: number;

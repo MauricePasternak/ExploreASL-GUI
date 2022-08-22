@@ -169,6 +169,7 @@ function RunEASLSingleStudySetup({
     );
     changeStatus({ studyIndex, status: "Standby" });
     pids.length > 0 && setPids([]);
+    api.invoke("App:SoundNotification")
   }
 
   /**
@@ -204,6 +205,7 @@ function RunEASLSingleStudySetup({
             : "Invalid syntax in JSON file",
         message: loadDataParError.message,
       });
+      await api.invoke("App:SoundNotification");
       return;
     }
 
@@ -233,6 +235,7 @@ function RunEASLSingleStudySetup({
           </List>
         </div>
       );
+      await api.invoke("App:SoundNotification");
       setProcessStudiesSnackbar({
         severity: "error",
         title: "Invalid data parameters file",
@@ -255,6 +258,7 @@ function RunEASLSingleStudySetup({
     } as Omit<RunEASLStudySetupType, "currentStatus">);
 
     if (startupEASLResult.GUIMessage.severity !== "success") {
+      await api.invoke("App:SoundNotification");
       setProcessStudiesSnackbar({
         severity: startupEASLResult.GUIMessage.severity,
         title: startupEASLResult.GUIMessage.title,

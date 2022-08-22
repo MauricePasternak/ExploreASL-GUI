@@ -2,7 +2,7 @@ import { ChildProcess } from "child_process";
 import { watch } from "chokidar";
 import spawn from "cross-spawn";
 import { IpcMainInvokeEvent } from "electron";
-import { difference as lodashDiff, range as lodashRange, uniq as lodashUniq } from "lodash";
+import { range as lodashRange } from "lodash";
 import Path from "pathlib-js";
 import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 import { GLOBAL_CHILD_PROCESSES } from "../common/GLOBALS";
@@ -13,14 +13,16 @@ import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import { RunEASLStudySetupType } from "../common/types/ProcessStudiesTypes";
 import { calculatePercent } from "../common/utilityFunctions/numberFunctions";
 import { sleep } from "../common/utilityFunctions/sleepFunctions";
-import { matlabEscapeBlockChar, Regex } from "../common/utilityFunctions/stringFunctions";
+import { matlabEscapeBlockChar } from "../common/utilityFunctions/stringFunctions";
 import { Lock } from "../common/utilityFunctions/threadingFunctions";
 import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
 import {
   calculateWorkload,
   createRuntimeEnvironment,
   getExploreASLExitSummary,
+  getExploreASLVersion,
   getMATLABPathAndVersion,
+  RemoveBIDS2LegacyLockDirs
 } from "./runExploreASLHelperFunctions";
 
 export async function handleRunExploreASL(
@@ -36,21 +38,36 @@ export async function handleRunExploreASL(
   /******************************************************************
    * STEP 1: get the ExploreASL Program version and the Workload type
    *****************************************************************/
-  const EASLVerionFile = (await new Path(dataPar.x.GUI.EASLPath).glob("VERSION_*", { onlyFiles: true }))[0];
-  if (!(EASLVerionFile.basename in EASLWorkloadMapping)) {
+  const { EASLVersionPath, EASLVersionNumber } = await getExploreASLVersion(dataPar.x.GUI.EASLPath);
+  if (!EASLVersionPath || !EASLVersionNumber) {
+    return {
+      GUIMessage: {
+        severity: "error",
+        title: "No ExploreASL version found",
+        messages: [
+          "No valid ExploreASL version found in the provided ExploreASL folder:",
+          `${new Path(dataPar.x.GUI.EASLPath).toString(true)}`,
+          " ",
+          "This is necessary to the operation of this program.",
+        ],
+      },
+      payload: defaultPayload,
+    };
+  }
+  if (!(EASLVersionPath.basename in EASLWorkloadMapping)) {
     return {
       GUIMessage: {
         title: "ExploreASL Executable Version Incompatible",
         severity: "error",
         messages: ["ExploreASL must be at least version 1.9.0 in order to be executed."],
       },
-      payload: {
-        pids: [-1],
-        channelName: channelName,
-      },
+      payload: defaultPayload,
     };
   }
-  const workloadMapping = EASLWorkloadMapping[EASLVerionFile.basename as keyof typeof EASLWorkloadMapping];
+
+  // We use the version number to determine specific behaviors
+  console.log(`EASLProcess ${channelName} -- EASLVersionNumber:`, EASLVersionNumber);
+  const workloadMapping = EASLWorkloadMapping[EASLVersionPath.basename as keyof typeof EASLWorkloadMapping];
 
   /************************************************************************
    * STEP 2: Get the MATLAB Versions and Calculate the anticipated Workload
@@ -184,10 +201,22 @@ export async function handleRunExploreASL(
     }
   }
 
-  /*****************************************************
-   * STEP 7: Define the behavior of the filepath watcher
-   ****************************************************/
+  /********************************************************************************************************
+   * STEP 7: In later versions of ExploreASL, we should automatically re-run BIDS2Legacy for the subjects
+   * involved, especially if the user has changed BIDS-specific fields using the BIDSDatagrid module.
+   *******************************************************************************************************/
+  const BIDS2LegacyLockDir = StudyDerivExploreASLDir.resolve("lock", "xASL_module_BIDS2Legacy");
+  if (
+    EASLVersionNumber >= 110 &&
+    studySetup.whichModulesToRun !== "Population" &&
+    (await BIDS2LegacyLockDir.exists())
+  ) {
+    await RemoveBIDS2LegacyLockDirs(BIDS2LegacyLockDir, [...setOfAnticipatedFilepaths]);
+  }
 
+  /*****************************************************
+   * STEP 8: Define the behavior of the filepath watcher
+   ****************************************************/
   // First define all the regexes, and translator mappings
   const regexLockDir =
     /lock\/xASL_module_(?<Module>ASL|Structural|Population)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population)_?(?<Session>.*)\/locked$/m;
@@ -254,33 +283,34 @@ export async function handleRunExploreASL(
     const asPath = new Path(path);
 
     console.log(`Watcher's "addDir" event got path: ${asPath.path}`);
-    if (regexImageFile.test(asPath.basename)) {
-      // THIS IS AN IMAGE FILE
-      console.log("This is an image file");
+    // if (regexImageFile.test(asPath.basename)) {
+    //   // THIS IS AN IMAGE FILE
+    //   console.log("This is an image file");
 
-      // Get the data for the given image file
-      const regexResult = regexImageFile.exec(asPath.basename);
-      if (!("groups" in regexResult) || regexResult.groups == null) {
-        console.warn(`Could not parse image file ${asPath.path} ; regexResult: ${regexResult}`);
-        return;
-      }
+    //   // Get the data for the given image file
+    //   const regexResult = regexImageFile.exec(asPath.basename);
+    //   if (!("groups" in regexResult) || regexResult.groups == null) {
+    //     console.warn(`Could not parse image file ${asPath.path} ; regexResult: ${regexResult}`);
+    //     return;
+    //   }
 
-      const { Axis, ImageType, Target } = regexResult["groups"];
-      const whichImageType = ImageTypeMapping[ImageType as keyof typeof ImageTypeMapping];
-      const whichAxis = AxisTypeMapping[Axis as keyof typeof AxisTypeMapping];
-      const statement = `Processed a ${whichAxis} ${whichImageType} image for ${Target}`;
-      console.log(statement);
+    //   const { Axis, ImageType, Target } = regexResult["groups"];
+    //   const whichImageType = ImageTypeMapping[ImageType as keyof typeof ImageTypeMapping];
+    //   const whichAxis = AxisTypeMapping[Axis as keyof typeof AxisTypeMapping];
+    //   const statement = `Processed a ${whichAxis} ${whichImageType} image for ${Target}`;
+    //   console.log(statement);
 
-      // Acquire lock, Respond to frontend, release lock
-      const unlock = (await lock.lock()) as () => void | Promise<() => void>;
-      await sleep(300);
-      console.log(`Sleeping for 300ms before sending image file ${asPath.path}`);
-      respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, statement, { bold: true });
-      respondToIPCRenderer(event, `${channelName}:childProcessRequestsMediaDisplay`, asPath.path);
+    //   // Acquire lock, Respond to frontend, release lock
+    //   const unlock = (await lock.lock()) as () => void | Promise<() => void>;
+    //   await sleep(300);
+    //   console.log(`Sleeping for 300ms before sending image file ${asPath.path}`);
+    //   respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, statement, { bold: true });
+    //   respondToIPCRenderer(event, `${channelName}:childProcessRequestsMediaDisplay`, asPath.path);
 
-      await unlock();
-      return; // END OF IMAGE FILE SCENARIO
-    } else if (regexLockDir.test(asPath.path)) {
+    //   await unlock();
+    //   return; // END OF IMAGE FILE SCENARIO
+    // } else
+    if (regexLockDir.test(asPath.path)) {
       // Acquire lock, Respond to frontend, release lock
       const { Module, Subject, Session } = regexLockDir.exec(asPath.path)["groups"];
       const unlock = (await lock.lock()) as () => void | Promise<() => void>;
@@ -367,7 +397,8 @@ export async function handleRunExploreASL(
       return; // END OF STATUS FILE SCENARIO
     } else if (regexImageFile.test(asPath.basename)) {
       // THIS IS AN IMAGE FILE
-      console.log("This is an image file");
+      // Do not display images if the module being run is the Population Module
+      if (studySetup.whichModulesToRun === "Population") return;
 
       // Get the data for the given image file
       const { Axis, ImageType, Target } = regexImageFile.exec(asPath.basename)["groups"];
@@ -428,7 +459,7 @@ export async function handleRunExploreASL(
   });
 
   /****************************************************************************************
-   * STEP 8: Spawn the child processs for the given module and define its callback behavior
+   * STEP 9: Spawn the child processs for the given module and define its callback behavior
    ***************************************************************************************/
   const moduleMapping = {
     Structural: `[1 0 0]`,

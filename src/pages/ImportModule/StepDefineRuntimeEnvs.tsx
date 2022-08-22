@@ -1,23 +1,23 @@
+import FolderIcon from "@mui/icons-material/Folder";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
+import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import React from "react";
 import { DeepRequired, FieldErrorsImpl } from "react-hook-form";
-import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../components/FormComponents/RHFMultiStep";
 import RHFSelect from "../../components/FormComponents/RHFSelect";
 import OutlinedGroupBox from "../../components/OutlinedGroupBox";
-import StructureByParts from "./StructureByParts";
+import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import HelpImport__StepDefineRuntimeEnvs from "../Help/HelpImport__StepDefineRuntimeEnvs";
-import Card from "@mui/material/Card";
-import CardHeader from "@mui/material/CardHeader";
-import CardContent from "@mui/material/CardContent";
-import FolderIcon from "@mui/icons-material/Folder";
-import Avatar from "@mui/material/Avatar";
-import Divider from "@mui/material/Divider";
+import StructureByParts from "./StructureByParts";
 
 function StepDefineRuntimeEnvs({
   currentStep,

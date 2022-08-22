@@ -1,15 +1,15 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { Options as FastGlobOptions } from "fast-glob";
+import { ReadOptions as ReadJSONOptions, WriteOptions as WriteJSONOptions } from "fs-extra";
 import { cpus } from "os";
 import { basename } from "path";
 import Path from "pathlib-js";
-import { ReadOptions as ReadJSONOptions, WriteOptions as WriteJSONOptions } from "fs-extra";
 import { getFilepathType, getTree, loadJSONSafe } from "./backend/filepathFunctions";
-import { Options as FastGlobOptions } from "fast-glob";
 // LOCAL IMPORTS
 import { ExtractChannelName } from "./common/types/utilityTypes";
 import MappingIPCMainEventsToHanders, {
   InvokeEventNames,
-  InvokeHandlerSignature,
+  InvokeHandlerSignature
 } from "./communcations/MappingIPCMainEventsToHanders";
 import { MappingIPCRendererEventsType } from "./communcations/MappingIPCRendererEvents";
 
@@ -47,7 +47,8 @@ const pathOperations = {
    * @returns A string representation of the filepath that is correct to the operating system.
    */
   osSpecificString: (...filePath: string[]) => {
-    return new Path(...filePath).toString(true);
+    const path = new Path(...filePath);
+    return process.platform === "win32" ? path.toString(true) : path.path;
   },
   /**
    *
@@ -123,7 +124,9 @@ const ApplicationProgramInterface = {
    * - `childProcessSTDERR` - Pass a STDERR stream of text to the frontend (i.e. to IPCQuill)
    * - `childProcessRequestsMediaDisplay` - The backend has detected a local file that it would like displayed on the frontend
    * - `FSWatcherEvent` - Inform the frontend about a child in a watched file structure.
-   * - `Pong` - Inform the frontend about a Ping event that was received by the backend.
+   * - `progressBarIncrement` - Increment the value of a progressbar by a given amount.
+   * - `progressBarReset` - Reset the value of a progressbar back to zero.
+   * - `shortcutTriggered` - Respond to the user clicking certain keyboard buttons/accelerators.
    * @param listener The corresponding listener function.
    */
   on<K extends string, T = ExtractChannelName<K>>(
@@ -146,7 +149,9 @@ const ApplicationProgramInterface = {
    * - `childProcessSTDERR` - Pass a STDERR stream of text to the frontend (i.e. to IPCQuill)
    * - `childProcessRequestsMediaDisplay` - The backend has detected a local file that it would like displayed on the frontend
    * - `FSWatcherEvent` - Inform the frontend about a child in a watched file structure.
-   * - `Pong` - Inform the frontend about a Ping event that was received by the backend.
+   * - `progressBarIncrement` - Increment the value of a progressbar by a given amount.
+   * - `progressBarReset` - Reset the value of a progressbar back to zero.
+   * - `shortcutTriggered` - Respond to the user clicking certain keyboard buttons/accelerators.
    * @param listener The corresponding listener function.
    */
   // IPC Renderer API for continually listening to a "send" callback coming from IPCMain
@@ -179,14 +184,20 @@ const ApplicationProgramInterface = {
    * * `App:Minimize` - Minimize the main window.
    * * `App:Maximize` - Maximize the main window.
    * * `App:Quit` - Quit the application.
+   * * `App:SoundNotification` - Play a sound notification.
    * * `Dialog:OpenDialog` - Open a file/folder dialogue and return filepaths.
    * * `Dialog:OpenMessageBox` - Open a message box and return the response.
    * * `FSWatcher:Initialize` - Initialize the filepath watcher.
    * * `FSWatcher:Shutdown` - Shutdown the filepath watcher.
-   * * `Process:Pause` - Pauses a given child process based on its PID.
-   * * `Process:Resume` - Resumes a given child process based on its PID.
-   * * `Process:Terminate` - Terminates a given child process based on its PID.
+   * * `ChildProcess:Pause` - Pauses a given child process based on its PID.
+   * * `ChildProcess:Resume` - Resumes a given child process based on its PID.
+   * * `ChildProcess:Terminate` - Terminates a given child process based on its PID.
    * * `ExploreASL:RunImportModule` - Runs an ExploreASL module.
+   * * `ExploreASL:RunExploreASL` - Runs the main modules of the ExploreASL program.
+   * * `NIFTI:Load` - Loads the array numerical data coming from a NIFTI file.
+   * * `Dataframe:Load` - Loads a dataframe from a CSV/TSV file as a CSV-encoded string to the frontend.
+   * * `Shortcut:Register` - Registers a event callbacks to be emitted when users click certain keyboard shortcuts.
+   * * `Shortcut:Unregister` - Halts the emission of event callbacks when users click certain keyboard shortcuts.
    * @param channel One of the above channels to execute their corresponding handler function.
    * @param args Arguments to provide to the handler function.
    * @returns The return of the handler function, as a Promise (must be awaited)

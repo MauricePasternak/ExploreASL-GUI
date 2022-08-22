@@ -1,3 +1,4 @@
+import ScatterPlotIcon from "@mui/icons-material/ScatterPlot";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -14,13 +15,12 @@ import React from "react";
 import {
   atomDataVizCurrentStep,
   atomNivoGraphDataVariablesSchema,
-  atomNivoGraphType,
+  atomNivoGraphType
 } from "../../stores/DataFrameVisualizationStore";
 import EASLScatterplot from "./DataVizPlots/EASLScatterplot";
 import EASLSwarmplot from "./DataVizPlots/EASLSwarmplot";
 import PlotSettingsDrawer from "./DataVizSettings/PlotSettingsDrawer";
 import MRIMultiView from "./MRIView/MRIMultiView";
-import ScatterPlotIcon from "@mui/icons-material/ScatterPlot";
 
 function PlotEASLMainView() {
   const graphType = useAtomValue(atomNivoGraphType);
@@ -55,7 +55,8 @@ function PlotEASLMainView() {
               title={<Typography variant="h4">Data Visualization</Typography>}
               subheader={
                 <Typography>
-                  Plot an interactive chart and load CBF volumes from individual subjects/visits/sessions by clicking on data points
+                  Plot an interactive chart and load CBF volumes from individual subjects/visits/sessions by clicking on
+                  data points
                 </Typography>
               }
               avatar={

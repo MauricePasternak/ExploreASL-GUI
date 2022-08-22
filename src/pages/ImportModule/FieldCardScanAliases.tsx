@@ -10,8 +10,8 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import React from "react";
 import { Controller } from "react-hook-form";
-import { ImportScanType, ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 import { RHFControlAndNameType } from "../../common/types/formTypes";
+import { ImportScanType, ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 
 type FieldCardScanAliasesProps = RHFControlAndNameType<ImportSchemaType, "MappingScanAliases">;
 

@@ -6,7 +6,11 @@ import { matlabEscapeBlockChar } from "../common/utilityFunctions/stringFunction
 import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
 import { GLOBAL_CHILD_PROCESSES } from "../common/GLOBALS";
 import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
-import { createRuntimeEnvironment, getMATLABPathAndVersion } from "./runExploreASLHelperFunctions";
+import {
+  createRuntimeEnvironment,
+  getExploreASLVersion,
+  getMATLABPathAndVersion,
+} from "./runExploreASLHelperFunctions";
 import { ImportSchemaType } from "../common/types/ImportSchemaTypes";
 import { RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
 import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
@@ -31,8 +35,23 @@ export async function handleRunImportModule(
   /******************************************
    * Step 1: Determine the ExploreASL Version
    *****************************************/
-  const EASLVerionFile = (await ExploreASLPath.glob("VERSION_*", { onlyFiles: true }))[0];
-  if (!EASLVerionFile || !(EASLVerionFile.basename in EASLWorkloadMapping)) {
+  const { EASLVersionPath, EASLVersionNumber } = await getExploreASLVersion(ExploreASLPath.path);
+  if (!EASLVersionPath || !EASLVersionNumber) {
+    return {
+      GUIMessage: {
+        severity: "error",
+        title: "No ExploreASL version found",
+        messages: [
+          "No valid ExploreASL version found in the provided ExploreASL folder:",
+          `${ExploreASLPath.toString(true)}`,
+          " ",
+          "This is necessary to the operation of this program.",
+        ],
+      },
+      payload: defaultPayload,
+    };
+  }
+  if (!(EASLVersionPath.basename in EASLWorkloadMapping)) {
     return {
       GUIMessage: {
         title: "ExploreASL Executable Version Incompatible",

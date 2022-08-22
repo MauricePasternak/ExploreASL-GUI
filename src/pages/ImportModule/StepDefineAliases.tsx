@@ -74,16 +74,6 @@ function StepDefineAliases({
   const handleValidSubmit: SubmitHandler<ImportSchemaType> = async values => {
     console.log("Step 'Define Aliases' -- Valid Submit Values: ", values);
     setCurrentStep(currentStep + 1);
-    // const sourceStructureJSON = await buildSourceStructureJSON(values);
-    // console.log("Step 'Define Aliases' -- Source Structure JSON: ", sourceStructureJSON);
-    // const jsonDestination = `${values.StudyRootPath}/${SOURCESTRUCTUREFILE_BASENAME}`;
-    // console.log("Step 'Define Aliases' -- JSON Destination: ", jsonDestination);
-    // const createdJSONFile = await api.path.writeJSON(jsonDestination, sourceStructureJSON, { spaces: 2 });
-    // if (await api.path.filepathExists(createdJSONFile.path)) {
-    //   setCurrentStep(currentStep + 1);
-    // } else {
-    //   console.error(`Failed to create ${SOURCESTRUCTUREFILE_BASENAME} file`);
-    // }
   };
 
   const handleInvalidSubmit: SubmitErrorHandler<ImportSchemaType> = errors => {

@@ -1,31 +1,27 @@
 import PauseCircleOutlineIcon from "@mui/icons-material/PauseCircleOutline";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
 import StopCircleIcon from "@mui/icons-material/StopCircle";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import ButtonGroup from "@mui/material/ButtonGroup";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
 import CircularProgress from "@mui/material/CircularProgress";
+import Divider from "@mui/material/Divider";
+import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
 import { useAtom, useSetAtom } from "jotai";
 import React, { useEffect, useRef } from "react";
 import { SubmitErrorHandler, SubmitHandler } from "react-hook-form";
-import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
+import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
+import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../components/FormComponents/RHFMultiStep";
 import IPCQuill from "../../components/IPCComponents/IPCQuill";
-import {
-  atomImportModuleCurrentProcPID,
-  atomImportModuleCurrentProcStatus,
-  ImportModuleChannelName,
-} from "../../stores/ImportPageStore";
+import { atomImportModuleCurrentProcStatus, ImportModuleChannelName } from "../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
-import Card from "@mui/material/Card";
-import CardHeader from "@mui/material/CardHeader";
-import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
-import Avatar from "@mui/material/Avatar";
-import SvgIcon from "@mui/material/SvgIcon";
-import CardContent from "@mui/material/CardContent";
-import Divider from "@mui/material/Divider";
 
 type StepRunImportModuleProps = RHFMultiStepReturnProps<ImportSchemaType>;
 
@@ -41,6 +37,7 @@ function StepRunImportModule({
   const [procStatus, setProcStatus] = useAtom(atomImportModuleCurrentProcStatus);
   const setImportModuleSnackbar = useSetAtom(atomImportModuleSnackbar);
   const currentProcPID = useRef(-1);
+  const wasTerminatedByUser = useRef(false);
 
   // Tracking the tasks performed
   const currentTask = useRef(0);
@@ -70,6 +67,7 @@ function StepRunImportModule({
     if (GUIMessage.severity === "success") {
       procStatus !== "Running" && setProcStatus("Running");
       currentProcPID.current = payload.pids[0];
+      wasTerminatedByUser.current = false;
       return;
     }
 
@@ -99,9 +97,23 @@ function StepRunImportModule({
 
     // When the current task is negative, it means that all the tasks have been run
     if (currentTask.current < 0) {
+      const values = getValues();
       console.log(`StepRunImportModule: All tasks completed. Resetting the current PID to -1`);
       resetRefs();
       setProcStatus("Standby");
+
+      // Only give snackbar info feedback if the user did not terminate the process
+      !wasTerminatedByUser.current &&
+        setImportModuleSnackbar({
+          severity: "info",
+          title: "Import Completed",
+          message: [
+            "All Import Contexts have been imported.",
+            `Before proceeding, you are recommended to review the contents of the following directories in order to verify import success:`,
+            `${api.path.osSpecificString(values.EASLPath, "rawdata")}`,
+            `${api.path.osSpecificString(values.EASLPath, "derivatives", "ExploreASL", "log")}`,
+          ],
+        });
       return;
     }
 
@@ -191,8 +203,9 @@ function StepRunImportModule({
       return;
     }
     // Send the terminate command and set the current PID to -1 in order to allow handleProcessClose to not start any followup tasks
-    await api.invoke("ChildProcess:Terminate", currentProcPID.current, ImportModuleChannelName);
     currentProcPID.current = -1;
+    wasTerminatedByUser.current = true;
+    await api.invoke("ChildProcess:Terminate", currentProcPID.current, ImportModuleChannelName);
   };
 
   return (
