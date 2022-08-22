@@ -19,8 +19,6 @@ import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrappe
 import { DefaultImportSingleContext } from "../../stores/ImportPageStore";
 import HelpImport__StepDefineAdditionalContext from "../Help/HelpImport__StepDefineAdditionalContext";
 import SingleImportContext from "./SingleImportContext";
-import { YupValidate } from "../../common/utilityFunctions/formFunctions";
-import { SchemaImportPar } from "../../common/schemas/ImportSchema";
 
 function StepDefineContexts({
   currentStep,
