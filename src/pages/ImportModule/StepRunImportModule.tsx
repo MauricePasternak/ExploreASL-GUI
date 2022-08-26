@@ -17,7 +17,6 @@ import React, { useEffect, useRef } from "react";
 import { SubmitErrorHandler, SubmitHandler } from "react-hook-form";
 import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
-import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../components/FormComponents/RHFMultiStep";
 import IPCQuill from "../../components/IPCComponents/IPCQuill";
 import { atomImportModuleCurrentProcStatus, ImportModuleChannelName } from "../../stores/ImportPageStore";
@@ -45,8 +44,7 @@ function StepRunImportModule({
   const failedTasks = useRef([] as number[]);
 
   function resetRefs() {
-    const values = getValues();
-    currentTask.current = values.ImportContexts.length - 1; // For indexing
+    currentTask.current = 0; // For indexing contexts; we start from the global context
     completedTasks.current = [];
     failedTasks.current = [];
     currentProcPID.current = -1;
@@ -92,12 +90,12 @@ function StepRunImportModule({
     console.log(`Import Module Process Closed with Process ID: ${pid} and Exit Code: ${exitCode}.`);
     console.log(`Prior to updating the currentTask, the currentTask is: ${currentTask.current}`);
 
-    currentTask.current--; // Decrement the current task to allow for indexing the next task
+    currentTask.current++; // Increment the current task to allow for indexing the next task
     console.log(`After updating the currentTask, the currentTask is: ${currentTask.current}`);
 
-    // When the current task is negative, it means that all the tasks have been run
-    if (currentTask.current < 0) {
-      const values = getValues();
+    // When the current task is equal to the length of contexts (minus 1), it means that all the tasks have been run
+    const values = getValues();
+    if (currentTask.current === values.ImportContexts.length) {
       console.log(`StepRunImportModule: All tasks completed. Resetting the current PID to -1`);
       resetRefs();
       setProcStatus("Standby");
@@ -229,7 +227,7 @@ function StepRunImportModule({
           <CardContent>
             <Box>
               <Typography variant="subtitle1">ExploreASL Progress Feedback</Typography>
-              <IPCQuill channelName={ImportModuleChannelName} />
+              <IPCQuill defaultHeight="calc(100vh - 375px)" channelName={ImportModuleChannelName} />
             </Box>
             <ButtonGroup variant="contained" fullWidth color="inherit">
               <Button
@@ -273,7 +271,6 @@ function StepRunImportModule({
           nextButtonText="Run ExploreASL Import Module"
         />
       </Box>
-      <AtomicSnackbarMessage atomConfig={atomImportModuleSnackbar} />
     </form>
   );
 }

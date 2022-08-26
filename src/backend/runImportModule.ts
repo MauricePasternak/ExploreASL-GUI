@@ -16,7 +16,6 @@ import { RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
 import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
 import { createGUIMessage } from "../common/utilityFunctions/GUIMessageFunctions";
 import { buildSourceStructureJSON, buildStudyParJSON } from "./runImportModuleHelperFunctions";
-import { sleep } from "../common/utilityFunctions/sleepFunctions";
 import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 
 export async function handleRunImportModule(
@@ -157,18 +156,12 @@ export async function handleRunImportModule(
   // rid of certain import progress?
   // At the current time, just re-run the entire process.
 
-  /***************************************************************************************
-   * Step 5: Delete the "locked" directories and/or the root lock if this is the first run
-   **************************************************************************************/
+  /**********************************************
+   * Step 5: Handle ExploreASL locked directories
+   *********************************************/
   const StudyDerivExploreASLDir = StudyRootPath.resolve("derivatives", "ExploreASL");
   console.log(`EASL Import `, `Proceeding to delete locked dirs for: ${StudyDerivExploreASLDir.path}`);
-  // For the very first task, we delete the root lock folders pertaining to the import Module
-  if (formData.ImportContexts.length - 1 === whichImportContext) {
-    const rootImportLockDir = StudyDerivExploreASLDir.resolve("lock/xASL_module_Import");
-    const rootBIDS2LegacyLockDir = StudyDerivExploreASLDir.resolve("lock/xASL_module_BIDS2Legacy");
-    (await rootImportLockDir.exists()) && (await rootImportLockDir.remove());
-    (await rootBIDS2LegacyLockDir.exists()) && (await rootBIDS2LegacyLockDir.remove());
-  }
+
   // Delete "locked" directories
   for await (const filepath of StudyDerivExploreASLDir.globIter("**/locked", { onlyDirectories: true })) {
     try {
@@ -177,6 +170,21 @@ export async function handleRunImportModule(
       console.warn(`An Error occurred while trying to delete filepath ${filepath.path}: ${error}`);
       continue;
     }
+  }
+
+  // Specific behavior for certain versions of ExploreASL
+  // Since we start with global context and proceed to specific cases, we need to delete the lock directories each time
+  // to ensure that overwrite behavior is possible.
+  const rootImportLockDir = StudyDerivExploreASLDir.resolve("lock/xASL_module_Import");
+  const rootBIDS2LegacyLockDir = StudyDerivExploreASLDir.resolve("lock/xASL_module_BIDS2Legacy");
+  // For Version 1.9.0, we delete both the Import and BIDS2Legacy lock directories
+  if (EASLVersionNumber < 110) {
+    (await rootBIDS2LegacyLockDir.exists()) && (await rootBIDS2LegacyLockDir.remove());
+    (await rootImportLockDir.exists()) && (await rootImportLockDir.remove());
+  }
+  // For Version 1.10.0, BIDS2Legacy is no longer part of Import Module, so we don't delete it
+  else if (EASLVersionNumber < 120) {
+    (await rootImportLockDir.exists()) && (await rootImportLockDir.remove());
   }
 
   /*************************************************************************************

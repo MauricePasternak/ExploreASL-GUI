@@ -7,17 +7,21 @@ import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
+import { useSetAtom } from "jotai";
 import { cloneDeep as lodashCloneDeep } from "lodash";
 import React, { useEffect } from "react";
 import { SubmitErrorHandler, SubmitHandler, useFieldArray } from "react-hook-form";
 import ContextIcon from "../../assets/svg/ContextIcon.svg";
+import { GUIIMPORTFILE_BASENAME } from "../../common/GLOBALS";
 import { SchemaImportPar } from "../../common/schemas/ImportSchema";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 import { YupValidate } from "../../common/utilityFunctions/formFunctions";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../components/FormComponents/RHFMultiStep";
 import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import { DefaultImportSingleContext } from "../../stores/ImportPageStore";
+import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
 import HelpImport__StepDefineAdditionalContext from "../Help/HelpImport__StepDefineAdditionalContext";
+import { updateFolderHierarchyPerContext } from "./ImportModuleHelperFunctions";
 import SingleImportContext from "./SingleImportContext";
 
 function StepDefineContexts({
@@ -31,18 +35,44 @@ function StepDefineContexts({
 }: RHFMultiStepReturnProps<ImportSchemaType>) {
   const { api } = window;
   const { fields, append, remove } = useFieldArray({ control: control, name: "ImportContexts" });
+  const setImportSnackbar = useSetAtom(atomImportModuleSnackbar);
 
   console.log("Step 'Define Contexts' -- rendered with fields", fields);
 
   const handleValidSubmit: SubmitHandler<ImportSchemaType> = async values => {
     console.log("Step 'Define Contexts' -- Valid Submit Values: ", values);
 
-    // Save the values to an ImportPar.json file and proceed to the next step
-    const pathImportPar = api.path.asPath(values.StudyRootPath, `ImportPar.json`);
-    const createdJSONFile = await api.path.writeJSON(pathImportPar.path, values, { spaces: 2 });
+    // Form values must be adjusted to translate Paths into folderHierarchy for each context
+    const adjustedValues = await updateFolderHierarchyPerContext(values);
+    if (!adjustedValues) {
+      setImportSnackbar({
+        severity: "error",
+        title: "Error interpreting Contexts",
+        message: [
+          "Could not interpret folder structure for one or more contexts.",
+          "Please ensure that the filepaths you have provided actually exist and do not have any illegal characters (i.e. $^&).",
+        ],
+      });
+      return;
+    }
 
-    if (await api.path.filepathExists(createdJSONFile.path)) {
-      setCurrentStep(currentStep + 1);
+    const pathGUIImportPar = api.path.asPath(values.StudyRootPath, GUIIMPORTFILE_BASENAME);
+    try {
+      const createdJSONFile = await api.path.writeJSON(pathGUIImportPar.path, adjustedValues, { spaces: 1 });
+      if (await api.path.filepathExists(createdJSONFile.path)) {
+        setCurrentStep(currentStep + 1);
+      }
+    } catch (error) {
+      setImportSnackbar({
+        severity: "error",
+        title: "Error while writing Import Parameters",
+        message: [
+          `Could not write filepath:`,
+          `${pathGUIImportPar.path}`,
+          `It is possible that the folder this filepath is meant to be written in has special privileges.`,
+          `Please check the permissions of this folder and try again.`,
+        ],
+      });
     }
   };
 
@@ -62,7 +92,7 @@ function StepDefineContexts({
       );
 
       try {
-        const importParPath = api.path.asPath(currentValues.StudyRootPath, "ImportPar.json");
+        const importParPath = api.path.asPath(currentValues.StudyRootPath, GUIIMPORTFILE_BASENAME);
         if (!(await api.path.filepathExists(importParPath.path))) return;
 
         console.log(
@@ -99,7 +129,7 @@ function StepDefineContexts({
       );
 
       try {
-        const importParPath = api.path.asPath(currentValues.StudyRootPath, "ImportPar.json");
+        const importParPath = api.path.asPath(currentValues.StudyRootPath, GUIIMPORTFILE_BASENAME);
         if (!(await api.path.filepathExists(importParPath.path))) return;
 
         console.log(

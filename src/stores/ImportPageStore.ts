@@ -8,7 +8,8 @@ export const ImportModuleChannelName = "ImportModule";
 
 export const DefaultImportSingleContext: ImportContextSchemaType = {
   IsGlobal: true, // Terrible hack to make the validation work
-  Subjects: [],
+  Paths: [],
+  folderHierarchy: [],
   ASLSeriesPattern: "deltam",
   NVolumes: 2,
   M0PositionInASL: [],

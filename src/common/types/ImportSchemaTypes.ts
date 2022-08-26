@@ -58,7 +58,8 @@ export type ImportAliasesSchemaType = {
  */
 export type ImportContextSchemaType = {
   IsGlobal: boolean;
-  Subjects?: string[];
+  folderHierarchy: string[];
+  Paths: string[];
   ASLSeriesPattern: ASLSeriesPatternType | "";
   NVolumes: number;
   M0PositionInASL: number[];

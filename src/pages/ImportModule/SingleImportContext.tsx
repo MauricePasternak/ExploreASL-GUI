@@ -73,12 +73,12 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
           {!isFirst && (
             <RHFFilepathDropzone
               control={control}
-              name={`ImportContexts.${contextIndex}.Subjects`}
+              name={`ImportContexts.${contextIndex}.Paths`}
               filepathType="dir"
               dialogOptions={{ properties: ["multiSelections", "openDirectory"] }}
-              label="Subjects Within this Context"
-              helperText="Drop subject folders into this field to indicate that these are the subjects that should be included in this context"
-              placeholderText="Drop Subject folders here"
+              label="Subjects/Visits/Sessions Within this Context"
+              helperText="Drop Subject, Visit, and/or Session folders into this field to indicate that these are the items that are encompassed by this context."
+              placeholderText="Drop Folders Here"
             />
           )}
 

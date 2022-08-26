@@ -1,6 +1,8 @@
 import Box from "@mui/material/Box";
 import { styled } from "@mui/material/styles";
 import React from "react";
+import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
+import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
 import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import {
   SchemaImportStepDefineAliases,
@@ -85,6 +87,7 @@ function ImportModulePage() {
                 {currentStep === 2 && <StepDefineContexts {...bag} />}
                 {currentStep === 3 && <StepRunImportModule {...bag} />}
               </Box>
+              <AtomicSnackbarMessage atomConfig={atomImportModuleSnackbar} />
             </>
           );
         }}

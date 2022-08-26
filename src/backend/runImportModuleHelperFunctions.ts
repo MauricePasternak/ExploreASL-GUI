@@ -1,7 +1,6 @@
-import { pickBy as lodashPickBy, range as lodashRange, uniq as lodashUniq } from "lodash";
-import Path from "pathlib-js";
+import { pickBy as lodashPickBy } from "lodash";
 import { ImportContextSchemaType, ImportSchemaType, SourcedataFolderType } from "../common/types/ImportSchemaTypes";
-import { escapeRegExp, stringArrToRegex } from "../common/utilityFunctions/stringFunctions";
+import { escapeRegExp } from "../common/utilityFunctions/stringFunctions";
 
 /**
  * Gets a number array representing the MATLAB index positions of Subject, Visit, Session, and Scan directories.
@@ -16,88 +15,6 @@ function getTokenOrdering(folderStructure: SourcedataFolderType[]): [number, num
   return tokenOrdering as [number, number, number, number];
 }
 
-/**
- * Retrieves the regexes corresponding to each level of an indicated folder Structure.
- * @param rootFolder The directory from which globbing at the Nth level away will take place.
- * @param folderStructure An array of strings signifying what is present at a particular directory.
- * Example ["Subject", "Scan", "Ignore"]
- * @param validVisitFolders An array of strings of basenames to keep w.r.t all basenames found at the level of "Visit".
- * Example ["morning", "afternoon", "evening"]
- * @param validSessionFolders An array of strings of basenames to keep w.r.t all basenames found at the level of "Session".
- * Example ["ASL_1", "ASL_2", "ASL_3"]
- * @param validScanFolders An array of strings of basenames to keep w.r.t all basenames found at the level of "Scan".
- * Example ["ASL", "T1-weighted", "LowFLAIR"]
- * @param whichContext A number indicating
- * @returns An array of strings, each of which is a regex corresponding to a level indicated in the folderStructure argument.
- * Example ["^(sub001|sub002)$", "^(ASL|T1-weighted|LowFLAIR)$", ".*"]
- */
-async function getFolderHierarchy(
-  rootFolder: string,
-  folderStructure: SourcedataFolderType[],
-  validVisitFolders: string[],
-  validSessionFolders: string[],
-  validScanFolders: string[],
-  importContext: ImportContextSchemaType
-) {
-  const setVisitFolders = new Set(validVisitFolders);
-  const setSessionFolders = new Set(validSessionFolders);
-  const setScanFolders = new Set(validScanFolders);
-
-  const globOptions = {
-    onlyDirectories: true,
-    onlyFiles: false,
-  };
-  const folderHierarchyArray = [];
-  for (let index = 0; index < folderStructure.length; index++) {
-    const level = folderStructure[index];
-
-    // Push universal regex for Ignore levels
-    if (level === "Ignore") {
-      folderHierarchyArray.push(".*");
-      continue;
-    }
-
-    // Get non-global contexts & the Subject level, we just use the subject filepaths
-    if (level === "Subject" && !importContext.IsGlobal) {
-      const basenames = importContext.Subjects.map(p => new Path(p).basename);
-      const regexSubjects = stringArrToRegex(basenames);
-      folderHierarchyArray.push(regexSubjects);
-      continue;
-    }
-
-    // Get paths for the indicated levels
-    const globStar = lodashRange(index + 1)
-      .map(() => "*")
-      .join("/");
-    console.log(`globStar for level ${level}: ${globStar}`);
-    const paths = await new Path(rootFolder, "sourcedata").glob(globStar, globOptions);
-    const basenames = lodashUniq(paths.map(p => p.basename));
-    console.log(`Basenames for level: ${level}`, basenames);
-
-    // Convert the valid foldernames to a single regex string like ^(sub001|sub002|sub003)$
-    // and add it to the folderHierarchy array
-    if (level === "Subject") {
-      const regexSubjects = stringArrToRegex(basenames);
-      folderHierarchyArray.push(regexSubjects);
-      continue;
-    } else if (level === "Visit") {
-      const regexVisits = stringArrToRegex(basenames.filter(b => setVisitFolders.has(b)));
-      folderHierarchyArray.push(regexVisits);
-    } else if (level === "Session") {
-      const regexSessions = stringArrToRegex(basenames.filter(b => setSessionFolders.has(b)));
-      folderHierarchyArray.push(regexSessions);
-    } else if (level === "Scan") {
-      const regexScans = stringArrToRegex(basenames.filter(b => setScanFolders.has(b)));
-
-      folderHierarchyArray.push(regexScans);
-    } else {
-      throw new Error(
-        "Impossible value contained within the provided folder structure. A level must be one of Subject, Visit, Session, Scan, or Ignore."
-      );
-    }
-  }
-  return folderHierarchyArray;
-}
 
 /**
  * Parses the form values into a format appropriate for conversion to sourceStructure.json
@@ -115,17 +32,10 @@ export async function buildSourceStructureJSON(formValues: ImportSchemaType, whi
     const filteredSessionMapping = lodashPickBy(formValues.MappingSessionAliases, alias => alias && alias !== "");
 
     // console.log("filteredScanMapping", filteredScanMapping);
-
     const sourceStructureJSON = {
       bMatchDirectories: true,
-      folderHierarchy: await getFolderHierarchy(
-        formValues.StudyRootPath, // rootFolder
-        formValues.SourcedataStructure, // folderStructure
-        Object.keys(filteredVisitMapping), // validVisitFolders
-        Object.keys(filteredSessionMapping), // validSessionFolders
-        Object.keys(filteredScanMapping), // validScanFolders
-        formValues.ImportContexts[whichContext]
-      ),
+
+      folderHierarchy: formValues.ImportContexts[whichContext].folderHierarchy,
 
       // Example [ 1 0 2 3],
       tokenOrdering: getTokenOrdering(formValues.SourcedataStructure),

@@ -3,8 +3,13 @@ import * as Yup from "yup";
 import { ObjectShape } from "yup/lib/object";
 import {
   ASLSeriesPatternType,
-  EASLType, ImportAliasesSchemaType,
-  ImportContextSchemaType, ImportMultipleContextsSchemaType, ImportRuntimeEnvsSchemaType, ImportSchemaType, SourcedataFolderType
+  EASLType,
+  ImportAliasesSchemaType,
+  ImportContextSchemaType,
+  ImportMultipleContextsSchemaType,
+  ImportRuntimeEnvsSchemaType,
+  ImportSchemaType,
+  SourcedataFolderType,
 } from "../types/ImportSchemaTypes";
 import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../utilityFunctions/EASLFunctions";
 const { api } = window;
@@ -157,53 +162,74 @@ export const SchemaImportStepDefineAliases = Yup.object().shape<YupShape<ImportA
  */
 export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportContextSchemaType>>({
   IsGlobal: Yup.boolean().default(false),
-  Subjects: Yup.array()
+  Paths: Yup.array()
     .optional()
     .default([])
     .of(Yup.string())
     .test(
-      "ValidSubjects",
-      "Invalid Subjects",
-      async (subjectPaths: string[], helpers: Yup.TestContext<ImportSchemaType>) => {
-        // For the global context, there should be no subjectPaths
+      "ValidContextPaths",
+      "One or more invalid filepaths provided for this context",
+      async (paths: string[], helpers: Yup.TestContext<ImportSchemaType>) => {
+        // For the global context, there should be no paths
         const isGlobal = helpers.parent.IsGlobal ?? true;
 
         // console.log("SchemaImportDefineContext -- Subjects -- isGlobal: ", {
         //   isGlobal,
-        //   subjectPaths,
+        //   paths,
         // });
 
-        if (isGlobal && subjectPaths.length === 0) return true;
+        if (isGlobal && paths.length === 0) return true;
 
-        if (subjectPaths.length === 0)
+        // Paths cannot be blank for the non-global context
+        if (paths.length === 0)
           return helpers.createError({
             path: helpers.path,
-            message: "At least one subject is required when specifying an additional context",
+            message: "At least one path is required when specifying an additional context",
           });
 
-        // For any additional context, we should verify that the subjectPaths exist within the indicated level
+        // For any additional context, we should verify that the paths exist within the indicated level
         const studyRootPath: string = helpers.options.context.StudyRootPath;
         const SourcedataStructure: SourcedataFolderType[] = helpers.options.context.SourcedataStructure;
 
-        const nLevels = SourcedataStructure.indexOf("Subject");
-        const globStars = SourcedataStructure.slice(0, nLevels + 1)
-          .map(() => "*")
-          .join("/");
+        //
+        if (!studyRootPath || !((await api.path.getFilepathType(`${studyRootPath}/sourcedata`)) === "dir"))
+          return helpers.createError({
+            path: helpers.path,
+            message: "Cannot determine the validity of the folder structure when the Study Root Path is invalid",
+          });
 
-        console.log(`Searching for subjects at fullPath Pattern ${studyRootPath}/sourcedata/${globStars}`);
+        for (const path of paths) {
+          if (!(await api.path.filepathExists(path))) return false;
 
-        const foundSubjectPaths = new Set(
-          (await api.path.glob(`${studyRootPath}/sourcedata`, globStars, { onlyDirectories: true })).map(p => p.path)
-        );
-
-        for (const subjectPath of subjectPaths) {
-          const asPath = api.path.asPath(subjectPath); // Necessary to normalize to forward slashes in Windows
-          if (!foundSubjectPaths.has(asPath.path))
+          const pathParts = path.replace("\\\\", "/").replace(`${studyRootPath}/sourcedata/`, "").split("/");
+          const pathDepth = pathParts.length;
+          const folderType = SourcedataStructure[pathDepth - 1];
+          if (!["Subject", "Visit", "Session"].includes(folderType))
             return helpers.createError({
               path: helpers.path,
-              message: `Subject ${subjectPath} does not exist in the folder structure you had previously specified`,
+              message: `Path ${path} was not found to be a Subject, Visit, or Session`,
             });
         }
+
+        // const nLevels = SourcedataStructure.indexOf("Subject");
+        // const globStars = SourcedataStructure.slice(0, nLevels + 1)
+        //   .map(() => "*")
+        //   .join("/");
+
+        // console.log(`Searching for subjects at fullPath Pattern ${studyRootPath}/sourcedata/${globStars}`);
+
+        // const foundSubjectPaths = new Set(
+        //   (await api.path.glob(`${studyRootPath}/sourcedata`, globStars, { onlyDirectories: true })).map(p => p.path)
+        // );
+
+        // for (const subjectPath of paths) {
+        //   const asPath = api.path.asPath(subjectPath); // Necessary to normalize to forward slashes in Windows
+        //   if (!foundSubjectPaths.has(asPath.path))
+        //     return helpers.createError({
+        //       path: helpers.path,
+        //       message: `Subject ${subjectPath} does not exist in the folder structure you had previously specified`,
+        //     });
+        // }
 
         return true;
       }

@@ -11,4 +11,5 @@ export const SUPPORTEDMATLABRUNTIMEVERSIONS = ["v96", "v97", "v98", "v99", "v910
 export const GLOBAL_CHILD_PROCESSES: number[] = [];
 export const STUDYPARFILE_BASENAME = "studyPar.json";
 export const DATAPARFILE_BASENAME = "dataPar.json";
+export const GUIIMPORTFILE_BASENAME = "EASLGUI_ImportPar.json";
 export const SOURCESTRUCTUREFILE_BASENAME = "sourceStructure.json";
