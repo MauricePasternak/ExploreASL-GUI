@@ -20,7 +20,7 @@ import {
   formatErrorsForDisplay,
   parseNestedFormattedYupErrors,
   YupResolverFactoryBase,
-  YupValidate
+  YupValidate,
 } from "../../common/utilityFunctions/formFunctions";
 import { stringArrToRegex } from "../../common/utilityFunctions/stringFunctions";
 import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
@@ -169,7 +169,10 @@ function DataParPage() {
       message: finalErrorMessage,
     });
     reset(correctedValues);
-    // setDataParValues(correctedValues);
+
+    // Set the form into a submitted state so that changes immediately update validation
+    // (initially RHF validates on a onSubmit mode and switches to an onChange mode only after the form is submitted)
+    handleSubmit(() => {})();
   };
 
   return (

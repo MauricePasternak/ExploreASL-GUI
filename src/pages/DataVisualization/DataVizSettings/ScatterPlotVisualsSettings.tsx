@@ -14,14 +14,16 @@ import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
+import DebouncedInput from "../../../components/DebouncedComponents/DebouncedInput";
 import ScatterPlotIcon from "../../../assets/svg/ScatterGraph.svg";
 import ExpandMore from "../../../components/ExpandMore";
 import { ControlledLabelSlider, ControlledLabelSwitch } from "../../../components/FormComponents/ControlLabelGrid";
 import {
   atomEASLScatterplotSettings,
-  atomSetEASLScatterplotSettings
+  atomSetEASLScatterplotSettings,
 } from "../../../stores/DataFrameVisualizationStore";
 import ColorSelect from "../ColorSelect";
+import Box from "@mui/material/Box";
 
 function ScatterPlotVisualsSettings() {
   const [expanded, setExpanded] = React.useState(true);
@@ -187,6 +189,22 @@ function ScatterPlotVisualsSettings() {
             </FormControl>
             <FormControl fullWidth>
               <FormLabel>X Axis Settings</FormLabel>
+              <Box py={2} ml={2}>
+                <DebouncedInput
+                  fullWidth
+                  label="X Axis Label"
+                  value={EASLPlotSettings.axisBottom.axisLabelText}
+                  onChange={e => {
+                    const value = typeof e === "string" ? e : e.target.value;
+                    setEASLPlotSettings({
+                      path: "axisBottom.axisLabelText",
+                      value,
+                    });
+                  }}
+                  debounceDelay={1000}
+                />
+              </Box>
+
               <ControlledLabelSlider
                 label="Tick Height"
                 labelwidth="160px"
@@ -281,6 +299,22 @@ function ScatterPlotVisualsSettings() {
             </FormControl>
             <FormControl fullWidth>
               <FormLabel>Y Axis Settings</FormLabel>
+              <Box py={2} ml={2}>
+                <DebouncedInput
+                  fullWidth
+                  label="Y Axis Label"
+                  value={EASLPlotSettings.axisLeft.axisLabelText}
+                  onChange={e => {
+                    const value = typeof e === "string" ? e : e.target.value;
+                    setEASLPlotSettings({
+                      path: "axisLeft.axisLabelText",
+                      value,
+                    });
+                  }}
+                  debounceDelay={1000}
+                />
+              </Box>
+
               <ControlledLabelSlider
                 label="Tick Height"
                 labelwidth="160px"

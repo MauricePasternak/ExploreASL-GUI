@@ -9,6 +9,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import React, { useState } from "react";
 import { DialogTitleH4 } from "../../components/DialogTitle";
+import { NumberedPointList } from "./HelpStyledComponents";
 
 function HelpBIDSDatagrid__BIDSDatagrid() {
   const [expanded, setExpanded] = useState<string | false>(false);
@@ -86,7 +87,7 @@ function HelpBIDSDatagrid__BIDSDatagrid() {
                   In the bottom of the program, you'll see a button with the text "ADD A NEW BIDS COLUMN". Click it.
                 </p>
                 <p>You'll be brought to a dialog window that is comprised of 3 steps:</p>
-                <ol style={{ textIndent: "1rem", listStylePosition: "inside" }}>
+                <NumberedPointList>
                   <li>Select the BIDS field that you'd like to add.</li>
                   <li>
                     Select the default value that should be applied to all rows. Alternatively, if the column should be
@@ -94,7 +95,7 @@ function HelpBIDSDatagrid__BIDSDatagrid() {
                     value".
                   </li>
                   <li>Click the "ADD TO SPREADSHEET" action label in the bottom right corner of the dialog window.</li>
-                </ol>
+                </NumberedPointList>
                 <p>
                   Your new column is automatically added as the rightmost column. You may need to move the scrollbar to
                   see it.

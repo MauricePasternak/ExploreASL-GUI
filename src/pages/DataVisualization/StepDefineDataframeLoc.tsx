@@ -57,6 +57,7 @@ const atlasesOptions: RHFControlledSelectOption<LoadEASLDataFrameSchema, "Atlase
 ];
 
 const EASLColnamesNotPermittedInMetadata: string[] = [
+  "LongitudinalTimePoint",
   "SubjectNList",
   "GM_vol",
   "WM_vol",
@@ -65,43 +66,11 @@ const EASLColnamesNotPermittedInMetadata: string[] = [
   "GMWM_ICVRatio",
 ];
 
-function renderLoadDFError(statistic: string, atlases: string[], pvc: boolean) {
-  return (
-    <div>
-      <Typography>
-        Could not load data for statistic: {statistic}, atlas: {atlases.join(", ")}, and PVC {pvc}...
-      </Typography>
-      <Typography>One of the following may be the cause:</Typography>
-      <List>
-        <ListItem>
-          <ListItemIcon>
-            <CircleIcon />
-          </ListItemIcon>
-          <ListItemText>You haven't run the Population module yet for this study.</ListItemText>
-        </ListItem>
-        <ListItem>
-          <ListItemIcon>
-            <CircleIcon />
-          </ListItemIcon>
-          <ListItemText>
-            You have run the Population module once, but you forgot to specify which atlases should be analyzed when you
-            were defining parameters. If this is the case, you will have to go back to Define Parameters to adjust that
-            field and re-run the Population Module for your study.
-          </ListItemText>
-        </ListItem>
-        <ListItem>
-          <ListItemIcon>
-            <CircleIcon />
-          </ListItemIcon>
-          <ListItemText>
-            Some unforseen filesystem error happened and the data files were lost. Try re-running the Population module
-            for your study?
-          </ListItemText>
-        </ListItem>
-      </List>
-    </div>
-  );
-}
+// Automatically coerce certain columns to a given type
+const EASLCoerceToCategorical: Record<string, DataFrameMainType> = {
+  LongitudinalTimePoint: "Categorical",
+  SubjectNList: "Categorical",
+};
 
 function handleCleanRawDF(df: DataFrame | IDataFrame) {
   const dtypeMapping = {} as Record<string, DataFrameMainType>;
@@ -112,8 +81,12 @@ function handleCleanRawDF(df: DataFrame | IDataFrame) {
     const series = df.getSeries(colName);
     const dtype = getColumnDtypeFreq(series);
 
+    if (colName in EASLCoerceToCategorical) {
+      dtypeMapping[colName] = EASLCoerceToCategorical[colName];
+      convertedSeries[colName] = series.map((x: number) => (x == null ? null : x.toString()));
+    }
     // Pure type
-    if (typeof dtype === "string") {
+    else if (typeof dtype === "string") {
       // Pure string
       if (dtype === "string") {
         dtypeMapping[colName] = "Categorical";
@@ -173,6 +146,7 @@ function StepDefineDataframeLoc() {
   const handleValidSubmit: SubmitHandler<LoadEASLDataFrameSchema> = async values => {
     console.log("Step 'Define Runtime Envs' -- Valid Submit Values: ", values);
     const statisticsPath = api.path.asPath(values.StudyRootPath, "derivatives", "ExploreASL", "Population", "Stats");
+    let mergeColumn: "SUBJECT" | "participant_id"; // Differs between EASL versions
 
     /**
      * Part 1: Load the ExploreASL dataframes, merging them into a single dataframe if necessary
@@ -199,15 +173,42 @@ function StepDefineDataframeLoc() {
         return;
       }
 
-      // First round, just re-assign
+      // First round, just re-assign. Also, this determines the merge column
       if (tmpIDF == null) {
         tmpIDF = fromCSV(fetchDF.data, { dynamicTyping: true }).after(0); // after(0) to skip ExploreASL's 1st row
+        if (!tmpIDF.hasSeries("participant_id") && !tmpIDF.hasSeries("SUBJECT")) {
+          setDataVizSnackbar({
+            severity: "error",
+            title: "Merge column not found",
+            message: [
+              "Encountered the following error while loading dataframe:",
+              `${pathDF.path}`,
+              `The dataframe does not contain the expected column named 'participant_id' (ExploreASL v1.10 onwards) or 'SUBJECT' (ExploreASL v1.9 and earlier)`,
+            ],
+          });
+          return;
+        }
+        mergeColumn = tmpIDF.hasSeries("participant_id") ? "participant_id" : "SUBJECT";
         continue;
       }
 
       // Otherwise, merge
-      tmpIDF = innerJoin(tmpIDF, fromCSV(fetchDF.data, { dynamicTyping: true }).after(0), "SUBJECT");
+      const nextDF = fromCSV(fetchDF.data, { dynamicTyping: true }).after(0);
+      if (!nextDF.hasSeries(mergeColumn)) {
+        setDataVizSnackbar({
+          severity: "error",
+          title: "Merge column not found",
+          message: [
+            "Encountered the following error while loading dataframe:",
+            `${pathDF.path}`,
+            `The dataframe does not contain the expected column named '${mergeColumn}'`,
+          ],
+        });
+        return;
+      }
+      tmpIDF = innerJoin(tmpIDF, nextDF, mergeColumn);
     } // End of for loop
+
     // Drop Site column; it should be coming from a user's metadata
     EASLDF = new DataFrame(tmpIDF.hasSeries("Site") ? tmpIDF.dropSeries("Site").toArray() : tmpIDF.toArray());
 
@@ -251,14 +252,14 @@ function StepDefineDataframeLoc() {
     let mergedDF: DataFrame = null;
     if (MetadataDF) {
       // Sanity Check for main merge column existing
-      if (!MetadataDF.getColumnNames().includes("SUBJECT")) {
+      if (!MetadataDF.getColumnNames().includes(mergeColumn)) {
         setDataVizSnackbar({
           severity: "error",
-          title: "Could not find the SUBJECT column in the Metadata dataframe",
+          title: `Could not find the column ${mergeColumn} in the Metadata dataframe`,
           message: [
             "Encountered the following error while loading dataframe:",
             `${values.MetadataPath}`,
-            "The SUBJECT column is required for merging the ExploreASL and Metadata dataframes",
+            `The column: ${mergeColumn} is required for merging the ExploreASL and Metadata dataframes`,
           ],
         });
         return;
@@ -267,20 +268,20 @@ function StepDefineDataframeLoc() {
       // Sanity Check for non-null values in merge columns
       let nullItems: number;
       if (!MetadataDF.hasSeries("session")) {
-        nullItems = MetadataDF.getSeries("SUBJECT")
+        nullItems = MetadataDF.getSeries(mergeColumn)
           .filter(val => val == null)
           .count();
       } else {
-        nullItems = MetadataDF.subset(["SUBJECT", "session"])
-          .filter(row => row["SUBJECT"] == null || row["session"] == null)
+        nullItems = MetadataDF.subset([mergeColumn, "session"])
+          .filter(row => row[mergeColumn] == null || row["session"] == null)
           .count();
       }
       if (nullItems > 0) {
         setDataVizSnackbar({
           severity: "error",
-          title: "Empty values found in the SUBJECT and/or session columns of the Metadata dataframe",
+          title: `Empty values found in the ${mergeColumn} and/or session columns of the Metadata dataframe`,
           message: [
-            `A proper merging of the ExploreASL and Metadata dataframes is impossible when there are empty values in the "SUBJECT" and/or "session" columns of the Metadata dataframe.`,
+            `A proper merging of the ExploreASL and Metadata dataframes is impossible when there are empty values in the "${mergeColumn}" and/or "session" columns of the Metadata dataframe.`,
             " ",
             "Please remove rows with the empty values in this/these column(s) and try again.",
           ],
@@ -294,7 +295,7 @@ function StepDefineDataframeLoc() {
         outerLeftJoin(
           EASLDF,
           MetadataDF,
-          MetadataDF.hasSeries("session") ? ["SUBJECT", "session"] : "SUBJECT"
+          MetadataDF.hasSeries("session") ? [mergeColumn, "session"] : mergeColumn
         ).toArray()
       );
     } else {

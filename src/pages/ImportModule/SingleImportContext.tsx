@@ -120,10 +120,12 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                   name={`ImportContexts.${contextIndex}.M0PositionInASL`}
                   label="M0 Positions within ASL Series"
                   fullWidth
-                  debounceTime={750}
+                  debounceTime={2000}
                   helperText="Specify as comma-separated positive integers. Leave blank if not applicable."
                   handleInnerToField={getNumbersFromDelimitedString}
-                  handleFieldToInner={(numbers: number[]) => numbers.join(", ")}
+                  handleFieldToInner={(numbers: number[]) =>
+                    numbers && Array.isArray(numbers) ? numbers.join(", ") : ""
+                  }
                   shouldUpdateAfterDebounce
                 />
               </Grid>
@@ -133,10 +135,12 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                   name={`ImportContexts.${contextIndex}.DummyPositionInASL`}
                   label="Dummy Positions within ASL Series"
                   fullWidth
-                  debounceTime={750}
+                  debounceTime={2000}
                   helperText="Specify as comma-separated positive integers. Leave blank if not applicable."
                   handleInnerToField={getNumbersFromDelimitedString}
-                  handleFieldToInner={(numbers: number[]) => numbers.join(", ")}
+                  handleFieldToInner={(numbers: number[]) =>
+                    numbers && Array.isArray(numbers) ? numbers.join(", ") : ""
+                  }
                   shouldUpdateAfterDebounce
                 />
               </Grid>
@@ -226,10 +230,12 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                   name={`ImportContexts.${contextIndex}.BackgroundSuppressionPulseTime`}
                   fullWidth
                   label="Background Pulse Suppression Timings"
-                  helperText="Specify as comma-separated positive numbers. Leave blank if not applicable."
+                  helperText="Specify as comma-separated positive numbers in seconds. Leave blank if not applicable."
                   handleInnerToField={lodashPartialRight(getNumbersFromDelimitedString, ",", "float")}
-                  handleFieldToInner={(numbers: number[]) => numbers.join(", ")}
-                  debounceTime={1000}
+                  handleFieldToInner={(numbers: number[]) =>
+                    numbers && Array.isArray(numbers) ? numbers.join(", ") : ""
+                  }
+                  debounceTime={2000}
                   shouldUpdateAfterDebounce
                 />
               </Grid>

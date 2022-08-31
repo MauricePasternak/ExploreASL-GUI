@@ -9,7 +9,7 @@ import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { BulletPointList } from "./HelpStyledComponents";
+import { BulletPointList, NumberedPointList } from "./HelpStyledComponents";
 import Link from "@mui/material/Link";
 import HelperImage__DataVizRerunPopulationModule from "../../assets/img/HelperImages/HelperImage__DataVizRerunPopulationModule.png";
 import Box from "@mui/material/Box";
@@ -70,8 +70,17 @@ function HelpDataViz__StepDefineDataframeLoc() {
                 <p>
                   Unfortunately, at the current time, this option is not available, since the program is specifically
                   geared towards plotting the output of ExploreASL. You can, however, merge the ExploreASL data with
-                  your own metadata as long as the latter possesses a column called SUBJECT
+                  your own metadata as long as the latter possesses a column to merge with.
                 </p>
+                <br />
+                <p>
+                  The merge column the must be present depends on the version of ExploreASL that was used to run the
+                  analysis:
+                </p>
+                <BulletPointList>
+                  <li>SUBJECT for ExploreASL versions 1.9.0 and earlier</li>
+                  <li>participant_id for ExploreASL versions 1.10.0 and later</li>
+                </BulletPointList>
               </AccordionDetails>
             </Accordion>
           </section>
@@ -114,7 +123,7 @@ function HelpDataViz__StepDefineDataframeLoc() {
 
                 <p>Fortunately, it isn&#39;t too much of a hassle to get things to work with these steps:</p>
 
-                <ol>
+                <NumberedPointList>
                   <li>
                     Go back to the &quot;Define Parameters&quot; section of this program and load in your study&#39;s
                     dataPar.json file.
@@ -142,7 +151,7 @@ function HelpDataViz__StepDefineDataframeLoc() {
                   </li>
                   <li>Go to the&nbsp;&quot;Run ExploreASL&quot; tab and run the Population Module for this study.</li>
                   <li>Once completed successfully, you will be permitted to indicate those atlases.</li>
-                </ol>
+                </NumberedPointList>
               </AccordionDetails>
             </Accordion>
           </section>
@@ -158,7 +167,7 @@ function HelpDataViz__StepDefineDataframeLoc() {
               <Divider />
               <AccordionDetails>
                 <p>
-                  The metadata spreadsheet must contain a column called SUBJECT in order to perform an{" "}
+                  The metadata spreadsheet must contain a merge in order to perform an{" "}
                   <Link href="https://miro.medium.com/max/1838/1*UAPgZRnhFG29C0nDFi5D0A.png" target="_blank">
                     outer-left join
                   </Link>{" "}
@@ -168,9 +177,19 @@ function HelpDataViz__StepDefineDataframeLoc() {
                 </p>
                 <br />
                 <p>
-                  In addition to the SUBJECT column (which must be present regardless) you can also merge with an
-                  additional column called: session. Again, the nature of the join is outer-left. Rows for SUBJECT and
-                  session which are present in the metadata but absent in the ExploreASL data will be removed.
+                  The merge column the must be present depends on the version of ExploreASL that was used to run the
+                  analysis:
+                </p>
+                <BulletPointList>
+                  <li>SUBJECT for ExploreASL versions 1.9.0 and earlier</li>
+                  <li>participant_id for ExploreASL versions 1.10.0 and later</li>
+                </BulletPointList>
+                <br />
+                <p>
+                  In addition to the merge column (which must be present regardless) you can also merge with an
+                  additional column called: session. Again, the nature of the join is outer-left. Rows for the merge
+                  column and session which are present in the metadata but absent in the ExploreASL data will be
+                  removed.
                 </p>
               </AccordionDetails>
             </Accordion>
@@ -199,7 +218,8 @@ function HelpDataViz__StepDefineDataframeLoc() {
                   </li>
                   <li>
                     It contains complex/nested values (i.e. if this:&nbsp;[1, 2, 3] was inside a cell, it is interpreted
-                    as an array of numbers). Arrays and JSON-like content is interpreted as complex.
+                    as an array of numbers). Arrays (i.e. [1, 2, 3]) and JSON-like content (i.e. {"{"} key: value {"}"})
+                    is interpreted as complex.
                   </li>
                 </BulletPointList>
               </AccordionDetails>

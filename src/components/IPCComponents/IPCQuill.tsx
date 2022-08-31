@@ -77,6 +77,23 @@ function IPCQuill({ channelName, defaultHeight = 530, scrollDownPerUpdate = fals
     quill && shouldClearText && quill.setText("");
   };
 
+  const handleProcessClosed = (pid: number, exitCode: number) => {
+    const currentText = quill.getText();
+    const endingBlurb =
+      exitCode != null
+        ? exitCode === 0
+          ? "successfully!"
+          : `with errors (Error code: ${exitCode}`
+        : "forcefully due to termination by the user";
+    const endingMessage = `Job has ended ${endingBlurb}`;
+    currentText === "\n"
+      ? quill.setText(endingMessage)
+      : quill.insertText(quill.getLength(), endingMessage, { color: exitCode === 0 ? "green" : "red", bold: true });
+    if (scrollDownPerUpdate) {
+      quill.root.scrollTop = quill.root.scrollHeight;
+    }
+  };
+
   /**
    * useEffect for registering events related to text output coming from the backend
    */
@@ -87,22 +104,7 @@ function IPCQuill({ channelName, defaultHeight = 530, scrollDownPerUpdate = fals
     api.on(`${channelName}:childProcessSTDERR`, handleIncomingText);
     api.on(`${channelName}:childProcessRequestsMediaDisplay`, handleDisplayMedia);
     api.on(`${channelName}:childProcessHasSpawned`, handleStart);
-    api.on(`${channelName}:childProcessHasClosed`, (pid, exitCode) => {
-      const currentText = quill.getText();
-      const endingBlurb =
-        exitCode != null
-          ? exitCode === 0
-            ? "successfully!"
-            : `with errors (Error code: ${exitCode}`
-          : "forcefully due to termination by the user";
-      const endingMessage = `Process ${pid} has ended ${endingBlurb}`;
-      currentText === "\n"
-        ? quill.setText(endingMessage)
-        : quill.insertText(quill.getLength(), endingMessage, { color: exitCode === 0 ? "green" : "red", bold: true });
-      if (scrollDownPerUpdate) {
-        quill.root.scrollTop = quill.root.scrollHeight;
-      }
-    });
+    api.on(`${channelName}:childProcessHasClosed`, handleProcessClosed);
 
     return () => {
       api.removeAllListeners(`${channelName}:childProcessSTDOUT`);
@@ -110,7 +112,7 @@ function IPCQuill({ channelName, defaultHeight = 530, scrollDownPerUpdate = fals
       api.removeAllListeners(`${channelName}:childProcessHasSpawned`);
       api.removeAllListeners(`${channelName}:childProcessHasClosed`);
     };
-  }, [quill, scrollDownPerUpdate]);
+  }, [quill, channelName, scrollDownPerUpdate]);
 
   /**
    * Upon mounting the component, this function will be called to create the quill instance.

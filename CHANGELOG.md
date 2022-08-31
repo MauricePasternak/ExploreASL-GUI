@@ -10,10 +10,20 @@ Dates are in format: `YYYY-MM-DD`
 
 ## [0.3.0] - 2022-08-21
 
-Introduction of the BIDSDataGrid Module. Module is responsible for editing BIDS fields taken from multiple asl.json
-BIDS sidecars.
+Introduction of the BIDSDataGrid Module (#4) and multiple MacOS Fixes (#5)
 
 ### Fixed
+
+- Fixed a bug in the Define Parameters Module where, after loading invalid values from a dataPar.json file, validations
+  would not occur until the user submitted. This has been fixed by programatically putting the form into a submitted
+  state, which forces RHF to enter its reValidate mode (onChange basis).
+
+- Improved the compatibility of loading dataframe in the DataVisualization steps to account for the switch from
+  "SUBJECT" to "participant_id" as the main subject column between ExploreASL versions. Helper section has been updated
+  to reflect this change as well.
+
+- Fixed a bug on MacOS where `stats` was not provided in path watcher events. Switching to the `PathWatcher` class
+  maintained backward compatibility without the need of a stats class.
 
 - Event docstrings were not updated in MappingIPCRendererEvents.ts , MappingIPCMainEventsToHanders.ts , and preload.ts
 
@@ -23,6 +33,9 @@ BIDS sidecars.
   naming of .status files that should be created for the study.
 
 ### Added
+
+- Added the option for renaming X and Y axis labels for both scatterplots and swarmplots within the Data Visualization
+  Module.
 
 - Added the new BIDSDataGrid Module.
 
@@ -34,6 +47,20 @@ BIDS sidecars.
 
 ### Changed
 
+- Changed the handling of `MATLABGithubArgs` in the running of the Import & other ExploreASL modules. Command-line
+  arguments are now handled based on pre-vs-post 2019 MATLAB as well as the operating system.
+
+- Changed IPCQuill's ending feedback to be a little more user-friendly (i.e. stating PIDs directly may have been
+  confusing for non-developers).
+
+- Form fields involving comma-delimited numbers had their debounce timers increased to 2 seconds before forcing an
+  update. Also added some logic for encountering null values in their handleFieldToInner.
+
+- In the Data Visualization module, certain ExploreASL dataframe columns are coerced into the appropriate categorical
+  type and are not allowed to be changed to continuous.
+
+- Moved the `Regex` class to its own module. Changed it to be more sensitive to optional capture groups.
+
 - The Import Module now gives some info feedback when a study finishes import, as long as the user did not terminate
   the process.
 
@@ -42,13 +69,14 @@ BIDS sidecars.
 
 - Minor removal of unnecessary imports and other sorts of code refactoring.
 
-- Moved the logic of determining ExploreASL version to its own function `getExploreASLVersion`.
+- Moved the logic of determining ExploreASL version to its own functions `getExploreASLVersion` and
+  `rendererGetEASLVersion` for the backend and frontend, respectively.
 
 ---
 
 ## [0.2.3] - 2022-08-20
 
-Improvements to the handling of finding a MATLAB executable as well as quality-of-life improvements to the Import
+Improvements to the handling of finding a MATLAB executable (#3) as well as quality-of-life improvements to the Import
 Module.
 
 ### Fixed

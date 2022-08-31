@@ -7,7 +7,7 @@ import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import React from "react";
 import {
   toNivoSwarmPlotDataGroupBy,
-  toNivoSwarmPlotDataSingle
+  toNivoSwarmPlotDataSingle,
 } from "../../../common/utilityFunctions/dataFrameFunctions";
 import {
   atomCurrentMRIViewSubject,
@@ -16,14 +16,14 @@ import {
   atomEASLSwarmplotSettings,
   atomMRIDataStats,
   atomNivoGraphDataVariablesSchema,
-  atomOfAtomMRIData
+  atomOfAtomMRIData,
 } from "../../../stores/DataFrameVisualizationStore";
 
 import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
 import {
   niftiToNivoAxial,
   niftiToNivoCoronal,
-  niftiToNivoSagittal
+  niftiToNivoSagittal,
 } from "../../../common/utilityFunctions/nivoFunctions";
 
 function EASLSwarmplot() {
@@ -40,7 +40,8 @@ function EASLSwarmplot() {
   const [YMin, YMax, YCount, YSum] = getMinMaxCountSum(dataFrame.getSeries(dataVarsSchema.YAxisVar).toArray());
   const YMean = YSum / YCount;
 
-  const SubjectSessionSpread = dataFrame.hasSeries("session") ? ["SUBJECT", "session"] : ["SUBJECT"];
+  const subjectCol = dataFrame.hasSeries("participant_id") ? "participant_id" : "SUBJECT";
+  const SubjectSessionSpread = dataFrame.hasSeries("session") ? [subjectCol, "session"] : [subjectCol];
 
   const [groups, data] = dataVarsSchema.XAxisVar
     ? toNivoSwarmPlotDataGroupBy(
@@ -53,7 +54,7 @@ function EASLSwarmplot() {
       )
     : toNivoSwarmPlotDataSingle(
         dataFrame,
-        "SUBJECT",
+        subjectCol,
         dataVarsSchema.YAxisVar,
         dataVarsSchema.XAxisVar,
         ...SubjectSessionSpread,
@@ -117,7 +118,10 @@ function EASLSwarmplot() {
         tickSize: swarmplotSettings.axisBottom.tickHeight,
         tickPadding: swarmplotSettings.axisBottom.tickLabelPadding,
         tickRotation: swarmplotSettings.axisBottom.tickLabelRotation,
-        legend: swarmplotSettings.plotLayout === "vertical" ? dataVarsSchema.XAxisVar : dataVarsSchema.YAxisVar,
+        legend:
+          swarmplotSettings.plotLayout === "vertical"
+            ? swarmplotSettings.axisBottom.axisLabelText
+            : swarmplotSettings.axisLeft.axisLabelText,
         legendPosition: "middle",
         legendOffset: swarmplotSettings.axisBottom.axisLabelTextOffset,
       }}
@@ -125,7 +129,10 @@ function EASLSwarmplot() {
         tickSize: swarmplotSettings.axisLeft.tickHeight,
         tickPadding: swarmplotSettings.axisLeft.tickLabelPadding,
         tickRotation: swarmplotSettings.axisLeft.tickLabelRotation,
-        legend: swarmplotSettings.plotLayout === "vertical" ? dataVarsSchema.YAxisVar : dataVarsSchema.XAxisVar,
+        legend:
+          swarmplotSettings.plotLayout === "vertical"
+            ? swarmplotSettings.axisLeft.axisLabelText
+            : swarmplotSettings.axisBottom.axisLabelText,
         legendPosition: "middle",
         legendOffset: swarmplotSettings.axisLeft.axisLabelTextOffset,
       }}
@@ -134,10 +141,10 @@ function EASLSwarmplot() {
         <Paper elevation={2} sx={{ p: 1 }}>
           <Stack>
             {SubjectSessionSpread.length === 1 ? (
-              <Typography component={"strong"}>Subject/Visit: {data["SUBJECT" as "value"]}</Typography>
+              <Typography component={"strong"}>Subject/Visit: {data[subjectCol as "value"]}</Typography>
             ) : (
               <>
-                <Typography component={"strong"}>Subject/Visit: {data["SUBJECT" as "value"]}</Typography>
+                <Typography component={"strong"}>Subject/Visit: {data[subjectCol as "value"]}</Typography>
                 <Typography component={"strong"}>Session: {data["session" as "value"]}</Typography>
               </>
             )}
@@ -189,9 +196,9 @@ function EASLSwarmplot() {
       }}
       onClick={async ({ data }) => {
         console.log(data);
-        if (!("SUBJECT" in data)) return;
+        if (!(subjectCol in data)) return;
         const subjectToLoad =
-          "session" in data ? `${data["SUBJECT" as "id"]}_${data["session" as "id"]}` : data["SUBJECT" as "id"];
+          "session" in data ? `${data[subjectCol as "id"]}_${data["session" as "id"]}` : data[subjectCol as "id"];
         console.log("Swarmplot trying to load in subject/session: ", subjectToLoad);
         await handleLoadSubject(subjectToLoad);
       }}

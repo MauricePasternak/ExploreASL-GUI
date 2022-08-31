@@ -8,11 +8,12 @@ import { EASLWorkload } from "../common/types/ExploreASLTypes";
 import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import { EASLType } from "../common/types/ImportSchemaTypes";
 import { RunEASLStudySetupType } from "../common/types/ProcessStudiesTypes";
-import { Regex } from "../common/utilityFunctions/stringFunctions";
-const asyncExec = promisify(exec);
+import { Regex } from "../common/utilityFunctions/Regex";
+export const asyncExec = promisify(exec);
 
 /**
  * Gets the givens of the ExploreASL version.
+ * **This is the backend version of the function. Do not use in frontend code.**
  * @param EASLPath The path to the ExploreASL directory.
  * @returns Ascertains the path to the ExploreASL version file as we all the MajorMinor combined number.
  */

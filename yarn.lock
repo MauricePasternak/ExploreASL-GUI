@@ -7514,9 +7514,9 @@ path-type@^4.0.0:
   integrity sha512-gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw==
 
 pathlib-js@^1.4.2:
-  version "1.4.2"
-  resolved "https://registry.yarnpkg.com/pathlib-js/-/pathlib-js-1.4.2.tgz#3d0e68a2d9cf6dc754ef832df3330162407449ed"
-  integrity sha512-2ohH0n6WO8DsOkoEk/qSbMS5aIaI7LuYC3Yo5N+7TFtdACKwlMobvblIEC14xRsg1W55aOUD+/sTBQeXG3Y8Tg==
+  version "1.5.0"
+  resolved "https://registry.yarnpkg.com/pathlib-js/-/pathlib-js-1.5.0.tgz#a0c3d693abc23e3141bf9b162f0aac4415d6c5f2"
+  integrity sha512-OnGbKFVc8OCN2ObHDUWIgEd//9vxkEejLq1Hxv5wbRO8XE8xOQK5HPwgFDbUb44xE08h2jLE/VdwNDAQ1vyRig==
   dependencies:
     chokidar "^3.5.3"
     fast-glob "^3.2.11"

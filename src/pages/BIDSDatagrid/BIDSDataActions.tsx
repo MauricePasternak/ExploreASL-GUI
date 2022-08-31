@@ -4,14 +4,21 @@ import Paper from "@mui/material/Paper";
 import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
 import { BIDSRow } from "../../common/types/BIDSDatagridTypes";
-import { atomAddColumnDialogOpen, atomBIDSDataframe } from "../../stores/BIDSDatagridStore";
+import {
+  atomAddColumnDialogOpen,
+  atomBIDSDataframe,
+  atomBIDSStudyRootPath,
+  atomFetchDataframe,
+} from "../../stores/BIDSDatagridStore";
 import { atomBIDSDatagridSnackbar } from "../../stores/SnackbarStore";
 
 function BIDSDataActions() {
   const { api } = window;
   const dataframe = useAtomValue(atomBIDSDataframe);
+  const StudyRootPath = useAtomValue(atomBIDSStudyRootPath);
   const setAddColumnDialogOpen = useSetAtom(atomAddColumnDialogOpen);
   const setBIDSDatagridSnackbar = useSetAtom(atomBIDSDatagridSnackbar);
+  const fetchDataFrame = useSetAtom(atomFetchDataframe);
 
   async function handleWriteSingleRow(row: BIDSRow) {
     const { ID, File, Basename, ...rest } = row;
@@ -95,10 +102,28 @@ function BIDSDataActions() {
       }}
     >
       <ButtonGroup>
-        <Button variant="outlined" onClick={handleWriteData} disabled={dataframe.count() === 0}>
+        <Button
+          className="BIDSDataGridActions__Button__ResetDataframe"
+          variant="outlined"
+          onClick={() => fetchDataFrame(StudyRootPath)}
+          disabled={dataframe.count() === 0}
+        >
+          Reset Current Spreadsheet
+        </Button>
+        <Button
+          className="BIDSDataGridActions__Button__SaveValues"
+          variant="outlined"
+          onClick={handleWriteData}
+          disabled={dataframe.count() === 0}
+        >
           Submit Altered BIDS Values
         </Button>
-        <Button variant="outlined" onClick={() => setAddColumnDialogOpen(true)} disabled={dataframe.count() === 0}>
+        <Button
+          className="BIDSDataGridActions__Button__AddNewColumn"
+          variant="outlined"
+          onClick={() => setAddColumnDialogOpen(true)}
+          disabled={dataframe.count() === 0}
+        >
           Add a New BIDS Column
         </Button>
       </ButtonGroup>

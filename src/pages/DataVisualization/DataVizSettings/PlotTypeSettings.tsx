@@ -7,11 +7,11 @@ import Collapse from "@mui/material/Collapse";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
+import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import React from "react";
 import FunctionVariableIcon from "../../../assets/svg/FunctionVariable.svg";
 import { DataFrameMainType } from "../../../common/types/dataFrameTypes";
@@ -20,7 +20,9 @@ import ExpandMore from "../../../components/ExpandMore";
 import {
   atomDataVizDFDTypes,
   atomNivoGraphDataVariablesSchema,
-  atomNivoGraphType
+  atomNivoGraphType,
+  atomSetEASLScatterplotSettings,
+  atomSetEASLSwarmplotSettings,
 } from "../../../stores/DataFrameVisualizationStore";
 
 function PlotTypeSettings() {
@@ -28,6 +30,8 @@ function PlotTypeSettings() {
   const dtypes = useAtomValue(atomDataVizDFDTypes);
   const [nivoGraphType, setNivoGraphType] = useAtom(atomNivoGraphType);
   const [nivoGraphDataSchema, setNivoGraphDataSchema] = useAtom(atomNivoGraphDataVariablesSchema);
+  const setEASLScatterplotSettings = useSetAtom(atomSetEASLScatterplotSettings);
+  const setEASLSwarmplotSettings = useSetAtom(atomSetEASLSwarmplotSettings);
 
   function renderOptions(
     permittedType: DataFrameMainType | "Any",
@@ -56,6 +60,32 @@ function PlotTypeSettings() {
       .filter(x => x !== null);
   }
 
+  const handleChangeYAxis = (e: SelectChangeEvent<string>) => {
+    setNivoGraphDataSchema({
+      ...nivoGraphDataSchema,
+      HoverVariables: nivoGraphDataSchema.HoverVariables
+        ? nivoGraphDataSchema.HoverVariables.filter(l => l !== e.target.value)
+        : [],
+      YAxisVar: e.target.value,
+    });
+    nivoGraphType === "Scatterplot"
+      ? setEASLScatterplotSettings({ path: "axisLeft.axisLabelText", value: e.target.value })
+      : setEASLSwarmplotSettings({ path: "axisLeft.axisLabelText", value: e.target.value });
+  };
+
+  const handleChangeXAxis = (e: SelectChangeEvent<string>) => {
+    setNivoGraphDataSchema({
+      ...nivoGraphDataSchema,
+      HoverVariables: nivoGraphDataSchema.HoverVariables
+        ? nivoGraphDataSchema.HoverVariables.filter(l => l !== e.target.value)
+        : [],
+      XAxisVar: e.target.value as string,
+    });
+    nivoGraphType === "Scatterplot"
+      ? setEASLScatterplotSettings({ path: "axisBottom.axisLabelText", value: e.target.value })
+      : setEASLSwarmplotSettings({ path: "axisBottom.axisLabelText", value: e.target.value });
+  };
+
   return (
     <Card elevation={1} sx={{ margin: 0.5 }}>
       <CardHeader
@@ -83,7 +113,7 @@ function PlotTypeSettings() {
       <Collapse in={expanded}>
         <CardContent>
           <Stack spacing={2}>
-            <FormControl fullWidth>
+            <FormControl fullWidth className="PlotTypeSetting__GraphType__FormControl">
               <InputLabel>Graph Type</InputLabel>
               <Select
                 fullWidth
@@ -104,48 +134,22 @@ function PlotTypeSettings() {
               </Select>
             </FormControl>
 
-            <FormControl fullWidth>
+            <FormControl fullWidth className="PlotTypeSetting__XAxis__FormControl">
               <InputLabel>X Axis</InputLabel>
-              <Select
-                fullWidth
-                label="X Axis"
-                value={nivoGraphDataSchema.XAxisVar}
-                onChange={e => {
-                  setNivoGraphDataSchema({
-                    ...nivoGraphDataSchema,
-                    HoverVariables: nivoGraphDataSchema.HoverVariables
-                      ? nivoGraphDataSchema.HoverVariables.filter(l => l !== e.target.value)
-                      : [],
-                    XAxisVar: e.target.value as string,
-                  });
-                }}
-              >
+              <Select fullWidth label="X Axis" value={nivoGraphDataSchema.XAxisVar} onChange={handleChangeXAxis}>
                 {renderOptions(nivoGraphType === "Swarmplot" ? "Categorical" : "Continuous", "XAxisVar")}
               </Select>
             </FormControl>
 
-            <FormControl fullWidth>
+            <FormControl fullWidth className="PlotTypeSetting__YAxis__FormControl">
               <InputLabel>Y Axis</InputLabel>
-              <Select
-                fullWidth
-                label="Y Axis"
-                value={nivoGraphDataSchema.YAxisVar}
-                onChange={e => {
-                  setNivoGraphDataSchema({
-                    ...nivoGraphDataSchema,
-                    HoverVariables: nivoGraphDataSchema.HoverVariables
-                      ? nivoGraphDataSchema.HoverVariables.filter(l => l !== e.target.value)
-                      : [],
-                    YAxisVar: e.target.value as string,
-                  });
-                }}
-              >
+              <Select fullWidth label="Y Axis" value={nivoGraphDataSchema.YAxisVar} onChange={handleChangeYAxis}>
                 {renderOptions("Continuous", "YAxisVar")}
               </Select>
             </FormControl>
 
             {nivoGraphType === "Scatterplot" && (
-              <FormControl fullWidth>
+              <FormControl fullWidth className="PlotTypeSetting__Color__FormControl">
                 <InputLabel>Color</InputLabel>
                 <Select
                   fullWidth
@@ -160,7 +164,7 @@ function PlotTypeSettings() {
               </FormControl>
             )}
 
-            <FormControl fullWidth>
+            <FormControl fullWidth className="PlotTypeSetting__HoverData__FormControl">
               <InputLabel>Additional Hover Data</InputLabel>
               <Select
                 fullWidth

@@ -5,13 +5,14 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { DataFrame, Series } from "data-forge";
 import { atom, useSetAtom } from "jotai";
-import { isEmpty as lodashIsEmpty, range as lodashRange } from "lodash";
+import { isEmpty as lodashIsEmpty, range as lodashRange, sortBy as lodashSortBy } from "lodash";
 import React from "react";
 import { CalculatedColumn, Column, FormatterProps } from "react-data-grid";
 import {
   BIDSBooleanSet,
   BIDSCompleteSchema,
   BIDSEnumSet,
+  BIDSFieldNames,
   BIDSNumericalSet,
   BIDSTextSet,
 } from "../common/schemas/BIDSDatagridConfigurationSchemas";
@@ -64,6 +65,48 @@ export const atomBIDSStudyRootPath = atom<string>("");
  * Atom that holds the loaded ASL BIDS data.
  */
 export const atomBIDSDataframe = atom<DataFrame>(new DataFrame());
+
+export const atomFetchDataframe = atom(null, async (get, set, StudyRootPath: string) => {
+  const { api } = window;
+
+  const parseSingleJSON = async (jsonPath: string, basename: string, jsonIndex: number) => {
+    const { error, payload } = await api.path.readJSONSafe(jsonPath);
+    if (error) return {};
+    const data = Object.entries(payload).reduce(
+      (acc, [key, value]) => {
+        // We filter out keys that are not in the BIDSFieldNames in order to avoid adding extra overhead to processing
+        // the datagrid when it comes to enormous studies.
+        if (!BIDSFieldNames.includes(key as BIDSFieldNamesType)) return acc;
+        acc[key] = value;
+        return acc;
+      },
+      { ID: jsonIndex, Basename: basename, File: jsonPath } as Record<string, unknown>
+    );
+    // console.log(`BIDSDataGrid: ParsedDataFor ${jsonPath}`, data);
+    return data;
+  };
+
+  // Sanity check -- must be a valid BIDS study root path
+  if (!StudyRootPath || !((await api.path.getFilepathType(StudyRootPath)) === "dir")) return;
+
+  // Get the ASL json files
+  let jsonPaths = await api.path.glob(`${StudyRootPath}/rawdata`, "/**/*asl.json", { onlyFiles: true });
+  if (jsonPaths.length === 0) return;
+  jsonPaths = lodashSortBy(jsonPaths, "path"); // Globing order not guaranteed, so sort by path
+
+  // Load in the JSON contents & parse into a dataframe
+  const rawJSONs = await Promise.all(
+    jsonPaths.map(async (jsonPath, jsonIndex) => parseSingleJSON(jsonPath.path, jsonPath.basename, jsonIndex))
+  );
+  const filteredJSONs = rawJSONs.filter(json => !lodashIsEmpty(json));
+  if (filteredJSONs.length === 0) return;
+  const newDF = new DataFrame(filteredJSONs);
+
+  // Set the dataframe and columns; also re-set the currently-selected cell
+  console.log(`BIDSDataGrid: Fetched new DataFrame:`, newDF.toString());
+  set(atomBIDSDataframe, newDF);
+  set(atomDataframeColumns, newDF.getColumnNames() as BIDSColumnName[]);
+});
 
 /**
  * Setter atom for removing columns from the dataframe & columns atoms.

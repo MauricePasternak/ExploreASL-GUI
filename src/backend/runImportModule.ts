@@ -1,22 +1,27 @@
-import spawn from "cross-spawn";
 import { ChildProcess } from "child_process";
-import Path from "pathlib-js";
+import spawn from "cross-spawn";
 import { IpcMainInvokeEvent } from "electron";
+import Path from "pathlib-js";
+import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
+import { GLOBAL_CHILD_PROCESSES } from "../common/GLOBALS";
+import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
+import {
+  MATLABArgsPlatformType,
+  MATLABCommandLineArgsPost2019,
+  MATLABCommandLineArgsPre2019
+} from "../common/schemas/MATLABCommandLineArgs";
+import { RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
+import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
+import { ImportSchemaType } from "../common/types/ImportSchemaTypes";
+import { createGUIMessage } from "../common/utilityFunctions/GUIMessageFunctions";
 import { matlabEscapeBlockChar } from "../common/utilityFunctions/stringFunctions";
 import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
-import { GLOBAL_CHILD_PROCESSES } from "../common/GLOBALS";
-import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import {
   createRuntimeEnvironment,
   getExploreASLVersion,
-  getMATLABPathAndVersion,
+  getMATLABPathAndVersion
 } from "./runExploreASLHelperFunctions";
-import { ImportSchemaType } from "../common/types/ImportSchemaTypes";
-import { RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
-import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
-import { createGUIMessage } from "../common/utilityFunctions/GUIMessageFunctions";
 import { buildSourceStructureJSON, buildStudyParJSON } from "./runImportModuleHelperFunctions";
-import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 
 export async function handleRunImportModule(
   event: IpcMainInvokeEvent,
@@ -26,10 +31,24 @@ export async function handleRunImportModule(
 ): Promise<GUIMessageWithPayload<RunEASLStartupReturnType>> {
   // By default, we assume an error will occur
   const defaultPayload: RunEASLStartupReturnType = { pids: [-1], channelName };
-  let MATLABGithubArgs = ["-nodesktop", "-nosplash", "-batch"];
+  let MATLABGithubArgs: string[];
 
   const ExploreASLPath = new Path(formData.EASLPath);
   const StudyRootPath = new Path(formData.StudyRootPath);
+
+  /***********************
+   * STEP 0: Sanity Checks
+   **********************/
+  if (!["linux", "darwin", "win32"].includes(process.platform)) {
+    return {
+      GUIMessage: {
+        severity: "error",
+        title: "Non-supported platform",
+        messages: [`The platform ${process.platform} is not supported by ExploreASL.`],
+      },
+      payload: defaultPayload,
+    };
+  }
 
   /******************************************
    * Step 1: Determine the ExploreASL Version
@@ -100,7 +119,9 @@ export async function handleRunImportModule(
         payload: defaultPayload,
       };
     } else if (matlabVersion < 2019) {
-      MATLABGithubArgs = ["-nosplash", "-nodisplay", "-r"];
+      MATLABGithubArgs = MATLABCommandLineArgsPre2019[process.platform as keyof MATLABArgsPlatformType];
+    } else {
+      MATLABGithubArgs = MATLABCommandLineArgsPost2019[process.platform as keyof MATLABArgsPlatformType];
     }
     // End of Github Case
     // For Compiled
@@ -119,10 +140,7 @@ export async function handleRunImportModule(
             `${xASL_latest_dir.path}`,
           ],
         },
-        payload: {
-          pids: [-1],
-          channelName: channelName,
-        },
+        payload: defaultPayload
       };
     }
     executablePath = xASL_runnable.path;

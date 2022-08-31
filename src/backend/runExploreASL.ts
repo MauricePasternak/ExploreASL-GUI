@@ -1,12 +1,16 @@
 import { ChildProcess } from "child_process";
-import { watch } from "chokidar";
 import spawn from "cross-spawn";
 import { IpcMainInvokeEvent } from "electron";
 import { range as lodashRange } from "lodash";
-import Path from "pathlib-js";
+import Path, { PathWatcher } from "pathlib-js";
 import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 import { GLOBAL_CHILD_PROCESSES } from "../common/GLOBALS";
 import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
+import {
+  MATLABArgsPlatformType,
+  MATLABCommandLineArgsPost2019,
+  MATLABCommandLineArgsPre2019
+} from "../common/schemas/MATLABCommandLineArgs";
 import { DataParValuesType } from "../common/types/ExploreASLDataParTypes";
 import { RunEASLChildProcSummary, RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
 import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
@@ -33,7 +37,20 @@ export async function handleRunExploreASL(
 ): Promise<GUIMessageWithPayload<RunEASLStartupReturnType>> {
   // console.log(`EASLProcess ${channelName} -- dataPar:`, dataPar);
   const defaultPayload = { pids: [-1], channelName };
-  let MATLABGithubArgs = ["-nodesktop", "-nosplash", "-batch"];
+  let MATLABGithubArgs: string[];
+  /***********************
+   * STEP 0: Sanity Checks
+   **********************/
+  if (!["linux", "darwin", "win32"].includes(process.platform)) {
+    return {
+      GUIMessage: {
+        severity: "error",
+        title: "Non-supported platform",
+        messages: [`The platform ${process.platform} is not supported by ExploreASL.`],
+      },
+      payload: defaultPayload,
+    };
+  }
 
   /******************************************************************
    * STEP 1: get the ExploreASL Program version and the Workload type
@@ -119,7 +136,9 @@ export async function handleRunExploreASL(
         payload: defaultPayload,
       };
     } else if (matlabVersionNumber < 2019) {
-      MATLABGithubArgs = ["-nosplash", "-nodisplay", "-r"];
+      MATLABGithubArgs = MATLABCommandLineArgsPre2019[process.platform as keyof MATLABArgsPlatformType];
+    } else {
+      MATLABGithubArgs = MATLABCommandLineArgsPost2019[process.platform as keyof MATLABArgsPlatformType];
     }
     // For compiled ExploreASL
   } else {
@@ -248,27 +267,30 @@ export async function handleRunExploreASL(
     Sag: "Sagittal",
   };
 
+  const SeenPaths = new Set();
   const SentImages = new Set();
 
-  const studyFilepathWatcher = watch(
-    [StudyDerivExploreASLDir.resolve("lock").path, StudyDerivExploreASLDir.resolve("Population").path],
-    {
-      ignoreInitial: true,
-      persistent: true,
-      ignored: [
-        `${StudyDerivExploreASLDir.path}/**/*.nii*`,
-        `${StudyDerivExploreASLDir.path}/**/*.mat*`,
-        `${StudyDerivExploreASLDir.path}/**/*.txt*`,
-        `${StudyDerivExploreASLDir.path}/**/*.json*`,
-        `${StudyDerivExploreASLDir.path}/**/*.csv*`,
-        `${StudyDerivExploreASLDir.path}/**/*.tsv*`,
-        `${StudyDerivExploreASLDir.path}/**/*.pdf*`,
-        `${StudyDerivExploreASLDir.path}/**/*.log*`,
-        // `${StudyDerivExploreASLDir.resolve("Population").path}/*`,
-        `${StudyDerivExploreASLDir.resolve("Logs").path}/*`,
-      ],
-    }
-  );
+  const studyFilepathWatcher = new PathWatcher({
+    ignoreInitial: true,
+    persistent: true,
+    ignored: [
+      `${StudyDerivExploreASLDir.path}/**/*.nii*`,
+      `${StudyDerivExploreASLDir.path}/**/*.mat*`,
+      `${StudyDerivExploreASLDir.path}/**/*.txt*`,
+      `${StudyDerivExploreASLDir.path}/**/*.json*`,
+      `${StudyDerivExploreASLDir.path}/**/*.csv*`,
+      `${StudyDerivExploreASLDir.path}/**/*.tsv*`,
+      `${StudyDerivExploreASLDir.path}/**/*.pdf*`,
+      `${StudyDerivExploreASLDir.path}/**/*.log*`,
+      // `${StudyDerivExploreASLDir.resolve("Population").path}/*`,
+      `${StudyDerivExploreASLDir.resolve("Logs").path}/*`,
+    ],
+  });
+
+  studyFilepathWatcher.add([
+    StudyDerivExploreASLDir.resolve("lock").path,
+    StudyDerivExploreASLDir.resolve("Population").path,
+  ]);
 
   // When ready, should be responsible for clearing the processbar
   studyFilepathWatcher.on("ready", () => {
@@ -277,48 +299,19 @@ export async function handleRunExploreASL(
   });
 
   // Handler for directories
-  studyFilepathWatcher.on("addDir", async (path, stats) => {
-    // Early Exit. Event fires twice; ignore the first time (no stats is provided)
-    if (!stats) return;
-    const asPath = new Path(path);
+  studyFilepathWatcher.on("addDir", async path => {
+    if (SeenPaths.has(path.path)) return;
+    SeenPaths.add(path.path);
 
-    console.log(`Watcher's "addDir" event got path: ${asPath.path}`);
-    // if (regexImageFile.test(asPath.basename)) {
-    //   // THIS IS AN IMAGE FILE
-    //   console.log("This is an image file");
-
-    //   // Get the data for the given image file
-    //   const regexResult = regexImageFile.exec(asPath.basename);
-    //   if (!("groups" in regexResult) || regexResult.groups == null) {
-    //     console.warn(`Could not parse image file ${asPath.path} ; regexResult: ${regexResult}`);
-    //     return;
-    //   }
-
-    //   const { Axis, ImageType, Target } = regexResult["groups"];
-    //   const whichImageType = ImageTypeMapping[ImageType as keyof typeof ImageTypeMapping];
-    //   const whichAxis = AxisTypeMapping[Axis as keyof typeof AxisTypeMapping];
-    //   const statement = `Processed a ${whichAxis} ${whichImageType} image for ${Target}`;
-    //   console.log(statement);
-
-    //   // Acquire lock, Respond to frontend, release lock
-    //   const unlock = (await lock.lock()) as () => void | Promise<() => void>;
-    //   await sleep(300);
-    //   console.log(`Sleeping for 300ms before sending image file ${asPath.path}`);
-    //   respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, statement, { bold: true });
-    //   respondToIPCRenderer(event, `${channelName}:childProcessRequestsMediaDisplay`, asPath.path);
-
-    //   await unlock();
-    //   return; // END OF IMAGE FILE SCENARIO
-    // } else
-    if (regexLockDir.test(asPath.path)) {
+    if (regexLockDir.test(path.path)) {
       // Acquire lock, Respond to frontend, release lock
-      const { Module, Subject, Session } = regexLockDir.exec(asPath.path)["groups"];
+      const { Module, Subject, Session } = regexLockDir.exec(path.path)["groups"];
       const unlock = (await lock.lock()) as () => void | Promise<() => void>;
       if (Module === "ASL") {
         respondToIPCRenderer(
           event,
           `${channelName}:childProcessSTDOUT`,
-          `Starting ASL Module for Subject: ${Subject} -- Session: ${Session}`
+          `Starting ASL Module for Subject: ${Subject} -- Visit/Session: ${Session}`
         );
       } else if (Module === "Structural") {
         respondToIPCRenderer(
@@ -331,34 +324,32 @@ export async function handleRunExploreASL(
       }
       await unlock();
     } else {
-      console.log(`Watcher's "addDir" path: ${asPath.path} ... did not match any regex`);
+      console.log(`Watcher's "addDir" path: ${path.path} ... did not match any regex`);
     }
   });
 
   // Handler for files
-  studyFilepathWatcher.on("add", async (path, stats) => {
-    // Early Exit. Event fires twice; ignore the first time (no stats is provided)
-    if (!stats) return;
-
-    const asPath = new Path(path);
-    console.log(`Watcher's "add" event got path: ${asPath.path}`);
+  studyFilepathWatcher.on("add", async path => {
+    console.log(`Watcher's "add" event got path: ${path.path}`);
+    if (SeenPaths.has(path.path)) return;
+    SeenPaths.add(path.path);
 
     // Decide whether this is a status file or an image file
-    if (regexStatusFile.test(asPath.path)) {
+    if (regexStatusFile.test(path.path)) {
       // THIS IS A STATUS FILE
       console.log("This is a status file");
 
       // Early Exit. Not one of the anticipated status files
-      if (!setOfAnticipatedFilepaths.has(asPath.path)) return;
+      if (!setOfAnticipatedFilepaths.has(path.path)) return;
 
       // Get the data for the given status file
-      const regexResult = regexStatusFile.exec(asPath.path);
+      const regexResult = regexStatusFile.exec(path.path);
       if (!("groups" in regexResult) || regexResult.groups == null) {
-        console.warn(`Could not parse image file ${asPath.path} ; regexResult: ${regexResult}`);
+        console.warn(`Could not parse image file ${path.path} ; regexResult: ${regexResult}`);
         return;
       }
-      const { Module, Subject, Session } = regexStatusFile.exec(asPath.path)["groups"];
-      const statusFileCriteria = workloadMapping[asPath.basename];
+      const { Module, Subject, Session } = regexStatusFile.exec(path.path)["groups"];
+      const statusFileCriteria = workloadMapping[path.basename];
 
       // Increment associated progressbar
       const progressbarIncrementAmount =
@@ -395,25 +386,25 @@ export async function handleRunExploreASL(
       }
       await unlock();
       return; // END OF STATUS FILE SCENARIO
-    } else if (regexImageFile.test(asPath.basename)) {
+    } else if (regexImageFile.test(path.basename)) {
       // THIS IS AN IMAGE FILE
       // Do not display images if the module being run is the Population Module
       if (studySetup.whichModulesToRun === "Population") return;
 
       // Get the data for the given image file
-      const { Axis, ImageType, Target } = regexImageFile.exec(asPath.basename)["groups"];
+      const { Axis, ImageType, Target } = regexImageFile.exec(path.basename)["groups"];
       const whichImageType = ImageTypeMapping[ImageType as keyof typeof ImageTypeMapping];
       const whichAxis = AxisTypeMapping[Axis as keyof typeof AxisTypeMapping];
       const statement = `Processed a ${whichAxis} ${whichImageType} image for ${Target}:`;
       console.log(statement);
 
       // Acquire lock, Respond to frontend, release lock
-      SentImages.add(asPath.path);
+      SentImages.add(path.path);
       const unlock = (await lock.lock()) as () => void | Promise<() => void>;
       await sleep(100);
-      console.log(`Sleeping for 100ms before sending image file ${asPath.path}`);
+      console.log(`Sleeping for 100ms before sending image file ${path.path}`);
       respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, statement, { bold: true });
-      respondToIPCRenderer(event, `${channelName}:childProcessRequestsMediaDisplay`, asPath.path);
+      respondToIPCRenderer(event, `${channelName}:childProcessRequestsMediaDisplay`, path.path);
 
       await unlock();
       return; // END OF IMAGE FILE SCENARIO
@@ -422,14 +413,10 @@ export async function handleRunExploreASL(
   });
 
   // Handler for changed files
-  studyFilepathWatcher.on("change", async (path, stats) => {
-    // Early Exit. Event fires twice; ignore the first time (no stats is provided)
-    if (!stats) return;
-
-    const asPath = new Path(path);
+  studyFilepathWatcher.on("change", async path => {
     if (
-      !regexImageFile.test(asPath.basename) ||
-      SentImages.has(asPath.path) ||
+      !regexImageFile.test(path.basename) ||
+      SentImages.has(path.path) ||
       studySetup.whichModulesToRun === "Population"
     )
       return;
@@ -438,22 +425,22 @@ export async function handleRunExploreASL(
     console.log("This is an image file");
 
     // Get the data for the given image file
-    const { Axis, ImageType, Target } = regexImageFile.exec(asPath.basename)["groups"];
+    const { Axis, ImageType, Target } = regexImageFile.exec(path.basename)["groups"];
     const whichImageType = ImageTypeMapping[ImageType as keyof typeof ImageTypeMapping];
     const whichAxis = AxisTypeMapping[Axis as keyof typeof AxisTypeMapping];
     const statement = `Processed a ${whichAxis} ${whichImageType} for ${Target}:`;
     console.log(statement);
 
     // Acquire lock, Respond to frontend, release lock
-    SentImages.add(asPath.path);
+    SentImages.add(path.path);
     const unlock = (await lock.lock()) as () => Promise<unknown>;
 
     // Currently this setup works...many need to implement a SetInterval & Queue alternative to Locks & Sleeps
     // if users report issues with this
-    console.log(`Sleeping for 200ms before sending image file ${asPath.path}`);
+    console.log(`Sleeping for 200ms before sending image file ${path.path}`);
     await sleep(200); // This works to prevent premature cancellation of image render for some reason???
     respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, statement, { bold: true });
-    respondToIPCRenderer(event, `${channelName}:childProcessRequestsMediaDisplay`, asPath.path);
+    respondToIPCRenderer(event, `${channelName}:childProcessRequestsMediaDisplay`, path.path);
     await unlock();
     return; // END OF IMAGE FILE SCENARIO
   });
@@ -478,6 +465,37 @@ export async function handleRunExploreASL(
     numIncompleteSteps: 0,
     missedStepsMessages: [],
   };
+
+  // // TODO: This is a temporary fix for BIDS2NII non-parallelism
+  // try {
+  //   if (EASLVersionNumber === 110 && nWorkers > 1 && dataPar.x.GUI.EASLType === "Github") {
+  //     console.log(`EASL Process ${channelName} -- running BIDS2NII in advance...`);
+  //     const bids2nii_cmd = `"${executablePath}" ${MATLABGithubArgs.join(" ")} "ExploreASL('${dataPar.x.GUI.StudyRootPath}', [0 1 0], 0, ${bPause}, 1, 1)"`
+  //     console.log(bids2nii_cmd);
+  //     respondToIPCRenderer(
+  //       event,
+  //       `${channelName}:childProcessSTDOUT`,
+  //       "First need to run BIDS2NII to allow for parallelism. This is single-core and may take a while if you have many subjects..."
+  //     );
+  //     const result = await asyncExec(bids2nii_cmd, { windowsHide: true });
+  //     console.log("Result of running BIDS2NII", result);
+  //     respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, "BIDS2NII completed. Continuing with EASL...");
+  //   }
+  // } catch (error) {
+  //   console.warn(error);
+  //   return {
+  //     GUIMessage: {
+  //       title: "Compiled ExploreASL Executable could not be found",
+  //       severity: "error",
+  //       messages: [
+  //         "Something went wrong.",
+  //         "Encountered the following error when running the preliminary BIDS2NII step:",
+  //         `${error.message}`,
+  //       ],
+  //     },
+  //     payload: defaultPayload,
+  //   };
+  // }
 
   for (let index = 0; index < rangeArg.length; index++) {
     const iWorker = rangeArg[index] + 1; // +1 due to MATLAB indexing rules

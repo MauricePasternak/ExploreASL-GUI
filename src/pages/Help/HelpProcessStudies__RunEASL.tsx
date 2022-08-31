@@ -9,7 +9,7 @@ import AccordionSummary from "@mui/material/AccordionSummary";
 import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
 import AccordionDetails from "@mui/material/AccordionDetails";
-import { BulletPointList } from "./HelpStyledComponents";
+import { BulletPointList, NumberedPointList } from "./HelpStyledComponents";
 import Box from "@mui/material/Box";
 import HelperImage__ProcessStudiesLogsLocation from "../../assets/img/HelperImages/HelperImage__ProcessStudiesLogsLocation.png";
 
@@ -173,7 +173,7 @@ function HelpProcessStudies__RunEASL() {
               <Divider />
               <AccordionDetails>
                 <p>In general, the following steps would have to be taken:</p>
-                <ol style={{ textIndent: "1rem", listStylePosition: "inside" }}>
+                <NumberedPointList>
                   <li>Go to the &quot;Define Parameters&quot; section of this program.</li>
                   <li>
                     Load in the existing parameters, alter as needed, and save back to overwrite the existing
@@ -184,7 +184,7 @@ function HelpProcessStudies__RunEASL() {
                     should be re-run.
                   </li>
                   <li>Re-run the study.</li>
-                </ol>
+                </NumberedPointList>
               </AccordionDetails>
             </Accordion>
           </section>

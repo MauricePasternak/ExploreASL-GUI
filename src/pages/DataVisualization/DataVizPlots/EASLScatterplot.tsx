@@ -38,7 +38,8 @@ function EASLScatterplot() {
   const [currentMRIViewSubject, setMRICurrentViewSubject] = useAtom(atomCurrentMRIViewSubject);
   const scatterplotSettings = useAtomValue(atomEASLScatterplotSettings);
 
-  const SubjectSessionSpread = dataFrame.hasSeries("session") ? ["SUBJECT", "session"] : ["SUBJECT"];
+  const subjectCol  = dataFrame.hasSeries("participant_id") ? "participant_id" : "SUBJECT";
+  const SubjectSessionSpread = dataFrame.hasSeries("session") ? [subjectCol, "session"] : [subjectCol];
 
   const data = dataVarsSchema.GroupingVar
     ? toNivoScatterPlotDataGroupBy(
@@ -109,7 +110,7 @@ function EASLScatterplot() {
         tickSize: scatterplotSettings.axisBottom.tickHeight,
         tickPadding: scatterplotSettings.axisBottom.tickLabelPadding,
         tickRotation: scatterplotSettings.axisBottom.tickLabelRotation,
-        legend: dataVarsSchema.XAxisVar,
+        legend: scatterplotSettings.axisBottom.axisLabelText,
         legendPosition: "middle",
         legendOffset: scatterplotSettings.axisBottom.axisLabelTextOffset,
       }}
@@ -117,7 +118,7 @@ function EASLScatterplot() {
         tickSize: scatterplotSettings.axisLeft.tickHeight,
         tickPadding: scatterplotSettings.axisLeft.tickLabelPadding,
         tickRotation: scatterplotSettings.axisLeft.tickLabelRotation,
-        legend: dataVarsSchema.YAxisVar,
+        legend: scatterplotSettings.axisLeft.axisLabelText,
         legendPosition: "middle",
         legendOffset: scatterplotSettings.axisLeft.axisLabelTextOffset,
       }}
@@ -149,10 +150,10 @@ function EASLScatterplot() {
           <Paper elevation={2} sx={{ p: 1 }}>
             <Stack>
               {SubjectSessionSpread.length === 1 ? (
-                <Typography component={"strong"}>Subject/Visit: {data["SUBJECT" as "x"]}</Typography>
+                <Typography component={"strong"}>Subject/Visit: {data[subjectCol as "x"]}</Typography>
               ) : (
                 <>
-                  <Typography component={"strong"}>Subject/Visit: {data["SUBJECT" as "x"]}</Typography>
+                  <Typography component={"strong"}>Subject/Visit: {data[subjectCol as "x"]}</Typography>
                   <Typography component={"strong"}>Session: {data["session" as "x"]}</Typography>
                 </>
               )}
@@ -209,9 +210,9 @@ function EASLScatterplot() {
         },
       }}
       onClick={async ({ data }) => {
-        if (!("SUBJECT" in data)) return;
+        if (!(subjectCol in data)) return;
         const subjectToLoad =
-          "session" in data ? `${data["SUBJECT" as "x"]}_${data["session" as "y"]}` : data["SUBJECT" as "x"];
+          "session" in data ? `${data[subjectCol as "x"]}_${data["session" as "y"]}` : data[subjectCol as "x"];
         console.log("Scatterplot trying to load in subject/session: ", subjectToLoad);
         await handleLoadSubject(subjectToLoad);
       }}

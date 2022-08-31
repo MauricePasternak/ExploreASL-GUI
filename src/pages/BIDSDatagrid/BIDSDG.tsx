@@ -13,6 +13,7 @@ import {
   atomBIDSStudyRootPath,
   atomDataframeColumns,
   atomDeleteDataframeCell,
+  atomFetchDataframe,
   atomRDGColumnConfigs,
 } from "../../stores/BIDSDatagridStore";
 
@@ -42,6 +43,7 @@ function BIDSDG() {
   const StudyRootPath = useAtomValue(atomBIDSStudyRootPath);
   const [dataframe, setDataframe] = useAtom(atomBIDSDataframe);
   const setDataFrameColumns = useSetAtom(atomDataframeColumns);
+  const fetchDataFrame = useSetAtom(atomFetchDataframe)
   const deleteDataFrameCell = useSetAtom(atomDeleteDataframeCell);
   const RDGColumnConfig = useAtomValue(atomRDGColumnConfigs);
   const selectedCell = useRef<{ selectedRow: number; selectedColumn: BIDSColumnName }>(null); // Keep track for deleting cells
@@ -110,26 +112,28 @@ function BIDSDG() {
     };
 
     const fetchData = async () => {
-      // Sanity check -- must be a valid BIDS study root path
-      if (!StudyRootPath || !((await api.path.getFilepathType(StudyRootPath)) === "dir")) return;
+      // // Sanity check -- must be a valid BIDS study root path
+      // if (!StudyRootPath || !((await api.path.getFilepathType(StudyRootPath)) === "dir")) return;
 
-      // Get the ASL json files
-      let jsonPaths = await api.path.glob(`${StudyRootPath}/rawdata`, "/**/*asl.json", { onlyFiles: true });
-      if (jsonPaths.length === 0) return;
-      jsonPaths = lodashSortBy(jsonPaths, "path"); // Globing order not guaranteed, so sort by path
+      // // Get the ASL json files
+      // let jsonPaths = await api.path.glob(`${StudyRootPath}/rawdata`, "/**/*asl.json", { onlyFiles: true });
+      // if (jsonPaths.length === 0) return;
+      // jsonPaths = lodashSortBy(jsonPaths, "path"); // Globing order not guaranteed, so sort by path
 
-      // Load in the JSON contents & parse into a dataframe
-      const rawJSONs = await Promise.all(
-        jsonPaths.map(async (jsonPath, jsonIndex) => parseSingleJSON(jsonPath.path, jsonPath.basename, jsonIndex))
-      );
-      const filteredJSONs = rawJSONs.filter(json => !lodashIsEmpty(json));
-      if (filteredJSONs.length === 0) return;
-      const newDF = new DataFrame(filteredJSONs);
+      // // Load in the JSON contents & parse into a dataframe
+      // const rawJSONs = await Promise.all(
+      //   jsonPaths.map(async (jsonPath, jsonIndex) => parseSingleJSON(jsonPath.path, jsonPath.basename, jsonIndex))
+      // );
+      // const filteredJSONs = rawJSONs.filter(json => !lodashIsEmpty(json));
+      // if (filteredJSONs.length === 0) return;
+      // const newDF = new DataFrame(filteredJSONs);
 
-      // Set the dataframe and columns; also re-set the currently-selected cell
-      console.log(`BIDSDataGrid: Fetched new DataFrame:`, newDF.toString());
-      setDataframe(newDF);
-      setDataFrameColumns(newDF.getColumnNames() as BIDSColumnName[]);
+      // // Set the dataframe and columns; also re-set the currently-selected cell
+      // console.log(`BIDSDataGrid: Fetched new DataFrame:`, newDF.toString());
+      // setDataframe(newDF);
+      // setDataFrameColumns(newDF.getColumnNames() as BIDSColumnName[]);
+
+      await fetchDataFrame(StudyRootPath);
       selectedCell.current = null;
     };
 

@@ -1,10 +1,36 @@
+import Path from "pathlib-js";
 import { FieldValues } from "react-hook-form";
 import { TestContext } from "yup";
 import { SUPPORTEDMATLABRUNTIMEVERSIONS } from "../GLOBALS";
 import { EASLWorkloadMapping } from "../schemas/ExploreASLWorkloads";
 import { DataParValuesType } from "../types/ExploreASLDataParTypes";
 import { EASLType } from "../types/ImportSchemaTypes";
+import { Regex } from "./Regex";
 const { api } = window;
+
+/**
+ * Wrapper for frontend retrieval of the ExploreASL version indicated.
+ * @param filepath The filepath to the ExploreASL root directory.
+ * @returns An Object with properties:
+ * - `EASLVersioPath`: The path to the ExploreASL verison file as a `Path`.
+ * - `EASLVersionNumber`: The version number as ### (i.e. 110 for 1.10) on the basis of Major and Minor version numbers.
+ */
+export async function rendererGetEASLVersion(filepath: string) {
+  const result = {
+    EASLVersionPath: null as Path,
+    EASLVersionNumber: null as number,
+  };
+  const EASLVersionRegex = new Regex("VERSION_(?<Major>\\d+)\\.(?<Minor>\\d+)\\.(?<Patch>\\d+)", "m");
+  const [versionFile] = await api.path.glob(filepath, "VERSION_*", { onlyFiles: true, onlyDirectories: false });
+  if (!versionFile) return result;
+  result.EASLVersionPath = versionFile;
+
+  const match = EASLVersionRegex.search(versionFile.path);
+  if (!match) return result;
+  const { Major, Minor } = match.groupsObject;
+  result.EASLVersionNumber = parseInt(`${Major}${Minor}`, 10);
+  return result;
+}
 
 /**
  * Function for determining whether a filepath for an ExploreASL directory is valid.
@@ -24,16 +50,18 @@ export async function IsValidEASLPath<TContext extends FieldValues = FieldValues
 
   // Filepath must be a directory
   if (filePathType !== "dir") return false;
-  const [versionFile] = await api.path.glob(filepath, "VERSION_*", { onlyFiles: true, onlyDirectories: false });
+
+  // Version must exist and be in the currently-supported version list
+  const { EASLVersionPath } = await rendererGetEASLVersion(filepath);
 
   // Version file must exist and be in the current accepted mappings
-  if (!versionFile) {
+  if (!EASLVersionPath) {
     return helpers.createError({ path: helpers.path, message: "Could not locate an ExploreASL Version File" });
   }
-  if (!(versionFile.basename in EASLWorkloadMapping)) {
+  if (!(EASLVersionPath.basename in EASLWorkloadMapping)) {
     return helpers.createError({
       path: helpers.path,
-      message: `This GUI does not support ExploreASL version: ${versionFile.basename}`,
+      message: `This GUI does not support ExploreASL version: ${EASLVersionPath.basename}`,
     });
   }
 

@@ -5,3 +5,9 @@ export const BulletPointList = styled("ul")(() => ({
   textIndent: 2,
   listStylePosition: "inside",
 }));
+
+export const NumberedPointList = styled("ol")(() => ({
+  paddingLeft: "2rem",
+  textIndent: 2,
+  listStylePosition: "inside",
+}));

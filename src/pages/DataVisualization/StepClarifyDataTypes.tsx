@@ -14,13 +14,14 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
+import { Regex } from "../../common/utilityFunctions/Regex";
 import { DataFrameMainType } from "../../common/types/dataFrameTypes";
 import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import {
   atomDataVizCurrentStep,
   atomDataVizDFDTypes,
   atomSetDataVizDF,
-  DataFrameMainTypeOptions
+  DataFrameMainTypeOptions,
 } from "../../stores/DataFrameVisualizationStore";
 import HelpDataViz__StepClarifyDataTypes from "../Help/HelpDataViz__StepClarifyDataTypes";
 
@@ -28,6 +29,7 @@ function StepClarifyDataTypes() {
   const dataFrameTypes = useAtomValue(atomDataVizDFDTypes);
   const setDataFrame = useSetAtom(atomSetDataVizDF);
   const setDataVizCurrentStep = useSetAtom(atomDataVizCurrentStep);
+  const regexDefaultEASL = new Regex(`^(participant_id|session|LongitudinalTimePoint|SubjectNList)$`);
 
   function handleDTypeChange(event: SelectChangeEvent<DataFrameMainType>, colName: string) {
     const newDType = event.target.value as DataFrameMainType;
@@ -81,7 +83,12 @@ function StepClarifyDataTypes() {
                         <Typography noWrap variant="h5" flexBasis="400px" mr={10}>
                           {columnName}
                         </Typography>
-                        <Select fullWidth value={dtype} onChange={e => handleDTypeChange(e, columnName)}>
+                        <Select
+                          disabled={!!regexDefaultEASL.search(columnName)}
+                          fullWidth
+                          value={dtype}
+                          onChange={e => handleDTypeChange(e, columnName)}
+                        >
                           {DataFrameMainTypeOptions.map((dtype, idx) => {
                             return (
                               <MenuItem key={`DataFrameDtypeClarifier__${columnName}_${idx}`} value={dtype}>

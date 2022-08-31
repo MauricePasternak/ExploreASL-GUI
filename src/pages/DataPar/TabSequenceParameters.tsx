@@ -160,8 +160,8 @@ function TabSequenceParameters({
                 label="Background Pulse Suppression Timings"
                 helperText="Specify as comma-separated positive numbers representing timings in milliseconds. Leave blank if not applicable."
                 handleInnerToField={lodashPartialRight(getNumbersFromDelimitedString, ",", "float")}
-                handleFieldToInner={(numbers: number[]) => numbers.join(", ")}
-                debounceTime={1000}
+                handleFieldToInner={(numbers: number[]) => (numbers && Array.isArray(numbers)) ? numbers.join(", ") : ""}
+                debounceTime={2000}
                 shouldUpdateAfterDebounce
               />
             </Grid>

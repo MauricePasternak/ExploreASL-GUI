@@ -9,7 +9,7 @@ import { getFilepathType, getTree, loadJSONSafe } from "./backend/filepathFuncti
 import { ExtractChannelName } from "./common/types/utilityTypes";
 import MappingIPCMainEventsToHanders, {
   InvokeEventNames,
-  InvokeHandlerSignature
+  InvokeHandlerSignature,
 } from "./communcations/MappingIPCMainEventsToHanders";
 import { MappingIPCRendererEventsType } from "./communcations/MappingIPCRendererEvents";
 
@@ -32,14 +32,7 @@ const pathOperations = {
    * @returns A Path instance lacking the methods (as electron cannot include methods in the IPC transfer).
    */
   asPath: (...filePath: string[]) => {
-    return new Path(...filePath).toJSON() as {
-      path: string;
-      root: string;
-      basename: string;
-      stem: string;
-      ext: string;
-      suffixes: string[];
-    };
+    return new Path(...filePath).toJSON();
   },
   /**
    * Resolves a filepath to be os-specific.
