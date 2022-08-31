@@ -2,7 +2,7 @@ import CalculateIcon from "@mui/icons-material/Calculate";
 import ErrorIcon from "@mui/icons-material/Error";
 import PeopleIcon from "@mui/icons-material/People";
 import Paper from "@mui/material/Paper";
-import { styled } from "@mui/material/styles";
+import SvgIcon from "@mui/material/SvgIcon";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import { useAtom, useAtomValue } from "jotai";
@@ -21,11 +21,6 @@ type DataParTabProps<TFV extends FieldValues> = {
   fieldNames: Path<TFV>[];
   icon?: React.ReactElement;
 };
-
-const TabProcessIcon = styled(ProcessIcon)(({ theme }) => ({
-  height: "1.5rem",
-  fill: theme.palette.text.secondary,
-}));
 
 const dataParTabs: Record<DataParTabOption, DataParTabProps<DataParValuesType>> = {
   StudyParameters: {
@@ -94,7 +89,7 @@ const dataParTabs: Record<DataParTabOption, DataParTabProps<DataParValuesType>> 
       "x.S.bMasking",
       "x.S.Atlases",
     ],
-    icon: <TabProcessIcon />,
+    icon: <SvgIcon component={ProcessIcon} inheritViewBox />,
   },
 };
 
@@ -130,6 +125,10 @@ function DataParTabs({ control }: UseFormReturn<DataParValuesType>) {
             "& .MuiTabs-scroller": {
               flexGrow: 0,
             },
+
+            "& .MuiTabs-indicator": {
+              backgroundColor: errKeys.length > 0 ? "error.main" : "default",
+            },
           }}
         >
           {Object.entries(dataParTabs).map(([tab, { label, fieldNames, icon }]) => {
@@ -141,6 +140,9 @@ function DataParTabs({ control }: UseFormReturn<DataParValuesType>) {
                 key={`DataParTab_${label}`}
                 sx={{
                   color: containsError ? "error.main" : "default",
+                  "&.Mui-selected": {
+                    color: containsError ? "error.main" : "default",
+                  },
                   "&.Mui-selected svg": {
                     fill: theme => (containsError ? theme.palette.error.main : theme.palette.primary.main),
                   },

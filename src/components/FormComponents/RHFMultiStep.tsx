@@ -89,6 +89,8 @@ export function RHFMultiStepStepper<TFV extends FieldValues>({
   const { errors } = useFormState({ control: control, name: currentStepNames });
   const errKeys = Object.keys(errors);
 
+  // console.log(`RHFMultiStepStepper: errKeys`, errKeys);
+
   return (
     <Stepper {...stepperProps} activeStep={currentStep}>
       {steps.map((step, index) => {

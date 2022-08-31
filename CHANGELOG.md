@@ -47,6 +47,12 @@ Introduction of the BIDSDataGrid Module (#4) and multiple MacOS Fixes (#5)
 
 ### Changed
 
+- Removed the osxSign and osxNotarize fields from package.json for the time being until a proper workflow/credentials
+  is established for distributing this on MacOSX.
+
+- Improved the communication of errors by red color for the Import and Define Parameters moduels; namely that the
+  steeper and tabs components reflect the particular step where errored fields are found.
+
 - Changed the handling of `MATLABGithubArgs` in the running of the Import & other ExploreASL modules. Command-line
   arguments are now handled based on pre-vs-post 2019 MATLAB as well as the operating system.
 

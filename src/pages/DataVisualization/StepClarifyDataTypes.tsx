@@ -39,9 +39,6 @@ function StepClarifyDataTypes() {
 
   console.log("StepClarifyDataTypes -- dataFrameTypes: ", dataFrameTypes);
 
-  // TODO: There should be logic wherein a Regex is used to automatically avoid the default ExploreASL numerical column
-  // names and some of the categorical ones such as SUBJECT and session.
-
   return (
     dataFrameTypes && (
       <>

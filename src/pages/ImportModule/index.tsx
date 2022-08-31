@@ -1,8 +1,6 @@
 import Box from "@mui/material/Box";
 import { styled } from "@mui/material/styles";
 import React from "react";
-import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
-import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
 import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import {
   SchemaImportStepDefineAliases,
@@ -10,8 +8,10 @@ import {
   SchemaImportStepDefineRuntimeEnvs
 } from "../../common/schemas/ImportSchema";
 import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
+import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
 import RHFMultiStep, { RHFMultiStepStepper } from "../../components/FormComponents/RHFMultiStep";
 import { ImportModuleFormDefaultValues } from "../../stores/ImportPageStore";
+import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
 import StepDefineAliases from "./StepDefineAliases";
 import StepDefineContexts from "./StepDefineContexts";
 import StepDefineRuntimeEnvs from "./StepDefineRuntimeEnvs";
@@ -20,7 +20,7 @@ import StepRunImportModule from "./StepRunImportModule";
 const importModuleSchemas = [
   SchemaImportStepDefineRuntimeEnvs,
   SchemaImportStepDefineAliases,
-  SchemaImportStepDefineMultiContext
+  SchemaImportStepDefineMultiContext,
 ];
 
 const ImportModulePaper = styled(Box)(({ theme }) => ({
@@ -30,7 +30,7 @@ const ImportModulePaper = styled(Box)(({ theme }) => ({
   width: "100%",
   top: APPBARHEIGHTPIXELS,
   left: 0,
-  zIndex: 10,
+  zIndex: 1051,
   height: "48px",
   display: "flex",
   alignItems: "center",
@@ -47,11 +47,11 @@ function ImportModulePage() {
       >
         {bag => {
           const { currentStep, control } = bag;
-
           return (
             <>
               <ImportModulePaper>
                 <RHFMultiStepStepper
+                  className="ImportModuleStepper"
                   sx={{ width: "100%" }}
                   control={control}
                   currentStep={currentStep}
@@ -66,17 +66,7 @@ function ImportModulePage() {
                     },
                     {
                       label: "Define Additional Context",
-                      fieldNames: [
-                        // "ASLManufacturer",
-                        // "ASLSequence",
-                        // "ASLSeriesPattern",
-                        // "BackgroundSuppression",
-                        // "BackgroundSuppressionNumberPulses",
-                        // "BackgroundSuppressionPulseTime",
-                        // "DummyPositionInASL",
-                        // "LabelingDuration",
-                        // "PostLabelingDelay",
-                      ],
+                      fieldNames: ["ImportContexts"],
                     },
                   ]}
                 />

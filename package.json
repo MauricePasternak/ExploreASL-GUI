@@ -28,17 +28,7 @@
           "linux",
           "win32"
         ],
-        "icon": "src/assets/appIcons/ExploreASLIcon",
-        "osxSign": {
-          "hardened-runtime": true,
-          "entitlements": "entitlements.plist",
-          "entitlements-inherit": "entitlements.plist",
-          "signature-flags": "library"
-        },
-        "osxNotarize": {
-          "appleId": "mpasternak@this.is.a.placeholder.com",
-          "appleIdPassword": "this.is.a.placeholder.password"
-        }
+        "icon": "src/assets/appIcons/ExploreASLIcon"
       },
       "makers": [
         {

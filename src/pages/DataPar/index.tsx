@@ -208,7 +208,7 @@ function DataParPage() {
         elevation={10}
       >
         <Button variant="contained" type="submit" fullWidth>
-          Submit
+          Save
         </Button>
         <Button
           variant="contained"

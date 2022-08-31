@@ -216,37 +216,6 @@ function AboutPage() {
                 </Link>
               </li>
               <li>
-                <Link href="mailto:p.f.c.groot@amsterdamumc.nl?subject=%5BGitHub%5D%20ExploreASL">Paul Groot</Link> -
-                Software developer, IT specialist,{" "}
-                <Link href="https://www.researchgate.net/profile/Paul-Groot" rel="nofollow" target="_blank">
-                  Researcher
-                </Link>
-              </li>
-              <li>
-                <Link href="mailto:pieter.vandemaele@gmail.com?subject=%5BGitHub%5D%20ExploreASL">
-                  Pieter Vandemaele
-                </Link>{" "}
-                - Developer Matlab{" "}
-                <Link href="https://github.com/bids-standard" target="_blank">
-                  BIDS app
-                </Link>
-              </li>
-              <li>
-                <Link href="mailto:l.lorenzini@amsterdamumc.nl?subject=%5BGitHub%5D%20ExploreASL" target="_blank">
-                  Luigi Lorenzini
-                </Link>{" "}
-                - Developer{" "}
-                <Link href="https://www.hzdr.de/publications/Publ-31929" rel="nofollow" target="_blank">
-                  ExploreQC
-                </Link>
-              </li>
-              <li>
-                <Link href="mailto:maurice.pasternak@mail.utoronto.ca?subject=%5BGitHub%5D%20ExploreASL">
-                  Maurice Pasternak
-                </Link>{" "}
-                - Developer ExploreASL User Interface
-              </li>
-              <li>
                 <Link href="mailto:m.b.dijsselhof@amsterdamumc.nl?subject=%5BGitHub%5D%20ExploreASL" target="_blank">
                   Mathijs Dijsselhof
                 </Link>{" "}
@@ -264,6 +233,38 @@ function AboutPage() {
                   BBB-ASL
                 </Link>
               </li>
+              <li>
+                <Link href="mailto:maurice.pasternak@mail.utoronto.ca?subject=%5BGitHub%5D%20ExploreASL">
+                  Maurice Pasternak
+                </Link>{" "}
+                - Developer ExploreASL User Interface
+              </li>
+              <li>
+                <Link href="mailto:p.f.c.groot@amsterdamumc.nl?subject=%5BGitHub%5D%20ExploreASL">Paul Groot</Link> -
+                Software developer, IT specialist,{" "}
+                <Link href="https://www.researchgate.net/profile/Paul-Groot" rel="nofollow" target="_blank">
+                  Researcher
+                </Link>
+              </li>
+              <li>
+                <Link href="mailto:pieter.vandemaele@gmail.com?subject=%5BGitHub%5D%20ExploreASL">
+                  Pieter Vandemaele
+                </Link>{" "}
+                - Developer Matlab,{" "}
+                <Link href="https://github.com/bids-standard" target="_blank">
+                  BIDS app
+                </Link>
+              </li>
+              <li>
+                <Link href="mailto:l.lorenzini@amsterdamumc.nl?subject=%5BGitHub%5D%20ExploreASL" target="_blank">
+                  Luigi Lorenzini
+                </Link>{" "}
+                - Developer,{" "}
+                <Link href="https://www.hzdr.de/publications/Publ-31929" rel="nofollow" target="_blank">
+                  ExploreQC
+                </Link>
+              </li>
+
               <li>
                 <Link href="mailto:Sandeep.g.bio@gmail.com?subject=%5BGitHub%5D%20ExploreASL" target="_blank">
                   Sandeep Ganji

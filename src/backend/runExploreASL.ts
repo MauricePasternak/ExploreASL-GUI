@@ -466,37 +466,6 @@ export async function handleRunExploreASL(
     missedStepsMessages: [],
   };
 
-  // // TODO: This is a temporary fix for BIDS2NII non-parallelism
-  // try {
-  //   if (EASLVersionNumber === 110 && nWorkers > 1 && dataPar.x.GUI.EASLType === "Github") {
-  //     console.log(`EASL Process ${channelName} -- running BIDS2NII in advance...`);
-  //     const bids2nii_cmd = `"${executablePath}" ${MATLABGithubArgs.join(" ")} "ExploreASL('${dataPar.x.GUI.StudyRootPath}', [0 1 0], 0, ${bPause}, 1, 1)"`
-  //     console.log(bids2nii_cmd);
-  //     respondToIPCRenderer(
-  //       event,
-  //       `${channelName}:childProcessSTDOUT`,
-  //       "First need to run BIDS2NII to allow for parallelism. This is single-core and may take a while if you have many subjects..."
-  //     );
-  //     const result = await asyncExec(bids2nii_cmd, { windowsHide: true });
-  //     console.log("Result of running BIDS2NII", result);
-  //     respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, "BIDS2NII completed. Continuing with EASL...");
-  //   }
-  // } catch (error) {
-  //   console.warn(error);
-  //   return {
-  //     GUIMessage: {
-  //       title: "Compiled ExploreASL Executable could not be found",
-  //       severity: "error",
-  //       messages: [
-  //         "Something went wrong.",
-  //         "Encountered the following error when running the preliminary BIDS2NII step:",
-  //         `${error.message}`,
-  //       ],
-  //     },
-  //     payload: defaultPayload,
-  //   };
-  // }
-
   for (let index = 0; index < rangeArg.length; index++) {
     const iWorker = rangeArg[index] + 1; // +1 due to MATLAB indexing rules
     console.log(
