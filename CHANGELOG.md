@@ -14,6 +14,10 @@ Introduction of the BIDSDataGrid Module (#4) and multiple MacOS Fixes (#5)
 
 ### Fixed
 
+- Fixed a bug where indicating excluded subjects resulted errors when trying to run ExploreASL as well as when loading
+  in dataPar.json in Define Parameters. Excluded subjects are now handled back and forth between states where the "_#"
+  is present versus absent.
+
 - Fixed a bug in the Define Parameters Module where, after loading invalid values from a dataPar.json file, validations
   would not occur until the user submitted. This has been fixed by programatically putting the form into a submitted
   state, which forces RHF to enter its reValidate mode (onChange basis).
@@ -33,6 +37,8 @@ Introduction of the BIDSDataGrid Module (#4) and multiple MacOS Fixes (#5)
   naming of .status files that should be created for the study.
 
 ### Added
+
+- Added progressbar/text/error feedback for running ExploreASL's DARTEL module.
 
 - Added the option for renaming X and Y axis labels for both scatterplots and swarmplots within the Data Visualization
   Module.

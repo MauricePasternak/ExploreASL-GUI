@@ -11,7 +11,15 @@
  * - "Population"
  * - "Misc" (i.e. 999_completed)
  */
-export type EASLModuleType = "Structural" | "Structural_FLAIR" | "ASL" | "Population" | "Misc" | "Import";
+export type EASLModuleType =
+  | "Structural"
+  | "Structural_FLAIR"
+  | "DARTEL_T1"
+  | "LongReg"
+  | "ASL"
+  | "Population"
+  | "Misc"
+  | "Import";
 
 /**
  * Type defining a single step of the ExploreASL pipeline. Has properties:
@@ -71,4 +79,3 @@ export interface RunEASLChildProcSummary extends Record<string, unknown> {
  * Type which represent the current child process status that was requested to run an ExploreASL module
  */
 export type RunEASLStatusType = "Paused" | "Running" | "Standby";
-

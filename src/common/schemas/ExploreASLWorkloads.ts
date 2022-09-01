@@ -66,6 +66,41 @@ const Mapping_1_9_0: EASLWorkload = {
     description: "T1w-image & FLAIR-image visual (and quantitative) quality control",
     loadingBarValue: 5,
   },
+  "001_create_templates_1.status": {
+    module: "DARTEL_T1",
+    description: "First iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_2.status": {
+    module: "DARTEL_T1",
+    description: "Second iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_3.status": {
+    module: "DARTEL_T1",
+    description: "Third iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_4.status": {
+    module: "DARTEL_T1",
+    description: "Fourth iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_5.status": {
+    module: "DARTEL_T1",
+    description: "Fifth iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_6.status": {
+    module: "DARTEL_T1",
+    description: "Sixth iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates.status": {
+    module: "DARTEL_T1",
+    description: "Finalized creation of DARTEL templates",
+    loadingBarValue: 100,
+  },
   "020_RealignASL.status": {
     module: "ASL",
     description: "motion correction and spike removal",
@@ -228,6 +263,41 @@ const Mapping_1_10_0: EASLWorkload = {
     module: "Structural",
     description: "T1w-image & FLAIR-image visual (and quantitative) quality control",
     loadingBarValue: 5,
+  },
+  "001_create_templates_1.status": {
+    module: "DARTEL_T1",
+    description: "First iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_2.status": {
+    module: "DARTEL_T1",
+    description: "Second iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_3.status": {
+    module: "DARTEL_T1",
+    description: "Third iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_4.status": {
+    module: "DARTEL_T1",
+    description: "Fourth iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_5.status": {
+    module: "DARTEL_T1",
+    description: "Fifth iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates_6.status": {
+    module: "DARTEL_T1",
+    description: "Sixth iteration of creating DARTEL templates",
+    loadingBarValue: 100,
+  },
+  "001_create_templates.status": {
+    module: "DARTEL_T1",
+    description: "Finalized creation of DARTEL templates",
+    loadingBarValue: 100,
   },
   "020_RealignASL.status": {
     module: "ASL",

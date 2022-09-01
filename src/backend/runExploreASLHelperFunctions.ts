@@ -369,12 +369,24 @@ async function getSubjectImagetypes(path: Path, globMapping: GlobMapping) {
 
 async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadSubset: EASLWorkload) {
   const subjectRegexp = new RegExp(dataPar.x.dataset.subjectRegexp);
-  const excludedSubjects = new Set(dataPar.x.dataset.exclusion);
+  const exclusionRegex = new Regex(`(?<SUBJECT>.*?)(?:_\\d+)?$`);
+  const excludedSubjects = new Set(
+    dataPar.x.dataset.exclusion
+      .map(s => {
+        // Remove trailing "_#"
+        const match = exclusionRegex.search(s);
+        return match ? match.groupsObject.SUBJECT : null;
+      })
+      .filter(v => v)
+  );
+  console.log(`Excluded subjects: ${Array.from(excludedSubjects).join(", ")}`);
+
   const defaultFolders = new Set(["Population", "log", "lock", "Logs"]);
   const pathRawData = new Path(dataPar.x.GUI.StudyRootPath, "rawdata");
   const globMapping: GlobMapping = { GlobASL: "*/*_asl.nii*", GlobM0: "*/*_m0scan.nii", GlobFLAIR: "*FLAIR*.nii*" };
-
   const pathDerivativesEASL = new Path(dataPar.x.GUI.StudyRootPath, "derivatives", "ExploreASL");
+
+  let DARTELCounter = 0; // Used to keep track of subjects that aren't filtered out
 
   const structuralWorkload = {
     anticipatedFilepaths: [] as string[],
@@ -384,7 +396,7 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
   for await (const subjectPath of pathRawData.readDirIter()) {
     console.log("Checking subject:", subjectPath.path);
 
-    // Skip non-indicated subjects, excluded subjects, defaults folders, and non-directories
+    // Skip non-indicated subjects, excluded subjects, default folders, and non-directories
     if (
       !subjectRegexp.test(subjectPath.basename) ||
       excludedSubjects.has(subjectPath.basename) ||
@@ -417,6 +429,9 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
       ) {
         continue;
       }
+
+      // Add to DARTEL counter
+      DARTELCounter++;
 
       // Get the path of the directory that will hold the .status files; creating it if necessary
       const lockDirPath = new Path(
@@ -473,6 +488,9 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
           continue;
         }
 
+        // Add to DARTEL counter
+        DARTELCounter++;
+
         // Get the path of the directory that will hold the .status files; creating it if necessary
         const lockDirPath = new Path(
           pathDerivativesEASL.path,
@@ -507,13 +525,48 @@ async function calculateStructuralWorkload(dataPar: DataParValuesType, workloadS
     } // End of visits.length > 0
   } // End of for await (const subjectPath of pathRawData.readDirIter())
 
+  // DARTEL status files are expected if there is more than 1 subject (DARTELCounter > 1) and the appropriate dataPar
+  // settings are set
+  console.log(
+    `DARTELCounter: ${DARTELCounter}`,
+    dataPar.x?.modules?.bRunDARTEL,
+    dataPar.x?.modules?.structural?.bSegmentSPM12
+  );
+
+  if (DARTELCounter > 1 && (dataPar.x?.modules?.bRunDARTEL || dataPar.x?.modules?.structural?.bSegmentSPM12)) {
+    const lockDirPath = new Path(pathDerivativesEASL.path, "lock", "xASL_module_DARTEL_T1", "xASL_module_DARTEL");
+    if (!(await lockDirPath.exists())) {
+      await lockDirPath.makeDir();
+    }
+
+    const filteredWorkloadMapping = lodashPickBy(workloadSubset, v => v.module === "DARTEL_T1");
+    // Determine the workload based on the .status files not already existing
+    const workloadMappingEntires = Object.entries(filteredWorkloadMapping);
+    for (let index = 0; index < workloadMappingEntires.length; index++) {
+      const [statusBasename, info] = workloadMappingEntires[index];
+      const statusFilepath = new Path(lockDirPath.path, statusBasename);
+      if (await statusFilepath.exists()) continue;
+      structuralWorkload.anticipatedFilepaths.push(statusFilepath.path);
+      structuralWorkload.anticipatedWorkload.push(info.loadingBarValue);
+    }
+  }
   // console.log(`calculateStructuralWorkload -- Structural workload:`, JSON.stringify(structuralWorkload, null, 2));
   return structuralWorkload;
 }
 
 async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: EASLWorkload) {
   const subjectRegexp = new RegExp(dataPar.x.dataset.subjectRegexp);
-  const excludedSubjects = new Set(dataPar.x.dataset.exclusion);
+  const exclusionRegex = new Regex(`(?<SUBJECT>.*?)(?:_\\d+)?$`);
+  const excludedSubjects = new Set(
+    dataPar.x.dataset.exclusion
+      .map(s => {
+        // Remove trailing "_#"
+        const match = exclusionRegex.search(s);
+        return match ? match.groupsObject.SUBJECT : null;
+      })
+      .filter(v => v)
+  );
+  console.log(`Excluded subjects: ${Array.from(excludedSubjects).join(", ")}`);
   const defaultFolders = new Set(["Population", "log", "lock", "Logs"]);
   const pathDerivativesEASL = new Path(dataPar.x.GUI.StudyRootPath, "derivatives", "ExploreASL");
   const pathRawData = new Path(dataPar.x.GUI.StudyRootPath, "rawdata");
@@ -532,7 +585,7 @@ async function calculateASLWorkload(dataPar: DataParValuesType, workloadSubset: 
   };
 
   for await (const subjectPath of pathRawData.readDirIter()) {
-    // Skip non-indicated subjects, excluded subjects, defaults folders, and non-directories
+    // Skip non-indicated subjects, excluded subjects, default folders, and non-directories
     if (
       !subjectRegexp.test(subjectPath.basename) ||
       excludedSubjects.has(subjectPath.basename) ||
@@ -920,7 +973,7 @@ export async function getExploreASLExitSummary(
 
   const missedStepsMessages: string[] = [];
   const regexStatusFile = new Regex(
-    "lock\\/xASL_module_(?<Module>ASL|Structural|Population)\\/?(?<Subject>.*)?\\/xASL_module_(?:ASL|Structural|Population)_?(?<Session>.*)\\/(?<StatusBasename>(?<StatusCode>\\d{3}).*\\.status)$",
+    "lock\\/xASL_module_(?<Module>ASL|Structural|Population|DARTEL_T1)\\/?(?<Subject>.*)?\\/xASL_module_(?:ASL|Structural|Population|DARTEL)_?(?<Session>.*)\\/(?<StatusBasename>(?<StatusCode>\\d{3}).*\\.status)$",
     "m"
   );
   const seenItems = new Set<string>();
@@ -931,7 +984,7 @@ export async function getExploreASLExitSummary(
     if (!(StatusBasename in workloadMapping)) continue;
 
     // Population module is a special case, prompting an early return
-    if (Module === "Population") {
+    if (Module === "Population" || Module === "DARTEL_T1") {
       missedStepsMessages.push(
         `Module: ${Module} ...failed at earliest step: ${workloadMapping[StatusBasename].description}`
       );

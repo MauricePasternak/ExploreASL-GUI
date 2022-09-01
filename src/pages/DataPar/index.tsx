@@ -11,6 +11,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { isEmpty as lodashIsEmpty } from "lodash";
 import React from "react";
 import { SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
+import { Regex } from "../../common/utilityFunctions/Regex";
 import { DATAPARFILE_BASENAME } from "../../common/GLOBALS";
 import { DataParFieldNameTranslator } from "../../common/schemas/DataParFieldNameTranslator";
 import { SchemaDataPar } from "../../common/schemas/DataParSchema";
@@ -103,6 +104,7 @@ function DataParPage() {
    */
   const handleLoadDataPar = async () => {
     const { canceled, filePaths } = await api.invoke("Dialog:OpenDialog", {
+      title: "Select a dataPar.json file",
       properties: ["openFile"],
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
@@ -119,6 +121,22 @@ function DataParPage() {
         message: loadDataParError.message,
       });
       return;
+    }
+
+    // Minor formatting operations before validation
+    // Correct the exclusions field by removing the trailing "_#"
+    const exclusion = (jsonFileContent as DataParValuesType).x?.dataset?.exclusion;
+    console.log("exclusion", exclusion);
+    if (exclusion && Array.isArray(exclusion) && exclusion.length > 0) {
+      const exclusionRegex = new Regex(`(?<SUBJECT>.*?)(?:_\\d+)?$`);
+      const reformattedExclusion = exclusion
+        .map(v => {
+          const match = exclusionRegex.search(v);
+          return match ? match.groupsObject.SUBJECT : null;
+        })
+        .filter(v => v);
+      console.log("reformattedExclusion", reformattedExclusion);
+      (jsonFileContent as DataParValuesType).x.dataset.exclusion = Array.from(new Set(reformattedExclusion));
     }
 
     // Validate the JSON file

@@ -13,9 +13,16 @@ import { SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useAtom, useSetAtom } from "jotai";
-import { isEmpty as lodashIsEmpty, range as lodashRange, sum as lodashSum } from "lodash";
+import {
+  isEmpty as lodashIsEmpty,
+  range as lodashRange,
+  sum as lodashSum,
+  cloneDeep as lodashCloneDeep,
+  set as lodashSet,
+} from "lodash";
 import React, { useEffect } from "react";
 import { Controller, SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
+import { Regex } from "../../../common/utilityFunctions/Regex";
 import { DATAPARFILE_BASENAME } from "../../../common/GLOBALS";
 import { DataParFieldNameTranslator } from "../../../common/schemas/DataParFieldNameTranslator";
 import { SchemaDataPar } from "../../../common/schemas/DataParSchema";
@@ -169,7 +176,7 @@ function RunEASLSingleStudySetup({
     );
     changeStatus({ studyIndex, status: "Standby" });
     pids.length > 0 && setPids([]);
-    api.invoke("App:SoundNotification")
+    api.invoke("App:SoundNotification");
   }
 
   /**
@@ -207,6 +214,23 @@ function RunEASLSingleStudySetup({
       });
       await api.invoke("App:SoundNotification");
       return;
+    }
+
+    // Minor formatting operations before validation
+    // Correct the exclusions field by removing the trailing "_#"
+    const exclusion = (initialDataParJSON as DataParValuesType).x?.dataset?.exclusion;
+    let originalExclusion = lodashCloneDeep(exclusion);
+    console.log("exclusion", exclusion);
+    if (exclusion && Array.isArray(exclusion) && exclusion.length > 0) {
+      const exclusionRegex = new Regex(`(?<SUBJECT>.*?)(?:_\\d+)?$`);
+      const reformattedExclusion = exclusion
+        .map(v => {
+          const match = exclusionRegex.search(v);
+          return match ? match.groupsObject.SUBJECT : null;
+        })
+        .filter(v => v);
+      console.log("reformattedExclusion", reformattedExclusion);
+      (initialDataParJSON as DataParValuesType).x.dataset.exclusion = Array.from(new Set(reformattedExclusion));
     }
 
     // Validate the data par JSON file
@@ -248,6 +272,11 @@ function RunEASLSingleStudySetup({
     let finalNumCores: number = numUsedCoresForThisStudy;
     if (whichModulesToRun !== "Population" && numUsedCoresForThisStudy > dataParValues.x.GUI.SUBJECTS.length) {
       finalNumCores = dataParValues.x.GUI.SUBJECTS.length;
+    }
+
+    // Re-adjust some fields back to what ExploreASL accepts
+    if (originalExclusion && dataParValues.x?.dataset?.exclusion) {
+      lodashSet(dataParValues, "x.dataset.exclusion", originalExclusion);
     }
 
     // Call the backend to start the process

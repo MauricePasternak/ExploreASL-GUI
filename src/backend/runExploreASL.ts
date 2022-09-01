@@ -9,7 +9,7 @@ import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
 import {
   MATLABArgsPlatformType,
   MATLABCommandLineArgsPost2019,
-  MATLABCommandLineArgsPre2019
+  MATLABCommandLineArgsPre2019,
 } from "../common/schemas/MATLABCommandLineArgs";
 import { DataParValuesType } from "../common/types/ExploreASLDataParTypes";
 import { RunEASLChildProcSummary, RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
@@ -26,7 +26,7 @@ import {
   getExploreASLExitSummary,
   getExploreASLVersion,
   getMATLABPathAndVersion,
-  RemoveBIDS2LegacyLockDirs
+  RemoveBIDS2LegacyLockDirs,
 } from "./runExploreASLHelperFunctions";
 
 export async function handleRunExploreASL(
@@ -238,9 +238,9 @@ export async function handleRunExploreASL(
    ****************************************************/
   // First define all the regexes, and translator mappings
   const regexLockDir =
-    /lock\/xASL_module_(?<Module>ASL|Structural|Population)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population)_?(?<Session>.*)\/locked$/m;
+    /lock\/xASL_module_(?<Module>ASL|Structural|Population|DARTEL_T1)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population|DARTEL)_?(?<Session>.*)\/locked$/m;
   const regexStatusFile =
-    /lock\/xASL_module_(?<Module>ASL|Structural|Population)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population)_?(?<Session>.*)\/.*\.status$/m;
+  /lock\/xASL_module_(?<Module>ASL|Structural|Population|DARTEL_T1)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population|DARTEL)_?(?<Session>.*)\/.*\.status$/m;
   const regexImageFile =
     /(?<Axis>Cor|Tra)_(?<ImageType>Reg_rT1|Seg_rT1|Reg_noSmooth_M0|noSmooth_M0|Reg_qCBF|qCBF)(?!.*Contour)_(?<Target>[\w-]+?_\d?)_?.*\.jpe?g$/m;
 
@@ -282,7 +282,6 @@ export async function handleRunExploreASL(
       `${StudyDerivExploreASLDir.path}/**/*.tsv*`,
       `${StudyDerivExploreASLDir.path}/**/*.pdf*`,
       `${StudyDerivExploreASLDir.path}/**/*.log*`,
-      // `${StudyDerivExploreASLDir.resolve("Population").path}/*`,
       `${StudyDerivExploreASLDir.resolve("Logs").path}/*`,
     ],
   });
@@ -339,8 +338,8 @@ export async function handleRunExploreASL(
       // THIS IS A STATUS FILE
       console.log("This is a status file");
 
-      // Early Exit. Not one of the anticipated status files
-      if (!setOfAnticipatedFilepaths.has(path.path)) return;
+      // Early Exit. Not one of the anticipated status files or the status file isn't supported
+      if (!setOfAnticipatedFilepaths.has(path.path) || !(path.basename in workloadMapping)) return;
 
       // Get the data for the given status file
       const regexResult = regexStatusFile.exec(path.path);
@@ -377,7 +376,7 @@ export async function handleRunExploreASL(
           `${channelName}:childProcessSTDOUT`,
           `Completed step in ${Module} Module for:\n\tSubject: ${Subject}\n\tDescription: ${statusFileCriteria.description}`
         );
-      } else if (Module === "Population") {
+      } else if (Module === "Population" || Module === "DARTEL_T1") {
         respondToIPCRenderer(
           event,
           `${channelName}:childProcessSTDOUT`,

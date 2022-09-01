@@ -26,9 +26,9 @@ const SchemaDataParDatasetParams: Yup.SchemaOf<DatasetParamsSchema> = Yup.object
   exclusion: Yup.array()
     .typeError("This value must be a collection of folder names")
     .of(Yup.string())
-    .test("AreValidSubjects", async (subjects, helpers: Yup.TestContext<DataParValuesType>) => {
-      if (subjects.length === 0) return true;
-      return await AreValidSubjects(subjects, helpers);
+    .test("AreValidSubjects", async (subjectsToExclude, helpers: Yup.TestContext<DataParValuesType>) => {
+      if (!subjectsToExclude || subjectsToExclude.length === 0) return true;
+      return await AreValidSubjects(subjectsToExclude, helpers);
     })
     .default([]),
 });
@@ -96,35 +96,7 @@ const SchemaDataParGUIParams = Yup.object().shape<YupShape<GUIParamsSchema>>({
           message: "Invalid value provided for the listing of subjects",
         });
       }
-
-      // Must first ascertain that
-      const StudyRootPath: string | undefined = helpers.options.context.x.GUI.StudyRootPath;
-      console.log(`DataParSchema -- SUBJECTS field -- StudyRootPath`, helpers.options.context.x.GUI.StudyRootPath);
-
-      if (
-        !StudyRootPath || // Cannot be falsy
-        typeof StudyRootPath !== "string" || // Must be a string
-        (await IsValidStudyRoot(StudyRootPath, helpers, ["sourcedata", "rawdata", "derivatives"])) !== true // Must be a valid study root
-      ) {
-        return helpers.createError({
-          path: helpers.path,
-          message: "Cannot validate the subjects because the Study Root Path itself is invalid",
-        });
-      }
-
-      // Must all exist in rawdata
-      const existenceChecks = await api.path.getFilepathsType(
-        subjectBasenames.map(subjectBasename => `${StudyRootPath}/rawdata/${subjectBasename}`)
-      );
-      console.log(`DataParSchema -- SUBJECTS field -- existenceChecks`, existenceChecks);
-      if (!existenceChecks.every(check => check === "dir")) {
-        return helpers.createError({
-          path: helpers.path,
-          message: "One or more of the provided subjects do not exist in the rawdata folder",
-        });
-      }
-
-      return true;
+      return await AreValidSubjects(subjectBasenames, helpers);
     }),
 });
 
