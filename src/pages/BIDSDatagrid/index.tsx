@@ -6,7 +6,9 @@ import Divider from "@mui/material/Divider";
 import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
 import React from "react";
+
 import BIDSIcon from "../../assets/svg/BIDSIcon.svg";
+import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import AtomicSnackbarMessage from "../../components/AtomicSnackbarMessage";
 import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import { atomBIDSDatagridSnackbar } from "../../stores/SnackbarStore";
@@ -18,14 +20,8 @@ import BIDSDG from "./BIDSDG";
 
 function BIDSDataGrid() {
   return (
-    <Box display="flex">
-      <Box
-        display="flex"
-        flexDirection="column"
-        gap={2}
-        padding={2}
-        width="100%"
-      >
+    <Box display="flex" className="currentMainPage" height={`calc(100% - ${APPBARHEIGHTPIXELS}px)`}>
+      <Box display="flex" flexDirection="column" gap={2} padding={2} width="100%">
         <Card>
           <CardHeader
             title={<Typography variant="h4">Edit BIDS Fields</Typography>}

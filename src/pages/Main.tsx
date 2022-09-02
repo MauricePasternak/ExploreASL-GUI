@@ -59,28 +59,9 @@ function Main() {
       >
         <ProcessStudiesPage />
       </Box>
-      <Box
-        className="currentMainPage"
-        height={`calc(100% - ${APPBARHEIGHTPIXELS}px)`}
-        display={currentGUIPage === "BIDSDatagrid" ? "block" : "none"}
-      >
-        <BIDSDatagrid />
-      </Box>
-      <Box
-        className="currentMainPage"
-        height={`calc(100% - ${APPBARHEIGHTPIXELS}px)`}
-        display={currentGUIPage === "DataVisualization" ? "block" : "none"}
-      >
-        <DataVisualizationPage />
-      </Box>
-      <Box
-        className="currentMainPage"
-        height={`calc(100% - ${APPBARHEIGHTPIXELS}px)`}
-        display={currentGUIPage === "About" ? "block" : "none"}
-        padding={2}
-      >
-        <AboutPage />
-      </Box>
+      {currentGUIPage === "BIDSDatagrid" && <BIDSDatagrid />}
+      {currentGUIPage === "DataVisualization" && <DataVisualizationPage />}
+      {currentGUIPage === "About" && <AboutPage />}
     </ThemeProvider>
   );
 }

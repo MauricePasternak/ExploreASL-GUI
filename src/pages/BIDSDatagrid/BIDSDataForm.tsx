@@ -1,5 +1,5 @@
 import { DataFrame } from "data-forge";
-import { useSetAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { BIDSFormSchema } from "../../common/schemas/BIDSFormSchema";
@@ -8,13 +8,13 @@ import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTex
 import { atomBIDSDataframe, atomBIDSStudyRootPath, atomDataframeColumns } from "../../stores/BIDSDatagridStore";
 
 function BIDSDataForm() {
-  const setBIDSStudyRootPath = useSetAtom(atomBIDSStudyRootPath);
-  const setBIDSDataframeColumns = useSetAtom(atomDataframeColumns)
+  const [BIDSStudyRootPath, setBIDSStudyRootPath] = useAtom(atomBIDSStudyRootPath);
+  const setBIDSDataframeColumns = useSetAtom(atomDataframeColumns);
   const setBIDSDF = useSetAtom(atomBIDSDataframe);
-  
+
   const { control, trigger, watch } = useForm({
     defaultValues: {
-      StudyRootPath: "",
+      StudyRootPath: BIDSStudyRootPath,
     },
     resolver: YupResolverFactoryBase(BIDSFormSchema),
   });
