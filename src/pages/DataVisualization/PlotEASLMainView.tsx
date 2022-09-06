@@ -10,13 +10,16 @@ import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { toPng } from "html-to-image";
 import { useAtomValue, useSetAtom } from "jotai";
-import React from "react";
+import React, { useRef } from "react";
+
 import {
   atomDataVizCurrentStep,
   atomNivoGraphDataVariablesSchema,
-  atomNivoGraphType
+  atomNivoGraphType,
 } from "../../stores/DataFrameVisualizationStore";
+import { atomDataVizModuleSnackbar } from "../../stores/SnackbarStore";
 import EASLScatterplot from "./DataVizPlots/EASLScatterplot";
 import EASLSwarmplot from "./DataVizPlots/EASLSwarmplot";
 import PlotSettingsDrawer from "./DataVizSettings/PlotSettingsDrawer";
@@ -25,6 +28,7 @@ import MRIMultiView from "./MRIView/MRIMultiView";
 function PlotEASLMainView() {
   const graphType = useAtomValue(atomNivoGraphType);
   const dataVarsSchema = useAtomValue(atomNivoGraphDataVariablesSchema);
+  const setDataVizSnackbar = useSetAtom(atomDataVizModuleSnackbar);
 
   const validAxisVars =
     !!dataVarsSchema.XAxisVar &&
@@ -35,6 +39,25 @@ function PlotEASLMainView() {
   const canRenderSwarmplot = graphType === "Swarmplot" && validAxisVars;
 
   const setDataVizCurrentStep = useSetAtom(atomDataVizCurrentStep);
+  const figureContainer = useRef<HTMLDivElement>(null);
+
+  const handleSavePNGFigure = async () => {
+    if (!figureContainer.current) return;
+    try {
+      const dataUrl = await toPng(figureContainer.current, { cacheBust: true });
+      const link = document.createElement("a");
+      link.download = "ExploreASLJSPlot.png";
+      link.href = dataUrl;
+      link.click();
+      link.remove();
+    } catch (error) {
+      setDataVizSnackbar({
+        severity: "error",
+        title: "Error saving figure as PNG",
+        message: ["Could not save figure as PNG due to error:", error.message],
+      });
+    }
+  };
 
   return (
     <Box display="flex" padding={3}>
@@ -42,6 +65,7 @@ function PlotEASLMainView() {
         pb={3}
         container
         className="PlotEASLMain__GridContainer"
+        // The widths below are necessary to offset the width of the PlotSettingsDrawer
         width={{
           xs: "calc(100% - 300px)",
           sm: "calc(100% - 300px)",
@@ -67,18 +91,33 @@ function PlotEASLMainView() {
             />
             <Divider />
           </Card>
-          <Box
-            position={"relative"}
-            display="flex"
-            flexGrow={1}
-            height={{
-              xs: "300px",
-              sm: "500px",
-              md: "600px",
-              lg: "800px",
+        </Grid>
+        <Grid
+          container
+          item
+          xs={12}
+          id="PlotEASLMain__FigureContainer"
+          ref={figureContainer}
+          sx={{
+            backgroundColor: "background.paper",
+          }}
+        >
+          <Grid
+            item
+            xs={12}
+            sx={{
+              display: "flex",
+              flexGrow: 1,
+              position: "relative",
+              height: {
+                xs: "300px",
+                sm: "500px",
+                md: "600px",
+                lg: "800px",
+              },
+              mb: 0,
             }}
-            mb={1}
-            className="CanvasContainer"
+            className="PlotEASLMain__CanvasContainer"
           >
             {canRenderSwarmplot && <EASLSwarmplot />}
             {canRenderScatterplot && <EASLScatterplot />}
@@ -106,9 +145,9 @@ function PlotEASLMainView() {
                 </Typography>
               </Stack>
             )}
-          </Box>
+          </Grid>
+          <MRIMultiView />
         </Grid>
-        <MRIMultiView />
       </Grid>
       <PlotSettingsDrawer />
       <Paper
@@ -117,13 +156,22 @@ function PlotEASLMainView() {
           position: "fixed",
           left: 0,
           bottom: 0,
-          width: "100%",
+          px: 2,
           borderRadius: 0,
           display: "flex",
-          justifyContent: "flex-start",
+          justifyContent: "space-between",
+          width: {
+            xs: "calc(100% - 300px)",
+            sm: "calc(100% - 300px)",
+            md: "calc(100% - 400px)",
+            lg: "calc(100% - 500px)",
+          },
         }}
       >
         <Button onClick={() => setDataVizCurrentStep("DefineDTypes")}>Return To Clarify Data Types</Button>
+        <Button disabled={!canRenderScatterplot && !canRenderSwarmplot} onClick={handleSavePNGFigure}>
+          Export Figure to PNG
+        </Button>
       </Paper>
     </Box>
   );

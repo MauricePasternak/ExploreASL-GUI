@@ -2,12 +2,20 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import { ResponsiveScatterPlotCanvas } from "@nivo/scatterplot";
 import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import React from "react";
+
+import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
 import {
   toNivoScatterPlotDataGroupBy,
   toNivoScatterPlotDataSingle
 } from "../../../common/utilityFunctions/dataFrameFunctions";
+import {
+  niftiToNivoAxial,
+  niftiToNivoCoronal,
+  niftiToNivoSagittal
+} from "../../../common/utilityFunctions/nivoFunctions";
 import {
   atomCurrentMRIViewSubject,
   atomDataVizLoadSettings,
@@ -17,14 +25,6 @@ import {
   atomNivoGraphDataVariablesSchema,
   atomOfAtomMRIData
 } from "../../../stores/DataFrameVisualizationStore";
-
-import { ResponsiveScatterPlotCanvas } from "@nivo/scatterplot";
-import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
-import {
-  niftiToNivoAxial,
-  niftiToNivoCoronal,
-  niftiToNivoSagittal
-} from "../../../common/utilityFunctions/nivoFunctions";
 
 function EASLScatterplot() {
   console.log("EASLScatterplot rendered");

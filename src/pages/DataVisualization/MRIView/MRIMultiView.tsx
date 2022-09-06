@@ -37,8 +37,9 @@ function MRIMultiView() {
           padding={4}
           textAlign="center"
           key={`${atomMRIData}`}
+          className={`MRIViewContainer__${orientation}`}
         >
-          <Typography variant="h6" color={"white"}>
+          <Typography variant="h6" color={"white"} className={`MRIViewLabel__${orientation}`}>
             {currentMRIViewSubject === "" ? orientation : `${currentMRIViewSubject} - ${orientation}`}
           </Typography>
           <MRISingleView atomMRIData={atomMRIData} atomMRISlice={atomMRISlice} orientation={orientation} />

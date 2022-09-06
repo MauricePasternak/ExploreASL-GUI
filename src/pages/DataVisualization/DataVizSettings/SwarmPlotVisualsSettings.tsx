@@ -100,8 +100,8 @@ function SwarmPlotVisualsSettings() {
               <ControlledLabelSlider
                 label="Border Width"
                 labelwidth="150px"
-                max={5}
-                step={0.2}
+                max={1}
+                step={1}
                 valueLabelDisplay="auto"
                 value={EASLPlotSettings.nodeBorderWidth}
                 onChange={(e, v) =>

@@ -10,18 +10,6 @@ import { NivoHeatmapData } from "../../../common/types/nivoTypes";
 import ColorBar from "../../../components/ColorBar";
 import { atomMRIDataStats } from "../../../stores/DataFrameVisualizationStore";
 
-function hslToHex(h: number, s: number, l: number) {
-  l /= 100;
-  const a = (s * Math.min(l, 1 - l)) / 100;
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color)
-      .toString(16)
-      .padStart(2, "0"); // convert to Hex and prefix "0" if needed
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
 
 interface MRISingleViewProps {
   atomMRIData: PrimitiveAtom<NivoHeatmapData[]>;
@@ -40,23 +28,12 @@ function MRISingleView({ atomMRIData, atomMRISlice, orientation }: MRISingleView
       display="flex"
       pr={3}
       className={`MRISingleView__${orientation}`}
-      // sx={{
-      //   "& > *:first-child": {
-      //     position: "relative",
-      //   },
-      //   "& > *:first-child::after": {
-      //     content: `'${orientation === "Sagittal" ? "Anterior" : "Left"}'`,
-      //     position: "absolute",
-      //     top: "50%",
-      //     left: "-7%",
-      //     transform: "rotate(-90deg)",
-      //   },
-      // }}
       sx={{
         "&::after": {
           content: `'${orientation === "Sagittal" ? "Anterior" : "Left"}'`,
           position: "absolute",
           top: "50%",
+          color: "white",
           left: `${orientation === "Sagittal" ? "-3%" : 0}`,
           transform: "rotate(-90deg)",
         },
@@ -64,23 +41,20 @@ function MRISingleView({ atomMRIData, atomMRISlice, orientation }: MRISingleView
     >
       <ResponsiveHeatMapCanvas
         data={data[slice]}
-        // margin={{ top: 70, right: 60, bottom: 20, left: 80 }}
         valueFormat=">-.2s"
         axisTop={null}
         axisRight={null}
         axisLeft={null}
         axisBottom={null}
         colors={({ value }) => {
-          const hue = (value * 100) / (max - 10);
+          const hue = ((value) * 100) / (max);
           return `hsl(0, 0%, ${hue}%)`;
-          // return hslToHex(0, 0, (value * 100) / max);
         }}
         emptyColor="#000"
         borderWidth={0}
         borderColor="#000000"
         enableLabels={false}
         forceSquare
-        // layers={["cells"]}
         inactiveOpacity={0.7}
         legends={[
           {
@@ -100,15 +74,6 @@ function MRISingleView({ atomMRIData, atomMRISlice, orientation }: MRISingleView
             titleOffset: 4,
           },
         ]}
-        // theme={{
-        //   background: "#000",
-        //   grid: {
-        //     line: {
-        //       stroke: "#000",
-        //       strokeWidth: 0,
-        //     },
-        //   },
-        // }}
         annotations={[]}
         tooltip={({ cell: { data, id, serieId } }) => {
           return (

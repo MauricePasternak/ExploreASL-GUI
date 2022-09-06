@@ -277,7 +277,7 @@ Additional features to keep in mind:
 - [ ] Add Multiprocessing Capability to the Import Module as well. \*\*
 - [x] Add a separate module where users can pin-point change the JSON sidecars of individual subjects/visits/sessions.
 - [ ] Add auto-update capability to the software so that users don't have to manually install new versions.
-- [ ] Allow for plots to be exported as PNG files in the Data Visualization Module.
+- [x] Allow for plots to be exported as PNG files in the Data Visualization Module.
 - [ ] Allow for the Data Visualization module to save/load a JSON parameters file to skip the hassle of repeating steps and re-adjusting sliders each time. Just load the json file and have it all done for you.
 
 \* This is only partially the case. The GUI goes through extensive logical gymnastics to get ExploreASL to import different subsets of your dataset. The official ExploreASL application does not support this as of version 1.10.0.

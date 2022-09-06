@@ -4,7 +4,6 @@ import Box from "@mui/material/Box";
 import Icon from "@mui/material/Icon";
 import IconButton from "@mui/material/IconButton";
 import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
 import { useSetAtom } from "jotai";
 import React from "react";
 import ExploreASLPNG from "../../assets/appIcons/ExploreASLIcon.png";
@@ -32,11 +31,8 @@ function ApplicationBar() {
         </IconButton>
 
         <Box className="drag-window" display="flex" alignItems="center" flexGrow={1} alignSelf="stretch">
-          <Typography marginLeft="10px" variant="h6">
-            ExploreASL GUI
-          </Typography>
           <Icon sx={{ ml: 1, height: 36, width: 36 }}>
-            <img src={ExploreASLPNG}></img>
+            <img src={ExploreASLPNG} />
           </Icon>
         </Box>
         <WindowIcons />

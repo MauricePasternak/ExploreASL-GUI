@@ -9,7 +9,7 @@ import Typography from "@mui/material/Typography";
 import React from "react";
 
 import GIFGitCloneExploreASL from "../../assets/gif/GitCloneExploreASL.gif";
-import GIFMatlabAddPaths from "../../assets/gif/MatlabAddPaths.gif";
+import GIFMatlabAddPaths from "../../assets/gif/MATLABAddPaths.gif";
 
 function AboutGettingStarted() {
   return (

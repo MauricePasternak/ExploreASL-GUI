@@ -5,9 +5,10 @@ import Typography from "@mui/material/Typography";
 import { ResponsiveSwarmPlotCanvas } from "@nivo/swarmplot";
 import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import React from "react";
+
 import {
   toNivoSwarmPlotDataGroupBy,
-  toNivoSwarmPlotDataSingle,
+  toNivoSwarmPlotDataSingle
 } from "../../../common/utilityFunctions/dataFrameFunctions";
 import {
   atomCurrentMRIViewSubject,
@@ -16,14 +17,14 @@ import {
   atomEASLSwarmplotSettings,
   atomMRIDataStats,
   atomNivoGraphDataVariablesSchema,
-  atomOfAtomMRIData,
+  atomOfAtomMRIData
 } from "../../../stores/DataFrameVisualizationStore";
 
 import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
 import {
   niftiToNivoAxial,
   niftiToNivoCoronal,
-  niftiToNivoSagittal,
+  niftiToNivoSagittal
 } from "../../../common/utilityFunctions/nivoFunctions";
 
 function EASLSwarmplot() {
@@ -98,11 +99,15 @@ function EASLSwarmplot() {
       spacing={swarmplotSettings.interNodeSpacing}
       gap={swarmplotSettings.interSeriesGap}
       colors={{ scheme: swarmplotSettings.colorScheme }}
-      borderWidth={swarmplotSettings.nodeBorderWidth}
-      borderColor={{
-        from: "color",
-        modifiers: [["darker", 0.6]],
-      }}
+      // borderWidth={0}
+      borderColor={
+        swarmplotSettings.nodeBorderWidth === 0
+          ? {
+              from: "color",
+              modifiers: [["darker", 1.4]],
+            }
+          : theme.palette.text.primary
+      }
       valueScale={{
         type: "linear",
         min: YMin - YMean * 0.1,
@@ -163,6 +168,7 @@ function EASLSwarmplot() {
         </Paper>
       )}
       theme={{
+        background: theme.palette.background.paper,
         textColor: theme.palette.text.primary,
         fontSize: theme.typography.fontSize,
         grid: {

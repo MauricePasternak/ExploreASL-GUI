@@ -38,6 +38,8 @@ Introduction of the BIDSDataGrid Module (#4) and multiple MacOS Fixes (#5)
 
 ### Added
 
+- Added the ability for users to export the DataVisualization plot result into a PNG file.
+
 - Added progressbar/text/error feedback for running ExploreASL's DARTEL module.
 
 - Added the option for renaming X and Y axis labels for both scatterplots and swarmplots within the Data Visualization
