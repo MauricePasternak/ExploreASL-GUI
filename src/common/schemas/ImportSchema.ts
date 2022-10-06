@@ -190,18 +190,25 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
         // For any additional context, we should verify that the paths exist within the indicated level
         const studyRootPath: string = helpers.options.context.StudyRootPath;
         const SourcedataStructure: SourcedataFolderType[] = helpers.options.context.SourcedataStructure;
+        console.log("SchemaImportDefineContext -- Subjects -- StudyRootPath: ", studyRootPath);
 
-        //
+        // If the study root path is invalid, we cannot validate the paths
         if (!studyRootPath || !((await api.path.getFilepathType(`${studyRootPath}/sourcedata`)) === "dir"))
           return helpers.createError({
             path: helpers.path,
             message: "Cannot determine the validity of the folder structure when the Study Root Path is invalid",
           });
 
+        // Each path must be validated: must exist and the level beyond "sourcedata" that its basename
+        // occurs at must match the SourcedataStructure; forward slashe conversions required
+        const sourcedataPathForwardSlash = `${studyRootPath.replace(/\\/gm, "/")}/sourcedata/`
         for (const path of paths) {
           if (!(await api.path.filepathExists(path))) return false;
 
-          const pathParts = path.replace("\\\\", "/").replace(`${studyRootPath}/sourcedata/`, "").split("/");
+          const pathParts = path
+            .replace(/\\/gm, "/")
+            .replace(sourcedataPathForwardSlash, "")
+            .split("/");
           const pathDepth = pathParts.length;
           const folderType = SourcedataStructure[pathDepth - 1];
           if (!["Subject", "Visit", "Session"].includes(folderType))
@@ -210,27 +217,6 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
               message: `Path ${path} was not found to be a Subject, Visit, or Session`,
             });
         }
-
-        // const nLevels = SourcedataStructure.indexOf("Subject");
-        // const globStars = SourcedataStructure.slice(0, nLevels + 1)
-        //   .map(() => "*")
-        //   .join("/");
-
-        // console.log(`Searching for subjects at fullPath Pattern ${studyRootPath}/sourcedata/${globStars}`);
-
-        // const foundSubjectPaths = new Set(
-        //   (await api.path.glob(`${studyRootPath}/sourcedata`, globStars, { onlyDirectories: true })).map(p => p.path)
-        // );
-
-        // for (const subjectPath of paths) {
-        //   const asPath = api.path.asPath(subjectPath); // Necessary to normalize to forward slashes in Windows
-        //   if (!foundSubjectPaths.has(asPath.path))
-        //     return helpers.createError({
-        //       path: helpers.path,
-        //       message: `Subject ${subjectPath} does not exist in the folder structure you had previously specified`,
-        //     });
-        // }
-
         return true;
       }
     ),

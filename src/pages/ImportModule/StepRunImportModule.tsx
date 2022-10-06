@@ -93,6 +93,14 @@ function StepRunImportModule({
     currentTask.current++; // Increment the current task to allow for indexing the next task
     console.log(`After updating the currentTask, the currentTask is: ${currentTask.current}`);
 
+    // Early return if the process was terminated by the user
+    if (wasTerminatedByUser.current) {
+      console.log("The process was terminated by the user. Resetting refs and setting status back to standby.");
+      resetRefs();
+      setProcStatus("Standby");
+      return;
+    }
+
     // When the current task is equal to the length of contexts (minus 1), it means that all the tasks have been run
     const values = getValues();
     if (currentTask.current === values.ImportContexts.length) {
@@ -178,21 +186,25 @@ function StepRunImportModule({
   const handlePause = async () => {
     // Sanity check
     if (currentProcPID.current === -1 || procStatus !== "Running") {
-      console.log("Import Module Process is not running");
+      console.log("Cannot pause Import Module, as the current state is not running");
       return;
     }
     // Send the pause command
-    await api.invoke("ChildProcess:Pause", currentProcPID.current, ImportModuleChannelName);
+    console.log("StepRunImportModule -- Sending pause command");
+    const pauseResult = await api.invoke("ChildProcess:Pause", currentProcPID.current, ImportModuleChannelName);
+    console.log("StepRunImportModule -- Pause Result: ", pauseResult);
   };
 
   const handleResume = async () => {
     // Sanity check
     if (currentProcPID.current === -1 || procStatus !== "Paused") {
-      console.log("Import Module Process is not paused");
+      console.log("Cannot resume Import Module, as the current state is not paused");
       return;
     }
     // Send the resume command
-    await api.invoke("ChildProcess:Resume", currentProcPID.current, ImportModuleChannelName);
+    console.log("StepRunImportModule -- Sending resume command");
+    const resumeResult = await api.invoke("ChildProcess:Resume", currentProcPID.current, ImportModuleChannelName);
+    console.log("StepRunImportModule -- Resume Result: ", resumeResult);
   };
 
   const handleTerminate = async () => {
@@ -201,9 +213,12 @@ function StepRunImportModule({
       return;
     }
     // Send the terminate command and set the current PID to -1 in order to allow handleProcessClose to not start any followup tasks
+    const procToTerminate = currentProcPID.current;
     currentProcPID.current = -1;
     wasTerminatedByUser.current = true;
-    await api.invoke("ChildProcess:Terminate", currentProcPID.current, ImportModuleChannelName);
+    console.log("StepRunImportModule -- Sending terminate command");
+    const terminateResult = await api.invoke("ChildProcess:Terminate", procToTerminate, ImportModuleChannelName);
+    console.log("StepRunImportModule -- Terminate Result: ", terminateResult);
   };
 
   return (
