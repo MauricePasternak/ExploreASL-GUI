@@ -194,9 +194,9 @@ export async function buildStudyParJSON(importSchema: ImportSchemaType): Promise
       const ASLContext = await getASLContext({ ASLSeriesPattern, NVolumes, M0PositionInASL });
 
       const temp = {
-        SubjectRegexp: SubjectRegExp !== "" ? SubjectRegExp : undefined,
-        VisitRegexp: VisitRegExp !== "" ? VisitRegExp : undefined,
-        SessionRegexp: SessionRegExp !== "" ? SessionRegExp : undefined,
+        SubjectRegExp: SubjectRegExp !== "" ? SubjectRegExp : undefined,
+        VisitRegExp: VisitRegExp !== "" ? VisitRegExp : undefined,
+        SessionRegExp: SessionRegExp !== "" ? SessionRegExp : undefined,
         ASLContext,
         M0: context.M0IsSeparate,
         Manufacturer: context.ASLManufacturer !== "" ? context.ASLManufacturer : undefined,
@@ -212,9 +212,9 @@ export async function buildStudyParJSON(importSchema: ImportSchemaType): Promise
       };
 
       // Cleanup undefined or incompatible fields based on BIDS
-      lodashIsUndefined(temp.SubjectRegexp) && delete temp.SubjectRegexp;
-      lodashIsUndefined(temp.VisitRegexp) && delete temp.VisitRegexp;
-      lodashIsUndefined(temp.SessionRegexp) && delete temp.SessionRegexp;
+      lodashIsUndefined(temp.SubjectRegExp) && delete temp.SubjectRegExp;
+      lodashIsUndefined(temp.VisitRegExp) && delete temp.VisitRegExp;
+      lodashIsUndefined(temp.SessionRegExp) && delete temp.SessionRegExp;
       lodashIsUndefined(temp.Manufacturer) && delete temp.Manufacturer;
       lodashIsUndefined(temp.BackgroundSuppression) && delete temp.BackgroundSuppression;
       temp.PostLabelingDelay === 0 && delete temp.PostLabelingDelay;
@@ -257,9 +257,9 @@ export async function updateContextSpecificRegexps(importSchema: ImportSchemaTyp
     for (const context of importSchema.ImportContexts) {
       if (context.IsGlobal) continue;
 
-      const subjectRegexp = [];
-      const visitRegexp = [];
-      const sessionRegexp = [];
+      const subjectRegExp = [];
+      const visitRegExp = [];
+      const sessionRegExp = [];
 
       // Loop through each path, split into parts, and add the appropriate part to each regexp array
       // AFTER applying any alias mappings
@@ -271,29 +271,29 @@ export async function updateContextSpecificRegexps(importSchema: ImportSchemaTyp
         const sessionIndex = folderStructure.indexOf("Session");
 
         if (subjectIndex !== -1) {
-          subjectRegexp.push(pathParts[subjectIndex]);
+          subjectRegExp.push(pathParts[subjectIndex]);
         }
 
         if (visitIndex !== -1) {
           const visit = pathParts[visitIndex];
           const visitAlias = importSchema.MappingVisitAliases[visit];
-          visitAlias && visitRegexp.push(visitAlias);
+          visitAlias && visitRegExp.push(visitAlias);
         }
 
         if (sessionIndex !== -1) {
           const session = pathParts[sessionIndex];
           const sessionAlias = importSchema.MappingSessionAliases[session];
-          sessionAlias && sessionRegexp.push(sessionAlias);
+          sessionAlias && sessionRegExp.push(sessionAlias);
         }
       }
 
       // Before moving onto the next context, update the regexps
-      subjectRegexp.length > 0 &&
-        (context.SubjectRegExp = stringArrToRegex(subjectRegexp, { isCaptureGroup: false, isStartEndBound: false }));
-      visitRegexp.length > 0 &&
-        (context.VisitRegExp = stringArrToRegex(visitRegexp, { isCaptureGroup: false, isStartEndBound: false }));
-      sessionRegexp.length > 0 &&
-        (context.SessionRegExp = stringArrToRegex(sessionRegexp, { isCaptureGroup: false, isStartEndBound: false }));
+      subjectRegExp.length > 0 &&
+        (context.SubjectRegExp = stringArrToRegex(subjectRegExp, { isCaptureGroup: false, isStartEndBound: false }));
+      visitRegExp.length > 0 &&
+        (context.VisitRegExp = stringArrToRegex(visitRegExp, { isCaptureGroup: false, isStartEndBound: false }));
+      sessionRegExp.length > 0 &&
+        (context.SessionRegExp = stringArrToRegex(sessionRegExp, { isCaptureGroup: false, isStartEndBound: false }));
     }
 
     return importSchema;
