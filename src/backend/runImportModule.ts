@@ -8,7 +8,7 @@ import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
 import {
   MATLABArgsPlatformType,
   MATLABCommandLineArgsPost2019,
-  MATLABCommandLineArgsPre2019
+  MATLABCommandLineArgsPre2019,
 } from "../common/schemas/MATLABCommandLineArgs";
 import { RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
 import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
@@ -19,15 +19,14 @@ import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents"
 import {
   createRuntimeEnvironment,
   getExploreASLVersion,
-  getMATLABPathAndVersion
+  getMATLABPathAndVersion,
 } from "./runExploreASLHelperFunctions";
-import { buildSourceStructureJSON, buildStudyParJSON } from "./runImportModuleHelperFunctions";
+// import { buildSourceStructureJSON, buildStudyParJSON } from "./runImportModuleHelperFunctions";
 
 export async function handleRunImportModule(
   event: IpcMainInvokeEvent,
   channelName: string,
   formData: ImportSchemaType,
-  whichImportContext: number
 ): Promise<GUIMessageWithPayload<RunEASLStartupReturnType>> {
   // By default, we assume an error will occur
   const defaultPayload: RunEASLStartupReturnType = { pids: [-1], channelName };
@@ -140,7 +139,7 @@ export async function handleRunImportModule(
             `${xASL_latest_dir.path}`,
           ],
         },
-        payload: defaultPayload
+        payload: defaultPayload,
       };
     }
     executablePath = xASL_runnable.path;
@@ -205,49 +204,49 @@ export async function handleRunImportModule(
     (await rootImportLockDir.exists()) && (await rootImportLockDir.remove());
   }
 
-  /*************************************************************************************
-   * Step 6: Define the appropriate sourceStructure.json file and create it for this run
-   ************************************************************************************/
-  const sourceStructureJSON = await buildSourceStructureJSON(formData, whichImportContext);
+  // /*************************************************************************************
+  //  * Step 6: Define the appropriate sourceStructure.json file and create it for this run
+  //  ************************************************************************************/
+  // const sourceStructureJSON = await buildSourceStructureJSON(formData, whichImportContext);
 
-  console.log(`EASL Import -- sourceStructureJSON:`, JSON.stringify(sourceStructureJSON, null, 2));
+  // console.log(`EASL Import -- sourceStructureJSON:`, JSON.stringify(sourceStructureJSON, null, 2));
 
-  if (!sourceStructureJSON) {
-    return {
-      GUIMessage: createGUIMessage("Could not create the sourceStructure.json file.", "Error", "error"),
-      payload: defaultPayload,
-    };
-  }
-  const sourceStructureJSONPath = await StudyRootPath.resolve("sourceStructure.json").writeJSON(sourceStructureJSON, {
-    spaces: 2,
-  });
-  if (!(await sourceStructureJSONPath.exists())) {
-    return {
-      GUIMessage: createGUIMessage("Could not create the sourceStructure.json file.", "Error", "error"),
-      payload: defaultPayload,
-    };
-  }
+  // if (!sourceStructureJSON) {
+  //   return {
+  //     GUIMessage: createGUIMessage("Could not create the sourceStructure.json file.", "Error", "error"),
+  //     payload: defaultPayload,
+  //   };
+  // }
+  // const sourceStructureJSONPath = await StudyRootPath.resolve("sourceStructure.json").writeJSON(sourceStructureJSON, {
+  //   spaces: 2,
+  // });
+  // if (!(await sourceStructureJSONPath.exists())) {
+  //   return {
+  //     GUIMessage: createGUIMessage("Could not create the sourceStructure.json file.", "Error", "error"),
+  //     payload: defaultPayload,
+  //   };
+  // }
 
-  /******************************************************************************
-   * Step 7: Define the appropriate studyPar.json file and create it for this run
-   *****************************************************************************/
-  const studyParJSON = await buildStudyParJSON(formData, whichImportContext);
+  // /******************************************************************************
+  //  * Step 7: Define the appropriate studyPar.json file and create it for this run
+  //  *****************************************************************************/
+  // const studyParJSON = await buildStudyParJSON(formData, whichImportContext);
 
-  console.log(`EASL Import -- studyParJSON:`, JSON.stringify(studyParJSON, null, 2));
+  // console.log(`EASL Import -- studyParJSON:`, JSON.stringify(studyParJSON, null, 2));
 
-  if (!studyParJSON) {
-    return {
-      GUIMessage: createGUIMessage("Could not create the studyPar.json file.", "Error", "error"),
-      payload: defaultPayload,
-    };
-  }
-  const studyParJSONPath = await StudyRootPath.resolve("studyPar.json").writeJSON(studyParJSON, { spaces: 2 });
-  if (!(await studyParJSONPath.exists())) {
-    return {
-      GUIMessage: createGUIMessage("Could not create the studyPar.json file.", "Error", "error"),
-      payload: defaultPayload,
-    };
-  }
+  // if (!studyParJSON) {
+  //   return {
+  //     GUIMessage: createGUIMessage("Could not create the studyPar.json file.", "Error", "error"),
+  //     payload: defaultPayload,
+  //   };
+  // }
+  // const studyParJSONPath = await StudyRootPath.resolve("studyPar.json").writeJSON(studyParJSON, { spaces: 2 });
+  // if (!(await studyParJSONPath.exists())) {
+  //   return {
+  //     GUIMessage: createGUIMessage("Could not create the studyPar.json file.", "Error", "error"),
+  //     payload: defaultPayload,
+  //   };
+  // }
 
   /***************************************
    * Step 8: Run the ExploreASL executable
@@ -306,11 +305,11 @@ export async function handleRunImportModule(
   // On successful spawn, add to the globalChildProcesses and clear the corresponding text display
   child.on("spawn", () => {
     console.log("Import Module process has spawned with PID", child.pid);
-    const contextName = whichImportContext === 0 ? "Global Context" : `Additional Context ${whichImportContext}`;
+    // const contextName = whichImportContext === 0 ? "Global Context" : `Additional Context ${whichImportContext}`;
 
     GLOBAL_CHILD_PROCESSES.push(child.pid);
     respondToIPCRenderer(event, `${channelName}:childProcessHasSpawned`, child.pid);
-    respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, `Running ExploreASL Import for ${contextName}`, {
+    respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, `Running ExploreASL Import`, {
       size: "24px",
       bold: true,
     });

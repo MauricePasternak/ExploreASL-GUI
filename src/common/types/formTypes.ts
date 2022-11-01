@@ -11,8 +11,8 @@ import {
 /**
  * @description An intermediate type to represent the mandatory props to provide every `RHF` prefixed component.
  * These props include:
- * `control`: The controller object returned by a `useForm` hook.
- * `name`: The name of the field that this component is responsible for.
+ * - `control`: The controller object returned by a `useForm` hook.
+ * - `name`: The name of the field that this component is responsible for.
  */
 export type RHFControlAndNameType<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> = {
   name: TName;

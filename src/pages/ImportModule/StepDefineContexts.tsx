@@ -12,7 +12,7 @@ import { cloneDeep as lodashCloneDeep } from "lodash";
 import React, { useEffect } from "react";
 import { SubmitErrorHandler, SubmitHandler, useFieldArray } from "react-hook-form";
 import ContextIcon from "../../assets/svg/ContextIcon.svg";
-import { GUIIMPORTFILE_BASENAME } from "../../common/GLOBALS";
+import { GUIIMPORTFILE_BASENAME, SOURCESTRUCTUREFILE_BASENAME, STUDYPARFILE_BASENAME } from "../../common/GLOBALS";
 import { SchemaImportPar } from "../../common/schemas/ImportSchema";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 import { YupValidate } from "../../common/utilityFunctions/formFunctions";
@@ -21,7 +21,11 @@ import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrappe
 import { DefaultImportSingleContext } from "../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
 import HelpImport__StepDefineAdditionalContext from "../Help/HelpImport__StepDefineAdditionalContext";
-import { updateFolderHierarchyPerContext } from "./ImportModuleHelperFunctions";
+import {
+  buildSourceStructureJSON,
+  buildStudyParJSON,
+  updateContextSpecificRegexps,
+} from "./ImportModuleHelperFunctions";
 import SingleImportContext from "./SingleImportContext";
 
 function StepDefineContexts({
@@ -43,7 +47,8 @@ function StepDefineContexts({
     console.log("Step 'Define Contexts' -- Valid Submit Values: ", values);
 
     // Form values must be adjusted to translate Paths into folderHierarchy for each context
-    const adjustedValues = await updateFolderHierarchyPerContext(values);
+    // const adjustedValues = await updateFolderHierarchyPerContext(values);
+    const adjustedValues = await updateContextSpecificRegexps(values);
     if (!adjustedValues) {
       setImportSnackbar({
         severity: "error",
@@ -56,10 +61,58 @@ function StepDefineContexts({
       return;
     }
 
-    const pathGUIImportPar = api.path.asPath(values.StudyRootPath, GUIIMPORTFILE_BASENAME);
+    // Build the sourceStructure.json file
+    const sourceStructureJSON = await buildSourceStructureJSON(adjustedValues);
+    if (!sourceStructureJSON) {
+      setImportSnackbar({
+        severity: "error",
+        title: "Error building sourceStructure.json",
+        message: [
+          "Could not build sourceStructure.json file.",
+          "Please ensure that the filepaths you have provided actually exist and do not have any illegal characters (i.e. $^&).",
+        ],
+      });
+      return;
+    }
+
+    // Build the studyPar.json file
+    const studyParJSON = await buildStudyParJSON(adjustedValues);
+    if (!studyParJSON) {
+      setImportSnackbar({
+        severity: "error",
+        title: "Error creating studyPar.json",
+        message: [
+          "Could not create studyPar.json file.",
+          "Please ensure that the filepaths you have provided actually exist and do not have any illegal characters (i.e. $^&).",
+        ],
+      });
+      return;
+    }
+
     try {
-      const createdJSONFile = await api.path.writeJSON(pathGUIImportPar.path, adjustedValues, { spaces: 1 });
-      if (await api.path.filepathExists(createdJSONFile.path)) {
+      const createdGUIImportJSONFile = await api.path.writeJSON(
+        api.path.asPath(values.StudyRootPath, GUIIMPORTFILE_BASENAME).path,
+        adjustedValues,
+        { spaces: 1 }
+      );
+      const createdSourceStructureFile = await api.path.writeJSON(
+        api.path.asPath(values.StudyRootPath, SOURCESTRUCTUREFILE_BASENAME).path,
+        sourceStructureJSON,
+        { spaces: 1 }
+      );
+      const createdStudyParFile = await api.path.writeJSON(
+        api.path.asPath(values.StudyRootPath, STUDYPARFILE_BASENAME).path,
+        studyParJSON,
+        { spaces: 1 }
+      );
+
+      if (
+        await Promise.all([
+          api.path.filepathExists(createdGUIImportJSONFile.path),
+          api.path.filepathExists(createdSourceStructureFile.path),
+          api.path.filepathExists(createdStudyParFile.path),
+        ])
+      ) {
         setCurrentStep(currentStep + 1);
       }
     } catch (error) {
@@ -67,8 +120,7 @@ function StepDefineContexts({
         severity: "error",
         title: "Error while writing Import Parameters",
         message: [
-          `Could not write filepath:`,
-          `${pathGUIImportPar.path}`,
+          `One of the import configuration files could not be written to the study root folder.`,
           `It is possible that the folder this filepath is meant to be written in has special privileges.`,
           `Please check the permissions of this folder and try again.`,
         ],
@@ -83,43 +135,6 @@ function StepDefineContexts({
   /**
    * useEffect for populating fields from an existing ImportPar.json file if it is valid
    */
-  useEffect(() => {
-    async function handleLoadImportPar() {
-      const currentValues = getValues();
-      console.log(
-        "Step 'Define Contexts' -- useEffect -- searching for ImportPar.json in ",
-        currentValues.StudyRootPath
-      );
-
-      try {
-        const importParPath = api.path.asPath(currentValues.StudyRootPath, GUIIMPORTFILE_BASENAME);
-        if (!(await api.path.filepathExists(importParPath.path))) return;
-
-        console.log(
-          "Step 'Define Contexts' -- useEffect -- ImportPar.json found at ",
-          importParPath.path,
-          "...validating"
-        );
-        const { payload, error } = await api.path.readJSONSafe(importParPath.path);
-        if (!("ImportContexts" in payload) || error) return;
-
-        // Validate the data
-        const { errors, values } = await YupValidate(SchemaImportPar, payload as ImportSchemaType);
-        if (Object.keys(errors).length > 0) {
-          console.log("Step 'Define Contexts' -- useEffect -- loaded ImportPar.json did not pass validation: ", errors);
-          return;
-        }
-        setValue("ImportContexts", values.ImportContexts, { shouldValidate: false });
-        return;
-      } catch (error) {
-        console.warn(`Step 'Define Contexts' -- useEffect -- Error while loading/validating ImportPar.json: `, error);
-        return;
-      }
-    }
-
-    handleLoadImportPar();
-  }, []);
-
   useEffect(() => {
     async function handleLoadImportPar() {
       const currentValues = getValues();

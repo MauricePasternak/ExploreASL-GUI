@@ -2,7 +2,9 @@ import { uniq as lodashUniq } from "lodash";
 import * as Yup from "yup";
 import { ObjectShape } from "yup/lib/object";
 import {
+  ASLSequenceType,
   ASLSeriesPatternType,
+  BolusCutOffTechniqueType,
   EASLType,
   ImportAliasesSchemaType,
   ImportContextSchemaType,
@@ -157,70 +159,76 @@ export const SchemaImportStepDefineAliases = Yup.object().shape<YupShape<ImportA
   ),
 });
 
+const handleValidatePaths = async (paths: string[], helpers: Yup.TestContext<ImportSchemaType>) => {
+  // For the global context, there should be no paths
+  const isGlobal = helpers.parent.IsGlobal ?? true;
+
+  console.log("SchemaImportDefineContext -- Subjects -- isGlobal: ", {
+    isGlobal,
+    paths,
+  });
+
+  if (isGlobal && paths.length === 0) return true;
+
+  // Paths cannot be blank for the non-global context
+  if (paths.length === 0)
+    return helpers.createError({
+      path: helpers.path,
+      message: "At least one path is required when specifying an additional context",
+    });
+
+  // For any additional context, we should verify that the paths exist within the indicated level
+  const studyRootPath: string = helpers.options.context.StudyRootPath;
+  const SourcedataStructure: SourcedataFolderType[] = helpers.options.context.SourcedataStructure;
+  console.log("SchemaImportDefineContext -- Subjects -- StudyRootPath: ", studyRootPath);
+
+  // If the study root path is invalid, we cannot validate the paths
+  if (!studyRootPath || !((await api.path.getFilepathType(`${studyRootPath}/sourcedata`)) === "dir"))
+    return helpers.createError({
+      path: helpers.path,
+      message: "Cannot determine the validity of the folder structure when the Study Root Path is invalid",
+    });
+
+  // Each path must be validated: must exist and the level beyond "sourcedata" that its basename
+  // occurs at must match the SourcedataStructure; forward slashe conversions required
+  const sourcedataPathForwardSlash = `${studyRootPath.replace(/\\/gm, "/")}/sourcedata/`;
+  for (const path of paths) {
+    if (!(await api.path.filepathExists(path))) return false;
+
+    const pathParts = path.replace(/\\/gm, "/").replace(sourcedataPathForwardSlash, "").split("/");
+    const pathDepth = pathParts.length;
+    const folderType = SourcedataStructure[pathDepth - 1];
+
+    console.log("SchemaImportDefineContext -- Subjects -- pathParts: ", {
+      path,
+      sourcedataPathForwardSlash,
+      pathParts,
+      pathDepth,
+      folderType,
+    });
+
+    if (!["Subject", "Visit", "Session"].includes(folderType))
+      return helpers.createError({
+        path: helpers.path,
+        message: `Path ${path} was not found to be a Subject, Visit, or Session`,
+      });
+  }
+  return true;
+};
+
 /**
  * Schema intended for the Import Module Step: Define Context
  */
 export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportContextSchemaType>>({
+  // GUI Meta Fields
   IsGlobal: Yup.boolean().default(false),
   Paths: Yup.array()
     .optional()
     .default([])
     .of(Yup.string())
-    .test(
-      "ValidContextPaths",
-      "One or more invalid filepaths provided for this context",
-      async (paths: string[], helpers: Yup.TestContext<ImportSchemaType>) => {
-        // For the global context, there should be no paths
-        const isGlobal = helpers.parent.IsGlobal ?? true;
+    .test("ValidContextPaths", "One or more invalid filepaths provided for this context", handleValidatePaths),
 
-        // console.log("SchemaImportDefineContext -- Subjects -- isGlobal: ", {
-        //   isGlobal,
-        //   paths,
-        // });
-
-        if (isGlobal && paths.length === 0) return true;
-
-        // Paths cannot be blank for the non-global context
-        if (paths.length === 0)
-          return helpers.createError({
-            path: helpers.path,
-            message: "At least one path is required when specifying an additional context",
-          });
-
-        // For any additional context, we should verify that the paths exist within the indicated level
-        const studyRootPath: string = helpers.options.context.StudyRootPath;
-        const SourcedataStructure: SourcedataFolderType[] = helpers.options.context.SourcedataStructure;
-        console.log("SchemaImportDefineContext -- Subjects -- StudyRootPath: ", studyRootPath);
-
-        // If the study root path is invalid, we cannot validate the paths
-        if (!studyRootPath || !((await api.path.getFilepathType(`${studyRootPath}/sourcedata`)) === "dir"))
-          return helpers.createError({
-            path: helpers.path,
-            message: "Cannot determine the validity of the folder structure when the Study Root Path is invalid",
-          });
-
-        // Each path must be validated: must exist and the level beyond "sourcedata" that its basename
-        // occurs at must match the SourcedataStructure; forward slashe conversions required
-        const sourcedataPathForwardSlash = `${studyRootPath.replace(/\\/gm, "/")}/sourcedata/`
-        for (const path of paths) {
-          if (!(await api.path.filepathExists(path))) return false;
-
-          const pathParts = path
-            .replace(/\\/gm, "/")
-            .replace(sourcedataPathForwardSlash, "")
-            .split("/");
-          const pathDepth = pathParts.length;
-          const folderType = SourcedataStructure[pathDepth - 1];
-          if (!["Subject", "Visit", "Session"].includes(folderType))
-            return helpers.createError({
-              path: helpers.path,
-              message: `Path ${path} was not found to be a Subject, Visit, or Session`,
-            });
-        }
-        return true;
-      }
-    ),
-
+  // ASL Context Fields
   ASLSeriesPattern: Yup.string()
     .required("This is a required field")
     .oneOf(["control-label", "label-control", "deltam", "cbf"], "Invalid ASL Series Pattern"),
@@ -273,11 +281,52 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
         return true;
       }
     ),
+
+  // ASL Sequence Info Fields
   M0IsSeparate: Yup.boolean().optional(),
   ASLManufacturer: Yup.string().optional().oneOf(["GE", "Philips", "Siemens", ""], "Invalid ASL Manufacturer"),
   ASLSequence: Yup.string().optional().oneOf(["PASL", "CASL", "PCASL"], "Invalid ASL Sequence"),
   PostLabelingDelay: Yup.number().optional(),
-  LabelingDuration: Yup.number().optional(),
+  LabelingDuration: Yup.number().when("ASLSequence", {
+    is: (sequence: ASLSequenceType) => sequence !== "PASL",
+    then: Yup.number()
+      .required("This is a required field when working with CASL or PCASL")
+      .moreThan(0, "Labeling Duration must be greater than 0 when working with CASL or PCASL"),
+    otherwise: schema =>
+      schema
+        .optional()
+        .max(
+          0,
+          "Labeling Duration must be 0 when working with PASL. You're probably thinking about Bolus Cut Off Delay Time which applies to PASL."
+        ),
+  }),
+  BolusCutOffFlag: Yup.boolean().when("ASLSequence", {
+    is: (sequence: ASLSequenceType) => sequence === "PASL",
+    then: Yup.boolean().required("This is a required field when working with PASL"),
+    otherwise: schema =>
+      schema.optional().notOneOf([true], "Bolus Cut Off Flag must be false or omitted when working with CASL or PCASL"),
+  }),
+  BolusCutOffTechnique: Yup.string().when("BolusCutOffFlag", {
+    is: (bolusCutOffFlag: boolean) => !!bolusCutOffFlag,
+    then: schema =>
+      schema
+        .required("This is a required field when Bolus Cut Off Flag is true")
+        .oneOf(["QUIPSS", "QUIPSSII", "Q2TIPS"]),
+    otherwise: schema =>
+      schema
+        .optional()
+        .notOneOf(["QUIPSS", "QUIPSSII", "Q2TIPS"], "If Bolus Cut Off Flag is false, this field must be omitted"),
+  }),
+  BolusCutOffDelayTime: Yup.number().when("BolusCutOffTechnique", {
+    is: (bolusCutOffTechnique: BolusCutOffTechniqueType) => !!bolusCutOffTechnique,
+    then: schema =>
+      schema
+        .required("This is a required field and cannot be zero when Bolus Cut Off Technique is defined")
+        .moreThan(0, "Bolus Cut Off Delay Time must be greater than 0"),
+    otherwise: schema =>
+      schema.optional().max(0, "This field must be set to 0 when Bolus Cut Off Technique is omitted"),
+  }),
+  // Background Suppression Fields
   BackgroundSuppressionNumberPulses: Yup.number().integer("Must be an integer"),
   BackgroundSuppressionPulseTime: Yup.array().when("BackgroundSuppressionNumberPulses", {
     is: (nPulses: number) => nPulses > 0,

@@ -34,6 +34,21 @@ export type ASLSequenceType = "CASL" | "PCASL" | "PASL";
 export type ASLManufacturerType = "GE" | "Philips" | "Siemens";
 
 /**
+ * For PASL sequences, this determines whether a bolus cut-off strategy was used.
+ */
+export type BolusCutOffFlagType = boolean;
+
+/**
+ * For PASL sequences, this determines which bolus cut-off strategy was used.
+ */
+export type BolusCutOffTechniqueType = "QUIPSS" | "QUIPSSII" | "Q2TIPS";
+
+/**
+ * For PASL sequences, this determines the cut-off times used.
+ */
+export type BolusCutOffDelayTimeType = number;
+
+/**
  * Type defining the schma of the step where the folder paths and structure are defined.
  */
 export type ImportRuntimeEnvsSchemaType = {
@@ -57,18 +72,29 @@ export type ImportAliasesSchemaType = {
  * Type defining the schema of the step where ASL Context and other variables are defined.
  */
 export type ImportContextSchemaType = {
+  // GUI Meta
   IsGlobal: boolean;
-  folderHierarchy: string[];
+  // folderHierarchy: string[];
   Paths: string[];
+  SubjectRegExp: string;
+  VisitRegExp: string;
+  SessionRegExp: string;
+
+  // ASL Context
   ASLSeriesPattern: ASLSeriesPatternType | "";
   NVolumes: number;
   M0PositionInASL: number[];
   DummyPositionInASL?: number[];
+  // ASL Sequence Info
   M0IsSeparate: boolean;
   ASLManufacturer?: ASLManufacturerType | "";
   ASLSequence: ASLSequenceType;
   PostLabelingDelay?: number;
   LabelingDuration?: number;
+  BolusCutOffFlag?: BolusCutOffFlagType;
+  BolusCutOffTechnique?: BolusCutOffTechniqueType | "";
+  BolusCutOffDelayTime?: BolusCutOffDelayTimeType;
+  // Other
   BackgroundSuppressionNumberPulses?: number;
   BackgroundSuppressionPulseTime?: number[];
 };
@@ -86,12 +112,20 @@ export type ImportSchemaType = ImportRuntimeEnvsSchemaType & ImportAliasesSchema
  * Type defining the JSON output to studyPar.json
  */
 export type StudyParJSONOutputSchemaType = {
+  SubjectRegExp?: string;
+  VisitRegExp?: string;
+  SessionRegExp?: string;
+
   ASLContext: string;
-  Manufacturer?: ASLManufacturerType;
-  LabelingType: ASLSequenceType;
   M0?: boolean;
+  Manufacturer?: ASLManufacturerType;
+  ArterialSpinLabelingType: ASLSequenceType;
+
   PostLabelingDelay?: number;
   LabelingDuration?: number;
+  BolusCutOffFlag?: boolean;
+  BolusCutOffTechnique?: BolusCutOffTechniqueType;
+  BolusCutOffDelayTime?: number;
   BackgroundSuppression?: boolean;
   BackgroundSuppressionNumberPulses?: number;
   BackgroundSuppressionPulseTime?: number[];

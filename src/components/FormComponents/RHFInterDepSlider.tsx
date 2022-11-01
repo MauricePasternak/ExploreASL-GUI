@@ -1,19 +1,14 @@
-import React, { useEffect, useState } from "react";
-import Slider, { SliderProps } from "@mui/material/Slider";
-import { Controller, FieldValues, Path } from "react-hook-form";
-import { useDebouncedCallback } from "use-debounce";
-import {
-  RHFFieldAndFieldStateType,
-  RHFControlAndNameType,
-  RHFInterDepBaseProps,
-  RHFTriggerType,
-} from "../../common/types/formTypes";
-import FormControl, { FormControlProps } from "@mui/material/FormControl";
-import FormLabel from "@mui/material/FormLabel";
-import FormHelperText from "@mui/material/FormHelperText";
 import Box from "@mui/material/Box";
+import FormControl, { FormControlProps } from "@mui/material/FormControl";
+import FormHelperText from "@mui/material/FormHelperText";
+import FormLabel from "@mui/material/FormLabel";
+import Slider, { SliderProps } from "@mui/material/Slider";
 import TextField, { TextFieldProps } from "@mui/material/TextField";
 import FastIsEqual from "fast-deep-equal";
+import React, { useEffect, useState } from "react";
+import { Controller, FieldValues, Path } from "react-hook-form";
+import { useDebouncedCallback } from "use-debounce";
+import { RHFFieldAndFieldStateType, RHFInterDepBaseProps, RHFTriggerType } from "../../common/types/formTypes";
 
 type InterDepControlledSliderBaseProps = {
   label?: string;
@@ -39,11 +34,6 @@ type InterDepControlledSliderPropsNoField<
   TValues extends FieldValues,
   TName extends Path<TValues> = Path<TValues>
 > = Omit<InterDepControlledSliderProps<TValues, TName>, "field" | "fieldState">;
-
-export type RHFInterDepSliderProps<
-  TValues extends FieldValues,
-  TName extends Path<TValues> = Path<TValues>
-> = RHFInterDepBaseProps<TValues, TName> & InterDepControlledSliderPropsNoField<TValues, TName>;
 
 function InterDepControlledSlider<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
   field,
@@ -144,6 +134,11 @@ function InterDepControlledSlider<TValues extends FieldValues, TName extends Pat
   );
 }
 
+export type RHFInterDepSliderProps<
+  TValues extends FieldValues,
+  TName extends Path<TValues> = Path<TValues>
+> = RHFInterDepBaseProps<TValues, TName> & InterDepControlledSliderPropsNoField<TValues, TName>;
+
 /**
  * A Material UI Slider under the control of RHF. This component triggers the validation of other fields.
  *
@@ -174,14 +169,14 @@ function InterDepControlledSlider<TValues extends FieldValues, TName extends Pat
 function RHFInterDepSlider<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>>({
   control,
   name,
-  ...InterDepcontrolledSliderProps
+  ...InterDepControlledSliderProps
 }: RHFInterDepSliderProps<TValues, TName>) {
   return (
     <Controller
       control={control}
       name={name}
       render={({ field, fieldState }) => {
-        return <InterDepControlledSlider field={field} fieldState={fieldState} {...InterDepcontrolledSliderProps} />;
+        return <InterDepControlledSlider field={field} fieldState={fieldState} {...InterDepControlledSliderProps} />;
       }}
     />
   );

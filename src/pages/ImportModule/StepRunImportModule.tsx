@@ -39,27 +39,22 @@ function StepRunImportModule({
   const wasTerminatedByUser = useRef(false);
 
   // Tracking the tasks performed
-  const currentTask = useRef(0);
-  const completedTasks = useRef([] as number[]);
-  const failedTasks = useRef([] as number[]);
+  // const currentTask = useRef(0);
+  // const completedTasks = useRef([] as number[]);
+  // const failedTasks = useRef([] as number[]);
 
   function resetRefs() {
-    currentTask.current = 0; // For indexing contexts; we start from the global context
-    completedTasks.current = [];
-    failedTasks.current = [];
+    // currentTask.current = 0; // For indexing contexts; we start from the global context
+    // completedTasks.current = [];
+    // failedTasks.current = [];
     currentProcPID.current = -1;
   }
 
   const handleStartImportModule = async () => {
-    console.log(`Running Import Module for context with index: ${currentTask.current}`);
+    // console.log(`Running Import Module for context with index: ${currentTask.current}`);
 
     const values = getValues();
-    const { payload, GUIMessage } = await api.invoke(
-      "ExploreASL:RunImportModule",
-      ImportModuleChannelName,
-      values,
-      currentTask.current
-    );
+    const { payload, GUIMessage } = await api.invoke("ExploreASL:RunImportModule", ImportModuleChannelName, values);
 
     // If Successful, re-render in a running state and update the current PID
     if (GUIMessage.severity === "success") {
@@ -88,10 +83,6 @@ function StepRunImportModule({
 
   const handleFeedbackProcessClose = async (pid: number, exitCode: number) => {
     console.log(`Import Module Process Closed with Process ID: ${pid} and Exit Code: ${exitCode}.`);
-    console.log(`Prior to updating the currentTask, the currentTask is: ${currentTask.current}`);
-
-    currentTask.current++; // Increment the current task to allow for indexing the next task
-    console.log(`After updating the currentTask, the currentTask is: ${currentTask.current}`);
 
     // Early return if the process was terminated by the user
     if (wasTerminatedByUser.current) {
@@ -99,33 +90,25 @@ function StepRunImportModule({
       resetRefs();
       setProcStatus("Standby");
       return;
-    }
-
-    // When the current task is equal to the length of contexts (minus 1), it means that all the tasks have been run
-    const values = getValues();
-    if (currentTask.current === values.ImportContexts.length) {
+    } else {
+      const values = getValues();
+      // if (currentTask.current === values.ImportContexts.length) {
       console.log(`StepRunImportModule: All tasks completed. Resetting the current PID to -1`);
       resetRefs();
       setProcStatus("Standby");
 
       // Only give snackbar info feedback if the user did not terminate the process
-      !wasTerminatedByUser.current &&
-        setImportModuleSnackbar({
-          severity: "info",
-          title: "Import Completed",
-          message: [
-            "All Import Contexts have been imported.",
-            `Before proceeding, you are recommended to review the contents of the following directories in order to verify import success:`,
-            `${api.path.osSpecificString(values.EASLPath, "rawdata")}`,
-            `${api.path.osSpecificString(values.EASLPath, "derivatives", "ExploreASL", "log")}`,
-          ],
-        });
-      return;
+      setImportModuleSnackbar({
+        severity: "info",
+        title: "Import Completed",
+        message: [
+          "All Import Contexts have been imported.",
+          `Before proceeding, you are recommended to review the contents of the following directories in order to verify import success:`,
+          `${api.path.osSpecificString(values.EASLPath, "rawdata")}`,
+          `${api.path.osSpecificString(values.EASLPath, "derivatives", "ExploreASL", "log")}`,
+        ],
+      });
     }
-
-    console.log(`StepRunImportModule: Running the next task`);
-    // Otherwise start up the next task
-    await handleStartImportModule();
   };
 
   const handleFeedbackProcessPaused = (message: string, failedToPause: boolean) => {

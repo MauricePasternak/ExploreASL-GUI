@@ -12,16 +12,18 @@ import Typography from "@mui/material/Typography";
 import { partialRight as lodashPartialRight, range as lodashRange } from "lodash";
 import React from "react";
 import { Control, UseFieldArrayRemove, UseFormTrigger } from "react-hook-form";
+import RHFInterDepSelect from "../../components/FormComponents/RHFInterDepSelect";
 import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 import { getNumbersFromDelimitedString } from "../../common/utilityFunctions/stringFunctions";
 import ExpandMore from "../../components/ExpandMore";
 import RHFFilepathDropzone from "../../components/FormComponents/RHFFilepathDropzone";
 import RHFInterDepSlider from "../../components/FormComponents/RHFInterDepSlider";
-import RHFSelect from "../../components/FormComponents/RHFSelect";
+import RHFSelect, { RHFControlledSelectOption } from "../../components/FormComponents/RHFSelect";
 import RHFSingleCheckable from "../../components/FormComponents/RHFSingleCheckable";
 import RHFSlider from "../../components/FormComponents/RHFSlider";
 import RHFTextfield from "../../components/FormComponents/RHFTextfield";
 import OutlinedGroupBox from "../../components/OutlinedGroupBox";
+import RHFInterDepSingleCheckable from "../../components/FormComponents/RHFInterDepSingleCheckable";
 
 type SingleImportContextProps = {
   contextIndex: number;
@@ -94,10 +96,10 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                   name={`ImportContexts.${contextIndex}.ASLSeriesPattern`}
                   label="ASL Series Pattern"
                   options={[
-                    { label: "Alternating Control, Label", value: "control-label" },
-                    { label: "Alternating Label, Control", value: "label-control" },
-                    { label: "Pairwise Subtracted Image", value: "deltam" },
-                    { label: "Perfusion Image", value: "cbf" },
+                    { label: "Alternating Control, Label Series", value: "control-label" },
+                    { label: "Alternating Label, Control Series", value: "label-control" },
+                    { label: "Intermediate Perfusion Weighted Image", value: "deltam" },
+                    { label: "Complete Perfusion (CBF) Image", value: "cbf" },
                   ]}
                   helperText="Describes the general pattern of the ASL series (i.e. does it alternate between control and label volumes?)."
                 />
@@ -157,6 +159,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                   control={control}
                   name={`ImportContexts.${contextIndex}.M0IsSeparate`}
                   label="An M0 scan was acquired separately"
+                  helperText="Check this box if an M0 scan is acquired as a separate DICOM series"
                   valWhenChecked={true}
                   valWhenUnchecked={false}
                 />
@@ -175,7 +178,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                 />
               </Grid>
               <Grid item xs={12} md={6} xl={3}>
-                <RHFSelect
+                <RHFInterDepSelect
                   control={control}
                   name={`ImportContexts.${contextIndex}.ASLSequence`}
                   label="ASL Sequence Type"
@@ -184,6 +187,11 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                     { label: "Pulsed ASL", value: "PASL" },
                     { label: "Pseudo-continuous ASL", value: "PCASL" },
                     { label: "Continuous ASL", value: "CASL" },
+                  ]}
+                  trigger={trigger}
+                  triggerTarget={[
+                    `ImportContexts.${contextIndex}.BolusCutOffFlag`,
+                    `ImportContexts.${contextIndex}.LabelingDuration`,
                   ]}
                 />
               </Grid>
@@ -211,6 +219,57 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                   helperText="Units are in seconds. If you want this field ignored, set to 0."
                 />
               </Grid>
+              <Grid item xs={12} md={6} xl={3}>
+                <RHFInterDepSingleCheckable
+                  control={control}
+                  name={`ImportContexts.${contextIndex}.BolusCutOffFlag`}
+                  trigger={trigger}
+                  triggerTarget={`ImportContexts.${contextIndex}.BolusCutOffTechnique`}
+                  label="Bolus Cut-Off Flag"
+                  helperText="Was a bolus cut-off technique used? (checked if yes)"
+                  valWhenChecked={true}
+                  valWhenUnchecked={false}
+                />
+              </Grid>
+              <Grid item xs={12} md={6} xl={3}>
+                <RHFInterDepSelect
+                  control={control}
+                  name={`ImportContexts.${contextIndex}.BolusCutOffTechnique`}
+                  label="Bolus Cut-Off Technique"
+                  helperText="The technique used to perform the bolus cut-off."
+                  options={[
+                    { label: "No technique was used", value: "" },
+                    { label: "QUIPSS", value: "QUIPSS" },
+                    { label: "QUIPSSII", value: "QUIPSSII" },
+                    { label: "Q2TIPS", value: "Q2TIPS" },
+                  ]}
+                  trigger={trigger}
+                  triggerTarget={[
+                    `ImportContexts.${contextIndex}.BolusCutOffFlag`,
+                    `ImportContexts.${contextIndex}.BolusCutOffDelayTime`,
+                  ]}
+                />
+              </Grid>
+              <Grid item xs={12} md={6} xl={3}>
+                <RHFSlider
+                  control={control}
+                  name={`ImportContexts.${contextIndex}.BolusCutOffDelayTime`}
+                  min={0}
+                  max={5}
+                  step={0.001}
+                  renderTextfields
+                  label="Bolus Cut-Off Delay Time"
+                  helperText="Units are in seconds. If you want this field ignored, set to 0."
+                />
+              </Grid>
+            </Grid>
+          </OutlinedGroupBox>
+          <OutlinedGroupBox
+            label="Background Suppression Information"
+            mt={5}
+            labelBackgroundColor={theme => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
+          >
+            <Grid container rowSpacing={3} columnSpacing={3} marginTop={-2} padding={2} alignItems="center">
               <Grid item xs={12} md={6} xl={3}>
                 <RHFInterDepSlider
                   control={control}
