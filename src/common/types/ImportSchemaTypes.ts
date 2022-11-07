@@ -111,7 +111,7 @@ export type ImportSchemaType = ImportRuntimeEnvsSchemaType & ImportAliasesSchema
 /**
  * Type defining the JSON output to studyPar.json
  */
-export type StudyParJSONOutputSchemaType = {
+export type SingleStudyParJSONOutputSchemaType = {
   SubjectRegExp?: string;
   VisitRegExp?: string;
   SessionRegExp?: string;
@@ -129,6 +129,10 @@ export type StudyParJSONOutputSchemaType = {
   BackgroundSuppression?: boolean;
   BackgroundSuppressionNumberPulses?: number;
   BackgroundSuppressionPulseTime?: number[];
+};
+
+export type StudyParJSONOutputSchemaType = {
+  StudyPars: SingleStudyParJSONOutputSchemaType[];
 };
 
 export type SourceStuctureJSONOutputSchemaType = {

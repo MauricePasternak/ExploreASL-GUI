@@ -6,6 +6,33 @@ Versions are in format: `[MAJOR.MINOR.BUGFIX]`
 
 Dates are in format: `YYYY-MM-DD`
 
+## [0.4.0] - 2022-11-07
+
+Change of the Import Module to support ExploreASL's approach and syntax of multiple import contexts.
+
+### Fixed
+
+- Fixed a bug where the snackbar message at the end of the import process displayed the ExploreASL path instead of the
+  study path.
+
+### Added
+
+- Added the ability for the GUI to export the current plot & MRI slice views to a PNG file.
+
+- Added multiple new fields to defining each import context, particularly when it comes to PASL sequences. The following
+fields were added:
+  - `BolusCutOffFlag`
+  - `BolusCutOffTechnique`
+  - `BolusCutOffDelayTime`
+
+- With the above, validation rules were added to comply with BIDS and ExploreASL's requirements.
+
+### Changed
+
+- Changed the import module to support ExploreASL's approach and syntax of multiple import contexts. There is no longer
+  a need to launch the import module multiple times for different import contexts nor the need to generate multiple
+  import settings files. The import module now supports multiple import contexts in a single run.
+
 ---
 
 ## [0.3.0] - 2022-08-21
@@ -15,7 +42,7 @@ Introduction of the BIDSDataGrid Module (#4) and multiple MacOS Fixes (#5)
 ### Fixed
 
 - Fixed a bug where indicating excluded subjects resulted errors when trying to run ExploreASL as well as when loading
-  in dataPar.json in Define Parameters. Excluded subjects are now handled back and forth between states where the "_#"
+  in dataPar.json in Define Parameters. Excluded subjects are now handled back and forth between states where the "\_#"
   is present versus absent.
 
 - Fixed a bug in the Define Parameters Module where, after loading invalid values from a dataPar.json file, validations

@@ -38,49 +38,20 @@ function StepRunImportModule({
   const currentProcPID = useRef(-1);
   const wasTerminatedByUser = useRef(false);
 
-  // Tracking the tasks performed
-  // const currentTask = useRef(0);
-  // const completedTasks = useRef([] as number[]);
-  // const failedTasks = useRef([] as number[]);
-
+  /** Resets ref variables back to their default values */
   function resetRefs() {
-    // currentTask.current = 0; // For indexing contexts; we start from the global context
-    // completedTasks.current = [];
-    // failedTasks.current = [];
     currentProcPID.current = -1;
+    wasTerminatedByUser.current = false;
   }
 
-  const handleStartImportModule = async () => {
-    // console.log(`Running Import Module for context with index: ${currentTask.current}`);
-
-    const values = getValues();
-    const { payload, GUIMessage } = await api.invoke("ExploreASL:RunImportModule", ImportModuleChannelName, values);
-
-    // If Successful, re-render in a running state and update the current PID
-    if (GUIMessage.severity === "success") {
-      procStatus !== "Running" && setProcStatus("Running");
-      currentProcPID.current = payload.pids[0];
-      wasTerminatedByUser.current = false;
-      return;
-    }
-
-    // If Failed
-    setImportModuleSnackbar({
-      severity: GUIMessage.severity,
-      title: "Failed to Run Import Module",
-      message: GUIMessage.messages,
-    });
-    resetRefs();
-    procStatus !== "Standby" && setProcStatus("Standby");
-    return;
-  };
-
+  /** Handler for receiving a spawn child process event from the backend */
   const handleFeedbackProcessSpawn = (pid: number) => {
     console.log("Import Module Process Spawned with Process ID: ", pid);
     currentProcPID.current = pid;
     procStatus !== "Running" && setProcStatus("Running");
   };
 
+  /** Handler for receiving an exit event from the backend */
   const handleFeedbackProcessClose = async (pid: number, exitCode: number) => {
     console.log(`Import Module Process Closed with Process ID: ${pid} and Exit Code: ${exitCode}.`);
 
@@ -104,8 +75,8 @@ function StepRunImportModule({
         message: [
           "All Import Contexts have been imported.",
           `Before proceeding, you are recommended to review the contents of the following directories in order to verify import success:`,
-          `${api.path.osSpecificString(values.EASLPath, "rawdata")}`,
-          `${api.path.osSpecificString(values.EASLPath, "derivatives", "ExploreASL", "log")}`,
+          `${api.path.osSpecificString(values.StudyRootPath, "rawdata")}`,
+          `${api.path.osSpecificString(values.StudyRootPath, "derivatives", "ExploreASL", "log")}`,
         ],
       });
     }
@@ -147,12 +118,31 @@ function StepRunImportModule({
     };
   }, []);
 
+  /** Handler for starting up the Import Module */
   const handleValidSubmit: SubmitHandler<ImportSchemaType> = async values => {
     console.log("Step 'Run Import Module' -- Valid Submit Values: ", values);
-    await handleStartImportModule();
+    const { payload, GUIMessage } = await api.invoke("ExploreASL:RunImportModule", ImportModuleChannelName, values);
+
+    // If Successful, re-render in a running state and update the current PID
+    if (GUIMessage.severity === "success") {
+      procStatus !== "Running" && setProcStatus("Running");
+      currentProcPID.current = payload.pids[0];
+      wasTerminatedByUser.current = false;
+      return;
+    }
+
+    // If Failed
+    setImportModuleSnackbar({
+      severity: GUIMessage.severity,
+      title: "Failed to Run Import Module",
+      message: GUIMessage.messages,
+    });
+    resetRefs();
+    procStatus !== "Standby" && setProcStatus("Standby");
+    return;
   };
 
-  // For naughty users who try to break the app
+  /** Handler for attempting to start the Import Module with invalid values that may have changed since the last step */
   const handleInvalidSubmit: SubmitErrorHandler<ImportSchemaType> = errors => {
     console.log("Step 'Run Import Module' -- Invalid Submit Errors: ", errors);
 
@@ -166,6 +156,7 @@ function StepRunImportModule({
     });
   };
 
+  /** Handler for pausing the current Import Module execution */
   const handlePause = async () => {
     // Sanity check
     if (currentProcPID.current === -1 || procStatus !== "Running") {
@@ -178,6 +169,7 @@ function StepRunImportModule({
     console.log("StepRunImportModule -- Pause Result: ", pauseResult);
   };
 
+  /** Handler for resuming a paused and pending Import Module execution */
   const handleResume = async () => {
     // Sanity check
     if (currentProcPID.current === -1 || procStatus !== "Paused") {
@@ -190,6 +182,7 @@ function StepRunImportModule({
     console.log("StepRunImportModule -- Resume Result: ", resumeResult);
   };
 
+  /** Handler for killing the child process executing the Import Module */
   const handleTerminate = async () => {
     if (procStatus === "Standby") {
       console.log("Import Module Process is in Standby; nothing to terminate");

@@ -8,6 +8,7 @@ import { escapeRegExp, stringArrToRegex } from "../../common/utilityFunctions/st
 import {
   ImportContextSchemaType,
   ImportSchemaType,
+  SingleStudyParJSONOutputSchemaType,
   SourcedataFolderType,
   SourceStuctureJSONOutputSchemaType,
   StudyParJSONOutputSchemaType,
@@ -193,7 +194,7 @@ export async function buildStudyParJSON(importSchema: ImportSchemaType): Promise
       const { ASLSeriesPattern, NVolumes, M0PositionInASL, SubjectRegExp, VisitRegExp, SessionRegExp } = context;
       const ASLContext = await getASLContext({ ASLSeriesPattern, NVolumes, M0PositionInASL });
 
-      const temp = {
+      const temp: SingleStudyParJSONOutputSchemaType = {
         SubjectRegExp: SubjectRegExp !== "" ? SubjectRegExp : undefined,
         VisitRegExp: VisitRegExp !== "" ? VisitRegExp : undefined,
         SessionRegExp: SessionRegExp !== "" ? SessionRegExp : undefined,
@@ -204,7 +205,7 @@ export async function buildStudyParJSON(importSchema: ImportSchemaType): Promise
         PostLabelingDelay: context.PostLabelingDelay,
         LabelingDuration: context.LabelingDuration,
         BolusCutOffFlag: context.BolusCutOffFlag,
-        BolusCutOffTechnique: context.BolusCutOffTechnique,
+        BolusCutOffTechnique: context.BolusCutOffTechnique !== "" ? context.BolusCutOffTechnique : undefined,
         BolusCutOffDelayTime: context.BolusCutOffDelayTime,
         BackgroundSuppression: context.BackgroundSuppressionNumberPulses > 0 ? true : undefined,
         BackgroundSuppressionNumberPulses: context.BackgroundSuppressionNumberPulses,
@@ -236,7 +237,7 @@ export async function buildStudyParJSON(importSchema: ImportSchemaType): Promise
       // Save to result
       result.push(temp);
     }
-    return result.length > 0 ? ({ StudyPars: result } as unknown as StudyParJSONOutputSchemaType) : false; // If result is empty, return false
+    return result.length > 0 ? ({ StudyPars: result } as StudyParJSONOutputSchemaType) : false; // If result is empty, return false
   } catch (error) {
     console.warn("Something went wrong in buildStudyParJSON", error);
     return false;
