@@ -143,7 +143,7 @@
     "react-refresh": "^0.14.0",
     "style-loader": "^3.0.0",
     "ts-loader": "^9.2.2",
-    "typescript": "^4.7.4"
+    "typescript": "^4.8.4"
   },
   "dependencies": {
     "@emotion/react": "^11.7.1",
@@ -165,17 +165,17 @@
     "electron-squirrel-startup": "^1.0.0",
     "formik": "^2.2.9",
     "html-to-image": "^1.10.8",
-    "jotai": "^1.7.4",
+    "jotai": "^1.9.2",
     "lodash": "^4.17.21",
     "nifti-stream": "^0.2.1",
-    "pathlib-js": "^1.4.2",
+    "pathlib-js": "^1.5.0",
     "quill": "^1.3.7",
     "react": "^18.2.0",
     "react-data-grid": "^7.0.0-beta.15",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.33.1",
     "tree-kill": "^1.2.2",
-    "use-debounce": "^8.0.1",
+    "use-debounce": "^8.0.4",
     "yup": "^0.32.11"
   }
 }

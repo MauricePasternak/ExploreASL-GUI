@@ -33,6 +33,23 @@ function AboutDescription() {
             </Link>{" "}
             standard to support consistency between datasets across investigators.
           </p>
+          <br />
+          Please remember to reference{" "}
+          <Link href="https://www.sciencedirect.com/science/article/pii/S1053811920305176" target="_blank">
+            the following paper
+          </Link>{" "}
+          in the event that this software is used in a publication:
+          <br />
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: "1.1rem",
+              bgcolor: theme => (theme.palette.mode === "light" ? theme.palette.grey[100] : theme.palette.grey[800]),
+            }}
+          >
+            Mutsaerts HJMM, Petr J, Groot P, et al. ExploreASL: an image processing pipeline for multi-center ASL
+            perfusion MRI studies. Neuroimage. 2020;219:117031. doi:10.1016/j.neuroimage.2020.117031
+          </Typography>
         </AccordionDetails>
       </Accordion>
     </Paper>

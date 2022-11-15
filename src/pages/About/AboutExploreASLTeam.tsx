@@ -24,11 +24,25 @@ function AboutExploreASLTeam() {
             <Link href="https://github.com/MauricePasternak" target="_blank">
               Maurice Pasternak
             </Link>
-            . For questions regarding this program interface, please contact him at{" "}
+            .
+            <br />
+            <br />
+            For questions, suggestions for improvement, and issues regarding the use of this graphical program, please
+            contact him at{" "}
             <Link data-fr-linked="true" href="mailto:maurice.pasternak@utoronto.ca" target="_blank">
               maurice.pasternak@utoronto.ca
+            </Link>{" "}
+            or submit an issue at{" "}
+            <Link href="https://github.com/MauricePasternak/ExploreASLJS/issues/new/choose" target="_blank">
+              the GitHub repository of this program
             </Link>
-            . For all other inquiries, please see the team makeup and contacts below.
+            .
+            <br />
+            For questions regarding error messages that originate from the ExploreASL pipeline, please contact the main
+            ExploreASL team at{" "}
+            <Link href="exploreasl.lab@gmail.com" target="_blank">
+              exploreasl.lab@gmail.com
+            </Link>
           </p>
           <br />
           <Typography variant="h5" component="h2">
