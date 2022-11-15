@@ -3,10 +3,10 @@ import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import Divider from "@mui/material/Divider";
-import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import React from "react";
+import { SecureLink } from "../../components/NavComponents";
 
 import GIFGitCloneExploreASL from "../../assets/gif/GitCloneExploreASL.gif";
 import GIFMatlabAddPaths from "../../assets/gif/MATLABAddPaths.gif";
@@ -31,12 +31,9 @@ function AboutGettingStarted() {
           <br />
           <p>
             1) Go to{" "}
-            <Link
-              href="https://login.mathworks.com/embedded-login/landing.html?cid=getmatlab&amp;s_tid=gn_getml"
-              target="_blank"
-            >
+            <SecureLink href="https://login.mathworks.com/embedded-login/landing.html?cid=getmatlab&amp;s_tid=gn_getml">
               MATLAB&#39;s website
-            </Link>{" "}
+            </SecureLink>{" "}
             and download a relatively-modern version of MATLAB (2019a onward is recommended). Follow their installation
             instructions carefully.
           </p>
@@ -68,22 +65,20 @@ function AboutGettingStarted() {
           <br />
           <p>
             1) Go to{" "}
-            <Link target="_blank" href="https://www.mathworks.com/products/compiler/matlab-runtime.html">
+            <SecureLink href="https://www.mathworks.com/products/compiler/matlab-runtime.html">
               MATLAB&#39;s Runtime Website
-            </Link>{" "}
+            </SecureLink>{" "}
             and download R2019a (9.6) specifically for your operating system. No other version is compatible with
             Compiled ExploreASL for the time being. Unzip and follow the installer&#39;s instructions carefully.
           </p>
 
           <p>
             2) Contact either&nbsp;
-            <Link target="_blank" href="mailto:h.j.mutsaerts@amsterdamumc.nl?subject=%5BGitHub%5D%20ExploreASL">
+            <SecureLink href="mailto:h.j.mutsaerts@amsterdamumc.nl?subject=%5BGitHub%5D%20ExploreASL">
               Henk Mutsaerts
-            </Link>
+            </SecureLink>
             &nbsp;or&nbsp;
-            <Link target="_blank" href="mailto:j.petr@hzdr.de?subject=%5BGitHub%5D%20ExploreASL">
-              Jan Petr
-            </Link>
+            <SecureLink href="mailto:j.petr@hzdr.de?subject=%5BGitHub%5D%20ExploreASL">Jan Petr</SecureLink>
             &nbsp;for a copy of the compiled ExploreASL program. Save it in an accessible location (i.e. does not need
             administrator/sudo priveleges to access).
           </p>

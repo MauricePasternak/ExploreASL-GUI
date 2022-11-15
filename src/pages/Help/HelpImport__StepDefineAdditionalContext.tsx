@@ -5,11 +5,11 @@ import AccordionSummary from "@mui/material/AccordionSummary";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import Divider from "@mui/material/Divider";
-import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import React, { useState } from "react";
 import { DialogTitleH4 } from "../../components/DialogTitle";
+import { SecureLink } from "../../components/NavComponents";
 import { BulletPointList } from "./HelpStyledComponents";
 
 function HelpImport__StepDefineAdditionalContext() {
@@ -76,12 +76,9 @@ function HelpImport__StepDefineAdditionalContext() {
                 <br />
                 <p>
                   For more information about ASL Context,{" "}
-                  <Link
-                    href="https://bids-specification.readthedocs.io/en/stable/99-appendices/12-arterial-spin-labeling.html"
-                    target="_blank"
-                  >
+                  <SecureLink href="https://bids-specification.readthedocs.io/en/stable/99-appendices/12-arterial-spin-labeling.html">
                     please see the BIDS documentation
-                  </Link>
+                  </SecureLink>
                   .
                 </p>
               </AccordionDetails>
@@ -113,10 +110,8 @@ function HelpImport__StepDefineAdditionalContext() {
                 <br />
                 <p>
                   When in doubt, it is strongly recommended to check the DICOM headers using a program like{" "}
-                  <Link href="https://nroduit.github.io/en/" target="_blank">
-                    Weasis DICOM viewer
-                  </Link>
-                  . Otherwise, contact the technicians who operated the scanner for your particular images.
+                  <SecureLink href="https://nroduit.github.io/en/">Weasis DICOM viewer</SecureLink>. Otherwise, contact
+                  the technicians who operated the scanner for your particular images.
                 </p>
               </AccordionDetails>
             </Accordion>

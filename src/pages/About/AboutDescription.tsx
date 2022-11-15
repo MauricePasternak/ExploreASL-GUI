@@ -7,6 +7,7 @@ import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import React from "react";
+import { SecureLink } from "../../components/NavComponents";
 
 function AboutDescription() {
   return (
@@ -28,16 +29,14 @@ function AboutDescription() {
           <br />
           <p>
             ExploreASL is opinionated and enforces a{" "}
-            <Link href="https://bids.neuroimaging.io/" target="_blank">
-              Brain Imaging Data Structure (BIDS)
-            </Link>{" "}
-            standard to support consistency between datasets across investigators.
+            <SecureLink href="https://bids.neuroimaging.io/">Brain Imaging Data Structure (BIDS)</SecureLink> standard
+            to support consistency between datasets across investigators.
           </p>
           <br />
           Please remember to reference{" "}
-          <Link href="https://www.sciencedirect.com/science/article/pii/S1053811920305176" target="_blank">
+          <SecureLink href="https://www.sciencedirect.com/science/article/pii/S1053811920305176">
             the following paper
-          </Link>{" "}
+          </SecureLink>{" "}
           in the event that this software is used in a publication:
           <br />
           <Typography

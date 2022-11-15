@@ -6,7 +6,6 @@ import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import React from "react";
 import { DeepRequired, FieldErrorsImpl } from "react-hook-form";
@@ -14,6 +13,7 @@ import { ImportSchemaType } from "../../common/types/ImportSchemaTypes";
 import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../components/FormComponents/RHFMultiStep";
 import RHFSelect from "../../components/FormComponents/RHFSelect";
+import { SecureLink } from "../../components/NavComponents";
 import OutlinedGroupBox from "../../components/OutlinedGroupBox";
 import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import HelpImport__StepDefineRuntimeEnvs from "../Help/HelpImport__StepDefineRuntimeEnvs";
@@ -73,9 +73,9 @@ function StepDefineRuntimeEnvs({
                     helperText={
                       <Typography variant="caption">
                         Select Github if you cloned the{" "}
-                        <Link href="https://github.com/ExploreASL/ExploreASL" target="_blank">
+                        <SecureLink href="https://github.com/ExploreASL/ExploreASL">
                           ExploreASL GitHub repository
-                        </Link>
+                        </SecureLink>
                       </Typography>
                     }
                   />

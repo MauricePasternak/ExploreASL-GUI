@@ -1,23 +1,23 @@
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
+import Box from "@mui/material/Box";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import React, { useState } from "react";
-import { DialogTitleH4 } from "../../components/DialogTitle";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import Link from "@mui/material/Link";
-import HelperImage__EASLGithubExample from "../../assets/img/HelperImages/HelperImage__EASLGithubExample.png";
 import HelperImage__EASLCompiledExample from "../../assets/img/HelperImages/HelperImage__EASLCompiledExample.png";
-import HelperImage__MATLABRuntimeExample from "../../assets/img/HelperImages/HelperImage__MATLABRuntimeExample.png";
+import HelperImage__EASLGithubExample from "../../assets/img/HelperImages/HelperImage__EASLGithubExample.png";
 import HelperImage__ImportBeforeAndAfter from "../../assets/img/HelperImages/HelperImage__ImportBeforeAndAfter.png";
 import HelperImage__ImportFolderStructureMapping from "../../assets/img/HelperImages/HelperImage__ImportFolderStructureMapping.png";
+import HelperImage__MATLABRuntimeExample from "../../assets/img/HelperImages/HelperImage__MATLABRuntimeExample.png";
 import HelperImage__StudyRootWithSourcedataExample from "../../assets/img/HelperImages/HelperImage__StudyRootWithSourcedataExample.png";
+import { DialogTitleH4 } from "../../components/DialogTitle";
+import { SecureLink } from "../../components/NavComponents";
 import { BulletPointList } from "./HelpStyledComponents";
-import Box from "@mui/material/Box";
 
 function HelpImport__StepDefineRuntimeEnvs() {
   const { api } = window;
@@ -57,10 +57,8 @@ function HelpImport__StepDefineRuntimeEnvs() {
                 <br />
                 <p>
                   Therefore, this module aims to convert an existing scanner output format into a{" "}
-                  <Link href="https://bids.neuroimaging.io/" target="_blank">
-                    BIDS-standard
-                  </Link>{" "}
-                  structure while also converting the DICOM files into NIFTI format.
+                  <SecureLink href="https://bids.neuroimaging.io/">BIDS-standard</SecureLink> structure while also
+                  converting the DICOM files into NIFTI format.
                 </p>
                 <br />
                 <p>Here is an example of pre- and post- import folder structures:</p>
@@ -94,18 +92,14 @@ function HelpImport__StepDefineRuntimeEnvs() {
                 <br />
                 <p>
                   The{" "}
-                  <Link href="https://github.com/ExploreASL/ExploreASL" target="_blank">
-                    Github version of ExploreASL
-                  </Link>{" "}
+                  <SecureLink href="https://github.com/ExploreASL/ExploreASL">Github version of ExploreASL</SecureLink>{" "}
                   requires an activated version of MATLAB 2019a or later.
                 </p>
                 <br />
                 <p>
                   The packaged version of ExploreASL requires a MATLAB Runtime of version 2019a or later. The primary
                   advantage of this option is that MATLAB Runtime is free. Click{" "}
-                  <Link href="https://www.mathworks.com/products/compiler/matlab-runtime.html" target="_blank">
-                    here
-                  </Link>{" "}
+                  <SecureLink href="https://www.mathworks.com/products/compiler/matlab-runtime.html">here</SecureLink>{" "}
                   to be taken to download a MATLAB Runtime for your system.
                 </p>
               </AccordionDetails>
@@ -170,9 +164,9 @@ function HelpImport__StepDefineRuntimeEnvs() {
                   ExploreASL (not the one from the Github repository). You can (and should) leave this field blank if
                   you intend to use the ExploreASL version originating from Github. Otherwise, start by ensuring you
                   have followed{" "}
-                  <Link href="https://www.mathworks.com/help/compiler/install-the-matlab-runtime.html" target="_blank">
+                  <SecureLink href="https://www.mathworks.com/help/compiler/install-the-matlab-runtime.html">
                     the appropriate steps from the MATLAB website
-                  </Link>
+                  </SecureLink>
                   .
                 </p>
                 <br />
@@ -204,9 +198,7 @@ function HelpImport__StepDefineRuntimeEnvs() {
               <AccordionDetails>
                 <p>
                   This is the root folder of your overall study that must adhere to{" "}
-                  <Link href="https://bids.neuroimaging.io/" target="_blank">
-                    Brain Imaging Data Structure (BIDS)
-                  </Link>{" "}
+                  <SecureLink href="https://bids.neuroimaging.io/">Brain Imaging Data Structure (BIDS)</SecureLink>{" "}
                   standard in order to be usable by ExploreASL. An example of a BIDS-compatible folder structure would
                   be:
                 </p>

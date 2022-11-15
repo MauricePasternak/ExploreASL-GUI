@@ -6,7 +6,6 @@ import Box from "@mui/material/Box";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import Divider from "@mui/material/Divider";
-import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import React, { useState } from "react";
@@ -18,6 +17,7 @@ import HelperImage__MATLABRuntimeExample from "../../assets/img/HelperImages/Hel
 import HelperImage__DataParStudyRootExample from "../../assets/img/HelperImages/HelperImage__DataParStudyRootExample.png";
 import HelperImage__DataParSubjectsToIncludeExample from "../../assets/img/HelperImages/HelperImage__DataParSubjectsToIncludeExample.png";
 import HelperImage__DataParLoadDataParJSONExample from "../../assets/img/HelperImages/HelperImage__DataParLoadDataParJSONExample.png";
+import { SecureLink } from "../../components/NavComponents";
 
 function HelpDataPar__DataPar() {
   const { api } = window;
@@ -117,18 +117,14 @@ function HelpDataPar__DataPar() {
                 <br />
                 <p>
                   The{" "}
-                  <Link href="https://github.com/ExploreASL/ExploreASL" target="_blank">
-                    Github version of ExploreASL
-                  </Link>{" "}
+                  <SecureLink href="https://github.com/ExploreASL/ExploreASL">Github version of ExploreASL</SecureLink>{" "}
                   requires an activated version of MATLAB 2019a or later.
                 </p>
                 <br />
                 <p>
                   The packaged version of ExploreASL requires a MATLAB Runtime of version 2019a or later. The primary
                   advantage of this option is that MATLAB Runtime is free. Click{" "}
-                  <Link href="https://www.mathworks.com/products/compiler/matlab-runtime.html" target="_blank">
-                    here
-                  </Link>{" "}
+                  <SecureLink href="https://www.mathworks.com/products/compiler/matlab-runtime.html">here</SecureLink>{" "}
                   to be taken to download a MATLAB Runtime for your system.
                 </p>
               </AccordionDetails>
@@ -193,9 +189,9 @@ function HelpDataPar__DataPar() {
                   ExploreASL (not the one from the Github repository). You can (and should) leave this field blank if
                   you intend to use the ExploreASL version originating from Github. Otherwise, start by ensuring you
                   have followed{" "}
-                  <Link href="https://www.mathworks.com/help/compiler/install-the-matlab-runtime.html" target="_blank">
+                  <SecureLink href="https://www.mathworks.com/help/compiler/install-the-matlab-runtime.html">
                     the appropriate steps from the MATLAB website
-                  </Link>
+                  </SecureLink>
                   .
                 </p>
                 <br />
@@ -297,11 +293,9 @@ function HelpDataPar__DataPar() {
               <AccordionDetails>
                 <p>
                   This field refers to whether there was a proton-density scan (M0) acquired for your dataset. As per{" "}
-                  <Link href="https://pubmed.ncbi.nlm.nih.gov/24715426/" target="_blank">
-                    ASL Consensus Paper
-                  </Link>
-                  , a proton density image is required to scale the final perfusion image into clinically relevant units
-                  of mL / 100g / min. There are two possiblities here:
+                  <SecureLink href="https://pubmed.ncbi.nlm.nih.gov/24715426/">ASL Consensus Paper</SecureLink>, a
+                  proton density image is required to scale the final perfusion image into clinically relevant units of
+                  mL / 100g / min. There are two possiblities here:
                 </p>
                 <BulletPointList>
                   <li>

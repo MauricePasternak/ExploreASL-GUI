@@ -10,9 +10,9 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { BulletPointList, NumberedPointList } from "./HelpStyledComponents";
-import Link from "@mui/material/Link";
 import HelperImage__DataVizRerunPopulationModule from "../../assets/img/HelperImages/HelperImage__DataVizRerunPopulationModule.png";
 import Box from "@mui/material/Box";
+import { SecureLink } from "../../components/NavComponents";
 
 function HelpDataViz__StepDefineDataframeLoc() {
   const [expanded, setExpanded] = useState<string | false>(false);
@@ -168,9 +168,9 @@ function HelpDataViz__StepDefineDataframeLoc() {
               <AccordionDetails>
                 <p>
                   The metadata spreadsheet must contain a merge in order to perform an{" "}
-                  <Link href="https://miro.medium.com/max/1838/1*UAPgZRnhFG29C0nDFi5D0A.png" target="_blank">
+                  <SecureLink href="https://miro.medium.com/max/1838/1*UAPgZRnhFG29C0nDFi5D0A.png">
                     outer-left join
-                  </Link>{" "}
+                  </SecureLink>{" "}
                   with the ExploreASL data (the latter being the &quot;left&quot; portion of the join). As this is an
                   outer-left join, subjects which are present in the metadata but absent in the ExploreASL data will be
                   removed.

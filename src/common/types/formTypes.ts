@@ -6,7 +6,6 @@ import {
   FieldValues,
   Path,
   PathValue,
-  UseControllerProps,
   UseFormTrigger,
 } from "react-hook-form";
 

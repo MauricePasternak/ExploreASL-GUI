@@ -1,10 +1,10 @@
 import Box from "@mui/material/Box";
 import Fade from "@mui/material/Fade";
 import Grid from "@mui/material/Grid";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import React from "react";
 import { Control, UseFormTrigger } from "react-hook-form";
+import { SecureLink } from "../../components/NavComponents";
 import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
 import RHFFilepathDropzone from "../../components/FormComponents/RHFFilepathDropzone";
 import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
@@ -40,9 +40,9 @@ function TabStudyParameters({
                 helperText={
                   <Typography variant="caption">
                     Select Github if you cloned the{" "}
-                    <Link href="https://github.com/ExploreASL/ExploreASL" target="_blank">
+                    <SecureLink href="https://github.com/ExploreASL/ExploreASL">
                       ExploreASL GitHub repository
-                    </Link>
+                    </SecureLink>
                   </Typography>
                 }
               />
