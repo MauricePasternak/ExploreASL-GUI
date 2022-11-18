@@ -17,13 +17,10 @@ import {
   BIDSCompleteSchema,
   BIDSEnumSchema,
   BIDSNumericalSchema,
-  BIDSTextSchema
+  BIDSTextSchema,
 } from "../../common/schemas/BIDSDatagridConfigurationSchemas";
-import {
-  BIDSEnumConfig,
-  BIDSFieldNamesType
-} from "../../common/types/BIDSDatagridTypes";
-import DebouncedInput from "../../components/DebouncedComponents/DebouncedInput";
+import { BIDSEnumConfig, BIDSFieldNamesType } from "../../common/types/BIDSDatagridTypes";
+import { DebouncedInput } from "../../components/DebouncedComponents";
 import { atomAddColumnDialogOpen, atomAddDataframeColumns, atomDataframeColumns } from "../../stores/BIDSDatagridStore";
 
 function BIDSAddColumnDialog() {
@@ -64,9 +61,8 @@ function BIDSAddColumnDialog() {
         <DebouncedInput
           fullWidth
           disabled={applyEmptyDefault}
-          value={defaultValue}
-          onChange={e => {
-            const val = typeof e === "string" ? e : e.target.value;
+          value={defaultValue as string}
+          onChange={(val) => {
             setDefaultValue(val);
           }}
         />
@@ -85,12 +81,12 @@ function BIDSAddColumnDialog() {
           value={defaultValue}
           fullWidth
           disabled={applyEmptyDefault}
-          onChange={e => {
+          onChange={(e) => {
             const val = e.target.value as BIDSEnumConfig["defaultValue"];
             setDefaultValue(val);
           }}
         >
-          {schema.enumOptions.map(opt => (
+          {schema.enumOptions.map((opt) => (
             <MenuItem key={`${schema.colName}__${opt.label}`} value={opt.value}>
               {opt.label}
             </MenuItem>
@@ -101,10 +97,9 @@ function BIDSAddColumnDialog() {
       return (
         <DebouncedInput
           disabled={applyEmptyDefault}
-          value={defaultValue}
+          value={defaultValue as number}
           fullWidth
-          onChange={e => {
-            const val = typeof e === "string" ? e : e.target.value;
+          onChange={(val) => {
             setDefaultValue(Number(val));
           }}
           inputProps={{

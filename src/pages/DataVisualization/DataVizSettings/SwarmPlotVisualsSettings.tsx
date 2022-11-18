@@ -15,9 +15,12 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
-import DebouncedInput from "../../../components/DebouncedComponents/DebouncedInput";
+import { DebouncedInput } from "../../../components/DebouncedComponents";
 import ExpandMore from "../../../components/ExpandMore";
-import { ControlledLabelSlider, ControlledLabelSwitch } from "../../../components/FormComponents/ControlLabelGrid";
+import {
+  ControlledLabelSlider,
+  ControlledLabelSwitch,
+} from "../../../components/RegularFormComponents/ControlLabelGrid";
 import { atomEASLSwarmplotSettings, atomSetEASLSwarmplotSettings } from "../../../stores/DataFrameVisualizationStore";
 import ColorSelect from "../ColorSelect";
 
@@ -56,7 +59,7 @@ function SwarmPlotVisualsSettings() {
                 fullWidth
                 label="Orientation"
                 value={EASLPlotSettings.plotLayout}
-                onChange={e => {
+                onChange={(e) => {
                   setEASLPlotSettings({
                     path: "plotLayout",
                     value: e.target.value as "vertical" | "horizontal",
@@ -73,7 +76,7 @@ function SwarmPlotVisualsSettings() {
               <ColorSelect
                 label="Color Palette"
                 value={EASLPlotSettings.colorScheme}
-                onChange={color => {
+                onChange={(color) => {
                   setEASLPlotSettings({
                     path: "colorScheme",
                     value: color,
@@ -232,14 +235,13 @@ function SwarmPlotVisualsSettings() {
                   fullWidth
                   label="X Axis Label"
                   value={EASLPlotSettings.axisBottom.axisLabelText}
-                  onChange={e => {
-                    const value = typeof e === "string" ? e : e.target.value;
+                  onChange={(value) => {
                     setEASLPlotSettings({
                       path: "axisBottom.axisLabelText",
                       value,
                     });
                   }}
-                  debounceDelay={1000}
+                  debounceTime={1000}
                 />
               </Box>
 
@@ -343,14 +345,13 @@ function SwarmPlotVisualsSettings() {
                   fullWidth
                   label="Y Axis Label"
                   value={EASLPlotSettings.axisLeft.axisLabelText}
-                  onChange={e => {
-                    const value = typeof e === "string" ? e : e.target.value;
+                  onChange={(value) => {
                     setEASLPlotSettings({
                       path: "axisLeft.axisLabelText",
                       value,
                     });
                   }}
-                  debounceDelay={1000}
+                  debounceTime={1000}
                 />
               </Box>
 

@@ -3,7 +3,6 @@ import Box from "@mui/material/Box";
 import { styled } from "@mui/material/styles";
 import { DataFrame } from "data-forge";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { isEmpty as lodashIsEmpty, sortBy as lodashSortBy } from "lodash";
 import React, { useEffect, useRef } from "react";
 import DataGrid, { CalculatedColumn, RowsChangeData } from "react-data-grid";
 import { BIDSFieldNames } from "../../common/schemas/BIDSDatagridConfigurationSchemas";
@@ -43,7 +42,7 @@ function BIDSDG() {
   const StudyRootPath = useAtomValue(atomBIDSStudyRootPath);
   const [dataframe, setDataframe] = useAtom(atomBIDSDataframe);
   const setDataFrameColumns = useSetAtom(atomDataframeColumns);
-  const fetchDataFrame = useSetAtom(atomFetchDataframe)
+  const fetchDataFrame = useSetAtom(atomFetchDataframe);
   const deleteDataFrameCell = useSetAtom(atomDeleteDataframeCell);
   const RDGColumnConfig = useAtomValue(atomRDGColumnConfigs);
   const selectedCell = useRef<{ selectedRow: number; selectedColumn: BIDSColumnName }>(null); // Keep track for deleting cells
@@ -162,7 +161,7 @@ function BIDSDG() {
         columns={RDGColumnConfig}
         rows={dataframe.toArray()}
         rowHeight={56}
-        rowKeyGetter={i => i.ID}
+        rowKeyGetter={(i) => i.ID}
         onRowsChange={handleRowsChange}
         onRowClick={handleRowClick}
       />

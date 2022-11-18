@@ -6,7 +6,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import React, { useState } from "react";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { DialogTitleH4 } from "../../components/DialogTitle";
+import { DialogTitleH4 } from "../../components/TypographyComponents/DialogTitle";
 import DialogContentText from "@mui/material/DialogContentText";
 import Divider from "@mui/material/Divider";
 import Box from "@mui/material/Box";
@@ -123,7 +123,6 @@ function HelpImport__StepDefineAliases() {
               </AccordionDetails>
             </Accordion>
           </section>
-
         </Stack>
       </DialogContent>
     </>

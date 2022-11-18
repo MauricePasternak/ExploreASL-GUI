@@ -6,6 +6,28 @@ import * as Yup from "yup";
 import Lazy from "yup/lib/Lazy";
 import { ValidateOptions } from "yup/lib/types";
 
+/**
+ * Parses a react-hook-form error object or array of such objects to procure the first error message.
+ * @param err The value of fieldstate.error when using react-hook-form
+ * @returns either null if there was no error, or the error message as a string
+ */
+export function parseFieldError(err: null | FieldError | Array<null | FieldError>) {
+  // Error is not present
+  if (!err) return null;
+
+  // Error is an array
+  if (Array.isArray(err)) {
+    const firstErr = err.find((e) => e != null);
+    if (!firstErr) return null; // No errors in the array
+    return firstErr.message;
+  }
+
+  // Error is a single error
+  else {
+    return err?.message;
+  }
+}
+
 type ModifiedValidateOptions<TFV extends FieldValues> = ValidateOptions<TFV> & {
   extraContext?: Record<string, unknown>;
 };
@@ -47,7 +69,7 @@ export const useYupResolverFactory: ResolverFactory = <
           values,
           errors: {},
         };
-      } catch (errors: any) {
+      } catch (errors) {
         // Early exit
         if (!(errors instanceof Yup.ValidationError) || !errors.inner) throw errors;
         // Restrict errors to the first error of each field
@@ -78,45 +100,46 @@ export const useYupResolverFactory: ResolverFactory = <
  * @param validationSchema Yup schema to validate the form values.
  * @returns Returns the resolver function. This function should be fed into the `resolver` prop of the `useForm` hook.
  */
-export const YupResolverFactoryBase: ResolverFactory =
-  <T extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues = FieldValues>(
-    validationSchema: T,
-    options?: ModifiedValidateOptions<TFV>
-  ) =>
-  async (data: TFV) => {
-    options = Object.assign(
-      { abortEarly: false, context: options?.extraContext ? Object.assign(data, options.extraContext) : data },
-      options
-    );
+export const YupResolverFactoryBase: ResolverFactory = <
+  T extends Yup.AnyObjectSchema | Lazy<any>,
+  TFV extends FieldValues = FieldValues
+>(
+  validationSchema: T,
+  options?: ModifiedValidateOptions<TFV>
+) => async (data: TFV) => {
+  options = Object.assign(
+    { abortEarly: false, context: options?.extraContext ? Object.assign(data, options.extraContext) : data },
+    options
+  );
 
-    try {
-      const values = await validationSchema.validate(data, options);
-      return {
-        values,
-        errors: {},
-      };
-    } catch (errors: any) {
-      // Early exit
-      if (!(errors instanceof Yup.ValidationError) || !errors.inner) throw errors;
-      // Restrict errors to the first error of each field
-      const parsedErrors =
-        errors.inner.length === 0 && errors.path
-          ? { [errors.path]: errors.message }
-          : errors.inner.reduce<Record<string, FieldError>>((acc, currError) => {
-              if (!(currError.path in acc)) {
-                acc[currError.path] = { message: currError.message, type: currError.type ?? "validation" };
-              }
-              return acc;
-            }, {});
-      // React-hook-form expects an expanded object of errors, not a flattened one
-      const toExpandedFormat = object(parsedErrors);
-      const res = {
-        values: {},
-        errors: toExpandedFormat,
-      };
-      return res;
-    }
-  };
+  try {
+    const values = await validationSchema.validate(data, options);
+    return {
+      values,
+      errors: {},
+    };
+  } catch (errors) {
+    // Early exit
+    if (!(errors instanceof Yup.ValidationError) || !errors.inner) throw errors;
+    // Restrict errors to the first error of each field
+    const parsedErrors =
+      errors.inner.length === 0 && errors.path
+        ? { [errors.path]: errors.message }
+        : errors.inner.reduce<Record<string, FieldError>>((acc, currError) => {
+            if (!(currError.path in acc)) {
+              acc[currError.path] = { message: currError.message, type: currError.type ?? "validation" };
+            }
+            return acc;
+          }, {});
+    // React-hook-form expects an expanded object of errors, not a flattened one
+    const toExpandedFormat = object(parsedErrors);
+    const res = {
+      values: {},
+      errors: toExpandedFormat,
+    };
+    return res;
+  }
+};
 
 /**
  * Wrapper function around safetly invoking yup validation and catching any errors.

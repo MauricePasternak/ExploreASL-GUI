@@ -15,9 +15,9 @@ export function TextEditorFactory<Row = any>({ ...props }: TextEditorFactoryProp
         fullWidth
         {...props}
         value={row[column.key as keyof typeof row]}
-        onChange={event => onRowChange({ ...row, [column.key]: event.target.value })}
+        onChange={(event) => onRowChange({ ...row, [column.key]: event.target.value })}
         onBlur={() => onClose(true)}
-        inputRef={input => {
+        inputRef={(input) => {
           input?.focus();
         }}
       />
@@ -36,9 +36,9 @@ export function NumberEditorFactory<Row = any>({ ...props }: NumberEditorFactory
         {...props}
         type="number"
         value={row[column.key as keyof typeof row]}
-        onChange={event => onRowChange({ ...row, [column.key]: Number(event.target.value) })}
+        onChange={(event) => onRowChange({ ...row, [column.key]: Number(event.target.value) })}
         onBlur={() => onClose(true)}
-        inputRef={input => {
+        inputRef={(input) => {
           input?.focus();
         }}
       />
@@ -53,7 +53,7 @@ export function BooleanEditorFactory<Row = any>({ ...props }: BooleanEditorFacto
     return (
       <FormControlLabel
         label=""
-        sx={{ paddingInline: theme => theme.spacing(2.4) }}
+        sx={{ paddingInline: (theme) => theme.spacing(2.4) }}
         control={
           <Checkbox
             {...props}
@@ -61,7 +61,7 @@ export function BooleanEditorFactory<Row = any>({ ...props }: BooleanEditorFacto
             checked={!!row[column.key as keyof typeof row]}
             onChange={(e, checked) => onRowChange({ ...row, [column.key]: checked })}
             onBlur={() => onClose(true)}
-            inputRef={input => {
+            inputRef={(input) => {
               input?.focus();
             }}
           />
@@ -85,9 +85,9 @@ export function SelectEditorFactory<Row = any>({ ...props }: SelectEditorFactory
         select
         {...rest}
         value={row[column.key as keyof typeof row]}
-        onChange={event => onRowChange({ ...row, [column.key]: event.target.value })}
+        onChange={(event) => onRowChange({ ...row, [column.key]: event.target.value })}
         onBlur={() => onClose(true)}
-        inputRef={input => {
+        inputRef={(input) => {
           input?.focus();
         }}
       >

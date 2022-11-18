@@ -1,125 +1,102 @@
-import React, { useState, useEffect, useCallback } from "react";
-import Box, { BoxProps } from "@mui/material/Box";
-import Button, { ButtonProps } from "@mui/material/Button";
-import { useDebouncedCallback } from "use-debounce";
-import Textfield, { TextFieldProps } from "@mui/material/TextField";
-import IconButton from "@mui/material/IconButton";
 import ClearIcon from "@mui/icons-material/Clear";
-import { FieldError } from "react-hook-form";
+import Box, { BoxProps } from "@mui/material/Box";
+import FormHelperText from "@mui/material/FormHelperText";
+import IconButton from "@mui/material/IconButton";
+import TextField, { TextFieldProps } from "@mui/material/TextField";
+import React, { forwardRef, useEffect, useState } from "react";
+import { useDebouncedCallback } from "use-debounce";
 
-export interface debounceTypes {
-  debounceDelay?: number;
-  onChange?: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | string, ...args: unknown[]) => void;
-  onClick?: () => string | false | Promise<string | false>;
-}
+type MUITextFieldCompatibilityType = Omit<TextFieldProps, "onChange" | "value">;
 
-export type DebouncedInputProps = debounceTypes &
-  Omit<TextFieldProps, "onChange" | "variant" | "error"> & {
-    boxProps?: BoxProps;
-    buttonProps?: ButtonProps;
-    buttonText?: string;
-    clearable?: boolean;
-    error?: boolean | FieldError;
-    variant?: "outlined" | "standard" | "filled";
-  };
+type DebouncedInputBaseProps = {
+  value: string | number;
+  onChange: (value: string | number, ...args: unknown[]) => void;
+  errorMessage?: React.ReactNode;
+  boxProps?: BoxProps;
+  debounceTime?: number;
+};
 
-function DebouncedInput({
-  boxProps,
-  buttonProps,
-  buttonText,
-  error,
-  value,
-  onChange,
-  onClick,
-  debounceDelay = 400,
-  variant = "outlined",
-  clearable = true,
-  ...props
-}: DebouncedInputProps) {
-  const [innerValue, setInnerValue] = useState<string>("");
+export type DebouncedInputProps = DebouncedInputBaseProps & MUITextFieldCompatibilityType;
 
-  /**
-   * Hook which will allow this component to respond to changes to parent components (i.e. for versions
-   * of this component which are used in form, drag & drop, etc. contexts).
-   */
-  useEffect(() => {
-    setInnerValue(value ? (value as string) : "");
-  }, [value]);
+/**
+ * MUI TextField component meant to capture a string as its value and communicate it to a parent component
+ * in a debounced manner.
+ *
+ * ### Mandatory Props:
+ * - `value`: the value of the field
+ * - `onChange`: a callback function to update the value of the field. The first argument is expected to be a string.
+ *
+ * ### Optional Props:
+ * - `errorMessage`: error message for the text field
+ * - `boxProps`: props to pass to the Box component that wraps the text field and error text
+ * - `debounceTime`: debounce time for communicating changes to the parent component
+ * All other props are passed to the underlying [TextField](https://mui.com/material-ui/api/text-field/) component.
+ */
+export const DebouncedInput = forwardRef(
+  (
+    {
+      value,
+      onChange,
+      errorMessage,
+      boxProps,
+      debounceTime = 400,
+      variant = "outlined",
+      ...textFieldProps
+    }: DebouncedInputProps,
+    ref
+  ) => {
+    // Inner State
+    const [innerValue, setInnerValue] = useState<string | number>(value);
 
-  /**
-   * Wrapper around any provided onChange function, which will be debounced and propagate any change
-   * events upwards in the component tree.
-   */
-  const debouncedHandleOnChange = useDebouncedCallback(
-    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | string) => {
-      // console.log("The debounce callback will be called in DebouncedTextField");
-      onChange && onChange(event);
-    },
-    debounceDelay
-  );
+    // Debounce Callback
+    const debouncedOnChange = useDebouncedCallback(onChange, debounceTime);
 
-  /**
-   * Main handler of this component. Will detect changes either coming from the main Input component
-   * which will be a React.ChangeEvent or changes coming from the accompanying button
-   * or changes coming from the button which will be of type string. This handler will then change the
-   * inner value of this component (to reflect the immediate change) and then forward the value to the
-   * debounced function.
-   */
-  const handleOnChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | string) => {
-      if (typeof event === "string") {
-        setInnerValue(event);
-      } else {
-        event.persist();
-        setInnerValue(event.currentTarget.value);
-      }
-      debouncedHandleOnChange(event);
-    },
-    [debouncedHandleOnChange]
-  );
+    // useEffect for keeping innerValue in sync with value
+    useEffect(() => {
+      if (value !== innerValue) setInnerValue(value);
+    }, [value]);
 
-  /**
-   * Main handler of the accompanying Button's click events. Expects to retrieve either a string to pass
-   * onto the main handler, or false in order to exit early.
-   */
-  const handleOnClick = useCallback(async () => {
-    if (!onClick) return;
-    const result = await onClick();
-    if (!result) return;
-    handleOnChange(result);
-  }, [onClick]);
+    /** Handler for changes to the value; updates the inner value and forwards the new value via provided onChange */
+    const handleChange = (newValue: string) => {
+      setInnerValue(newValue);
+      debouncedOnChange(newValue);
+    };
 
-  const hasError = typeof error === "boolean" ? error : !!error?.message;
+    // Misc
+    const componentClassName = textFieldProps.className
+      ? `${textFieldProps.className} "DebouncedInput__TextField"`
+      : "DebouncedInput__TextField";
 
-  return (
-    <Box display="flex" gap={1} {...boxProps}>
-      <Textfield
-        InputProps={{
-          endAdornment: clearable && (
-            <IconButton disabled={false} onClick={() => innerValue && handleOnChange("")}>
-              <ClearIcon color={error ? "error" : "inherit"} />
-            </IconButton>
-          ),
-        }}
-        variant={variant}
-        {...props}
-        error={hasError}
-        helperText={hasError ? (typeof error !== "boolean" ? error.message : props.helperText) : props.helperText}
-        onChange={handleOnChange}
-        value={innerValue}
-      />
-      {onClick && (
-        <Button
-          variant="contained"
-          color={hasError ? "error" : buttonProps?.color ? buttonProps.color : "primary"}
-          {...buttonProps}
-          onClick={handleOnClick}
-        >
-          {buttonText}
-        </Button>
-      )}
-    </Box>
-  );
-}
-
-export default DebouncedInput;
+    return (
+      <Box className="DebouncedInput__Box" {...boxProps}>
+        <TextField
+          className={componentClassName}
+          variant={variant}
+          fullWidth
+          inputRef={ref}
+          InputProps={{
+            className: "DebouncedInput__Input",
+            endAdornment: (
+              <IconButton
+                className="DebouncedInput__IconButton"
+                disabled={textFieldProps.disabled}
+                onClick={() => innerValue && handleChange("")}
+                color={textFieldProps.error ? "error" : "inherit"}
+              >
+                <ClearIcon className="DebouncedInput__ClearIcon" />
+              </IconButton>
+            ),
+          }}
+          {...textFieldProps}
+          onChange={(e) => handleChange(e.target.value)}
+          value={innerValue}
+        />
+        {textFieldProps?.error && (
+          <FormHelperText className="DebouncedInput__ErrorText" variant={variant} error>
+            {errorMessage}
+          </FormHelperText>
+        )}
+      </Box>
+    );
+  }
+);

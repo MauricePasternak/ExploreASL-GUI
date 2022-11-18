@@ -19,7 +19,7 @@ import {
   IsValidStudyRoot,
 } from "../utilityFunctions/EASLFunctions";
 import { YupShape } from "./ImportSchema";
-const { api } = window;
+
 const SchemaDataParDatasetParams: Yup.SchemaOf<DatasetParamsSchema> = Yup.object().shape({
   name: Yup.string().typeError("Invalid value").default(""),
   subjectRegexp: Yup.string().default(""),
@@ -206,12 +206,7 @@ const SchemaDataParASLSequenceParams = Yup.object().shape<YupShape<ASLSequencePa
     .min(0, "Cannot be a negative number")
     .max(10, "Cannot be greater than 10"),
   BackgroundSuppressionPulseTime: Yup.array()
-    .of(
-      Yup.number()
-        .typeError("This value must be a number")
-        .integer("Units must be milliseconds as integers. No decimal points allowed.")
-        .positive("Negative or zero values are not allowed.")
-    )
+    .of(Yup.number().typeError("This value must be a number").positive("Negative or zero values are not allowed."))
     .test(
       "MatchesNBSup",
       "If the M0 type is specified as 'Use mean of control ASL', then the number of comma-separated values here must equal the value in the 'Number of Background Suppression Pulses' field.",
@@ -297,8 +292,8 @@ const SchemaDataParASLQuantificationParams = Yup.object().shape<YupShape<ASLQuan
     .test(
       "ApplyQuantificationIsValid",
       "These should be a collection of five numbers, each of which can be 0 or 1",
-      value => {
-        if (!Array.isArray(value) || !value.every(v => v === 0 || v === 1)) {
+      (value) => {
+        if (!Array.isArray(value) || !value.every((v) => v === 0 || v === 1)) {
           return false;
         }
         return true;

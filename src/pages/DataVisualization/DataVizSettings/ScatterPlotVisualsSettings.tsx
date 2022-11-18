@@ -14,10 +14,13 @@ import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
-import DebouncedInput from "../../../components/DebouncedComponents/DebouncedInput";
+import { DebouncedInput } from "../../../components/DebouncedComponents";
 import ScatterPlotIcon from "../../../assets/svg/ScatterGraph.svg";
 import ExpandMore from "../../../components/ExpandMore";
-import { ControlledLabelSlider, ControlledLabelSwitch } from "../../../components/FormComponents/ControlLabelGrid";
+import {
+  ControlledLabelSlider,
+  ControlledLabelSwitch,
+} from "../../../components/RegularFormComponents/ControlLabelGrid";
 import {
   atomEASLScatterplotSettings,
   atomSetEASLScatterplotSettings,
@@ -61,7 +64,7 @@ function ScatterPlotVisualsSettings() {
               <ColorSelect
                 label="Color Palette"
                 value={EASLPlotSettings.colorScheme}
-                onChange={color => {
+                onChange={(color) => {
                   setEASLPlotSettings({
                     path: "colorScheme",
                     value: color,
@@ -192,14 +195,13 @@ function ScatterPlotVisualsSettings() {
                   fullWidth
                   label="X Axis Label"
                   value={EASLPlotSettings.axisBottom.axisLabelText}
-                  onChange={e => {
-                    const value = typeof e === "string" ? e : e.target.value;
+                  onChange={(value) => {
                     setEASLPlotSettings({
                       path: "axisBottom.axisLabelText",
                       value,
                     });
                   }}
-                  debounceDelay={1000}
+                  debounceTime={1000}
                 />
               </Box>
 
@@ -302,14 +304,13 @@ function ScatterPlotVisualsSettings() {
                   fullWidth
                   label="Y Axis Label"
                   value={EASLPlotSettings.axisLeft.axisLabelText}
-                  onChange={e => {
-                    const value = typeof e === "string" ? e : e.target.value;
+                  onChange={(value) => {
                     setEASLPlotSettings({
                       path: "axisLeft.axisLabelText",
                       value,
                     });
                   }}
-                  debounceDelay={1000}
+                  debounceTime={1000}
                 />
               </Box>
 
@@ -418,7 +419,7 @@ function ScatterPlotVisualsSettings() {
                     fullWidth
                     label="Main Anchor"
                     value={EASLPlotSettings.legends[0].anchor}
-                    onChange={e => {
+                    onChange={(e) => {
                       setEASLPlotSettings({
                         path: "legends.0.anchor",
                         value: e.target.value as "top" | "bottom" | "left" | "right",
@@ -438,7 +439,7 @@ function ScatterPlotVisualsSettings() {
                     fullWidth
                     label="Legend Direction"
                     value={EASLPlotSettings.legends[0].direction}
-                    onChange={e => {
+                    onChange={(e) => {
                       setEASLPlotSettings({
                         path: "legends.0.direction",
                         value: e.target.value as "row" | "column",
@@ -456,7 +457,7 @@ function ScatterPlotVisualsSettings() {
                     fullWidth
                     label="Item Packing Order"
                     value={EASLPlotSettings.legends[0].itemDirection}
-                    onChange={e => {
+                    onChange={(e) => {
                       setEASLPlotSettings({
                         path: "legends.0.itemDirection",
                         value: e.target.value as "left-to-right" | "right-to-left" | "top-to-bottom" | "bottom-to-top",

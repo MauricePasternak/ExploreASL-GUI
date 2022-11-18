@@ -15,7 +15,7 @@ import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import { ImportSchemaType } from "../common/types/ImportSchemaTypes";
 import { createGUIMessage } from "../common/utilityFunctions/GUIMessageFunctions";
 import { matlabEscapeBlockChar } from "../common/utilityFunctions/stringFunctions";
-import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
+import { respondToIPCRenderer } from "../ipc/MappingIPCRendererEvents";
 import {
   createRuntimeEnvironment,
   getExploreASLVersion,
@@ -26,7 +26,7 @@ import {
 export async function handleRunImportModule(
   event: IpcMainInvokeEvent,
   channelName: string,
-  formData: ImportSchemaType,
+  formData: ImportSchemaType
 ): Promise<GUIMessageWithPayload<RunEASLStartupReturnType>> {
   // By default, we assume an error will occur
   const defaultPayload: RunEASLStartupReturnType = { pids: [-1], channelName };
@@ -325,7 +325,7 @@ export async function handleRunImportModule(
   });
 
   // Process STDERR and forward it to the appropriate text display
-  child.stderr.on("data", data => {
+  child.stderr.on("data", (data) => {
     const asString = matlabEscapeBlockChar(data);
     console.error(`STDERR: ${data}`);
     let currentColor = "red";

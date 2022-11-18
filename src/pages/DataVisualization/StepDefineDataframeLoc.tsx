@@ -1,4 +1,3 @@
-import CircleIcon from "@mui/icons-material/Circle";
 import FolderIcon from "@mui/icons-material/Folder";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -8,16 +7,13 @@ import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { DataFrame, fromCSV, IDataFrame, ISeries } from "data-forge";
 import { atom, useAtom, useSetAtom } from "jotai";
 import React from "react";
 import { SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
+import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
 import { DataVizLoadDFSchema } from "../../common/schemas/DataVizLoadDFSchema";
 import { DataFrameMainType } from "../../common/types/dataFrameTypes";
 import { LoadEASLDataFrameSchema } from "../../common/types/DataVizSchemaTypes";
@@ -28,10 +24,8 @@ import {
   outerLeftJoin,
 } from "../../common/utilityFunctions/dataFrameFunctions";
 import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
-import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
-import RHFSelect, { RHFControlledSelectOption } from "../../components/FormComponents/RHFSelect";
-import OutlinedGroupBox from "../../components/OutlinedGroupBox";
-import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
+import { RHFFilepathInput, RHFSelect, RHFSelectOption } from "../../components/RHFComponents";
+import { FabDialogWrapper, OutlinedGroupBox } from "../../components/WrapperComponents";
 import {
   atomCurrentMRIViewSubject,
   atomDataVizCurrentStep,
@@ -46,8 +40,8 @@ import {
 import { atomDataVizModuleSnackbar } from "../../stores/SnackbarStore";
 import HelpDataViz__StepDefineDataframeLoc from "../Help/HelpDataViz__StepDefineDataframeLoc";
 
-const atlasesOptions: RHFControlledSelectOption<LoadEASLDataFrameSchema, "Atlases">[] = [
-  { label: "WholeBrain Grey Matter", value: "TotalGM" },
+const atlasesOptions: RHFSelectOption<LoadEASLDataFrameSchema, "Atlases">[] = [
+  { label: "WholeBrain Grey Matter", value: "TotalGM" as const },
   { label: "Wholebrain White Matter", value: "DeepWM" },
   { label: "MNI Cortical Atlas", value: "MNI_Structural" },
   { label: "Hammers Atlas", value: "Hammers" },
@@ -94,7 +88,7 @@ function handleCleanRawDF(df: DataFrame | IDataFrame) {
         dtypeMapping[colName] = "Continuous";
       } else if (dtype === "boolean") {
         dtypeMapping[colName] = "Categorical";
-        convertedSeries[colName] = series.map(x => (x == null ? null : x === true ? "True" : "False"));
+        convertedSeries[colName] = series.map((x) => (x == null ? null : x === true ? "True" : "False"));
       } else if (dtype === "date") {
         dtypeMapping[colName] = "Categorical";
         convertedSeries[colName] = series.map((x: Date) => (x == null ? null : x.toString()));
@@ -143,7 +137,7 @@ function StepDefineDataframeLoc() {
     resolver: YupResolverFactoryBase(DataVizLoadDFSchema),
   });
 
-  const handleValidSubmit: SubmitHandler<LoadEASLDataFrameSchema> = async values => {
+  const handleValidSubmit: SubmitHandler<LoadEASLDataFrameSchema> = async (values) => {
     console.log("Step 'Define Runtime Envs' -- Valid Submit Values: ", values);
     const statisticsPath = api.path.asPath(values.StudyRootPath, "derivatives", "ExploreASL", "Population", "Stats");
     let mergeColumn: "SUBJECT" | "participant_id"; // Differs between EASL versions
@@ -151,7 +145,7 @@ function StepDefineDataframeLoc() {
     /**
      * Part 1: Load the ExploreASL dataframes, merging them into a single dataframe if necessary
      */
-    const atlasBasenames = values.Atlases.map(atlasName => {
+    const atlasBasenames = values.Atlases.map((atlasName) => {
       return `${values.Statistic}_qCBF_StandardSpace_${atlasName}_*${values.PVC}.tsv`;
     });
     const pathsEASLDF = await api.path.glob(statisticsPath.path, atlasBasenames);
@@ -269,11 +263,11 @@ function StepDefineDataframeLoc() {
       let nullItems: number;
       if (!MetadataDF.hasSeries("session")) {
         nullItems = MetadataDF.getSeries(mergeColumn)
-          .filter(val => val == null)
+          .filter((val) => val == null)
           .count();
       } else {
         nullItems = MetadataDF.subset([mergeColumn, "session"])
-          .filter(row => row[mergeColumn] == null || row["session"] == null)
+          .filter((row) => row[mergeColumn] == null || row["session"] == null)
           .count();
       }
       if (nullItems > 0) {
@@ -338,7 +332,7 @@ function StepDefineDataframeLoc() {
     setDataVizCurrentStep("DefineDTypes"); // Proceed to next step
   };
 
-  const handleInvalidSubmit: SubmitErrorHandler<LoadEASLDataFrameSchema> = errors => {
+  const handleInvalidSubmit: SubmitErrorHandler<LoadEASLDataFrameSchema> = (errors) => {
     console.log("Step 'Define Runtime Envs' -- Invalid Submit Errors: ", errors);
   };
 
@@ -369,11 +363,11 @@ function StepDefineDataframeLoc() {
             <OutlinedGroupBox
               label="Load DataFrame Parameters"
               mt={3}
-              labelBackgroundColor={theme => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
+              labelBackgroundColor={(theme) => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
             >
               <Grid container rowSpacing={3} columnSpacing={3} marginTop={0} padding={1}>
                 <Grid item xs={12} md={6} xl={3}>
-                  <RHFFilepathTextField
+                  <RHFFilepathInput
                     control={control}
                     name="StudyRootPath"
                     filepathType="dir"
@@ -383,7 +377,7 @@ function StepDefineDataframeLoc() {
                   />
                 </Grid>
                 <Grid item xs={12} md={6} xl={3}>
-                  <RHFFilepathTextField
+                  <RHFFilepathInput
                     control={control}
                     name="MetadataPath"
                     filepathType="file"

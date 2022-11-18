@@ -35,11 +35,7 @@ import {
   YupResolverFactoryBase,
   YupValidate,
 } from "../../../common/utilityFunctions/formFunctions";
-import { ControlledFilepathTextField } from "../../../components/FormComponents/RHFFilepathTextfield";
-import IPCProgressWithLabel from "../../../components/IPCComponents/IPCProgressWithLabel";
-import IPCQuill from "../../../components/IPCComponents/IPCQuill";
-import LabelledSelect from "../../../components/LabelledSelect";
-import OutlinedGroupBox from "../../../components/OutlinedGroupBox";
+import LabelledSelect from "../../../components/RegularFormComponents/LabelledSelect";
 import {
   atomProcStudyPIDs,
   atomSetModuleToRunForAStudy,
@@ -51,6 +47,9 @@ import {
 import { atomProcessStudiesSnackbar } from "../../../stores/SnackbarStore";
 import RunEASLAccordionSummary from "./RunEASLAccordionSummary";
 import RunEASLPauseResumeTerminateControls from "./RunEASLPauseResumeTerminateControls";
+import { OutlinedGroupBox } from "../../../components/WrapperComponents";
+import { IPCProgressWithLabel, IPCQuill } from "../../../components/IPCComponents";
+import { DebouncedFilepathInput } from "../../../components/DebouncedComponents";
 
 type RunEASLSingleStudySetupProps = {
   studyIndex: number;
@@ -97,7 +96,7 @@ function RunEASLSingleStudySetup({
   const channelName = `${ProcessStudiesChannelBaseName}${studyIndex}`;
   const numPhysicalCores = Math.floor(api.cpuCount / 2);
   const numCoresUsedByOtherStudies = numUsedCoresAllStudies - numUsedCoresForThisStudy;
-  const coreLabelOptions = lodashRange(1, numPhysicalCores + 1).map(count => ({
+  const coreLabelOptions = lodashRange(1, numPhysicalCores + 1).map((count) => ({
     label: `${count}`,
     value: count,
     disabled:
@@ -135,11 +134,11 @@ function RunEASLSingleStudySetup({
 
   function handleFeedbackProcessError(pid: number, err: Error | string) {
     console.warn(`Study ${channelName} has received a childProcessHasErrored Event with error: ${err}`);
-    pids.includes(pid) && setPids(currentPids => currentPids.filter(p => p !== pid));
+    pids.includes(pid) && setPids((currentPids) => currentPids.filter((p) => p !== pid));
   }
 
   function handleFeedbackProcessClosed(pid: number, exitCode: number, runSummary: RunEASLChildProcSummary) {
-    const numUnsuccesfulProcs = lodashSum(runSummary.exitSummaries.map(summary => (summary.exitCode !== 0 ? 1 : 0)));
+    const numUnsuccesfulProcs = lodashSum(runSummary.exitSummaries.map((summary) => (summary.exitCode !== 0 ? 1 : 0)));
     console.log(
       `Study ${channelName} -- handleFeedbackProcessClosed callback has givens:\n`,
       JSON.stringify({ pid, exitCode, runSummary, numUnsuccesfulProcs }, null, 2)
@@ -224,11 +223,11 @@ function RunEASLSingleStudySetup({
     if (exclusion && Array.isArray(exclusion) && exclusion.length > 0) {
       const exclusionRegex = new Regex(`(?<SUBJECT>.*?)(?:_\\d+)?$`);
       const reformattedExclusion = exclusion
-        .map(v => {
+        .map((v) => {
           const match = exclusionRegex.search(v);
           return match ? match.groupsObject.SUBJECT : null;
         })
-        .filter(v => v);
+        .filter((v) => v);
       console.log("reformattedExclusion", reformattedExclusion);
       (initialDataParJSON as DataParValuesType).x.dataset.exclusion = Array.from(new Set(reformattedExclusion));
     }
@@ -304,7 +303,7 @@ function RunEASLSingleStudySetup({
     console.log(`Set the following status: ${status}`);
   };
 
-  const handleInvalidSubmit: SubmitErrorHandler<Pick<RunEASLSingleStudySetupProps, "studyRootPath">> = error => {
+  const handleInvalidSubmit: SubmitErrorHandler<Pick<RunEASLSingleStudySetupProps, "studyRootPath">> = (error) => {
     console.log("handleInvalidSubmit", error);
   };
 
@@ -321,7 +320,7 @@ function RunEASLSingleStudySetup({
               <Box rowGap={3} mt={3} justifyContent="space-between" flexGrow={1} display="flex" flexDirection="column">
                 <OutlinedGroupBox
                   label="Study Settings"
-                  labelBackgroundColor={theme =>
+                  labelBackgroundColor={(theme) =>
                     theme.palette.mode === "dark" ? "#1e1e1e" : theme.palette.background.paper
                   }
                   display="flex"
@@ -345,16 +344,18 @@ function RunEASLSingleStudySetup({
                             }
                           : fieldState;
                         return (
-                          <ControlledFilepathTextField
-                            field={field}
-                            fieldState={alteredFieldState}
+                          <DebouncedFilepathInput
+                            {...field}
                             label="Study Root Path"
                             filepathType="dir"
                             dialogOptions={{
                               properties: ["openDirectory"],
+                              title: "Select the Study Root Folder",
                             }}
-                            helperText='The root folder of the study. Expected to contain "derivatives/ExploreASL", "rawdata" and "sourcedata" subfolders'
+                            errorMessage={alteredFieldState.error?.message}
+                            error={!!alteredFieldState.error}
                             disabled={currentStatus !== "Standby"}
+                            helperText='The root folder of the study. Expected to contain "derivatives/ExploreASL", "rawdata" and "sourcedata" subfolders'
                             buttonProps={{ disabled: currentStatus !== "Standby" }}
                           />
                         );
@@ -367,7 +368,9 @@ function RunEASLSingleStudySetup({
                       label="Number of Cores Allocated for this Study"
                       fullWidth
                       helperText="Take care that each extra core adds ~3.5GB of memory usage"
-                      onChange={e => changeNumCores({ studyIndex: studyIndex, numberOfCores: Number(e.target.value) })}
+                      onChange={(e) =>
+                        changeNumCores({ studyIndex: studyIndex, numberOfCores: Number(e.target.value) })
+                      }
                     />
                     <LabelledSelect
                       disabled={currentStatus !== "Standby"}
@@ -387,7 +390,7 @@ function RunEASLSingleStudySetup({
                 </OutlinedGroupBox>
                 <OutlinedGroupBox
                   label="Run Control"
-                  labelBackgroundColor={theme =>
+                  labelBackgroundColor={(theme) =>
                     theme.palette.mode === "dark" ? "#1e1e1e" : theme.palette.background.paper
                   }
                   padding={3}
@@ -402,7 +405,7 @@ function RunEASLSingleStudySetup({
                     currentStatus={currentStatus}
                   />
                   <Button
-                    sx={{ minHeight: "100px", fontSize: theme => theme.typography.h4.fontSize }}
+                    sx={{ minHeight: "100px", fontSize: (theme) => theme.typography.h4.fontSize }}
                     variant="contained"
                     type="submit"
                     color="primary"
@@ -414,7 +417,7 @@ function RunEASLSingleStudySetup({
                     endIcon={
                       <DirectionsRunIcon
                         fontSize="large"
-                        sx={{ ml: theme => theme.spacing(2), transform: "scale(2.5)" }}
+                        sx={{ ml: (theme) => theme.spacing(2), transform: "scale(2.5)" }}
                       />
                     }
                   >
@@ -428,7 +431,7 @@ function RunEASLSingleStudySetup({
             {/* <Box mt={3} flexGrow={1}> */}
             <OutlinedGroupBox
               label="Program Feedback"
-              labelBackgroundColor={theme =>
+              labelBackgroundColor={(theme) =>
                 theme.palette.mode === "dark" ? "#1e1e1e" : theme.palette.background.paper
               }
               padding={3}

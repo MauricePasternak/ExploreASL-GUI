@@ -5,7 +5,7 @@ import Fab, { FabProps } from "@mui/material/Fab";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 
-interface InfoDialogWrapperProps extends Omit<DialogProps, "open"> {
+export interface FabDialogWrapperProps extends Omit<DialogProps, "open"> {
   children: React.ReactNode;
   icon?: React.ReactNode;
   iconText?: React.ReactNode;
@@ -21,14 +21,14 @@ interface InfoDialogWrapperProps extends Omit<DialogProps, "open"> {
  * @param fabProps Additional props to give to the Fab component.
  * @param ...dialogProps All remaining props are given to the underlying Dialog component that is opened.
  */
-function FabDialogWrapper({
+export function FabDialogWrapper({
   children,
   icon = <HelpOutlineIcon fontSize="large" sx={{ mr: 1 }} />,
   iconText = "Help",
   fullScreenWhen = "sm",
   fabProps,
   ...dialogProps
-}: InfoDialogWrapperProps) {
+}: FabDialogWrapperProps) {
   const [open, setOpen] = useState(false);
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down(fullScreenWhen));
@@ -47,5 +47,3 @@ function FabDialogWrapper({
     </>
   );
 }
-
-export default FabDialogWrapper;

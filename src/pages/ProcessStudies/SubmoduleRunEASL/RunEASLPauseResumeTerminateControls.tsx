@@ -28,7 +28,7 @@ function RunEASLPauseResumeTerminateControls({
       const result = await api.invoke("ChildProcess:Pause", pid, channelName, true);
       if (pids.includes(result.pid)) successfulPauses.push(result.success);
     }
-    if (successfulPauses.every(v => v)) {
+    if (successfulPauses.every((v) => v)) {
       changeStatus({ studyIndex: studyIndex, status: "Paused" });
     } else {
       setProcessStudiesSnackbar({
@@ -45,7 +45,7 @@ function RunEASLPauseResumeTerminateControls({
       const result = await api.invoke("ChildProcess:Resume", pid, channelName, true);
       if (pids.includes(result.pid)) successfulResumes.push(result.success);
     }
-    if (successfulResumes.every(v => v)) {
+    if (successfulResumes.every((v) => v)) {
       changeStatus({ studyIndex: studyIndex, status: "Running" });
     } else {
       setProcessStudiesSnackbar({
@@ -66,7 +66,7 @@ function RunEASLPauseResumeTerminateControls({
       console.log(`Attempting to kill PID ${pid} Result: ${result}`);
       if (pids.includes(result.pid)) successfulKills.push(result.success);
     }
-    if (successfulKills.every(v => v)) {
+    if (successfulKills.every((v) => v)) {
       changeStatus({ studyIndex: studyIndex, status: "Standby" });
       setPids([]);
     } else {

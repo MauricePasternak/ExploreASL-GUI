@@ -15,7 +15,7 @@ import HelperImage__ImportBeforeAndAfter from "../../assets/img/HelperImages/Hel
 import HelperImage__ImportFolderStructureMapping from "../../assets/img/HelperImages/HelperImage__ImportFolderStructureMapping.png";
 import HelperImage__MATLABRuntimeExample from "../../assets/img/HelperImages/HelperImage__MATLABRuntimeExample.png";
 import HelperImage__StudyRootWithSourcedataExample from "../../assets/img/HelperImages/HelperImage__StudyRootWithSourcedataExample.png";
-import { DialogTitleH4 } from "../../components/DialogTitle";
+import { DialogTitleH4 } from "../../components/TypographyComponents/DialogTitle";
 import { SecureLink } from "../../components/NavComponents";
 import { BulletPointList } from "./HelpStyledComponents";
 

@@ -2,9 +2,9 @@ import { DataFrame } from "data-forge";
 import { useAtom, useSetAtom } from "jotai";
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { RHFFilepathInput } from "../../components/RHFComponents";
 import { BIDSFormSchema } from "../../common/schemas/BIDSFormSchema";
 import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
-import RHFFilepathTextField from "../../components/FormComponents/RHFFilepathTextfield";
 import { atomBIDSDataframe, atomBIDSStudyRootPath, atomDataframeColumns } from "../../stores/BIDSDatagridStore";
 
 function BIDSDataForm() {
@@ -20,7 +20,7 @@ function BIDSDataForm() {
   });
 
   useEffect(() => {
-    const subscription = watch(async value => {
+    const subscription = watch(async (value) => {
       const isValid = await trigger("StudyRootPath");
       console.log("BIDSDataForm's useEffect has triggered:", { isValid, value });
       if (isValid) {
@@ -38,11 +38,11 @@ function BIDSDataForm() {
 
   return (
     <form style={{ marginTop: "8px" }}>
-      <RHFFilepathTextField
+      <RHFFilepathInput
         control={control}
         name="StudyRootPath"
         filepathType="dir"
-        dialogOptions={{ properties: ["openDirectory"] }}
+        dialogOptions={{ properties: ["openDirectory"], title: "Select Study Root Directory" }}
         label="Study Root Path"
         helperText="This is the root of your dataset"
       />

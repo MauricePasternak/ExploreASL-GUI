@@ -62,7 +62,7 @@ function ProcessStudiesTabs() {
                 key={`ProcessStudiesTab_${tabIndex}_${label}`}
                 sx={{
                   "&.Mui-selected svg": {
-                    fill: theme => theme.palette.primary.main,
+                    fill: (theme) => theme.palette.primary.main,
                   },
                 }}
                 value={value}

@@ -11,11 +11,11 @@ import Stack from "@mui/material/Stack";
 import { PrimitiveAtom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import React from "react";
 import { predicateFormula } from "../../../common/types/dataFrameTypes";
-import DebouncedInput from "../../../components/DebouncedComponents/DebouncedInput";
+import { DebouncedInput } from "../../../components/DebouncedComponents";
 import {
   atomDataVizDF,
   atomDataVizDFDTypes,
-  atomSetRemovePredicate
+  atomSetRemovePredicate,
 } from "../../../stores/DataFrameVisualizationStore";
 
 interface SingleSubsetterProps {
@@ -82,13 +82,10 @@ function SingleSubsetter({ atomPredicateFormula, subsetterIndex }: SingleSubsett
     setPredicate(newPredicate as predicateFormula);
   };
 
-  const handleValueChange = (
-    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | string | SelectChangeEvent<string>
-  ) => {
+  const handleValueChange = (v: unknown) => {
     // Early exit if the column and its dtype hasn't been established yet
     if (!isColumnInDataFrame || !currentColType) return;
-
-    let newValue: number | string = typeof event === "string" ? event : event.target.value;
+    let newValue: number | string = v as string;
     // Convert to a number if the column is numeric
     if (currentColType === "Continuous") {
       try {
@@ -116,7 +113,7 @@ function SingleSubsetter({ atomPredicateFormula, subsetterIndex }: SingleSubsett
       const value = isMultiple
         ? Array.isArray(predicate.val)
           ? predicate.val
-          : [predicate.val].filter(v => v !== "")
+          : [predicate.val].filter((v) => v !== "")
         : predicate.val;
 
       return (
@@ -127,7 +124,7 @@ function SingleSubsetter({ atomPredicateFormula, subsetterIndex }: SingleSubsett
               .getSeries(predicate.col)
               .distinct()
               .toArray()
-              .map(value => {
+              .map((value) => {
                 return (
                   <MenuItem key={`ValueOption_${value}`} value={value}>
                     {value}

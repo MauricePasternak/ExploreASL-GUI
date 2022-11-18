@@ -4,13 +4,13 @@ import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import { countBy as lodashCountBy, range as lodashRange, sumBy as lodashSumBy } from "lodash";
 import React from "react";
-import AtomicSnackbarMessage from "../../../components/AtomicSnackbarMessage";
-import LabelledSelect from "../../../components/LabelledSelect";
-import FabDialogWrapper from "../../../components/WrapperComponents/FabDialogWrapper";
+import { FabDialogWrapper } from "../../../components/WrapperComponents";
+import LabelledSelect from "../../../components/RegularFormComponents/LabelledSelect";
 import { atomAddOrRemoveStudy, atomProcStudySetups } from "../../../stores/ProcessStudiesStore";
 import { atomProcessStudiesSnackbar } from "../../../stores/SnackbarStore";
 import HelpProcessStudies__RunEASL from "../../Help/HelpProcessStudies__RunEASL";
 import RunEASLSingleStudySetup from "./RunEASLSingleStudySetup";
+import { AtomicSnackbarMessage } from "../../../components/AtomicComponents";
 
 function SubmoduleRunEASL() {
   const studySetups = useAtomValue(atomProcStudySetups);
@@ -23,7 +23,7 @@ function SubmoduleRunEASL() {
   const numStudies = studySetups.length;
 
   // Options for selecting the number of studies
-  const labelOptions = lodashRange(1, numPhysicalCores + 1).map(count => {
+  const labelOptions = lodashRange(1, numPhysicalCores + 1).map((count) => {
     return {
       label: `${count}`,
       value: count,
@@ -59,7 +59,7 @@ function SubmoduleRunEASL() {
         onChange={handleSelect}
         value={studySetups.length}
         sx={{ width: "17rem" }}
-        disabled={studySetups.some(study => study.currentStatus !== "Standby")}
+        disabled={studySetups.some((study) => study.currentStatus !== "Standby")}
         label="Select the number of studies to process"
         helperText="This will be disabled while any study is actively running"
         options={labelOptions}

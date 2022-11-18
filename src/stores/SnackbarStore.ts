@@ -3,7 +3,7 @@
  */
 
 import { atom } from "jotai";
-import { SnackbarMessageConfig } from "../components/AtomicSnackbarMessage";
+import { SnackbarMessageConfig } from "../components/AtomicComponents/AtomicSnackbarMessage";
 
 export const atomImportModuleSnackbar = atom<SnackbarMessageConfig>({
   severity: "info",

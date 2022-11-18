@@ -8,7 +8,7 @@ import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import React, { useState } from "react";
-import { DialogTitleH4 } from "../../components/DialogTitle";
+import { DialogTitleH4 } from "../../components/TypographyComponents/DialogTitle";
 
 function HelpDataViz__StepClarifyDataTypes() {
   const [expanded, setExpanded] = useState<string | false>(false);

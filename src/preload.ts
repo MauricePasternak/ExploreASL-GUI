@@ -10,8 +10,8 @@ import { ExtractChannelName } from "./common/types/utilityTypes";
 import MappingIPCMainEventsToHanders, {
   InvokeEventNames,
   InvokeHandlerSignature,
-} from "./communcations/MappingIPCMainEventsToHanders";
-import { MappingIPCRendererEventsType } from "./communcations/MappingIPCRendererEvents";
+} from "./ipc/MappingIPCMainEventsToHanders";
+import { MappingIPCRendererEventsType } from "./ipc/MappingIPCRendererEvents";
 
 const pathOperations = {
   /**
@@ -25,7 +25,7 @@ const pathOperations = {
    * @param filePaths Filepaths to be assessed.
    * @returns An array of whose elements are one of "dir", "file", "other", or false if the filepath does not exist.
    */
-  getFilepathsType: async (filePaths: string[]) => await Promise.all(filePaths.map(fp => getFilepathType(fp))),
+  getFilepathsType: async (filePaths: string[]) => await Promise.all(filePaths.map((fp) => getFilepathType(fp))),
   /**
    * Converts a string representation of a filepath into a Path-like instance.
    * @param filePath Filepath to be converted.
@@ -78,7 +78,7 @@ const pathOperations = {
   containsChildren: async (filepath: string, children: string | string[]) => {
     const fp = new Path(filepath);
     if (!Array.isArray(children)) children = [children];
-    return await Promise.all(children.map(child => fp.resolve(child).exists()));
+    return await Promise.all(children.map((child) => fp.resolve(child).exists()));
   },
   /**
    * Deletes the filepath from the system.
@@ -168,7 +168,7 @@ const ApplicationProgramInterface = {
   removeAllListeners<K extends string, T = ExtractChannelName<K>>(
     channel: T extends keyof MappingIPCRendererEventsType ? K : never
   ) {
-    ipcRenderer.removeAllListeners(channel as unknown as string);
+    ipcRenderer.removeAllListeners((channel as unknown) as string);
   },
 
   /**

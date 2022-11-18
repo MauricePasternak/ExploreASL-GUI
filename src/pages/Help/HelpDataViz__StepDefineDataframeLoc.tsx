@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { DialogTitleH4 } from "../../components/DialogTitle";
+import { DialogTitleH4 } from "../../components/TypographyComponents/DialogTitle";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";

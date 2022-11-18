@@ -9,7 +9,7 @@ import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import React, { useState } from "react";
-import { DialogTitleH4 } from "../../components/DialogTitle";
+import { DialogTitleH4 } from "../../components/TypographyComponents/DialogTitle";
 import { BulletPointList } from "./HelpStyledComponents";
 import HelperImage__EASLGithubExample from "../../assets/img/HelperImages/HelperImage__EASLGithubExample.png";
 import HelperImage__EASLCompiledExample from "../../assets/img/HelperImages/HelperImage__EASLCompiledExample.png";

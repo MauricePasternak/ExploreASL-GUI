@@ -6,13 +6,13 @@ import React from "react";
 import { APPBARHEIGHTPIXELS } from "../common/GLOBALS";
 import { atomDarkMode } from "../stores/DarkModeStore";
 import { atomCurrentGUIPage } from "../stores/GUIFrameStore";
-import AboutPage from "./About";
-import DataParPage from "./DataPar";
-import GUIFrame from "./GUIFrame";
-import ImportModulePage from "./ImportModule";
-import ProcessStudiesPage from "./ProcessStudies";
-import DataVisualizationPage from "./DataVisualization";
-import BIDSDatagrid from "./BIDSDatagrid";
+import { AboutPage } from "./About/AboutPage";
+import { BIDSDataGridPage } from "./BIDSDatagrid/BIDSDataGridPage";
+import { DataParPage } from "./DataPar/DataParPage";
+import { DataVisualizationPage } from "./DataVisualization/DataVisualizationPage";
+import { GUIFrame } from "./GUIFrame/GUIFrame";
+import { ImportModulePage } from "./ImportModule/ImportModulePage";
+import { ProcessStudiesPage } from "./ProcessStudies/ProcessStudiesPage";
 
 function Main() {
   const isDarkMode = useAtomValue(atomDarkMode);
@@ -59,7 +59,7 @@ function Main() {
       >
         <ProcessStudiesPage />
       </Box>
-      {currentGUIPage === "BIDSDatagrid" && <BIDSDatagrid />}
+      {currentGUIPage === "BIDSDatagrid" && <BIDSDataGridPage />}
       {currentGUIPage === "DataVisualization" && <DataVisualizationPage />}
       {currentGUIPage === "About" && <AboutPage />}
     </ThemeProvider>

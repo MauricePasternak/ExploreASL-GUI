@@ -6,18 +6,18 @@ import { useAtomValue } from "jotai";
 import { isEmpty as lodashIsEmpty } from "lodash";
 import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
+import { FabDialogWrapper } from "../../../components/WrapperComponents";
 import { SchemaRunEASLSingleStudySetup } from "../../../common/schemas/RunEASLSchema";
 import { YupValidate } from "../../../common/utilityFunctions/formFunctions";
-import AtomicFilepathTreeView from "../../../components/FileTreeViewComponents/AtomicFilepathTreeView";
-import { ControlledFilepathTextField } from "../../../components/FormComponents/RHFFilepathTextfield";
-import FabDialogWrapper from "../../../components/WrapperComponents/FabDialogWrapper";
 import HelpProcessStudies__PrepareAReRun from "../../../pages/Help/HelpProcessStudies__PrepareAReRun";
 import { atomStudyRootPathsByAllStudies, atomStudyStatusByAllStudies } from "../../../stores/ProcessStudiesStore";
 import {
   atomReRunStudiesSelectedNodes,
   atomReRunStudiesTree,
-  ReRunStudiesChannelBaseName
+  ReRunStudiesChannelBaseName,
 } from "../../../stores/ReRunStudiesStore";
+import { AtomicFilepathTreeView } from "../../../components/AtomicComponents";
+import { RHFFilepathInput } from "../../../components/RHFComponents";
 
 function SubmoduleReRunAStudy() {
   const { api } = window;
@@ -86,23 +86,15 @@ function SubmoduleReRunAStudy() {
       </FabDialogWrapper>
       <Typography variant="h4">Prepare A Re-Run</Typography>
       <form>
-        <Controller
+        <RHFFilepathInput
           control={control}
           name="studyRootPath"
-          render={({ field, fieldState }) => {
-            return (
-              <ControlledFilepathTextField
-                field={field}
-                fieldState={fieldState}
-                label="Study Root Path"
-                filepathType="dir"
-                dialogOptions={{
-                  properties: ["openDirectory"],
-                }}
-                helperText='The root folder of the study. Expected to contain "derivatives/ExploreASL", "rawdata" and "sourcedata" subfolders'
-              />
-            );
+          label="Study Root Path"
+          filepathType="dir"
+          dialogOptions={{
+            properties: ["openDirectory"],
           }}
+          helperText='The root folder of the study. Expected to contain "derivatives/ExploreASL", "rawdata" and "sourcedata" subfolders'
         />
       </form>
       {isValid && studyPathToReRun && (

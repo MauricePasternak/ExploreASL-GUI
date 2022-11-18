@@ -10,10 +10,9 @@ import treeKill from "tree-kill";
 import { reverse as reverseLodash } from "lodash";
 // LOCAL IMPORTS
 import { sleep } from "../common/utilityFunctions/sleepFunctions";
-import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
+import { respondToIPCRenderer } from "../ipc/MappingIPCRendererEvents";
 
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
-
 
 // TYPES
 /**
@@ -60,7 +59,7 @@ function asyncTreeKill(
   signal?: "SIGCONT" | "SIGTERM" | "SIGKILL" | "SIGSTOP"
 ): Promise<ProcessFuncResult> {
   return new Promise((resolve, reject) => {
-    treeKill(pid, signal, error => {
+    treeKill(pid, signal, (error) => {
       if (error) reject(error);
       else resolve({ pid, success: true });
     });
@@ -109,7 +108,9 @@ if (process.platform === "win32") {
         respondToIPCRenderer(
           event,
           `${responseChannel}:childProcessHasBeenPaused`,
-          `Main Process paused process with PID ${pid} and had the following statuses: ${exitsWereSuccess.map(v => v)}`,
+          `Main Process paused process with PID ${pid} and had the following statuses: ${exitsWereSuccess.map(
+            (v) => v
+          )}`,
           false
         );
       return { pid: pid, success: true };
@@ -149,7 +150,7 @@ if (process.platform === "win32") {
           event,
           `${responseChannel}:childProcessHasBeenResumed`,
           `Main Process resumed process with PID ${pid} and had the following statuses: ${exitsWereSuccess.map(
-            v => v
+            (v) => v
           )}`,
           false
         );
@@ -236,7 +237,7 @@ function getWindowsPIDS(startingPid: number) {
     });
 
     if (/\d+/gm.test(stdout)) {
-      const childPids = stdout.match(/\d+/gm).map(pid => parseInt(pid));
+      const childPids = stdout.match(/\d+/gm).map((pid) => parseInt(pid));
       for (const childPid of childPids) {
         pids.push(childPid);
         getChildPids(childPid);

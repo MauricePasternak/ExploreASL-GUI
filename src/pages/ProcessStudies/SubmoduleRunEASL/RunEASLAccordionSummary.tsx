@@ -16,19 +16,19 @@ function RunEASLAccordionSummary({
   return (
     <AccordionSummary
       sx={{
-        bgcolor: theme =>
+        bgcolor: (theme) =>
           currentStatus === "Standby"
             ? theme.palette.primary.main
             : currentStatus === "Running"
             ? theme.palette.success.main
             : theme.palette.grey[400],
-        color: theme => theme.palette.primary.contrastText,
+        color: (theme) => theme.palette.primary.contrastText,
       }}
       expandIcon={
         <ExpandMoreIcon
           sx={{
-            color: theme => theme.palette.primary.contrastText,
-            fontSize: theme => theme.typography.h4.fontSize,
+            color: (theme) => theme.palette.primary.contrastText,
+            fontSize: (theme) => theme.typography.h4.fontSize,
           }}
         />
       }

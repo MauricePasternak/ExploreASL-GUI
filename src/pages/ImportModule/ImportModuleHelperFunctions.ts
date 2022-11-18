@@ -1,10 +1,4 @@
-import {
-  uniq as lodashUniq,
-  isUndefined as lodashIsUndefined,
-  pickBy as lodashPickBy,
-  trim as lodashTrim,
-} from "lodash";
-import { escapeRegExp, stringArrToRegex } from "../../common/utilityFunctions/stringFunctions";
+import { isUndefined as lodashIsUndefined, pickBy as lodashPickBy, uniq as lodashUniq } from "lodash";
 import {
   ImportContextSchemaType,
   ImportSchemaType,
@@ -13,6 +7,7 @@ import {
   SourceStuctureJSONOutputSchemaType,
   StudyParJSONOutputSchemaType,
 } from "../../common/types/ImportSchemaTypes";
+import { escapeRegExp, stringArrToRegex } from "../../common/utilityFunctions/stringFunctions";
 const { api } = window;
 
 /**
@@ -21,9 +16,9 @@ const { api } = window;
  * @returns The length-4 tuple of numbers representing the capture group indices of the folder structure.
  */
 function getTokenOrdering(folderStructure: SourcedataFolderType[]): [number, number, number, number] {
-  const filteredStructure = folderStructure.filter(folder => folder !== "Ignore");
+  const filteredStructure = folderStructure.filter((folder) => folder !== "Ignore");
   const tokenOrdering = (["Subject", "Visit", "Session", "Scan"] as Exclude<SourcedataFolderType, "Ignore">[]).map(
-    v => filteredStructure.indexOf(v) + 1 // +1 to account for MATLAB indexing
+    (v) => filteredStructure.indexOf(v) + 1 // +1 to account for MATLAB indexing
   );
   return tokenOrdering as [number, number, number, number];
 }
@@ -49,16 +44,16 @@ export async function getAliasBasenames(datasetRootDir: string, folderStructure:
 
     // Next get the paths concurrently
     const [scanPaths, visitPaths, sessionPaths] = await Promise.all(
-      [scanDepth, visitDepth, sessionDepth].map(depth => {
+      [scanDepth, visitDepth, sessionDepth].map((depth) => {
         return api.path.getPathsAtNthLevel(datasetRootDir + "/sourcedata", depth, globOptions);
       })
     );
     if (scanPaths.length === 0) return false;
 
     // We only care about the basenames
-    const scanBasenames = lodashUniq(scanPaths.map(p => p.basename));
-    const visitBasenames = visitDepth > 0 ? lodashUniq(visitPaths.map(p => p.basename)) : [];
-    const sessionBasenames = sessionDepth > 0 ? lodashUniq(sessionPaths.map(p => p.basename)) : [];
+    const scanBasenames = lodashUniq(scanPaths.map((p) => p.basename));
+    const visitBasenames = visitDepth > 0 ? lodashUniq(visitPaths.map((p) => p.basename)) : [];
+    const sessionBasenames = sessionDepth > 0 ? lodashUniq(sessionPaths.map((p) => p.basename)) : [];
 
     // Sort in-place
     scanBasenames.sort();
@@ -82,7 +77,7 @@ async function getASLContext({
   M0PositionInASL,
 }: Pick<ImportContextSchemaType, "ASLSeriesPattern" | "NVolumes" | "M0PositionInASL">) {
   let currentVolumeType: "m0scan" | "cbf" | "control" | "label" | "deltam";
-  const AdjustedM0Positions = M0PositionInASL.map(pos => pos - 1); // Temporary adjustment to 0-based indexing
+  const AdjustedM0Positions = M0PositionInASL.map((pos) => pos - 1); // Temporary adjustment to 0-based indexing
   const ASLContextArr: string[] = [];
   if (ASLSeriesPattern === "") throw new Error("ASLSeriesPattern is empty");
 
@@ -133,16 +128,16 @@ export async function buildSourceStructureJSON(
     // Clean up mappings for Scan, Visit, and Session
     const filteredScanMapping = lodashPickBy(
       importSchema.MappingScanAliases,
-      alias => alias && !["Ignore", ""].includes(alias)
+      (alias) => alias && !["Ignore", ""].includes(alias)
     );
-    const filteredVisitMapping = lodashPickBy(importSchema.MappingVisitAliases, alias => alias && alias !== "");
-    const filteredSessionMapping = lodashPickBy(importSchema.MappingSessionAliases, alias => alias && alias !== "");
+    const filteredVisitMapping = lodashPickBy(importSchema.MappingVisitAliases, (alias) => alias && alias !== "");
+    const filteredSessionMapping = lodashPickBy(importSchema.MappingSessionAliases, (alias) => alias && alias !== "");
 
     // Get the folderHierarchy
-    const folderHierarchy = folderStructure.map(folderType => {
+    const folderHierarchy = folderStructure.map((folderType) => {
       switch (folderType) {
         case "Subject":
-          return stringArrToRegex(subjectPaths.map(p => p.basename));
+          return stringArrToRegex(subjectPaths.map((p) => p.basename));
         case "Visit":
           return stringArrToRegex(Object.keys(filteredVisitMapping));
         case "Session":

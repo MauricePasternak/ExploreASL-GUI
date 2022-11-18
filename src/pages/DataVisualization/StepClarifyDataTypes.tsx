@@ -16,7 +16,6 @@ import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
 import { Regex } from "../../common/utilityFunctions/Regex";
 import { DataFrameMainType } from "../../common/types/dataFrameTypes";
-import FabDialogWrapper from "../../components/WrapperComponents/FabDialogWrapper";
 import {
   atomDataVizCurrentStep,
   atomDataVizDFDTypes,
@@ -24,6 +23,7 @@ import {
   DataFrameMainTypeOptions,
 } from "../../stores/DataFrameVisualizationStore";
 import HelpDataViz__StepClarifyDataTypes from "../Help/HelpDataViz__StepClarifyDataTypes";
+import { FabDialogWrapper } from "../../components/WrapperComponents";
 
 function StepClarifyDataTypes() {
   const dataFrameTypes = useAtomValue(atomDataVizDFDTypes);
@@ -84,7 +84,7 @@ function StepClarifyDataTypes() {
                           disabled={!!regexDefaultEASL.search(columnName)}
                           fullWidth
                           value={dtype}
-                          onChange={e => handleDTypeChange(e, columnName)}
+                          onChange={(e) => handleDTypeChange(e, columnName)}
                         >
                           {DataFrameMainTypeOptions.map((dtype, idx) => {
                             return (

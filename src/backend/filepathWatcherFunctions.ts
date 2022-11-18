@@ -1,7 +1,7 @@
 import Path, { PathWatcher } from "pathlib-js";
 import chokidar, { WatchOptions } from "chokidar";
 import { IpcMainEvent } from "electron";
-import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
+import { respondToIPCRenderer } from "../ipc/MappingIPCRendererEvents";
 
 export const GLOBAL_WATCHERS: { [key: string]: chokidar.FSWatcher } = {};
 
@@ -15,7 +15,7 @@ export function getReadyPathWatcher(
   paths: string | string[] | Path | Path[],
   options?: WatchOptions
 ): Promise<PathWatcher> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const watcher = new PathWatcher(options);
     watcher.add(paths);
     watcher.on("ready", () => {

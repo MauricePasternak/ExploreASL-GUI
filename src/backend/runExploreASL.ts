@@ -19,7 +19,7 @@ import { calculatePercent } from "../common/utilityFunctions/numberFunctions";
 import { sleep } from "../common/utilityFunctions/sleepFunctions";
 import { matlabEscapeBlockChar } from "../common/utilityFunctions/stringFunctions";
 import { Lock } from "../common/utilityFunctions/threadingFunctions";
-import { respondToIPCRenderer } from "../communcations/MappingIPCRendererEvents";
+import { respondToIPCRenderer } from "../ipc/MappingIPCRendererEvents";
 import {
   calculateWorkload,
   createRuntimeEnvironment,
@@ -237,12 +237,9 @@ export async function handleRunExploreASL(
    * STEP 8: Define the behavior of the filepath watcher
    ****************************************************/
   // First define all the regexes, and translator mappings
-  const regexLockDir =
-    /lock\/xASL_module_(?<Module>ASL|Structural|Population|DARTEL_T1)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population|DARTEL)_?(?<Session>.*)\/locked$/m;
-  const regexStatusFile =
-  /lock\/xASL_module_(?<Module>ASL|Structural|Population|DARTEL_T1)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population|DARTEL)_?(?<Session>.*)\/.*\.status$/m;
-  const regexImageFile =
-    /(?<Axis>Cor|Tra)_(?<ImageType>Reg_rT1|Seg_rT1|Reg_noSmooth_M0|noSmooth_M0|Reg_qCBF|qCBF)(?!.*Contour)_(?<Target>[\w-]+?_\d?)_?.*\.jpe?g$/m;
+  const regexLockDir = /lock\/xASL_module_(?<Module>ASL|Structural|Population|DARTEL_T1)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population|DARTEL)_?(?<Session>.*)\/locked$/m;
+  const regexStatusFile = /lock\/xASL_module_(?<Module>ASL|Structural|Population|DARTEL_T1)\/?(?<Subject>.*)?\/xASL_module_(?:ASL|Structural|Population|DARTEL)_?(?<Session>.*)\/.*\.status$/m;
+  const regexImageFile = /(?<Axis>Cor|Tra)_(?<ImageType>Reg_rT1|Seg_rT1|Reg_noSmooth_M0|noSmooth_M0|Reg_qCBF|qCBF)(?!.*Contour)_(?<Target>[\w-]+?_\d?)_?.*\.jpe?g$/m;
 
   let debugCounter = 0;
   const lock = new Lock();
@@ -298,7 +295,7 @@ export async function handleRunExploreASL(
   });
 
   // Handler for directories
-  studyFilepathWatcher.on("addDir", async path => {
+  studyFilepathWatcher.on("addDir", async (path) => {
     if (SeenPaths.has(path.path)) return;
     SeenPaths.add(path.path);
 
@@ -328,7 +325,7 @@ export async function handleRunExploreASL(
   });
 
   // Handler for files
-  studyFilepathWatcher.on("add", async path => {
+  studyFilepathWatcher.on("add", async (path) => {
     console.log(`Watcher's "add" event got path: ${path.path}`);
     if (SeenPaths.has(path.path)) return;
     SeenPaths.add(path.path);
@@ -412,7 +409,7 @@ export async function handleRunExploreASL(
   });
 
   // Handler for changed files
-  studyFilepathWatcher.on("change", async path => {
+  studyFilepathWatcher.on("change", async (path) => {
     if (
       !regexImageFile.test(path.basename) ||
       SentImages.has(path.path) ||
@@ -518,7 +515,7 @@ export async function handleRunExploreASL(
     }
 
     // On failed spawn inform the frontend
-    child.on("error", err => {
+    child.on("error", (err) => {
       console.warn(`Child process with ID: ${child.pid} has failed to spawn due to ERROR: ${err}`);
       respondToIPCRenderer(event, `${channelName}:childProcessHasErrored`, child.pid, err);
     });
@@ -531,13 +528,13 @@ export async function handleRunExploreASL(
       respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, "STARTING UP MATLAB ExploreASL", { bold: true });
     });
 
-    child.stdout.on("data", data => {
+    child.stdout.on("data", (data) => {
       // const asString = matlabEscapeBlockChar(data);
       // console.error(`STDOUT: ${asString}`);
     });
 
     // Process STDERR and forward it to the appropriate text display
-    child.stderr.on("data", data => {
+    child.stderr.on("data", (data) => {
       const asString = matlabEscapeBlockChar(data);
       console.error(`STDERR: ${data}`);
       const currentColor = /^[Ww]arning/gm.test(asString) ? "orange" : "red";

@@ -18,14 +18,14 @@ import { atomCurrentGUIPage } from "../../stores/GUIFrameStore";
 
 type DataParTabProps<TFV extends FieldValues> = {
   label: React.ReactNode;
-  fieldNames: Path<TFV>[];
+  fieldNames: Set<Path<TFV>>;
   icon?: React.ReactElement;
 };
 
 const dataParTabs: Record<DataParTabOption, DataParTabProps<DataParValuesType>> = {
   StudyParameters: {
     label: "Study Parameters",
-    fieldNames: [
+    fieldNames: new Set([
       "x.GUI.EASLPath",
       "x.GUI.EASLType",
       "x.GUI.StudyRootPath",
@@ -33,12 +33,12 @@ const dataParTabs: Record<DataParTabOption, DataParTabProps<DataParValuesType>> 
       "x.GUI.MATLABRuntimePath",
       "x.dataset.exclusion",
       "x.dataset.name",
-    ],
+    ]),
     icon: <PeopleIcon />,
   },
   SequenceParameters: {
     label: "Sequence Parameters",
-    fieldNames: [
+    fieldNames: new Set([
       "x.Q.Vendor",
       "x.Q.Sequence",
       "x.Q.readoutDim",
@@ -57,12 +57,12 @@ const dataParTabs: Record<DataParTabOption, DataParTabProps<DataParValuesType>> 
       "x.Q.nCompartments",
       "x.Q.ApplyQuantification",
       "x.Q.SaveCBF4D",
-    ],
+    ]),
     icon: <CalculateIcon />,
   },
   ProcessParameters: {
     label: "Processing Parameters",
-    fieldNames: [
+    fieldNames: new Set([
       "x.modules.asl.M0_conventionalProcessing",
       "x.modules.asl.M0_GMScaleFactor",
       "x.modules.asl.motionCorrection",
@@ -88,17 +88,20 @@ const dataParTabs: Record<DataParTabOption, DataParTabProps<DataParValuesType>> 
       "x.settings.SkipIfNoM0",
       "x.S.bMasking",
       "x.S.Atlases",
-    ],
+    ]),
     icon: <SvgIcon component={ProcessIcon} inheritViewBox />,
   },
 };
 
 function DataParTabs({ control }: UseFormReturn<DataParValuesType>) {
-  const [currentTab, setCurrentTab] = useAtom(atomDataParCurrentTab);
-  const currentTabsSchema = dataParTabs[currentTab];
-  const { errors } = useFormState({ control: control, name: currentTabsSchema.fieldNames });
-  const errKeys = Object.keys(parseNestedFormattedYupErrors(errors));
+  // Tabs need to unmount depending on the current page
   const currentGUIPage = useAtomValue(atomCurrentGUIPage);
+
+  const [currentTab, setCurrentTab] = useAtom(atomDataParCurrentTab);
+  const { errors } = useFormState({ control: control });
+  // console.log(`DataParTabs: errors`, errors);
+
+  const errKeys = Object.keys(parseNestedFormattedYupErrors(errors));
 
   return (
     <Paper
@@ -132,8 +135,8 @@ function DataParTabs({ control }: UseFormReturn<DataParValuesType>) {
           }}
         >
           {Object.entries(dataParTabs).map(([tab, { label, fieldNames, icon }]) => {
-            const containsError = errKeys.some((key: Path<DataParValuesType>) => fieldNames.includes(key));
-            // console.log(`DataParTab with label: ${label} contains error: ${containsError}`);
+            const containsError = errKeys.some((key: Path<DataParValuesType>) => fieldNames.has(key));
+            console.log(`DataParTab with label: ${label} contains error: ${containsError}`);
 
             return (
               <Tab
@@ -144,7 +147,7 @@ function DataParTabs({ control }: UseFormReturn<DataParValuesType>) {
                     color: containsError ? "error.main" : "default",
                   },
                   "&.Mui-selected svg": {
-                    fill: theme => (containsError ? theme.palette.error.main : theme.palette.primary.main),
+                    fill: (theme) => (containsError ? theme.palette.error.main : theme.palette.primary.main),
                   },
                 }}
                 label={label}
