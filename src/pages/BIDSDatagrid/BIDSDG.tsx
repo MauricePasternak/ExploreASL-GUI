@@ -5,7 +5,7 @@ import { DataFrame } from "data-forge";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import React, { useEffect, useRef } from "react";
 import DataGrid, { CalculatedColumn, RowsChangeData } from "react-data-grid";
-import { BIDSFieldNames } from "../../common/schemas/BIDSDatagridConfigurationSchemas";
+import { BIDSFieldNames } from "../../common/schemas/BIDSDataGridSchemas/BIDSDatagridConfigurationSchemas";
 import { BIDSColumnName, BIDSFieldNamesType, BIDSRow } from "../../common/types/BIDSDatagridTypes";
 import {
   atomBIDSDataframe,

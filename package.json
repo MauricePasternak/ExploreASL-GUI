@@ -1,9 +1,9 @@
 {
-  "name": "ExploreASLJS",
-  "productName": "ExploreASLJS",
+  "name": "ExploreASL-GUI",
+  "productName": "ExploreASL-GUI",
   "version": "0.4.0",
   "description": "A user interface for the analysis of arterial spin labeling (ASL) images",
-  "repository": "https://github.com/MauricePasternak/ExploreASLJS",
+  "repository": "https://github.com/MauricePasternak/ExploreASL-GUI",
   "main": ".webpack/main",
   "scripts": {
     "start": "electron-forge start",
@@ -21,8 +21,8 @@
   "config": {
     "forge": {
       "packagerConfig": {
-        "name": "ExploreASLJS",
-        "executableName": "ExploreASLJS",
+        "name": "ExploreASL-GUI",
+        "executableName": "ExploreASL-GUI",
         "platform": [
           "darwin",
           "linux",
@@ -34,8 +34,8 @@
         {
           "name": "@electron-forge/maker-squirrel",
           "config": {
-            "name": "ExploreASLJS",
-            "iconUrl": "https://raw.githubusercontent.com/MauricePasternak/ExploreASLJS/main/src/assets/appIcons/ExploreASLIcon.ico",
+            "name": "ExploreASL-GUI",
+            "iconUrl": "https://raw.githubusercontent.com/MauricePasternak/ExploreASL-GUI/main/src/assets/appIcons/ExploreASLIcon.ico",
             "setupIcon": "src/assets/appIcons/ExploreASLIcon.ico"
           }
         },
@@ -51,8 +51,8 @@
             "description": "A user interface for analyzing arterial-spin labelled images with ExploreASL",
             "icon": "src/assets/appIcons/ExploreASLIcon.png",
             "maintainer": "Maurice Pasternak",
-            "name": "ExploreASLJS",
-            "productName": "ExploreASLJS",
+            "name": "ExploreASL-GUI",
+            "productName": "ExploreASL-GUI",
             "categories": [
               "Science"
             ]
@@ -71,7 +71,7 @@
           "name": "@electron-forge/publisher-github",
           "config": {
             "owner": "MauricePasternak",
-            "repo": "ExploreASLJS",
+            "repo": "ExploreASL-GUI",
             "prerelease": true
           }
         }

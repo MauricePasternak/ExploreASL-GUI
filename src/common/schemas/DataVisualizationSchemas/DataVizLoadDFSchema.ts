@@ -1,8 +1,9 @@
 import * as Yup from "yup";
-import { LoadEASLDataFrameSchema } from "../types/DataVizSchemaTypes";
-import { IsValidStudyRoot } from "../utilityFunctions/EASLFunctions";
-import { YupShape } from "./ImportSchema";
+import { LoadEASLDataFrameSchema } from "../../types/DataVizSchemaTypes";
+import { YupShape } from "../../types/validationSchemaTypes";
+import { IsValidStudyRoot } from "../../utilityFunctions/EASLFunctions";
 const { api } = window;
+
 export const DataVizLoadDFSchema = Yup.object().shape<YupShape<LoadEASLDataFrameSchema>>({
   StudyRootPath: Yup.string()
     .required("This is a required field")
@@ -40,7 +41,7 @@ export const DataVizLoadDFSchema = Yup.object().shape<YupShape<LoadEASLDataFrame
       const statistic = helpers.parent.Statistic;
       const PVC = helpers.parent.PVC;
       const existences = await Promise.all(
-        atlases.map(atlasName => {
+        atlases.map((atlasName) => {
           return api.path.glob(statisticsPath.path, [`${statistic}_qCBF_*${atlasName}*${PVC}.tsv`]);
         })
       );

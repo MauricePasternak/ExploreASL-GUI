@@ -15,7 +15,7 @@ import {
   BIDSFieldNames,
   BIDSNumericalSet,
   BIDSTextSet,
-} from "../common/schemas/BIDSDatagridConfigurationSchemas";
+} from "../common/schemas/BIDSDataGridSchemas/BIDSDatagridConfigurationSchemas";
 import {
   BIDSBooleanFieldNamesType,
   BIDSColumnName,

@@ -7,7 +7,7 @@ import { isEmpty as lodashIsEmpty } from "lodash";
 import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { FabDialogWrapper } from "../../../components/WrapperComponents";
-import { SchemaRunEASLSingleStudySetup } from "../../../common/schemas/RunEASLSchema";
+import { SchemaRunEASLSingleStudySetup } from "../../../common/schemas/ProcessStudiesSchemas/RunEASLSchema";
 import { YupValidate } from "../../../common/utilityFunctions/formFunctions";
 import HelpProcessStudies__PrepareAReRun from "../../../pages/Help/HelpProcessStudies__PrepareAReRun";
 import { atomStudyRootPathsByAllStudies, atomStudyStatusByAllStudies } from "../../../stores/ProcessStudiesStore";

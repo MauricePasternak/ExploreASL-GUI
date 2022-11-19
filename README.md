@@ -15,15 +15,15 @@
     <img src="./src/assets/appIcons/ExploreASLGUIIcon.png" fill="red" alt="Logo" width="80" height="80">
   </a>
 
-  <h3 align="center">ExploreASLJS</h3>
+  <h3 align="center">ExploreASL GUI</h3>
 
   <p align="center">
     Scanner To Publication User Interface for ASL Imaging
     <br />
     <br />
-    <a href="https://github.com/MauricePasternak/ExploreASLJS/issues/new?assignees=MauricePasternak&labels=bug&template=bug_report.md&title=">Report Bug</a>
+    <a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?assignees=MauricePasternak&labels=bug&template=bug_report.md&title=">Report Bug</a>
     ·
-    <a href="https://github.com/MauricePasternak/ExploreASLJS/issues/new?assignees=MauricePasternak&labels=enhancement&template=feature_request.md&title=">Request Feature</a>
+    <a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?assignees=MauricePasternak&labels=enhancement&template=feature_request.md&title=">Request Feature</a>
   </p>
 </div>
 
@@ -78,8 +78,6 @@ This project wraps around [ExploreASL](https://exploreasl.github.io/Documentatio
 
 ### Built With
 
-<br/>
-
 [![Electron][electronjs]][electron-url]
 
 [![React][react.js]][react-url]
@@ -94,31 +92,75 @@ This project wraps around [ExploreASL](https://exploreasl.github.io/Documentatio
 
 ## Getting Started
 
+### Installation Instructions For Users
+
+#### 1) Get the pre-requisites
+
+Depending on the type of ExploreASL installation you have, you will need either:
+
+- A [standard MATLAB installation that preferrably at least R2019a](https://login.mathworks.com/embedded-login/landing.html?cid=getmatlab&s_tid=gn_getml)
+  and [ExploreASL](https://github.com/ExploreASL/ExploreASL) from GitHub. This is currently the more stable option.
+
+OR
+
+- [MATLAB Runtime R2019a (9.6)](https://www.mathworks.com/products/compiler/matlab-runtime.html) and a pre-compiled version of ExploreASL (currently not publically available; please contact the [developers of ExploreASL](https://sites.google.com/view/exploreasl/contact) for more information)
+
+#### 2) Download the latest release of this project and install it on your local machine
+
+Head on over to the [Releases](https://github.com/MauricePasternak/ExploreASL-GUI/releases) and download the appropriate version for your operating system
+
+### Uninstallation/Removal Instructions For Users
+
+#### For Windows
+
+In your search bar, look for "Add or remove programs". Select the application and click uninstall.
+
+#### For Linux
+
+Open a terminal and type in:
+
+```bash
+sudo apt remove ExploreASL-GUI
+```
+
+#### For MacOS
+
+Go to the Applications folder and drag & drop the ExploreASL-GUI.app application to the Trash bin.
+
+##
+
 ### Installation Instructions For Developers
 
-It is assumed that developers wishing to engage with this project will already have NodeJS installed on their system and
-that they are using `yarn` as their package manager.
+#### 1) Ensure that you have NodeJS and NPM installed on your machine
 
 [Click here](https://nodejs.org/en/) for more information on NodeJS installation.
 
-[Click here](https://classic.yarnpkg.com/en/docs/getting-started) for more information on yarn installation.
+#### 2) Ensure that you have the `yarn` package manager installed on your machine
 
-1. Clone the repo
-   ```sh
-   git clone https://github.com/MauricePasternak/ExploreASLJS.git
-   ```
-2. Install Javascript packages contained within `package.json`
-   ```sh
-   yarn install
-   ```
-3. Start up the GUI with hot-reload and have a crack at it
-   ```sh
-   yarn start
-   ```
-4. If you'd like to package the application for your operating system:
-   ```sh
-   yarn make
-   ```
+Simply install it via the command line:
+
+```sh
+npm install --global yarn
+```
+
+#### 3) Clone the repo and install the dependencies
+
+- Clone the repo using:
+  ```sh
+  git clone https://github.com/MauricePasternak/ExploreASL-GUI.git
+  ```
+- Install Javascript packages contained within `package.json`
+  ```sh
+  yarn install
+  ```
+- Start up the GUI with hot-reload and have a crack at it
+  ```sh
+  yarn start
+  ```
+- If you'd like to package the application for your operating system:
+  ```sh
+  yarn make
+  ```
 
 ### General Project Structure
 
@@ -132,42 +174,18 @@ that they are using `yarn` as their package manager.
     |           |-> utilityFunctions (reusable functions for reducing code use)
     |           |-> GLOBALS.ts (global variables used throughout)
     |
-    |-> communications (logic for type-safe IpcMain <-> IpcRenderer communication)
+    |-> ipc (logic for type-safe IpcMain <-> IpcRenderer communication)
     |-> components (reuseable React components)
     |-> pages (non-reuseable React components that make up the pages of the GUI)
     |-> stores (frontend-only collections of user-interface state)
     ... other files relate to project setup, package-handling, etc.
 ```
 
-### Installation Instructions For Users
-
-Head on over to the [Releases](https://github.com/MauricePasternak/ExploreASLJS/releases) and download the appropriate version for your operating system
-
-#### For Windows
-
-### Uninstallation Instructions For Users
-
-#### For Windows
-
-In your search bar, look for "Add or remove programs". Select the application and click uninstall.
-
-#### For Linux
-
-Open a terminal and type in:
-
-```bash
-sudo apt remove exploreasljs
-```
-
-#### For MacOS
-
-Go to the Applications folder and drag & drop the ExploreASLJS.app application to the Trash bin.
-
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ---
 
-## <!-- USAGE EXAMPLES -->
+<!-- USAGE EXAMPLES -->
 
 ## Usage
 
@@ -215,6 +233,7 @@ Users will have to specify the root folder of the study they'd like to tweak. If
 The appropriate widget will be present within each cell to allow users to set an appropriate value for that field.
 
 Due to the nature of datasets varying wildly between BIDS fields that are present (i.e. one set of scans is a PASL ASL sequence that needs a "PASL Type" field, another set is a PCASL sequence that needs a "PCASL Type" field), the following additional features allow users to specify their datasets accordingly.:
+
 - New BIDS columns can be added to the spreadsheet
 - Most columns can be removed from the spreadsheet if the field is not applicable to any scan.
 - Users can select a cell and make it "blank" by pressing Delete after having selected the cell. This has the effect of treating the BIDS field as if it doesn't exist for that particular scan. **If you have a complex dataset containing exclusionary fields across different scan subsets, this is the best way to avoid conflicts.**
@@ -268,21 +287,16 @@ Additional features to keep in mind:
 
 - [x] Add Dark Mode.
 - [x] Add Image Feedback during processing.
-- [x] Support multiple ASL Import contexts. \*
+- [x] Support multiple ASL Import contexts.
 - [x] Create a Data Visualization Module.
 - [x] Add plot settings for plot legends (i.e. legend text fontsize, positioning, etc.) within the DataVisualization Module.
 - [x] Add more helpful information in the Process Studies module for when a study does not fully complete.
 - [x] Add help information on the steps within the Data Visualization Module.
 - [x] Add plot settings for renaming axis main labels within the Data Visualization Module.
-- [ ] Add Multiprocessing Capability to the Import Module as well. \*\*
 - [x] Add a separate module where users can pin-point change the JSON sidecars of individual subjects/visits/sessions.
-- [ ] Add auto-update capability to the software so that users don't have to manually install new versions.
 - [x] Allow for plots to be exported as PNG files in the Data Visualization Module.
-- [ ] Allow for the Data Visualization module to save/load a JSON parameters file to skip the hassle of repeating steps and re-adjusting sliders each time. Just load the json file and have it all done for you.
-
-\* This is only partially the case. The GUI goes through extensive logical gymnastics to get ExploreASL to import different subsets of your dataset. The official ExploreASL application does not support this as of version 1.10.0.
-
-\*\* This will probably have to wait until the main ExploreASL program can handle multiple contexts.
+- [ ] Allow for the Data Visualization module to save/load a JSON parameters to allow for quick re-plotting.
+- [ ] Add auto-update capability to the software so that users don't have to manually install new versions.
 
 See the [open issues](https://github.com/othneildrew/Best-README-Template/issues) for a full list of proposed features (and known issues).
 
@@ -313,7 +327,7 @@ Don't forget to give the project a star! Thanks again!
 
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License. [See `LICENSE` for more information](https://raw.githubusercontent.com/MauricePasternak/ExploreASL-GUI/main/LICENSE).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -325,7 +339,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 Maurice Pasternak - maurice.pasternak@utoronto.ca
 
-Project Link: [https://github.com/MauricePasternak/ExploreASLJS](https://github.com/MauricePasternak/ExploreASLJS)
+Project Link: [https://github.com/MauricePasternak/ExploreASL-GUI](https://github.com/MauricePasternak/ExploreASL-GUI)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -361,16 +375,16 @@ For questions or concerns with the underlying ExploreASL program, the following 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 
-[contributors-shield]: https://img.shields.io/github/contributors/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
-[contributors-url]: https://github.com/MauricePasternak/ExploreASLJS/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
-[forks-url]: https://github.com/MauricePasternak/ExploreASLJS/network/members
-[stars-shield]: https://img.shields.io/github/stars/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
-[stars-url]: https://github.com/MauricePasternak/ExploreASLJS/stargazers
-[issues-shield]: https://img.shields.io/github/issues/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
-[issues-url]: https://github.com/MauricePasternak/ExploreASLJS/issues
-[license-shield]: https://img.shields.io/github/license/MauricePasternak/ExploreASLJS.svg?style=for-the-badge
-[license-url]: https://github.com/MauricePasternak/ExploreASLJS/blob/master/LICENSE.txt
+[contributors-shield]: https://img.shields.io/github/contributors/MauricePasternak/ExploreASL-GUI.svg?style=for-the-badge
+[contributors-url]: https://github.com/MauricePasternak/ExploreASL-GUI/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/MauricePasternak/ExploreASL-GUI.svg?style=for-the-badge
+[forks-url]: https://github.com/MauricePasternak/ExploreASL-GUI/network/members
+[stars-shield]: https://img.shields.io/github/stars/MauricePasternak/ExploreASL-GUI.svg?style=for-the-badge
+[stars-url]: https://github.com/MauricePasternak/ExploreASL-GUI/stargazers
+[issues-shield]: https://img.shields.io/github/issues/MauricePasternak/ExploreASL-GUI.svg?style=for-the-badge
+[issues-url]: https://github.com/MauricePasternak/ExploreASL-GUI/issues
+[license-shield]: https://img.shields.io/github/license/MauricePasternak/ExploreASL-GUI.svg?style=for-the-badge
+[license-url]: https://github.com/MauricePasternak/ExploreASL-GUI/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://www.linkedin.com/in/maurice-pasternak-238957207/
 

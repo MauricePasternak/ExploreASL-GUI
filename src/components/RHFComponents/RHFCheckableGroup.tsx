@@ -15,7 +15,7 @@ type TValueWrapper<
   TFV extends FieldValues,
   TName extends Path<TFV>,
   TValue = PathValue<TFV, TName>
-> = TValue extends any[] ? TValue[number] : TValue;
+> = TValue extends ReadonlyArray<any> ? TValue[number] : TValue;
 
 type MUISwitchProps = Omit<SwitchProps, keyof ControllerRenderProps | "control" | "checked">;
 type MUICheckboxProps = Omit<CheckboxProps, keyof ControllerRenderProps | "control" | "checked">;

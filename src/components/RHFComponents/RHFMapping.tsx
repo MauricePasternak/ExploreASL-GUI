@@ -140,7 +140,7 @@ export function RHFMapping<
       color: "primary.contrastText", // helper text for the whole mapping
     },
   };
-  const fixedHeaderSx: SxProps = { ...defaultCardHeaderSx, ...cardHeaderSx }; // merge default and custom sx props
+  const fixedHeaderSx: CardHeaderProps["sx"] = { ...defaultCardHeaderSx, ...cardHeaderSx }; // merge default and custom sx props
 
   /** Handler for rendering the keys subtitle */
   function renderKeysSubtitle() {
@@ -223,7 +223,7 @@ export function RHFMapping<
                       fullWidth
                       value={value as string}
                       type="text"
-                      onChange={(v) => handleTextFieldChange(v as string, key)}
+                      onChange={(v) => handleTextFieldChange(v, key)}
                     />
                   )}
                 </ListItem>

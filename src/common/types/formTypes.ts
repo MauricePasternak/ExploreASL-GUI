@@ -1,13 +1,4 @@
-import {
-  Control,
-  ControllerFieldState,
-  ControllerRenderProps,
-  FieldPathValues,
-  FieldValues,
-  Path,
-  PathValue,
-  UseFormTrigger,
-} from "react-hook-form";
+import { Control, FieldPathValues, FieldValues, Path, PathValue, UseFormTrigger } from "react-hook-form";
 
 /**
  * @description An intermediate type to represent the mandatory props to provide every `RHF` prefixed component.
@@ -18,27 +9,6 @@ import {
 export type RHFControlAndNameType<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> = {
   name: TName;
   control: Control<TValues, any>;
-};
-
-/**
- * @description Type representing the return of the Controller's render function. Has two properties:
- * - `field`: An object representing the field value, name, and changing handlers.
- * - `fieldState`: An object representing the field state (i.e. errors).
- */
-export type RHFFieldAndFieldStateType<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> = {
-  field: ControllerRenderProps<TValues, TName>;
-  fieldState: ControllerFieldState;
-};
-
-/**
- * Modified version of UseControllerReturnProps from react-hook-form.
- * Features the following props:
- * - `field`: the field object from react-hook-form
- * - `fieldState`: the field state object from react-hook-form
- */
-export type RHFControllerReturnProps<TFV extends FieldValues, TName extends Path<TFV>> = {
-  field: ControllerRenderProps<TFV, TName>;
-  fieldState: ControllerFieldState;
 };
 
 /**

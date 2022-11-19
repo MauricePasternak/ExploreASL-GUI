@@ -14,7 +14,7 @@ import { atom, useAtom, useSetAtom } from "jotai";
 import React from "react";
 import { SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
 import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
-import { DataVizLoadDFSchema } from "../../common/schemas/DataVizLoadDFSchema";
+import { DataVizLoadDFSchema } from "../../common/schemas/DataVisualizationSchemas/DataVizLoadDFSchema";
 import { DataFrameMainType } from "../../common/types/dataFrameTypes";
 import { LoadEASLDataFrameSchema } from "../../common/types/DataVizSchemaTypes";
 import {

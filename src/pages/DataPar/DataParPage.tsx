@@ -12,8 +12,8 @@ import { isEmpty as lodashIsEmpty } from "lodash";
 import React from "react";
 import { SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
 import { DATAPARFILE_BASENAME } from "../../common/GLOBALS";
-import { DataParFieldNameTranslator } from "../../common/schemas/DataParFieldNameTranslator";
-import { SchemaDataPar } from "../../common/schemas/DataParSchema";
+import { DataParFieldNameTranslator } from "../../common/schemas/DataParSchemas/DataParFieldNameTranslator";
+import { SchemaDataPar } from "../../common/schemas/DataParSchemas/DataParSchema";
 import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
 import {
   correctYupValidatedContent,

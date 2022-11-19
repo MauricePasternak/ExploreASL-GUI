@@ -10,7 +10,7 @@ type MUITextFieldCompatibilityType = Omit<TextFieldProps, "onChange" | "value">;
 
 type DebouncedInputBaseProps = {
   value: string | number;
-  onChange: (value: string | number, ...args: unknown[]) => void;
+  onChange: (value: string, ...args: unknown[]) => void;
   errorMessage?: React.ReactNode;
   boxProps?: BoxProps;
   debounceTime?: number;

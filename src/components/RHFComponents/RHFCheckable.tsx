@@ -4,12 +4,12 @@ import FormControlLabel, { FormControlLabelProps } from "@mui/material/FormContr
 import FormHelperText from "@mui/material/FormHelperText";
 import Switch, { SwitchProps } from "@mui/material/Switch";
 import React, { useEffect } from "react";
-import { FieldValues, Path, useController, useWatch } from "react-hook-form";
+import { FieldValues, Path, PathValue, useController, useWatch } from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 
 type RHFCheckboxBaseProps<TFV extends FieldValues, TName extends Path<TFV>> = {
-  valWhenChecked: TFV[TName]; // The value to set when the checkbox is checked
-  valWhenUnchecked: TFV[TName]; // The value to set when the checkbox is unchecked
+  valWhenChecked: PathValue<TFV, TName>; // The value to set when the checkbox is checked
+  valWhenUnchecked: PathValue<TFV, TName>; // The value to set when the checkbox is unchecked
   label?: React.ReactNode; // The label to display next to the checkbox
   helperText?: React.ReactNode; // The helper text to display below the checkbox
   isSwitch?: false; // Whether or not to render a switch instead of a checkbox
@@ -17,8 +17,8 @@ type RHFCheckboxBaseProps<TFV extends FieldValues, TName extends Path<TFV>> = {
 };
 
 type RHFSwitchBaseProps<TFV extends FieldValues, TName extends Path<TFV>> = {
-  valWhenChecked: TFV[TName]; // The value to set the field to when the switch is checked.
-  valWhenUnchecked: TFV[TName]; // The value to set the field to when the switch is unchecked.
+  valWhenChecked: PathValue<TFV, TName>; // The value to set the field to when the switch is checked.
+  valWhenUnchecked: PathValue<TFV, TName>; // The value to set the field to when the switch is unchecked.
   label?: React.ReactNode; // The label to display for the switch.
   helperText?: React.ReactNode; // The helper text to display for the switch.
   isSwitch?: true; // Whether or not to render a switch instead of a checkbox.

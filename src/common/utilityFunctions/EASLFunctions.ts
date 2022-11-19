@@ -2,7 +2,7 @@ import Path from "pathlib-js";
 import { FieldValues } from "react-hook-form";
 import { TestContext } from "yup";
 import { SUPPORTEDMATLABRUNTIMEVERSIONS } from "../GLOBALS";
-import { EASLWorkloadMapping } from "../schemas/ExploreASLWorkloads";
+import { EASLWorkloadMapping } from "../schemas/ExploreASLWorkloads/ExploreASLWorkloads";
 import { DataParValuesType } from "../types/ExploreASLDataParTypes";
 import { EASLType } from "../types/ImportSchemaTypes";
 import { Regex } from "./Regex";

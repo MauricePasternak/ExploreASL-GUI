@@ -3,7 +3,7 @@ import { useAtom, useSetAtom } from "jotai";
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { RHFFilepathInput } from "../../components/RHFComponents";
-import { BIDSFormSchema } from "../../common/schemas/BIDSFormSchema";
+import { BIDSFormSchema } from "../../common/schemas/BIDSDataGridSchemas/BIDSFormSchema";
 import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
 import { atomBIDSDataframe, atomBIDSStudyRootPath, atomDataframeColumns } from "../../stores/BIDSDatagridStore";
 

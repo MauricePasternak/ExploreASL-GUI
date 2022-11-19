@@ -1,5 +1,5 @@
 import { Path } from "react-hook-form";
-import { DataParValuesType } from "../types/ExploreASLDataParTypes";
+import { DataParValuesType } from "../../types/ExploreASLDataParTypes";
 
 export const DataParFieldNameTranslator: Partial<Record<Path<DataParValuesType>, string>> = {
   // #####################

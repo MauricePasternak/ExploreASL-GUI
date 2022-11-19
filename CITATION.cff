@@ -17,7 +17,7 @@ authors:
 identifiers:
   - type: url
     value: >-
-      https://github.com/MauricePasternak/ExploreASLJS
+      https://github.com/MauricePasternak/ExploreASL-GUI
     description: Open source repository
 abstract: >-
   This project wraps around the ExploreASL software
@@ -50,5 +50,5 @@ keywords:
   - Brain Imaging Data Standard
   - Perfusion
 license: MIT
-version: 0.3.0
-date-released: '2022-08-25'
+version: 0.4.0
+date-released: '2022-11-20'

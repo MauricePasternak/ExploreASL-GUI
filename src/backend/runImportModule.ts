@@ -4,7 +4,7 @@ import { IpcMainInvokeEvent } from "electron";
 import Path from "pathlib-js";
 import { CreateRuntimeError } from "../common/errors/runExploreASLErrors";
 import { GLOBAL_CHILD_PROCESSES } from "../common/GLOBALS";
-import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads";
+import { EASLWorkloadMapping } from "../common/schemas/ExploreASLWorkloads/ExploreASLWorkloads";
 import {
   MATLABArgsPlatformType,
   MATLABCommandLineArgsPost2019,

@@ -6,21 +6,27 @@ Versions are in format: `[MAJOR.MINOR.BUGFIX]`
 
 Dates are in format: `YYYY-MM-DD`
 
-## [0.4.0] - 2022-11-07
+## [0.4.0] - 2022-11-20
 
-Change of the Import Module to support ExploreASL's approach and syntax of multiple import contexts.
+Change of the Import Module to support ExploreASL's approach and syntax of multiple import contexts. Significant
+refactoring of the project structure
 
 ### Fixed
 
 - Fixed a bug where the snackbar message at the end of the import process displayed the ExploreASL path instead of the
   study path.
 
+- Fixed a bug where some error messages would not display for the `RHFTextField` component. This was the return of
+  react-hook-forms' `fieldState.error` variable sometimes being an `Array<null | FieldError>` instead of the expected
+  `FieldError` type. A workaround was implemented to handle this case.
+
 ### Added
 
 - Added the ability for the GUI to export the current plot & MRI slice views to a PNG file.
 
 - Added multiple new fields to defining each import context, particularly when it comes to PASL sequences. The following
-fields were added:
+  fields were added:
+
   - `BolusCutOffFlag`
   - `BolusCutOffTechnique`
   - `BolusCutOffDelayTime`
@@ -29,9 +35,24 @@ fields were added:
 
 ### Changed
 
+- Renamed github and this project's names:
+    - (this project) ExploreASL-GUI -> ExploreASL-GUI.
+    - (previous project) ExploreASL_GUI -> ExploreASL_PyGUI
+
 - Changed the import module to support ExploreASL's approach and syntax of multiple import contexts. There is no longer
   a need to launch the import module multiple times for different import contexts nor the need to generate multiple
   import settings files. The import module now supports multiple import contexts in a single run.
+
+- Gave a significant refactoring overhaul to the setup of the project, particularly when it comes to imports/exports.
+  Several schemas, components, and pages are appropriately allocated into subfolders and re-exported using index.ts(x).
+
+- Changed several react-hook-form components to use the `useController` hook instead of the `Controller` wrapper
+  component. This was done to improve code readability and to reduce the amount of code needed to implement additional
+  feature.
+
+- Changed several react-hook-form components to also incorporate optional use of the `useWatch` and `trigger`
+  functionality offered by react-hook-form. The former allows the field to conditionally render based on the value of
+  another field(s), while the latter allows the field to trigger a validation check on another field(s).
 
 ---
 

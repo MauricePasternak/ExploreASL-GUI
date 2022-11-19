@@ -46,7 +46,7 @@ function PlotEASLMainView() {
     try {
       const dataUrl = await toPng(figureContainer.current, { cacheBust: true });
       const link = document.createElement("a");
-      link.download = "ExploreASLJSPlot.png";
+      link.download = "ExploreASL-GUIPlot.png";
       link.href = dataUrl;
       link.click();
       link.remove();

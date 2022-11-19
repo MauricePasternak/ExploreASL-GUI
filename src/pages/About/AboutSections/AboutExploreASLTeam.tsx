@@ -31,7 +31,7 @@ export function AboutExploreASLTeam() {
               maurice.pasternak@utoronto.ca
             </SecureLink>{" "}
             or submit an issue at{" "}
-            <SecureLink href="https://github.com/MauricePasternak/ExploreASLJS/issues/new/choose">
+            <SecureLink href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new/choose">
               the GitHub repository of this program
             </SecureLink>
             .

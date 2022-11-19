@@ -1,4 +1,5 @@
 import MenuIcon from "@mui/icons-material/Menu";
+import { Typography } from "@mui/material";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Icon from "@mui/material/Icon";
@@ -22,10 +23,10 @@ function ApplicationBar() {
             height: 48,
             borderRadius: 0,
             "&:hover": {
-              backgroundColor: theme => theme.palette.primary.dark,
+              backgroundColor: (theme) => theme.palette.primary.dark,
             },
           }}
-          onClick={() => setDrawerOpen(open => !open)}
+          onClick={() => setDrawerOpen((open) => !open)}
         >
           <MenuIcon />
         </IconButton>
@@ -34,6 +35,7 @@ function ApplicationBar() {
           <Icon sx={{ ml: 1, height: 36, width: 36 }}>
             <img src={ExploreASLPNG} />
           </Icon>
+          <Typography variant="h6">ExploreASL GUI</Typography>
         </Box>
         <WindowIcons />
       </Toolbar>

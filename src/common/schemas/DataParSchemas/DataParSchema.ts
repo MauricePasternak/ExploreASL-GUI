@@ -11,14 +11,14 @@ import {
   PopulationParamsSchema,
   SettingsParamsSchema,
   StructuralProcessingParamsSchema,
-} from "../types/ExploreASLDataParTypes";
+} from "../../types/ExploreASLDataParTypes";
+import { YupShape } from "../../types/validationSchemaTypes";
 import {
   AreValidSubjects,
   IsValidEASLPath,
   IsValidMATLABRuntimePath,
   IsValidStudyRoot,
-} from "../utilityFunctions/EASLFunctions";
-import { YupShape } from "./ImportSchema";
+} from "../../utilityFunctions/EASLFunctions";
 
 const SchemaDataParDatasetParams: Yup.SchemaOf<DatasetParamsSchema> = Yup.object().shape({
   name: Yup.string().typeError("Invalid value").default(""),

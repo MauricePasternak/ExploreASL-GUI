@@ -1,7 +1,7 @@
 import * as Yup from "yup";
-import { RunEASLStudySetupType } from "../types/ProcessStudiesTypes";
-import { IsValidStudyRoot } from "../utilityFunctions/EASLFunctions";
-import { YupShape } from "./ImportSchema";
+import { RunEASLStudySetupType } from "../../types/ProcessStudiesTypes";
+import { YupShape } from "../../types/validationSchemaTypes";
+import { IsValidStudyRoot } from "../../utilityFunctions/EASLFunctions";
 
 export const SchemaRunEASLSingleStudySetup = Yup.object().shape<YupShape<Pick<RunEASLStudySetupType, "studyRootPath">>>(
   {

@@ -1,6 +1,6 @@
 import * as Yup from "yup";
-import { BIDSFieldNamesType } from "../types/BIDSDatagridTypes";
-import { YupShape } from "./ImportSchema";
+import { BIDSFieldNamesType } from "../../types/BIDSDatagridTypes";
+import { YupShape } from "../../types/validationSchemaTypes";
 
 export const BIDSRowSchema = Yup.object().shape<YupShape<Record<BIDSFieldNamesType, unknown>>>({
   // Enum fields
@@ -96,6 +96,4 @@ export const BIDSRowSchema = Yup.object().shape<YupShape<Record<BIDSFieldNamesTy
   LabelingDuration: Yup.number().moreThan(0, "Invalid Labeling Duration"),
   M0_GMScaleFactor: Yup.number().moreThan(0, "Invalid M0 GM Scale Factor"),
   M0Estimate: Yup.number().moreThan(0, "Invalid M0 Estimate"),
-
-
 });

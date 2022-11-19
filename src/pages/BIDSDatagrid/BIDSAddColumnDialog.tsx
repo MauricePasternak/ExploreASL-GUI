@@ -18,7 +18,7 @@ import {
   BIDSEnumSchema,
   BIDSNumericalSchema,
   BIDSTextSchema,
-} from "../../common/schemas/BIDSDatagridConfigurationSchemas";
+} from "../../common/schemas/BIDSDataGridSchemas/BIDSDatagridConfigurationSchemas";
 import { BIDSEnumConfig, BIDSFieldNamesType } from "../../common/types/BIDSDatagridTypes";
 import { DebouncedInput } from "../../components/DebouncedComponents";
 import { atomAddColumnDialogOpen, atomAddDataframeColumns, atomDataframeColumns } from "../../stores/BIDSDatagridStore";

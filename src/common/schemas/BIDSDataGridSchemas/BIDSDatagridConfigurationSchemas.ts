@@ -8,7 +8,7 @@ import {
   BIDSNumericalSchemaType,
   BIDSTextFieldNamesType,
   BIDSTextSchemaType,
-} from "../types/BIDSDatagridTypes";
+} from "../../types/BIDSDatagridTypes";
 
 export const BIDSEnumSchema: BIDSEnumSchemaType = {
   ArterialSpinLabelingType: {

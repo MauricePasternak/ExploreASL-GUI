@@ -1,6 +1,7 @@
 import { uniq as lodashUniq } from "lodash";
+import { YupShape } from "../../../common/types/validationSchemaTypes";
 import * as Yup from "yup";
-import { ObjectShape } from "yup/lib/object";
+
 import {
   ASLSequenceType,
   ASLSeriesPatternType,
@@ -12,12 +13,9 @@ import {
   ImportRuntimeEnvsSchemaType,
   ImportSchemaType,
   SourcedataFolderType,
-} from "../types/ImportSchemaTypes";
-import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../utilityFunctions/EASLFunctions";
+} from "../../types/ImportSchemaTypes";
+import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../../utilityFunctions/EASLFunctions";
 const { api } = window;
-
-type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never;
-export type YupShape<T extends Record<any, any>> = Partial<Record<keyof T, ObjectShapeValues>>;
 
 /**
  * Schema intended for the Import Module Step: Define Runtime Environments
@@ -71,7 +69,7 @@ export const SchemaImportStepDefineRuntimeEnvs: Yup.SchemaOf<ImportRuntimeEnvsSc
         if (!folderStruct) return false;
 
         // Blank fields are not allowed
-        if (folderStruct.some(folder => folder === ""))
+        if (folderStruct.some((folder) => folder === ""))
           return helpers.createError({
             path: helpers.path,
             message: "Blank fields are not allowed",
@@ -132,7 +130,7 @@ export const SchemaImportStepDefineRuntimeEnvs: Yup.SchemaOf<ImportRuntimeEnvsSc
 export const SchemaImportStepDefineAliases = Yup.object().shape<YupShape<ImportAliasesSchemaType>>({
   MappingScanAliases: Yup.object().test("ValidScanAliases", "Invalid Scan Aliases", (mapping, helpers) => {
     // At least one scan alias must be defined
-    const scansNotIgnored = Object.values(mapping).filter(scan => scan !== "Ignore");
+    const scansNotIgnored = Object.values(mapping).filter((scan) => scan !== "Ignore");
     if (scansNotIgnored.length === 0)
       return helpers.createError({ path: helpers.path, message: "At least one scan alias must be defined" });
     return true;
@@ -140,20 +138,20 @@ export const SchemaImportStepDefineAliases = Yup.object().shape<YupShape<ImportA
   MappingVisitAliases: Yup.object().test(
     "ValidVisitAliases",
     "All aliases must be unique and cannot be blank",
-    mapping => {
+    (mapping) => {
       const visitAliases = Object.values(mapping);
       // const isAllUnique = uniq(visitAliases).length === visitAliases.length;
-      const isAllNotBlank = visitAliases.every(alias => alias !== "");
+      const isAllNotBlank = visitAliases.every((alias) => alias !== "");
       return isAllNotBlank;
     }
   ),
   MappingSessionAliases: Yup.object().test(
     "ValidSessionAliases",
     "All session aliases must be unique and cannot be blank",
-    mapping => {
+    (mapping) => {
       const sessionAliases = Object.values(mapping);
       const isAllUnique = lodashUniq(sessionAliases).length === sessionAliases.length;
-      const isAllNotBlank = sessionAliases.every(alias => alias !== "");
+      const isAllNotBlank = sessionAliases.every((alias) => alias !== "");
       return isAllUnique && isAllNotBlank;
     }
   ),
@@ -256,7 +254,7 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 
       // No M0 position is allowed to exceed the number of volumes
       const nVolumes: number = helpers.parent.NVolumes;
-      if (m0Pos.some(pos => pos > nVolumes))
+      if (m0Pos.some((pos) => pos > nVolumes))
         return helpers.createError({
           path: helpers.path,
           message: "At least one specified M0 position is greater than the number of volumes",
@@ -273,7 +271,7 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
         if (dummyPositions.length === 0) return true;
         const nVolumes: number = helpers.parent.NVolumes;
         // No dummy position is allowed to exceed the number of volumes
-        if (dummyPositions.some(pos => pos > nVolumes))
+        if (dummyPositions.some((pos) => pos > nVolumes))
           return helpers.createError({
             path: helpers.path,
             message: "At least one specified dummy position is greater than the number of volumes",
@@ -292,7 +290,7 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
     then: Yup.number()
       .required("This is a required field when working with CASL or PCASL")
       .moreThan(0, "Labeling Duration must be greater than 0 when working with CASL or PCASL"),
-    otherwise: schema =>
+    otherwise: (schema) =>
       schema
         .optional()
         .max(
@@ -303,27 +301,27 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
   BolusCutOffFlag: Yup.boolean().when("ASLSequence", {
     is: (sequence: ASLSequenceType) => sequence === "PASL",
     then: Yup.boolean().required("This is a required field when working with PASL"),
-    otherwise: schema =>
+    otherwise: (schema) =>
       schema.optional().notOneOf([true], "Bolus Cut Off Flag must be false or omitted when working with CASL or PCASL"),
   }),
   BolusCutOffTechnique: Yup.string().when("BolusCutOffFlag", {
     is: (bolusCutOffFlag: boolean) => !!bolusCutOffFlag,
-    then: schema =>
+    then: (schema) =>
       schema
         .required("This is a required field when Bolus Cut Off Flag is true")
         .oneOf(["QUIPSS", "QUIPSSII", "Q2TIPS"]),
-    otherwise: schema =>
+    otherwise: (schema) =>
       schema
         .optional()
         .notOneOf(["QUIPSS", "QUIPSSII", "Q2TIPS"], "If Bolus Cut Off Flag is false, this field must be omitted"),
   }),
   BolusCutOffDelayTime: Yup.number().when("BolusCutOffTechnique", {
     is: (bolusCutOffTechnique: BolusCutOffTechniqueType) => !!bolusCutOffTechnique,
-    then: schema =>
+    then: (schema) =>
       schema
         .required("This is a required field and cannot be zero when Bolus Cut Off Technique is defined")
         .moreThan(0, "Bolus Cut Off Delay Time must be greater than 0"),
-    otherwise: schema =>
+    otherwise: (schema) =>
       schema.optional().max(0, "This field must be set to 0 when Bolus Cut Off Technique is omitted"),
   }),
   // Background Suppression Fields
