@@ -136,7 +136,7 @@ export const DebouncedSlider = ({
       <FormLabel component="legend" className="DebouncedSlider__FormLabel">
         {label}
       </FormLabel>
-      <Box display="flex" gap={1} alignItems="center" className="DebouncedSlider__FlexboxWrapper">
+      <Box display="flex" gap={2} alignItems="center" className="DebouncedSlider__FlexboxWrapper">
         <Slider
           className={componentClassname}
           sx={{ color: error ? "error.main" : "default" }}

@@ -53,7 +53,10 @@ export const DebouncedInput = forwardRef(
 
     // useEffect for keeping innerValue in sync with value
     useEffect(() => {
-      if (value !== innerValue) setInnerValue(value);
+      // console.log(`DebouncedInput: value changed to ${value} while innerValue is ${innerValue}`);
+      if (value !== innerValue) {
+        setInnerValue(value);
+      }
     }, [value]);
 
     /** Handler for changes to the value; updates the inner value and forwards the new value via provided onChange */

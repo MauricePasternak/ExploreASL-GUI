@@ -9,20 +9,20 @@ import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import { partialRight as lodashPartialRight, range as lodashRange } from "lodash";
+import { range as lodashRange } from "lodash";
 import React from "react";
 import { Control, UseFieldArrayRemove, UseFormTrigger } from "react-hook-form";
+import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
+import { getNumbersFromDelimitedString } from "../../../common/utilityFunctions/stringFunctions";
+import ExpandMore from "../../../components/ExpandMore";
 import {
   RHFCheckable,
   RHFFPDropzone,
   RHFSelect,
   RHFSelectOption,
   RHFSlider,
-  RHFTextField,
+  RHFTextField
 } from "../../../components/RHFComponents";
-import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
-import { getNumbersFromDelimitedString } from "../../../common/utilityFunctions/stringFunctions";
-import ExpandMore from "../../../components/ExpandMore";
 import { OutlinedGroupBox } from "../../../components/WrapperComponents";
 
 type SingleImportContextProps = {
@@ -293,7 +293,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger }: SingleI
                   fullWidth
                   label="Background Pulse Suppression Timings"
                   helperText="Specify as comma-separated positive numbers in seconds. Leave blank if not applicable."
-                  innerToField={lodashPartialRight(getNumbersFromDelimitedString, ",", "float")}
+                  innerToField={getNumbersFromDelimitedString}
                   fieldToInner={(numbers: number[]) => (numbers && Array.isArray(numbers) ? numbers.join(", ") : "")}
                   debounceTime={2000}
                 />

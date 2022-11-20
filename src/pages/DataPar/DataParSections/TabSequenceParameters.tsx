@@ -3,7 +3,7 @@ import Fade from "@mui/material/Fade";
 import Grid from "@mui/material/Grid";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { partialRight as lodashPartialRight, range as lodashRange } from "lodash";
+import { range as lodashRange } from "lodash";
 import React from "react";
 import { Control, UseFormTrigger } from "react-hook-form";
 import { DataParValuesType } from "../../../common/types/ExploreASLDataParTypes";
@@ -149,6 +149,8 @@ export const TabSequenceParameters = React.memo(
                   label="Background Suppression Number of Pulses"
                   marks={BackgroundSuppressionNumberPulsesMarks}
                   helperText="Keep at zero if you wish this field to be ignored"
+                  trigger={trigger}
+                  triggerTarget="x.Q.BackgroundSuppressionPulseTime"
                 />
               </Grid>
               <Grid item xs={12} md={6} xl={4}>
@@ -157,9 +159,11 @@ export const TabSequenceParameters = React.memo(
                   name="x.Q.BackgroundSuppressionPulseTime"
                   fullWidth
                   label="Background Pulse Suppression Timings"
-                  helperText="Specify as comma-separated positive numbers representing timings in seconds. Leave blank if not applicable."
-                  innerToField={lodashPartialRight(getNumbersFromDelimitedString, ",", "float")}
-                  fieldToInner={(numbers: number[]) => (numbers && Array.isArray(numbers) ? numbers.join(", ") : "")}
+                  helperText="Specify as comma-separated positive integers representing timings in seconds. Leave blank if not applicable."
+                  innerToField={(strValue) => getNumbersFromDelimitedString(strValue, ",", "float")}
+                  fieldToInner={(numbers: number[]) => {
+                    return numbers && Array.isArray(numbers) ? numbers.join(", ") : "";
+                  }}
                   debounceTime={2000}
                 />
               </Grid>

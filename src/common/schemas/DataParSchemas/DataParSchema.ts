@@ -181,7 +181,6 @@ const SchemaDataParASLSequenceParams = Yup.object().shape<YupShape<ASLSequencePa
     .typeError("Invalid readout dimension specified")
     .oneOf(["2D", "3D"], "Invalid dimension type specified")
     .test("DimensionMatchesSequence", "Dimension does not match sequence", (readoutDim, helpers) => {
-      // console.log("DimensionMatchesSequence");
       if (helpers.parent.Sequence === "2D_EPI" && readoutDim === "3D") {
         return helpers.createError({
           path: helpers.path,
@@ -206,11 +205,23 @@ const SchemaDataParASLSequenceParams = Yup.object().shape<YupShape<ASLSequencePa
     .min(0, "Cannot be a negative number")
     .max(10, "Cannot be greater than 10"),
   BackgroundSuppressionPulseTime: Yup.array()
-    .of(Yup.number().typeError("This value must be a number").positive("Negative or zero values are not allowed."))
+    .of(
+      Yup.number()
+        .typeError("This value must be a number")
+        .integer(
+          "The values provided must be integers representing the timing in milliseconds. " +
+            "Perhaps you entered the values as seconds by accident?"
+        )
+        .positive("Negative or zero values are not allowed.")
+    )
     .test(
       "MatchesNBSup",
-      "If the M0 type is specified as 'Use mean of control ASL', then the number of comma-separated values here must equal the value in the 'Number of Background Suppression Pulses' field.",
+      "If the M0 type is specified as 'Use mean of control ASL', " +
+        "then the number of comma-separated values here must equal " +
+        "the value in the 'Number of Background Suppression Pulses' field.",
       (value, helpers) => {
+        // console.log(`BackgroundSuppressionPulseTime Validation got value: ${value}`);
+
         try {
           const numPulses: number = helpers.parent.BackgroundSuppressionNumberPulses;
           if (numPulses === 0 && value.length > 0) {
@@ -224,7 +235,8 @@ const SchemaDataParASLSequenceParams = Yup.object().shape<YupShape<ASLSequencePa
             return helpers.createError({
               path: helpers.path,
               message:
-                "If this field isn't empty, then the number of comma-separated values must equal the value in the 'Background Suppression Number of Pulses' field.",
+                `If this field isn't empty, then the number of comma-separated values must equal ` +
+                `the value in the "Background Suppression Number of Pulses" field.`,
             });
           }
 

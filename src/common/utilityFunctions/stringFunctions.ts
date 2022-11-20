@@ -71,13 +71,15 @@ export const stringArrToRegex = (stringArr: string[], options?: StringArrToRegex
  * Retrieves an array of numbers from a string representation of them as delimited strings.
  * @param stringToParse The string to retrieve numerical values from.
  * @param delimiter The delimiter separating numerical values.
- * @param numberType Whether to attempt to parse integers or floats. Defaults to `integer`.
- * @returns An array of parsed numbers.
+ * Defaults to `","`.
+ * @param numberType Whether to attempt to parse integers or floats.
+ * Defaults to `"float"`.
+ * @returns An array of parsed numbers in ascending order.
  */
 export const getNumbersFromDelimitedString = (
   stringToParse: string,
   delimiter = ",",
-  numberType: "integer" | "float" = "integer"
+  numberType: "integer" | "float" = "float"
 ) => {
   const retrievedNums = stringToParse
     .split(delimiter)

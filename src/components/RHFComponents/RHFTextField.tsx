@@ -83,6 +83,7 @@ export function RHFTextField<
 
   // It is necessary to convert the field value to a compatible string type for the Input component
   const asStringValue = fieldToInner ? fieldToInner(field.value) : (field.value as string);
+  // console.log(`RHFTextField with name ${name} has asStringValue: `, asStringValue);
 
   function render() {
     return (
