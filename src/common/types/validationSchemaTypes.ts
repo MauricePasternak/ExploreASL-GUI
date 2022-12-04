@@ -1,5 +1,6 @@
 import { ObjectShape } from "yup/lib/object";
 type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never;
+import { ValidationError } from "yup";
 
 /**
  * More liberal version of Yup.SchemaOf<T> that validates the keys of T but not the values.
@@ -13,3 +14,8 @@ type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never
  * ```
  */
 export type YupShape<T extends Record<any, any>> = Partial<Record<keyof T, ObjectShapeValues>>;
+
+/**
+ * Type representing the appropriate return for any schema invoking the `test()` method
+ */
+export type YupTestReturnType = boolean | ValidationError;

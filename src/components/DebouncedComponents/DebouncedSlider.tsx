@@ -139,7 +139,7 @@ export const DebouncedSlider = ({
       <Box display="flex" gap={2} alignItems="center" className="DebouncedSlider__FlexboxWrapper">
         <Slider
           className={componentClassname}
-          sx={{ color: error ? "error.main" : "default" }}
+          sx={{ color: error ? "error.main" : "default", flexGrow: 1 }}
           {...sliderProps}
           value={innerValue}
           onChange={(_, values) => handleChange(values)}

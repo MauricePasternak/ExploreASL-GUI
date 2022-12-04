@@ -77,9 +77,9 @@ export type BIDSFieldNamesType =
 /**
  * Names that correspond to the `keys` of RDG `Column`s in the BIDS datagrid. These are used to add/remove columns.
  * Most of these are BIDS-specific field names (i.e. PCASLType), but include the frozen column keys ID, File, and
- * Basename
+ * Filename
  */
-export type BIDSColumnName = BIDSFieldNamesType | "ID" | "File" | "Basename";
+export type BIDSColumnName = BIDSFieldNamesType | "ID" | "File" | "Filename";
 
 export type BIDSSchemaType = BIDSEnumSchemaType & BIDSNumericalSchemaType & BIDSBooleanSchemaType & BIDSTextSchemaType;
 
@@ -101,7 +101,7 @@ export type BIDSRow = {
 } & {
   ID: number;
   File: string;
-  Basename: string;
+  Filename: string;
 };
 
 export type BIDSTypes = BIDSSchemaType[keyof BIDSSchemaType]["type"];

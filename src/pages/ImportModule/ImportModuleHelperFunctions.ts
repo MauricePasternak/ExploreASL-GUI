@@ -181,7 +181,9 @@ export async function buildSourceStructureJSON(
   }
 }
 
-export async function buildStudyParJSON(importSchema: ImportSchemaType): Promise<StudyParJSONOutputSchemaType | false> {
+export async function buildStudyParJSON(
+  importSchema: ImportSchemaType
+): Promise<StudyParJSONOutputSchemaType | SingleStudyParJSONOutputSchemaType | false> {
   try {
     const result = [];
 
@@ -202,7 +204,7 @@ export async function buildStudyParJSON(importSchema: ImportSchemaType): Promise
         BolusCutOffFlag: context.BolusCutOffFlag,
         BolusCutOffTechnique: context.BolusCutOffTechnique !== "" ? context.BolusCutOffTechnique : undefined,
         BolusCutOffDelayTime: context.BolusCutOffDelayTime,
-        BackgroundSuppression: context.BackgroundSuppressionNumberPulses > 0 ? true : undefined,
+        BackgroundSuppression: context.BackgroundSuppressionNumberPulses > 0 ? true : false,
         BackgroundSuppressionNumberPulses: context.BackgroundSuppressionNumberPulses,
         BackgroundSuppressionPulseTime: context.BackgroundSuppressionPulseTime,
       };
@@ -232,7 +234,20 @@ export async function buildStudyParJSON(importSchema: ImportSchemaType): Promise
       // Save to result
       result.push(temp);
     }
-    return result.length > 0 ? ({ StudyPars: result } as StudyParJSONOutputSchemaType) : false; // If result is empty, return false
+
+    // Determine output type
+    // If there are no contexts, return false, as an error occurred
+    if (result.length === 0) {
+      return false;
+    }
+    // If there is only one context, return a single object
+    if (result.length === 1) {
+      return result[0];
+    }
+    // If there are multiple contexts, return an array
+    if (result.length > 1) {
+      return { StudyPars: result } as StudyParJSONOutputSchemaType;
+    }
   } catch (error) {
     console.warn("Something went wrong in buildStudyParJSON", error);
     return false;

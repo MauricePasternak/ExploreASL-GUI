@@ -46,7 +46,7 @@ export type BolusCutOffTechniqueType = "QUIPSS" | "QUIPSSII" | "Q2TIPS";
 /**
  * For PASL sequences, this determines the cut-off times used.
  */
-export type BolusCutOffDelayTimeType = number;
+export type BolusCutOffDelayTimeType = number | number[];
 
 /**
  * Type defining the schma of the step where the folder paths and structure are defined.
@@ -125,7 +125,7 @@ export type SingleStudyParJSONOutputSchemaType = {
   LabelingDuration?: number;
   BolusCutOffFlag?: boolean;
   BolusCutOffTechnique?: BolusCutOffTechniqueType;
-  BolusCutOffDelayTime?: number;
+  BolusCutOffDelayTime?: BolusCutOffDelayTimeType;
   BackgroundSuppression?: boolean;
   BackgroundSuppressionNumberPulses?: number;
   BackgroundSuppressionPulseTime?: number[];

@@ -1,5 +1,6 @@
 import React from "react";
 import { ControllerRenderProps, FieldValues, Path, useController, useWatch } from "react-hook-form";
+import { parseFieldError } from "../../common/utilityFunctions/formFunctions";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedSlider, DebouncedSliderProps } from "../DebouncedComponents";
 
@@ -59,6 +60,7 @@ export function RHFSlider<
   // RHF Variables
   const { field, fieldState } = useController({ name, control }); // field & fieldState
   const hasError = !!fieldState.error;
+  const errorMessage = hasError ? parseFieldError(fieldState.error) : "";
 
   // Watch-related variables
   const isWatching = watchTarget && onWatchedChange;
@@ -80,7 +82,7 @@ export function RHFSlider<
         {...sliderProps}
         {...fixedField}
         error={hasError}
-        errorMessage={fieldState.error?.message}
+        errorMessage={errorMessage}
         onChange={handleChange}
         debounceTime={debounceTime}
         renderTextfields={renderTextfields}

@@ -71,7 +71,7 @@ export class Regex<Re extends string> {
    * ```
    */
   search(target: string): RegexMatch<Re> | false {
-    // String.match fails to match capture groups when the global flag is
+    // String.match fails to match capture groups when the global flag is "g"
     if (this.flags.includes("g")) {
       return new Regex(this.originalPattern, this.flags.replace("g", "")).search(target);
     }

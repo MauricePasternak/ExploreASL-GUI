@@ -21,12 +21,12 @@ function BIDSDataActions() {
   const fetchDataFrame = useSetAtom(atomFetchDataframe);
 
   async function handleWriteSingleRow(row: BIDSRow) {
-    const { ID, File, Basename, ...rest } = row;
+    const { ID, File, Filename, ...rest } = row;
     try {
       if (!(await api.path.filepathExists(File)))
         return {
           success: false,
-          error: `File ending as ${Basename} does not exist in this study`,
+          error: `File ending as ${Filename} does not exist in this study`,
         };
       // TODO: Add validation of the BIDS row here
 
@@ -39,7 +39,7 @@ function BIDSDataActions() {
     } catch (error) {
       return {
         success: false,
-        error: `Encountered an error while writing to file ending as ${Basename}: ${error.message}`,
+        error: `Encountered an error while writing to file ending as ${Filename}: ${error.message}`,
       };
     }
   }
