@@ -1,4 +1,4 @@
-import { IsValidStudyRoot } from "../../../common/utilityFunctions/EASLFunctions";
+import { IsValidStudyRoot } from "../../utils/EASLFunctions";
 import * as Yup from "yup";
 import {
 	BolusCutOffTechniqueType,
@@ -6,7 +6,7 @@ import {
 	SourcedataFolderType,
 } from "../../../common/types/ImportSchemaTypes";
 import { YupTestReturnType } from "../../../common/types/validationSchemaTypes";
-import { yupCreateError } from "../../utilityFunctions/formFunctions";
+import { yupCreateError } from "../../utils/formFunctions";
 import { uniq as lodashUniq } from "lodash";
 
 const { api } = window;

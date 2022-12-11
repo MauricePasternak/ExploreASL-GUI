@@ -1,7 +1,7 @@
 import { LoadEASLDataFrameSchema } from "../../types/DataVizSchemaTypes";
 import * as Yup from "yup";
 import { YupTestReturnType } from "../../types/validationSchemaTypes";
-import { yupCreateError } from "../../utilityFunctions/formFunctions";
+import { yupCreateError } from "../../utils/formFunctions";
 const { api } = window;
 
 export const DataVizLoadDFModule__AtlasesTest = async (

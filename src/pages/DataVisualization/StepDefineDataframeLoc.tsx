@@ -22,8 +22,8 @@ import {
   innerJoin,
   isNumericSeries,
   outerLeftJoin,
-} from "../../common/utilityFunctions/dataFrameFunctions";
-import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
+} from "../../common/utils/dataFrameFunctions";
+import { YupResolverFactoryBase } from "../../common/utils/formFunctions";
 import { RHFFilepathInput, RHFSelect, RHFSelectOption } from "../../components/RHFComponents";
 import { FabDialogWrapper, OutlinedGroupBox } from "../../components/WrapperComponents";
 import {

@@ -12,7 +12,7 @@ import ProcessIcon from "../../assets/svg/ArrowsSpinSolid.svg";
 import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import { DataParTabOption } from "../../common/types/DataParSchemaTypes";
 import { DataParValuesType } from "../../common/types/ExploreASLDataParTypes";
-import { parseNestedFormattedYupErrors } from "../../common/utilityFunctions/formFunctions";
+import { parseNestedFormattedYupErrors } from "../../common/utils/formFunctions";
 import { atomDataParCurrentTab } from "../../stores/DataParStore";
 import { atomCurrentGUIPage } from "../../stores/GUIFrameStore";
 

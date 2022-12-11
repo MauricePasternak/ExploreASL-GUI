@@ -21,9 +21,9 @@ import {
   parseNestedFormattedYupErrors,
   YupResolverFactoryBase,
   YupValidate,
-} from "../../common/utilityFunctions/formFunctions";
-import { Regex } from "../../common/utilityFunctions/Regex";
-import { stringArrToRegex } from "../../common/utilityFunctions/stringFunctions";
+} from "../../common/utils/formFunctions";
+import { Regex } from "../../common/utils/Regex";
+import { stringArrToRegex } from "../../common/utils/stringFunctions";
 import { AtomicSnackbarMessage } from "../../components/AtomicComponents";
 import { FabDialogWrapper } from "../../components/WrapperComponents";
 import { atomDataParCurrentTab, defaultDataParValues } from "../../stores/DataParStore";

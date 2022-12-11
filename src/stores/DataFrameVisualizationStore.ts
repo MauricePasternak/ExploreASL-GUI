@@ -16,7 +16,7 @@ import {
   NivoSwarmPlotProps,
   NivoSwarmPlotUpdateOp,
 } from "../common/types/nivoTypes";
-import { isNumericSeries, query, toNumericSeries, toStringSeries } from "../common/utilityFunctions/dataFrameFunctions";
+import { isNumericSeries, query, toNumericSeries, toStringSeries } from "../common/utils/dataFrameFunctions";
 
 export const DataFrameMainTypeOptions: DataFrameMainType[] = ["Categorical", "Continuous", "Ignore"];
 

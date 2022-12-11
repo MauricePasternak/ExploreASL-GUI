@@ -1,7 +1,7 @@
 import { ObjectShape } from "yup/lib/object";
-type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never;
 import { ValidationError } from "yup";
 
+type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never;
 /**
  * More liberal version of Yup.SchemaOf<T> that validates the keys of T but not the values.
  * The original is far too strict on occasion and this is meant to be used as a workaround while ensuring key-safety.

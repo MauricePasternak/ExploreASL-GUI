@@ -9,7 +9,7 @@ import FastIsEqual from "fast-deep-equal";
 import React, { useEffect, useState } from "react";
 import { ControllerRenderProps, FieldValues, Path, PathValue, useController, useWatch } from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
-import { parseFieldError } from "../../common/utilityFunctions/formFunctions";
+import { parseFieldError } from "../../common/utils/formFunctions";
 
 type TValueWrapper<
   TFV extends FieldValues,

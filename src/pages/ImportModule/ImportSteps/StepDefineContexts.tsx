@@ -15,7 +15,7 @@ import ContextIcon from "../../../assets/svg/ContextIcon.svg";
 import { GUIIMPORTFILE_BASENAME, SOURCESTRUCTUREFILE_BASENAME, STUDYPARFILE_BASENAME } from "../../../common/GLOBALS";
 import { SchemaImportPar } from "../../../common/schemas/ImportSchemas/ImportSchema";
 import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
-import { YupValidate } from "../../../common/utilityFunctions/formFunctions";
+import { YupValidate } from "../../../common/utils/formFunctions";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../../components/RHFComponents/RHFMultiStep";
 import { FabDialogWrapper } from "../../../components/WrapperComponents";
 import { DefaultImportSingleContext } from "../../../stores/ImportPageStore";

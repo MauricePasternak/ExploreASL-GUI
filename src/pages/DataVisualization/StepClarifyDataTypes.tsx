@@ -14,7 +14,7 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
 import React from "react";
-import { Regex } from "../../common/utilityFunctions/Regex";
+import { Regex } from "../../common/utils/Regex";
 import { DataFrameMainType } from "../../common/types/dataFrameTypes";
 import {
   atomDataVizCurrentStep,

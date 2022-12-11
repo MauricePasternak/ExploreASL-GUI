@@ -8,7 +8,7 @@ import { EASLWorkload } from "../common/types/ExploreASLTypes";
 import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import { EASLType } from "../common/types/ImportSchemaTypes";
 import { RunEASLStudySetupType } from "../common/types/ProcessStudiesTypes";
-import { Regex } from "../common/utilityFunctions/Regex";
+import { Regex } from "../common/utils/Regex";
 export const asyncExec = promisify(exec);
 
 /**

@@ -12,10 +12,10 @@ import Typography from "@mui/material/Typography";
 import { range as lodashRange } from "lodash";
 import React from "react";
 import { Control, Controller, UseFieldArrayRemove, UseFormSetValue, UseFormTrigger, useWatch } from "react-hook-form";
-import { parseFieldError } from "../../../common/utilityFunctions/formFunctions";
+import { parseFieldError } from "../../../common/utils/formFunctions";
 import { DebouncedSlider } from "../../../components/DebouncedComponents";
 import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
-import { getNumbersFromDelimitedString } from "../../../common/utilityFunctions/stringFunctions";
+import { getNumbersFromDelimitedString } from "../../../common/utils/stringFunctions";
 import ExpandMore from "../../../components/ExpandMore";
 import {
 	RHFCheckable,

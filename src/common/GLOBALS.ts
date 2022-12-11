@@ -1,5 +1,5 @@
 import { CSSSize } from "./types/cssTypes";
-import { range } from "./utilityFunctions/arrayFunctions";
+import { range } from "./utils/arrayFunctions";
 
 export const APPBARHEIGHTPIXELS = 48;
 export const MEDIAPROTOCOL = "mpprotocol"; // Priviledged protocol for loading local media files into app.

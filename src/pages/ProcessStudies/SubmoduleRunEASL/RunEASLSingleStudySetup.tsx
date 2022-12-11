@@ -22,7 +22,7 @@ import {
 } from "lodash";
 import React, { useEffect } from "react";
 import { Controller, SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
-import { Regex } from "../../../common/utilityFunctions/Regex";
+import { Regex } from "../../../common/utils/Regex";
 import { DATAPARFILE_BASENAME } from "../../../common/GLOBALS";
 import { DataParFieldNameTranslator } from "../../../common/schemas/DataParSchemas/DataParFieldNameTranslator";
 import { SchemaDataPar } from "../../../common/schemas/DataParSchemas/DataParSchema";
@@ -34,7 +34,7 @@ import {
   formatErrorsForDisplay,
   YupResolverFactoryBase,
   YupValidate,
-} from "../../../common/utilityFunctions/formFunctions";
+} from "../../../common/utils/formFunctions";
 import LabelledSelect from "../../../components/RegularFormComponents/LabelledSelect";
 import {
   atomProcStudyPIDs,

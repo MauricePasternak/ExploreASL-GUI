@@ -8,6 +8,7 @@ import { Regex } from "./Regex";
 
 const ArrayErrorRegex = new Regex(`(?<Field>.*)\\[\\d+\\]$`, "m"); // matches "Field[0]" and captures "Field" portion
 
+/** Wrapper function around helpers.createError when used in the test method of a Yup schema */
 export function yupCreateError<T extends Record<string, any>>(
 	helpers: Yup.TestContext<T>,
 	message: string
@@ -58,53 +59,52 @@ export type ResolverFactory = <T extends Yup.AnyObjectSchema | Lazy<any>, TFV ex
  * @param validationSchema Yup schema to validate the form values.
  * @returns Returns the resolver function. This function should be fed into the `resolver` prop of the `useForm` hook.
  */
-export const YupResolverFactoryBase: ResolverFactory = <
-	T extends Yup.AnyObjectSchema | Lazy<any>,
-	TFV extends FieldValues = FieldValues
->(
-	validationSchema: T,
-	options?: ModifiedValidateOptions<TFV>
-) => async (data: TFV) => {
-	options = Object.assign(
-		{ abortEarly: false, context: options?.extraContext ? Object.assign(data, options.extraContext) : data },
-		options
-	);
+export const YupResolverFactoryBase: ResolverFactory =
+	<T extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues = FieldValues>(
+		validationSchema: T,
+		options?: ModifiedValidateOptions<TFV>
+	) =>
+	async (data: TFV) => {
+		options = Object.assign(
+			{ abortEarly: false, context: options?.extraContext ? Object.assign(data, options.extraContext) : data },
+			options
+		);
 
-	try {
-		const values = await validationSchema.validate(data, options);
-		return {
-			values,
-			errors: {},
-		};
-	} catch (errors) {
-		// Early exit
-		if (!(errors instanceof Yup.ValidationError) || !errors.inner) throw errors;
+		try {
+			const values = await validationSchema.validate(data, options);
+			return {
+				values,
+				errors: {},
+			};
+		} catch (errors) {
+			// Early exit
+			if (!(errors instanceof Yup.ValidationError) || !errors.inner) throw errors;
 
-		// Restrict errors to the first error of each field
-		const parsedErrors =
-			errors.inner.length === 0 && errors.path
-				? { [errors.path]: errors.message } // single error
-				: errors.inner.reduce<Record<string, FieldError>>((acc, currError) => {
-						// Array errors ending in [#] will cause object-dot to throw an error; array index must be removed
-						const arrayFieldMatch = ArrayErrorRegex.search(currError.path);
-						if (arrayFieldMatch) {
-							currError.path = arrayFieldMatch.groupsObject.Field;
-						}
+			// Restrict errors to the first error of each field
+			const parsedErrors =
+				errors.inner.length === 0 && errors.path
+					? { [errors.path]: errors.message } // single error
+					: errors.inner.reduce<Record<string, FieldError>>((acc, currError) => {
+							// Array errors ending in [#] will cause object-dot to throw an error; array index must be removed
+							const arrayFieldMatch = ArrayErrorRegex.search(currError.path);
+							if (arrayFieldMatch) {
+								currError.path = arrayFieldMatch.groupsObject.Field;
+							}
 
-						if (!(currError.path in acc)) {
-							acc[currError.path] = { message: currError.message, type: currError.type ?? "validation" };
-						}
-						return acc;
-				  }, {});
-		// React-hook-form expects an expanded object of errors, not a flattened one
-		const toExpandedFormat = object(parsedErrors);
-		const res = {
-			values: {},
-			errors: toExpandedFormat,
-		};
-		return res;
-	}
-};
+							if (!(currError.path in acc)) {
+								acc[currError.path] = { message: currError.message, type: currError.type ?? "validation" };
+							}
+							return acc;
+					  }, {});
+			// React-hook-form expects an expanded object of errors, not a flattened one
+			const toExpandedFormat = object(parsedErrors);
+			const res = {
+				values: {},
+				errors: toExpandedFormat,
+			};
+			return res;
+		}
+	};
 
 /**
  * Wrapper function around safetly invoking yup validation and catching any errors.
@@ -192,14 +192,10 @@ export function correctYupValidatedContent<
 	const dottedInvalidObject = dot(invalidObject);
 	const dottedValidObject = dot(validObject);
 
-	console.log("correctYupValidatedContent -- dottedInvalidObject:", dottedInvalidObject);
-	console.log("correctYupValidatedContent -- dottedValidObject:", dottedValidObject);
-	console.log("correctYupValidatedContent -- errorMapping:", errorMapping);
-
 	// Remove all paths from the invalid Object that are in the error mapping and/or not in the valid object
 	for (const fieldpath of Object.keys(dottedInvalidObject)) {
 		// Skip valid fields
-		if (!(fieldpath in errorMapping)) continue;
+		if (!(fieldpath in (errorMapping as Record<Path<TValid>, FieldError>))) continue;
 
 		// Assign correct value to the invalid field
 		if (fieldpath in dottedValidObject) {
@@ -208,8 +204,6 @@ export function correctYupValidatedContent<
 			delete dottedInvalidObject[fieldpath];
 		}
 	}
-
-	console.log("correctYupValidatedContent -- mutated correctedInvalidObject:", dottedInvalidObject);
 
 	// Now merge to create the corrected object from the valid object and the expanded "no-longer-invalid" object
 	const correctedObject = lodashMerge({}, validObject, object(dottedInvalidObject)) as TValid;

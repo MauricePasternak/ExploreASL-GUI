@@ -8,7 +8,7 @@ import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { FabDialogWrapper } from "../../../components/WrapperComponents";
 import { SchemaRunEASLSingleStudySetup } from "../../../common/schemas/ProcessStudiesSchemas/RunEASLSchema";
-import { YupValidate } from "../../../common/utilityFunctions/formFunctions";
+import { YupValidate } from "../../../common/utils/formFunctions";
 import HelpProcessStudies__PrepareAReRun from "../../../pages/Help/HelpProcessStudies__PrepareAReRun";
 import { atomStudyRootPathsByAllStudies, atomStudyStatusByAllStudies } from "../../../stores/ProcessStudiesStore";
 import {

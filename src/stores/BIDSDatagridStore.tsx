@@ -69,6 +69,8 @@ export const atomBIDSDataframe = atom<DataFrame>(new DataFrame());
 export const atomFetchDataframe = atom(null, async (get, set, StudyRootPath: string) => {
 	const { api } = window;
 
+	console.log("Fetching BIDS data from: ", StudyRootPath);
+
 	const parseSingleJSON = async (jsonPath: string, basename: string, jsonIndex: number) => {
 		const { error, payload } = await api.path.readJSONSafe(jsonPath);
 		if (error) return {};
@@ -91,6 +93,7 @@ export const atomFetchDataframe = atom(null, async (get, set, StudyRootPath: str
 
 	// Get the ASL json files
 	let jsonPaths = await api.path.glob(`${StudyRootPath}/rawdata`, "/**/*asl.json", { onlyFiles: true });
+	console.log(`BIDSDataGrid: Found ${jsonPaths.length} ASL json files in ${StudyRootPath}`);
 	if (jsonPaths.length === 0) return;
 	jsonPaths = lodashSortBy(jsonPaths, "path"); // Globing order not guaranteed, so sort by path
 
@@ -305,6 +308,7 @@ export const atomRDGColumnConfigs = atom<Column<BIDSRow>[]>((get) => {
 				} as Column<BIDSRow>;
 			} else {
 				// Other columns like "File" are skipped but in the background are retained in the dataframe
+				console.log(`Skipping column: ${colName}`);
 				return {} as Column<BIDSRow>;
 			}
 		})

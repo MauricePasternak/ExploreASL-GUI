@@ -1,8 +1,8 @@
 import { DataParValuesType } from "../../types/ExploreASLDataParTypes";
 import * as Yup from "yup";
 import { YupTestReturnType } from "../../types/validationSchemaTypes";
-import { yupCreateError } from "../../utilityFunctions/formFunctions";
-import { AreValidSubjects } from "../../utilityFunctions/EASLFunctions";
+import { yupCreateError } from "../../utils/formFunctions";
+import { AreValidSubjects } from "../../utils/EASLFunctions";
 
 export const DataParModule__SUBJECTSTest = async (
 	subjectBasenames: string[],

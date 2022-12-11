@@ -7,7 +7,7 @@ import { range as lodashRange } from "lodash";
 import React from "react";
 import { Control, UseFormTrigger } from "react-hook-form";
 import { DataParValuesType } from "../../../common/types/ExploreASLDataParTypes";
-import { getNumbersFromDelimitedString } from "../../../common/utilityFunctions/stringFunctions";
+import { getNumbersFromDelimitedString } from "../../../common/utils/stringFunctions";
 import {
 	RHFCheckable,
 	RHFCheckableGroup,

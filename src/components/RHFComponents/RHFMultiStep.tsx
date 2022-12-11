@@ -8,7 +8,7 @@ import * as Yup from "yup";
 import { Control, DeepPartial, FieldValues, Path, useForm, UseFormReturn, useFormState } from "react-hook-form";
 import Lazy from "yup/lib/Lazy";
 import { ValidateOptions } from "yup/lib/types";
-import { ResolverFactory } from "../../common/utilityFunctions/formFunctions";
+import { ResolverFactory } from "../../common/utils/formFunctions";
 
 /**
  * Type for the return of `RHFMultiStep`.

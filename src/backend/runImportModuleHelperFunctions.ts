@@ -1,6 +1,6 @@
 import { pickBy as lodashPickBy } from "lodash";
 import { ImportContextSchemaType, ImportSchemaType, SourcedataFolderType } from "../common/types/ImportSchemaTypes";
-import { escapeRegExp } from "../common/utilityFunctions/stringFunctions";
+import { escapeRegExp } from "../common/utils/stringFunctions";
 
 // /**
 //  * Gets a number array representing the MATLAB index positions of Subject, Visit, Session, and Scan directories.

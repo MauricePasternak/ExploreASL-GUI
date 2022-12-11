@@ -3,7 +3,7 @@ import Typography from "@mui/material/Typography";
 import createColormap from "colormap";
 import { round as lodashRound } from "lodash";
 import React from "react";
-import { linspace } from "../common/utilityFunctions/arrayFunctions";
+import { linspace } from "../common/utils/arrayFunctions";
 
 export function generateLinearGradient(cmap: string, nSteps: number, direction = "to top") {
   const colors = createColormap({

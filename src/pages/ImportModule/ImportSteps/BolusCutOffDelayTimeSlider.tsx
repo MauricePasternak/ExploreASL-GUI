@@ -2,7 +2,7 @@ import React from "react";
 import { Control, Controller, UseFormSetValue, useWatch } from "react-hook-form";
 import { DebouncedSlider } from "../../../components/DebouncedComponents";
 import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
-import { parseFieldError } from "../../../common/utilityFunctions/formFunctions";
+import { parseFieldError } from "../../../common/utils/formFunctions";
 
 interface BolusCutOffDelayTimeSliderProps {
 	control: Control<ImportSchemaType>;

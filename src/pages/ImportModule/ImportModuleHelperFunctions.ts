@@ -7,7 +7,7 @@ import {
   SourceStuctureJSONOutputSchemaType,
   StudyParJSONOutputSchemaType,
 } from "../../common/types/ImportSchemaTypes";
-import { escapeRegExp, stringArrToRegex } from "../../common/utilityFunctions/stringFunctions";
+import { escapeRegExp, stringArrToRegex } from "../../common/utils/stringFunctions";
 const { api } = window;
 
 /**

@@ -18,7 +18,7 @@ import {
 	IsValidEASLPath,
 	IsValidMATLABRuntimePath,
 	IsValidStudyRoot,
-} from "../../utilityFunctions/EASLFunctions";
+} from "../../utils/EASLFunctions";
 import {
 	DataParModule__ApplyQuantificationTest,
 	DataParModule__BackgroundSuppressionPulseTimeTest,

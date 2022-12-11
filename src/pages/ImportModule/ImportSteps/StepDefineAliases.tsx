@@ -11,7 +11,7 @@ import { SubmitErrorHandler, SubmitHandler } from "react-hook-form";
 import { FabDialogWrapper } from "../../../components/WrapperComponents";
 import AliasIcon from "../../../assets/svg/AliasIcon.svg";
 import { ImportScanType, ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
-import { assignSelfKeysOnly } from "../../../common/utilityFunctions/objectFunctions";
+import { assignSelfKeysOnly } from "../../../common/utils/objectFunctions";
 import { RHFMapping } from "../../../components/RHFComponents";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../../components/RHFComponents/RHFMultiStep";
 import HelpImport__StepDefineAliases from "../../Help/HelpImport__StepDefineAliases";

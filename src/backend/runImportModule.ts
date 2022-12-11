@@ -13,8 +13,8 @@ import {
 import { RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
 import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import { ImportSchemaType } from "../common/types/ImportSchemaTypes";
-import { createGUIMessage } from "../common/utilityFunctions/GUIMessageFunctions";
-import { matlabEscapeBlockChar } from "../common/utilityFunctions/stringFunctions";
+import { createGUIMessage } from "../common/utils/GUIMessageFunctions";
+import { matlabEscapeBlockChar } from "../common/utils/stringFunctions";
 import { respondToIPCRenderer } from "../ipc/MappingIPCRendererEvents";
 import {
   createRuntimeEnvironment,

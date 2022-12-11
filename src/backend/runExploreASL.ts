@@ -15,10 +15,10 @@ import { DataParValuesType } from "../common/types/ExploreASLDataParTypes";
 import { RunEASLChildProcSummary, RunEASLStartupReturnType } from "../common/types/ExploreASLTypes";
 import { GUIMessageWithPayload } from "../common/types/GUIMessageTypes";
 import { RunEASLStudySetupType } from "../common/types/ProcessStudiesTypes";
-import { calculatePercent } from "../common/utilityFunctions/numberFunctions";
-import { sleep } from "../common/utilityFunctions/sleepFunctions";
-import { matlabEscapeBlockChar } from "../common/utilityFunctions/stringFunctions";
-import { Lock } from "../common/utilityFunctions/threadingFunctions";
+import { calculatePercent } from "../common/utils/numberFunctions";
+import { sleep } from "../common/utils/sleepFunctions";
+import { matlabEscapeBlockChar } from "../common/utils/stringFunctions";
+import { Lock } from "../common/utils/threadingFunctions";
 import { respondToIPCRenderer } from "../ipc/MappingIPCRendererEvents";
 import {
   calculateWorkload,

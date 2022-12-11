@@ -1,6 +1,6 @@
 import React from "react";
 import { ControllerRenderProps, FieldValues, Path, useController, useWatch } from "react-hook-form";
-import { parseFieldError } from "../../common/utilityFunctions/formFunctions";
+import { parseFieldError } from "../../common/utils/formFunctions";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedSlider, DebouncedSliderProps } from "../DebouncedComponents";
 

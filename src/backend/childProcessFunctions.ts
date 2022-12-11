@@ -9,7 +9,7 @@ import process from "process";
 import treeKill from "tree-kill";
 import { reverse as reverseLodash } from "lodash";
 // LOCAL IMPORTS
-import { sleep } from "../common/utilityFunctions/sleepFunctions";
+import { sleep } from "../common/utils/sleepFunctions";
 import { respondToIPCRenderer } from "../ipc/MappingIPCRendererEvents";
 
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;

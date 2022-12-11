@@ -9,7 +9,7 @@ import {
 	ImportMultipleContextsSchemaType,
 	ImportRuntimeEnvsSchemaType,
 } from "../../types/ImportSchemaTypes";
-import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../../utilityFunctions/EASLFunctions";
+import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../../utils/EASLFunctions";
 import {
 	ImportModule__BackgroundSuppressionPulseTimeTest,
 	ImportModule__BolusCutOffDelayTimeTest,

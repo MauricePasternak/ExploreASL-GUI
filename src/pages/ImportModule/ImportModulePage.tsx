@@ -8,7 +8,7 @@ import {
   SchemaImportStepDefineMultiContext,
   SchemaImportStepDefineRuntimeEnvs,
 } from "../../common/schemas/ImportSchemas/ImportSchema";
-import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
+import { YupResolverFactoryBase } from "../../common/utils/formFunctions";
 import { ImportModuleFormDefaultValues } from "../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
 import { AtomicSnackbarMessage } from "../../components/AtomicComponents";

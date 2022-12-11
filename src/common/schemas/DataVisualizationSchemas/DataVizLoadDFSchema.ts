@@ -1,7 +1,7 @@
 import * as Yup from "yup";
 import { LoadEASLDataFrameSchema } from "../../types/DataVizSchemaTypes";
 import { YupShape } from "../../types/validationSchemaTypes";
-import { IsValidStudyRoot } from "../../utilityFunctions/EASLFunctions";
+import { IsValidStudyRoot } from "../../utils/EASLFunctions";
 import {
 	DataVizLoadDFModule__AtlasesTest,
 	DataVizLoadDFModule__MetadataPathTest,

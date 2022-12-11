@@ -46,6 +46,8 @@ function BIDSDG() {
 	const RDGColumnConfig = useAtomValue(atomRDGColumnConfigs);
 	const selectedCell = useRef<{ selectedRow: number; selectedColumn: BIDSColumnName }>(null); // Keep track for deleting cells
 	const deleteIsRegistered = useRef(false);
+	console.log("🚀 ~ file: BIDSDG.tsx:44 ~ BIDSDG ~ dataframe", dataframe);
+	console.log("🚀 ~ file: BIDSDG.tsx:47 ~ BIDSDG ~ RDGColumnConfig", RDGColumnConfig);
 
 	/**
 	 * useEffect for registering IPC events for the BIDS datagrid. At the current time, events include:
@@ -91,6 +93,7 @@ function BIDSDG() {
 	/** useEffect for loading the dataframe from the BIDS json files whenever StudyRootPath changes. */
 	useEffect(() => {
 		const fetchData = async () => {
+			console.log(`Fetching dataframe for ${StudyRootPath}`);
 			await fetchDataFrame(StudyRootPath);
 			selectedCell.current = null;
 		};

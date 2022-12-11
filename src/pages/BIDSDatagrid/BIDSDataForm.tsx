@@ -4,7 +4,7 @@ import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { RHFFilepathInput } from "../../components/RHFComponents";
 import { BIDSFormSchema } from "../../common/schemas/BIDSDataGridSchemas/BIDSFormSchema";
-import { YupResolverFactoryBase } from "../../common/utilityFunctions/formFunctions";
+import { YupResolverFactoryBase } from "../../common/utils/formFunctions";
 import { atomBIDSDataframe, atomBIDSStudyRootPath, atomDataframeColumns } from "../../stores/BIDSDatagridStore";
 
 function BIDSDataForm() {
@@ -27,7 +27,7 @@ function BIDSDataForm() {
         console.log("BIDSDataForm: Setting BIDSStudyRootPath:", value.StudyRootPath);
         setBIDSStudyRootPath(value.StudyRootPath);
       } else {
-        console.log("BIDSDataForm setting BIDS DF to empty");
+        console.log("BIDSDataForm: Setting BIDS DF to empty");
         setBIDSStudyRootPath("");
         setBIDSDF(new DataFrame());
         setBIDSDataframeColumns([]);

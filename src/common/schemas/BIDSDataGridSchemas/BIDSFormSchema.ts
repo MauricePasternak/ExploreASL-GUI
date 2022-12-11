@@ -1,5 +1,5 @@
 import * as Yup from "yup";
-import { IsValidStudyRoot } from "../../utilityFunctions/EASLFunctions";
+import { IsValidStudyRoot } from "../../utils/EASLFunctions";
 
 export const BIDSFormSchema = Yup.object().shape({
   StudyRootPath: Yup.string()

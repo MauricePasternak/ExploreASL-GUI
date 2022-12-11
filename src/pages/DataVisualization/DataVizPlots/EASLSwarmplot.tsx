@@ -9,7 +9,7 @@ import React from "react";
 import {
   toNivoSwarmPlotDataGroupBy,
   toNivoSwarmPlotDataSingle
-} from "../../../common/utilityFunctions/dataFrameFunctions";
+} from "../../../common/utils/dataFrameFunctions";
 import {
   atomCurrentMRIViewSubject,
   atomDataVizLoadSettings,
@@ -20,12 +20,12 @@ import {
   atomOfAtomMRIData
 } from "../../../stores/DataFrameVisualizationStore";
 
-import { getMinMaxCountSum } from "../../../common/utilityFunctions/arrayFunctions";
+import { getMinMaxCountSum } from "../../../common/utils/arrayFunctions";
 import {
   niftiToNivoAxial,
   niftiToNivoCoronal,
   niftiToNivoSagittal
-} from "../../../common/utilityFunctions/nivoFunctions";
+} from "../../../common/utils/nivoFunctions";
 
 function EASLSwarmplot() {
   const { api } = window;
