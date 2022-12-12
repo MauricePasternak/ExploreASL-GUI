@@ -19,12 +19,7 @@ import {
 	IsValidMATLABRuntimePath,
 	IsValidStudyRoot,
 } from "../../utils/EASLFunctions";
-import {
-	DataParModule__ApplyQuantificationTest,
-	DataParModule__BackgroundSuppressionPulseTimeTest,
-	DataParModule__readoutDimTest,
-	DataParModule__SUBJECTSTest,
-} from "./DataParSchemaCustomTests";
+import { DataParModule__ApplyQuantificationTest, DataParModule__SUBJECTSTest } from "./DataParSchemaCustomTests";
 
 const SchemaDataParDatasetParams: Yup.SchemaOf<DatasetParamsSchema> = Yup.object().shape({
 	name: Yup.string().typeError("Invalid value").default(""),
@@ -93,7 +88,6 @@ const SchemaDataParGUIParams = Yup.object().shape<YupShape<GUIParamsSchema>>({
 		.required("This is a required field")
 		.typeError("This value must be a collection of folder names")
 		.of(Yup.string())
-		.min(1, "At least one subject is required")
 		.test("AreValidSubjects", DataParModule__SUBJECTSTest),
 });
 
@@ -165,59 +159,6 @@ const SchemaDataParStructuralProcessingParams = Yup.object().shape<YupShape<Stru
 });
 
 const SchemaDataParASLSequenceParams = Yup.object().shape<YupShape<ASLSequenceParamsSchema>>({
-	Vendor: Yup.string()
-		.required("This is a required field")
-		.typeError("Invalid manufacturer specified")
-		.oneOf(["GE_product", "Siemens", "Philips"], "Invalid Vendor type specified"),
-	Sequence: Yup.string()
-		.required("This is a required field")
-		.typeError("Invalid Sequence type specified")
-		.oneOf(["3D_spiral", "3D_GRASE", "2D_EPI"], "Invalid Sequence type specified"),
-	readoutDim: Yup.string()
-		.required("This is a required field")
-		.typeError("Invalid readout dimension specified")
-		.oneOf(["2D", "3D"], "Invalid dimension type specified")
-		.test("DimensionMatchesSequence", "Dimension does not match sequence", DataParModule__readoutDimTest),
-	LabelingType: Yup.string()
-		.required("This is a required field")
-		.oneOf(["CASL", "PASL"], "Invalid labeling type specified"),
-	M0: Yup.string()
-		.required("This is a required field")
-		.typeError("Invalid Value")
-		.oneOf(["UseControlAsM0", "separate_scan"], "Invalid valid provided for the type of M0"),
-	BackgroundSuppressionNumberPulses: Yup.number()
-		.required("This is a required field")
-		.typeError("This value must be a number")
-		.integer("Must be an integer")
-		.min(0, "Cannot be a negative number")
-		.max(10, "Cannot be greater than 10"),
-	BackgroundSuppressionPulseTime: Yup.array()
-		.of(
-			Yup.number()
-				.typeError("This value must be a number")
-				.integer(
-					"The values provided must be integers representing the timing in milliseconds. " +
-						"Perhaps you entered the values as seconds by accident?"
-				)
-				.positive("Negative or zero values are not allowed.")
-		)
-		.test(
-			"MatchesNBSup",
-			"If the M0 type is specified as 'Use mean of control ASL', " +
-				"then the number of comma-separated values here must equal " +
-				"the value in the 'Number of Background Suppression Pulses' field.",
-			DataParModule__BackgroundSuppressionPulseTimeTest
-		),
-	Initial_PLD: Yup.number()
-		.required("This is a required field")
-		.typeError("This value must be a number")
-		.moreThan(0, "This value cannot be zero or a negative number")
-		.max(5000, "This values cannot be greater than 5000"),
-	LabelingDuration: Yup.number()
-		.required("This is a required field")
-		.typeError("This value must be a number")
-		.moreThan(0, "This value cannot be zero or a negative number")
-		.max(5000, "This values cannot be greater than 5000"),
 	SliceReadoutTime: Yup.number()
 		.required("This is a required field")
 		.typeError("This value must be a number")
@@ -226,7 +167,10 @@ const SchemaDataParASLSequenceParams = Yup.object().shape<YupShape<ASLSequencePa
 });
 
 const SchemaDataParASLQuantificationParams = Yup.object().shape<YupShape<ASLQuantificationParamsSchema>>({
-	bUseBasilQuantification: Yup.boolean().oneOf([true, false], "Impossible value given for this field"),
+	bUseBasilQuantification: Yup.boolean()
+		.oneOf([true, false], "Impossible value given for this field")
+		.typeError("This value must be either true or false")
+		.default(false),
 	Lambda: Yup.number()
 		.optional()
 		.typeError("This value must be a number")
@@ -255,7 +199,7 @@ const SchemaDataParASLQuantificationParams = Yup.object().shape<YupShape<ASLQuan
 	ApplyQuantification: Yup.array()
 		.required("This is a required field")
 		.typeError("Invalid value")
-		.length(5, "The length of this array of zeros or ones must be 5")
+		.length(6, "The length of this array of zeros or ones must be 6")
 		.test(
 			"ApplyQuantificationIsValid",
 			"These should be a collection of five numbers, each of which can be 0 or 1",
@@ -294,15 +238,25 @@ const SchemaDataParSettingsParams = Yup.object().shape<YupShape<SettingsParamsSc
 
 const SchemDataParPopulationParams = Yup.object().shape<YupShape<PopulationParamsSchema>>({
 	bMasking: Yup.array()
-		.required("This is a required field")
 		.length(4, "The length of this array of zeros or ones must be 4")
 		.of(Yup.number().oneOf([0, 1], "This field must be an array of zeros or ones."))
+		.typeError("Expected an array of zeros or ones")
 		.default([1, 1, 1, 1]),
 	Atlases: Yup.array()
 		.optional()
 		.of(
 			Yup.string().oneOf(
-				["TotalGM", "DeepWM", "MNI_Structural", "HOcort_CONN", "HOsub_CONN", "Hammers"],
+				[
+					"TotalGM",
+					"DeepWM",
+					"MNI_Structural",
+					"HOcort_CONN",
+					"HOsub_CONN",
+					"Hammers",
+					"HammersCAT12",
+					"Thalamus",
+					"Mindboggle_OASIS_DKT31_CMA",
+				],
 				"At least one invalid or no-longer-supported atlas name specified for this field"
 			)
 		)
@@ -312,9 +266,13 @@ const SchemDataParPopulationParams = Yup.object().shape<YupShape<PopulationParam
 const SchemaDataParASLModule = SchemaDataParASLProcessingParamsSchema.concat(SchemaDataParM0ProcessingParams);
 const SchemaDataParQuantification = SchemaDataParASLQuantificationParams.concat(SchemaDataParASLSequenceParams);
 
-const SchemaDataParModules = Yup.object().shape({
+const SchemaDataParModules = Yup.object().shape<YupShape<DataParValuesType["x"]["modules"]>>({
 	asl: SchemaDataParASLModule,
 	structural: SchemaDataParStructuralProcessingParams,
+	WMHsegmAlg: Yup.string()
+		.oneOf(["LPA", "LGA"], "Invalid value given for this field.")
+		.typeError(`This field must be one of "LPA" or LGA"`)
+		.default("LPA"),
 	bRunLongReg: Yup.number().optional().oneOf([0, 1], "Impossible value given for this field.").default(0),
 	bRunDARTEL: Yup.number().optional().oneOf([0, 1], "Impossible value given for this field.").default(0),
 });

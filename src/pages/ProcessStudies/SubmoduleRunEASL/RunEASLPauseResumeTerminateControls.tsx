@@ -86,7 +86,7 @@ function RunEASLPauseResumeTerminateControls({
       <Button onClick={handlePause} disabled={currentStatus !== "Running"} variant="contained" color="warning">
         Pause
       </Button>
-      <Button onClick={handleTerminate} disabled={currentStatus !== "Running"} variant="contained" color="error">
+      <Button onClick={handleTerminate} disabled={currentStatus === "Standby"} variant="contained" color="error">
         Terminate
       </Button>
     </ButtonGroup>

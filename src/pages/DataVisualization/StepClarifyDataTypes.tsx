@@ -37,8 +37,7 @@ function StepClarifyDataTypes() {
     setDataFrame({ col: colName, mainDtype: newDType });
   }
 
-  console.log("StepClarifyDataTypes -- dataFrameTypes: ", dataFrameTypes);
-
+  // console.log("StepClarifyDataTypes -- dataFrameTypes: ", dataFrameTypes);
   return (
     dataFrameTypes && (
       <>

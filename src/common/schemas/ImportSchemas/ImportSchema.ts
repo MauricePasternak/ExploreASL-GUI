@@ -1,7 +1,7 @@
 import * as Yup from "yup";
 import { YupShape } from "../../../common/types/validationSchemaTypes";
 import {
-	ASLSequenceType,
+	ASLLabelingType,
 	ASLSeriesPatternType,
 	EASLType,
 	ImportAliasesSchemaType,
@@ -10,6 +10,14 @@ import {
 	ImportRuntimeEnvsSchemaType,
 } from "../../types/ImportSchemaTypes";
 import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../../utils/EASLFunctions";
+import {
+	Schema_ArterialSpinLabelingType,
+	Schema_M0Estimate,
+	Schema_M0Type,
+	Schema_Manufacturer,
+	Schema_PostLabelingDelay,
+	Schema_PulseSequenceType,
+} from "../BIDSSchema";
 import {
 	ImportModule__BackgroundSuppressionPulseTimeTest,
 	ImportModule__BolusCutOffDelayTimeTest,
@@ -117,13 +125,17 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 		.of(Yup.number().integer("Must be an integer"))
 		.test("ValidDummyPosition", "Invalid Dummy Scan Position", ImportModule__DummyPositionInASLTest),
 
+	// M0 Info Fields
+	M0Type: Schema_M0Type,
+	M0Estimate: Schema_M0Estimate,
+
 	// ASL Sequence Info Fields
-	M0IsSeparate: Yup.boolean().optional(),
-	ASLManufacturer: Yup.string().optional().oneOf(["GE", "Philips", "Siemens", ""], "Invalid ASL Manufacturer"),
-	ASLSequence: Yup.string().optional().oneOf(["PASL", "CASL", "PCASL"], "Invalid ASL Sequence"),
-	PostLabelingDelay: Yup.number().optional(),
-	LabelingDuration: Yup.number().when("ASLSequence", {
-		is: (sequence: ASLSequenceType) => sequence !== "PASL",
+	Manufacturer: Schema_Manufacturer,
+	PulseSequenceType: Schema_PulseSequenceType,
+	ArterialSpinLabelingType: Schema_ArterialSpinLabelingType,
+	PostLabelingDelay: Schema_PostLabelingDelay,
+	LabelingDuration: Yup.number().when("ArterialSpinLabelingType", {
+		is: (sequence: ASLLabelingType) => sequence !== "PASL",
 		then: Yup.number()
 			.required("This is a required field when working with CASL or PCASL")
 			.moreThan(0, "Labeling Duration must be greater than 0 when working with CASL or PCASL"),
@@ -136,8 +148,8 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 						"You're probably thinking about Bolus Cut Off Delay Time which applies to PASL."
 				),
 	}),
-	BolusCutOffFlag: Yup.boolean().when("ASLSequence", {
-		is: (sequence: ASLSequenceType) => sequence === "PASL",
+	BolusCutOffFlag: Yup.boolean().when("ArterialSpinLabelingType", {
+		is: (sequence: ASLLabelingType) => sequence === "PASL",
 		then: Yup.boolean().required("This is a required field when working with PASL"),
 		otherwise: (schema) =>
 			schema.optional().notOneOf([true], "Bolus Cut Off Flag must be false or omitted when working with CASL or PCASL"),

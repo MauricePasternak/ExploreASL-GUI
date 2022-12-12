@@ -21,15 +21,6 @@ export const DataParFieldNameTranslator: Partial<Record<Path<DataParValuesType>,
   // ########################
 
   // Sequence Parameters
-  "x.Q.M0": "M0 Type",
-  "x.Q.BackgroundSuppressionNumberPulses": "Number of Background Suppression Pulses",
-  "x.Q.BackgroundSuppressionPulseTime": "Background Suppression Timings",
-  "x.Q.readoutDim": "Readout Dimension",
-  "x.Q.Vendor": "Vendor",
-  "x.Q.Sequence": "ASL Sequence",
-  "x.Q.LabelingType": "ASL Labeling Strategy",
-  "x.Q.Initial_PLD": "Initial Post-labeling Delay",
-  "x.Q.LabelingDuration": "Labeling Duration",
   "x.Q.SliceReadoutTime": "Slice Readout Time",
 
   // Quantification Parameters
@@ -61,6 +52,7 @@ export const DataParFieldNameTranslator: Partial<Record<Path<DataParValuesType>,
   // Structural Processing Parameters
   "x.modules.bRunLongReg": "Run Longitudinal Registration",
   "x.modules.bRunDARTEL": "Run DARTEL",
+  "x.modules.WMHsegmAlg": "WHM Segmentation Algorithm",
   "x.modules.structural.bSegmentSPM12": "Use SPM12 over CAT12",
   "x.modules.structural.bHammersCAT12": "Give Hammer's Atlas ROI printout",
   "x.modules.structural.bFixResolution": "Force CAT12-compatible Resolution",

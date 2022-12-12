@@ -1,180 +1,179 @@
 {
-  "name": "ExploreASL-GUI",
-  "productName": "ExploreASL-GUI",
-  "version": "0.4.0",
-  "description": "A user interface for the analysis of arterial spin labeling (ASL) images",
-  "repository": "https://github.com/MauricePasternak/ExploreASL-GUI",
-  "main": ".webpack/main",
-  "scripts": {
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
-  },
-  "keywords": [],
-  "author": {
-    "name": "Maurice Pasternak",
-    "email": "maurice.pasternak@utoronto.ca"
-  },
-  "license": "MIT",
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "name": "ExploreASL-GUI",
-        "executableName": "ExploreASL-GUI",
-        "platform": [
-          "darwin",
-          "linux",
-          "win32"
-        ],
-        "icon": "src/assets/appIcons/ExploreASLIcon"
-      },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {
-            "name": "ExploreASL-GUI",
-            "iconUrl": "https://raw.githubusercontent.com/MauricePasternak/ExploreASL-GUI/main/src/assets/appIcons/ExploreASLIcon.ico",
-            "setupIcon": "src/assets/appIcons/ExploreASLIcon.ico"
-          }
-        },
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": [
-            "darwin"
-          ]
-        },
-        {
-          "name": "@electron-forge/maker-deb",
-          "config": {
-            "description": "A user interface for analyzing arterial-spin labelled images with ExploreASL",
-            "icon": "src/assets/appIcons/ExploreASLIcon.png",
-            "maintainer": "Maurice Pasternak",
-            "name": "ExploreASL-GUI",
-            "productName": "ExploreASL-GUI",
-            "categories": [
-              "Science"
-            ]
-          }
-        },
-        {
-          "name": "@electron-forge/maker-dmg",
-          "config": {
-            "icon": "src/assets/appIcons/ExploreASLIcon.png",
-            "overwrite": true
-          }
-        }
-      ],
-      "publishers": [
-        {
-          "name": "@electron-forge/publisher-github",
-          "config": {
-            "owner": "MauricePasternak",
-            "repo": "ExploreASL-GUI",
-            "prerelease": true
-          }
-        }
-      ],
-      "plugins": [
-        [
-          "@electron-forge/plugin-webpack",
-          {
-            "devServer": {
-              "liveReload": false
-            },
-            "mainConfig": "./webpack.main.config.js",
-            "renderer": {
-              "config": "./webpack.renderer.config.js",
-              "entryPoints": [
-                {
-                  "html": "./src/index.html",
-                  "js": "./src/renderer.ts",
-                  "name": "main_window",
-                  "preload": {
-                    "js": "./src/preload.ts"
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      ]
-    }
-  },
-  "resolutions": {
-    "@types/react": "17.0.2",
-    "@types/react-dom": "17.0.2"
-  },
-  "devDependencies": {
-    "@electron-forge/cli": "^6.0.0-beta.59",
-    "@electron-forge/maker-deb": "^6.0.0-beta.59",
-    "@electron-forge/maker-dmg": "6.0.0-beta.59",
-    "@electron-forge/maker-rpm": "^6.0.0-beta.59",
-    "@electron-forge/maker-squirrel": "^6.0.0-beta.59",
-    "@electron-forge/maker-zip": "^6.0.0-beta.59",
-    "@electron-forge/plugin-webpack": "6.0.0-beta.64",
-    "@pmmmwh/react-refresh-webpack-plugin": "^0.5.7",
-    "@svgr/webpack": "^6.2.1",
-    "@types/colormap": "^2.3.1",
-    "@types/cross-spawn": "^6.0.2",
-    "@types/dataframe-js": "^1.4.0",
-    "@types/dot-object": "^2.1.2",
-    "@types/fs-extra": "^9.0.13",
-    "@types/lodash": "^4.14.189",
-    "@types/normalize-path": "^3.0.0",
-    "@types/papaparse": "^5.3.5",
-    "@types/quill": "^2.0.9",
-    "@types/react": "18.0.15",
-    "@types/react-dom": "18.0.6",
-    "@typescript-eslint/eslint-plugin": "^5.30.5",
-    "@typescript-eslint/parser": "^5.30.5",
-    "@vercel/webpack-asset-relocator-loader": "1.7.2",
-    "copy-webpack-plugin": "^11.0.0",
-    "css-loader": "^6.0.0",
-    "electron": "19.0.8",
-    "eslint": "^8.19.0",
-    "eslint-plugin-import": "^2.20.0",
-    "file-loader": "^6.2.0",
-    "fork-ts-checker-webpack-plugin": "^7.2.11",
-    "node-loader": "^2.0.0",
-    "react-refresh": "^0.14.0",
-    "style-loader": "^3.0.0",
-    "ts-loader": "^9.2.2",
-    "typescript": "^4.9.3"
-  },
-  "dependencies": {
-    "@emotion/react": "^11.10.5",
-    "@emotion/styled": "^11.10.5",
-    "@hookform/resolvers": "^2.9.10",
-    "@mui/icons-material": "^5.10.14",
-    "@mui/lab": "5.0.0-alpha.108",
-    "@mui/material": "^5.10.14",
-    "@mui/x-data-grid": "^5.17.14",
-    "@nivo/core": "^0.80.0",
-    "@nivo/heatmap": "^0.80.0",
-    "@nivo/scatterplot": "^0.80.0",
-    "@nivo/swarmplot": "^0.80.0",
-    "chokidar": "^3.5.3",
-    "colormap": "^2.3.2",
-    "cross-spawn": "^7.0.3",
-    "data-forge": "^1.9.6",
-    "data-forge-fs": "^0.0.9",
-    "dot-object": "^2.1.4",
-    "electron-squirrel-startup": "^1.0.0",
-    "formik": "^2.2.9",
-    "html-to-image": "^1.10.8",
-    "jotai": "^1.10.0",
-    "lodash": "^4.17.21",
-    "nifti-stream": "^0.2.1",
-    "pathlib-js": "^1.5.0",
-    "quill": "^1.3.7",
-    "react": "^18.2.0",
-    "react-data-grid": "7.0.0-beta.20",
-    "react-dom": "^18.2.0",
-    "react-hook-form": "^7.39.4",
-    "tree-kill": "^1.2.2",
-    "use-debounce": "^8.0.4",
-    "yup": "^0.32.11"
-  }
+	"name": "ExploreASL-GUI",
+	"productName": "ExploreASL-GUI",
+	"version": "0.4.0",
+	"description": "A user interface for the analysis of arterial spin labeling (ASL) images",
+	"repository": "https://github.com/MauricePasternak/ExploreASL-GUI",
+	"main": ".webpack/main",
+	"scripts": {
+		"start": "electron-forge start",
+		"package": "electron-forge package",
+		"make": "electron-forge make",
+		"publish": "electron-forge publish",
+		"lint": "eslint --ext .ts,.tsx ."
+	},
+	"keywords": [],
+	"author": {
+		"name": "Maurice Pasternak",
+		"email": "maurice.pasternak@utoronto.ca"
+	},
+	"license": "MIT",
+	"config": {
+		"forge": {
+			"packagerConfig": {
+				"name": "ExploreASL-GUI",
+				"executableName": "ExploreASL-GUI",
+				"platform": [
+					"darwin",
+					"linux",
+					"win32"
+				],
+				"icon": "src/assets/appIcons/ExploreASLGUI_Logo_Blank"
+			},
+			"makers": [
+				{
+					"name": "@electron-forge/maker-squirrel",
+					"config": {
+						"name": "ExploreASL-GUI",
+						"iconUrl": "https://raw.githubusercontent.com/MauricePasternak/ExploreASL-GUI/main/src/assets/appIcons/ExploreASLGUI_Logo_Blank.ico",
+						"setupIcon": "src/assets/appIcons/ExploreASLGUI_Logo_Blank.ico"
+					}
+				},
+				{
+					"name": "@electron-forge/maker-zip",
+					"platforms": [
+						"darwin"
+					]
+				},
+				{
+					"name": "@electron-forge/maker-deb",
+					"config": {
+						"description": "A user interface for analyzing arterial-spin labelled images with ExploreASL",
+						"icon": "src/assets/appIcons/ExploreASLGUI_Logo_Blank.png",
+						"maintainer": "Maurice Pasternak",
+						"name": "ExploreASL-GUI",
+						"productName": "ExploreASL-GUI",
+						"categories": [
+							"Science"
+						]
+					}
+				},
+				{
+					"name": "@electron-forge/maker-dmg",
+					"config": {
+						"icon": "src/assets/appIcons/ExploreASLGUI_Logo_Blank.png",
+						"overwrite": true
+					}
+				}
+			],
+			"publishers": [
+				{
+					"name": "@electron-forge/publisher-github",
+					"config": {
+						"owner": "MauricePasternak",
+						"repo": "ExploreASL-GUI",
+						"prerelease": true
+					}
+				}
+			],
+			"plugins": [
+				[
+					"@electron-forge/plugin-webpack",
+					{
+						"devServer": {
+							"liveReload": false
+						},
+						"mainConfig": "./webpack.main.config.js",
+						"renderer": {
+							"config": "./webpack.renderer.config.js",
+							"entryPoints": [
+								{
+									"html": "./src/index.html",
+									"js": "./src/renderer.ts",
+									"name": "main_window",
+									"preload": {
+										"js": "./src/preload.ts"
+									}
+								}
+							]
+						}
+					}
+				]
+			]
+		}
+	},
+	"resolutions": {
+		"@types/react": "17.0.2",
+		"@types/react-dom": "17.0.2"
+	},
+	"devDependencies": {
+		"@electron-forge/cli": "^6.0.0-beta.59",
+		"@electron-forge/maker-deb": "^6.0.0-beta.59",
+		"@electron-forge/maker-dmg": "6.0.0-beta.59",
+		"@electron-forge/maker-rpm": "^6.0.0-beta.59",
+		"@electron-forge/maker-squirrel": "^6.0.0-beta.59",
+		"@electron-forge/maker-zip": "^6.0.0-beta.59",
+		"@electron-forge/plugin-webpack": "6.0.0-beta.64",
+		"@pmmmwh/react-refresh-webpack-plugin": "^0.5.7",
+		"@svgr/webpack": "^6.2.1",
+		"@types/colormap": "^2.3.1",
+		"@types/cross-spawn": "^6.0.2",
+		"@types/dataframe-js": "^1.4.0",
+		"@types/dot-object": "^2.1.2",
+		"@types/fs-extra": "^9.0.13",
+		"@types/lodash": "^4.14.189",
+		"@types/normalize-path": "^3.0.0",
+		"@types/papaparse": "^5.3.5",
+		"@types/quill": "^2.0.9",
+		"@types/react": "18.0.26",
+		"@types/react-dom": "18.0.9",
+		"@typescript-eslint/eslint-plugin": "^5.30.5",
+		"@typescript-eslint/parser": "^5.30.5",
+		"@vercel/webpack-asset-relocator-loader": "1.7.2",
+		"copy-webpack-plugin": "^11.0.0",
+		"css-loader": "^6.0.0",
+		"electron": "19.0.8",
+		"eslint": "^8.19.0",
+		"eslint-plugin-import": "^2.20.0",
+		"file-loader": "^6.2.0",
+		"fork-ts-checker-webpack-plugin": "^7.2.11",
+		"node-loader": "^2.0.0",
+		"react-refresh": "^0.14.0",
+		"style-loader": "^3.0.0",
+		"ts-loader": "^9.2.2",
+		"typescript": "^4.9.4"
+	},
+	"dependencies": {
+		"@emotion/react": "^11.10.5",
+		"@emotion/styled": "^11.10.5",
+		"@hookform/resolvers": "^2.9.10",
+		"@mui/icons-material": "^5.10.16",
+		"@mui/lab": "5.0.0-alpha.111",
+		"@mui/material": "^5.10.17",
+		"@mui/x-data-grid": "^5.17.10",
+    "@nivo/core": "^0.79.0",
+    "@nivo/heatmap": "^0.79.1",
+    "@nivo/scatterplot": "^0.79.1",
+    "@nivo/swarmplot": "^0.79.1",
+		"chokidar": "^3.5.3",
+		"colormap": "^2.3.2",
+		"cross-spawn": "^7.0.3",
+		"data-forge": "^1.9.6",
+		"data-forge-fs": "^0.0.9",
+		"dot-object": "^2.1.4",
+		"electron-squirrel-startup": "^1.0.0",
+		"formik": "^2.2.9",
+		"html-to-image": "^1.11.1",
+		"jotai": "^1.11.1",
+		"lodash": "^4.17.21",
+		"nifti-stream": "^0.2.1",
+		"pathlib-js": "^1.5.0",
+		"quill": "^1.3.7",
+		"react": "^18.2.0",
+		"react-dom": "^18.2.0",
+		"react-hook-form": "^7.40.0",
+		"tree-kill": "^1.2.2",
+		"use-debounce": "^9.0.2",
+		"yup": "^0.32.11"
+	}
 }

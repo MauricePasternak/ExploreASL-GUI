@@ -12,7 +12,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/othneildrew/Best-README-Template">
-    <img src="./src/assets/appIcons/ExploreASLGUIIcon.png" fill="red" alt="Logo" width="80" height="80">
+    <img src="./src/assets/appIcons/ExploreASLGUI_Logo_LightMode.png" fill="red" alt="Logo" width="80" height="80">
   </a>
 
   <h3 align="center">ExploreASL GUI</h3>
@@ -24,6 +24,8 @@
     <a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?assignees=MauricePasternak&labels=bug&template=bug_report.md&title=">Report Bug</a>
     ·
     <a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?assignees=MauricePasternak&labels=enhancement&template=feature_request.md&title=">Request Feature</a>
+    .
+    <a href="https://mauricepasternak.github.io/ExploreASL-GUI-Docs/latest">Documentation</a>
   </p>
 </div>
 
@@ -36,6 +38,9 @@
       <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
+    </li>
+    <li>
+      <a href="#documentation">Documentation</a>
     </li>
     <li>
       <a href="#getting-started">Getting Started</a>
@@ -83,6 +88,18 @@ This project wraps around [ExploreASL](https://exploreasl.github.io/Documentatio
 [![React][react.js]][react-url]
 
 [![MaterialUI][mui.js]][mui-url]
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+
+---
+
+<!-- DOCUMENTATION -->
+
+## Documentation
+
+The documentation for this project is hosted on [GitHub Pages](https://mauricepasternak.github.io/ExploreASL-GUI-Docs/latest/). While this README serves as a quickstart guide, the documentation provides a more detailed overview of the project's features and how to use them.
+
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 

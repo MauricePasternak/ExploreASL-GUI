@@ -4,3 +4,5 @@ export { DebouncedSlider } from "./DebouncedSlider";
 export type { DebouncedSliderProps } from "./DebouncedSlider";
 export { DebouncedFilepathInput } from "./DebouncedFilepathInput";
 export type { DebouncedFilepathInputProps } from "./DebouncedFilepathInput";
+export { DebouncedBaseInput } from "./DebouncedBaseInput";
+export type { DebouncedBaseInputProps } from "./DebouncedBaseInput";

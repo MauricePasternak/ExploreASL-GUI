@@ -1,1 +1,1 @@
-export type DataParTabOption = "ProcessParameters" | "SequenceParameters" | "StudyParameters"
+export type DataParTabOption = "ProcessParameters" | "ModelingParameters" | "StudyParameters"

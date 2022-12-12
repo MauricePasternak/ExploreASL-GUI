@@ -1,4 +1,5 @@
 import { cloneDeep, pick as lodashPick, zip as lodashZip } from "lodash";
+import { ObjectEntry } from "../types/utilityTypes";
 
 /**
  * Converts a string Record to a flat array of values comprising of modified & alternative key-value or value-key sequences.
@@ -21,21 +22,21 @@ import { cloneDeep, pick as lodashPick, zip as lodashZip } from "lodash";
  *
  */
 export function stringRecordToFlatArray(
-  record: Record<string, string>,
-  keyPredicate?: (s: string, idx?: number, arr?: string[]) => string,
-  valuePredicate?: (s: string, idx?: number, arr?: string[]) => string,
-  keysFirst = true
+	record: Record<string, string>,
+	keyPredicate?: (s: string, idx?: number, arr?: string[]) => string,
+	valuePredicate?: (s: string, idx?: number, arr?: string[]) => string,
+	keysFirst = true
 ) {
-  const modifiedKeys = keyPredicate
-    ? Object.keys(record).map((k, idx, arr) => keyPredicate(k, idx, arr))
-    : Object.keys(record);
-  const modifiedValues = valuePredicate
-    ? Object.values(record).map((v, idx, arr) => valuePredicate(v, idx, arr))
-    : Object.values(record);
-  const asFlatArray = keysFirst
-    ? lodashZip(modifiedKeys, modifiedValues).flat()
-    : lodashZip(modifiedValues, modifiedKeys).flat();
-  return asFlatArray;
+	const modifiedKeys = keyPredicate
+		? Object.keys(record).map((k, idx, arr) => keyPredicate(k, idx, arr))
+		: Object.keys(record);
+	const modifiedValues = valuePredicate
+		? Object.values(record).map((v, idx, arr) => valuePredicate(v, idx, arr))
+		: Object.values(record);
+	const asFlatArray = keysFirst
+		? lodashZip(modifiedKeys, modifiedValues).flat()
+		: lodashZip(modifiedValues, modifiedKeys).flat();
+	return asFlatArray;
 }
 
 /**
@@ -53,9 +54,18 @@ export function stringRecordToFlatArray(
  * ```
  */
 export function assignSelfKeysOnly<T>(
-  object: Record<string, T>,
-  valuesDonor: Record<string, T>,
-  deep = true
+	object: Record<string, T>,
+	valuesDonor: Record<string, T>,
+	deep = true
 ): Record<string, T> {
-  return Object.assign(deep ? cloneDeep(object) : object, lodashPick(valuesDonor, Object.keys(object)));
+	return Object.assign(deep ? cloneDeep(object) : object, lodashPick(valuesDonor, Object.keys(object)));
+}
+
+/**
+ * Wrapper for Object.entries() that preserves the type of the object.
+ * @param obj The object to be converted to an array of entries.
+ * @returns A type-preserving array of entries.
+ */
+export function ObjectEntries<T extends object>(obj: T): ObjectEntry<T>[] {
+	return Object.entries(obj) as any;
 }

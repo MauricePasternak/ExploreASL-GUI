@@ -168,10 +168,10 @@ export function RHFMultiStepButtons({
       }}
       {...paperProps}
     >
-      <Button disabled={currentStep === 0} onClick={() => setCurrentStep(currentStep - 1)} {...backButtonProps}>
+      <Button disabled={currentStep === 0} size="large" onClick={() => setCurrentStep(currentStep - 1)} {...backButtonProps}>
         {backButtonText}
       </Button>
-      <Button type="submit" {...nextButtonProps}>
+      <Button type="submit" size="large" {...nextButtonProps}>
         {nextButtonText}
       </Button>
     </Paper>
