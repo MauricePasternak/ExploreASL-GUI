@@ -7,7 +7,7 @@ import { APPBARHEIGHTPIXELS } from "../common/GLOBALS";
 import { atomDarkMode } from "../stores/DarkModeStore";
 import { atomCurrentGUIPage } from "../stores/GUIFrameStore";
 import { AboutPage } from "./About/AboutPage";
-import { BIDSDataGridPage } from "./BIDSDatagrid/BIDSDataGridPage";
+import { BIDSDataGridPage } from "./BIDSDataGrid/BIDSDataGridPage";
 import { DataParPage } from "./DataPar/DataParPage";
 import { DataVisualizationPage } from "./DataVisualization/DataVisualizationPage";
 import { GUIFrame } from "./GUIFrame/GUIFrame";

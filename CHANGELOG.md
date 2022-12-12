@@ -6,10 +6,10 @@ Versions are in format: `[MAJOR.MINOR.BUGFIX]`
 
 Dates are in format: `YYYY-MM-DD`
 
-## [0.4.0] - 2022-11-20
+## [0.4.0] - 2022-12-12
 
 Change of the Import Module to support ExploreASL's approach and syntax of multiple import contexts. Significant
-refactoring of the project structure
+refactoring of the project structure.
 
 ### Fixed
 
@@ -19,6 +19,11 @@ refactoring of the project structure
 - Fixed a bug where some error messages would not display for the `RHFTextField` component. This was the return of
   react-hook-forms' `fieldState.error` variable sometimes being an `Array<null | FieldError>` instead of the expected
   `FieldError` type. A workaround was implemented to handle this case.
+
+- Fixed a bug with the field `x.GUI.SUBJECTS` in the Define Data Parameters module where the field would not start 
+  validation on a fresh ExploreASL-GUI startup if its related field of x.GUI.StudyRoot was filled in first. This was
+  fixed by adding a `trigger` call to its own field, which is a hacky solution, but the only one available at the time.
+
 
 ### Added
 
@@ -30,18 +35,33 @@ refactoring of the project structure
   - `BolusCutOffFlag`
   - `BolusCutOffTechnique`
   - `BolusCutOffDelayTime`
+  - `M0Type`
+  - `M0Estimate`
 
 - With the above, validation rules were added to comply with BIDS and ExploreASL's requirements.
 
 ### Changed
 
+- Bumped non-developer dependencies to their latest versions.
+
 - Renamed github and this project's names:
-    - (this project) ExploreASL-GUI -> ExploreASL-GUI.
-    - (previous project) ExploreASL_GUI -> ExploreASL_PyGUI
+    - (this project) **ExploreASLJS --> ExploreASL-GUI**.
+    - (previous project) **ExploreASL_GUI --> ExploreASL_PyGUI**
 
 - Changed the import module to support ExploreASL's approach and syntax of multiple import contexts. There is no longer
   a need to launch the import module multiple times for different import contexts nor the need to generate multiple
   import settings files. The import module now supports multiple import contexts in a single run.
+
+- Major change to the BIDSDataGrid module. It is now based on Material UI's DataGrid instead of React-Data-Grid. This 
+  change comes with benefits and caveats alike:
+    - Benefits:
+      - MUI is a more well-supported library than R-Data-Grid.
+      - There a more features available, including sorting, filtering, hiding, resizing rows, etc.
+      - The implementation of validation rules is much more scalable for the foreseeable future.
+      - The UI is generally more aesthetically pleasing.
+    - Caveats:
+      - Frozen columns are not supported in the community version of MUI's DataGrid. As this project is not for profit,
+        there is no way to practical way to obtain the enterprise version of MUI's DataGrid.
 
 - Gave a significant refactoring overhaul to the setup of the project, particularly when it comes to imports/exports.
   Several schemas, components, and pages are appropriately allocated into subfolders and re-exported using index.ts(x).

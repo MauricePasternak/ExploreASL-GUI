@@ -43,13 +43,13 @@ const ASLSeriesPatternOptions: RHFSelectOption<ImportSchemaType, `ImportContexts
 	{ label: "Complete Perfusion (CBF) Image", value: "cbf" },
 ];
 
-const ASLManufacturerOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}.ASLManufacturer`>[] = [
+const ASLManufacturerOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}.Manufacturer`>[] = [
 	{ label: "General Electric (GE)", value: "GE" },
 	{ label: "Philips", value: "Philips" },
 	{ label: "Siemens", value: "Siemens" },
 ];
 
-const ASLSequenceOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}.ASLSequence`>[] = [
+const ASLSequenceOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}.ArterialSpinLabelingType`>[] = [
 	{ label: "Pulsed ASL", value: "PASL" },
 	{ label: "Pseudo-continuous ASL", value: "PCASL" },
 	{ label: "Continuous ASL", value: "CASL" },
@@ -63,6 +63,13 @@ const ASLBolusCutOffTechniqueOptions: RHFSelectOption<
 	{ label: "QUIPSS", value: "QUIPSS" },
 	{ label: "QUIPSSII", value: "QUIPSSII" },
 	{ label: "Q2TIPS", value: "Q2TIPS" },
+];
+
+const M0TypeOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}.M0Type`>[] = [
+	{ label: "The M0 is a separate entity", value: "Separate" },
+	{ label: "The M0 is within the ASL series", value: "Included" },
+	{ label: "No M0 exists for these scans", value: "Absent" },
+	{ label: "Use a single number estimate instead", value: "Estimate" },
 ];
 
 function SingleImportContext({ contextIndex, control, remove, trigger, setFieldValue }: SingleImportContextProps) {
@@ -171,25 +178,44 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 						</Grid>
 					</OutlinedGroupBox>
 					<OutlinedGroupBox
+						label="M0 Scan Information"
+						mt={5}
+						labelBackgroundColor={(theme) => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
+					>
+						<Grid container rowSpacing={3} columnSpacing={3} marginTop={-2} padding={2} alignItems="center">
+							<Grid item xs={12} md={6} xl={3}>
+								<RHFSelect
+									control={control}
+									name={`ImportContexts.${contextIndex}.M0Type`}
+									label="M0 Type"
+									helperText="The nature of the M0 scan (i.e. is it a separate scan or a volume within the ASL series?)."
+									options={M0TypeOptions}
+								/>
+							</Grid>
+							<Grid item xs={12} md={6} xl={3}>
+								<RHFSlider
+									control={control}
+									name={`ImportContexts.${contextIndex}.M0Estimate`}
+									min={1}
+									max={1_000_000_000}
+									step={1}
+									renderTextfields
+									label="M0 Estimate"
+									helperText="A numerical value to use as the M0 estimate if no M0 scan is available."
+								/>
+							</Grid>
+						</Grid>
+					</OutlinedGroupBox>
+					<OutlinedGroupBox
 						label="Additional ASL Sequence Information"
 						mt={5}
 						labelBackgroundColor={(theme) => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
 					>
 						<Grid container rowSpacing={3} columnSpacing={3} marginTop={-2} padding={2} alignItems="center">
 							<Grid item xs={12} md={6} xl={3}>
-								<RHFCheckable
-									control={control}
-									name={`ImportContexts.${contextIndex}.M0IsSeparate`}
-									label="An M0 scan was acquired separately"
-									helperText="Check this box if an M0 scan is acquired as a separate DICOM series"
-									valWhenChecked={true}
-									valWhenUnchecked={false}
-								/>
-							</Grid>
-							<Grid item xs={12} md={6} xl={3}>
 								<RHFSelect
 									control={control}
-									name={`ImportContexts.${contextIndex}.ASLManufacturer`}
+									name={`ImportContexts.${contextIndex}.Manufacturer`}
 									label="Scanner Manufacturer"
 									helperText="The manufacturer of the scanner used to acquire the ASL series."
 									options={ASLManufacturerOptions}
@@ -198,7 +224,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 							<Grid item xs={12} md={6} xl={3}>
 								<RHFSelect
 									control={control}
-									name={`ImportContexts.${contextIndex}.ASLSequence`}
+									name={`ImportContexts.${contextIndex}.ArterialSpinLabelingType`}
 									label="ASL Sequence Type"
 									helperText="The type of ASL sequence used"
 									options={ASLSequenceOptions}

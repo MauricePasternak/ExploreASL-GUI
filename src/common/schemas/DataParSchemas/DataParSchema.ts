@@ -93,7 +93,6 @@ const SchemaDataParGUIParams = Yup.object().shape<YupShape<GUIParamsSchema>>({
 		.required("This is a required field")
 		.typeError("This value must be a collection of folder names")
 		.of(Yup.string())
-		.min(1, "At least one subject is required")
 		.test("AreValidSubjects", DataParModule__SUBJECTSTest),
 });
 
