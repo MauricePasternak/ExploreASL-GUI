@@ -13,6 +13,8 @@ refactoring of the project structure.
 
 ### Fixed
 
+- Fixed a bug where the Terminate button was disabled in Process Studies module when in a paused state.
+
 - Fixed a bug where the snackbar message at the end of the import process displayed the ExploreASL path instead of the
   study path.
 
@@ -20,12 +22,27 @@ refactoring of the project structure.
   react-hook-forms' `fieldState.error` variable sometimes being an `Array<null | FieldError>` instead of the expected
   `FieldError` type. A workaround was implemented to handle this case.
 
-- Fixed a bug with the field `x.GUI.SUBJECTS` in the Define Data Parameters module where the field would not start 
+- Fixed a bug with the field `x.GUI.SUBJECTS` in the Define Data Parameters module where the field would not start
   validation on a fresh ExploreASL-GUI startup if its related field of x.GUI.StudyRoot was filled in first. This was
   fixed by adding a `trigger` call to its own field, which is a hacky solution, but the only one available at the time.
 
 
 ### Added
+
+- Added the ability for the Import Module to short circuit generating the `ASLContext` field when it is a control-label
+  or label-control sequence without any embedded M0 scan or dummy scan. ExploreASL itself will be able to expand the
+  field to its full form when it processes an ASL timeseries. This solution allows for more similar ASL contexts to be
+  grouped together, assuming the only differentiating factor was the number of volumes output in an ASL timeseries.
+
+- Added BIDS validation to BIDSDataGrid module. Validation will now be run in the following manners:
+  - All rows will be validated when:
+    - The data is loaded in.
+    - A column (BIDS field) is added.
+    - A column (BIDS field) is removed.
+  - Only a single row of interest will be validated when:
+    - A cell is edited.
+    - A cell's value is made undefined via Delete key.
+
 
 - Added the ability for the GUI to export the current plot & MRI slice views to a PNG file.
 
@@ -52,7 +69,7 @@ refactoring of the project structure.
   a need to launch the import module multiple times for different import contexts nor the need to generate multiple
   import settings files. The import module now supports multiple import contexts in a single run.
 
-- Major change to the BIDSDataGrid module. It is now based on Material UI's DataGrid instead of React-Data-Grid. This 
+- Major change to the BIDSDataGrid module. It is now based on Material UI's DataGrid instead of React-Data-Grid. This
   change comes with benefits and caveats alike:
     - Benefits:
       - MUI is a more well-supported library than R-Data-Grid.

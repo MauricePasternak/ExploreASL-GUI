@@ -57,7 +57,7 @@ export function BIDSFlexibleNumberField<R extends GridValidRowModel = any>({
 
 	const handleMultiNumericChange = (newValue: number[]) => {
 		console.log("🚀 ~ file: BIDSFlexibleNumberField.tsx:52 ~ handleMultiNumericChange ~ newValue", newValue);
-		apiRef.current.setEditCellValue({ id: params.id, field: params.field, value: newValue, debounceMs: 400 });
+		apiRef.current.setEditCellValue({ id: params.id, field: params.field, value: newValue, debounceMs: 250 });
 	};
 
 	const handleSingleNumericChange = (newValue: number) => {

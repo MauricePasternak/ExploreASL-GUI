@@ -23,15 +23,22 @@ import {
 
 import { pickBy as lodashPickBy } from "lodash";
 
-import { fetchBIDSData } from "../pages/BIDSDataGrid/BIDSDataGridFetching";
+import {
+	fetchBIDSData,
+	parseInvalidFetchItems,
+	strictValidateAllBIDSRows,
+} from "../pages/BIDSDataGrid/BIDSDataGridFunctions";
 import { BIDSErrorAddArg, BIDSErrorMapping } from "../pages/BIDSDataGrid/BIDSErrors";
+import { YupValidate } from "../common/utils/formFunctions";
+import { Schema_BIDS } from "../common/schemas/BIDSSchema";
+import { atomBIDSDatagridSnackbar } from "./SnackbarStore";
 
 const { api } = window;
 
 //^ PRIMITIVE ATOMS
 
 /** Atom that holds a validated filepath which will allow for loading the dataframes from this location */
-export const atomBIDSStudyRootPath = atom<string>("");
+export const atomBIDSStudyRootPath = atom<string>("D:/GENFI_DF5/Siemens/2D_EPI_M0-Included");
 
 /** Atom that holds the current dataframe data as BIDSRow[] */
 export const atomBIDSRows = atom<BIDSRow[]>([]);
@@ -59,14 +66,15 @@ export const atomSetBIDSUpdateErrors = atom<null, BIDSErrorAddArg>(null, (get, s
 	const hasErrors = Object.keys(newErrors).length > 0;
 	const currentBIDSErrors = get(atomBIDSErrors);
 
-	// console.log("🚀 ~ atomSetBIDSUpdateErrors called with debug:", {
-	// 	ID,
-	// 	hasErrors,
-	// 	newErrors,
-	// 	currentBIDSErrors,
-	// });
+	console.log("🚀 ~ atomSetBIDSUpdateErrors called with debug:", {
+		ID,
+		bidsRow,
+		hasErrors,
+		newErrors,
+		currentBIDSErrors,
+	});
 
-	// If there are errors, we need to do an addition operation
+	//* ADDITION OF ERRORS
 	if (hasErrors) {
 		for (const [fieldName, error] of Object.entries(newErrors)) {
 			if (!isBIDSField(fieldName)) continue;
@@ -84,25 +92,43 @@ export const atomSetBIDSUpdateErrors = atom<null, BIDSErrorAddArg>(null, (get, s
 		}
 
 		// Jotai requires that we make a copy in order for the update to register
-		set(atomBIDSErrors, { ...currentBIDSErrors });
+		const updatedBIDSErrors = { ...currentBIDSErrors };
+		console.log("🚀 ~ atomSetBIDSUpdateErrors ~ updatedBIDSErrors after addition", updatedBIDSErrors);
+		set(atomBIDSErrors, updatedBIDSErrors);
 	}
-	// Otherwise, we need to do a subtraction operation using the bidsRow
+	//* SUBTRACTION/REMOVAL OF ERRORS
 	else {
-		for (const fieldName of Object.keys(bidsRow)) {
-			if (!isBIDSField(fieldName) || !(fieldName in currentBIDSErrors)) continue;
+		const bidsRowFields = new Set(Object.keys(bidsRow));
+		const errorKeySet = new Set(Object.keys(newErrors));
 
-			// If the field already exists in the currentBIDSErrors, then we can just remove the error
-			if (ID in currentBIDSErrors[fieldName]) {
-				delete currentBIDSErrors[fieldName][ID];
-			}
-			// If the field no longer has any errors, then we can remove the field from the currentBIDSErrors
-			if (Object.keys(currentBIDSErrors[fieldName]).length === 0) {
-				delete currentBIDSErrors[fieldName];
+		// We need to loop through the fields in the errors rather than through the bidsRow because it is possible that
+		// bidsRow does not have all of the fields that are in the errors
+		for (const errField of Object.keys(currentBIDSErrors) as BIDSAllFieldsNameType[]) {
+			if (bidsRowFields.has(errField)) {
+				// If the field is in the bidsRow, then we must:
+				// 1) Remove the ID from the error mapping
+				if (ID in currentBIDSErrors[errField]) {
+					delete currentBIDSErrors[errField][ID];
+				}
+
+				// 2) Remove the field if there are no more IDs present for this field
+				if (Object.keys(currentBIDSErrors[errField]).length === 0) {
+					delete currentBIDSErrors[errField];
+					continue;
+				}
+			} else {
+				// If the field is neither in the bidsRow nor in the errors, then we should remove it
+				if (!errorKeySet.has(errField)) {
+					delete currentBIDSErrors[errField];
+					continue;
+				}
 			}
 		}
 
 		// Jotai requires that we make a copy in order for the update to register
-		set(atomBIDSErrors, { ...currentBIDSErrors });
+		const updatedBIDSErrors = { ...currentBIDSErrors };
+		console.log("🚀 ~ atomSetBIDSUpdateErrors ~ updatedBIDSErrors after removal", updatedBIDSErrors);
+		set(atomBIDSErrors, updatedBIDSErrors);
 	}
 });
 
@@ -118,15 +144,22 @@ export const atomSetFetchBIDSDataFrame = atom<null, string>(null, async (get, se
 	console.log("🚀 ~ file: BIDSDataGridStore.ts:118 ~ atomSetFetchBIDSDataFrame ~ fetchResult", fetchResult);
 	if (!fetchResult) return null;
 
-	// TODO -- handle the invalid files in a future update; note that these are basenames
-	const { BIDSRows, BIDSColumns, invalidFiles } = fetchResult;
+	const { BIDSRows, BIDSColumns, invalidItems } = fetchResult;
+	invalidItems.length > 0 &&
+		set(atomBIDSDatagridSnackbar, {
+			severity: "error",
+			title: "Could not load in one or more ASL BIDS sidecar files",
+			message: parseInvalidFetchItems(invalidItems),
+		});
+	console.log("🚀 ~ file: BIDSDataGridStore.ts:125 ~ atomSetFe	tchBIDSDataFrame ~ invalidFiles", invalidItems);
 
-	console.log("🚀 ~ file: BIDSDataGridStore.ts:125 ~ atomSetFetchBIDSDataFrame ~ invalidFiles", invalidFiles);
+	const validationErrors = await strictValidateAllBIDSRows(BIDSRows);
+	console.log("🚀 ~ file: BIDSDataGridStore.ts:164 ~ atomSetFetchBIDSDataFrame ~ validationErrors", validationErrors);
 
-	// Update the BIDSRows and the BIDSColumnNames atoms
+	// Update the BIDSRows, BIDSColumnNames, and BIDSErrors atoms
 	set(atomBIDSRows, BIDSRows);
 	set(atomBIDSColumnNames, Array.from(BIDSColumns));
-	set(atomBIDSErrors, {} as BIDSErrorMapping); // Reset the errors
+	set(atomBIDSErrors, validationErrors);
 	return true;
 });
 
@@ -162,43 +195,37 @@ export const atomGetBIDSColumnConfigs = atom<
 	return columnConfigs as Array<MiscColDef | BIDSNumericColDef | BIDSBooleanColDef | BIDSTextColDef | BIDSEnumColDef>;
 });
 
-/** Derived setter atom for saving the existing data */
-export const atomSetSaveBIDSDataFrame = atom(null, async (get) => {
-	const bidsRows = get(atomBIDSRows);
-	for await (const row of bidsRows) {
-		const { ID, Filepath, Filename, ...bidsData } = row;
-		// TODO Logic for verifying that the filepath is valid
-		console.log(`🚀 ~ Saving bidsData for ${Filename} to ${Filepath}`);
-		// TODO Logic for saving the bidsData to the validated filepath
-	}
-});
-
 type BIDSAddColumnArgs<TName extends BIDSAllFieldsNameType = BIDSAllFieldsNameType> = {
 	colToAdd: TName;
 	defaultValue: BIDSRow[TName];
 };
 
 /** Derived setter atom for adding in a new column to the dataframe */
-export const atomSetBIDSAddColumn = atom<null, BIDSAddColumnArgs>(null, (get, set, { colToAdd, defaultValue }) => {
-	// Update the existing BIDS rows
-	const BIDSRows = get(atomBIDSRows);
-	const newBIDSRows: BIDSRow[] = BIDSRows.map((row) => ({ ...row, [colToAdd]: defaultValue }));
+export const atomSetBIDSAddColumn = atom<null, BIDSAddColumnArgs>(
+	null,
+	async (get, set, { colToAdd, defaultValue }) => {
+		// Update the existing BIDS rows
+		const BIDSRows = get(atomBIDSRows);
+		const newBIDSRows: BIDSRow[] = BIDSRows.map((row) => ({ ...row, [colToAdd]: defaultValue }));
 
-	// Update the existing BIDS column names
-	const BIDSColumnNames = get(atomBIDSColumnNames);
-	const newBIDSColumnNames = [...BIDSColumnNames, colToAdd];
+		// Update the existing BIDS column names
+		const BIDSColumnNames = get(atomBIDSColumnNames);
+		const newBIDSColumnNames = [...BIDSColumnNames, colToAdd];
 
-	// TODO Adding a column should cause validation to be re-run on the entire dataframe
+		// Update the existing BIDS errors by re-running the validation for all new rows
+		const validationErrors = await strictValidateAllBIDSRows(newBIDSRows);
 
-	// Update the atoms
-	set(atomBIDSRows, newBIDSRows);
-	set(atomBIDSColumnNames, newBIDSColumnNames);
-});
+		// Update the atoms
+		set(atomBIDSRows, newBIDSRows);
+		set(atomBIDSColumnNames, newBIDSColumnNames);
+		set(atomBIDSErrors, validationErrors);
+	}
+);
 
 /** Derived setter atom for removing a given column from the dataframe */
 export const atomSetBIDSRemoveColumn = atom(
 	null,
-	(get, set, colsToRemove: BIDSAllNonMiscFieldsNameType[] | BIDSAllNonMiscFieldsNameType) => {
+	async (get, set, colsToRemove: BIDSAllNonMiscFieldsNameType[] | BIDSAllNonMiscFieldsNameType) => {
 		// Type stabiliy
 		const colsToRemoveSet = new Set(Array.isArray(colsToRemove) ? colsToRemove : [colsToRemove]);
 
@@ -219,17 +246,14 @@ export const atomSetBIDSRemoveColumn = atom(
 			(colName) => !colsToRemoveSet.has(colName as BIDSAllNonMiscFieldsNameType)
 		);
 
-		// Update the existing errors, if any
-		const BIDSRowErrors = get(atomBIDSErrors);
-		const newBIDSRowErrors = lodashPickBy(
-			BIDSRowErrors,
-			(_, key) => !colsToRemoveSet.has(key as BIDSAllNonMiscFieldsNameType)
-		);
+		// Update the existing errors by re-running the validation for all new rows
+		// (i.e. it is possible that removing a column will cause a row to become invalid)
+		const newBIDSRowErrors = await strictValidateAllBIDSRows(newBIDSRows);
 
 		// Update the atoms
 		set(atomBIDSRows, newBIDSRows);
 		set(atomBIDSColumnNames, newBIDSColumnNames);
-		set(atomBIDSErrors, newBIDSRowErrors as BIDSErrorMapping);
+		set(atomBIDSErrors, newBIDSRowErrors);
 	}
 );
 

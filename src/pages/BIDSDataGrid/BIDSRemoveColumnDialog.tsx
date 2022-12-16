@@ -70,7 +70,6 @@ export const BIDSRemoveColumnDialog = memo(() => {
 	};
 
 	return (
-		// ! Remember to switch true to open
 		<Dialog open={open} maxWidth="md">
 			<DialogTitle>Remove a BIDS Field</DialogTitle>
 			<DialogContent>
@@ -78,7 +77,15 @@ export const BIDSRemoveColumnDialog = memo(() => {
 					<DialogContentText>
 						Indicate the BIDS Field that you'd like to have removed from the spreadsheet.
 					</DialogContentText>
-					<Select fullWidth multiple value={selectedFields} onChange={handleSelectedFieldChange}>
+					<Select
+						fullWidth
+						multiple
+						value={selectedFields}
+						onChange={handleSelectedFieldChange}
+						MenuProps={{
+							sx: { maxHeight: 300 },
+						}}
+					>
 						{renderChoices()}
 					</Select>
 					<div>

@@ -75,11 +75,31 @@ async function getASLContext({
 	ASLSeriesPattern,
 	NVolumes,
 	M0PositionInASL,
-}: Pick<ImportContextSchemaType, "ASLSeriesPattern" | "NVolumes" | "M0PositionInASL">) {
+	DummyPositionInASL,
+}: Pick<ImportContextSchemaType, "ASLSeriesPattern" | "NVolumes" | "M0PositionInASL" | "DummyPositionInASL">) {
+	//! Sanity/Typescript Check
+	if (ASLSeriesPattern === "") throw new Error("ASLSeriesPattern is empty");
+
+	console.log("getASLContext called with the following", {
+		ASLSeriesPattern,
+		NVolumes,
+		M0PositionInASL,
+		DummyPositionInASL,
+	});
+
+	// Short-circuit if there are no m0 nor dummies in the ASL series; ExploreASL will auto-expand when it detects
+	// the number of volumes present
+	if (M0PositionInASL.length === 0 && DummyPositionInASL.length === 0) {
+		if (ASLSeriesPattern === "control-label") {
+			return "control, label";
+		} else if (ASLSeriesPattern === "label-control") {
+			return "label, control";
+		}
+	}
+
 	let currentVolumeType: "m0scan" | "cbf" | "control" | "label" | "deltam";
 	const AdjustedM0Positions = M0PositionInASL.map((pos) => pos - 1); // Temporary adjustment to 0-based indexing
 	const ASLContextArr: string[] = [];
-	if (ASLSeriesPattern === "") throw new Error("ASLSeriesPattern is empty");
 
 	if (ASLSeriesPattern === "control-label") {
 		currentVolumeType = "control";
@@ -184,12 +204,22 @@ export async function buildSourceStructureJSON(
 export async function buildStudyParJSON(
 	importSchema: ImportSchemaType
 ): Promise<StudyParJSONOutputSchemaType | SingleStudyParJSONOutputSchemaType | false> {
+	console.log("Building studyPar.json; called with importSchema:", importSchema);
+
 	try {
 		const result = [];
 
 		for (const context of importSchema.ImportContexts) {
-			const { ASLSeriesPattern, NVolumes, M0PositionInASL, SubjectRegExp, VisitRegExp, SessionRegExp } = context;
-			const ASLContext = await getASLContext({ ASLSeriesPattern, NVolumes, M0PositionInASL });
+			const {
+				ASLSeriesPattern,
+				NVolumes,
+				M0PositionInASL,
+				SubjectRegExp,
+				VisitRegExp,
+				SessionRegExp,
+				DummyPositionInASL,
+			} = context;
+			const ASLContext = await getASLContext({ ASLSeriesPattern, NVolumes, M0PositionInASL, DummyPositionInASL });
 
 			const temp: SingleStudyParJSONOutputSchemaType = {
 				SubjectRegExp: SubjectRegExp !== "" ? SubjectRegExp : undefined,

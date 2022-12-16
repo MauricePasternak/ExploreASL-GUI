@@ -3,7 +3,7 @@ import Skeleton from "@mui/material/Skeleton";
 import { DataGrid, GridCellParams } from "@mui/x-data-grid";
 import { useAtomValue, useSetAtom } from "jotai";
 import React, { memo } from "react";
-import { BIDSRowSchema } from "../../common/schemas/BIDSDataGridSchemas/BIDSDataGridSchemas";
+import { Schema_BIDS } from "../../common/schemas/BIDSSchema";
 import { YupValidate } from "../../common/utils/formFunctions";
 import {
 	atomBIDSErrors,
@@ -67,7 +67,9 @@ export const BIDSDataGrid = memo(() => {
 
 						// * Since this won't trigger processRowUpdate, we need to do validation and updating of errors here
 						const newRow: BIDSRow = { ...params.row, [params.field]: undefined };
-						const { errors } = await YupValidate(BIDSRowSchema, newRow);
+						const { errors } = await YupValidate(Schema_BIDS, newRow);
+
+						console.log("🚀 ~ onCellKeyDown ~ errors", errors);
 
 						// Communicate the changes to external state
 						handleEditFromCell({ ID: params.row.ID, colName: params.field, value: undefined });
@@ -85,10 +87,11 @@ export const BIDSDataGrid = memo(() => {
 				processRowUpdate={async (newRow, oldRow) => {
 					try {
 						// This function is called after other events like onCellKeyDown, onCellFocusOut have occurred
-						console.log("🚀 ~ processRowUpdate ~ newRow", newRow);
 
 						// * Validate the new row
-						const { errors } = await YupValidate(BIDSRowSchema, newRow);
+						console.log("🚀 ~ processRowUpdate ~ newRow", newRow);
+						const { errors } = await YupValidate(Schema_BIDS, newRow);
+						console.log("🚀 ~ processRowUpdate ~ errors", errors);
 
 						// Communicate the changes to external state to keep the data in sync
 						handleEditFromRow(newRow);

@@ -11,10 +11,12 @@ import Typography from "@mui/material/Typography";
 import { useAtomValue } from "jotai";
 import { memo, useState } from "react";
 import { BIDSAllFieldsNameType, BIDSFieldNameToDisplayName } from "./BIDSColumnDefs";
-import { atomBIDSErrors } from "../../stores/BIDSDataGridStore";
+import { atomBIDSColumnNames, atomBIDSErrors, atomGetBIDSColumnConfigs } from "../../stores/BIDSDataGridStore";
 import ErrorIcon from "@mui/icons-material/Error";
+import ListItemIcon from "@mui/material/ListItemIcon";
+
 type BIDSParsedError = {
-	fieldName: string;
+	fieldName: BIDSAllFieldsNameType;
 	rowIndex: string;
 	errorMessage: string;
 };
@@ -25,6 +27,7 @@ export const BIDSDataGridErrorPopover = memo(() => {
 
 	// Atomic State
 	const bidsErrorMapping = useAtomValue(atomBIDSErrors);
+	const bidsColumnNames = new Set(useAtomValue(atomBIDSColumnNames));
 
 	// ? Is there a better way to do this???
 	const parsedErrors: BIDSParsedError[] = [];
@@ -34,7 +37,7 @@ export const BIDSDataGridErrorPopover = memo(() => {
 				fieldName,
 				rowIndex,
 				errorMessage,
-			});
+			} as BIDSParsedError);
 		}
 	}
 	const hasError = parsedErrors.length > 0;
@@ -73,24 +76,40 @@ export const BIDSDataGridErrorPopover = memo(() => {
 					<Typography variant="subtitle1">The following errors were found within the BIDS Dataframe:</Typography>
 					<List sx={{ maxHeight: 300 }}>
 						{parsedErrors.map((error) => (
-							<ListItem key={`${error.fieldName}-${error.rowIndex}`}>
-								<ListItemButton>
-									<ErrorIcon sx={{ color: "error.main" }} />
-								</ListItemButton>
+							<ListItem key={`${error.fieldName}__${error.rowIndex}`}>
+								<ListItemIcon>
+									<ErrorIcon sx={{ color: "error.main", fontSize: "2rem" }} />
+								</ListItemIcon>
 								<ListItemText
 									primary={error.errorMessage}
 									secondary={
-										<>
-											<Typography variant="subtitle2" component="span">
-												Found in column
-											</Typography>{" "}
-											<Typography variant="subtitle2" component="span" sx={{ fontWeight: 800 }}>
-												{BIDSFieldNameToDisplayName[error.fieldName as BIDSAllFieldsNameType]}
-											</Typography>{" "}
-											<Typography variant="subtitle2" component="span">
-												at row ID {error.rowIndex}
-											</Typography>
-										</>
+										bidsColumnNames.has(error.fieldName) ? (
+											<>
+												<Typography variant="subtitle2" component="span">
+													Found in column
+												</Typography>{" "}
+												<Typography variant="subtitle2" component="span" sx={{ fontWeight: 800 }}>
+													{BIDSFieldNameToDisplayName[error.fieldName as BIDSAllFieldsNameType]}
+												</Typography>{" "}
+												<Typography variant="subtitle2" component="span">
+													at row ID {error.rowIndex}
+												</Typography>
+											</>
+										) : (
+											<>
+												<Typography variant="subtitle2" component="span">
+													This would normally be found in column
+												</Typography>{" "}
+												<Typography variant="subtitle2" component="span" sx={{ fontWeight: 800 }}>
+													{BIDSFieldNameToDisplayName[error.fieldName as BIDSAllFieldsNameType]}
+												</Typography>
+												{` at row ID ${error.rowIndex}.`}
+												<Typography variant="subtitle2">
+													However this column is currently not present in the spreadsheet. Use the "ADD COLUMN" button
+													to add this column in if necessary.
+												</Typography>
+											</>
+										)
 									}
 								/>
 							</ListItem>

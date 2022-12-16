@@ -1,23 +1,21 @@
-import React from "react";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import CachedIcon from "@mui/icons-material/Cached";
+import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import { Button } from "@mui/material";
 import {
 	GridToolbarColumnsButton,
 	GridToolbarContainer,
 	GridToolbarDensitySelector,
-	GridToolbarExport,
 	GridToolbarFilterButton,
 } from "@mui/x-data-grid";
 import { useAtomValue, useSetAtom } from "jotai";
-import { memo } from "react";
+import React, { memo } from "react";
 import {
 	atomBIDSAddColumnDialogOpen,
 	atomBIDSRemoveColumnDialogOpen,
 	atomBIDSStudyRootPath,
 	atomSetFetchBIDSDataFrame,
 } from "../../stores/BIDSDataGridStore";
-import CachedIcon from "@mui/icons-material/Cached";
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
-import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import { BIDSDataGridErrorPopover } from "./BIDSDataGridErrorPopover";
 import { BIDSSaveOverwriteSidecars } from "./BIDSSaveOverwriteSidecars";
 
@@ -31,7 +29,6 @@ export const BIDSToolBar = memo(() => {
 			<GridToolbarColumnsButton />
 			<GridToolbarFilterButton {...({} as any)} />
 			<GridToolbarDensitySelector />
-			<GridToolbarExport />
 			<Button
 				size="small"
 				variant="text"

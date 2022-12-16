@@ -231,7 +231,7 @@ export const BIDSAddColumnDialog = memo(() => {
 			</DialogContent>
 			<DialogActions>
 				<Button onClick={() => setOpen(false)}>Cancel</Button>
-				<Button disabled={!selectedField} onClick={handleAddColumn}>
+				<Button disabled={!selectedField || (!applyEmptyDefault && defaultValue == null)} onClick={handleAddColumn}>
 					Add to Spreadsheet
 				</Button>
 			</DialogActions>
