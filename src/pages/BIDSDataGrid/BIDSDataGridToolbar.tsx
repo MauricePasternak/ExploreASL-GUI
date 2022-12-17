@@ -16,8 +16,7 @@ import {
 	atomBIDSStudyRootPath,
 	atomSetFetchBIDSDataFrame,
 } from "../../stores/BIDSDataGridStore";
-import { BIDSDataGridErrorPopover } from "./BIDSDataGridErrorPopover";
-import { BIDSSaveOverwriteSidecars } from "./BIDSSaveOverwriteSidecars";
+import { BIDSDataGridErrorPopover, BIDSSaveOverwriteSidecars } from "./BIDSCustomActionComponents";
 
 export const BIDSToolBar = memo(() => {
 	const studyRootPath = useAtomValue(atomBIDSStudyRootPath);

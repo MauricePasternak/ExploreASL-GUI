@@ -26,14 +26,15 @@ export const DefaultImportSingleContext: ImportContextSchemaType = {
 
 	// ASL Sequence Info
 	Manufacturer: "GE",
+	PulseSequenceType: "3D_spiral",
 	ArterialSpinLabelingType: "PCASL",
 	PostLabelingDelay: 1.525,
-	LabelingDuration: 1.425,
+	LabelingDuration: 1.450,
 	BolusCutOffFlag: false,
 	BolusCutOffTechnique: "",
 	BolusCutOffDelayTime: 0,
 
-	// Other
+	// Background Suppression Info
 	BackgroundSuppressionNumberPulses: 5,
 	BackgroundSuppressionPulseTime: [],
 };

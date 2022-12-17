@@ -12,7 +12,7 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import React, { memo, useState } from "react";
-import { DebouncedInput } from "../../components/DebouncedComponents";
+import { DebouncedInput } from "../../../components/DebouncedComponents";
 import {
 	BIDSAllFieldsNameType,
 	BIDSBooleanFieldToColDef,
@@ -23,13 +23,10 @@ import {
 	isBIDSEnumField,
 	isBIDSNumericField,
 	isBIDSTextField,
-} from "./BIDSColumnDefs";
-import { atomBIDSAddColumnDialogOpen, atomBIDSColumnNames, atomSetBIDSAddColumn } from "../../stores/BIDSDataGridStore";
+} from "../BIDSColumnDefs";
+import { atomBIDSAddColumnDialogOpen, atomBIDSColumnNames, atomSetBIDSAddColumn } from "../../../stores/BIDSDataGridStore";
+import { ObjectEntries } from "../../../common/utils/objectFunctions";
 
-type Entries<T> = { [K in keyof T]: [K, T[K]] }[keyof T];
-function ObjectEntries<T extends object>(t: T): Entries<T>[] {
-	return Object.entries(t) as any;
-}
 
 export const BIDSAddColumnDialog = memo(() => {
 	// Atomic State

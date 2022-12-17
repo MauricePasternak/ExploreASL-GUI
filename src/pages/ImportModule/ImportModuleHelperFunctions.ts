@@ -77,9 +77,6 @@ async function getASLContext({
 	M0PositionInASL,
 	DummyPositionInASL,
 }: Pick<ImportContextSchemaType, "ASLSeriesPattern" | "NVolumes" | "M0PositionInASL" | "DummyPositionInASL">) {
-	//! Sanity/Typescript Check
-	if (ASLSeriesPattern === "") throw new Error("ASLSeriesPattern is empty");
-
 	console.log("getASLContext called with the following", {
 		ASLSeriesPattern,
 		NVolumes,
@@ -228,7 +225,9 @@ export async function buildStudyParJSON(
 				ASLContext,
 				M0Type: context.M0Type,
 				M0: context.M0Type === "Included" || context.M0Type === "Separate",
-				Manufacturer: context.Manufacturer !== "" ? context.Manufacturer : undefined,
+				Manufacturer: context.Manufacturer,
+				PulseSequenceType: context.PulseSequenceType,
+				MRAcquisitionType: context.PulseSequenceType === "2D_EPI" ? "2D" : "3D",
 				ArterialSpinLabelingType:
 					context.ArterialSpinLabelingType === "CASL" ? "PCASL" : context.ArterialSpinLabelingType,
 				PostLabelingDelay: context.PostLabelingDelay,

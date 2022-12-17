@@ -1,4 +1,3 @@
-import React from "react";
 import WarningIcon from "@mui/icons-material/Warning";
 import { Typography } from "@mui/material";
 import Button from "@mui/material/Button";
@@ -13,13 +12,13 @@ import MenuItem from "@mui/material/MenuItem";
 import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { memo, useState } from "react";
+import React, { memo, useState } from "react";
 import {
 	atomBIDSColumnNames,
 	atomBIDSRemoveColumnDialogOpen,
 	atomSetBIDSRemoveColumn,
-} from "../../stores/BIDSDataGridStore";
-import { BIDSAllNonMiscFieldsNameType, isBIDSNonMiscField } from "./BIDSColumnDefs";
+} from "../../../stores/BIDSDataGridStore";
+import { BIDSAllNonMiscFieldsNameType, isBIDSNonMiscField } from "../BIDSColumnDefs";
 
 export const BIDSRemoveColumnDialog = memo(() => {
 	// Atomic State

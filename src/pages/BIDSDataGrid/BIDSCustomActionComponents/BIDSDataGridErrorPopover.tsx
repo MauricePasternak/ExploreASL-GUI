@@ -1,19 +1,17 @@
-import React from "react";
+import ErrorIcon from "@mui/icons-material/Error";
 import SearchOffIcon from "@mui/icons-material/SearchOff";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
-import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Popover from "@mui/material/Popover";
 import Typography from "@mui/material/Typography";
 import { useAtomValue } from "jotai";
-import { memo, useState } from "react";
-import { BIDSAllFieldsNameType, BIDSFieldNameToDisplayName } from "./BIDSColumnDefs";
-import { atomBIDSColumnNames, atomBIDSErrors, atomGetBIDSColumnConfigs } from "../../stores/BIDSDataGridStore";
-import ErrorIcon from "@mui/icons-material/Error";
-import ListItemIcon from "@mui/material/ListItemIcon";
+import React, { memo, useState } from "react";
+import { atomBIDSColumnNames, atomBIDSErrors } from "../../../stores/BIDSDataGridStore";
+import { BIDSAllFieldsNameType, BIDSFieldNameToDisplayName } from "../BIDSColumnDefs";
 
 type BIDSParsedError = {
 	fieldName: BIDSAllFieldsNameType;

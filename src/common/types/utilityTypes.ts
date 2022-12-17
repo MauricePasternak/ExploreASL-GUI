@@ -16,8 +16,8 @@ export type Primitive = string | number | boolean | bigint | symbol | undefined 
  * ```
  */
 export type ExtractChannelName<
-  T extends string,
-  Delimiter extends string = ":"
+	T extends string,
+	Delimiter extends string = ":"
 > = T extends `${string}${Delimiter}${infer ChannelName}` ? ChannelName : T;
 
 export type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -30,20 +30,20 @@ type MatchesCaptureGroup<T extends string> = T extends `${string}(?<${string}>${
 export type GetCaptureGroup<T extends string> = T extends `${string}(?<${infer G}>${string})${string}` ? [G] : never;
 
 export type ParseCaptureGroup<T extends string> = T extends `${string}(?<${infer G}>${string})${infer Rest}`
-  ? MatchesCaptureGroup<Rest> extends true
-    ? [G, ...ParseCaptureGroup<Rest>]
-    : [G]
-  : [];
+	? MatchesCaptureGroup<Rest> extends true
+		? [G, ...ParseCaptureGroup<Rest>]
+		: [G]
+	: [];
 
 type ParseNamedCaptureGroupsImpl<
-  PS extends string,
-  PT extends string[]
+	PS extends string,
+	PT extends string[]
 > = PS extends `${string}(?<${infer G}>${infer PossibleNested})${infer Rest}`
-  ? [
-      ...ParseNamedCaptureGroupsImpl<Rest, AppendNonBlankString<PT, G>>,
-      ...ParseNamedCaptureGroupsImpl<`${PossibleNested})`, []>
-    ]
-  : PT;
+	? [
+			...ParseNamedCaptureGroupsImpl<Rest, AppendNonBlankString<PT, G>>,
+			...ParseNamedCaptureGroupsImpl<`${PossibleNested})`, []>
+	  ]
+	: PT;
 
 export type ParseNamedCaptureGroups<PS extends string> = ParseNamedCaptureGroupsImpl<PS, []>;
 
@@ -58,7 +58,7 @@ export type ParseNamedCaptureGroups<PS extends string> = ParseNamedCaptureGroups
  * ```
  */
 export type ArrToStringMapping<T extends readonly any[]> = {
-  [K in T[number]]: string;
+	[K in T[number]]: string;
 };
 
 /**
@@ -72,24 +72,19 @@ export type ArrToStringMapping<T extends readonly any[]> = {
  */
 export type IsTuple<T extends readonly any[]> = number extends T["length"] ? true : false;
 
-/**
- * Removes the first element from an array.
- */
+/** Removes the first element from an array. */
 export type DropFirstElement<T extends ReadonlyArray<any>> = T extends [any, ...infer Rest] ? Rest : never;
 
-/**
- * Removes the last element from an array.
- */
+/** Removes the last element from an array. */
 export type DropLastElement<T extends ReadonlyArray<any>> = T extends [...infer Rest, any] ? Rest : never;
 
-/**
- * Removes the first parameter from a function type.
- */
+/** Removes the first parameter from a function type. */
 export type DropFirstParameter<F extends (...args: any) => any> = DropFirstElement<Parameters<F>>;
 
-/**
- * Removes the last parameter from a function type.
- */
+/** Removes the last parameter from a function type. */
 export type DropLastParameter<F extends (...args: any) => any> = DropLastElement<Parameters<F>>;
 
 type AppendNonBlankString<PT extends string[], S extends string> = S extends "" ? PT : [...PT, S];
+
+/** Represents the possible tuples that can result from Object.entries */
+export type ObjectEntry<T> = { [K in keyof T]: [K, T[K]] }[keyof T];

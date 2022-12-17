@@ -11,6 +11,14 @@ import {
 } from "../../types/ImportSchemaTypes";
 import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../../utils/EASLFunctions";
 import {
+	Schema_ArterialSpinLabelingType,
+	Schema_M0Estimate,
+	Schema_M0Type,
+	Schema_Manufacturer,
+	Schema_PostLabelingDelay,
+	Schema_PulseSequenceType,
+} from "../BIDSSchema";
+import {
 	ImportModule__BackgroundSuppressionPulseTimeTest,
 	ImportModule__BolusCutOffDelayTimeTest,
 	ImportModule__DummyPositionInASLTest,
@@ -118,17 +126,14 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 		.test("ValidDummyPosition", "Invalid Dummy Scan Position", ImportModule__DummyPositionInASLTest),
 
 	// M0 Info Fields
-	M0Type: Yup.string().optional().oneOf(["Separate", "Included", "Absent", "Estimate"], "Invalid M0 Type"),
-	M0Estimate: Yup.number().when("M0Type", {
-		is: "Estimate",
-		then: Yup.number().required("Required").moreThan(0, "M0 Estimate must be greater than 0"),
-		otherwise: Yup.number().optional(),
-	}),
+	M0Type: Schema_M0Type,
+	M0Estimate: Schema_M0Estimate,
 
 	// ASL Sequence Info Fields
-	Manufacturer: Yup.string().optional().oneOf(["GE", "Philips", "Siemens", ""], "Invalid ASL Manufacturer"),
-	ArterialSpinLabelingType: Yup.string().optional().oneOf(["PASL", "CASL", "PCASL"], "Invalid ASL Sequence"),
-	PostLabelingDelay: Yup.number().optional(),
+	Manufacturer: Schema_Manufacturer,
+	PulseSequenceType: Schema_PulseSequenceType,
+	ArterialSpinLabelingType: Schema_ArterialSpinLabelingType,
+	PostLabelingDelay: Schema_PostLabelingDelay,
 	LabelingDuration: Yup.number().when("ArterialSpinLabelingType", {
 		is: (sequence: ASLLabelingType) => sequence !== "PASL",
 		then: Yup.number()

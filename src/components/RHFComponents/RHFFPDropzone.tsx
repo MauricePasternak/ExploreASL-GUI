@@ -269,7 +269,7 @@ export function RHFFPDropzone<
 		console.log("🚀 ~ file: RHFFPDropzone.tsx:250 ~ handleChange ~ newValue", newValue);
 		console.log("🚀 ~ file: RHFFPDropzone.tsx:250 ~ handleChange ~ fieldState", JSON.stringify(fieldState));
 		field.onChange(newValue);
-		trigger && trigger(field.name); // HACK; otherwise, the field doesn't get validated...
+		trigger && trigger(field.name); // hack; otherwise, the field doesn't get validated...
 		field.onBlur();
 		enterCounter.current = 0;
 		isAcceptingDrop && setIsAcceptingDrop(false);

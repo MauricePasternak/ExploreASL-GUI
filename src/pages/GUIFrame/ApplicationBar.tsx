@@ -32,7 +32,7 @@ function ApplicationBar() {
         </IconButton>
 
         <Box className="drag-window" display="flex" alignItems="center" flexGrow={1} alignSelf="stretch">
-          <Icon sx={{ ml: 1, height: 36, width: 36 }}>
+          <Icon sx={{ mx: 1, height: 36, width: 36 }}>
             <img src={ExploreASLPNG} />
           </Icon>
           <Typography variant="h6">ExploreASL GUI</Typography>

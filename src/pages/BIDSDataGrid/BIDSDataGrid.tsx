@@ -29,7 +29,7 @@ export const BIDSDataGrid = memo(() => {
 	return bidsRows.length > 0 ? (
 		<Box
 			sx={{
-				height: "calc(100vh - 370px)",
+				height: "calc(100vh - 320px)",
 				width: "100%",
 				"& .BIDSError": {
 					backgroundColor: "error.main",
@@ -107,6 +107,6 @@ export const BIDSDataGrid = memo(() => {
 			/>
 		</Box>
 	) : (
-		<Skeleton variant="rectangular" height="calc(100vh - 400px)" />
+		<Skeleton variant="rectangular" height="calc(100vh - 300px)" />
 	);
 });

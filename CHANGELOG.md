@@ -29,6 +29,8 @@ refactoring of the project structure.
 
 ### Added
 
+- Added app version information in the lower left corner of the sidebar.
+
 - Added the ability for the Import Module to short circuit generating the `ASLContext` field when it is a control-label
   or label-control sequence without any embedded M0 scan or dummy scan. ExploreASL itself will be able to expand the
   field to its full form when it processes an ASL timeseries. This solution allows for more similar ASL contexts to be
@@ -43,12 +45,12 @@ refactoring of the project structure.
     - A cell is edited.
     - A cell's value is made undefined via Delete key.
 
-
 - Added the ability for the GUI to export the current plot & MRI slice views to a PNG file.
 
 - Added multiple new fields to defining each import context, particularly when it comes to PASL sequences. The following
   fields were added:
-
+  - `PulseSequenceType`
+  - `MRAcquisitionType` (indirectly, via `PulseSequenceType`)
   - `BolusCutOffFlag`
   - `BolusCutOffTechnique`
   - `BolusCutOffDelayTime`
@@ -61,6 +63,28 @@ refactoring of the project structure.
 
 - Bumped non-developer dependencies to their latest versions.
 
+- Increased size of the sidebar icons to 3rem.
+
+- Changed the About page main picture to be the ExploreASL GUI logo instead of the ExploreASL logo.
+
+- Changed the name of the BIDSDataGrid module in the sidebar to "Verify BIDS Sidecars". Its position is now also second
+  after the Import module to entice its immediate use after an import.
+
+- Updated the Define Parameters module to remove several fields in and add/change others, including:
+  - `x.SESSIONS` - Removed
+  - `x.session.options` - Removed
+  - `x.Q.M0` - Removed; this is now a field in the import module (M0Type)
+  - `x.Q.BackgroundSuppressionNumberPulses` - Removed; this is now a field in the import module (BackgroundSuppressionNumberPulses)
+  - `x.Q.BackgroundSuppressionPulseTime` - Removed; this is now a field in the import module (BackgroundSuppressionPulseTime)
+  - `x.Q.readoutDim` - Removed; this is now inferred in the import module (MRAcquisitionType)
+  - `x.Q.Vendor` - Removed; this is now a field in the import module (Manufacturer)
+  - `x.Q.Sequence` - Removed; this is now a field in the import module (PulseSequenceType)
+  - `x.Q.LabelingType` - Removed; this is now a field in the import module (ArterialSpinLabelingType)
+  - `x.Q.Initial_PLD` - Removed; this is now a field in the import module (PostLabelingDelay)
+  - `x.Q.LabelingDuration` - Removed; this is now a field in the import module (LabelingDuration)
+  - `x.modules.asl.M0PositionInASL4D` - Removed; this is now a field in the import module (M0PositionInASL4D)
+  - `x.modules.asl.DummyScanPositionInASL4D` - Removed
+
 - Renamed github and this project's names:
     - (this project) **ExploreASLJS --> ExploreASL-GUI**.
     - (previous project) **ExploreASL_GUI --> ExploreASL_PyGUI**
@@ -71,14 +95,14 @@ refactoring of the project structure.
 
 - Major change to the BIDSDataGrid module. It is now based on Material UI's DataGrid instead of React-Data-Grid. This
   change comes with benefits and caveats alike:
-    - Benefits:
-      - MUI is a more well-supported library than R-Data-Grid.
-      - There a more features available, including sorting, filtering, hiding, resizing rows, etc.
-      - The implementation of validation rules is much more scalable for the foreseeable future.
-      - The UI is generally more aesthetically pleasing.
-    - Caveats:
-      - Frozen columns are not supported in the community version of MUI's DataGrid. As this project is not for profit,
-        there is no way to practical way to obtain the enterprise version of MUI's DataGrid.
+  - Benefits:
+    - MUI is a more well-supported library than R-Data-Grid.
+    - There a more features available, including sorting, filtering, hiding, resizing rows, etc.
+    - The implementation of validation rules is much more scalable for the foreseeable future.
+    - The UI is generally more aesthetically pleasing.
+  - Caveats:
+    - Frozen columns are not supported in the community version of MUI's DataGrid. As this project is not for profit,
+      there is no way to practical way to obtain the enterprise version of MUI's DataGrid.
 
 - Gave a significant refactoring overhaul to the setup of the project, particularly when it comes to imports/exports.
   Several schemas, components, and pages are appropriately allocated into subfolders and re-exported using index.ts(x).

@@ -11,9 +11,7 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { range as lodashRange } from "lodash";
 import React from "react";
-import { Control, Controller, UseFieldArrayRemove, UseFormSetValue, UseFormTrigger, useWatch } from "react-hook-form";
-import { parseFieldError } from "../../../common/utils/formFunctions";
-import { DebouncedSlider } from "../../../components/DebouncedComponents";
+import { Control, UseFieldArrayRemove, UseFormSetValue, UseFormTrigger } from "react-hook-form";
 import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
 import { getNumbersFromDelimitedString } from "../../../common/utils/stringFunctions";
 import ExpandMore from "../../../components/ExpandMore";
@@ -49,7 +47,13 @@ const ASLManufacturerOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.
 	{ label: "Siemens", value: "Siemens" },
 ];
 
-const ASLSequenceOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}.ArterialSpinLabelingType`>[] = [
+const MRIPulseSequenceTypeOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}.PulseSequenceType`>[] = [
+	{ label: "3D Acquisition with Spiral Gradient Recalled EPI (Spiral)", value: "3D_spiral" },
+	{ label: "3D Acquisition with Gradient & Spin EPI (GRASE)", value: "3D_GRASE" },
+	{ label: "2D Acquisition with Spin EPI (EPI)", value: "2D_EPI" },
+];
+
+const ASLTypeOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}.ArterialSpinLabelingType`>[] = [
 	{ label: "Pulsed ASL", value: "PASL" },
 	{ label: "Pseudo-continuous ASL", value: "PCASL" },
 	{ label: "Continuous ASL", value: "CASL" },
@@ -224,10 +228,19 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 							<Grid item xs={12} md={6} xl={3}>
 								<RHFSelect
 									control={control}
+									name={`ImportContexts.${contextIndex}.PulseSequenceType`}
+									options={MRIPulseSequenceTypeOptions}
+									label="MRI Pulse Sequence Type"
+									helperText="The MRI pulse sequence used for image acquisition"
+								/>
+							</Grid>
+							<Grid item xs={12} md={6} xl={3}>
+								<RHFSelect
+									control={control}
 									name={`ImportContexts.${contextIndex}.ArterialSpinLabelingType`}
 									label="ASL Sequence Type"
 									helperText="The type of ASL sequence used"
-									options={ASLSequenceOptions}
+									options={ASLTypeOptions}
 									trigger={trigger}
 									triggerTarget={[
 										`ImportContexts.${contextIndex}.BolusCutOffFlag`,
@@ -243,6 +256,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									max={5}
 									step={0.001}
 									renderTextfields
+									textFieldProps={{sx: { minWidth: 90 }}}
 									label="Post Labeling Delay"
 									helperText="Units are in seconds. If you want this field ignored, set to 0."
 								/>
@@ -255,6 +269,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									max={5}
 									step={0.001}
 									renderTextfields
+									textFieldProps={{sx: { minWidth: 90 }}}
 									label="Labeling Duration"
 									helperText="Units are in seconds. If you want this field ignored, set to 0."
 								/>

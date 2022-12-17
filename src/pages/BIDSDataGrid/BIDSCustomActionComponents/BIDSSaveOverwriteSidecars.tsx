@@ -3,14 +3,17 @@ import Button from "@mui/material/Button";
 import { useAtomValue, useSetAtom } from "jotai";
 import { isPlainObject } from "lodash";
 import React from "react";
-import { atomBIDSRows } from "../../stores/BIDSDataGridStore";
-import { atomBIDSDatagridSnackbar } from "../../stores/SnackbarStore";
-import { BIDSRow } from "./BIDSColumnDefs";
+import { atomBIDSColumnsToPermanentDelete, atomBIDSRows } from "../../../stores/BIDSDataGridStore";
+import { atomBIDSDatagridSnackbar } from "../../../stores/SnackbarStore";
+import { BIDSAllFieldsNameType, BIDSRow } from "../BIDSColumnDefs";
+import { pickBy as lodashPickBy } from "lodash";
 
 export const BIDSSaveOverwriteSidecars = () => {
 	const { api } = window;
 	const BIDSRows = useAtomValue(atomBIDSRows);
 	const setBIDSDatagridSnackbar = useSetAtom(atomBIDSDatagridSnackbar);
+	const BIDSColumnsToPermaDelete = useAtomValue(atomBIDSColumnsToPermanentDelete);
+	const BIDSSetColsToPermaDelete = new Set(BIDSColumnsToPermaDelete); // We use a set for faster lookup
 
 	async function handleWriteSingleRow(row: BIDSRow) {
 		const { ID, Filename, Filepath, ...rest } = row;
@@ -20,8 +23,6 @@ export const BIDSSaveOverwriteSidecars = () => {
 					success: false,
 					error: `Filepath ending as ${Filename} does not exist in this study`,
 				};
-
-			// TODO: Add validation of the BIDS row here; Actually, this is up for discussion...maybe the user knows better?
 
 			// We load in the old values and overwrite them with the new ones; this approach keeps the exisitng datagrid as
 			// small as possible in order to accomodate larger datasets at the cost of longer export times.
@@ -35,7 +36,13 @@ export const BIDSSaveOverwriteSidecars = () => {
 				};
 			}
 
-			const newValues = { ...origValues, ...rest };
+			// We remove any keys that are in the set of columns to permanently delete
+			const origWithoutPermaDelete = lodashPickBy(
+				origValues,
+				(_, key) => !BIDSSetColsToPermaDelete.has(key as BIDSAllFieldsNameType)
+			);
+
+			const newValues = { ...origWithoutPermaDelete, ...rest };
 			await api.path.writeJSON(Filepath, newValues, { spaces: 1 });
 			return { success: true, error: null };
 		} catch (error) {

@@ -31,6 +31,9 @@ export type BolusCutOffDelayTimeType = number | number[];
 /** Type defining the nature of the M0 scan */
 export type M0TypeType = "Separate" | "Included" | "Absent" | "Estimate";
 
+/** Type defining the nature of the MRI imaging sequence (NOT the ASL labeling sequence) */
+export type PulseSequenceType = "3D_GRASE" | "2D_EPI" | "3D_spiral";
+
 /** Type defining the schma of the step where the folder paths and structure are defined. */
 export type ImportRuntimeEnvsSchemaType = {
 	EASLType: EASLType;
@@ -58,7 +61,7 @@ export type ImportContextSchemaType = {
 	SessionRegExp: string;
 
 	// ASL Context
-	ASLSeriesPattern: ASLSeriesPatternType | "";
+	ASLSeriesPattern: ASLSeriesPatternType;
 	NVolumes: number;
 	M0PositionInASL: number[];
 	DummyPositionInASL?: number[];
@@ -68,14 +71,16 @@ export type ImportContextSchemaType = {
 	M0Estimate: number;
 
 	// ASL Sequence Info
-	Manufacturer?: ASLManufacturerType | "";
+	Manufacturer: ASLManufacturerType;
+	PulseSequenceType: PulseSequenceType;
 	ArterialSpinLabelingType: ASLLabelingType;
-	PostLabelingDelay?: number;
+	PostLabelingDelay: number;
 	LabelingDuration?: number;
 	BolusCutOffFlag?: BolusCutOffFlagType;
 	BolusCutOffTechnique?: BolusCutOffTechniqueType | "";
 	BolusCutOffDelayTime?: BolusCutOffDelayTimeType;
-	// Other
+
+	// Background Suppression Info
 	BackgroundSuppressionNumberPulses?: number;
 	BackgroundSuppressionPulseTime?: number[];
 };
@@ -96,17 +101,21 @@ export type SingleStudyParJSONOutputSchemaType = {
 	// M0 Info
 	M0Type: M0TypeType;
 	M0Estimate?: number;
-  M0?: boolean;
+	M0?: boolean;
 
 	// ASL Info
 	ASLContext: string;
-	Manufacturer?: ASLManufacturerType;
+	Manufacturer: ASLManufacturerType;
+	PulseSequenceType: PulseSequenceType;
+	MRAcquisitionType: "2D" | "3D"
 	ArterialSpinLabelingType: ASLLabelingType;
-	PostLabelingDelay?: number;
+	PostLabelingDelay: number;
 	LabelingDuration?: number;
 	BolusCutOffFlag?: boolean;
 	BolusCutOffTechnique?: BolusCutOffTechniqueType;
 	BolusCutOffDelayTime?: BolusCutOffDelayTimeType;
+
+	// Background Suppression Info
 	BackgroundSuppression?: boolean;
 	BackgroundSuppressionNumberPulses?: number;
 	BackgroundSuppressionPulseTime?: number[];
