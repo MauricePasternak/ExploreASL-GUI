@@ -1,8 +1,8 @@
 import Box from "@mui/material/Box";
 import { useTheme } from "@mui/material/styles";
 import React from "react";
-import ExploreASLGUIIconDarkMode from "../../assets/appIcons/ExploreASLGUIIconDarkMode.png";
-import ExploreASLGUIIconLightMode from "../../assets/appIcons/ExploreASLGUIIconLightMode.png";
+import ExploreASLGUIIconDarkMode from "../../assets/appIcons/ExploreASLGUI_Logo_DarkMode.png";
+import ExploreASLGUIIconLightMode from "../../assets/appIcons/ExploreASLGUI_Logo_LightMode.png";
 import {
 	AboutAcknowledgements,
 	AboutDescription,
@@ -31,6 +31,7 @@ export const AboutPage = React.memo(() => {
 				sx={{
 					height: 250,
 					width: 250,
+					mb: 2
 				}}
 			/>
 			<AboutDescription />

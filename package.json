@@ -28,15 +28,15 @@
 					"linux",
 					"win32"
 				],
-				"icon": "src/assets/appIcons/ExploreASLIcon"
+				"icon": "src/assets/appIcons/ExploreASLGUI_Logo_Blank"
 			},
 			"makers": [
 				{
 					"name": "@electron-forge/maker-squirrel",
 					"config": {
 						"name": "ExploreASL-GUI",
-						"iconUrl": "https://raw.githubusercontent.com/MauricePasternak/ExploreASL-GUI/main/src/assets/appIcons/ExploreASLIcon.ico",
-						"setupIcon": "src/assets/appIcons/ExploreASLIcon.ico"
+						"iconUrl": "https://raw.githubusercontent.com/MauricePasternak/ExploreASL-GUI/main/src/assets/appIcons/ExploreASLGUI_Logo_Blank.ico",
+						"setupIcon": "src/assets/appIcons/ExploreASLGUI_Logo_Blank.ico"
 					}
 				},
 				{
@@ -49,7 +49,7 @@
 					"name": "@electron-forge/maker-deb",
 					"config": {
 						"description": "A user interface for analyzing arterial-spin labelled images with ExploreASL",
-						"icon": "src/assets/appIcons/ExploreASLIcon.png",
+						"icon": "src/assets/appIcons/ExploreASLGUI_Logo_Blank.png",
 						"maintainer": "Maurice Pasternak",
 						"name": "ExploreASL-GUI",
 						"productName": "ExploreASL-GUI",
@@ -61,7 +61,7 @@
 				{
 					"name": "@electron-forge/maker-dmg",
 					"config": {
-						"icon": "src/assets/appIcons/ExploreASLIcon.png",
+						"icon": "src/assets/appIcons/ExploreASLGUI_Logo_Blank.png",
 						"overwrite": true
 					}
 				}
