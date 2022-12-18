@@ -70,7 +70,7 @@ export const TabProcessingParameters = React.memo(({ control }: { control: Contr
 	return (
 		<Fade in>
 			<Box display="flex" flexDirection="column" gap={4} position="relative" padding={2}>
-				<Typography variant="h4">Sequence Parameters</Typography>
+				<Typography variant="h4">Processing Parameters</Typography>
 				<OutlinedGroupBox label="General Processing Parameters">
 					<Grid container rowSpacing={3} columnSpacing={3} marginTop={0} padding={2}>
 						<Grid item xs={12} md={6} xl={4}>
