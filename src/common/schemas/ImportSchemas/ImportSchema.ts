@@ -167,19 +167,14 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 	BolusCutOffDelayTime: Yup.mixed().test("Invalid Bolus Cutoff Delay Time", ImportModule__BolusCutOffDelayTimeTest),
 	// Background Suppression Fields
 	BackgroundSuppressionNumberPulses: Yup.number().integer("Must be an integer"),
-	BackgroundSuppressionPulseTime: Yup.array().when("BackgroundSuppressionNumberPulses", {
-		is: (nPulses: number) => nPulses > 0,
-		then: Yup.array()
-			.of(Yup.number())
-			.test(
-				"ValidPulseTimes",
-				"If provided, the number of timings specified must match number of pulses in the other field",
-				ImportModule__BackgroundSuppressionPulseTimeTest
-			),
-		otherwise: Yup.array()
-			.of(Yup.number())
-			.max(0, "This field must be empty if there are no background suppression pulses indicated"),
-	}),
+	BackgroundSuppressionPulseTime: Yup.array()
+		.of(Yup.number())
+		.typeError("This field must be either an array of numbers or left blank")
+		.test(
+			"BackgroundSuppressionPulseTime",
+			`The number of comma-separated values here must equal the number of indicated pulses in "Number of Background Suppression Pulses"`,
+			ImportModule__BackgroundSuppressionPulseTimeTest
+		),
 });
 
 export const SchemaImportStepDefineMultiContext = Yup.object().shape<YupShape<ImportMultipleContextsSchemaType>>({

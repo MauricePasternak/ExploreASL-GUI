@@ -155,6 +155,6 @@ export const ImportModule__BackgroundSuppressionPulseTimeTest = (
 	pulseTimes: number[],
 	helpers: Yup.TestContext<ImportSchemaType>
 ): YupTestReturnType => {
-	if (pulseTimes.length === 0) return true;
+	console.log(`🔎 Validating Import Module -- Context.BackgroundSuppressionPulseTime:`, pulseTimes);
 	return pulseTimes.length === helpers.parent.BackgroundSuppressionNumberPulses;
 };
