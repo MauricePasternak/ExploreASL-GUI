@@ -7,7 +7,8 @@ import {
 	SourceStuctureJSONOutputSchemaType,
 	StudyParJSONOutputSchemaType,
 } from "../../common/types/ImportSchemaTypes";
-import { escapeRegExp, stringArrToRegex } from "../../common/utils/stringFunctions";
+import { ObjectEntries } from "../../common/utils/objectFunctions";
+import { escapeRegExp, makeForwardSlashes, stringArrToRegex } from "../../common/utils/stringFunctions";
 const { api } = window;
 
 /**
@@ -131,17 +132,22 @@ async function getASLContext({
 export async function buildSourceStructureJSON(
 	importSchema: ImportSchemaType
 ): Promise<SourceStuctureJSONOutputSchemaType | false> {
+	console.log(`⚙️ buildSourceStructureJSON called with importSchema:`, importSchema);
+
 	try {
 		// Save to more wieldy named variables
 		const pathSourcedata = api.path.asPath(importSchema.StudyRootPath, "sourcedata");
+		const pathSourcedataForwardSlash = makeForwardSlashes(pathSourcedata.path) + "/";
 		const folderStructure = importSchema.SourcedataStructure;
 
-		// Get the filepaths for each subject
-		const subjectDepth = folderStructure.indexOf("Subject") + 1;
-		const subjectPaths = await api.path.getPathsAtNthLevel(pathSourcedata.path, subjectDepth, {
-			onlyDirectories: true,
-		});
-
+		// Get the filepaths for each subject from the importContexts rather than globbing anew!
+		const subjectDepth = folderStructure.indexOf("Subject");
+		const subjectNames = importSchema.ImportContexts.flatMap((context) =>
+			context.Paths.map((path) => {
+				const pathParts = makeForwardSlashes(path).replace(pathSourcedataForwardSlash, "").split("/");
+				return pathParts[subjectDepth];
+			})
+		);
 		// Clean up mappings for Scan, Visit, and Session
 		const filteredScanMapping = lodashPickBy(
 			importSchema.MappingScanAliases,
@@ -154,7 +160,7 @@ export async function buildSourceStructureJSON(
 		const folderHierarchy = folderStructure.map((folderType) => {
 			switch (folderType) {
 				case "Subject":
-					return stringArrToRegex(subjectPaths.map((p) => p.basename));
+					return stringArrToRegex(subjectNames);
 				case "Visit":
 					return stringArrToRegex(Object.keys(filteredVisitMapping));
 				case "Session":
@@ -201,7 +207,7 @@ export async function buildSourceStructureJSON(
 export async function buildStudyParJSON(
 	importSchema: ImportSchemaType
 ): Promise<StudyParJSONOutputSchemaType | SingleStudyParJSONOutputSchemaType | false> {
-	console.log("Building studyPar.json; called with importSchema:", importSchema);
+	console.log("⚙️ buildStudyParJSON called with importSchema:", importSchema);
 
 	try {
 		const result = [];
@@ -294,54 +300,145 @@ export async function buildStudyParJSON(
  */
 export async function updateContextSpecificRegexps(importSchema: ImportSchemaType) {
 	try {
-		const folderStructure = importSchema.SourcedataStructure;
-		const pathSourcedata = `${importSchema.StudyRootPath.replace(/\\/gm, "/")}/sourcedata/`;
-
-		for (const context of importSchema.ImportContexts) {
-			if (context.IsGlobal) continue;
-
-			const subjectRegExp = [];
-			const visitRegExp = [];
-			const sessionRegExp = [];
-
-			// Loop through each path, split into parts, and add the appropriate part to each regexp array
-			// AFTER applying any alias mappings
-			for (const path of context.Paths) {
-				const pathParts = path.replace(/\\/g, "/").replace(pathSourcedata, "").split("/");
-
-				const subjectIndex = folderStructure.indexOf("Subject");
-				const visitIndex = folderStructure.indexOf("Visit");
-				const sessionIndex = folderStructure.indexOf("Session");
-
-				if (subjectIndex !== -1) {
-					subjectRegExp.push(pathParts[subjectIndex]);
-				}
-
-				if (visitIndex !== -1) {
-					const visit = pathParts[visitIndex];
-					const visitAlias = importSchema.MappingVisitAliases[visit];
-					visitAlias && visitRegExp.push(visitAlias);
-				}
-
-				if (sessionIndex !== -1) {
-					const session = pathParts[sessionIndex];
-					const sessionAlias = importSchema.MappingSessionAliases[session];
-					sessionAlias && sessionRegExp.push(sessionAlias);
-				}
-			}
-
-			// Before moving onto the next context, update the regexps
-			subjectRegExp.length > 0 &&
-				(context.SubjectRegExp = stringArrToRegex(subjectRegExp, { isCaptureGroup: false, isStartEndBound: false }));
-			visitRegExp.length > 0 &&
-				(context.VisitRegExp = stringArrToRegex(visitRegExp, { isCaptureGroup: false, isStartEndBound: false }));
-			sessionRegExp.length > 0 &&
-				(context.SessionRegExp = stringArrToRegex(sessionRegExp, { isCaptureGroup: false, isStartEndBound: false }));
-		}
-
+		const pathSourcedata = `${makeForwardSlashes(importSchema.StudyRootPath)}/sourcedata/`;
+		const newContexts = importSchema.ImportContexts.flatMap((context) =>
+			expandImportContext(
+				context,
+				pathSourcedata, // We need to pass the path to the sourcedata folder to the function as a forward slash!
+				importSchema.SourcedataStructure,
+				importSchema.MappingVisitAliases,
+				importSchema.MappingSessionAliases
+			)
+		);
+		importSchema.ImportContexts = newContexts;
 		return importSchema;
 	} catch (error) {
 		console.warn("Something went wrong in updateContextSpecificRegexps:", error);
 		return false;
 	}
+}
+
+interface InfoContainer {
+	paths: string[];
+	subjectRegExpList: string[];
+	visitRegExpList: string[];
+	sessionRegExpList: string[];
+}
+
+/**
+ * Semi-clones & expands a single {@link ImportContextSchemaType} into multiple contexts that are more specific in terms
+ * of the paths and regexps.
+ *
+ * @param singleContext The {@link ImportContextSchemaType} to expand into multiple contexts.
+ * @param pathSourcedata A forward-slash path to the sourcedata folder.
+ * @param folderStructure The current folder structure after the sourcedata folder.
+ * @param MappingVisitAliases The mapping of visit folder names to their visit aliases.
+ * @param MappingSessionAliases The mapping of session folder names to their session aliases.
+ * @returns An array of semi-cloned {@link ImportContextSchemaType} objects, but the paths and regexps are allocated
+ * to each more-specific context.
+ */
+export function expandImportContext(
+	singleContext: ImportContextSchemaType,
+	pathSourcedata: string,
+	folderStructure: SourcedataFolderType[],
+	MappingVisitAliases: Record<string, string>,
+	MappingSessionAliases: Record<string, string>
+) {
+	//? An "infoType" being a concatentation of the types of info in a path, e.g. "SubjectVisitSession"
+	const infoTypeToPathsMapping: Record<string, InfoContainer> = {};
+	const subjectIndex = folderStructure.indexOf("Subject");
+	const visitIndex = folderStructure.indexOf("Visit");
+	const sessionIndex = folderStructure.indexOf("Session");
+
+	// First for loop updates the infoTypeToPathsMapping object
+	for (const path of singleContext.Paths) {
+		const pathParts = makeForwardSlashes(path).replace(pathSourcedata, "").split("/");
+		const pathInfo = new Set(
+			pathParts
+				.map((_, index) => {
+					if (index === subjectIndex) return "Subject";
+					if (index === visitIndex) return "Visit";
+					if (index === sessionIndex) return "Session";
+					return "";
+				})
+				.filter((part) => part !== "")
+		);
+
+		// Start by making a possibly-temporary container for the info types
+		const infoTypeContainer: InfoContainer = {
+			paths: [path],
+			subjectRegExpList: [],
+			visitRegExpList: [],
+			sessionRegExpList: [],
+		};
+
+		if (pathInfo.has("Subject")) {
+			infoTypeContainer.subjectRegExpList.push(pathParts[subjectIndex]);
+		}
+
+		if (pathInfo.has("Visit")) {
+			const visit = pathParts[visitIndex];
+			const visitAlias = MappingVisitAliases[visit];
+			visitAlias && infoTypeContainer.visitRegExpList.push(visitAlias);
+		}
+
+		if (pathInfo.has("Session")) {
+			const session = pathParts[sessionIndex];
+			const sessionAlias = MappingSessionAliases[session];
+			sessionAlias && infoTypeContainer.sessionRegExpList.push(sessionAlias);
+		}
+
+		const infoTypeString = [...pathInfo].sort().join("");
+
+		// If the infoTypeString is already in the mapping, add the path to the existing container
+		if (infoTypeString in infoTypeToPathsMapping) {
+			infoTypeToPathsMapping[infoTypeString].paths.push(path);
+			infoTypeToPathsMapping[infoTypeString].subjectRegExpList.push(...infoTypeContainer.subjectRegExpList);
+			infoTypeToPathsMapping[infoTypeString].visitRegExpList.push(...infoTypeContainer.visitRegExpList);
+			infoTypeToPathsMapping[infoTypeString].sessionRegExpList.push(...infoTypeContainer.sessionRegExpList);
+		}
+		// Otherwise, add the infoTypeString to the mapping
+		else {
+			infoTypeToPathsMapping[infoTypeString] = infoTypeContainer;
+		}
+	}
+
+	console.log("🚀 ~ file: ImportModuleHelperFunctions.ts:395 ~ infoTypeToPathsMapping", infoTypeToPathsMapping);
+
+	// Second for loop uses the infoTypeToPathsMapping object to create the new contexts
+	const newContexts = ObjectEntries(infoTypeToPathsMapping).flatMap(([_, infoContainer]) => {
+		const { Paths, SubjectRegExp, VisitRegExp, SessionRegExp, ...restOfContext } = singleContext;
+
+		// Regexps need to be converted to strings
+		const newSubjectRegExp =
+			infoContainer.subjectRegExpList.length > 0
+				? stringArrToRegex(lodashUniq(infoContainer.subjectRegExpList), {
+						isCaptureGroup: false,
+						isStartEndBound: false,
+				  })
+				: "";
+		const newVisitRegExp =
+			infoContainer.visitRegExpList.length > 0
+				? stringArrToRegex(lodashUniq(infoContainer.visitRegExpList), { isCaptureGroup: false, isStartEndBound: false })
+				: "";
+		const newSessionRegExp =
+			infoContainer.sessionRegExpList.length > 0
+				? stringArrToRegex(lodashUniq(infoContainer.sessionRegExpList), {
+						isCaptureGroup: false,
+						isStartEndBound: false,
+				  })
+				: "";
+
+		const newContext: ImportContextSchemaType = {
+			Paths: infoContainer.paths,
+			SubjectRegExp: newSubjectRegExp,
+			VisitRegExp: newVisitRegExp,
+			SessionRegExp: newSessionRegExp,
+			...restOfContext,
+		};
+
+		return newContext;
+	});
+
+	return newContexts;
 }

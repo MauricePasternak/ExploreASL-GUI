@@ -7,7 +7,7 @@ import { sortBy as lodashSortBy, uniq as lodashUniq } from "lodash";
  * @returns The decoded string
  */
 export function matlabEscapeBlockChar(data: Buffer, encoding: BufferEncoding = "utf-8") {
-  return data.toString(encoding).trim().replace(new RegExp("\\\b", "g"), "");
+	return data.toString(encoding).trim().replace(new RegExp("\\\b", "g"), "");
 }
 
 /**
@@ -15,7 +15,7 @@ export function matlabEscapeBlockChar(data: Buffer, encoding: BufferEncoding = "
  * @param string The string with possible Regexp characters that need escaping.
  */
 export function escapeRegExp(string: string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
+	return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
 }
 
 /**
@@ -24,17 +24,17 @@ export function escapeRegExp(string: string) {
  * @param delimiter The assumed delimiter separating the content. Defaults to "|".
  */
 export const parseRegexToStringArr = (regexString: string, delimiter = "|") => {
-  const trimmedStr = regexString.replace(/^\^\(|\)\$$/gm, "").trim();
-  const arrVal = trimmedStr.split(delimiter);
-  // Remove empty strings
-  return arrVal.filter(v => !!v);
+	const trimmedStr = regexString.replace(/^\^\(|\)\$$/gm, "").trim();
+	const arrVal = trimmedStr.split(delimiter);
+	// Remove empty strings
+	return arrVal.filter((v) => !!v);
 };
 
 interface StringArrToRegexOptions {
-  delimiter?: string;
-  isMetaCharsEscaped?: boolean;
-  isCaptureGroup?: boolean;
-  isStartEndBound?: boolean;
+	delimiter?: string;
+	isMetaCharsEscaped?: boolean;
+	isCaptureGroup?: boolean;
+	isStartEndBound?: boolean;
 }
 
 /**
@@ -51,20 +51,20 @@ interface StringArrToRegexOptions {
  * ```
  */
 export const stringArrToRegex = (stringArr: string[], options?: StringArrToRegexOptions) => {
-  const defaultOptions: StringArrToRegexOptions = {
-    delimiter: "|",
-    isMetaCharsEscaped: true,
-    isCaptureGroup: true,
-    isStartEndBound: true,
-  };
-  const _options = options ? Object.assign(defaultOptions, options) : defaultOptions;
-  let joinedStr: string;
+	const defaultOptions: StringArrToRegexOptions = {
+		delimiter: "|",
+		isMetaCharsEscaped: true,
+		isCaptureGroup: true,
+		isStartEndBound: true,
+	};
+	const _options = options ? Object.assign(defaultOptions, options) : defaultOptions;
+	let joinedStr: string;
 
-  const modifiedStrArr = _options.isMetaCharsEscaped ? stringArr.map(s => escapeRegExp(s)) : stringArr;
-  joinedStr = modifiedStrArr.join(_options.delimiter);
-  joinedStr = _options.isCaptureGroup ? `(${joinedStr})` : joinedStr;
-  joinedStr = _options.isStartEndBound ? `^${joinedStr}$` : joinedStr;
-  return joinedStr;
+	const modifiedStrArr = _options.isMetaCharsEscaped ? stringArr.map((s) => escapeRegExp(s)) : stringArr;
+	joinedStr = modifiedStrArr.join(_options.delimiter);
+	joinedStr = _options.isCaptureGroup ? `(${joinedStr})` : joinedStr;
+	joinedStr = _options.isStartEndBound ? `^${joinedStr}$` : joinedStr;
+	return joinedStr;
 };
 
 /**
@@ -77,18 +77,21 @@ export const stringArrToRegex = (stringArr: string[], options?: StringArrToRegex
  * @returns An array of parsed numbers in ascending order.
  */
 export const getNumbersFromDelimitedString = (
-  stringToParse: string,
-  delimiter = ",",
-  numberType: "integer" | "float" = "float"
+	stringToParse: string,
+	delimiter = ",",
+	numberType: "integer" | "float" = "float"
 ) => {
-  const retrievedNums = stringToParse
-    .split(delimiter)
-    .map(substring => {
-      const trimmed = substring.trim();
-      const parsed = numberType === "integer" ? parseInt(trimmed) : parseFloat(trimmed);
-      if (trimmed && parsed != null && !isNaN(parsed)) return parsed;
-    })
-    .filter(val => val != null);
+	const retrievedNums = stringToParse
+		.split(delimiter)
+		.map((substring) => {
+			const trimmed = substring.trim();
+			const parsed = numberType === "integer" ? parseInt(trimmed) : parseFloat(trimmed);
+			if (trimmed && parsed != null && !isNaN(parsed)) return parsed;
+		})
+		.filter((val) => val != null);
 
-  return lodashSortBy(lodashUniq(retrievedNums));
+	return lodashSortBy(lodashUniq(retrievedNums));
 };
+
+/** Replaces all backward slashes with forward ones. Used to keep filepaths consistent across situations and OS */
+export const makeForwardSlashes = (path: string) => path.replace(/\\/g, "/");

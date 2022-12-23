@@ -94,7 +94,6 @@ export const SchemaImportStepDefineAliases = Yup.object().shape<YupShape<ImportA
 /** Schema intended for the Import Module Step: Define Context */
 export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportContextSchemaType>>({
 	// GUI Meta Fields
-	IsGlobal: Yup.boolean().default(false),
 	Paths: Yup.array()
 		.optional()
 		.default([])

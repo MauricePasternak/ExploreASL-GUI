@@ -8,7 +8,7 @@ export const ImportModuleChannelName = "ImportModule";
 
 export const DefaultImportSingleContext: ImportContextSchemaType = {
 	// GUI Meta
-	IsGlobal: true, // Terrible hack to make the validation work
+	// IsGlobal: true, // Terrible hack to make the validation work
 	Paths: [],
 	SubjectRegExp: "",
 	VisitRegExp: "",

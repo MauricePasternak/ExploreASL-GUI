@@ -53,8 +53,6 @@ export type ImportAliasesSchemaType = {
 /** Type defining the schema of the step where ASL Context and other variables are defined. */
 export type ImportContextSchemaType = {
 	// GUI Meta
-	IsGlobal: boolean;
-	// folderHierarchy: string[];
 	Paths: string[];
 	SubjectRegExp: string;
 	VisitRegExp: string;

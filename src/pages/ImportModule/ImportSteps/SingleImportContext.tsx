@@ -83,21 +83,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 	return (
 		<Card>
 			<CardHeader
-				title={
-					isFirst ? (
-						<Typography variant="h6">Global Context</Typography>
-					) : (
-						<Typography variant="h6">Additional Context {contextIndex}</Typography>
-					)
-				}
-				subheader={
-					isFirst && (
-						<Typography>
-							This context will apply to all subjects that have not been specified in any other contexts. If this is the
-							only context, then it applies to all subjects under sourcedata.
-						</Typography>
-					)
-				}
+				title={<Typography variant="h6">Acquisition Context {contextIndex + 1}</Typography>}
 				avatar={
 					<ExpandMore expand={expanded} onClick={() => setExpanded(!expanded)}>
 						<ExpandMoreIcon />
@@ -116,18 +102,15 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 			<Divider />
 			<Collapse in={expanded}>
 				<CardContent>
-					{!isFirst && (
-						<RHFFPDropzone
-							control={control}
-							name={`ImportContexts.${contextIndex}.Paths`}
-							filepathType="dir"
-							dialogOptions={{ properties: ["multiSelections", "openDirectory"] }}
-							label="Subjects/Visits/Sessions Within this Context"
-							helperText="Drop Subject, Visit, and/or Session folders into this field to indicate that these are the items that are encompassed by this context."
-							placeholderText="Drop Folders Here"
-						/>
-					)}
-
+					<RHFFPDropzone
+						control={control}
+						name={`ImportContexts.${contextIndex}.Paths`}
+						filepathType="dir"
+						dialogOptions={{ properties: ["multiSelections", "openDirectory"] }}
+						label="Subjects/Visits/Sessions Within this Context"
+						helperText="Drop Subject, Visit, and/or Session folders into this field to indicate that these are the items that are encompassed by this context."
+						placeholderText="Drop Folders Here"
+					/>
 					<OutlinedGroupBox
 						label="ASL Context"
 						mt={3}
@@ -152,7 +135,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									step={1}
 									max={250}
 									renderTextfields
-									helperText="The number of volumes in the ASL series."
+									helperText="NOTE: If there aren't any embedded M0 or dummy volumes, this number is optional and can be ignored."
 								/>
 							</Grid>
 							<Grid item xs={12} md={6} xl={3}>
@@ -162,7 +145,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									label="M0 Positions within ASL Series"
 									fullWidth
 									debounceTime={2000}
-									helperText="Specify as comma-separated positive integers. Leave blank if not applicable."
+									helperText="Describe the locations of any embeded M0 scans that are contained within the ASL timeseries. Specify as comma-separated positive integers. Leave blank if not applicable."
 									innerToField={getNumbersFromDelimitedString}
 									fieldToInner={(numbers: number[]) => (numbers && Array.isArray(numbers) ? numbers.join(", ") : "")}
 								/>
@@ -174,7 +157,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									label="Dummy Positions within ASL Series"
 									fullWidth
 									debounceTime={2000}
-									helperText="Specify as comma-separated positive integers. Leave blank if not applicable."
+									helperText="Describe the locations of any dummy scans that should be extracted out of the ASL timeseries. Specify as comma-separated positive integers. Leave blank if not applicable."
 									innerToField={getNumbersFromDelimitedString}
 									fieldToInner={(numbers: number[]) => (numbers && Array.isArray(numbers) ? numbers.join(", ") : "")}
 								/>
@@ -256,7 +239,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									max={5}
 									step={0.001}
 									renderTextfields
-									textFieldProps={{sx: { minWidth: 90 }}}
+									textFieldProps={{ sx: { minWidth: 90 } }}
 									label="Post Labeling Delay"
 									helperText="Units are in seconds. If you want this field ignored, set to 0."
 								/>
@@ -269,7 +252,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									max={5}
 									step={0.001}
 									renderTextfields
-									textFieldProps={{sx: { minWidth: 90 }}}
+									textFieldProps={{ sx: { minWidth: 90 } }}
 									label="Labeling Duration"
 									helperText="Units are in seconds. If you want this field ignored, set to 0."
 								/>

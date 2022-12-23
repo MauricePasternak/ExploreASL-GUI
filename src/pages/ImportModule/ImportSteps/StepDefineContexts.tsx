@@ -47,7 +47,7 @@ export function StepDefineContexts({
 		console.log("Step 'Define Contexts' -- Valid Submit Values: ", values);
 
 		// Form values must be adjusted to translate Paths into folderHierarchy for each context
-		const adjustedValues = await updateContextSpecificRegexps(values);
+		const adjustedValues = await updateContextSpecificRegexps(lodashCloneDeep(values));
 		if (!adjustedValues) {
 			setImportSnackbar({
 				severity: "error",
@@ -91,7 +91,7 @@ export function StepDefineContexts({
 		try {
 			const createdGUIImportJSONFile = await api.path.writeJSON(
 				api.path.asPath(values.StudyRootPath, GUIIMPORTFILE_BASENAME).path,
-				adjustedValues,
+				values, // We don't necessarily want to write the adjusted values here, as the auto-generated extra contexts would be troublesome upon reload
 				{ spaces: 1 }
 			);
 			const createdSourceStructureFile = await api.path.writeJSON(
@@ -205,7 +205,7 @@ export function StepDefineContexts({
 						variant="contained"
 						onClick={() => {
 							const defaultContext = lodashCloneDeep(DefaultImportSingleContext);
-							defaultContext.IsGlobal = false; // This allows for proper validation of the form.
+							// defaultContext.IsGlobal = false; // This allows for proper validation of the form.
 							append(defaultContext);
 						}}
 					>
