@@ -5,7 +5,7 @@ import Step from "@mui/material/Step";
 import StepLabel from "@mui/material/StepLabel";
 import Stepper, { StepperProps } from "@mui/material/Stepper";
 import * as Yup from "yup";
-import { Control, DeepPartial, FieldValues, Path, useForm, UseFormReturn, useFormState } from "react-hook-form";
+import { Control, DeepPartial, FieldValues, FieldPath, useForm, UseFormReturn, useFormState } from "react-hook-form";
 import Lazy from "yup/lib/Lazy";
 import { ValidateOptions } from "yup/lib/types";
 import { ResolverFactory } from "../../common/utils/formFunctions";
@@ -33,7 +33,7 @@ export type RHFMultiStepReturnProps<TF extends FieldValues> = UseFormReturn<TF> 
  */
 export type RHFMultiStepStepProps<TFV extends FieldValues = FieldValues> = {
   label: React.ReactNode;
-  fieldNames: Path<TFV>[];
+  fieldNames: FieldPath<TFV>[];
 };
 
 export type RHFMultiStepStepperProps<TFV extends FieldValues> = {

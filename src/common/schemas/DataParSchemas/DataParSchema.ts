@@ -13,12 +13,8 @@ import {
 	StructuralProcessingParamsSchema,
 } from "../../types/ExploreASLDataParTypes";
 import { YupShape } from "../../types/validationSchemaTypes";
-import {
-	AreValidSubjects,
-	IsValidEASLPath,
-	IsValidMATLABRuntimePath,
-	IsValidStudyRoot,
-} from "../../utils/EASLFunctions";
+import { AreValidSubjects, IsValidEASLPath, IsValidMATLABRuntimePath } from "../../utils/EASLFunctions";
+import { Schema_StudyRootPathPostImport } from "../CommonSchemas/EASLGUIPathsSchema";
 import { DataParModule__ApplyQuantificationTest, DataParModule__SUBJECTSTest } from "./DataParSchemaCustomTests";
 
 const SchemaDataParDatasetParams: Yup.SchemaOf<DatasetParamsSchema> = Yup.object().shape({
@@ -76,14 +72,7 @@ const SchemaDataParGUIParams = Yup.object().shape<YupShape<GUIParamsSchema>>({
 					async (filepath, helpers) => await IsValidMATLABRuntimePath(filepath, helpers)
 				),
 		}),
-	StudyRootPath: Yup.string()
-		.required("This is a required field")
-		.typeError("Invalid value")
-		.test(
-			"IsValidStudyRoot",
-			"Invalid Study Root filepath. Ensure it is an existent directory.",
-			async (filepath, helpers) => await IsValidStudyRoot(filepath, helpers, ["sourcedata", "rawdata", "derivatives"])
-		),
+	StudyRootPath: Schema_StudyRootPathPostImport,
 	SUBJECTS: Yup.array()
 		.required("This is a required field")
 		.typeError("This value must be a collection of folder names")

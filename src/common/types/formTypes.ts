@@ -1,4 +1,4 @@
-import { Control, FieldPathValues, FieldValues, Path, PathValue, UseFormTrigger } from "react-hook-form";
+import { Control, FieldPathValues, FieldValues, FieldPath, FieldPathValue, UseFormTrigger } from "react-hook-form";
 
 /**
  * @description An intermediate type to represent the mandatory props to provide every `RHF` prefixed component.
@@ -6,9 +6,9 @@ import { Control, FieldPathValues, FieldValues, Path, PathValue, UseFormTrigger 
  * - `control`: The controller object returned by a `useForm` hook.
  * - `name`: The name of the field that this component is responsible for.
  */
-export type RHFControlAndNameType<TValues extends FieldValues, TName extends Path<TValues> = Path<TValues>> = {
-  name: TName;
-  control: Control<TValues, any>;
+export type RHFControlAndNameType<TFV extends FieldValues, TName extends FieldPath<TFV> = FieldPath<TFV>> = {
+	name: TName;
+	control: Control<TFV, any>;
 };
 
 /**
@@ -17,9 +17,9 @@ export type RHFControlAndNameType<TValues extends FieldValues, TName extends Pat
  * - `name`: path/name of the field
  * - `control`: the form control object from react-hook-form
  */
-export type RHFControllerProps<TFV extends FieldValues, TName extends Path<TFV>> = {
-  name: TName;
-  control: Control<TFV, any>;
+export type RHFControllerProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
+	name: TName;
+	control: Control<TFV, any>;
 };
 
 /**
@@ -27,15 +27,15 @@ export type RHFControllerProps<TFV extends FieldValues, TName extends Path<TFV>>
  * - `trigger`: The trigger function from React Hook Form's useForm hook return.
  * - `triggerTarget`: The name of the field(s) that should be triggered when the component's value changes.
  */
-export type RHFTriggerProps<TFV extends FieldValues, TName extends Path<TFV>> =
-  | {
-      trigger: UseFormTrigger<TFV>;
-      triggerTarget: TName | TName[];
-    }
-  | {
-      trigger?: undefined;
-      triggerTarget?: undefined;
-    };
+export type RHFTriggerProps<TFV extends FieldValues, TName extends FieldPath<TFV>> =
+	| {
+			trigger: UseFormTrigger<TFV>;
+			triggerTarget: TName | TName[];
+	  }
+	| {
+			trigger?: undefined;
+			triggerTarget?: undefined;
+	  };
 
 /**
  * @description Type representing the exact type that a field represents.
@@ -43,13 +43,13 @@ export type RHFTriggerProps<TFV extends FieldValues, TName extends Path<TFV>> =
  * - Otherwise, it will be the type of the field.
  */
 export type SingleFieldValueType<
-  TFV extends FieldValues,
-  TName extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = TName extends ReadonlyArray<any>
-  ? FieldPathValues<TFV, TName>
-  : TName extends Path<TFV>
-  ? PathValue<TFV, TName>
-  : never;
+	? FieldPathValues<TFV, TName>
+	: TName extends FieldPath<TFV>
+	? FieldPathValue<TFV, TName>
+	: never;
 
 /**
  * Props dedicated to responding to changes in another field
@@ -58,15 +58,15 @@ export type SingleFieldValueType<
  * - `onWatchedChange`: A function that should take in the value of the watched field and return a boolean on whether
  * the component using this prop should render.
  */
-export type RHFWatchProps<TFV extends FieldValues, TName extends Path<TFV> | readonly Path<TFV>[]> =
-  | {
-      watchTarget: TName;
-      onWatchedChange: (watchedValue: SingleFieldValueType<TFV, TName>) => boolean;
-    }
-  | {
-      watchTarget?: undefined;
-      onWatchedChange?: undefined;
-    };
+export type RHFWatchProps<TFV extends FieldValues, TName extends FieldPath<TFV> | readonly FieldPath<TFV>[]> =
+	| {
+			watchTarget: TName;
+			onWatchedChange: (watchedValue: SingleFieldValueType<TFV, TName>) => boolean;
+	  }
+	| {
+			watchTarget?: undefined;
+			onWatchedChange?: undefined;
+	  };
 
 /**
  * @description Wrapper type around {@link RHFControlAndNameType} and {@link RHFTriggerType}.
@@ -77,14 +77,6 @@ export type RHFWatchProps<TFV extends FieldValues, TName extends Path<TFV> | rea
  * - `triggerName`: The name of the field(s) that should be triggered when the component's value changes.
  */
 export type RHFInterDepBaseProps<
-  TValues extends FieldValues,
-  TName extends Path<TValues> = Path<TValues>
-> = RHFControlAndNameType<TValues, TName> & RHFTriggerProps<TValues, TName>;
-
-/**
- * @description Type representing the value type of a particular field.
- */
-export type RHFFieldValueType<
-  TValues extends FieldValues,
-  TName extends Path<TValues> = Path<TValues>
-> = TValues[TName];
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV> = FieldPath<TFV>
+> = RHFControlAndNameType<TFV, TName> & RHFTriggerProps<TFV, TName>;

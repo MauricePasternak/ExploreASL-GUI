@@ -11,6 +11,19 @@ export {
 } from "./BIDSNumericColDefs";
 export type { BIDSNumericFieldsNameType, BIDSNumericColDef, BIDSNumericFieldToColDefType } from "./BIDSNumericColDefs";
 
+// NUMERIC ARRAY
+export {
+	BIDSNumericArrayFields,
+	BIDSNumericArrayFieldsSet,
+	isBIDSNumericArrayField,
+	BIDSNumericArrayFieldToColDef,
+} from "./BIDSNumericArrayColDefs";
+export type {
+	BIDSNumericArrayFieldsNameType,
+	BIDSNumericArrayColDef,
+	BIDSNumericArrayFieldToColDefType,
+} from "./BIDSNumericArrayColDefs";
+
 // STRING/TEXT
 export { BIDSTextFields, BIDSTextFieldsSet, isBIDSTextField, BIDSTextFieldToColDef } from "./BIDSTextColDefs";
 export type { BIDSTextFieldsNameType, BIDSTextColDef, BIDSTextFieldToColDefType } from "./BIDSTextColDefs";

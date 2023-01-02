@@ -1,4 +1,4 @@
-import { isNumber, isUndefined } from "lodash";
+import { isNumber as lodashIsNumber, isUndefined as lodashIsUndefined } from "lodash";
 import { yupCreateError } from "../../utils/formFunctions";
 import * as Yup from "yup";
 
@@ -13,12 +13,90 @@ export const Schema_ArterialSpinLabelingType = SchemaMin_ArterialSpinLabelingTyp
 );
 
 /** Minimal schema to ensure PLD is an **optional** positive number */
-export const SchemaMin_PostLabelingDelay = Yup.number()
-	.positive("Post Labeling Delay must be a positive number")
-	.typeError("Post Labeling Delay must be a number");
+export const SchemaMin_PostLabelingDelay = Yup.mixed()
+	.optional()
+	.test(
+		"PostLabelingDelay__Lenient",
+		"Post Labeling Delay must be either a positive number or a collection of positive numbers",
+		(postLabelingDelay: unknown, context: Yup.TestContext) => {
+			if (lodashIsUndefined(postLabelingDelay) || lodashIsNumber(postLabelingDelay)) return true;
+			if (Array.isArray(postLabelingDelay) && postLabelingDelay.every((value) => lodashIsNumber(value))) return true;
+			return false;
+		}
+	);
 
 /** Expanded PLD schema to include its required status */
-export const Schema_PostLabelingDelay = SchemaMin_PostLabelingDelay.required("Post Labeling Delay is a required field");
+export const Schema_PostLabelingDelay = SchemaMin_PostLabelingDelay.required(
+	"Post Labeling Delay is a required field"
+).test(
+	"PostLabelingDelay__Strict",
+	"Post Labeling Delay must be either a single positive number of a collection of positive numbers",
+	(postLabelingDelay: unknown, context: Yup.TestContext) => {
+		if (lodashIsNumber(postLabelingDelay)) {
+			if (postLabelingDelay <= 0) {
+				return yupCreateError(
+					context,
+					"Post Labeling Delay cannot be a non-positive number. It must be either a single positive number of a collection of such numbers (typically, separated by commas)"
+				);
+			}
+			return true; // Single positive number; early exit
+		}
+
+		if (!Array.isArray(postLabelingDelay))
+			return yupCreateError(
+				context,
+				"Post Labeling Delay must be either a single positive number of a collection of such numbers (typically, separated by commas)"
+			);
+
+		if (!postLabelingDelay.every((value) => lodashIsNumber(value) && value > 0))
+			return yupCreateError(context, "One or more of the Post Labeling Delay values is not a positive number");
+
+		return true;
+	}
+);
+
+export const SchemaMin_SliceTiming = Yup.mixed().test(
+	"SliceTiming__Lenient",
+	"Slice Timing must be either a single positive number or a collection of such",
+	(sliceTiming: unknown, context: Yup.TestContext) => {
+		if (lodashIsUndefined(sliceTiming) || lodashIsNumber(sliceTiming)) return true;
+		if (Array.isArray(sliceTiming) && sliceTiming.every((value) => lodashIsNumber(value))) return true;
+		return false;
+	}
+);
+
+export const Schema_SliceTiming = Yup.mixed().when("MRAcquisitionType", {
+	is: "2D",
+	then: (schema) =>
+		schema
+			.required("Slice Timing is a required field for 2D ASL acquisitions")
+			.test(
+				"SliceTiming__Strict__2D",
+				"Slice Timing must be either a single positive number or a collection of such",
+				(sliceTiming: unknown, context: Yup.TestContext) => {
+					if (lodashIsNumber(sliceTiming)) {
+						if (sliceTiming <= 0) {
+							return yupCreateError(
+								context,
+								"Slice Timing cannot be a single negative number. Provide either a single positive number or a collection of incrementing non-negative numbers (separated by commas)"
+							);
+						}
+						return true; // Single positive number; early exit
+					}
+
+					if (!Array.isArray(sliceTiming)) return false;
+					if (!sliceTiming.every((value) => lodashIsNumber(value) && value >= 0))
+						return yupCreateError(context, "One or more of the Slice Timing values is not a positive number");
+					return true;
+				}
+			),
+	otherwise: (schema) =>
+		schema.test(
+			"SliceTiming__Strict__Not2D",
+			"Slice Timing should not be provided for 3D ASL acquisitions",
+			(sliceTiming: unknown, context: Yup.TestContext) => lodashIsUndefined(sliceTiming)
+		),
+});
 
 /** Schema to ensure LabelingDistance is an **optional** positive number */
 export const Schema_LabelingDistance = Yup.number()
@@ -45,27 +123,34 @@ export const Schema_TotalReadoutTime = Yup.number()
 
 /** Minimal schema to ensure PCASLType is an **optional** enum */
 export const SchemaMin_PCASLType = Yup.string()
-	.oneOf(["gradient", "balanced"], `If provided, PCASL Type must be one of the following: "Gradient", "Balanced'"`)
 	.optional()
+	.oneOf(["gradient", "balanced"], `If provided, PCASL Type must be one of the following: "Gradient", "Balanced'"`)
 	.typeError(`PCASL Type, if present, must be one of the following: "Gradient", "Balanced"`);
 
 /** Expanded schema to ensure PCASLType is also sensitive to ASLType field */
-export const Schema_PCASLType = SchemaMin_PCASLType.test(
-	"PCASLType",
-	`PCASL Type must be either "Gradient" or "Balanced"`,
-	(pcaslType, context) => {
-		const ArterialSpinLabelingType = context.parent;
-		if (ArterialSpinLabelingType !== "PCASL") {
-			if (!isUndefined(pcaslType)) {
-				return yupCreateError(
-					context,
-					`PCASL Type should not be present when Arterial Spin Labeling Type is not "PCASL"`
-				);
+export const Schema_PCASLType = SchemaMin_PCASLType.when("ArterialSpinLabelingType", {
+	is: "PCASL",
+	then: (schema) => schema,
+	otherwise: (schema) =>
+		schema.test(
+			"PCASLType__NotPCASL",
+			"PCASL Type should not be provided for non-PCASL ASL acquisitions",
+			(caslType: unknown, context: Yup.TestContext) => {
+				// Because this is a conditional schema, we know ASLType is not PCASL
+				const ASLType = context.parent.ArterialSpinLabelingType;
+				if (lodashIsUndefined(caslType)) return true;
+
+				if (lodashIsUndefined(ASLType)) {
+					return yupCreateError(
+						context,
+						`PCASL Type cannot be provided without first indicating the "Arterial Spin Labeling Type"`
+					);
+				} else {
+					return yupCreateError(context, `PCASL Type should not be provided for non-PCASL ASL acquisitions`);
+				}
 			}
-		}
-		return true;
-	}
-);
+		),
+});
 
 /** Minimal schema to ensure CASLType is an **optional** enum */
 export const SchemaMin_CASLType = Yup.string()
@@ -77,34 +162,45 @@ export const SchemaMin_CASLType = Yup.string()
 	.typeError(`CASL Type, if present, must be one of the following: "Single Coil", "Double Coil"`);
 
 /** Expanded schema to ensure CASLType is also sensitive to ASLType field */
-export const Schema_CASLType = SchemaMin_CASLType.test(
-	"CASLType",
-	`CASL Type must be either "Single Coil" or "Double Coil"`,
-	(caslType, context) => {
-		const ArterialSpinLabelingType = context.parent;
-		if (ArterialSpinLabelingType !== "CASL") {
-			if (!isUndefined(caslType)) {
-				return yupCreateError(
-					context,
-					`CASL Type should not be present when Arterial Spin Labeling Type is not "CASL"`
-				);
+export const Schema_CASLType = SchemaMin_CASLType.when("ArterialSpinLabelingType", {
+	is: "CASL",
+	then: (schema) => schema,
+	otherwise: (schema) =>
+		schema.test(
+			"CASLType__NotCASL",
+			"CASL Type should not be provided for non-CASL ASL acquisitions",
+			(caslType: unknown, context: Yup.TestContext) => {
+				// Because this is a conditional schema, we know ASLType is not CASL
+				const ASLType = context.parent.ArterialSpinLabelingType;
+				if (lodashIsUndefined(caslType)) return true;
+
+				if (lodashIsUndefined(ASLType)) {
+					return yupCreateError(
+						context,
+						`CASL Type cannot be provided without first indicating the "Arterial Spin Labeling Type"`
+					);
+				} else {
+					return yupCreateError(context, `CASL Type should not be provided for non-CASL ASL acquisitions`);
+				}
 			}
-		}
-		return true;
-	}
-);
+		),
+});
 
 /** Minimal schema to ensure Labeling Duration is an **optional** positive number */
-export const SchemaMin_LabelingDuration = Yup.number()
-	.positive("Labeling Duration must be a positive number")
+export const SchemaMin_LabelingDuration = Yup.mixed()
 	.optional()
-	.typeError("Labeling Duration must be a number, if provided");
+	.test((labelingDuration: unknown, context: Yup.TestContext) => {
+		if (lodashIsUndefined(labelingDuration) || typeof labelingDuration === "number") return true;
+		if (Array.isArray(labelingDuration) && labelingDuration.every((v) => lodashIsNumber(v) && v >= 0))
+			return true;
+		return yupCreateError(context, "Labeling Duration must be a number or an array of non-negative numbers");
+	});
 
 /**
- * Expanded schema to ensure Labeling Duration is an **optional** positive number sensitive to
- * the value of ArterialSpinLabelingType
+ * Expanded schema to ensure Labeling Duration is a conditionally **optional** positive number or array of positive
+ * numbers, depending on the value of ArterialSpinLabelingType
  */
-export const Schema_LabelingDuration = Yup.number()
+export const Schema_LabelingDuration = Yup.mixed()
 	.transform((value) => {
 		return value === 0 ? undefined : value;
 	})
@@ -116,13 +212,28 @@ export const Schema_LabelingDuration = Yup.number()
 				.test(
 					"LabelingDuration",
 					"Labeling Duration should not be present when Arterial Spin Labeling Type is PASL",
-					(value) => isUndefined(value)
+					(value: unknown) => lodashIsUndefined(value)
 				),
 		otherwise: (schema) =>
 			schema
 				.required("Labeling Duration is a required field for CASL/PCASL processing")
-				.positive("Labeling Duration must be a positive number")
-				.typeError("Labeling Duration must be a number"),
+				.test((labelingDuration, context) => {
+					if (typeof labelingDuration === "number") {
+						if (labelingDuration <= 0) {
+							return yupCreateError(context, "Labeling Duration cannot be a non-positive number");
+						}
+						return true;
+					}
+					if (Array.isArray(labelingDuration)) {
+						if (labelingDuration.length === 0) {
+							return yupCreateError(context, "If provided as a collection of numbers, it cannot be empty");
+						}
+						if (labelingDuration.some((v) => !lodashIsNumber(v) || v <= 0)) {
+							return yupCreateError(context, "Labeling Duration cannot contain non-finite or non-positive numbers");
+						}
+					}
+					return yupCreateError(context, "Labeling Duration must be a number or an array of numbers if provided");
+				}),
 	});
 
 /** Minimal schema to ensure that PASLType is an **optional** string enum */
@@ -135,22 +246,29 @@ export const SchemaMin_PASLType = Yup.string()
 	.typeError(`PASL Type must be one of the following: "FAIR", "EPISTAR", "PICORE"`);
 
 /** Expanded schema to ensure PASLType is also sensitive to ASLType field */
-export const Schema_PASLType = SchemaMin_PASLType.test(
-	"PASLType",
-	`PASL Type must be either "FAIR", "EPISTAR", or "PICORE"`,
-	(paslType, context) => {
-		const ArterialSpinLabelingType = context.parent;
-		if (ArterialSpinLabelingType !== "PASL") {
-			if (!isUndefined(paslType)) {
-				return yupCreateError(
-					context,
-					`PASL Type should not be present when Arterial Spin Labeling Type is not "PASL"`
-				);
+export const Schema_PASLType = SchemaMin_PASLType.when("ArterialSpinLabelingType", {
+	is: "PASL",
+	then: (schema) => schema,
+	otherwise: (schema) =>
+		schema.test(
+			"PASLType__NotPASL",
+			"PASL Type should not be provided for non-PASL ASL acquisitions",
+			(caslType: unknown, context: Yup.TestContext) => {
+				// Because this is a conditional schema, we know ASLType is not PASL
+				const ASLType = context.parent.ArterialSpinLabelingType;
+				if (lodashIsUndefined(caslType)) return true;
+
+				if (lodashIsUndefined(ASLType)) {
+					return yupCreateError(
+						context,
+						`PASL Type cannot be provided without first indicating the "Arterial Spin Labeling Type"`
+					);
+				} else {
+					return yupCreateError(context, `PASL Type should not be provided for non-PASL ASL acquisitions`);
+				}
 			}
-		}
-		return true;
-	}
-);
+		),
+});
 
 /** Minimal schema to ensure BolusCutOffFlag is an **optional** boolean */
 export const SchemaMin_BolusCutOffFlag = Yup.boolean()
@@ -166,7 +284,7 @@ export const Schema_BolusCutOffFlag = Yup.boolean().when("ArterialSpinLabelingTy
 	otherwise: SchemaMin_BolusCutOffFlag.test(
 		"BolusCutOffFlag",
 		"Bolus Cut Off Flag should not be present when Arterial Spin Labeling Type is not PASL",
-		(value) => isUndefined(value)
+		(value) => lodashIsUndefined(value)
 	),
 });
 
@@ -184,7 +302,7 @@ export const Schema_BolusCutOffTechnique = Yup.string().when("BolusCutOffFlag", 
 	otherwise: SchemaMin_BolusCutOffTechnique.test(
 		"BolusCutOffTechnique",
 		"Bolus Cut Off Technique should not be present when Bolus Cut Off Flag is false",
-		(value) => isUndefined(value)
+		(value) => lodashIsUndefined(value)
 	),
 });
 
@@ -194,11 +312,11 @@ export const SchemaMin_BolusCutOffDelayTime = Yup.mixed().test(
 	"Bolus Cut Off Delay Time must be either omitted, a non-negative number, or a collection of two non-negative numbers depending on the value of Bolus Cut Off Technique",
 	(cutOffDelayTime) => {
 		return (
-			isUndefined(cutOffDelayTime) ||
-			(isNumber(cutOffDelayTime) && cutOffDelayTime >= 0) ||
+			lodashIsUndefined(cutOffDelayTime) ||
+			(lodashIsNumber(cutOffDelayTime) && cutOffDelayTime >= 0) ||
 			(Array.isArray(cutOffDelayTime) &&
 				cutOffDelayTime.length === 2 &&
-				cutOffDelayTime.every((v) => isNumber(v) && v >= 0))
+				cutOffDelayTime.every((v) => lodashIsNumber(v) && v >= 0))
 		);
 	}
 );
@@ -217,7 +335,7 @@ export const Schema_BolusCutOffDelayTime = Yup.mixed()
 				BolusCutOffFlag: boolean | undefined;
 				BolusCutOffTechnique: "QUIPSS" | "QUIPSSII" | "Q2TIPS" | undefined;
 			} = context.parent;
-			if (!BolusCutOffFlag || isUndefined(BolusCutOffTechnique)) {
+			if (!BolusCutOffFlag || lodashIsUndefined(BolusCutOffTechnique)) {
 				if (!!delayTime) {
 					return yupCreateError(
 						context,
@@ -272,6 +390,8 @@ export const SchemaMin_ASLSpecificFields = Yup.object().shape({
 	BolusCutOffFlag: SchemaMin_BolusCutOffFlag,
 	BolusCutOffTechnique: SchemaMin_BolusCutOffTechnique,
 	BolusCutOffDelayTime: SchemaMin_BolusCutOffDelayTime,
+	// ^ 2D Acquisition Specific Fields
+	SliceTiming: SchemaMin_SliceTiming,
 });
 
 /**
@@ -296,4 +416,6 @@ export const Schema_ASLSpecificFields = Yup.object().shape({
 	BolusCutOffFlag: Schema_BolusCutOffFlag,
 	BolusCutOffTechnique: Schema_BolusCutOffTechnique,
 	BolusCutOffDelayTime: Schema_BolusCutOffDelayTime,
+	// ^ 2D Acquisition Specific Fields
+	SliceTiming: Schema_SliceTiming,
 });

@@ -57,7 +57,7 @@ export const BIDSDataGrid = memo(() => {
 					return "";
 				}}
 				onCellKeyDown={async (params: GridCellParams<any, BIDSRow>, event) => {
-					console.log("🚀 ~ onCellKeyDown ~ event", event);
+					// console.log("🚀 ~ onCellKeyDown ~ event", event);
 
 					// For editable cells, pressing the delete key should force the cell to take on an undefined value
 					if (event.key === "Delete" && params.isEditable && isBIDSField(params.field)) {

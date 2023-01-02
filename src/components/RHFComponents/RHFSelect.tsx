@@ -4,45 +4,52 @@ import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select, { SelectChangeEvent, SelectProps } from "@mui/material/Select";
 import React from "react";
-import { ControllerRenderProps, FieldValues, Path, PathValue, useController, useWatch } from "react-hook-form";
+import {
+	ControllerRenderProps,
+	FieldValues,
+	FieldPath,
+	FieldPathValue,
+	useController,
+	useWatch,
+} from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 
-type RHFSelectValue<TFV extends FieldValues, TName extends Path<TFV>, TValue = PathValue<TFV, TName>> = TValue extends
-  | string
-  | number
-  | readonly string[]
-  | undefined
-  ? TValue extends ReadonlyArray<any>
-    ? TValue[number]
-    : TValue
-  : never;
+type RHFSelectValue<
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TValue = FieldPathValue<TFV, TName>
+> = TValue extends string | number | readonly string[] | undefined
+	? TValue extends ReadonlyArray<any>
+		? TValue[number]
+		: TValue
+	: never;
 
-export type RHFSelectOption<TFV extends FieldValues, TName extends Path<TFV>> = {
-  label: React.ReactNode;
-  value: RHFSelectValue<TFV, TName>;
-  disabled?: boolean;
+export type RHFSelectOption<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
+	label: React.ReactNode;
+	value: RHFSelectValue<TFV, TName>;
+	disabled?: boolean;
 };
 
 // Modified SelectProps to avoid conflicts with the field props
 type MUIRestrictedSelectProps = Omit<SelectProps, keyof ControllerRenderProps | "value" | "error">;
 
-type RHFSelectBaseProps<TFV extends FieldValues, TName extends Path<TFV>> = {
-  options: RHFSelectOption<TFV, TName>[]; // options to display in the select
-  label?: React.ReactNode;
-  formControlProps?: Omit<FormControlProps<"fieldset">, "error" | "variant">;
-  helperText?: React.ReactNode;
+type RHFSelectBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
+	options: RHFSelectOption<TFV, TName>[]; // options to display in the select
+	label?: React.ReactNode;
+	formControlProps?: Omit<FormControlProps<"fieldset">, "error" | "variant">;
+	helperText?: React.ReactNode;
 };
 
 export type RHFSelectProps<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = MUIRestrictedSelectProps &
-  RHFControllerProps<TFV, TName> & // name, control
-  RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
-  RHFWatchProps<TFV, TWatch> & // watch
-  RHFSelectBaseProps<TFV, TName>; // options
+	RHFControllerProps<TFV, TName> & // name, control
+	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
+	RHFWatchProps<TFV, TWatch> & // watch
+	RHFSelectBaseProps<TFV, TName>; // options
 
 /**
  * A MaterialUI Select component meant to be used in a react-hook-form context, specifically for fields that either
@@ -69,72 +76,72 @@ export type RHFSelectProps<
  * - Additional props are passed to the Select component.
  */
 export function RHFSelect<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
-  name,
-  control,
-  trigger,
-  triggerTarget,
-  watchTarget,
-  onWatchedChange,
-  options,
-  label,
-  formControlProps,
-  helperText,
-  ...muiSelectProps
+	name,
+	control,
+	trigger,
+	triggerTarget,
+	watchTarget,
+	onWatchedChange,
+	options,
+	label,
+	formControlProps,
+	helperText,
+	...muiSelectProps
 }: RHFSelectProps<TFV, TName, TTrigger, TWatch>) {
-  // RHF Variables
-  const { field, fieldState } = useController({ name, control });
-  const hasError = !!fieldState.error;
-  const errorMessage = hasError ? fieldState.error?.message : "";
+	// RHF Variables
+	const { field, fieldState } = useController({ name, control });
+	const hasError = !!fieldState.error;
+	const errorMessage = hasError ? fieldState.error?.message : "";
 
-  // Watch-related variables
-  const isWatching = watchTarget && onWatchedChange;
-  const watchParams = isWatching ? { control, name: watchTarget } : { control };
-  const watchedValue = useWatch(watchParams);
+	// Watch-related variables
+	const isWatching = watchTarget && onWatchedChange;
+	const watchParams = isWatching ? { control, name: watchTarget } : { control };
+	const watchedValue = useWatch(watchParams);
 
-  const handleChange = (e: SelectChangeEvent<unknown>) => {
-    field.onChange(e);
-    trigger && triggerTarget && trigger(triggerTarget);
-  };
+	const handleChange = (e: SelectChangeEvent<unknown>) => {
+		field.onChange(e);
+		trigger && triggerTarget && trigger(triggerTarget);
+	};
 
-  function render() {
-    return (
-      <FormControl
-        className="RHFSelect__FormControl"
-        fullWidth
-        {...formControlProps}
-        variant={muiSelectProps.variant}
-        error={hasError}
-        disabled={muiSelectProps.disabled}
-        component="fieldset"
-      >
-        <InputLabel className="RHFSelect__InputLabel">{label}</InputLabel>
-        <Select className="RHFSelect__Select" {...muiSelectProps} {...field} onChange={handleChange} label={label}>
-          {options.map((option, index) => {
-            return (
-              <MenuItem className="RHFSelect__MenuItem" key={`RHFSelect__MenuItem__${index}`} {...option}>
-                {option.label}
-              </MenuItem>
-            );
-          })}
-        </Select>
-        {helperText && (
-          <FormHelperText className="RHFSelect__HelperText" error={hasError}>
-            {helperText}
-          </FormHelperText>
-        )}
-        {hasError && (
-          <FormHelperText className="RHFSelect__ErrorText" error={true}>
-            {errorMessage}
-          </FormHelperText>
-        )}
-      </FormControl>
-    );
-  }
+	function render() {
+		return (
+			<FormControl
+				className="RHFSelect__FormControl"
+				fullWidth
+				{...formControlProps}
+				variant={muiSelectProps.variant}
+				error={hasError}
+				disabled={muiSelectProps.disabled}
+				component="fieldset"
+			>
+				<InputLabel className="RHFSelect__InputLabel">{label}</InputLabel>
+				<Select className="RHFSelect__Select" {...muiSelectProps} {...field} onChange={handleChange} label={label}>
+					{options.map((option, index) => {
+						return (
+							<MenuItem className="RHFSelect__MenuItem" key={`RHFSelect__MenuItem__${index}`} {...option}>
+								{option.label}
+							</MenuItem>
+						);
+					})}
+				</Select>
+				{helperText && (
+					<FormHelperText className="RHFSelect__HelperText" error={hasError}>
+						{helperText}
+					</FormHelperText>
+				)}
+				{hasError && (
+					<FormHelperText className="RHFSelect__ErrorText" error={true}>
+						{errorMessage}
+					</FormHelperText>
+				)}
+			</FormControl>
+		);
+	}
 
-  return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
+	return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
 }

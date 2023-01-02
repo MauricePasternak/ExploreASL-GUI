@@ -1,6 +1,13 @@
 import { TextFieldProps } from "@mui/material/TextField";
 import React from "react";
-import { ControllerRenderProps, FieldPathValue, FieldValues, Path, useController, useWatch } from "react-hook-form";
+import {
+	ControllerRenderProps,
+	FieldPathValue,
+	FieldValues,
+	FieldPath,
+	useController,
+	useWatch,
+} from "react-hook-form";
 import { parseFieldError } from "../../common/utils/formFunctions";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedInput } from "../DebouncedComponents";
@@ -9,22 +16,22 @@ import { DebouncedInput } from "../DebouncedComponents";
 type RestrictedMUITextFieldProps = Omit<TextFieldProps, keyof ControllerRenderProps>;
 
 // Field <---> Inner value conversion functions
-type RHFTextFieldBaseProps<TFV extends FieldValues, TName extends Path<TFV>> = {
-  fieldToInner?: (fieldValue: FieldPathValue<TFV, TName>, ...args: unknown[]) => string;
-  innerToField?: (inner: string, ...args: unknown[]) => FieldPathValue<TFV, TName>;
-  debounceTime?: number; // in ms
+type RHFTextFieldBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
+	fieldToInner?: (fieldValue: FieldPathValue<TFV, TName>, ...args: unknown[]) => string;
+	innerToField?: (inner: string, ...args: unknown[]) => FieldPathValue<TFV, TName>;
+	debounceTime?: number; // in ms
 };
 
 export type RHFTextFieldProps<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = RestrictedMUITextFieldProps &
-  RHFControllerProps<TFV, TName> & // name & control
-  RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
-  RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchChange
-  RHFTextFieldBaseProps<TFV, TName>;
+	RHFControllerProps<TFV, TName> & // name & control
+	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
+	RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchChange
+	RHFTextFieldBaseProps<TFV, TName>;
 
 /**
  * Altered MaterialUI TextField component meant to be used in a react-hook-form context, specifically for text input.
@@ -48,57 +55,57 @@ export type RHFTextFieldProps<
  * - `muiTextFieldProps`: All other props are passed to the underlying MaterialUI TextField component.
  */
 export function RHFTextField<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
-  name,
-  control,
-  trigger,
-  triggerTarget,
-  watchTarget,
-  onWatchedChange,
-  fieldToInner,
-  innerToField,
-  debounceTime = 500, // in ms
-  ...muiTextFieldProps
+	name,
+	control,
+	trigger,
+	triggerTarget,
+	watchTarget,
+	onWatchedChange,
+	fieldToInner,
+	innerToField,
+	debounceTime = 500, // in ms
+	...muiTextFieldProps
 }: RHFTextFieldProps<TFV, TName, TTrigger, TWatch>) {
-  // RHF Variables
-  const { field, fieldState } = useController({ name, control }); // field & fieldState
-  const hasError = !!fieldState.error;
-  const errorMessage = hasError ? parseFieldError(fieldState.error) : null;
+	// RHF Variables
+	const { field, fieldState } = useController({ name, control }); // field & fieldState
+	const hasError = !!fieldState.error;
+	const errorMessage = hasError ? parseFieldError(fieldState.error) : null;
 
-  // Watch-related variables
-  const isWatching = watchTarget && onWatchedChange;
-  const watchParams = isWatching ? { control, name: watchTarget } : { control };
-  const watchedValue = useWatch(watchParams);
+	// Watch-related variables
+	const isWatching = watchTarget && onWatchedChange;
+	const watchParams = isWatching ? { control, name: watchTarget } : { control };
+	const watchedValue = useWatch(watchParams);
 
-  /** Handles changes to the input and triggers validation of dependent fields */
-  const handleChange = (value: string) => {
-    const newValue = innerToField ? innerToField(value) : value;
-    field.onChange(newValue); // update the field value
-    trigger && trigger(triggerTarget); // trigger the validation
-  };
+	/** Handles changes to the input and triggers validation of dependent fields */
+	const handleChange = (value: string) => {
+		const newValue = innerToField ? innerToField(value) : value;
+		field.onChange(newValue); // update the field value
+		trigger && trigger(triggerTarget); // trigger the validation
+	};
 
-  // It is necessary to convert the field value to a compatible string type for the Input component
-  const asStringValue = fieldToInner ? fieldToInner(field.value) : (field.value as string);
-  // console.log(`RHFTextField with name ${name} has asStringValue: `, asStringValue);
+	// It is necessary to convert the field value to a compatible string type for the Input component
+	const asStringValue = fieldToInner ? fieldToInner(field.value) : (field.value as string);
+	// console.log(`RHFTextField with name ${name} has asStringValue: `, asStringValue);
 
-  function render() {
-    return (
-      <DebouncedInput
-        className="RHFTextField__TextField"
-        {...muiTextFieldProps} // spread the rest of the props
-        {...field}
-        error={hasError}
-        errorMessage={errorMessage}
-        value={asStringValue}
-        onChange={handleChange}
-        debounceTime={debounceTime}
-      />
-    );
-  }
+	function render() {
+		return (
+			<DebouncedInput
+				className="RHFTextField__TextField"
+				{...muiTextFieldProps} // spread the rest of the props
+				{...field}
+				error={hasError}
+				errorMessage={errorMessage}
+				value={asStringValue}
+				onChange={handleChange}
+				debounceTime={debounceTime}
+			/>
+		);
+	}
 
-  return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
+	return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
 }

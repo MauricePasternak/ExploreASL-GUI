@@ -9,7 +9,7 @@ import {
 	ImportMultipleContextsSchemaType,
 	ImportRuntimeEnvsSchemaType,
 } from "../../types/ImportSchemaTypes";
-import { IsValidEASLPath, IsValidMATLABRuntimePath, IsValidStudyRoot } from "../../utils/EASLFunctions";
+import { IsValidEASLPath, IsValidMATLABRuntimePath } from "../../utils/EASLFunctions";
 import {
 	Schema_ArterialSpinLabelingType,
 	Schema_M0Estimate,
@@ -18,6 +18,7 @@ import {
 	Schema_PostLabelingDelay,
 	Schema_PulseSequenceType,
 } from "../BIDSSchema";
+import { Schema_StudyRootPathPreImport } from "../CommonSchemas/EASLGUIPathsSchema";
 import {
 	ImportModule__BackgroundSuppressionPulseTimeTest,
 	ImportModule__BolusCutOffDelayTimeTest,
@@ -61,14 +62,7 @@ export const SchemaImportStepDefineRuntimeEnvs: Yup.SchemaOf<ImportRuntimeEnvsSc
 				async (filepath, helpers) => await IsValidMATLABRuntimePath(filepath, helpers)
 			),
 	}),
-	StudyRootPath: Yup.string()
-		.required("Required")
-		.test(
-			"IsValidStudyRootPath",
-			"Invalid Study Root Path",
-			async (filepath, helpers) => await IsValidStudyRoot(filepath, helpers, ["sourcedata"])
-		),
-
+	StudyRootPath: Schema_StudyRootPathPreImport,
 	SourcedataStructure: Yup.array()
 		.required("Required.")
 		.test("IsValidStructure", "Invalid sourcedata filepath structure", ImportModule__SourcedataStructureTest),

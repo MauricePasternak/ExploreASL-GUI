@@ -11,21 +11,21 @@ import ClearIcon from "@mui/icons-material/Clear";
 type MUITextFieldCompatibilityType = Omit<TextFieldProps, "onChange" | "value">;
 
 type DebouncedFilepathInputBaseProps = {
-  value: string;
-  onChange: (value: string, ...args: unknown[]) => void;
-  filepathType: "file" | "dir" | "other" | "all";
-  /**
-   * options to pass to the Electron dialog when the button is clicked.
-   * [See the Electron docs for more info.](https://www.electronjs.org/docs/latest/api/dialog#dialogshowopendialogbrowserwindow-options)
-   */
-  dialogOptions?: OpenDialogOptions;
-  errorMessage?: React.ReactNode;
-  debounceTime?: number;
-  includeButton?: boolean;
-  buttonText?: React.ReactNode;
-  buttonProps?: ButtonProps;
-  onValidateDrop?: (filepath: string) => boolean | Promise<boolean>;
-  boxProps?: BoxProps;
+	value: string;
+	onChange: (value: string, ...args: unknown[]) => void;
+	filepathType: "file" | "dir" | "other" | "all";
+	/**
+	 * options to pass to the Electron dialog when the button is clicked.
+	 * [See the Electron docs for more info.](https://www.electronjs.org/docs/latest/api/dialog#dialogshowopendialogbrowserwindow-options)
+	 */
+	dialogOptions?: OpenDialogOptions;
+	errorMessage?: React.ReactNode;
+	debounceTime?: number;
+	includeButton?: boolean;
+	buttonText?: React.ReactNode;
+	buttonProps?: ButtonProps;
+	onValidateDrop?: (filepath: string) => boolean | Promise<boolean>;
+	boxProps?: BoxProps;
 };
 
 export type DebouncedFilepathInputProps = MUITextFieldCompatibilityType & DebouncedFilepathInputBaseProps;
@@ -53,180 +53,181 @@ export type DebouncedFilepathInputProps = MUITextFieldCompatibilityType & Deboun
  * - all other props are forwarded to the TextField component
  */
 export const DebouncedFilepathInput = forwardRef(
-  (
-    {
-      value,
-      onChange,
-      filepathType,
-      dialogOptions,
-      errorMessage,
-      debounceTime,
-      includeButton = true,
-      buttonText = "Browse",
-      buttonProps,
-      onValidateDrop,
-      boxProps,
-      helperText,
-      ...textFieldProps
-    }: DebouncedFilepathInputProps,
-    ref
-  ) => {
-    // Misc
-    const componentClassName = textFieldProps.className
-      ? `${textFieldProps.className} "DebouncedInput__TextField"`
-      : "DebouncedInput__TextField";
-    const { api } = window;
+	(
+		{
+			value,
+			onChange,
+			filepathType,
+			dialogOptions,
+			errorMessage,
+			debounceTime = 500,
+			includeButton = true,
+			buttonText = "Browse",
+			buttonProps,
+			onValidateDrop,
+			boxProps,
+			helperText,
+			...textFieldProps
+		}: DebouncedFilepathInputProps,
+		ref
+	) => {
+		// Misc
+		const componentClassName = textFieldProps.className
+			? `${textFieldProps.className} "DebouncedInput__TextField"`
+			: "DebouncedInput__TextField";
+		const { api } = window;
 
-    // Inner State
-    const [innerValue, setInnerValue] = useState(value);
+		// Inner State
+		const [innerValue, setInnerValue] = useState(value);
 
-    // Refs
-    const isDialogOpened = useRef(false);
+		// Refs
+		const isDialogOpened = useRef(false);
 
-    // Debounce Callback
-    const debouncedHandleChange = useDebouncedCallback(onChange, debounceTime);
+		// Debounce Callback
+		const debouncedHandleChange = useDebouncedCallback(onChange, debounceTime);
 
-    /** Handler for changes to the value; updates the inner value and forwards the new value via provided onChange */
-    const handleChange = (newValue: string) => {
-      setInnerValue(newValue);
-      debouncedHandleChange(newValue);
-    };
+		/** Handler for changes to the value; updates the inner value and forwards the new value via provided onChange */
+		const handleChange = (newValue: string) => {
+			// console.log("🚀 ~ file: DebouncedFilepathInput.tsx:91 ~ handleChange ~ newValue", newValue);
+			setInnerValue(newValue);
+			debouncedHandleChange(newValue);
+		};
 
-    // useEffect for keeping innerVal in sync with value prop
-    useEffect(() => {
-      if (value !== innerValue) setInnerValue(value);
-    });
+		// useEffect for keeping innerVal in sync with value prop
+		useEffect(() => {
+			if (value !== innerValue) setInnerValue(value);
+		}, [value]);
 
-    // Sanity Check for valid Props
-    if (!dialogOptions && includeButton) {
-      dialogOptions = {
-        properties:
-          filepathType === "all"
-            ? ["openFile", "openDirectory"]
-            : filepathType === "file"
-            ? ["openFile"]
-            : ["openDirectory"],
-      };
-    }
-    if (dialogOptions && filepathType === "file" && dialogOptions.properties.includes("openDirectory")) {
-      throw new Error("DebouncedFilepathInput: Cannot use openDirectory with filepathType=file");
-    }
-    if (dialogOptions && filepathType === "dir" && dialogOptions.properties.includes("openFile")) {
-      throw new Error("DebouncedFilepathInput: Cannot use openFile with filepathType=dir");
-    }
+		// Sanity Check for valid Props
+		if (!dialogOptions && includeButton) {
+			dialogOptions = {
+				properties:
+					filepathType === "all"
+						? ["openFile", "openDirectory"]
+						: filepathType === "file"
+						? ["openFile"]
+						: ["openDirectory"],
+			};
+		}
+		if (dialogOptions && filepathType === "file" && dialogOptions.properties.includes("openDirectory")) {
+			throw new Error("DebouncedFilepathInput: Cannot use openDirectory with filepathType=file");
+		}
+		if (dialogOptions && filepathType === "dir" && dialogOptions.properties.includes("openFile")) {
+			throw new Error("DebouncedFilepathInput: Cannot use openFile with filepathType=dir");
+		}
 
-    /** Handler for dragging in a filepath */
-    const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
+		/** Handler for dragging in a filepath */
+		const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+			e.preventDefault();
+			e.stopPropagation();
+		};
 
-    /** Handler for aborting in a drag */
-    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
+		/** Handler for aborting in a drag */
+		const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+			e.preventDefault();
+			e.stopPropagation();
+		};
 
-    /** Handler for dropping a filepath */
-    const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
+		/** Handler for dropping a filepath */
+		const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+			e.preventDefault();
+			e.stopPropagation();
 
-      // Early exist
-      if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+			// Early exist
+			if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
 
-      const dndPath = e.dataTransfer.files[0];
-      const droppedFilepathType = await api.path.getFilepathType(dndPath.path);
+			const dndPath = e.dataTransfer.files[0];
+			const droppedFilepathType = await api.path.getFilepathType(dndPath.path);
 
-      // Basic Filetype Checks
-      // Exit if the filepathType doesn't match the given status
-      if (
-        !droppedFilepathType ||
-        !(
-          filepathType === droppedFilepathType ||
-          (filepathType === "all" && ["file", "dir", "other"].includes(droppedFilepathType))
-        )
-      )
-        return;
+			// Basic Filetype Checks
+			// Exit if the filepathType doesn't match the given status
+			if (
+				!droppedFilepathType ||
+				!(
+					filepathType === droppedFilepathType ||
+					(filepathType === "all" && ["file", "dir", "other"].includes(droppedFilepathType))
+				)
+			)
+				return;
 
-      // Custom additional validation implemented, as necessary
-      if (onValidateDrop) {
-        const validationStatus = await onValidateDrop(dndPath.path);
-        if (!validationStatus) return;
-      }
-      handleChange(dndPath.path);
-    };
+			// Custom additional validation implemented, as necessary
+			if (onValidateDrop) {
+				const validationStatus = await onValidateDrop(dndPath.path);
+				if (!validationStatus) return;
+			}
+			handleChange(dndPath.path);
+		};
 
-    //* Handler for opening the file dialog */
-    const handleOpenFileDialog = async () => {
-      if (isDialogOpened.current) return; // Early return if already opened
-      isDialogOpened.current = true;
-      const { canceled, filePaths } = await api.invoke("Dialog:OpenDialog", dialogOptions);
-      isDialogOpened.current = false;
-      !canceled && handleChange(filePaths[0]);
-    };
+		//* Handler for opening the file dialog */
+		const handleOpenFileDialog = async () => {
+			if (isDialogOpened.current) return; // Early return if already opened
+			isDialogOpened.current = true;
+			const { canceled, filePaths } = await api.invoke("Dialog:OpenDialog", dialogOptions);
+			isDialogOpened.current = false;
+			!canceled && handleChange(filePaths[0]);
+		};
 
-    return (
-      <Box className="DebouncedFilepathInput__Box__MainWrapper" {...boxProps}>
-        <Box className="DebouncedFilepathInput__Box__TextFieldButtonWrapper" display="flex" width="100%" gap={1}>
-          <TextField
-            className={componentClassName}
-            fullWidth
-            variant={textFieldProps.variant}
-            {...textFieldProps}
-            inputRef={ref}
-            InputProps={{
-              endAdornment: (
-                <IconButton
-                  className="DebouncedFilepathInput__IconButton"
-                  color={textFieldProps.error ? "error" : "inherit"}
-                  disabled={textFieldProps.disabled}
-                  onClick={() => innerValue && handleChange("")}
-                >
-                  <ClearIcon className="DebouncedFilepathInput__ClearIcon" />
-                </IconButton>
-              ),
-            }}
-            error={textFieldProps.error}
-            onDrop={handleDrop}
-            onDragLeave={handleDragLeave}
-            onDragEnter={handleDragEnter}
-            onChange={(e) => handleChange(e.target.value)}
-            value={innerValue}
-          />
-          {includeButton && (
-            <Button
-              className="DebouncedFilepathInput__Button"
-              variant="contained"
-              disabled={textFieldProps.disabled}
-              color={textFieldProps.error ? "error" : buttonProps?.color ?? "primary"}
-              {...buttonProps}
-              onClick={handleOpenFileDialog}
-            >
-              {buttonText}
-            </Button>
-          )}
-        </Box>
-        {helperText && (
-          <FormHelperText
-            className="DebouncedFilepathInput__HelperText"
-            disabled={textFieldProps.disabled}
-            variant={textFieldProps.variant}
-          >
-            {helperText}
-          </FormHelperText>
-        )}
-        {textFieldProps.error && (
-          <FormHelperText
-            className="DebouncedFilepathInput__ErrorText"
-            disabled={textFieldProps.disabled}
-            variant={textFieldProps.variant}
-            error
-          >
-            {errorMessage}
-          </FormHelperText>
-        )}
-      </Box>
-    );
-  }
+		return (
+			<Box className="DebouncedFilepathInput__Box__MainWrapper" {...boxProps}>
+				<Box className="DebouncedFilepathInput__Box__TextFieldButtonWrapper" display="flex" width="100%" gap={1}>
+					<TextField
+						className={componentClassName}
+						fullWidth
+						variant={textFieldProps.variant}
+						{...textFieldProps}
+						inputRef={ref}
+						InputProps={{
+							endAdornment: (
+								<IconButton
+									className="DebouncedFilepathInput__IconButton"
+									color={textFieldProps.error ? "error" : "inherit"}
+									disabled={textFieldProps.disabled}
+									onClick={() => innerValue && handleChange("")}
+								>
+									<ClearIcon className="DebouncedFilepathInput__ClearIcon" />
+								</IconButton>
+							),
+						}}
+						error={textFieldProps.error}
+						onDrop={handleDrop}
+						onDragLeave={handleDragLeave}
+						onDragEnter={handleDragEnter}
+						onChange={(e) => handleChange(e.target.value)}
+						value={innerValue}
+					/>
+					{includeButton && (
+						<Button
+							className="DebouncedFilepathInput__Button"
+							variant="contained"
+							disabled={textFieldProps.disabled}
+							color={textFieldProps.error ? "error" : buttonProps?.color ?? "primary"}
+							{...buttonProps}
+							onClick={handleOpenFileDialog}
+						>
+							{buttonText}
+						</Button>
+					)}
+				</Box>
+				{helperText && (
+					<FormHelperText
+						className="DebouncedFilepathInput__HelperText"
+						disabled={textFieldProps.disabled}
+						variant={textFieldProps.variant}
+					>
+						{helperText}
+					</FormHelperText>
+				)}
+				{textFieldProps.error && (
+					<FormHelperText
+						className="DebouncedFilepathInput__ErrorText"
+						disabled={textFieldProps.disabled}
+						variant={textFieldProps.variant}
+						error
+					>
+						{errorMessage}
+					</FormHelperText>
+				)}
+			</Box>
+		);
+	}
 );

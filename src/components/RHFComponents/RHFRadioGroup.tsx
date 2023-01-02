@@ -5,32 +5,39 @@ import FormLabel from "@mui/material/FormLabel";
 import Radio, { RadioProps } from "@mui/material/Radio";
 import RadioGroup from "@mui/material/RadioGroup";
 import React from "react";
-import { ControllerRenderProps, FieldValues, Path, PathValue, useController, useWatch } from "react-hook-form";
+import {
+	ControllerRenderProps,
+	FieldValues,
+	FieldPath,
+	FieldPathValue,
+	useController,
+	useWatch,
+} from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 
 type MUIRestrictedRadioButtonProps = Omit<RadioProps, keyof ControllerRenderProps | "control" | "checked">;
 
-export type RHFRadioButtonOption<TFV extends FieldValues, TName extends Path<TFV>> = {
-  label: React.ReactNode; // label to display next to the checkbox
-  value: PathValue<TFV, TName>; // value to set when checked
+export type RHFRadioButtonOption<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
+	label: React.ReactNode; // label to display next to the checkbox
+	value: FieldPathValue<TFV, TName>; // value to set when checked
 } & MUIRestrictedRadioButtonProps;
 
-type RHFRadioGroupBaseProps<TFV extends FieldValues, TName extends Path<TFV>> = {
-  options: RHFRadioButtonOption<TFV, TName>[]; // options to display
-  helperText?: React.ReactNode; // helper text to display below the checkbox
-  label?: React.ReactNode; // label to display next to the checkbox
-  row?: boolean; // display options in a row instead of a column
+type RHFRadioGroupBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
+	options: RHFRadioButtonOption<TFV, TName>[]; // options to display
+	helperText?: React.ReactNode; // helper text to display below the checkbox
+	label?: React.ReactNode; // label to display next to the checkbox
+	row?: boolean; // display options in a row instead of a column
 };
 
 export type RHFRadioGroupProps<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = RHFRadioGroupBaseProps<TFV, TName> &
-  RHFControllerProps<TFV, TName> & // name, control
-  RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchedChange
-  RHFTriggerProps<TFV, TTrigger>; // trigger & triggerTarget
+	RHFControllerProps<TFV, TName> & // name, control
+	RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchedChange
+	RHFTriggerProps<TFV, TTrigger>; // trigger & triggerTarget
 
 /**
  * A MaterialUI RadioGroup meant to be used in a react-hook-form context, specifically for fields where there are few
@@ -56,75 +63,75 @@ export type RHFRadioGroupProps<
  *    Defaults to column arrangement.
  */
 export function RHFRadioGroup<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
-  name,
-  control,
-  trigger,
-  triggerTarget,
-  watchTarget,
-  onWatchedChange,
-  options,
-  label, // label to display above the radio buttons
-  helperText, // helper text to display below the checkbox
-  row, // display options in a row instead of a column
+	name,
+	control,
+	trigger,
+	triggerTarget,
+	watchTarget,
+	onWatchedChange,
+	options,
+	label, // label to display above the radio buttons
+	helperText, // helper text to display below the checkbox
+	row, // display options in a row instead of a column
 }: RHFRadioGroupProps<TFV, TName, TTrigger, TWatch>) {
-  // RHF Variables
-  const { field, fieldState } = useController({ name, control }); // get the field and fieldState from react-hook-form
-  const hasError = !!fieldState.error;
-  const errorMessage = hasError ? fieldState.error?.message : "";
+	// RHF Variables
+	const { field, fieldState } = useController({ name, control }); // get the field and fieldState from react-hook-form
+	const hasError = !!fieldState.error;
+	const errorMessage = hasError ? fieldState.error?.message : "";
 
-  // Watch-related variables
-  const isWatching = watchTarget && onWatchedChange;
-  const watchParams = isWatching ? { control, name: watchTarget } : { control };
-  const watchedValue = useWatch(watchParams);
+	// Watch-related variables
+	const isWatching = watchTarget && onWatchedChange;
+	const watchParams = isWatching ? { control, name: watchTarget } : { control };
+	const watchedValue = useWatch(watchParams);
 
-  const handleChange = (idx: number) => {
-    field.onChange(options[idx].value);
-    trigger && trigger(triggerTarget); // trigger validation
-  };
+	const handleChange = (idx: number) => {
+		field.onChange(options[idx].value);
+		trigger && trigger(triggerTarget); // trigger validation
+	};
 
-  function render() {
-    return (
-      <FormControl
-        onBlur={field.onBlur}
-        fullWidth
-        error={hasError}
-        variant="standard"
-        component="fieldset"
-        className="RHFRadioGroup__FormControl"
-      >
-        <FormLabel component="legend" className="RHFRadioGroup__FormLabel">
-          {label}
-        </FormLabel>
-        <RadioGroup row={row} className="RHFRadioGroup__RadioGroup">
-          {options.map((option, idx) => (
-            <FormControlLabel
-              key={`RHFRadioGroup__FormControlLabel__${field.name}__${idx}`}
-              className="RHFRadioGroup__FormControlLabel"
-              label={option.label}
-              checked={field.value === option.value} // check if the current option is checked
-              onChange={() => handleChange(idx)} // handle change for the current option
-              control={<Radio {...option} color={hasError ? "error" : option?.color ?? "primary"} />}
-            />
-          ))}
-        </RadioGroup>
-        {helperText && (
-          <FormHelperText className="RHFRadioGroup__HelperText" error={hasError}>
-            {helperText}
-          </FormHelperText>
-        )}
-        {hasError && (
-          <FormHelperText className="RHFRadioGroup__ErrorText" error={true}>
-            {errorMessage}
-          </FormHelperText>
-        )}
-      </FormControl>
-    );
-  }
+	function render() {
+		return (
+			<FormControl
+				onBlur={field.onBlur}
+				fullWidth
+				error={hasError}
+				variant="standard"
+				component="fieldset"
+				className="RHFRadioGroup__FormControl"
+			>
+				<FormLabel component="legend" className="RHFRadioGroup__FormLabel">
+					{label}
+				</FormLabel>
+				<RadioGroup row={row} className="RHFRadioGroup__RadioGroup">
+					{options.map((option, idx) => (
+						<FormControlLabel
+							key={`RHFRadioGroup__FormControlLabel__${field.name}__${idx}`}
+							className="RHFRadioGroup__FormControlLabel"
+							label={option.label}
+							checked={field.value === option.value} // check if the current option is checked
+							onChange={() => handleChange(idx)} // handle change for the current option
+							control={<Radio {...option} color={hasError ? "error" : option?.color ?? "primary"} />}
+						/>
+					))}
+				</RadioGroup>
+				{helperText && (
+					<FormHelperText className="RHFRadioGroup__HelperText" error={hasError}>
+						{helperText}
+					</FormHelperText>
+				)}
+				{hasError && (
+					<FormHelperText className="RHFRadioGroup__ErrorText" error={true}>
+						{errorMessage}
+					</FormHelperText>
+				)}
+			</FormControl>
+		);
+	}
 
-  return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
+	return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
 }

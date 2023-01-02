@@ -7,7 +7,7 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import { useAtom, useAtomValue } from "jotai";
 import React from "react";
-import { FieldValues, Path, UseFormReturn, useFormState } from "react-hook-form";
+import { FieldValues, FieldPath, UseFormReturn, useFormState } from "react-hook-form";
 import ProcessIcon from "../../assets/svg/ArrowsSpinSolid.svg";
 import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import { DataParTabOption } from "../../common/types/DataParSchemaTypes";
@@ -18,7 +18,7 @@ import { atomCurrentGUIPage } from "../../stores/GUIFrameStore";
 
 type DataParTabProps<TFV extends FieldValues> = {
 	label: React.ReactNode;
-	fieldNames: Set<Path<TFV>>;
+	fieldNames: Set<FieldPath<TFV>>;
 	icon?: React.ReactElement;
 };
 
@@ -112,22 +112,18 @@ function DataParTabs({ control }: UseFormReturn<DataParValuesType>) {
 					value={currentTab}
 					onChange={(e, v) => setCurrentTab(v)}
 					sx={{
-						// left: "50%",
-						// transform: "translateX(-50%)",
 						width: "100%",
-
 						justifyContent: "center",
 						"& .MuiTabs-scroller": {
 							flexGrow: 0,
 						},
-
 						"& .MuiTabs-indicator": {
 							backgroundColor: errKeys.length > 0 ? "error.main" : "default",
 						},
 					}}
 				>
 					{Object.entries(dataParTabs).map(([tab, { label, fieldNames, icon }]) => {
-						const containsError = errKeys.some((key: Path<DataParValuesType>) => fieldNames.has(key));
+						const containsError = errKeys.some((key: FieldPath<DataParValuesType>) => fieldNames.has(key));
 						console.log(`DataParTab with label: ${label} contains error: ${containsError}`);
 
 						return (

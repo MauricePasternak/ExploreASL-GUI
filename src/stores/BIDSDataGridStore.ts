@@ -9,6 +9,7 @@ import {
 	BIDSBooleanFieldToColDef,
 	BIDSEnumColDef,
 	BIDSEnumFieldToColDef,
+	BIDSNumericArrayFieldToColDef,
 	BIDSNumericColDef,
 	BIDSNumericFieldToColDef,
 	BIDSRow,
@@ -17,6 +18,7 @@ import {
 	isBIDSBooleanField,
 	isBIDSEnumField,
 	isBIDSField,
+	isBIDSNumericArrayField,
 	isBIDSNumericField,
 	isBIDSTextField,
 	isMiscField,
@@ -126,7 +128,7 @@ export const atomSetFetchBIDSDataFrame = atom<null, string>(null, async (_, set,
 
 	// Clean the fetched data
 	const fetchResult = await fetchBIDSData(studyRootPath);
-	console.log("🚀 ~ file: BIDSDataGridStore.ts:118 ~ atomSetFetchBIDSDataFrame ~ fetchResult", fetchResult);
+	console.log("🚀 ~ file: BIDSDataGridStore.ts:131 ~ atomSetFetchBIDSDataFrame ~ fetchResult", fetchResult);
 	if (!fetchResult) return null;
 
 	const { BIDSRows, BIDSColumns, invalidItems } = fetchResult;
@@ -136,10 +138,10 @@ export const atomSetFetchBIDSDataFrame = atom<null, string>(null, async (_, set,
 			title: "Could not load in one or more ASL BIDS sidecar files",
 			message: parseInvalidFetchItems(invalidItems),
 		});
-	console.log("🚀 ~ file: BIDSDataGridStore.ts:125 ~ atomSetFe	tchBIDSDataFrame ~ invalidFiles", invalidItems);
+	console.log("🚀 ~ file: BIDSDataGridStore.ts:141 ~ atomSetFe	tchBIDSDataFrame ~ invalidFiles", invalidItems);
 
 	const validationErrors = await strictValidateAllBIDSRows(BIDSRows);
-	console.log("🚀 ~ file: BIDSDataGridStore.ts:164 ~ atomSetFetchBIDSDataFrame ~ validationErrors", validationErrors);
+	console.log("🚀 ~ file: BIDSDataGridStore.ts:144 ~ atomSetFetchBIDSDataFrame ~ validationErrors", validationErrors);
 
 	// Update the BIDSRows, BIDSColumnNames, BIDSErrors, and BIDSColumnsToPermaDelete atoms
 	set(atomBIDSRows, BIDSRows);
@@ -163,6 +165,9 @@ export const atomGetBIDSColumnConfigs = atom<
 				return config;
 			} else if (isBIDSNumericField(colName)) {
 				const config = BIDSNumericFieldToColDef[colName];
+				return config;
+			} else if (isBIDSNumericArrayField(colName)) {
+				const config = BIDSNumericArrayFieldToColDef[colName];
 				return config;
 			} else if (isBIDSTextField(colName)) {
 				const config = BIDSTextFieldToColDef[colName];
@@ -227,7 +232,6 @@ export const atomSetBIDSRemoveColumn = atom(
 				row,
 				(_, key) => !colsToRemoveSet.has(key as BIDSAllNonMiscFieldsNameType)
 			) as BIDSRow;
-			console.log("🚀 ~ file: BIDSDataGridStore.ts:151 ~ constnewBIDSRows:BIDSRow[]=BIDSRows.map ~ newRow", newRow);
 			return newRow;
 		});
 

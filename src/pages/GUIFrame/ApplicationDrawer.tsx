@@ -1,7 +1,9 @@
-import CircleIcon from "@mui/icons-material/Circle";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import FunctionsIcon from "@mui/icons-material/Functions";
 import InfoIcon from "@mui/icons-material/Info";
+import PeopleIcon from "@mui/icons-material/People";
 import TuneIcon from "@mui/icons-material/Tune";
+import UndoIcon from "@mui/icons-material/Undo";
 import { Typography } from "@mui/material";
 import Collapse from "@mui/material/Collapse";
 import Drawer from "@mui/material/Drawer";
@@ -13,9 +15,11 @@ import { styled } from "@mui/material/styles";
 import SvgIcon from "@mui/material/SvgIcon";
 import { useAtom, useSetAtom } from "jotai";
 import React from "react";
+import ProcessIcon from "../../assets/svg/ArrowsSpinSolid.svg";
 import BIDSIcon from "../../assets/svg/BIDSIcon.svg";
 import BrainSvg from "../../assets/svg/Brain.svg";
 import DICOM2NIFTIIcon from "../../assets/svg/DICOM2NIFTI.svg";
+import ExploreASLIcon from "../../assets/svg/ExploreASLIcon.svg";
 import ScatterPlotIcon from "../../assets/svg/ScatterGraph.svg";
 import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import ExpandMore from "../../components/ExpandMore";
@@ -80,14 +84,14 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 					}}
 				>
 					<ListItemIcon>
-						<SvgIcon component={BIDSIcon} inheritViewBox sx={{ fontSize: "3rem" }}  />
+						<SvgIcon component={BIDSIcon} inheritViewBox sx={{ fontSize: "3rem" }} />
 					</ListItemIcon>
 					<ListItemText>Verify BIDS Sidecars</ListItemText>
 				</ListItemButton>
 
 				<ListItemButton onClick={() => setExpandedDataPar(!expandedDataPar)} divider={!expandedDataPar}>
 					<ListItemIcon>
-						<TuneIcon fontSize="large" sx={{ fontSize: "3rem" }}  />
+						<TuneIcon fontSize="large" sx={{ fontSize: "3rem" }} />
 					</ListItemIcon>
 					<ListItemText>Define Parameters</ListItemText>
 					<ExpandMore expand={expandedDataPar} onClick={() => setExpandedDataPar(!expandedDataPar)}>
@@ -98,7 +102,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 					<List component="div" disablePadding>
 						<ListItemButton
 							disableGutters
-							sx={{ pl: 4 }}
+							sx={{ pl: 7 }}
 							onClick={() => {
 								setCurrentModule("DataPar");
 								setDataParTab("StudyParameters");
@@ -107,13 +111,13 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 							}}
 						>
 							<ListItemIcon>
-								<CircleIcon sx={{ fontSize: "0.75rem" }} />
+								<PeopleIcon sx={{ ml: 2, fontSize: "2rem" }} />
 							</ListItemIcon>
 							<ListItemText>Study Parameters</ListItemText>
 						</ListItemButton>
 						<ListItemButton
 							disableGutters
-							sx={{ pl: 4 }}
+							sx={{ pl: 7 }}
 							onClick={() => {
 								setCurrentModule("DataPar");
 								setDataParTab("ModelingParameters");
@@ -122,14 +126,14 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 							}}
 						>
 							<ListItemIcon>
-								<CircleIcon sx={{ fontSize: "0.75rem" }} />
+								<FunctionsIcon sx={{ ml: 2, fontSize: "2rem" }} />
 							</ListItemIcon>
-							<ListItemText>ASL Sequence Parameters</ListItemText>
+							<ListItemText>Modeling Parameters</ListItemText>
 						</ListItemButton>
 						<ListItemButton
 							disableGutters
 							divider
-							sx={{ pl: 4 }}
+							sx={{ pl: 7 }}
 							onClick={() => {
 								setCurrentModule("DataPar");
 								setDataParTab("ProcessParameters");
@@ -138,7 +142,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 							}}
 						>
 							<ListItemIcon>
-								<CircleIcon sx={{ fontSize: "0.75rem" }} />
+								<SvgIcon component={ProcessIcon} inheritViewBox sx={{ ml: 2, fontSize: "2rem" }} />
 							</ListItemIcon>
 							<ListItemText>Processing Parameters</ListItemText>
 						</ListItemButton>
@@ -147,7 +151,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 
 				<ListItemButton onClick={() => setExpandedProcStudies(!expandedProcStudies)} divider={!expandedProcStudies}>
 					<ListItemIcon>
-						<SvgIcon component={BrainSvg} inheritViewBox sx={{ fontSize: "3rem" }}  />
+						<SvgIcon component={BrainSvg} inheritViewBox sx={{ fontSize: "3rem" }} />
 					</ListItemIcon>
 					<ListItemText>Process Studies</ListItemText>
 					<ExpandMore expand={expandedProcStudies} onClick={() => setExpandedProcStudies(!expandedProcStudies)}>
@@ -158,7 +162,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 					<List component="div" disablePadding>
 						<ListItemButton
 							disableGutters
-							sx={{ pl: 4 }}
+							sx={{ pl: 7 }}
 							onClick={() => {
 								setCurrentModule("ProcessStudies");
 								setProcStudiesTab("RunExploreASL");
@@ -167,14 +171,14 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 							}}
 						>
 							<ListItemIcon>
-								<CircleIcon sx={{ fontSize: "0.75rem" }} />
+								<SvgIcon component={ExploreASLIcon} inheritViewBox sx={{ ml: 2, fontSize: "2rem" }} />
 							</ListItemIcon>
 							<ListItemText>Run ExploreASL</ListItemText>
 						</ListItemButton>
 						<ListItemButton
 							disableGutters
 							divider
-							sx={{ pl: 4 }}
+							sx={{ pl: 7 }}
 							onClick={() => {
 								setCurrentModule("ProcessStudies");
 								setProcStudiesTab("PrepareARerun");
@@ -183,7 +187,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 							}}
 						>
 							<ListItemIcon>
-								<CircleIcon sx={{ fontSize: "0.75rem" }} />
+								<UndoIcon sx={{ ml: 2, fontSize: "2rem" }} />
 							</ListItemIcon>
 							<ListItemText>Prepare A Re-Run</ListItemText>
 						</ListItemButton>
@@ -198,7 +202,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 					}}
 				>
 					<ListItemIcon>
-						<SvgIcon component={ScatterPlotIcon} inheritViewBox sx={{ fontSize: "3rem" }}  />
+						<SvgIcon component={ScatterPlotIcon} inheritViewBox sx={{ fontSize: "3rem" }} />
 					</ListItemIcon>
 					<ListItemText>Data Visualization</ListItemText>
 				</ListItemButton>
@@ -211,7 +215,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 					}}
 				>
 					<ListItemIcon>
-						<InfoIcon sx={{ fontSize: "3rem" }}  />
+						<InfoIcon sx={{ fontSize: "3rem" }} />
 					</ListItemIcon>
 					<ListItemText>About</ListItemText>
 				</ListItemButton>

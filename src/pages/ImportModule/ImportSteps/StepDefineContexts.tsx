@@ -175,11 +175,11 @@ export function StepDefineContexts({
 		<form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
 			<Card elevation={3} sx={{ marginBottom: 2 }}>
 				<CardHeader
-					title={<Typography variant="h4">Define Additional Context</Typography>}
+					title={<Typography variant="h4">Define Scan Acquisition Context</Typography>}
 					subheader={
 						<Typography>
-							Define the specific nature of the ASL sequence acquisition to allow for the Import Module to properly
-							convert the series into NIFTI format. Allows for multiple contexts for complex datasets.
+							Define the specific nature of the ASL scan acquisition to allow for the Import Module to properly convert
+							the series into NIFTI format. Supports defining multiple acquisition contexts for complex datasets.
 						</Typography>
 					}
 					avatar={

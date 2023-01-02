@@ -1,13 +1,13 @@
 import React from "react";
-import { ControllerRenderProps, FieldValues, Path, useController, useWatch } from "react-hook-form";
+import { ControllerRenderProps, FieldValues, FieldPath, useController, useWatch } from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedFilepathInput, DebouncedFilepathInputProps } from "../DebouncedComponents";
 
 export type RHFFilepathInputProps<
   TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+  TName extends FieldPath<TFV>,
+  TTrigger extends FieldPath<TFV>,
+  TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = Omit<DebouncedFilepathInputProps, keyof ControllerRenderProps> &
   RHFControllerProps<TFV, TName> & // name & control
   RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchedChange
@@ -42,9 +42,9 @@ export type RHFFilepathInputProps<
  */
 export function RHFFilepathInput<
   TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+  TName extends FieldPath<TFV>,
+  TTrigger extends FieldPath<TFV>,
+  TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
   name,
   control,
@@ -74,6 +74,7 @@ export function RHFFilepathInput<
       <DebouncedFilepathInput
         className="RHFFilepathInput__DebouncedFilepathInput"
         {...field}
+        ref={null}
         {...filepathInputProps}
         onChange={handleChange}
         error={hasError}

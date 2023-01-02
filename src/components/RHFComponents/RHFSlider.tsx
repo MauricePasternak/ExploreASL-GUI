@@ -1,18 +1,18 @@
 import React from "react";
-import { ControllerRenderProps, FieldValues, Path, useController, useWatch } from "react-hook-form";
+import { ControllerRenderProps, FieldValues, FieldPath, useController, useWatch } from "react-hook-form";
 import { parseFieldError } from "../../common/utils/formFunctions";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedSlider, DebouncedSliderProps } from "../DebouncedComponents";
 
 export type RHFSliderProps<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = Omit<DebouncedSliderProps, keyof ControllerRenderProps | "onChangeCommitted"> &
-  RHFControllerProps<TFV, TName> & // name & control
-  RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
-  RHFWatchProps<TFV, TWatch>; // watchTarget & onWatchChange
+	RHFControllerProps<TFV, TName> & // name & control
+	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
+	RHFWatchProps<TFV, TWatch>; // watchTarget & onWatchChange
 
 /**
  * Altered MaterialUI Slider component meant to be used in a react-hook-form context, specifically for fields that are
@@ -42,53 +42,53 @@ export type RHFSliderProps<
  * - `...sliderProps`: All other props are passed to the underlying MaterialUI Slider component.
  */
 export function RHFSlider<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
-  name,
-  control,
-  trigger,
-  triggerTarget,
-  watchTarget,
-  onWatchedChange,
-  debounceTime = 500,
-  renderTextfields = true,
-  ...sliderProps
+	name,
+	control,
+	trigger,
+	triggerTarget,
+	watchTarget,
+	onWatchedChange,
+	debounceTime = 500,
+	renderTextfields = true,
+	...sliderProps
 }: RHFSliderProps<TFV, TName, TTrigger, TWatch>) {
-  // RHF Variables
-  const { field, fieldState } = useController({ name, control }); // field & fieldState
-  const hasError = !!fieldState.error;
-  const errorMessage = hasError ? parseFieldError(fieldState.error) : "";
+	// RHF Variables
+	const { field, fieldState } = useController({ name, control }); // field & fieldState
+	const hasError = !!fieldState.error;
+	const errorMessage = hasError ? parseFieldError(fieldState.error) : "";
 
-  // Watch-related variables
-  const isWatching = watchTarget && onWatchedChange;
-  const watchProps = watchTarget && onWatchedChange ? { control, name: watchTarget } : { control };
-  const watchedValue = useWatch(watchProps);
+	// Watch-related variables
+	const isWatching = watchTarget && onWatchedChange;
+	const watchProps = watchTarget && onWatchedChange ? { control, name: watchTarget } : { control };
+	const watchedValue = useWatch(watchProps);
 
-  /** Handles changes to the input and triggers validation of dependent fields */
-  const handleChange = (value: number | number[]) => {
-    field.onChange(value);
-    trigger && trigger(triggerTarget);
-  };
+	/** Handles changes to the input and triggers validation of dependent fields */
+	const handleChange = (value: number | number[]) => {
+		field.onChange(value);
+		trigger && trigger(triggerTarget);
+	};
 
-  // Slider doesn't take in a ref
-  const { ref, ...fixedField } = field;
+	// Slider doesn't take in a ref
+	const { ref, ...fixedField } = field;
 
-  function render() {
-    return (
-      <DebouncedSlider
-        {...sliderProps}
-        {...fixedField}
-        error={hasError}
-        errorMessage={errorMessage}
-        onChange={handleChange}
-        debounceTime={debounceTime}
-        renderTextfields={renderTextfields}
-      />
-    );
-  }
+	function render() {
+		return (
+			<DebouncedSlider
+				{...sliderProps}
+				{...fixedField}
+				error={hasError}
+				errorMessage={errorMessage}
+				onChange={handleChange}
+				debounceTime={debounceTime}
+				renderTextfields={renderTextfields}
+			/>
+		);
+	}
 
-  return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
+	return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
 }

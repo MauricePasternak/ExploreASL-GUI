@@ -171,7 +171,7 @@
 		"quill": "^1.3.7",
 		"react": "^18.2.0",
 		"react-dom": "^18.2.0",
-		"react-hook-form": "^7.40.0",
+		"react-hook-form": "^7.41.2",
 		"tree-kill": "^1.2.2",
 		"use-debounce": "^9.0.2",
 		"yup": "^0.32.11"

@@ -9,11 +9,11 @@ import { useDebouncedCallback } from "use-debounce";
 type MUITextFieldCompatibilityType = Omit<TextFieldProps, "onChange" | "value">;
 
 type DebouncedInputBaseProps = {
-  value: string | number;
-  onChange: (value: string, ...args: unknown[]) => void;
-  errorMessage?: React.ReactNode;
-  boxProps?: BoxProps;
-  debounceTime?: number;
+	value: string | number;
+	onChange: (value: string, ...args: unknown[]) => void;
+	errorMessage?: React.ReactNode;
+	boxProps?: BoxProps;
+	debounceTime?: number;
 };
 
 export type DebouncedInputProps = DebouncedInputBaseProps & MUITextFieldCompatibilityType;
@@ -33,73 +33,75 @@ export type DebouncedInputProps = DebouncedInputBaseProps & MUITextFieldCompatib
  * All other props are passed to the underlying [TextField](https://mui.com/material-ui/api/text-field/) component.
  */
 export const DebouncedInput = forwardRef(
-  (
-    {
-      value,
-      onChange,
-      errorMessage,
-      boxProps,
-      debounceTime = 400,
-      variant = "outlined",
-      ...textFieldProps
-    }: DebouncedInputProps,
-    ref
-  ) => {
-    // Inner State
-    const [innerValue, setInnerValue] = useState<string | number>(value);
+	(
+		{
+			value,
+			onChange,
+			errorMessage,
+			boxProps,
+			debounceTime = 400,
+			variant = "outlined",
+			...textFieldProps
+		}: DebouncedInputProps,
+		ref
+	) => {
+		// Inner State
+		const [innerValue, setInnerValue] = useState<string | number>(value);
 
-    // Debounce Callback
-    const debouncedOnChange = useDebouncedCallback(onChange, debounceTime);
+		// Debounce Callback
+		const debouncedOnChange = useDebouncedCallback(onChange, debounceTime);
 
-    // useEffect for keeping innerValue in sync with value
-    useEffect(() => {
-      // console.log(`DebouncedInput: value changed to ${value} while innerValue is ${innerValue}`);
-      if (value !== innerValue) {
-        setInnerValue(value);
-      }
-    }, [value]);
+		// useEffect for keeping innerValue in sync with value
+		useEffect(() => {
+			console.log(`DebouncedInput useEffect: value is ${value} and innerValue is ${innerValue}`);
 
-    /** Handler for changes to the value; updates the inner value and forwards the new value via provided onChange */
-    const handleChange = (newValue: string) => {
-      setInnerValue(newValue);
-      debouncedOnChange(newValue);
-    };
+			// console.log(`DebouncedInput: value changed to ${value} while innerValue is ${innerValue}`);
+			if (value !== innerValue) {
+				setInnerValue(value);
+			}
+		}, [value]);
 
-    // Misc
-    const componentClassName = textFieldProps.className
-      ? `${textFieldProps.className} "DebouncedInput__TextField"`
-      : "DebouncedInput__TextField";
+		/** Handler for changes to the value; updates the inner value and forwards the new value via provided onChange */
+		const handleChange = (newValue: string) => {
+			setInnerValue(newValue);
+			debouncedOnChange(newValue);
+		};
 
-    return (
-      <Box className="DebouncedInput__Box" {...boxProps}>
-        <TextField
-          className={componentClassName}
-          variant={variant}
-          fullWidth
-          inputRef={ref}
-          InputProps={{
-            className: "DebouncedInput__Input",
-            endAdornment: (
-              <IconButton
-                className="DebouncedInput__IconButton"
-                disabled={textFieldProps.disabled}
-                onClick={() => innerValue && handleChange("")}
-                color={textFieldProps.error ? "error" : "inherit"}
-              >
-                <ClearIcon className="DebouncedInput__ClearIcon" />
-              </IconButton>
-            ),
-          }}
-          {...textFieldProps}
-          onChange={(e) => handleChange(e.target.value)}
-          value={innerValue}
-        />
-        {textFieldProps?.error && (
-          <FormHelperText className="DebouncedInput__ErrorText" variant={variant} error>
-            {errorMessage}
-          </FormHelperText>
-        )}
-      </Box>
-    );
-  }
+		// Misc
+		const componentClassName = textFieldProps.className
+			? `${textFieldProps.className} "DebouncedInput__TextField"`
+			: "DebouncedInput__TextField";
+
+		return (
+			<Box className="DebouncedInput__Box" {...boxProps}>
+				<TextField
+					className={componentClassName}
+					variant={variant}
+					fullWidth
+					inputRef={ref}
+					InputProps={{
+						className: "DebouncedInput__Input",
+						endAdornment: (
+							<IconButton
+								className="DebouncedInput__IconButton"
+								disabled={textFieldProps.disabled}
+								onClick={() => innerValue && handleChange("")}
+								color={textFieldProps.error ? "error" : "inherit"}
+							>
+								<ClearIcon className="DebouncedInput__ClearIcon" />
+							</IconButton>
+						),
+					}}
+					{...textFieldProps}
+					onChange={(e) => handleChange(e.target.value)}
+					value={innerValue}
+				/>
+				{textFieldProps?.error && (
+					<FormHelperText className="DebouncedInput__ErrorText" variant={variant} error>
+						{errorMessage}
+					</FormHelperText>
+				)}
+			</Box>
+		);
+	}
 );

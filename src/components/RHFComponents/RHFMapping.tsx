@@ -6,10 +6,9 @@ import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
-import { SxProps } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import React from "react";
-import { FieldValues, Path, useController, useWatch } from "react-hook-form";
+import { FieldValues, FieldPath, useController, useWatch } from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedInput } from "../DebouncedComponents";
 
@@ -39,9 +38,9 @@ type RHFMappingBaseProps = {
 
 export type RHFMappingProps<
 	TFV extends FieldValues,
-	TName extends Path<TFV>,
-	TTrigger extends Path<TFV>,
-	TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = RHFMappingBaseProps & // options
 	RHFControllerProps<TFV, TName> & // name, control
 	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
@@ -76,9 +75,9 @@ export type RHFMappingProps<
  */
 export function RHFMapping<
 	TFV extends FieldValues,
-	TName extends Path<TFV>,
-	TTrigger extends Path<TFV>,
-	TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
 	name,
 	control,

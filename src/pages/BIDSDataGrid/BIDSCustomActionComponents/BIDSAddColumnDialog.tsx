@@ -12,21 +12,29 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import React, { memo, useState } from "react";
-import { DebouncedInput } from "../../../components/DebouncedComponents";
+import { DebouncedInput, DebouncedNumericCSVInput } from "../../../components/DebouncedComponents";
 import {
 	BIDSAllFieldsNameType,
 	BIDSBooleanFieldToColDef,
 	BIDSEnumFieldToColDef,
+	BIDSNumericArrayFieldToColDef,
 	BIDSNumericFieldToColDef,
 	BIDSTextFieldToColDef,
 	isBIDSBooleanField,
 	isBIDSEnumField,
+	isBIDSNumericArrayField,
 	isBIDSNumericField,
 	isBIDSTextField,
 } from "../BIDSColumnDefs";
-import { atomBIDSAddColumnDialogOpen, atomBIDSColumnNames, atomSetBIDSAddColumn } from "../../../stores/BIDSDataGridStore";
+import {
+	atomBIDSAddColumnDialogOpen,
+	atomBIDSColumnNames,
+	atomSetBIDSAddColumn,
+} from "../../../stores/BIDSDataGridStore";
 import { ObjectEntries } from "../../../common/utils/objectFunctions";
-
+import InputLabel from "@mui/material/InputLabel";
+import FormControl from "@mui/material/FormControl";
+import FormHelperText from "@mui/material/FormHelperText";
 
 export const BIDSAddColumnDialog = memo(() => {
 	// Atomic State
@@ -47,12 +55,17 @@ export const BIDSAddColumnDialog = memo(() => {
 	const availableNumberFieldConfigs = ObjectEntries(BIDSNumericFieldToColDef).filter(([fieldName, _]) => {
 		return !currentColumnNamesSet.has(fieldName);
 	});
+	const availableNumberArrayFieldConfigs = ObjectEntries(BIDSNumericArrayFieldToColDef).filter(([fieldName, _]) => {
+		return !currentColumnNamesSet.has(fieldName);
+	});
 	const availableBooleanFieldConfigs = ObjectEntries(BIDSBooleanFieldToColDef).filter(([fieldName, _]) => {
 		return !currentColumnNamesSet.has(fieldName);
 	});
 	const availableEnumFieldConfigs = ObjectEntries(BIDSEnumFieldToColDef).filter(([fieldName, _]) => {
 		return !currentColumnNamesSet.has(fieldName);
 	});
+
+	console.log("BIDSAddColumnDialog Rendered with defaultValue", defaultValue);
 
 	// Define the component for controlling the default value
 	const renderDefaultValueControl = () => {
@@ -70,6 +83,7 @@ export const BIDSAddColumnDialog = memo(() => {
 					onChange={(newValue) => {
 						setDefaultValue(newValue);
 					}}
+					helperText={fieldConfig.description}
 				/>
 			);
 		}
@@ -80,6 +94,7 @@ export const BIDSAddColumnDialog = memo(() => {
 				<DebouncedInput
 					type="number"
 					disabled={applyEmptyDefault}
+					label={fieldConfig.headerName}
 					defaultValue={fieldConfig.defaultValue as number}
 					value={defaultValue as number}
 					fullWidth
@@ -93,6 +108,48 @@ export const BIDSAddColumnDialog = memo(() => {
 						step: fieldConfig.step,
 					}}
 					InputProps={{ endAdornment: null }}
+					helperText={fieldConfig.description}
+				/>
+			);
+		}
+		// Numeric Array
+		else if (isBIDSNumericArrayField(selectedField)) {
+			const fieldConfig = BIDSNumericArrayFieldToColDef[selectedField];
+			return (
+				<DebouncedNumericCSVInput
+					disabled={applyEmptyDefault}
+					value={defaultValue as number}
+					fullWidth
+					label={fieldConfig.headerName}
+					onChange={(numberValues) => {
+						const numericArrayFieldName = selectedField;
+
+						console.log("BIDSAddColumnDialog onChange", {
+							numericArrayFieldName,
+							numberValues,
+						});
+
+						// Special Case: BackgroundSuppressionPulseTime; always return an array
+						if (numericArrayFieldName === "BackgroundSuppressionPulseTime") {
+							setDefaultValue(numberValues);
+							return;
+						}
+
+						// Otherwise, act according to the number of values: 0 = defaultValue, 1 = single number, 2+ = array
+						if (numberValues.length === 0) {
+							setDefaultValue(fieldConfig.defaultValue);
+							return;
+						} else if (numberValues.length === 1) {
+							setDefaultValue(numberValues[0]);
+							return;
+						} else {
+							setDefaultValue(numberValues);
+							return;
+						}
+					}}
+					InputProps={{ endAdornment: null }}
+					debounceTime={1500}
+					helperText={fieldConfig.description}
 				/>
 			);
 		}
@@ -100,33 +157,41 @@ export const BIDSAddColumnDialog = memo(() => {
 		else if (isBIDSBooleanField(selectedField)) {
 			const fieldConfig = BIDSBooleanFieldToColDef[selectedField];
 			return (
-				<FormControlLabel
-					label={fieldConfig.headerName}
-					disabled={applyEmptyDefault}
-					control={<Checkbox checked={!!defaultValue} onChange={(e, checked) => setDefaultValue(checked)} />}
-				/>
+				<FormControl variant="standard">
+					<FormControlLabel
+						label={fieldConfig.headerName}
+						disabled={applyEmptyDefault}
+						control={<Checkbox checked={!!defaultValue} onChange={(e, checked) => setDefaultValue(checked)} />}
+					/>
+					<FormHelperText>{fieldConfig.description}</FormHelperText>
+				</FormControl>
 			);
 		}
 		// Enum
 		else if (isBIDSEnumField(selectedField)) {
 			const fieldConfig = BIDSEnumFieldToColDef[selectedField];
 			return (
-				<Select
-					value={defaultValue}
-					fullWidth
-					defaultValue={fieldConfig.defaultValue as string}
-					disabled={applyEmptyDefault}
-					onChange={(e) => {
-						const val = e.target.value;
-						setDefaultValue(val);
-					}}
-				>
-					{fieldConfig.enumOptions.map((opt) => (
-						<MenuItem key={`${fieldConfig.headerName}__${opt.label}`} value={opt.value}>
-							{opt.label}
-						</MenuItem>
-					))}
-				</Select>
+				<FormControl fullWidth>
+					<InputLabel>{fieldConfig.headerName}</InputLabel>
+					<Select
+						value={defaultValue}
+						fullWidth
+						label={fieldConfig.headerName}
+						defaultValue={fieldConfig.defaultValue as string}
+						disabled={applyEmptyDefault}
+						onChange={(e) => {
+							const val = e.target.value;
+							setDefaultValue(val);
+						}}
+					>
+						{fieldConfig.enumOptions.map((opt) => (
+							<MenuItem key={`${fieldConfig.headerName}__${opt.label}`} value={opt.value}>
+								{opt.label}
+							</MenuItem>
+						))}
+					</Select>
+					<FormHelperText>{fieldConfig.description}</FormHelperText>
+				</FormControl>
 			);
 		}
 		// Otherwise
@@ -162,6 +227,8 @@ export const BIDSAddColumnDialog = memo(() => {
 			defaultValue = BIDSTextFieldToColDef[fieldName].defaultValue;
 		} else if (isBIDSNumericField(fieldName)) {
 			defaultValue = BIDSNumericFieldToColDef[fieldName].defaultValue;
+		} else if (isBIDSNumericArrayField(fieldName)) {
+			defaultValue = BIDSNumericArrayFieldToColDef[fieldName].defaultValue;
 		} else if (isBIDSBooleanField(fieldName)) {
 			defaultValue = BIDSBooleanFieldToColDef[fieldName].defaultValue;
 		} else if (isBIDSEnumField(fieldName)) {
@@ -186,35 +253,49 @@ export const BIDSAddColumnDialog = memo(() => {
 						the added column.
 					</DialogContentText>
 
-					<Select fullWidth value={selectedField} onChange={handleSelectedFieldChange}>
-						{availableTextFieldConfigs.length > 0 && <ListSubheader>Text-based Fields</ListSubheader>}
-						{availableTextFieldConfigs.map(([fieldName, fieldConfig]) => (
-							<MenuItem key={`BIDSAddColumnSelectTextField_${fieldName}`} value={fieldName}>
-								{fieldConfig.headerName}
-							</MenuItem>
-						))}
-
-						{availableNumberFieldConfigs.length > 0 && <ListSubheader>Number-based Fields</ListSubheader>}
-						{availableNumberFieldConfigs.map(([fieldName, fieldConfig]) => (
-							<MenuItem key={`BIDSAddColumnSelectNumberField_${fieldName}`} value={fieldName}>
-								{fieldConfig.headerName}
-							</MenuItem>
-						))}
-
-						{availableBooleanFieldConfigs.length > 0 && <ListSubheader>Boolean-based Fields</ListSubheader>}
-						{availableBooleanFieldConfigs.map(([fieldName, fieldConfig]) => (
-							<MenuItem key={`BIDSAddColumnSelectBooleanField_${fieldName}`} value={fieldName}>
-								{fieldConfig.headerName}
-							</MenuItem>
-						))}
-
-						{availableEnumFieldConfigs.length > 0 && <ListSubheader>Enum-based Fields</ListSubheader>}
-						{availableEnumFieldConfigs.map(([fieldName, fieldConfig]) => (
-							<MenuItem key={`BIDSAddColumnSelectEnumField_${fieldName}`} value={fieldName}>
-								{fieldConfig.headerName}
-							</MenuItem>
-						))}
-					</Select>
+					<FormControl fullWidth>
+						<InputLabel>BIDS Field to Add</InputLabel>
+						<Select
+							fullWidth
+							value={selectedField}
+							onChange={handleSelectedFieldChange}
+							label="BIDS Field to Add"
+							MenuProps={{
+								sx: { maxHeight: 500 },
+							}}
+						>
+							{availableTextFieldConfigs.length > 0 && <ListSubheader>Text-based Fields</ListSubheader>}
+							{availableTextFieldConfigs.map(([fieldName, fieldConfig]) => (
+								<MenuItem key={`BIDSAddColumnSelectTextField_${fieldName}`} value={fieldName}>
+									{fieldConfig.headerName}
+								</MenuItem>
+							))}
+							{availableNumberFieldConfigs.length > 0 && <ListSubheader>Number-based Fields</ListSubheader>}
+							{availableNumberFieldConfigs.map(([fieldName, fieldConfig]) => (
+								<MenuItem key={`BIDSAddColumnSelectNumberField_${fieldName}`} value={fieldName}>
+									{fieldConfig.headerName}
+								</MenuItem>
+							))}
+							{availableNumberArrayFieldConfigs.length > 0 && <ListSubheader>Number Array-based Fields</ListSubheader>}
+							{availableNumberArrayFieldConfigs.map(([fieldName, fieldConfig]) => (
+								<MenuItem key={`BIDSAddColumnSelectNumberArrayField_${fieldName}`} value={fieldName}>
+									{fieldConfig.headerName}
+								</MenuItem>
+							))}
+							{availableBooleanFieldConfigs.length > 0 && <ListSubheader>Boolean-based Fields</ListSubheader>}
+							{availableBooleanFieldConfigs.map(([fieldName, fieldConfig]) => (
+								<MenuItem key={`BIDSAddColumnSelectBooleanField_${fieldName}`} value={fieldName}>
+									{fieldConfig.headerName}
+								</MenuItem>
+							))}
+							{availableEnumFieldConfigs.length > 0 && <ListSubheader>Enum-based Fields</ListSubheader>}
+							{availableEnumFieldConfigs.map(([fieldName, fieldConfig]) => (
+								<MenuItem key={`BIDSAddColumnSelectEnumField_${fieldName}`} value={fieldName}>
+									{fieldConfig.headerName}
+								</MenuItem>
+							))}
+						</Select>
+					</FormControl>
 					{renderDefaultValueControl()}
 					{selectedField && (
 						<FormControlLabel

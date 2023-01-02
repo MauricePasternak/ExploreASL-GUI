@@ -13,7 +13,7 @@ import { styled } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { OpenDialogOptions } from "electron";
 import React, { useEffect, useRef, useState } from "react";
-import { FieldValues, Path, PathValue, useController, useWatch } from "react-hook-form";
+import { FieldValues, FieldPath, FieldPathValue, useController, useWatch } from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import FastIsEqual from "fast-deep-equal";
 
@@ -72,9 +72,9 @@ type RHFFPDropzoneBaseProps = {
 
 export type RHFFPDropzoneProps<
 	TFV extends FieldValues,
-	TName extends Path<TFV>,
-	TTrigger extends Path<TFV>,
-	TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = RHFFPDropzoneBaseProps &
 	RHFControllerProps<TFV, TName> & // name & control
 	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
@@ -116,9 +116,9 @@ export type RHFFPDropzoneProps<
  */
 export function RHFFPDropzone<
 	TFV extends FieldValues,
-	TName extends Path<TFV>,
-	TTrigger extends Path<TFV>,
-	TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
 	name,
 	control,
@@ -261,7 +261,7 @@ export function RHFFPDropzone<
 		const finalItemset = overWriteOnDrop ? filteredList : [...innerVal, ...filteredList];
 
 		// Update the field value
-		handleChange(finalItemset as PathValue<TFV, TName>);
+		handleChange(finalItemset as FieldPathValue<TFV, TName>);
 	};
 
 	/** Handler for changing the value of the field, triggering validation, and resetting drop-related variables */
@@ -273,7 +273,7 @@ export function RHFFPDropzone<
 		field.onBlur();
 		enterCounter.current = 0;
 		isAcceptingDrop && setIsAcceptingDrop(false);
-		setInnerVal(newValue as PathValue<TFV, TName>);
+		setInnerVal(newValue as FieldPathValue<TFV, TName>);
 	};
 
 	/** Handler for opening a file dialog */
@@ -292,7 +292,7 @@ export function RHFFPDropzone<
 		const finalItemset = overWriteOnDrop ? filteredList : [...innerVal, ...filteredList];
 
 		// Update the field value
-		handleChange(finalItemset as PathValue<TFV, TName>);
+		handleChange(finalItemset as FieldPathValue<TFV, TName>);
 	};
 
 	/** Handler for choosing to delete a particular item within innerVal */

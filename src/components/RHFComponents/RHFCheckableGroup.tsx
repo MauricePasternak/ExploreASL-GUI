@@ -7,22 +7,29 @@ import FormLabel from "@mui/material/FormLabel";
 import Switch, { SwitchProps } from "@mui/material/Switch";
 import FastIsEqual from "fast-deep-equal";
 import React, { useEffect, useState } from "react";
-import { ControllerRenderProps, FieldValues, Path, PathValue, useController, useWatch } from "react-hook-form";
+import {
+	ControllerRenderProps,
+	FieldValues,
+	FieldPath,
+	FieldPathValue,
+	useController,
+	useWatch,
+} from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { parseFieldError } from "../../common/utils/formFunctions";
 
 type TValueWrapper<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TValue = PathValue<TFV, TName>
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TValue = FieldPathValue<TFV, TName>
 > = TValue extends ReadonlyArray<any> ? TValue[number] : TValue;
 
 type MUISwitchProps = Omit<SwitchProps, keyof ControllerRenderProps | "control" | "checked">;
 type MUICheckboxProps = Omit<CheckboxProps, keyof ControllerRenderProps | "control" | "checked">;
 
-type RHFCheckableOptionBaseProps<TFV extends FieldValues, TName extends Path<TFV>> = {
-  label: React.ReactNode; // label to display next to the checkbox
-  value: TValueWrapper<TFV, TName>;
+type RHFCheckableOptionBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
+	label: React.ReactNode; // label to display next to the checkbox
+	value: TValueWrapper<TFV, TName>;
 };
 
 /**
@@ -37,37 +44,37 @@ type RHFCheckableOptionBaseProps<TFV extends FieldValues, TName extends Path<TFV
  * the `type` prop of the {@link RHFCheckableGroup} this option is used in.
  */
 export type RHFCheckableOption<
-  TCheck extends "switch" | "checkbox" = "checkbox",
-  TFV extends FieldValues = FieldValues,
-  TName extends Path<TFV> = Path<TFV>
+	TCheck extends "switch" | "checkbox" = "checkbox",
+	TFV extends FieldValues = FieldValues,
+	TName extends FieldPath<TFV> = FieldPath<TFV>
 > = TCheck extends "switch"
-  ? MUISwitchProps & RHFCheckableOptionBaseProps<TFV, TName>
-  : MUICheckboxProps & RHFCheckableOptionBaseProps<TFV, TName>;
+	? MUISwitchProps & RHFCheckableOptionBaseProps<TFV, TName>
+	: MUICheckboxProps & RHFCheckableOptionBaseProps<TFV, TName>;
 
 type RHFCheckableGroupBaseProps<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TCheck extends "switch" | "checkbox"
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TCheck extends "switch" | "checkbox"
 > = {
-  type: TCheck; // type of checkable to use (switch or checkbox)
-  options: RHFCheckableOption<TCheck, TFV, TName>[]; // options to display
-  keepUncheckedValue: boolean; // keep unchecked options in the form values (default: false)
-  uncheckedValue: TValueWrapper<TFV, TName>;
-  helperText?: React.ReactNode; // helper text to display below the checkbox
-  label?: React.ReactNode; // label to display next to the checkbox
-  row?: boolean; // display options in a row instead of a column
+	type: TCheck; // type of checkable to use (switch or checkbox)
+	options: RHFCheckableOption<TCheck, TFV, TName>[]; // options to display
+	keepUncheckedValue: boolean; // keep unchecked options in the form values (default: false)
+	uncheckedValue: TValueWrapper<TFV, TName>;
+	helperText?: React.ReactNode; // helper text to display below the checkbox
+	label?: React.ReactNode; // label to display next to the checkbox
+	row?: boolean; // display options in a row instead of a column
 };
 
 export type RHFCheckableGroupProps<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TCheck extends "switch" | "checkbox",
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TCheck extends "switch" | "checkbox",
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = RHFCheckableGroupBaseProps<TFV, TName, TCheck> &
-  RHFControllerProps<TFV, TName> & // name, control
-  RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchedChange
-  RHFTriggerProps<TFV, TTrigger>; // trigger & triggerTarget
+	RHFControllerProps<TFV, TName> & // name, control
+	RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchedChange
+	RHFTriggerProps<TFV, TTrigger>; // trigger & triggerTarget
 
 /**
  * A collection of MaterialUI Checkbox/Switch components meant for use in a react-hook-form context,
@@ -101,140 +108,140 @@ export type RHFCheckableGroupProps<
  *    Defaults to column arrangement.
  */
 export function RHFCheckableGroup<
-  TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TCheck extends "switch" | "checkbox",
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TCheck extends "switch" | "checkbox",
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
-  name,
-  control,
-  trigger,
-  triggerTarget,
-  watchTarget,
-  onWatchedChange,
-  type,
-  options,
-  keepUncheckedValue,
-  uncheckedValue,
-  helperText,
-  label,
-  row = false,
+	name,
+	control,
+	trigger,
+	triggerTarget,
+	watchTarget,
+	onWatchedChange,
+	type,
+	options,
+	keepUncheckedValue,
+	uncheckedValue,
+	helperText,
+	label,
+	row = false,
 }: RHFCheckableGroupProps<TFV, TName, TCheck, TTrigger, TWatch>) {
-  // RHF Variables
-  const { field, fieldState } = useController({ name, control }); // get the field and fieldState from react-hook-form
-  const hasError = !!fieldState.error;
-  const errorMessage = hasError ? parseFieldError(fieldState.error) : "";
+	// RHF Variables
+	const { field, fieldState } = useController({ name, control }); // get the field and fieldState from react-hook-form
+	const hasError = !!fieldState.error;
+	const errorMessage = hasError ? parseFieldError(fieldState.error) : "";
 
-  // Watch-related variables
-  const isWatching = watchTarget && onWatchedChange;
-  const watchParams = isWatching ? { control, name: watchTarget } : { control };
-  const watchedValue = useWatch(watchParams);
+	// Watch-related variables
+	const isWatching = watchTarget && onWatchedChange;
+	const watchParams = isWatching ? { control, name: watchTarget } : { control };
+	const watchedValue = useWatch(watchParams);
 
-  /**
-   * Parses the current field.value to into what innerValue should be based on options given to the component.
-   */
-  function getNewInnerValue(): PathValue<TFV, TName> {
-    return options.map((option, idx) => {
-      if (keepUncheckedValue) {
-        return option.value === field.value[idx] ? option.value : uncheckedValue;
-      } else {
-        return field.value.includes(option.value) ? option.value : uncheckedValue;
-      }
-    }) as PathValue<TFV, TName>;
-  }
+	/**
+	 * Parses the current field.value to into what innerValue should be based on options given to the component.
+	 */
+	function getNewInnerValue(): FieldPathValue<TFV, TName> {
+		return options.map((option, idx) => {
+			if (keepUncheckedValue) {
+				return option.value === field.value[idx] ? option.value : uncheckedValue;
+			} else {
+				return field.value.includes(option.value) ? option.value : uncheckedValue;
+			}
+		}) as FieldPathValue<TFV, TName>;
+	}
 
-  // Inner State
-  const [innerValue, setInnerVal] = useState(
-    () => (field.value && getNewInnerValue()) || ([] as PathValue<TFV, TName>)
-  );
+	// Inner State
+	const [innerValue, setInnerVal] = useState(
+		() => (field.value && getNewInnerValue()) || ([] as FieldPathValue<TFV, TName>)
+	);
 
-  /** Keep innerValue and field.value synced (i.e. if field.value is programatically changed) */
-  useEffect(() => {
-    const paddedInnerValue = getNewInnerValue();
-    if (field.value != null && !FastIsEqual(paddedInnerValue, innerValue)) setInnerVal(paddedInnerValue);
-  }, [JSON.stringify(field.value)]);
+	/** Keep innerValue and field.value synced (i.e. if field.value is programatically changed) */
+	useEffect(() => {
+		const paddedInnerValue = getNewInnerValue();
+		if (field.value != null && !FastIsEqual(paddedInnerValue, innerValue)) setInnerVal(paddedInnerValue);
+	}, [JSON.stringify(field.value)]);
 
-  /** Handler for updating  */
-  const handleChange = (index: number, checked: boolean) => {
-    // Need to make a copy of the innerValue to avoid mutating the state directly
-    const innerValCopy = [...innerValue] as PathValue<TFV, TName>;
+	/** Handler for updating  */
+	const handleChange = (index: number, checked: boolean) => {
+		// Need to make a copy of the innerValue to avoid mutating the state directly
+		const innerValCopy = [...innerValue] as FieldPathValue<TFV, TName>;
 
-    // Mutate the copy at the indicated location
-    innerValCopy[index] = checked ? options[index].value : uncheckedValue;
+		// Mutate the copy at the indicated location
+		innerValCopy[index] = checked ? options[index].value : uncheckedValue;
 
-    // Filter out the filler value if indicated
-    const finalVal = keepUncheckedValue
-      ? innerValCopy
-      : innerValCopy.filter((val: PathValue<TFV, TName>[number]) => val !== uncheckedValue);
+		// Filter out the filler value if indicated
+		const finalVal = keepUncheckedValue
+			? innerValCopy
+			: innerValCopy.filter((val: FieldPathValue<TFV, TName>[number]) => val !== uncheckedValue);
 
-    // Update the state and trigger the onChange callback with the final value
-    setInnerVal(innerValCopy);
-    field.onChange(finalVal);
-    trigger && trigger(triggerTarget);
-  };
+		// Update the state and trigger the onChange callback with the final value
+		setInnerVal(innerValCopy);
+		field.onChange(finalVal);
+		trigger && trigger(triggerTarget);
+	};
 
-  function render() {
-    return (
-      <FormControl
-        onBlur={field.onBlur}
-        error={hasError}
-        fullWidth
-        component="fieldset"
-        variant="standard"
-        className="RHFMultiCheckable__FormControl"
-      >
-        <FormLabel component="legend" className="RHFMultiCheckable__FormLabel">
-          {label}
-        </FormLabel>
-        <FormGroup row={row} className="RHFMultiCheckable__FormGroup">
-          {options.map((rawOption, optionIdx) => {
-            const { value, ...option } = rawOption;
-            return (
-              <FormControlLabel
-                key={`RHFMultiCheckable__${option.label}__${optionIdx}`}
-                className="RHFMultiCheckable__FormControlLabel"
-                label={option.label}
-                control={
-                  type === "checkbox" ? (
-                    <Checkbox
-                      className="RHFMultiCheckable__Checkbox"
-                      {...option}
-                      value={value}
-                      checked={
-                        keepUncheckedValue ? innerValue[optionIdx] !== uncheckedValue : innerValue.includes(value)
-                      }
-                      onChange={(_, checked) => handleChange(optionIdx, checked)}
-                    />
-                  ) : (
-                    <Switch
-                      className="RHFMultiCheckable__Switch"
-                      {...option}
-                      value={value}
-                      checked={
-                        keepUncheckedValue ? innerValue[optionIdx] !== uncheckedValue : innerValue.includes(value)
-                      }
-                      onChange={(_, checked) => handleChange(optionIdx, checked)}
-                    />
-                  )
-                }
-              />
-            );
-          })}
-        </FormGroup>
-        {hasError && (
-          <FormHelperText className="RHFMultiCheckable__ErrorText" error={true}>
-            {errorMessage}
-          </FormHelperText>
-        )}
-        {helperText && (
-          <FormHelperText className="RHFMultiCheckable__HelperText" error={hasError}>
-            {helperText}
-          </FormHelperText>
-        )}
-      </FormControl>
-    );
-  }
+	function render() {
+		return (
+			<FormControl
+				onBlur={field.onBlur}
+				error={hasError}
+				fullWidth
+				component="fieldset"
+				variant="standard"
+				className="RHFMultiCheckable__FormControl"
+			>
+				<FormLabel component="legend" className="RHFMultiCheckable__FormLabel">
+					{label}
+				</FormLabel>
+				<FormGroup row={row} className="RHFMultiCheckable__FormGroup">
+					{options.map((rawOption, optionIdx) => {
+						const { value, ...option } = rawOption;
+						return (
+							<FormControlLabel
+								key={`RHFMultiCheckable__${option.label}__${optionIdx}`}
+								className="RHFMultiCheckable__FormControlLabel"
+								label={option.label}
+								control={
+									type === "checkbox" ? (
+										<Checkbox
+											className="RHFMultiCheckable__Checkbox"
+											{...option}
+											value={value}
+											checked={
+												keepUncheckedValue ? innerValue[optionIdx] !== uncheckedValue : innerValue.includes(value)
+											}
+											onChange={(_, checked) => handleChange(optionIdx, checked)}
+										/>
+									) : (
+										<Switch
+											className="RHFMultiCheckable__Switch"
+											{...option}
+											value={value}
+											checked={
+												keepUncheckedValue ? innerValue[optionIdx] !== uncheckedValue : innerValue.includes(value)
+											}
+											onChange={(_, checked) => handleChange(optionIdx, checked)}
+										/>
+									)
+								}
+							/>
+						);
+					})}
+				</FormGroup>
+				{hasError && (
+					<FormHelperText className="RHFMultiCheckable__ErrorText" error={true}>
+						{errorMessage}
+					</FormHelperText>
+				)}
+				{helperText && (
+					<FormHelperText className="RHFMultiCheckable__HelperText" error={hasError}>
+						{helperText}
+					</FormHelperText>
+				)}
+			</FormControl>
+		);
+	}
 
-  return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
+	return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
 }

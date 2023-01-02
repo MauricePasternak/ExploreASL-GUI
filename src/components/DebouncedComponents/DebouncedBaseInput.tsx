@@ -17,7 +17,7 @@ export function DebouncedBaseInput({
 	...inputBaseProps
 }: DebouncedBaseInputProps) {
 	// Component State
-	const [innerValue, setInnerValue] = useState(value);
+	const [innerValue, setInnerValue] = useState(value ?? "");
 
 	// Keep in sync with parent components
 	useEffect(() => {
@@ -30,7 +30,7 @@ export function DebouncedBaseInput({
 	const handleChange = useCallback(
 		(event: React.ChangeEvent<HTMLInputElement>) => {
 			const newValue = event.target.value;
-			console.log("🚀 ~ file: DebouncedBaseInput.tsx:31 ~ handleChange ~ newValue", newValue);
+			// console.log("🚀 ~ file: DebouncedBaseInput.tsx:31 ~ handleChange ~ newValue", newValue);
 			setInnerValue(newValue);
 			onChange && debouncedHandleChange(event);
 		},

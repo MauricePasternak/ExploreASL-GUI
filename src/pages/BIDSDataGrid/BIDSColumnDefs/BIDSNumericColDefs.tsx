@@ -1,22 +1,24 @@
 import React from "react";
-import { GridColDef, GridRenderCellParams, GridValueSetterParams } from "@mui/x-data-grid";
+import { GridColDef, GridRenderCellParams, GridValueFormatterParams, GridValueSetterParams } from "@mui/x-data-grid";
 import { BIDSRow } from "./BIDSMergeColDefs";
 import { BIDSSingleNumberField } from "../BIDSDataGridCellComponents/BIDSSingleNumberField";
 import { BIDSFlexibleNumberField, switchBIDSNumericType } from "../BIDSDataGridCellComponents/BIDSFlexibleNumberField";
+
+function formatAsCommaSeparatedValues(params: GridValueFormatterParams<any>) {
+	if (params.value != null) return Array.isArray(params.value) ? params.value.join(", ") : params.value;
+	return "";
+}
 
 // ^ Field Names
 
 export const BIDSNumericFields = [
 	"BackgroundSuppressionNumberPulses",
 	"BolusCutOffDelayTime",
-	"EchoTime",
 	"FlipAngle",
 	"InversionTime",
-	"LabelingDuration",
 	"MagneticFieldStrength",
 	"M0Estimate",
 	"M0_GMScaleFactor",
-	"PostLabelingDelay",
 	"RepetitionTimePreparation",
 	"TotalAcquiredPairs",
 	"TotalReadoutTime",
@@ -35,7 +37,6 @@ export function isBIDSNumericField(fieldName: string): fieldName is BIDSNumericF
 type BIDSNumericBaseColDef<TName extends BIDSNumericFieldsNameType = BIDSNumericFieldsNameType> = {
 	field: TName; // field name must be present for compatibility with GridColDef
 	defaultValue?: number | number[];
-	type?: "number";
 	BIDSType: "Numeric";
 	min: number;
 	max: number;
@@ -85,10 +86,7 @@ export const BIDSNumericFieldToColDef: BIDSNumericFieldToColDefType = {
 			`Duration between the end of the labeling and the start of the bolus cut-off ` +
 			`saturation pulse(s), in seconds. For Q2TIPS, this is a collection of two numbers that correspond to ` +
 			`the first and last saturation pulses given`,
-		valueFormatter: (params) => {
-			if (params.value != null) return Array.isArray(params.value) ? params.value.join(", ") : params.value;
-			return "";
-		},
+		valueFormatter: formatAsCommaSeparatedValues,
 		valueSetter: (params) => {
 			const { value, row } = params;
 			console.log("🚀 ~ file: BIDSNumericColDefs.tsx ~ BolusCutOffDelayTime ~ valueSetter ~ value", value);
@@ -110,24 +108,6 @@ export const BIDSNumericFieldToColDef: BIDSNumericFieldToColDefType = {
 						return params.row?.BolusCutOffTechnique === "Q2TIPS";
 					}}
 				/>
-			);
-		},
-	},
-	EchoTime: {
-		field: "EchoTime",
-		headerName: "Echo Time (s)",
-		BIDSType: "Numeric",
-		editable: true,
-		width: 110,
-		min: 0.001,
-		max: 1,
-		step: 0.001,
-		description:
-			`The time, in seconds, between the application of the RF excitation pulse and the peak of ` +
-			`the signal induced in the receiver coils`,
-		renderEditCell: (params: GridRenderCellParams<any, BIDSRow>) => {
-			return (
-				<BIDSSingleNumberField params={params} defaultValue={0.02} inputProps={{ min: 0.001, max: 1, step: 0.001 }} />
 			);
 		},
 	},
@@ -161,22 +141,6 @@ export const BIDSNumericFieldToColDef: BIDSNumericFieldToColDefType = {
 			return (
 				<BIDSSingleNumberField params={params} defaultValue={2} inputProps={{ min: 0.001, max: 5, step: 0.001 }} />
 			);
-		},
-	},
-	LabelingDuration: {
-		field: "LabelingDuration",
-		headerName: "Labeling Duration (s)",
-		BIDSType: "Numeric",
-		editable: true,
-		width: 175,
-		min: 0,
-		max: 5,
-		step: 0.001,
-		description:
-			"The temporal width, in seconds, of the labeling bolus when using CASL or PCASL. " +
-			"This field should be omitted in PASL sequences.",
-		renderEditCell: (params: GridRenderCellParams<any, BIDSRow>) => {
-			return <BIDSSingleNumberField params={params} defaultValue={0.8} inputProps={{ min: 0, max: 5, step: 0.001 }} />;
 		},
 	},
 	MagneticFieldStrength: {
@@ -238,25 +202,7 @@ export const BIDSNumericFieldToColDef: BIDSNumericFieldToColDefType = {
 			);
 		},
 	},
-	PostLabelingDelay: {
-		field: "PostLabelingDelay",
-		headerName: "Post Labeling Delay (s)",
-		BIDSType: "Numeric",
-		editable: true,
-		width: 210,
-		min: 0.001,
-		max: 5,
-		step: 0.001,
-		description:
-			`The time, in seconds, after the end of the labeling (for "CASL" or "PCASL") or middle of ` +
-			`the labeling pulse (for "PASL") until the middle of the excitation pulse applied to the imaging slab ` +
-			`(for 3D acquisition) or first slice (for 2D acquisition). This number cannot be zero.`,
-		renderEditCell: (params: GridRenderCellParams<any, BIDSRow>) => {
-			return (
-				<BIDSSingleNumberField params={params} defaultValue={2} inputProps={{ min: 0.001, max: 5, step: 0.001 }} />
-			);
-		},
-	},
+
 	RepetitionTimePreparation: {
 		field: "RepetitionTimePreparation",
 		headerName: "Repetition Time (s)",

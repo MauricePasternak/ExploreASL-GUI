@@ -133,6 +133,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "PCASL", label: "PCASL" },
 			{ value: "PASL", label: "PASL" },
 		],
+		defaultValue: "PCASL",
 	},
 	BolusCutOffTechnique: {
 		field: "BolusCutOffTechnique",
@@ -172,6 +173,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 
 			return { ...oldRow, BolusCutOffTechnique: newValue };
 		},
+		defaultValue: "QUIPSSII",
 	},
 	CASLType: {
 		field: "CASLType",
@@ -189,6 +191,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "double-coil", label: "Double Coil" },
 		],
 		valueFormatter: BIDSEnumValueFormatter,
+		defaultValue: "single-coil",
 	},
 	Manufacturer: {
 		field: "Manufacturer",
@@ -204,6 +207,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "Siemens", label: "Siemens" },
 			{ value: "GE", label: "GE" },
 		],
+		defaultValue: "Siemens",
 	},
 	M0Type: {
 		field: "M0Type",
@@ -223,6 +227,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "Estimate", label: "Estimate" },
 			{ value: "Absent", label: "Absent" },
 		],
+		defaultValue: "Separate",
 	},
 	MRAcquisitionType: {
 		field: "MRAcquisitionType",
@@ -237,6 +242,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "2D", label: "2D" },
 			{ value: "3D", label: "3D" },
 		],
+		defaultValue: "3D",
 	},
 	PASLType: {
 		field: "PASLType",
@@ -252,6 +258,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "EPISTAR", label: "EPISTAR" },
 			{ value: "PICORE", label: "PICORE" },
 		],
+		defaultValue: "FAIR",
 	},
 	PCASLType: {
 		field: "PCASLType",
@@ -271,6 +278,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "balanced", label: "Balanced" },
 			{ value: "unbalanced", label: "Unbalanced" },
 		],
+		defaultValue: "balanced",
 		valueFormatter: BIDSEnumValueFormatter,
 	},
 	PhaseEncodingDirection: {
@@ -290,6 +298,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "k", label: "Third Axis (k) - Forward" },
 			{ value: "k-", label: "Third Axis (k) - Reverse" },
 		],
+		defaultValue: "j",
 		valueFormatter: BIDSEnumValueFormatter,
 	},
 	PulseSequenceType: {
@@ -308,6 +317,7 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "3D_GRASE", label: "3D GRaSE" },
 			{ value: "3D_spiral", label: "3D Spiral" },
 		],
+		defaultValue: "3D_GRASE",
 	},
 	SliceEncodingDirection: {
 		field: "SliceEncodingDirection",
@@ -327,5 +337,6 @@ export const BIDSEnumFieldToColDef: BIDSEnumFieldToColDefType = {
 			{ value: "k-", label: "Third Axis (k) - Reverse" },
 		],
 		valueGetter: BIDSEnumValueFormatter,
+		defaultValue: "i",
 	},
 };

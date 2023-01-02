@@ -1,12 +1,47 @@
 import * as Yup from "yup";
+import { isUndefined as lodashIsUndefined } from "lodash";
+import { yupCreateError } from "../../../common/utils/formFunctions";
 
-/** Minimal schema to ensure Echo time is an **optional** positive number */
-export const SchemaMin_EchoTime = Yup.number()
-	.typeError("Echo Time must be a positive number")
-	.positive("Echo Time must be a positive number");
+/** Minimal schema to ensure Echo time is an **optional** number or array of numbers */
+export const SchemaMin_EchoTime = Yup.mixed().test(
+	"FitsEchoTimeType",
+	"Echo Time must be either a positive number or an array of positive numbers",
+	(echoTime) => {
+		// Permit undefined or single-numeric values
+		if (lodashIsUndefined(echoTime) || typeof echoTime === "number") return true;
+		// Otherwise, must be an array of numbers
+		return Array.isArray(echoTime) && echoTime.every((value) => typeof value === "number");
+	}
+);
 
 /** Expanded schema for EchoTime to ensure it is required as well */
-export const Schema_EchoTime = SchemaMin_EchoTime.required("Echo Time is a required field in ASL processing");
+export const Schema_EchoTime = SchemaMin_EchoTime.required("Echo Time is a required field in ASL processing").test(
+	"EchoTimeBIDSValid",
+	"Echo Time must be a positive number or an array of positive numbers",
+	(echoTime, context) => {
+		// First assess if the value is a number
+		if (typeof echoTime === "number") {
+			if (echoTime <= 0) {
+				return yupCreateError(context, "Echo Time cannot be a negative number");
+			}
+			return true; // Early return
+		}
+
+		// Otherwise, must be an array of numbers
+		if (!Array.isArray(echoTime)) return false;
+
+		if (echoTime.length === 0) {
+			return yupCreateError(
+				context,
+				"If provided as a collection of numbers, Echo Time must contain at least one positive number"
+			);
+		}
+
+		if (!echoTime.every((value) => typeof value === "number" && value > 0)) {
+			return yupCreateError(context, "One or more Echo Time values are not positive numbers");
+		}
+	}
+);
 
 /** Minimal schema to ensure RepetitionTime is an **optional** positive number */
 export const SchemaMin_RepetitionTimePreparation = Yup.number()

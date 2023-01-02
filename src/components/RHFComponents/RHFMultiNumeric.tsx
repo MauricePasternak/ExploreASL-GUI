@@ -3,7 +3,7 @@ import FormControl, { FormControlProps } from "@mui/material/FormControl";
 import FormHelperText from "@mui/material/FormHelperText";
 import FormLabel from "@mui/material/FormLabel";
 import React from "react";
-import { FieldValues, Path, useController, useWatch } from "react-hook-form";
+import { FieldValues, FieldPath, useController, useWatch } from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedInput } from "../DebouncedComponents";
 
@@ -21,9 +21,9 @@ type RHFMultiNumericBaseProps = {
 
 export type RHFMultiNumericProps<
   TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+  TName extends FieldPath<TFV>,
+  TTrigger extends FieldPath<TFV>,
+  TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = RHFMultiNumericBaseProps &
   RHFControllerProps<TFV, TName> & // name, control
   RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchedChange
@@ -57,9 +57,9 @@ export type RHFMultiNumericProps<
  */
 export function RHFMultiNumeric<
   TFV extends FieldValues,
-  TName extends Path<TFV>,
-  TTrigger extends Path<TFV>,
-  TWatch extends Path<TFV> | readonly Path<TFV>[]
+  TName extends FieldPath<TFV>,
+  TTrigger extends FieldPath<TFV>,
+  TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
   name,
   control,

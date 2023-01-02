@@ -2,12 +2,18 @@ import { GridValidRowModel } from "@mui/x-data-grid";
 import { BIDSBooleanFields, BIDSBooleanFieldsNameType, isBIDSBooleanField } from "./BIDSBooleanColDefs";
 import { BIDSEnumFields, BIDSEnumFieldsNameType, isBIDSEnumField } from "./BIDSEnumColDefs";
 import { isMiscField, MiscFields, MiscFieldsNameType } from "./BIDSMiscColDefs";
+import {
+	BIDSNumericArrayFields,
+	BIDSNumericArrayFieldsNameType,
+	isBIDSNumericArrayField,
+} from "./BIDSNumericArrayColDefs";
 import { BIDSNumericFields, BIDSNumericFieldsNameType, isBIDSNumericField } from "./BIDSNumericColDefs";
 import { BIDSTextFields, BIDSTextFieldsNameType, isBIDSTextField } from "./BIDSTextColDefs";
 
 // ^ Field Names
 export type BIDSAllNonMiscFieldsNameType =
 	| BIDSNumericFieldsNameType
+	| BIDSNumericArrayFieldsNameType
 	| BIDSTextFieldsNameType
 	| BIDSEnumFieldsNameType
 	| BIDSBooleanFieldsNameType;
@@ -15,6 +21,7 @@ export type BIDSAllFieldsNameType = MiscFieldsNameType | BIDSAllNonMiscFieldsNam
 
 export const BIDSAllNonMiscFieldsSet = new Set([
 	...BIDSNumericFields,
+	...BIDSNumericArrayFields,
 	...BIDSTextFields,
 	...BIDSEnumFields,
 	...BIDSBooleanFields,
@@ -22,6 +29,7 @@ export const BIDSAllNonMiscFieldsSet = new Set([
 export const BIDSAllFieldsSet = new Set([
 	...MiscFields,
 	...BIDSNumericFields,
+	...BIDSNumericArrayFields,
 	...BIDSTextFields,
 	...BIDSEnumFields,
 	...BIDSBooleanFields,
@@ -35,6 +43,7 @@ export function isBIDSField(fieldName: string): fieldName is BIDSAllFieldsNameTy
 	return (
 		isMiscField(fieldName) ||
 		isBIDSNumericField(fieldName) ||
+		isBIDSNumericArrayField(fieldName) ||
 		isBIDSTextField(fieldName) ||
 		isBIDSEnumField(fieldName) ||
 		isBIDSBooleanField(fieldName)
@@ -54,14 +63,17 @@ export interface BIDSRow extends BIDSValidRowModel {
 	EchoTime?: number;
 	FlipAngle?: number;
 	InversionTime?: number;
-	LabelingDuration?: number;
 	MagneticFieldStrength?: number;
 	M0Estimate?: number;
 	M0_GMScaleFactor?: number;
-	PostLabelingDelay?: number;
 	RepetitionTimePreparation?: number;
 	TotalAcquiredPairs?: number;
 	TotalReadoutTime?: number;
+	// Numeric Array Fields
+	BackgroundSuppressionPulseTime?: number[];
+	PostLabelingDelay?: number | number[];
+	LabelingDuration?: number | number[];
+	SliceTiming?: number | number[];
 	// Text Fields
 	PulseSequenceDetails?: string;
 	ReceiveCoilName?: string;
@@ -99,14 +111,17 @@ export const BIDSFieldNameToDisplayName: Record<BIDSAllFieldsNameType, string> =
 	EchoTime: "Echo Time (s)",
 	FlipAngle: "Flip Angle (deg)",
 	InversionTime: "Inversion Time (s)",
-	LabelingDuration: "Labeling Duration (s)",
 	MagneticFieldStrength: "Magnetic Field Strength (T)",
 	M0Estimate: "M0 Estimate (a.u.)",
 	M0_GMScaleFactor: "M0 GM Scale Factor (a.u.)",
-	PostLabelingDelay: "Post Labeling Delay (s)",
 	RepetitionTimePreparation: "Repetition Time Preparation (s)",
 	TotalAcquiredPairs: "Total Acquired Pairs",
 	TotalReadoutTime: "Total Readout Time (s)",
+	// Numeric Array Fields
+	BackgroundSuppressionPulseTime: "Background Suppression Pulse Timings (s)",
+	PostLabelingDelay: "Post Labeling Delay (s)",
+	LabelingDuration: "Labeling Duration (s)",
+	SliceTiming: "Slice Timing (s)",
 	// Text Fields
 	PulseSequenceDetails: "Pulse Sequence Details",
 	ReceiveCoilName: "Receive Coil Name",
