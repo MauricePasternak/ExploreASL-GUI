@@ -16,20 +16,20 @@ const { api } = window;
  * - `EASLVersionNumber`: The version number as ### (i.e. 110 for 1.10) on the basis of Major and Minor version numbers.
  */
 export async function rendererGetEASLVersion(filepath: string) {
-  const result = {
-    EASLVersionPath: null as Path,
-    EASLVersionNumber: null as number,
-  };
-  const EASLVersionRegex = new Regex("VERSION_(?<Major>\\d+)\\.(?<Minor>\\d+)\\.(?<Patch>\\d+)", "m");
-  const [versionFile] = await api.path.glob(filepath, "VERSION_*", { onlyFiles: true, onlyDirectories: false });
-  if (!versionFile) return result;
-  result.EASLVersionPath = versionFile;
+	const result = {
+		EASLVersionPath: null as Path,
+		EASLVersionNumber: null as number,
+	};
+	const EASLVersionRegex = new Regex("VERSION_(?<Major>\\d+)\\.(?<Minor>\\d+)\\.(?<Patch>\\d+)", "m");
+	const [versionFile] = await api.path.glob(filepath, "VERSION_*", { onlyFiles: true, onlyDirectories: false });
+	if (!versionFile) return result;
+	result.EASLVersionPath = versionFile;
 
-  const match = EASLVersionRegex.search(versionFile.path);
-  if (!match) return result;
-  const { Major, Minor } = match.groupsObject;
-  result.EASLVersionNumber = parseInt(`${Major}${Minor}`, 10);
-  return result;
+	const match = EASLVersionRegex.search(versionFile.path);
+	if (!match) return result;
+	const { Major, Minor } = match.groupsObject;
+	result.EASLVersionNumber = parseInt(`${Major}${Minor}`, 10);
+	return result;
 }
 
 /**
@@ -40,44 +40,46 @@ export async function rendererGetEASLVersion(filepath: string) {
  * @returns A boolean or a Yup.ValidationError.
  */
 export async function IsValidEASLPath<TContext extends FieldValues = FieldValues>(
-  filepath: string,
-  easlType: EASLType,
-  helpers: TestContext<TContext>
+	filepath: string,
+	easlType: EASLType,
+	helpers: TestContext<TContext>
 ) {
-  // Filepath must be a valid string
-  if (!filepath || typeof filepath !== "string") return false;
-  const filePathType = await api.path.getFilepathType(filepath);
+	// Filepath must be a valid string
+	if (!filepath || typeof filepath !== "string") return false;
+	const filePathType = await api.path.getFilepathType(filepath);
 
-  // Filepath must be a directory
-  if (filePathType !== "dir") return false;
+	// Filepath must be a directory
+	if (filePathType !== "dir") return false;
 
-  // Version must exist and be in the currently-supported version list
-  const { EASLVersionPath } = await rendererGetEASLVersion(filepath);
+	// Version must exist and be in the currently-supported version list
+	const { EASLVersionPath } = await rendererGetEASLVersion(filepath);
 
-  // Version file must exist and be in the current accepted mappings
-  if (!EASLVersionPath) {
-    return helpers.createError({ path: helpers.path, message: "Could not locate an ExploreASL Version File" });
-  }
-  if (!(EASLVersionPath.basename in EASLWorkloadMapping)) {
-    return helpers.createError({
-      path: helpers.path,
-      message: `This GUI does not support ExploreASL version: ${EASLVersionPath.basename}`,
-    });
-  }
+	// Version file must exist and be in the current accepted mappings
+	if (!EASLVersionPath) {
+		return helpers.createError({ path: helpers.path, message: "Could not locate an ExploreASL Version File" });
+	}
+	if (!(EASLVersionPath.basename in EASLWorkloadMapping)) {
+		return helpers.createError({
+			path: helpers.path,
+			message: `This GUI does not support ExploreASL version: ${
+				EASLVersionPath.basename
+			}. Supported versions include: ${Object.keys(EASLWorkloadMapping).join(", ")}`,
+		});
+	}
 
-  // There must be an executable file in the directory
-  const expectedBasename =
-    easlType === "Compiled" ? (api.platform === "win32" ? "xASL_latest.exe" : "run_xASL_latest.sh") : "ExploreASL.m";
-  const hasExecutable = !!(await api.path.containsImmediateChild(filepath, expectedBasename));
-  if (!hasExecutable) {
-    return helpers.createError({
-      path: helpers.path,
-      message: `This folder was expected to contain a "${expectedBasename}" file.`,
-    });
-  }
+	// There must be an executable file in the directory
+	const expectedBasename =
+		easlType === "Compiled" ? (api.platform === "win32" ? "xASL_latest.exe" : "run_xASL_latest.sh") : "ExploreASL.m";
+	const hasExecutable = !!(await api.path.containsImmediateChild(filepath, expectedBasename));
+	if (!hasExecutable) {
+		return helpers.createError({
+			path: helpers.path,
+			message: `This folder was expected to contain a "${expectedBasename}" file.`,
+		});
+	}
 
-  // Filepath is valid
-  return true;
+	// Filepath is valid
+	return true;
 }
 
 /**
@@ -87,32 +89,32 @@ export async function IsValidEASLPath<TContext extends FieldValues = FieldValues
  * @returns A boolean or a Yup.ValidationError.
  */
 export async function IsValidMATLABRuntimePath(filepath: string, helpers: TestContext) {
-  // Filepath must be a valid string
-  if (!filepath || typeof filepath !== "string") return false;
-  const filePathType = await api.path.getFilepathType(filepath);
+	// Filepath must be a valid string
+	if (!filepath || typeof filepath !== "string") return false;
+	const filePathType = await api.path.getFilepathType(filepath);
 
-  // Filepath must be a directory
-  if (filePathType !== "dir") return false;
+	// Filepath must be a directory
+	if (filePathType !== "dir") return false;
 
-  // Must contain a valid MATLAB Runtime version
-  const asPath = api.path.asPath(filepath);
-  if (!/^v\d{2,3}$/.test(asPath.basename)) {
-    return helpers.createError({
-      path: helpers.path,
-      message: "Not a MATLAB Runtime folder. A MATLAB runtime folder has the format v9# (i.e. v97)",
-    });
-  }
+	// Must contain a valid MATLAB Runtime version
+	const asPath = api.path.asPath(filepath);
+	if (!/^v\d{2,3}$/.test(asPath.basename)) {
+		return helpers.createError({
+			path: helpers.path,
+			message: "Not a MATLAB Runtime folder. A MATLAB runtime folder has the format v9# (i.e. v97)",
+		});
+	}
 
-  // The version must be supported by this GUI
-  if (!SUPPORTEDMATLABRUNTIMEVERSIONS.includes(asPath.basename)) {
-    return helpers.createError({
-      path: helpers.path,
-      message: "The MATLAB Runtime must be at least v96 (R2019a)",
-    });
-  }
+	// The version must be supported by this GUI
+	if (!SUPPORTEDMATLABRUNTIMEVERSIONS.includes(asPath.basename)) {
+		return helpers.createError({
+			path: helpers.path,
+			message: "The MATLAB Runtime must be at least v96 (R2019a)",
+		});
+	}
 
-  // Filepath is valid
-  return true;
+	// Filepath is valid
+	return true;
 }
 
 /**
@@ -123,28 +125,28 @@ export async function IsValidMATLABRuntimePath(filepath: string, helpers: TestCo
  * @returns A boolean or a Yup.ValidationError.
  */
 export async function IsValidStudyRoot(
-  filepath: string,
-  helpers: TestContext,
-  expectedChildren: string[] = ["sourcedata"]
+	filepath: string,
+	helpers: TestContext,
+	expectedChildren: string[] = ["sourcedata"]
 ) {
-  console.log("IsValidStudyRoot -- filepath: ", filepath);
-  // Filepath must be a valid string
-  if (!filepath) return false;
+	console.log("IsValidStudyRoot -- filepath: ", filepath);
+	// Filepath must be a valid string
+	if (!filepath) return false;
 
-  const filePathType = await api.path.getFilepathType(filepath);
-  if (filePathType !== "dir") return false;
+	const filePathType = await api.path.getFilepathType(filepath);
+	if (filePathType !== "dir") return false;
 
-  const children = await api.path.containsChildren(filepath, expectedChildren);
-  if (!children.every(child => Boolean(child))) {
-    return helpers.createError({
-      path: helpers.path,
-      message: `This folder was expected to contain the following ${
-        expectedChildren.length === 1 ? "folder" : "folders"
-      }: ${expectedChildren.join(", ")}`,
-    });
-  }
+	const children = await api.path.containsChildren(filepath, expectedChildren);
+	if (!children.every((child) => Boolean(child))) {
+		return helpers.createError({
+			path: helpers.path,
+			message: `This folder was expected to contain the following ${
+				expectedChildren.length === 1 ? "folder" : "folders"
+			}: ${expectedChildren.join(", ")}`,
+		});
+	}
 
-  return true;
+	return true;
 }
 
 /**
@@ -154,38 +156,38 @@ export async function IsValidStudyRoot(
  * @returns A boolean or a Yup.ValidationError.
  */
 export async function AreValidSubjects(subjectBasenames: string[], helpers: TestContext<DataParValuesType>) {
-  if (!subjectBasenames || !Array.isArray(subjectBasenames) || !subjectBasenames.length) {
-    return helpers.createError({
-      path: helpers.path,
-      message: "Invalid value provided for the listing of subjects",
-    });
-  }
+	if (!subjectBasenames || !Array.isArray(subjectBasenames) || !subjectBasenames.length) {
+		return helpers.createError({
+			path: helpers.path,
+			message: "Invalid value provided for the listing of subjects",
+		});
+	}
 
-  // Must first ascertain that
-  const StudyRootPath: string | undefined = helpers.options.context.x.GUI.StudyRootPath;
-  console.log(`AreValidSubjects -- StudyRootPath: ${StudyRootPath}`);
+	// Must first ascertain that
+	const StudyRootPath: string | undefined = helpers.options.context.x.GUI.StudyRootPath;
+	console.log(`AreValidSubjects -- StudyRootPath: ${StudyRootPath}`);
 
-  if (
-    !StudyRootPath || // Cannot be falsy
-    typeof StudyRootPath !== "string" || // Must be a string
-    (await IsValidStudyRoot(StudyRootPath, helpers, ["sourcedata", "rawdata", "derivatives"])) !== true // Must be a valid study root
-  ) {
-    return helpers.createError({
-      path: helpers.path,
-      message: "Cannot validate the subjects because the Study Root Path itself is invalid",
-    });
-  }
+	if (
+		!StudyRootPath || // Cannot be falsy
+		typeof StudyRootPath !== "string" || // Must be a string
+		(await IsValidStudyRoot(StudyRootPath, helpers, ["sourcedata", "rawdata", "derivatives"])) !== true // Must be a valid study root
+	) {
+		return helpers.createError({
+			path: helpers.path,
+			message: "Cannot validate the subjects because the Study Root Path itself is invalid",
+		});
+	}
 
-  // Must all exist in rawdata
-  const existenceChecks = await api.path.getFilepathsType(
-    subjectBasenames.map(subjectBasename => `${StudyRootPath}/rawdata/${subjectBasename}`)
-  );
-  if (!existenceChecks.every(check => check === "dir")) {
-    return helpers.createError({
-      path: helpers.path,
-      message: "One or more of the provided subjects do not exist in the rawdata folder",
-    });
-  }
+	// Must all exist in rawdata
+	const existenceChecks = await api.path.getFilepathsType(
+		subjectBasenames.map((subjectBasename) => `${StudyRootPath}/rawdata/${subjectBasename}`)
+	);
+	if (!existenceChecks.every((check) => check === "dir")) {
+		return helpers.createError({
+			path: helpers.path,
+			message: "One or more of the provided subjects do not exist in the rawdata folder",
+		});
+	}
 
-  return true;
+	return true;
 }

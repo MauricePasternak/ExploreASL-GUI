@@ -126,6 +126,9 @@ export const ImportModule__SingleContextPathsTest = async (
 		const pathParts = makeForwardSlashes(path).replace(sourcedataPathForwardSlash, "").split("/");
 		const pathDepth = pathParts.length;
 		const folderType = SourcedataStructure[pathDepth - 1];
+
+		// console.log(`${path} is a ${folderType}`);
+
 		if (!permissibleBasenameTypes.has(folderType))
 			return yupCreateError(helpers, `Path ${path} was not found to be a Subject, Visit, or Session`);
 	}

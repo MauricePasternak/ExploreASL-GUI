@@ -1,0 +1,348 @@
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+import FolderIcon from "@mui/icons-material/Folder";
+import Avatar from "@mui/material/Avatar";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
+import Divider from "@mui/material/Divider";
+import Grid from "@mui/material/Grid";
+import Paper from "@mui/material/Paper";
+import Typography from "@mui/material/Typography";
+import { DataFrame, fromCSV } from "data-forge";
+import { atom, useAtom, useSetAtom } from "jotai";
+import React from "react";
+import { useForm } from "react-hook-form";
+import { DataVizLoadDFSchema } from "../../common/schemas/DataVisualizationSchemas/DataVizLoadDFSchema";
+import { getColumnDtypeFreq, innerJoin, isNumericSeries, outerLeftJoin } from "../../common/utils/dataFrameFunctions";
+import { YupResolverFactoryBase } from "../../common/utils/formFunctions";
+import { RHFFilepathInput, RHFSelect } from "../../components/RHFComponents";
+import { FabDialogWrapper, OutlinedGroupBox } from "../../components/WrapperComponents";
+import { atomCurrentMRIViewSubject, atomDataVizCurrentStep, atomDataVizDF, atomDataVizDFDTypes, atomDataVizLoadSettings, atomNivoGraphDataVariablesSchema, atomOfAtomMRIData, atomOfAtomsDataVizSubsetOperations, defaultNivoGraphDataVariablesSchema, } from "../../stores/DataFrameVisualizationStore";
+import { atomDataVizModuleSnackbar } from "../../stores/SnackbarStore";
+import HelpDataViz__StepDefineDataframeLoc from "../Help/HelpDataViz__StepDefineDataframeLoc";
+const atlasesOptions = [
+    { label: "WholeBrain Grey Matter", value: "TotalGM" },
+    { label: "Wholebrain White Matter", value: "DeepWM" },
+    { label: "MNI Cortical Atlas", value: "MNI_Structural" },
+    { label: "Hammers Atlas", value: "Hammers" },
+    { label: "Harvard-Oxford Cortical", value: "HOcort_CONN" },
+    { label: "Harvard-Oxford Subcortical", value: "HOsub_CONN" },
+    { label: "OASIS Atlas", value: "Mindboggle_OASIS_DKT31_CMA" },
+];
+const EASLColnamesNotPermittedInMetadata = [
+    "LongitudinalTimePoint",
+    "SubjectNList",
+    "GM_vol",
+    "WM_vol",
+    "CSF_vol",
+    "GM_ICVRatio",
+    "GMWM_ICVRatio",
+];
+// Automatically coerce certain columns to a given type
+const EASLCoerceToCategorical = {
+    LongitudinalTimePoint: "Categorical",
+    SubjectNList: "Categorical",
+};
+function handleCleanRawDF(df) {
+    const dtypeMapping = {};
+    const colsToDrop = [];
+    const convertedSeries = {};
+    for (const colName of df.getColumnNames()) {
+        const series = df.getSeries(colName);
+        const dtype = getColumnDtypeFreq(series);
+        if (colName in EASLCoerceToCategorical) {
+            dtypeMapping[colName] = EASLCoerceToCategorical[colName];
+            convertedSeries[colName] = series.map((x) => (x == null ? null : x.toString()));
+        }
+        // Pure type
+        else if (typeof dtype === "string") {
+            // Pure string
+            if (dtype === "string") {
+                dtypeMapping[colName] = "Categorical";
+            }
+            else if (dtype === "number") {
+                dtypeMapping[colName] = "Continuous";
+            }
+            else if (dtype === "boolean") {
+                dtypeMapping[colName] = "Categorical";
+                convertedSeries[colName] = series.map((x) => (x == null ? null : x === true ? "True" : "False"));
+            }
+            else if (dtype === "date") {
+                dtypeMapping[colName] = "Categorical";
+                convertedSeries[colName] = series.map((x) => (x == null ? null : x.toString()));
+            }
+            else {
+                colsToDrop.push(colName);
+            }
+        }
+        // Impure type
+        else {
+            // Complex types automatically removed
+            if (dtype.object || dtype.array) {
+                colsToDrop.push(colName);
+            }
+            else {
+                const numericType = isNumericSeries(series);
+                if (numericType) {
+                    dtypeMapping[colName] = "Continuous";
+                    convertedSeries[colName] = numericType === "Float" ? series.parseFloats() : series.parseInts();
+                }
+                else {
+                    dtypeMapping[colName] = "Categorical";
+                    convertedSeries[colName] = series.map((x) => (x == null ? null : x.toString()));
+                }
+            }
+        }
+    } // End for loop
+    // Drop columns, convert series, and return the expected tuple
+    const cleanDF = new DataFrame(df.dropSeries(colsToDrop).withSeries(convertedSeries).toArray());
+    return [dtypeMapping, cleanDF];
+}
+function StepDefineDataframeLoc() {
+    const { api } = window;
+    const setDataVizCurrentStep = useSetAtom(atomDataVizCurrentStep);
+    const [dataVizLoadSettings, setDataVizLoadSettings] = useAtom(atomDataVizLoadSettings);
+    const setDataVizDF = useSetAtom(atomDataVizDF);
+    const setDataVizDFDTypes = useSetAtom(atomDataVizDFDTypes);
+    const setDataVizSubsetOps = useSetAtom(atomOfAtomsDataVizSubsetOperations);
+    const setDataVizSnackbar = useSetAtom(atomDataVizModuleSnackbar);
+    const setGraphDataVariables = useSetAtom(atomNivoGraphDataVariablesSchema);
+    const setCurrentMRIViewSubject = useSetAtom(atomCurrentMRIViewSubject);
+    const setAtomsMRIData = useSetAtom(atomOfAtomMRIData);
+    const { control, handleSubmit } = useForm({
+        // defaultValues: loadDataFrameDataVizDefaults,
+        defaultValues: dataVizLoadSettings,
+        resolver: YupResolverFactoryBase(DataVizLoadDFSchema),
+    });
+    const handleValidSubmit = (values) => __awaiter(this, void 0, void 0, function* () {
+        console.log("Step 'Define Runtime Envs' -- Valid Submit Values: ", values);
+        const statisticsPath = api.path.asPath(values.StudyRootPath, "derivatives", "ExploreASL", "Population", "Stats");
+        let mergeColumn; // Differs between EASL versions
+        /**
+         * Part 1: Load the ExploreASL dataframes, merging them into a single dataframe if necessary
+         */
+        const atlasBasenames = values.Atlases.map((atlasName) => {
+            return `${values.Statistic}_qCBF_StandardSpace_${atlasName}_*${values.PVC}.tsv`;
+        });
+        const pathsEASLDF = yield api.path.glob(statisticsPath.path, atlasBasenames);
+        let tmpIDF = null;
+        let EASLDF = null;
+        for (const pathDF of pathsEASLDF) {
+            const fetchDF = yield api.invoke("Dataframe:Load", pathDF.path);
+            if (!fetchDF.success) {
+                setDataVizSnackbar({
+                    severity: "error",
+                    title: "Could not load one or more ExploreASL dataframes",
+                    message: [
+                        "Encountered the following error while loading dataframe:",
+                        `${pathDF.path}`,
+                        ...fetchDF.errorMessages,
+                    ],
+                });
+                return;
+            }
+            // First round, just re-assign. Also, this determines the merge column
+            if (tmpIDF == null) {
+                tmpIDF = fromCSV(fetchDF.data, { dynamicTyping: true }).after(0); // after(0) to skip ExploreASL's 1st row
+                if (!tmpIDF.hasSeries("participant_id") && !tmpIDF.hasSeries("SUBJECT")) {
+                    setDataVizSnackbar({
+                        severity: "error",
+                        title: "Merge column not found",
+                        message: [
+                            "Encountered the following error while loading dataframe:",
+                            `${pathDF.path}`,
+                            `The dataframe does not contain the expected column named 'participant_id' (ExploreASL v1.10 onwards) or 'SUBJECT' (ExploreASL v1.9 and earlier)`,
+                        ],
+                    });
+                    return;
+                }
+                mergeColumn = tmpIDF.hasSeries("participant_id") ? "participant_id" : "SUBJECT";
+                continue;
+            }
+            // Otherwise, merge
+            const nextDF = fromCSV(fetchDF.data, { dynamicTyping: true }).after(0);
+            if (!nextDF.hasSeries(mergeColumn)) {
+                setDataVizSnackbar({
+                    severity: "error",
+                    title: "Merge column not found",
+                    message: [
+                        "Encountered the following error while loading dataframe:",
+                        `${pathDF.path}`,
+                        `The dataframe does not contain the expected column named '${mergeColumn}'`,
+                    ],
+                });
+                return;
+            }
+            tmpIDF = innerJoin(tmpIDF, nextDF, mergeColumn);
+        } // End of for loop
+        // Drop Site column; it should be coming from a user's metadata
+        EASLDF = new DataFrame(tmpIDF.hasSeries("Site") ? tmpIDF.dropSeries("Site").toArray() : tmpIDF.toArray());
+        console.log("Step 'Define Runtime Envs' -- EASLDF: ", EASLDF.toArray());
+        /**
+         * Part 2: Load the Metadata dataframe
+         */
+        let MetadataDF = null;
+        if (values.MetadataPath) {
+            const fetchMetaDF = yield api.invoke("Dataframe:Load", values.MetadataPath);
+            if (!fetchMetaDF.success) {
+                setDataVizSnackbar({
+                    severity: "error",
+                    title: "Could not load the Metadata dataframe",
+                    message: [
+                        "Encountered the following error while loading dataframe:",
+                        `${values.MetadataPath}`,
+                        ...fetchMetaDF.errorMessages,
+                    ],
+                });
+                return;
+            }
+            // Remove columns that may cause issues when merging
+            const initialMetadataDF = fromCSV(fetchMetaDF.data, { dynamicTyping: true });
+            const colsToDrop = [];
+            for (const colName of EASLColnamesNotPermittedInMetadata) {
+                if (initialMetadataDF.hasSeries(colName)) {
+                    colsToDrop.push(colName);
+                }
+            }
+            MetadataDF =
+                colsToDrop.length > 0 ? new DataFrame(initialMetadataDF.dropSeries(colsToDrop).toArray()) : initialMetadataDF;
+            console.log("Step 'Define Runtime Envs' -- MetadataDF: ", MetadataDF.toArray());
+        } // End of if statement
+        /**
+         * Part 3: Merge the ExploreASL and Metadata dataframes
+         */
+        let mergedDF = null;
+        if (MetadataDF) {
+            // Sanity Check for main merge column existing
+            if (!MetadataDF.getColumnNames().includes(mergeColumn)) {
+                setDataVizSnackbar({
+                    severity: "error",
+                    title: `Could not find the column ${mergeColumn} in the Metadata dataframe`,
+                    message: [
+                        "Encountered the following error while loading dataframe:",
+                        `${values.MetadataPath}`,
+                        `The column: ${mergeColumn} is required for merging the ExploreASL and Metadata dataframes`,
+                    ],
+                });
+                return;
+            }
+            // Sanity Check for non-null values in merge columns
+            let nullItems;
+            if (!MetadataDF.hasSeries("session")) {
+                nullItems = MetadataDF.getSeries(mergeColumn)
+                    .filter((val) => val == null)
+                    .count();
+            }
+            else {
+                nullItems = MetadataDF.subset([mergeColumn, "session"])
+                    .filter((row) => row[mergeColumn] == null || row["session"] == null)
+                    .count();
+            }
+            if (nullItems > 0) {
+                setDataVizSnackbar({
+                    severity: "error",
+                    title: `Empty values found in the ${mergeColumn} and/or session columns of the Metadata dataframe`,
+                    message: [
+                        `A proper merging of the ExploreASL and Metadata dataframes is impossible when there are empty values in the "${mergeColumn}" and/or "session" columns of the Metadata dataframe.`,
+                        " ",
+                        "Please remove rows with the empty values in this/these column(s) and try again.",
+                    ],
+                });
+                return;
+            }
+            // Perform an outer-left join on the ExploreASL and Metadata dataframes;
+            // on SUBJECT and session if the latter is present; otherwise just on SUBJECT
+            mergedDF = new DataFrame(outerLeftJoin(EASLDF, MetadataDF, MetadataDF.hasSeries("session") ? [mergeColumn, "session"] : mergeColumn).toArray());
+        }
+        else {
+            mergedDF = EASLDF;
+        }
+        console.log("Step 'Define Runtime Envs' -- Merged Dataframe: ", mergedDF.toString());
+        if (mergedDF.count() === 0) {
+            MetadataDF != null
+                ? setDataVizSnackbar({
+                    severity: "error",
+                    title: "Invalid Merge with Metadata",
+                    message: [
+                        "The ExploreASL and Metadata spreadsheet do not have any overlapping subjects/sessions.",
+                        "Ensure that the Metadata spreadsheet contains a SUBJECT column with the same subjects as the ExploreASL spreadsheet.",
+                        `The Metadata spreadsheet can also contain a "session" column.`,
+                        "Subject names are based on the subject folders located within the rawdata folder.",
+                    ],
+                })
+                : setDataVizSnackbar({
+                    severity: "error",
+                    title: "Error while loading ExploreASL Data",
+                    message: ["Failed to load and/or merge one or more ExploreASL spreadsheets."],
+                });
+            return;
+        }
+        /**
+         * Part 4: Clean the dataframe and set the fields
+         */
+        const [dtypeMapping, cleanDF] = handleCleanRawDF(mergedDF);
+        setDataVizLoadSettings(values); // Save the settings that were used to load the dataframe
+        setGraphDataVariables(defaultNivoGraphDataVariablesSchema); // Reset the graph data variables
+        setDataVizDF(cleanDF); // Set the new dataframe
+        setDataVizDFDTypes(dtypeMapping); // Set the new dataframe dtypes
+        setDataVizSubsetOps([]); // Reset subset operations
+        setCurrentMRIViewSubject(""); // Reset current subject
+        setAtomsMRIData([atom([]), atom([]), atom([])]); // Reset MRIData
+        setDataVizCurrentStep("DefineDTypes"); // Proceed to next step
+    });
+    const handleInvalidSubmit = (errors) => {
+        console.log("Step 'Define Runtime Envs' -- Invalid Submit Errors: ", errors);
+    };
+    return (React.createElement("form", { onSubmit: handleSubmit(handleValidSubmit, handleInvalidSubmit) },
+        React.createElement(Box, { padding: 2 },
+            React.createElement(Card, { sx: { marginBottom: 4 } },
+                React.createElement(CardHeader, { title: React.createElement(Typography, { variant: "h4" }, "Load DataFrame"), subheader: React.createElement(Typography, null, "Define which spreadsheets should be loaded, including your own metadata spreadsheet"), avatar: React.createElement(Avatar, { sizes: "large" },
+                        React.createElement(FolderIcon, null)), action: React.createElement(FabDialogWrapper, { maxWidth: "xl", PaperProps: { sx: { minWidth: "499px" } }, sx: { marginTop: "40px" } },
+                        React.createElement(HelpDataViz__StepDefineDataframeLoc, null)) }),
+                React.createElement(Divider, null),
+                React.createElement(CardContent, null,
+                    React.createElement(OutlinedGroupBox, { label: "Load DataFrame Parameters", mt: 3, labelBackgroundColor: (theme) => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff") },
+                        React.createElement(Grid, { container: true, rowSpacing: 3, columnSpacing: 3, marginTop: 0, padding: 1 },
+                            React.createElement(Grid, { item: true, xs: 12, md: 6, xl: 3 },
+                                React.createElement(RHFFilepathInput, { control: control, name: "StudyRootPath", filepathType: "dir", dialogOptions: { properties: ["openDirectory"] }, label: "Study Root Path", helperText: "This is the root of your dataset" })),
+                            React.createElement(Grid, { item: true, xs: 12, md: 6, xl: 3 },
+                                React.createElement(RHFFilepathInput, { control: control, name: "MetadataPath", filepathType: "file", dialogOptions: {
+                                        properties: ["openFile"],
+                                        filters: [{ name: "CSV, TSV", extensions: ["csv", "tsv"] }],
+                                    }, label: "Metadata Filepath", helperText: `(Optional) Filepath to any metadata for your dataset. Must be a ".csv" or ".tsv" file.` })),
+                            React.createElement(Grid, { item: true, xs: 12, md: 6, xl: 3 },
+                                React.createElement(RHFSelect, { control: control, name: "Statistic", label: "Which Atlas Statistic to Load", options: [
+                                        { label: "Mean", value: "mean" },
+                                        { label: "Median", value: "median" },
+                                        { label: "Coefficient of Variation", value: "CoV" },
+                                    ] })),
+                            React.createElement(Grid, { item: true, xs: 12, md: 6, xl: 3 },
+                                React.createElement(RHFSelect, { control: control, name: "PVC", label: "Which Partial Volume Correction Spreadsheet to Load", options: [
+                                        { label: "With Partial Volume Correction", value: "PVC2" },
+                                        { label: "No Partial Volume Correction", value: "PVC0" },
+                                    ] })),
+                            React.createElement(Grid, { item: true, xs: 12 },
+                                React.createElement(RHFSelect, { control: control, name: "Atlases", label: "Atlases to Load", options: atlasesOptions, multiple: true, helperText: "The atlases that should be loaded" }))))))),
+        React.createElement(Paper, { elevation: 10, sx: {
+                position: "fixed",
+                left: 0,
+                bottom: 0,
+                width: "100%",
+                borderRadius: 0,
+                display: "flex",
+                justifyContent: "flex-end",
+            } },
+            React.createElement(Button, { type: "submit" }, "Proceed To Clarify Data Types"))));
+}
+export default React.memo(StepDefineDataframeLoc);
+//# sourceMappingURL=StepDefineDataframeLoc.js.map

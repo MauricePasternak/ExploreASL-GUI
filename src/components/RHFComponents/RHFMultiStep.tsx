@@ -7,8 +7,6 @@ import Stepper, { StepperProps } from "@mui/material/Stepper";
 import React, { useState } from "react";
 import { Control, DeepPartial, FieldPath, FieldValues, useForm, UseFormReturn, useFormState } from "react-hook-form";
 import * as Yup from "yup";
-import Lazy from "yup/lib/Lazy";
-import { ValidateOptions } from "yup/lib/types";
 import { ResolverFactory } from "../../common/utils/formFunctions";
 
 /**
@@ -43,27 +41,27 @@ export type RHFMultiStepStepperProps<TFV extends FieldValues> = {
 	steps: RHFMultiStepStepProps<TFV>[];
 } & StepperProps;
 
-export type RHFMultiStepProps<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues> = {
+export type RHFMultiStepProps<TSchema extends Yup.AnyObjectSchema, TFV extends FieldValues> = {
 	schemas: TSchema[];
-	data: DeepPartial<TFV>;
+	defaultValues: DeepPartial<TFV>;
 	resolverFactory?: ResolverFactory;
-	resolverOptions?: ValidateOptions<TFV>;
+	resolverOptions?: Yup.ValidateOptions<TFV>;
 	children: (RHFbag: RHFMultiStepReturnProps<TFV>) => React.ReactElement;
 };
 
 /**
  * Higher order component that wraps a form in a react-hook-form coupled with step logic.
  * @param schemas - An array of Schemas to be applied for each step.
- * @param data - Initial data to be used for the form.
+ * @param defaultValues - Initial defaultValues to be used for the form.
  * @param resolverFactory - A factory function that returns a resolver function for the form.
  * @param resolverOptions - Options to be passed to the resolver factory.
  * @returns Returns an object equivalent to the return of `useForm` plus the following two properties:
  * - `currentStep`: The current step of the form.
  * - `setCurrentStep`: A function that sets the current step of the form.
  */
-export function RHFMultiStep<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues>({
+export function RHFMultiStep<TSchema extends Yup.AnyObjectSchema, TFV extends FieldValues>({
 	schemas,
-	data,
+	defaultValues,
 	resolverFactory,
 	resolverOptions,
 	children,
@@ -72,7 +70,7 @@ export function RHFMultiStep<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TF
 	const currentSchema = schemas[step];
 	const resolver = currentSchema != undefined ? resolverFactory(currentSchema, resolverOptions) : undefined;
 	const RHFbag = useForm({
-		defaultValues: data,
+		defaultValues: defaultValues,
 		resolver,
 	});
 
@@ -178,7 +176,7 @@ export function RHFMultiStepButtons({
 			>
 				{backButtonText}
 			</Button>
-			<Divider sx={{ borderWidth: 1 }} variant="middle" flexItem  orientation="vertical" />
+			<Divider sx={{ borderWidth: 1 }} variant="middle" flexItem orientation="vertical" />
 			<Button type="submit" size="large" {...nextButtonProps}>
 				{nextButtonText}
 			</Button>

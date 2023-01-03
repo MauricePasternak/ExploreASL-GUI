@@ -1,0 +1,1 @@
+{"version":3,"file":"SecureLink.js","sourceRoot":"","sources":["../../../src/components/NavComponents/SecureLink.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,MAAM,OAAO,CAAC;AAC1B,OAAO,EAAE,IAAI,EAAa,MAAM,eAAe,CAAC;AAEhD,MAAM,UAAU,UAAU,CAAC,KAAwC;IACjE,OAAO,oBAAC,IAAI,oBAAK,KAAK,IAAE,MAAM,EAAC,QAAQ,EAAC,GAAG,EAAC,UAAU,IAAG,CAAC;AAC5D,CAAC"}

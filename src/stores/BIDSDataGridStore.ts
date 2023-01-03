@@ -64,7 +64,7 @@ export const atomBIDSColumnsToPermanentDelete = atom<BIDSAllFieldsNameType[]>([]
  * Derived setter atom for updating the state of the BIDSErrors, either adding or removing errors depending on
  * whether there are any errors in the updateErrorsArg.errors object
  */
-export const atomSetBIDSUpdateErrors = atom<null, BIDSErrorAddArg>(null, (get, set, updateErrorsArg) => {
+export const atomSetBIDSUpdateErrors = atom(null, (get, set, updateErrorsArg: BIDSErrorAddArg) => {
 	const { ID, errors: newErrors, bidsRow } = updateErrorsArg;
 	const hasErrors = Object.keys(newErrors).length > 0;
 	const currentBIDSErrors = get(atomBIDSErrors);
@@ -120,7 +120,7 @@ export const atomSetBIDSUpdateErrors = atom<null, BIDSErrorAddArg>(null, (get, s
 });
 
 /** Derived setter atom for setting the dataframe from a given filepath */
-export const atomSetFetchBIDSDataFrame = atom<null, string>(null, async (_, set, studyRootPath) => {
+export const atomSetFetchBIDSDataFrame = atom(null, async (_, set, studyRootPath: string) => {
 	// Sanity check -- must be a valid BIDS study root path
 	if (!studyRootPath || !((await api.path.getFilepathType(studyRootPath)) === "dir")) return null;
 
@@ -192,9 +192,9 @@ type BIDSAddColumnArgs<TName extends BIDSAllFieldsNameType = BIDSAllFieldsNameTy
 };
 
 /** Derived setter atom for adding in a new column to the dataframe */
-export const atomSetBIDSAddColumn = atom<null, BIDSAddColumnArgs>(
+export const atomSetBIDSAddColumn = atom(
 	null,
-	async (get, set, { colToAdd, defaultValue }) => {
+	async (get, set, { colToAdd, defaultValue }: BIDSAddColumnArgs) => {
 		// Update the existing BIDS rows
 		const BIDSRows = get(atomBIDSRows);
 		const newBIDSRows: BIDSRow[] = BIDSRows.map((row) => ({ ...row, [colToAdd]: defaultValue }));
@@ -271,9 +271,9 @@ type BIDSUpdateFromCellArgs<TName extends BIDSAllFieldsNameType = BIDSAllFieldsN
 };
 
 /** Derived setter atom for updating the dataframe at a particular cell */
-export const atomSetBIDSUpdateDataFrameFromCell = atom<null, BIDSUpdateFromCellArgs>(
+export const atomSetBIDSUpdateDataFrameFromCell = atom(
 	null,
-	(get, set, { ID, colName, value }) => {
+	(get, set, { ID, colName, value }: BIDSUpdateFromCellArgs) => {
 		const BIDSRows = get(atomBIDSRows);
 		const newBIDSRows = BIDSRows.map((row) => (row.ID === ID ? { ...row, [colName]: value } : row));
 		set(atomBIDSRows, newBIDSRows);

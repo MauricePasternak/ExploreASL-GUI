@@ -24,7 +24,9 @@
     <a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?assignees=MauricePasternak&labels=bug&template=bug_report.md&title=">Report Bug</a>
     ·
     <a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?assignees=MauricePasternak&labels=enhancement&template=feature_request.md&title=">Request Feature</a>
-    .
+    ·
+    <a href="https://github.com/MauricePasternak/ExploreASL-GUI/releases">Download</a>
+    ·
     <a href="https://mauricepasternak.github.io/ExploreASL-GUI-Docs/latest">Documentation</a>
   </p>
 </div>
@@ -38,6 +40,9 @@
       <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
+    </li>
+    <li>
+      <a href="#download">Download</a>
     </li>
     <li>
       <a href="#documentation">Documentation</a>
@@ -85,6 +90,16 @@ This project wraps around [ExploreASL](https://exploreasl.github.io/Documentatio
 [![Electron][electronjs]][electron-url]
 [![React][react.js]][react-url]
 [![MaterialUI][mui.js]][mui-url]
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+
+---
+<!-- RELEASES -->
+
+## Download
+
+The latest downloadable releases for your operating system can be found [here](https://github.com/MauricePasternak/ExploreASL-GUI/releases).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 

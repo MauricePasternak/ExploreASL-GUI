@@ -14,12 +14,10 @@ import React, { useEffect } from "react";
 import { SubmitErrorHandler, SubmitHandler, useFieldArray } from "react-hook-form";
 import ContextIcon from "../../../assets/svg/ContextIcon.svg";
 import { GUIIMPORTFILE_BASENAME, SOURCESTRUCTUREFILE_BASENAME, STUDYPARFILE_BASENAME } from "../../../common/GLOBALS";
-import { SchemaImportPar } from "../../../common/schemas/ImportSchemas/ImportSchema";
 import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
-import { YupValidate } from "../../../common/utils/formFunctions";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../../components/RHFComponents/RHFMultiStep";
 import { FabDialogWrapper } from "../../../components/WrapperComponents";
-import { ImportSingleContextDefault, ImportSingleContextDefaultValueMapping } from "../../../stores/ImportPageStore";
+import { ImportSingleContextDefault } from "../../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../../stores/SnackbarStore";
 import HelpImport__StepDefineAdditionalContext from "../../Help/HelpImport__StepDefineAdditionalContext";
 import {
@@ -167,8 +165,9 @@ export function StepDefineContexts({
 						title={<Typography variant="h4">Define Scan Acquisition Context</Typography>}
 						subheader={
 							<Typography>
-								Define the specific nature of the ASL scan acquisition to allow for the Import Module to properly convert
-								the series into NIFTI format. Supports defining multiple acquisition contexts for complex datasets.
+								Define how ASL scans were acquired (i.e. on which scanner vendor, timing settings, etc.). For complex
+								studies such as multi-site and multi-scanner, specify multiple contexts for each unique set of
+								acquisition circumstances.
 							</Typography>
 						}
 						avatar={

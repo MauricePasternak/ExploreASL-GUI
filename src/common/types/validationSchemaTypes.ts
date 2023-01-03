@@ -1,5 +1,4 @@
-import { ObjectShape } from "yup/lib/object";
-import { ValidationError } from "yup";
+import { ValidationError, ObjectShape } from "yup";
 
 type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never;
 /**

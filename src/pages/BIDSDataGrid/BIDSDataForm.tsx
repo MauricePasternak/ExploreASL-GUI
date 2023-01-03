@@ -3,7 +3,6 @@ import React, { useEffect } from "react";
 import { SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
 import * as Yup from "yup";
 import { Schema_StudyRootPathPostImport } from "../../common/schemas/CommonSchemas/EASLGUIPathsSchema";
-import { YupShape } from "../../common/types/validationSchemaTypes";
 import { YupResolverFactoryBase } from "../../common/utils/formFunctions";
 import { RHFFilepathInput } from "../../components/RHFComponents";
 import {
@@ -23,7 +22,7 @@ const BIDSFormValuesDefault: BIDSFormValuesType = {
 	studyRootPath: "",
 };
 
-const BIDSFormValuesSchema = Yup.object().shape<YupShape<BIDSFormValuesType>>({
+const BIDSFormValuesSchema: Yup.ObjectSchema<BIDSFormValuesType> = Yup.object().shape({
 	studyRootPath: Schema_StudyRootPathPostImport,
 });
 

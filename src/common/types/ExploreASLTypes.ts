@@ -12,14 +12,14 @@
  * - "Misc" (i.e. 999_completed)
  */
 export type EASLModuleType =
-  | "Structural"
-  | "Structural_FLAIR"
-  | "DARTEL_T1"
-  | "LongReg"
-  | "ASL"
-  | "Population"
-  | "Misc"
-  | "Import";
+	| "Structural"
+	| "Structural_FLAIR"
+	| "DARTEL"
+	| "LongReg"
+	| "ASL"
+	| "Population"
+	| "Misc"
+	| "Import";
 
 /**
  * Type defining a single step of the ExploreASL pipeline. Has properties:
@@ -28,9 +28,9 @@ export type EASLModuleType =
  * - `loadingBarValue`: the value of the loading bar for this step
  */
 export type EASLWorkloadStep = {
-  module: EASLModuleType;
-  description: string;
-  loadingBarValue: number;
+	module: EASLModuleType;
+	description: string;
+	loadingBarValue: number;
 };
 
 /**
@@ -41,7 +41,7 @@ export type EASLWorkloadStep = {
  * - `loadingBarValue`: the value of the loading bar for this step
  */
 export type EASLWorkload = {
-  [statusFileBasename: string]: EASLWorkloadStep;
+	[statusFileBasename: string]: EASLWorkloadStep;
 };
 
 /**
@@ -49,7 +49,7 @@ export type EASLWorkload = {
  * Keys are version strings, values are {@link EASLWorkload} objects.
  */
 export type EASLVersionToWorkloadMappingType = {
-  [version: string]: EASLWorkload;
+	[version: string]: EASLWorkload;
 };
 
 /**
@@ -59,20 +59,20 @@ export type EASLVersionToWorkloadMappingType = {
  * - `channelName`: The name of the IPC channel that the child processes are communicating on
  */
 export interface RunEASLStartupReturnType {
-  pids: number[];
-  channelName: string;
+	pids: number[];
+	channelName: string;
 }
 
 /**
  * Type which defines the "on process close" return
  */
 export interface RunEASLChildProcSummary extends Record<string, unknown> {
-  exitSummaries: {
-    pid: number;
-    exitCode: number;
-  }[];
-  numIncompleteSteps: number;
-  missedStepsMessages: string[];
+	exitSummaries: {
+		pid: number;
+		exitCode: number;
+	}[];
+	numIncompleteSteps: number;
+	missedStepsMessages: string[];
 }
 
 /**

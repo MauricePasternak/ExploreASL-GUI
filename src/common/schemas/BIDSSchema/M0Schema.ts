@@ -17,8 +17,8 @@ export const SchemaMin_M0Estimate = Yup.number()
 
 export const Schema_M0Estimate = Yup.mixed().when("M0Type", {
 	is: "Estimate",
-	then: SchemaMin_M0Estimate.required(`M0 Estimate is a required field when M0 Type is "Estimate"`),
-	otherwise: SchemaMin_M0Estimate,
+	then: () => SchemaMin_M0Estimate.required(`M0 Estimate is a required field when M0 Type is "Estimate"`),
+	otherwise: () => SchemaMin_M0Estimate,
 });
 
 /**

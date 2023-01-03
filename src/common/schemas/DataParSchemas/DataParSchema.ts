@@ -17,7 +17,7 @@ import { AreValidSubjects, IsValidEASLPath, IsValidMATLABRuntimePath } from "../
 import { Schema_StudyRootPathPostImport } from "../CommonSchemas/EASLGUIPathsSchema";
 import { DataParModule__ApplyQuantificationTest, DataParModule__SUBJECTSTest } from "./DataParSchemaCustomTests";
 
-const SchemaDataParDatasetParams: Yup.SchemaOf<DatasetParamsSchema> = Yup.object().shape({
+const SchemaDataParDatasetParams: Yup.ObjectSchema<DatasetParamsSchema> = Yup.object().shape({
 	name: Yup.string().typeError("Invalid value").default(""),
 	subjectRegexp: Yup.string().default(""),
 	exclusion: Yup.array()
@@ -30,47 +30,50 @@ const SchemaDataParDatasetParams: Yup.SchemaOf<DatasetParamsSchema> = Yup.object
 		.default([]),
 });
 
-const SchemaDataParExternalParams: Yup.SchemaOf<ExternalParamsSchema> = Yup.object()
+const SchemaDataParExternalParams: Yup.ObjectSchema<ExternalParamsSchema> = Yup.object()
 	.shape({
 		bAutomaticallyDetectFSL: Yup.boolean().default(false),
 		FSLPath: Yup.string().default(""),
 	})
 	.optional();
 
-const SchemaDataParGUIParams = Yup.object().shape<YupShape<GUIParamsSchema>>({
+const SchemaDataParGUIParams: Yup.ObjectSchema<GUIParamsSchema> = Yup.object().shape({
 	EASLType: Yup.string()
 		.required("This is a required field")
-		.typeError("This value must be either a value of Github or Compiled")
-		.oneOf(["Github", "Compiled"], "Indicated ExploreASL program must either be described as Github or Compiled"),
+		.oneOf(["Github", "Compiled"], "Indicated ExploreASL program must either be described as Github or Compiled")
+		.typeError("This value must be either a value of Github or Compiled"),
 	EASLPath: Yup.string()
 		.required("This is a required field")
 		.typeError("Invalid value")
 		.when("EASLType", {
 			is: "Github",
-			then: Yup.string().test(
-				"EASLPathValidGithub",
-				"Invalid ExploreASL Path",
-				async (filepath, helpers) => await IsValidEASLPath(filepath, "Github", helpers)
-			),
+			then: (schema) =>
+				schema.test(
+					"EASLPathValidGithub",
+					"Invalid ExploreASL Path",
+					async (filepath, helpers) => await IsValidEASLPath(filepath, "Github", helpers)
+				),
 			// Compiled EASL case
-			otherwise: Yup.string().test(
-				"EASLPathValidCompiled",
-				"Invalid ExploreASL Path",
-				async (filepath, helpers) => await IsValidEASLPath(filepath, "Compiled", helpers)
-			),
+			otherwise: (schema) =>
+				schema.test(
+					"EASLPathValidCompiled",
+					"Invalid ExploreASL Path",
+					async (filepath, helpers) => await IsValidEASLPath(filepath, "Compiled", helpers)
+				),
 		}),
 	MATLABRuntimePath: Yup.string()
 		.typeError("Invalid value")
 		.when("EASLType", {
 			is: "Github",
-			then: Yup.string().optional(),
-			otherwise: Yup.string()
-				.required("This is a required field when the ExploreASL program is indicated as not being from Github")
-				.test(
-					"MATLABRuntimePathValid",
-					"Invalid MATLAB Runtime Path",
-					async (filepath, helpers) => await IsValidMATLABRuntimePath(filepath, helpers)
-				),
+			then: (schema) => schema.optional(),
+			otherwise: (schema) =>
+				schema
+					.required("This is a required field when the ExploreASL program is indicated as not being from Github")
+					.test(
+						"MATLABRuntimePathValid",
+						"Invalid MATLAB Runtime Path",
+						async (filepath, helpers) => await IsValidMATLABRuntimePath(filepath, helpers)
+					),
 		}),
 	StudyRootPath: Schema_StudyRootPathPostImport,
 	SUBJECTS: Yup.array()
@@ -80,8 +83,13 @@ const SchemaDataParGUIParams = Yup.object().shape<YupShape<GUIParamsSchema>>({
 		.test("AreValidSubjects", DataParModule__SUBJECTSTest),
 });
 
-const SchemaDataParM0ProcessingParams = Yup.object().shape<YupShape<M0ProcessingParamsSchema>>({
-	M0_conventionalProcessing: Yup.number().optional().typeError("This value must be either 0 or 1").integer().default(0),
+const SchemaDataParM0ProcessingParams: Yup.ObjectSchema<M0ProcessingParamsSchema> = Yup.object().shape({
+	M0_conventionalProcessing: Yup.number()
+		.optional()
+		.typeError("This value must be either 0 or 1")
+		.integer()
+		.oneOf([0, 1], "This value must be either 0 or 1")
+		.default(0),
 	M0_GMScaleFactor: Yup.number()
 		.typeError("Must be a positive integer")
 		.positive("Must be a positive integer")
@@ -132,7 +140,7 @@ const SchemaDataParASLProcessingParamsSchema = Yup.object().shape<YupShape<ASLPr
 	MakeNIfTI4DICOM: Yup.boolean().oneOf([true, false], "Impossible value given for this field"),
 });
 
-const SchemaDataParStructuralProcessingParams = Yup.object().shape<YupShape<StructuralProcessingParamsSchema>>({
+const SchemaDataParStructuralProcessingParams: Yup.ObjectSchema<StructuralProcessingParamsSchema> = Yup.object().shape({
 	bSegmentSPM12: Yup.number()
 		.typeError("This value must be either 0 or 1")
 		.oneOf([0, 1], "Impossible value given for this field.")
@@ -147,7 +155,7 @@ const SchemaDataParStructuralProcessingParams = Yup.object().shape<YupShape<Stru
 		.default(false),
 });
 
-const SchemaDataParASLSequenceParams = Yup.object().shape<YupShape<ASLSequenceParamsSchema>>({
+const SchemaDataParASLSequenceParams: Yup.ObjectSchema<ASLSequenceParamsSchema> = Yup.object().shape({
 	SliceReadoutTime: Yup.number()
 		.required("This is a required field")
 		.typeError("This value must be a number")
@@ -197,7 +205,7 @@ const SchemaDataParASLQuantificationParams = Yup.object().shape<YupShape<ASLQuan
 	SaveCBF4D: Yup.boolean().optional().oneOf([true, false], "Impossible value given for this field").default(false),
 });
 
-const SchemaDataParSettingsParams = Yup.object().shape<YupShape<SettingsParamsSchema>>({
+const SchemaDataParSettingsParams: Yup.ObjectSchema<SettingsParamsSchema> = Yup.object().shape({
 	Quality: Yup.number()
 		.optional()
 		.typeError("This value must be either 0 or 1")
@@ -225,31 +233,28 @@ const SchemaDataParSettingsParams = Yup.object().shape<YupShape<SettingsParamsSc
 		.default(0),
 });
 
-const SchemDataParPopulationParams = Yup.object().shape<YupShape<PopulationParamsSchema>>({
+const SchemaDataParAtlasOptions = Yup.string().oneOf(
+	[
+		"TotalGM",
+		"DeepWM",
+		"MNI_Structural",
+		"HOcort_CONN",
+		"HOsub_CONN",
+		"Hammers",
+		"HammersCAT12",
+		"Thalamus",
+		"Mindboggle_OASIS_DKT31_CMA",
+	],
+	"At least one invalid or no-longer-supported atlas name specified for this field"
+);
+
+const SchemDataParPopulationParams: Yup.ObjectSchema<PopulationParamsSchema> = Yup.object().shape({
 	bMasking: Yup.array()
 		.length(4, "The length of this array of zeros or ones must be 4")
 		.of(Yup.number().oneOf([0, 1], "This field must be an array of zeros or ones."))
 		.typeError("Expected an array of zeros or ones")
 		.default([1, 1, 1, 1]),
-	Atlases: Yup.array()
-		.optional()
-		.of(
-			Yup.string().oneOf(
-				[
-					"TotalGM",
-					"DeepWM",
-					"MNI_Structural",
-					"HOcort_CONN",
-					"HOsub_CONN",
-					"Hammers",
-					"HammersCAT12",
-					"Thalamus",
-					"Mindboggle_OASIS_DKT31_CMA",
-				],
-				"At least one invalid or no-longer-supported atlas name specified for this field"
-			)
-		)
-		.default(["TotalGM", "DeepWM"]),
+	Atlases: Yup.array().optional().of(SchemaDataParAtlasOptions).default(["TotalGM", "DeepWM"]),
 });
 
 const SchemaDataParASLModule = SchemaDataParASLProcessingParamsSchema.concat(SchemaDataParM0ProcessingParams);

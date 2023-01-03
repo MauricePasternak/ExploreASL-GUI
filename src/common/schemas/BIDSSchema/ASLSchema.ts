@@ -284,14 +284,16 @@ export const SchemaMin_BolusCutOffFlag = Yup.boolean()
 /** Expanded schema to ensure BolusCutOffFlag is also sensitive to ASLType field */
 export const Schema_BolusCutOffFlag = Yup.boolean().when("ArterialSpinLabelingType", {
 	is: "PASL",
-	then: Yup.boolean()
-		.required("Bolus Cut Off Flag is a required field for PASL processing")
-		.typeError("Bolus Cut Off Flag must be a boolean"),
-	otherwise: SchemaMin_BolusCutOffFlag.test(
-		"BolusCutOffFlag",
-		"Bolus Cut Off Flag should not be present when Arterial Spin Labeling Type is not PASL",
-		(value) => lodashIsUndefined(value)
-	),
+	then: (schema) =>
+		schema
+			.required("Bolus Cut Off Flag is a required field for PASL processing")
+			.typeError("Bolus Cut Off Flag must be a boolean"),
+	otherwise: () =>
+		SchemaMin_BolusCutOffFlag.test(
+			"BolusCutOffFlag",
+			"Bolus Cut Off Flag should not be present when Arterial Spin Labeling Type is not PASL",
+			(value) => lodashIsUndefined(value)
+		),
 });
 
 /** Minimal schema to ensure BolusCutOffTechnique is an **optional** string enum */
@@ -302,10 +304,10 @@ export const SchemaMin_BolusCutOffTechnique = Yup.string()
 /** Expanded schema to ensure BolusCutOffTechnique responds to BolusCutOffFlag */
 export const Schema_BolusCutOffTechnique = Yup.string().when("BolusCutOffFlag", {
 	is: true,
-	then: SchemaMin_BolusCutOffTechnique.required(
+	then: () => SchemaMin_BolusCutOffTechnique.required(
 		"Bolus Cut Off Technique is a required field when Bolus Cut Off Flag is true"
 	),
-	otherwise: SchemaMin_BolusCutOffTechnique.test(
+	otherwise: () => SchemaMin_BolusCutOffTechnique.test(
 		"BolusCutOffTechnique",
 		"Bolus Cut Off Technique should not be present when Bolus Cut Off Flag is false",
 		(value) => lodashIsUndefined(value)

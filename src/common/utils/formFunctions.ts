@@ -2,8 +2,6 @@ import { dot, object } from "dot-object";
 import { merge as lodashMerge } from "lodash";
 import { FieldError, FieldValues, Path, Resolver, ResolverError } from "react-hook-form";
 import * as Yup from "yup";
-import Lazy from "yup/lib/Lazy";
-import { ValidateOptions } from "yup/lib/types";
 import { Regex } from "./Regex";
 
 const ArrayErrorRegex = new Regex(`(?<Field>.*)\\[\\d+\\]$`, "m"); // matches "Field[0]" and captures "Field" portion
@@ -38,14 +36,14 @@ export function parseFieldError(err: null | FieldError | Array<null | FieldError
 	}
 }
 
-type ModifiedValidateOptions<TFV extends FieldValues> = ValidateOptions<TFV> & {
+type ModifiedValidateOptions<TFV extends FieldValues> = Yup.ValidateOptions<TFV> & {
 	extraContext?: Record<string, unknown>;
 };
 
 /**
  * Type defining a function which produces a React Hook Form resolver.
  */
-export type ResolverFactory = <T extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues = FieldValues>(
+export type ResolverFactory = <T extends Yup.AnyObjectSchema, TFV extends FieldValues = FieldValues>(
 	schema: T,
 	options?: ModifiedValidateOptions<TFV>
 ) => Resolver<TFV, any>;
@@ -60,7 +58,7 @@ export type ResolverFactory = <T extends Yup.AnyObjectSchema | Lazy<any>, TFV ex
  * @returns Returns the resolver function. This function should be fed into the `resolver` prop of the `useForm` hook.
  */
 export const YupResolverFactoryBase: ResolverFactory =
-	<T extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues = FieldValues>(
+	<T extends Yup.AnyObjectSchema, TFV extends FieldValues = FieldValues>(
 		validationSchema: T,
 		options?: ModifiedValidateOptions<TFV>
 	) =>
@@ -115,7 +113,7 @@ export const YupResolverFactoryBase: ResolverFactory =
  * - `values`: The validated form values.
  * - `errors`: An mapping of field names to error messages.
  */
-export async function YupValidate<T extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues>(
+export async function YupValidate<T extends Yup.AnyObjectSchema, TFV extends FieldValues>(
 	schema: T,
 	data: TFV,
 	options?: ModifiedValidateOptions<TFV>
@@ -222,12 +220,14 @@ export function formatErrorsForDisplay(
 	translator: Record<Path<FieldValues>, string>
 ) {
 	const formattedErrors = [];
-	const regexHasSquareBrackets = /(.*)\[(\d+)\]/;
+	const regexHasSquareBrackets = /(.*)\["?(\d+)"?\]/;
 	for (const [fieldPath, fieldError] of Object.entries(errors)) {
 		// Fieldpath might be square-bracketed, so substitute appropriately
 		const fieldPathSub = regexHasSquareBrackets.test(fieldPath)
 			? fieldPath.replace(regexHasSquareBrackets, "$1.$2")
 			: fieldPath;
+
+		console.log("fieldPathSub:", fieldPathSub);
 
 		if (!(fieldPathSub in translator)) continue;
 		const formattedMessage = `${translator[fieldPathSub]}: ${fieldError.message}`;

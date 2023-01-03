@@ -8,7 +8,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import { useAtomValue, useSetAtom } from "jotai";
-import { isEmpty as lodashIsEmpty } from "lodash";
+import { isEmpty as lodashIsEmpty, mapKeys as lodashMapKeys } from "lodash";
 import React from "react";
 import { SubmitErrorHandler, SubmitHandler, useForm } from "react-hook-form";
 import { DATAPARFILE_BASENAME } from "../../common/GLOBALS";
@@ -26,7 +26,7 @@ import { Regex } from "../../common/utils/Regex";
 import { stringArrToRegex } from "../../common/utils/stringFunctions";
 import { AtomicSnackbarMessage } from "../../components/AtomicComponents";
 import { FabDialogWrapper } from "../../components/WrapperComponents";
-import { atomDataParCurrentTab, defaultDataParValues } from "../../stores/DataParStore";
+import { atomDataParCurrentTab, atomDataParDefaultValues } from "../../stores/DataParStore";
 import { atomDataParModuleSnackbar } from "../../stores/SnackbarStore";
 import HelpDataPar__DataPar from "../Help/HelpDataPar__DataPar";
 import { TabProcessingParameters, TabSequenceParameters, TabStudyParameters } from "./DataParSections";
@@ -35,8 +35,13 @@ import DataParTabs from "./DataParTabs";
 
 export const DataParPage = React.memo(() => {
 	const { api } = window;
+
+	// Atomic State
 	const currentDataParTab = useAtomValue(atomDataParCurrentTab);
 	const setDataParSnackbar = useSetAtom(atomDataParModuleSnackbar);
+	const defaultDataParValues = useAtomValue(atomDataParDefaultValues);
+
+	// Form State
 	const bag = useForm({
 		defaultValues: defaultDataParValues,
 		resolver: YupResolverFactoryBase(SchemaDataPar),
@@ -154,9 +159,12 @@ export const DataParPage = React.memo(() => {
 			return;
 		}
 
+		// Errors may need to be formatted due to quotations being inserted by newer versions of React Hook Form
+		const cleanedErrors = lodashMapKeys(errors, (value, key) => key.replace(/"/g, ""));
+
 		// If there are errors, correct them, set the corrected values, and display the errors
-		const correctedValues = correctYupValidatedContent(jsonFileContent, errors, defaultDataParValues);
-		console.log("Corrected JSON file value and errors: ", correctedValues);
+		const correctedValues = correctYupValidatedContent(jsonFileContent, cleanedErrors, defaultDataParValues);
+		console.log("Corrected JSON file value and errors: ", correctedValues, errors);
 
 		const parsedErrors = formatErrorsForDisplay(errors, DataParFieldNameTranslator);
 		console.log("Formatted errors: ", parsedErrors);

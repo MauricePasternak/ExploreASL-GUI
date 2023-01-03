@@ -1,5 +1,6 @@
 import Box from "@mui/material/Box";
 import { styled } from "@mui/material/styles";
+import { useAtomValue } from "jotai";
 import React from "react";
 import { APPBARHEIGHTPIXELS } from "../../common/GLOBALS";
 import {
@@ -10,7 +11,7 @@ import {
 import { YupResolverFactoryBase } from "../../common/utils/formFunctions";
 import { AtomicSnackbarMessage } from "../../components/AtomicComponents";
 import { RHFMultiStep, RHFMultiStepStepper } from "../../components/RHFComponents";
-import { ImportModuleFormDefaultValues } from "../../stores/ImportPageStore";
+import { atomImportModuleFormDefaultValues } from "../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../stores/SnackbarStore";
 import { StepDefineAliases, StepDefineContexts, StepDefineRuntimeEnvs, StepRunImportModule } from "./ImportSteps";
 
@@ -35,10 +36,11 @@ const ImportModulePaper = styled(Box)(({ theme }) => ({
 }));
 
 export const ImportModulePage = React.memo(() => {
+	const importModuleFormDefaultValues = useAtomValue(atomImportModuleFormDefaultValues);
 	return (
 		<Box padding={1}>
 			<RHFMultiStep
-				data={ImportModuleFormDefaultValues}
+				defaultValues={importModuleFormDefaultValues}
 				schemas={[...importModuleSchemas]}
 				resolverFactory={YupResolverFactoryBase}
 			>
@@ -62,7 +64,7 @@ export const ImportModulePage = React.memo(() => {
 											fieldNames: ["MappingScanAliases", "MappingSessionAliases", "MappingVisitAliases"],
 										},
 										{
-											label: "Define ASL Acquisition Context",
+											label: "Define Scan Acquisition Context",
 											fieldNames: ["ImportContexts"],
 										},
 									]}

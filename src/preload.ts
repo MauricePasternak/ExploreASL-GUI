@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { Options as FastGlobOptions } from "fast-glob";
-import { ReadOptions as ReadJSONOptions, WriteOptions as WriteJSONOptions } from "fs-extra";
+import { JsonReadOptions, JsonWriteOptions } from "fs-extra";
 import { cpus } from "os";
 import { basename } from "path";
 import Path from "pathlib-js";
@@ -106,12 +106,12 @@ const pathOperations = {
 	getPathsAtNthLevel: async (filepath: string, nthLevel: number, globOptions?: FastGlobOptions) =>
 		await new Path(filepath).getPathsNLevelsAway(nthLevel, false, globOptions),
 
-	writeJSON: async (filepath: string, data: any, options?: WriteJSONOptions) =>
+	writeJSON: async (filepath: string, data: any, options?: JsonWriteOptions) =>
 		await new Path(filepath).writeJSON(data, options),
 
-	readJSON: async (filepath: string, options?: string | ReadJSONOptions) => await new Path(filepath).readJSON(options),
+	readJSON: async (filepath: string, options?: string | JsonReadOptions) => await new Path(filepath).readJSON(options),
 
-	readJSONSafe: async (filepath: string, options?: string | ReadJSONOptions) => await loadJSONSafe(filepath, options),
+	readJSONSafe: async (filepath: string, options?: string | JsonReadOptions) => await loadJSONSafe(filepath, options),
 };
 
 const ApplicationProgramInterface = {

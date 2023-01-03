@@ -1,4 +1,4 @@
-import { ReadOptions as ReadJSONOptions } from "fs-extra";
+import { JsonReadOptions } from "fs-extra";
 import Path, { JSONObject } from "pathlib-js";
 import { ReadJSONError } from "../common/types/filepathOperationsTypes";
 
@@ -45,14 +45,14 @@ export async function getTree(filepath: string) {
 /**
  * Wrapper for reading a JSON file while handling the try-catch that comes with bad parsing or invalid JSON filepath.
  * @param filepath JSON Filepath to be read
- * @param options Options for reading the JSON file {@link ReadJSONOptions}
+ * @param options Options for reading the JSON file {@link JsonReadOptions}
  * @returns An object with properties:
  * - `payload` - The JSON object read from the file.
  * - `error` - Either `false` if no error occurred, or a {@link ReadJSONError} object.
  */
 export async function loadJSONSafe<T extends JSONObject = JSONObject>(
 	filepath: string,
-	options?: string | ReadJSONOptions
+	options?: string | JsonReadOptions
 ): Promise<{ payload: T; error: ReadJSONError | false }> {
 	const fp = new Path(filepath);
 	const [exists, isFile] = await Promise.all([fp.exists(), fp.isFile()]);

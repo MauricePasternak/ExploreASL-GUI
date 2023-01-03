@@ -6,6 +6,50 @@ Versions are in format: `[MAJOR.MINOR.BUGFIX]`
 
 Dates are in format: `YYYY-MM-DD`
 
+## [0.5.0] - 2023-06-12
+
+Compatibility update to ExploreASL >=1.10.0
+
+### Fixed
+
+- Fixed an incompatibility where updates relating to ExploreASL's Longitudinal Registration module were not being
+  reflected in the GUI.
+
+- Cleaned up the text feedback regarding the start/end of a module's execution for
+Structural/DARTEL/LongReg/ASL/Population modules.
+  - Users should no longer receive redundant start messages when ExploreASL generated locked folders for instances that
+  already have 999_ready.status files present.
+  - Users should now receive a module finished message when the 999_ready.status file is generated.
+
+- Fixed a bug in which invalid array element values made it into the data parameters structure since React Hook Form
+added quotations along the nested object path.
+  Prior to using `correctYupValidatedContent`, the errors object is now cleaned such that keys with quotations have
+  those quotations removed to be in sync with Yup.
+
+### Added
+
+- Added in a Settings page to control the GUI's behavior. Initial sections include aesthetic changes (dark mode), and
+the ability to set default filepaths for ExploreASL and MATLAB Runtime Path.
+
+- Added workloads for ExploreASL 1.10.0, 1.10.1, 1.11.0_BETA, 1.11.1, 1.12.0_BETA, and 1.12.0 in anticipation for
+future ExploreASL updates.
+
+- Added feedback for users when their ExploreASL version is not supported by the GUI.
+
+### Changed
+
+- Brought several regexes to accurately reflect ExploreASL's Longitudinal Registration and DARTEL module output. These
+regexes were also brought to the global scope to make the code more DRY.
+
+- Bumped dependencies for multiple packages to their latest versions.
+  - Did not update MUI DataGrid to v6 due to the breaking changes that would occur. Will likely update at a later date.
+  - Did not update Nivo to the their removal of animation from canvas scatterplots. Will unlikely update, as it isn't a
+  likely feature to be re-implemented by the Nivo team.
+
+- Updated README to link to the releases page.
+
+- Changed description of the "Define Scan Acquisition Context" section to be more understandable.
+
 ## [0.4.0] - 2022-12-12
 
 Change of the Import Module to support ExploreASL's approach and syntax of multiple import contexts. Significant

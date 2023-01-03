@@ -1,9 +1,8 @@
-import * as Yup from "yup";
 import { isUndefined as lodashIsUndefined } from "lodash";
+import * as Yup from "yup";
 import { YupShape } from "../../../common/types/validationSchemaTypes";
 import {
 	ASLLabelingType,
-	ASLSeriesPatternType,
 	EASLType,
 	ImportAliasesSchemaType,
 	ImportContextSchemaType,
@@ -35,7 +34,7 @@ import {
 } from "./ImportSchemaCustomTests";
 
 /** Schema intended for the Import Module Step: Define Runtime Environments */
-export const SchemaImportStepDefineRuntimeEnvs: Yup.SchemaOf<ImportRuntimeEnvsSchemaType> = Yup.object().shape({
+export const SchemaImportStepDefineRuntimeEnvs: Yup.ObjectSchema<ImportRuntimeEnvsSchemaType> = Yup.object().shape({
 	EASLType: Yup.mixed<EASLType>()
 		.oneOf(["Github", "Compiled"], "Must be either a clone of the ExploreASL Github repository or a compiled version")
 		.required("EASL Type is required"),
@@ -43,28 +42,31 @@ export const SchemaImportStepDefineRuntimeEnvs: Yup.SchemaOf<ImportRuntimeEnvsSc
 		.required("EASL Path is required")
 		.when("EASLType", {
 			is: "Github",
-			then: Yup.string().test(
-				"EASLPathValidGithub",
-				"Invalid ExploreASL Path",
-				async (filepath, helpers) => await IsValidEASLPath(filepath, "Github", helpers)
-			),
+			then: (schema) =>
+				schema.test(
+					"EASLPathValidGithub",
+					"Invalid ExploreASL Path",
+					async (filepath, helpers) => await IsValidEASLPath(filepath, "Github", helpers)
+				),
 			// Compiled EASL case
-			otherwise: Yup.string().test(
-				"EASLPathValidCompiled",
-				"Invalid ExploreASL Path",
-				async (filepath, helpers) => await IsValidEASLPath(filepath, "Compiled", helpers)
-			),
+			otherwise: (schema) =>
+				schema.test(
+					"EASLPathValidCompiled",
+					"Invalid ExploreASL Path",
+					async (filepath, helpers) => await IsValidEASLPath(filepath, "Compiled", helpers)
+				),
 		}),
 	MATLABRuntimePath: Yup.string().when("EASLType", {
 		is: "Github",
-		then: Yup.string().optional(),
-		otherwise: Yup.string()
-			.required("MATLAB Runtime Path is required")
-			.test(
-				"MATLABRuntimePathValid",
-				"Invalid MATLAB Runtime Path",
-				async (filepath, helpers) => await IsValidMATLABRuntimePath(filepath, helpers)
-			),
+		then: (schema) => schema.optional(),
+		otherwise: (schema) =>
+			schema
+				.required("MATLAB Runtime Path is required")
+				.test(
+					"MATLABRuntimePathValid",
+					"Invalid MATLAB Runtime Path",
+					async (filepath, helpers) => await IsValidMATLABRuntimePath(filepath, helpers)
+				),
 	}),
 	StudyRootPath: Schema_StudyRootPathPreImport,
 	SourcedataStructure: Yup.array()
@@ -73,7 +75,7 @@ export const SchemaImportStepDefineRuntimeEnvs: Yup.SchemaOf<ImportRuntimeEnvsSc
 });
 
 /** Schema intended for the Import Module Step: Define Aliases */
-export const SchemaImportStepDefineAliases = Yup.object().shape<YupShape<ImportAliasesSchemaType>>({
+export const SchemaImportStepDefineAliases: Yup.ObjectSchema<ImportAliasesSchemaType> = Yup.object().shape({
 	MappingScanAliases: Yup.object()
 		.typeError("Expected a mapping of filepaths to designated Scan types.")
 		.test("ValidScanAliases", "Invalid Scan Aliases", ImportModule__MappingScanAliasesTest),
@@ -106,13 +108,13 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 	ASLSeriesPattern: Yup.string()
 		.required("This is a required field")
 		.oneOf(["control-label", "label-control", "deltam", "cbf"], "Invalid ASL Series Pattern"),
-	NVolumes: Yup.number().when("ASLSeriesPattern", {
-		is: (pattern: ASLSeriesPatternType) => ["control-label", "label-control"].includes(pattern),
-		then: Yup.number()
-			.required("Required")
-			.min(2, "Number of volumes must be at least 2 when an alterating series is used"),
-		otherwise: Yup.number().required("Required").min(1, "Number of volumes must be at least 1"),
-	}),
+	NVolumes: Yup.number()
+		.required("Required")
+		.when("ASLSeriesPattern", {
+			is: (pattern: string) => ["control-label", "label-control"].includes(pattern),
+			then: (schema) => schema.min(2, "Number of volumes must be at least 2 when an alterating series is used"),
+			otherwise: (schema) => schema.min(1, "Number of volumes must be at least 1"),
+		}),
 	M0PositionInASL: Yup.array()
 		.optional()
 		.of(Yup.number().integer("Must be an integer"))
@@ -152,7 +154,7 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 	// PASL Fields
 	BolusCutOffFlag: Yup.boolean().when("ArterialSpinLabelingType", {
 		is: (sequence: ASLLabelingType) => sequence === "PASL",
-		then: Yup.boolean().required("This is a required field when working with PASL"),
+		then: (schema) => schema.required("This is a required field when working with PASL"),
 		otherwise: (schema) =>
 			schema.optional().notOneOf([true], "Bolus Cut Off Flag must be false or omitted when working with CASL or PCASL"),
 	}),

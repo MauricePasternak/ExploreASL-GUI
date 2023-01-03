@@ -1,0 +1,50 @@
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import { useAtomValue, useSetAtom } from "jotai";
+import { countBy as lodashCountBy, range as lodashRange, sumBy as lodashSumBy } from "lodash";
+import React from "react";
+import { FabDialogWrapper } from "../../../components/WrapperComponents";
+import LabelledSelect from "../../../components/RegularFormComponents/LabelledSelect";
+import { atomAddOrRemoveStudy, atomProcStudySetups } from "../../../stores/ProcessStudiesStore";
+import { atomProcessStudiesSnackbar } from "../../../stores/SnackbarStore";
+import HelpProcessStudies__RunEASL from "../../Help/HelpProcessStudies__RunEASL";
+import RunEASLSingleStudySetup from "./RunEASLSingleStudySetup";
+import { AtomicSnackbarMessage } from "../../../components/AtomicComponents";
+function SubmoduleRunEASL() {
+    const studySetups = useAtomValue(atomProcStudySetups);
+    const addOrRemoveStudySetups = useSetAtom(atomAddOrRemoveStudy);
+    const { cpuCount } = window.api;
+    const numPhysicalCores = Math.floor(cpuCount / 2);
+    const numUsedCores = lodashSumBy(studySetups, "numberOfCores");
+    const numFreeCores = numPhysicalCores - numUsedCores;
+    const numStudies = studySetups.length;
+    // Options for selecting the number of studies
+    const labelOptions = lodashRange(1, numPhysicalCores + 1).map((count) => {
+        return {
+            label: `${count}`,
+            value: count,
+            disabled: count > numFreeCores + numStudies,
+        };
+    });
+    // Whether there are duplicates in the study
+    const hasStudyDuplicates = lodashCountBy(studySetups, "studyRootPath");
+    /**
+     * Handler for adding/removing studies
+     */
+    const handleSelect = (e) => {
+        const selectedValue = Number(e.target.value);
+        addOrRemoveStudySetups(selectedValue);
+    };
+    return (React.createElement(Box, { display: "flex", flexDirection: "column", gap: 2, padding: 2, position: "relative" },
+        React.createElement(FabDialogWrapper, { maxWidth: "xl", fabProps: { sx: { position: "absolute", top: "20px", right: "1rem", zIndex: 1 } }, PaperProps: { sx: { minWidth: "499px" } }, sx: { marginTop: "40px" } },
+            React.createElement(HelpProcessStudies__RunEASL, null)),
+        React.createElement(AtomicSnackbarMessage, { atomConfig: atomProcessStudiesSnackbar }),
+        React.createElement(Typography, { variant: "h4" }, "Run ExploreASL"),
+        React.createElement(LabelledSelect, { variant: "outlined", onChange: handleSelect, value: studySetups.length, sx: { width: "17rem" }, disabled: studySetups.some((study) => study.currentStatus !== "Standby"), label: "Select the number of studies to process", helperText: "This will be disabled while any study is actively running", options: labelOptions }),
+        studySetups.map((studySetup, studyIndex) => {
+            const isDuplicate = hasStudyDuplicates[studySetup.studyRootPath] > 1 && studySetup.studyRootPath !== "";
+            return (React.createElement(RunEASLSingleStudySetup, { key: `RunEASLSingleStudySetup_${studyIndex}`, studyIndex: studyIndex, studyRootPath: studySetup.studyRootPath, isDuplicatePath: isDuplicate, numUsedCoresAllStudies: numUsedCores, numUsedCoresForThisStudy: studySetup.numberOfCores, whichModulesToRun: studySetup.whichModulesToRun, currentStatus: studySetup.currentStatus }));
+        })));
+}
+export default React.memo(SubmoduleRunEASL);
+//# sourceMappingURL=index.js.map
