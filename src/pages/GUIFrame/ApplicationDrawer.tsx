@@ -2,9 +2,9 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FunctionsIcon from "@mui/icons-material/Functions";
 import InfoIcon from "@mui/icons-material/Info";
 import PeopleIcon from "@mui/icons-material/People";
+import SettingsIcon from "@mui/icons-material/Settings";
 import TuneIcon from "@mui/icons-material/Tune";
 import UndoIcon from "@mui/icons-material/Undo";
-import { Typography } from "@mui/material";
 import Collapse from "@mui/material/Collapse";
 import Drawer from "@mui/material/Drawer";
 import List from "@mui/material/List";
@@ -13,6 +13,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import { styled } from "@mui/material/styles";
 import SvgIcon from "@mui/material/SvgIcon";
+import Typography from "@mui/material/Typography";
 import { useAtom, useSetAtom } from "jotai";
 import React from "react";
 import ProcessIcon from "../../assets/svg/ArrowsSpinSolid.svg";
@@ -219,6 +220,19 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 					</ListItemIcon>
 					<ListItemText>About</ListItemText>
 				</ListItemButton>
+
+				<ListItemButton
+					divider
+					onClick={() => {
+						setCurrentModule("Settings");
+						setOpen(false);
+					}}
+				>
+					<ListItemIcon>
+						<SettingsIcon sx={{ fontSize: "3rem" }} />
+					</ListItemIcon>
+					<ListItemText>Settings</ListItemText>
+				</ListItemButton>
 			</List>
 			<Typography
 				variant="overline"
@@ -229,7 +243,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 					left: "1rem",
 				}}
 			>
-				ExploreASL GUI Version: 0.4.0
+				ExploreASL GUI Version: 0.5.0
 			</Typography>
 		</LoweredTemporaryDrawer>
 	);

@@ -26,7 +26,7 @@ import { Regex } from "../../common/utils/Regex";
 import { stringArrToRegex } from "../../common/utils/stringFunctions";
 import { AtomicSnackbarMessage } from "../../components/AtomicComponents";
 import { FabDialogWrapper } from "../../components/WrapperComponents";
-import { atomDataParCurrentTab, defaultDataParValues } from "../../stores/DataParStore";
+import { atomDataParCurrentTab, atomDataParDefaultValues } from "../../stores/DataParStore";
 import { atomDataParModuleSnackbar } from "../../stores/SnackbarStore";
 import HelpDataPar__DataPar from "../Help/HelpDataPar__DataPar";
 import { TabProcessingParameters, TabSequenceParameters, TabStudyParameters } from "./DataParSections";
@@ -35,8 +35,13 @@ import DataParTabs from "./DataParTabs";
 
 export const DataParPage = React.memo(() => {
 	const { api } = window;
+
+	// Atomic State
 	const currentDataParTab = useAtomValue(atomDataParCurrentTab);
 	const setDataParSnackbar = useSetAtom(atomDataParModuleSnackbar);
+	const defaultDataParValues = useAtomValue(atomDataParDefaultValues);
+
+	// Form State
 	const bag = useForm({
 		defaultValues: defaultDataParValues,
 		resolver: YupResolverFactoryBase(SchemaDataPar),

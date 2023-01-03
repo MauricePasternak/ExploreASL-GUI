@@ -1,6 +1,7 @@
 import { atom } from "jotai";
 import { ImportContextSchemaType, ImportModuleProcStatus, ImportSchemaType } from "../common/types/ImportSchemaTypes";
 import { cloneDeep as lodashCloneDeep } from "lodash";
+import { atomPreferredExploreASLPath, atomPreferredMATLABRuntimePath } from "./GlobalSettingsStore";
 
 export const atomImportModuleCurrentProcPID = atom<number>(-1);
 export const atomImportModuleCurrentProcStatus = atom<ImportModuleProcStatus>("Standby");
@@ -83,14 +84,18 @@ export const ImportSingleContextDefaultValueMapping: ImportContextSchemaType = {
 	BackgroundSuppressionPulseTime: [],
 };
 
-export const ImportModuleFormDefaultValues: ImportSchemaType = {
-	EASLType: "Github",
-	EASLPath: "",
-	MATLABRuntimePath: "",
-	StudyRootPath: "",
-	SourcedataStructure: ["Subject", "Scan"],
-	MappingVisitAliases: {},
-	MappingSessionAliases: {},
-	MappingScanAliases: {},
-	ImportContexts: [lodashCloneDeep(ImportSingleContextDefault)],
-};
+export const atomImportModuleFormDefaultValues = atom<ImportSchemaType>((get) => {
+	const preferredExploreASLPath = get(atomPreferredExploreASLPath);
+	const preferredMATLABRuntimePath = get(atomPreferredMATLABRuntimePath);
+	return {
+		EASLType: "Github",
+		EASLPath: preferredExploreASLPath,
+		MATLABRuntimePath: preferredMATLABRuntimePath,
+		StudyRootPath: "",
+		SourcedataStructure: ["Subject", "Scan"],
+		MappingVisitAliases: {},
+		MappingSessionAliases: {},
+		MappingScanAliases: {},
+		ImportContexts: [lodashCloneDeep(ImportSingleContextDefault)],
+	};
+});

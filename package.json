@@ -1,7 +1,7 @@
 {
 	"name": "ExploreASL-GUI",
 	"productName": "ExploreASL-GUI",
-	"version": "0.4.0",
+	"version": "0.5.0",
 	"description": "A user interface for the analysis of arterial spin labeling (ASL) images",
 	"repository": "https://github.com/MauricePasternak/ExploreASL-GUI",
 	"main": ".webpack/main",

@@ -45,7 +45,7 @@ export type RHFMultiStepStepperProps<TFV extends FieldValues> = {
 
 export type RHFMultiStepProps<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues> = {
 	schemas: TSchema[];
-	data: DeepPartial<TFV>;
+	defaultValues: DeepPartial<TFV>;
 	resolverFactory?: ResolverFactory;
 	resolverOptions?: ValidateOptions<TFV>;
 	children: (RHFbag: RHFMultiStepReturnProps<TFV>) => React.ReactElement;
@@ -54,7 +54,7 @@ export type RHFMultiStepProps<TSchema extends Yup.AnyObjectSchema | Lazy<any>, T
 /**
  * Higher order component that wraps a form in a react-hook-form coupled with step logic.
  * @param schemas - An array of Schemas to be applied for each step.
- * @param data - Initial data to be used for the form.
+ * @param defaultValues - Initial defaultValues to be used for the form.
  * @param resolverFactory - A factory function that returns a resolver function for the form.
  * @param resolverOptions - Options to be passed to the resolver factory.
  * @returns Returns an object equivalent to the return of `useForm` plus the following two properties:
@@ -63,7 +63,7 @@ export type RHFMultiStepProps<TSchema extends Yup.AnyObjectSchema | Lazy<any>, T
  */
 export function RHFMultiStep<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues>({
 	schemas,
-	data,
+	defaultValues,
 	resolverFactory,
 	resolverOptions,
 	children,
@@ -72,7 +72,7 @@ export function RHFMultiStep<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TF
 	const currentSchema = schemas[step];
 	const resolver = currentSchema != undefined ? resolverFactory(currentSchema, resolverOptions) : undefined;
 	const RHFbag = useForm({
-		defaultValues: data,
+		defaultValues: defaultValues,
 		resolver,
 	});
 
