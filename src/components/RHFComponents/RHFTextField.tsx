@@ -13,7 +13,12 @@ import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueTyp
 import { DebouncedInput } from "../DebouncedComponents";
 
 // To avoid conflict with the "field" prop coming from the Controller render
-type RestrictedMUITextFieldProps = Omit<TextFieldProps, keyof ControllerRenderProps>;
+type RestrictedMUITextFieldProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = Omit<
+	TextFieldProps,
+	keyof ControllerRenderProps
+> & {
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
+};
 
 // Field <---> Inner value conversion functions
 type RHFTextFieldBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
@@ -27,7 +32,7 @@ export type RHFTextFieldProps<
 	TName extends FieldPath<TFV>,
 	TTrigger extends FieldPath<TFV>,
 	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
-> = RestrictedMUITextFieldProps &
+> = RestrictedMUITextFieldProps<TFV, TName> &
 	RHFControllerProps<TFV, TName> & // name & control
 	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
 	RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchChange
@@ -68,6 +73,7 @@ export function RHFTextField<
 	onWatchedChange,
 	fieldToInner,
 	innerToField,
+	onChange,
 	debounceTime = 500, // in ms
 	...muiTextFieldProps
 }: RHFTextFieldProps<TFV, TName, TTrigger, TWatch>) {
@@ -86,6 +92,7 @@ export function RHFTextField<
 		const newValue = innerToField ? innerToField(value) : value;
 		field.onChange(newValue); // update the field value
 		trigger && trigger(triggerTarget); // trigger the validation
+		onChange && onChange(newValue as FieldPathValue<TFV, TName>); // call the onChange callback
 	};
 
 	// It is necessary to convert the field value to a compatible string type for the Input component

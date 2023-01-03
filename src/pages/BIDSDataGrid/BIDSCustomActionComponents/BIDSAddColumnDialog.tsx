@@ -150,6 +150,8 @@ export const BIDSAddColumnDialog = memo(() => {
 					InputProps={{ endAdornment: null }}
 					debounceTime={1500}
 					helperText={fieldConfig.description}
+					shouldSort={selectedField === "SliceTiming" || selectedField === "BackgroundSuppressionPulseTime"}
+					uniqueOnly={selectedField === "SliceTiming" || selectedField === "BackgroundSuppressionPulseTime"}
 				/>
 			);
 		}

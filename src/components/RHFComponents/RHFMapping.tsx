@@ -8,14 +8,15 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
 import React from "react";
-import { FieldValues, FieldPath, useController, useWatch } from "react-hook-form";
+import { FieldValues, FieldPath, useController, useWatch, FieldPathValue } from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedInput } from "../DebouncedComponents";
 
-type RHFMappingBaseProps = {
+type RHFMappingBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
 	title?: React.ReactNode;
 	keysSubtitle?: React.ReactNode;
 	valuesSubtitle?: React.ReactNode;
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
 	helperText?: React.ReactNode; // helper text for the whole mapping
 	cardHeaderProps?: Omit<CardHeaderProps, "title" | "subheader">;
 	headerColor?: string;
@@ -41,7 +42,7 @@ export type RHFMappingProps<
 	TName extends FieldPath<TFV>,
 	TTrigger extends FieldPath<TFV>,
 	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
-> = RHFMappingBaseProps & // options
+> = RHFMappingBaseProps<TFV, TName> & // options
 	RHFControllerProps<TFV, TName> & // name, control
 	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
 	RHFWatchProps<TFV, TWatch>; // watchTarget & onWatchedChange
@@ -85,6 +86,7 @@ export function RHFMapping<
 	triggerTarget,
 	watchTarget,
 	onWatchedChange,
+	onChange,
 	type,
 	title,
 	keysSubtitle,
@@ -123,6 +125,7 @@ export function RHFMapping<
 		const newValues = { ...field.value, [key]: v }; // create new object with updated value
 		field.onChange(newValues); // update field value
 		trigger && trigger(triggerTarget); // trigger any target validation fields
+		onChange && onChange(newValues); // call onChange callback
 	};
 
 	/** Handler for changes coming from rendered DebouncedInput components */

@@ -54,11 +54,12 @@ const DropzonePaper = styled(Paper, {
 	};
 });
 
-type RHFFPDropzoneBaseProps = {
+type RHFFPDropzoneBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
 	filepathType: "file" | "dir" | "other" | "all";
 	dialogOptions?: OpenDialogOptions;
 	overWriteOnDrop?: boolean;
 	baseNamesOnly?: boolean;
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
 	label?: React.ReactNode;
 	placeholderText?: React.ReactNode;
 	helperText?: React.ReactNode;
@@ -75,7 +76,7 @@ export type RHFFPDropzoneProps<
 	TName extends FieldPath<TFV>,
 	TTrigger extends FieldPath<TFV>,
 	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
-> = RHFFPDropzoneBaseProps &
+> = RHFFPDropzoneBaseProps<TFV, TName> &
 	RHFControllerProps<TFV, TName> & // name & control
 	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
 	RHFWatchProps<TFV, TWatch>; // watchTarget & onWatchChange
@@ -126,6 +127,7 @@ export function RHFFPDropzone<
 	triggerTarget,
 	watchTarget,
 	onWatchedChange,
+	onChange,
 	filepathType,
 	dialogOptions,
 	baseNamesOnly = false,
@@ -271,6 +273,7 @@ export function RHFFPDropzone<
 		field.onChange(newValue);
 		trigger && trigger(field.name); // hack; otherwise, the field doesn't get validated...
 		field.onBlur();
+		onChange && onChange(newValue as FieldPathValue<TFV, TName>);
 		enterCounter.current = 0;
 		isAcceptingDrop && setIsAcceptingDrop(false);
 		setInnerVal(newValue as FieldPathValue<TFV, TName>);

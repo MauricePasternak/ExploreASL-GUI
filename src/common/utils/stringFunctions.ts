@@ -67,30 +67,45 @@ export const stringArrToRegex = (stringArr: string[], options?: StringArrToRegex
 	return joinedStr;
 };
 
+interface NumbersFromDelimitedStringOptions {
+	delimiter?: string;
+	numberType?: "integer" | "float";
+	sort?: boolean;
+	unique?: boolean;
+}
+
 /**
  * Retrieves an array of numbers from a string representation of them as delimited strings.
  * @param stringToParse The string to retrieve numerical values from.
- * @param delimiter The delimiter separating numerical values.
- * Defaults to `","`.
- * @param numberType Whether to attempt to parse integers or floats.
- * Defaults to `"float"`.
- * @returns An array of parsed numbers in ascending order.
+ * @param options {@link NumbersFromDelimitedStringOptions}, which include:
+ * - `delimiter` -- The delimiter separating the numbers. Defaults to `","`.
+ * - `numberType` -- The type of number to retrieve. Defaults to `"float"`.
+ * - `sort` -- Whether to sort the numbers. Defaults to `true`.
+ * - `unique` -- Whether to remove duplicate numbers. Defaults to `true`.
  */
-export const getNumbersFromDelimitedString = (
-	stringToParse: string,
-	delimiter = ",",
-	numberType: "integer" | "float" = "float"
-) => {
+export const getNumbersFromDelimitedString = (stringToParse: string, options?: NumbersFromDelimitedStringOptions) => {
+	const defaultOptions: NumbersFromDelimitedStringOptions = {
+		delimiter: ",",
+		numberType: "float",
+		sort: true,
+		unique: true,
+	};
+	const _options: NumbersFromDelimitedStringOptions = { ...defaultOptions, ...options };
+
 	const retrievedNums = stringToParse
-		.split(delimiter)
+		.split(_options.delimiter)
 		.map((substring) => {
 			const trimmed = substring.trim();
-			const parsed = numberType === "integer" ? parseInt(trimmed) : parseFloat(trimmed);
+			const parsed = _options.numberType === "integer" ? parseInt(trimmed) : parseFloat(trimmed);
 			if (trimmed && parsed != null && !isNaN(parsed)) return parsed;
 		})
 		.filter((val) => val != null);
 
-	return lodashSortBy(lodashUniq(retrievedNums));
+	if (_options.sort) {
+		return _options.unique ? lodashUniq(lodashSortBy(retrievedNums)) : lodashSortBy(retrievedNums);
+	} else {
+		return _options.unique ? lodashUniq(retrievedNums) : retrievedNums;
+	}
 };
 
 /** Replaces all backward slashes with forward ones. Used to keep filepaths consistent across situations and OS */

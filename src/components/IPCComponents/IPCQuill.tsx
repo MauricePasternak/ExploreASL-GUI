@@ -83,7 +83,7 @@ export const IPCQuill = React.memo(
       const endingBlurb =
         exitCode != null
           ? exitCode === 0
-            ? "successfully!"
+            ? ""
             : `with errors (Error code: ${exitCode}`
           : "forcefully due to termination by the user";
       const endingMessage = `Job has ended ${endingBlurb}`;

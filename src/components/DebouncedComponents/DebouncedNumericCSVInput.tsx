@@ -6,34 +6,47 @@ import { DebouncedInput, DebouncedInputProps } from "./DebouncedInput";
 type DebouncedNumericCSVBaseInputProps = Omit<DebouncedBaseInputProps, "onChange" | "value"> & {
 	value: number[] | number;
 	onChange: (newValue: number[]) => void;
+	shouldSort?: boolean;
+	uniqueOnly?: boolean;
 };
 
-export function DebouncedNumericCSVBaseInput(props: DebouncedNumericCSVBaseInputProps) {
-	const { value, onChange, ...rest } = props;
+export function DebouncedNumericCSVBaseInput({
+	value,
+	onChange,
+	shouldSort = true,
+	uniqueOnly = false,
+	...rest
+}: DebouncedNumericCSVBaseInputProps) {
 	const asStringCSVs = Array.isArray(value) ? value.join(", ") : value.toString();
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
 		const rawStringValue = event.target.value;
-		const numericValues = getNumbersFromDelimitedString(rawStringValue);
+		const numericValues = getNumbersFromDelimitedString(rawStringValue, { sort: shouldSort, unique: uniqueOnly });
 		onChange(numericValues);
 	};
 
 	console.log("🚀 ~ file: DebouncedNumericCSVBaseInput ~ asStringCSVs", asStringCSVs);
-
 	return <DebouncedBaseInput {...rest} value={asStringCSVs} onChange={handleChange} />;
 }
 
 type DebouncedNumericCSVInputProps = Omit<DebouncedInputProps, "onChange" | "value"> & {
 	value: number[] | number;
 	onChange: (newValue: number[]) => void;
+	shouldSort?: boolean;
+	uniqueOnly?: boolean;
 };
 
-export function DebouncedNumericCSVInput(props: DebouncedNumericCSVInputProps) {
-	const { value, onChange, ...rest } = props;
+export function DebouncedNumericCSVInput({
+	value,
+	onChange,
+	shouldSort = true,
+	uniqueOnly = false,
+	...rest
+}: DebouncedNumericCSVInputProps) {
 	const asStringCSVs = Array.isArray(value) ? value.join(", ") : value.toString();
 
 	const handleChange = (rawStringValue: string) => {
-		const numericValues = getNumbersFromDelimitedString(rawStringValue);
+		const numericValues = getNumbersFromDelimitedString(rawStringValue, { sort: shouldSort, unique: uniqueOnly });
 		onChange(numericValues);
 	};
 

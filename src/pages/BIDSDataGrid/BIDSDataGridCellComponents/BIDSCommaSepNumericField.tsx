@@ -11,6 +11,7 @@ type BIDSCommaSepNumericFieldProps<R extends GridValidRowModel = BIDSRow> = {
 	emptyValueStrategy?: "toUndefined" | "toZero" | "toEmptyArray" | "toDefaultValue";
 	coerceSingleValueToNumber?: boolean;
 	shouldSortValues?: boolean;
+	uniqueOnly?: boolean;
 	defaultValue?: number | number[];
 };
 
@@ -25,10 +26,11 @@ type BIDSCommaSepNumericFieldProps<R extends GridValidRowModel = BIDSRow> = {
  * 	- `toZero`: Set the value to 0
  * 	- `toEmptyArray`: Set the value to an empty array
  * 	- `toDefaultValue`: Set the value to the `defaultValue` property
- * Defaults to `toUndefined`
+ * 		Defaults to `toUndefined`
  * - `coerceSingleValueToNumber`: If the length of the numbers array parsed from text is of length 1,
  * 		should it be coerced to a number type? Defaults to `true`.
  * - `shouldSortValues`: For a numeric array outcome, should the values be sorted? Defaults to `true`.
+ * - `uniqueOnly`: For a numeric array outcome, should the values be unique? Defaults to `false`.
  */
 export function BIDSCommaSepNumericField<R extends GridValidRowModel = BIDSRow>({
 	params,
@@ -36,6 +38,7 @@ export function BIDSCommaSepNumericField<R extends GridValidRowModel = BIDSRow>(
 	emptyValueStrategy = "toUndefined",
 	coerceSingleValueToNumber = true,
 	shouldSortValues = true,
+	uniqueOnly = false,
 }: BIDSCommaSepNumericFieldProps<R>) {
 	const { id, field, value } = params;
 	const [innerValue, setInnerValue] = useState(value ?? "");
@@ -44,7 +47,7 @@ export function BIDSCommaSepNumericField<R extends GridValidRowModel = BIDSRow>(
 	console.log(`BIDSCommaSepNumericField of row ${id} in field ${field} is rendering with value: ${value}`);
 
 	const handleDebouncedChange = useDebouncedCallback((strValue: string) => {
-		const newNumericValue = getNumbersFromDelimitedString(strValue);
+		const newNumericValue = getNumbersFromDelimitedString(strValue, { sort: shouldSortValues, unique: uniqueOnly });
 		// We must be able to handle a blank value accordingly
 		if (newNumericValue.length === 0) {
 			switch (emptyValueStrategy) {

@@ -48,6 +48,9 @@ export const Schema_PostLabelingDelay = SchemaMin_PostLabelingDelay.required(
 				"Post Labeling Delay must be either a single positive number of a collection of such numbers (typically, separated by commas)"
 			);
 
+		if (postLabelingDelay.length === 0)
+			return yupCreateError(context, "Post Labeling Delay is a required field and cannot be empty");
+
 		if (!postLabelingDelay.every((value) => lodashIsNumber(value) && value > 0))
 			return yupCreateError(context, "One or more of the Post Labeling Delay values is not a positive number");
 
@@ -84,7 +87,7 @@ export const Schema_SliceTiming = Yup.mixed().when("MRAcquisitionType", {
 						return true; // Single positive number; early exit
 					}
 
-					if (!Array.isArray(sliceTiming)) return false;
+					if (!Array.isArray(sliceTiming) || sliceTiming.length === 0) return false;
 					if (!sliceTiming.every((value) => lodashIsNumber(value) && value >= 0))
 						return yupCreateError(context, "One or more of the Slice Timing values is not a positive number");
 					return true;
@@ -191,8 +194,7 @@ export const SchemaMin_LabelingDuration = Yup.mixed()
 	.optional()
 	.test((labelingDuration: unknown, context: Yup.TestContext) => {
 		if (lodashIsUndefined(labelingDuration) || typeof labelingDuration === "number") return true;
-		if (Array.isArray(labelingDuration) && labelingDuration.every((v) => lodashIsNumber(v) && v >= 0))
-			return true;
+		if (Array.isArray(labelingDuration) && labelingDuration.every((v) => lodashIsNumber(v) && v >= 0)) return true;
 		return yupCreateError(context, "Labeling Duration must be a number or an array of non-negative numbers");
 	});
 
@@ -226,11 +228,15 @@ export const Schema_LabelingDuration = Yup.mixed()
 					}
 					if (Array.isArray(labelingDuration)) {
 						if (labelingDuration.length === 0) {
-							return yupCreateError(context, "If provided as a collection of numbers, it cannot be empty");
+							return yupCreateError(
+								context,
+								"This field cannot be empty unless the Arterial Spin Labeling Type is PASL"
+							);
 						}
 						if (labelingDuration.some((v) => !lodashIsNumber(v) || v <= 0)) {
 							return yupCreateError(context, "Labeling Duration cannot contain non-finite or non-positive numbers");
 						}
+						return true;
 					}
 					return yupCreateError(context, "Labeling Duration must be a number or an array of numbers if provided");
 				}),

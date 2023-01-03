@@ -66,14 +66,23 @@ export type ImportContextSchemaType = {
 
 	// M0 Info
 	M0Type: M0TypeType;
-	M0Estimate: number;
+	M0Estimate?: number;
 
 	// ASL Sequence Info
+	// Main Fields
 	Manufacturer: ASLManufacturerType;
 	PulseSequenceType: PulseSequenceType;
+	MagneticFieldStrength: number;
 	ArterialSpinLabelingType: ASLLabelingType;
-	PostLabelingDelay: number;
-	LabelingDuration?: number;
+	PostLabelingDelay: number | number[];
+
+	// 2D-Specific Fields
+	SliceReadoutTime?: number;
+
+	// PCASL/CASL-Specific Fields
+	LabelingDuration?: number | number[];
+
+	// PASL-Specific Fields
 	BolusCutOffFlag?: BolusCutOffFlagType;
 	BolusCutOffTechnique?: BolusCutOffTechniqueType | "";
 	BolusCutOffDelayTime?: BolusCutOffDelayTimeType;
@@ -105,10 +114,13 @@ export type SingleStudyParJSONOutputSchemaType = {
 	ASLContext: string;
 	Manufacturer: ASLManufacturerType;
 	PulseSequenceType: PulseSequenceType;
-	MRAcquisitionType: "2D" | "3D"
+	MRAcquisitionType: "2D" | "3D";
+	MagneticFieldStrength: number;
+
 	ArterialSpinLabelingType: ASLLabelingType;
-	PostLabelingDelay: number;
-	LabelingDuration?: number;
+	SliceReadoutTime?: number;
+	PostLabelingDelay: number | number[];
+	LabelingDuration?: number | number[];
 	BolusCutOffFlag?: boolean;
 	BolusCutOffTechnique?: BolusCutOffTechniqueType;
 	BolusCutOffDelayTime?: BolusCutOffDelayTimeType;

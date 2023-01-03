@@ -1,6 +1,7 @@
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
+import { isUndefined as lodashIsUndefined } from "lodash";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
@@ -11,8 +12,13 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { range as lodashRange } from "lodash";
 import React from "react";
-import { Control, UseFieldArrayRemove, UseFormSetValue, UseFormTrigger } from "react-hook-form";
-import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
+import { Control, UseFieldArrayRemove, UseFormSetValue, UseFormTrigger, useWatch } from "react-hook-form";
+import {
+	ASLLabelingType,
+	ImportSchemaType,
+	M0TypeType,
+	PulseSequenceType,
+} from "../../../common/types/ImportSchemaTypes";
 import { getNumbersFromDelimitedString } from "../../../common/utils/stringFunctions";
 import ExpandMore from "../../../components/ExpandMore";
 import {
@@ -24,6 +30,7 @@ import {
 	RHFTextField,
 } from "../../../components/RHFComponents";
 import { OutlinedGroupBox } from "../../../components/WrapperComponents";
+import { ImportSingleContextDefaultValueMapping } from "../../../stores/ImportPageStore";
 import { BolusCutOffDelayTimeSlider } from "./BolusCutOffDelayTimeSlider";
 
 type SingleImportContextProps = {
@@ -79,6 +86,55 @@ const M0TypeOptions: RHFSelectOption<ImportSchemaType, `ImportContexts.${number}
 function SingleImportContext({ contextIndex, control, remove, trigger, setFieldValue }: SingleImportContextProps) {
 	const isFirst = contextIndex === 0;
 	const [expanded, setExpanded] = React.useState(true);
+	const contextValues = useWatch({ control, name: `ImportContexts.${contextIndex}` });
+
+	console.log(`Single Import Context ${contextIndex} rendered with values:`, contextValues);
+
+	// Handlers
+	const handleM0TypeChange = (m0Type: M0TypeType) => {
+		if (m0Type !== "Estimate") {
+			setFieldValue(`ImportContexts.${contextIndex}.M0Estimate`, undefined);
+		} else {
+			setFieldValue(`ImportContexts.${contextIndex}.M0Estimate`, ImportSingleContextDefaultValueMapping.M0Estimate);
+		}
+	};
+	const handlePulseSequenceTypeChange = (pulseSequenceType: PulseSequenceType) => {
+		if (pulseSequenceType === "2D_EPI") {
+			setFieldValue(
+				`ImportContexts.${contextIndex}.SliceReadoutTime`,
+				ImportSingleContextDefaultValueMapping.SliceReadoutTime
+			);
+		} else {
+			setFieldValue(`ImportContexts.${contextIndex}.SliceReadoutTime`, undefined);
+		}
+	};
+	const handleArterialSpinLabelingTypeChange = (aslType: ASLLabelingType) => {
+		if (aslType === "PASL") {
+			setFieldValue(`ImportContexts.${contextIndex}.LabelingDuration`, undefined);
+			setFieldValue(
+				`ImportContexts.${contextIndex}.BolusCutOffFlag`,
+				ImportSingleContextDefaultValueMapping.BolusCutOffFlag
+			);
+			setFieldValue(
+				`ImportContexts.${contextIndex}.BolusCutOffTechnique`,
+				ImportSingleContextDefaultValueMapping.BolusCutOffTechnique
+			);
+			setFieldValue(
+				`ImportContexts.${contextIndex}.BolusCutOffDelayTime`,
+				ImportSingleContextDefaultValueMapping.BolusCutOffDelayTime
+			);
+		} else {
+			if (!contextValues.LabelingDuration) {
+				setFieldValue(
+					`ImportContexts.${contextIndex}.LabelingDuration`,
+					ImportSingleContextDefaultValueMapping.LabelingDuration
+				);
+			}
+			setFieldValue(`ImportContexts.${contextIndex}.BolusCutOffFlag`, undefined);
+			setFieldValue(`ImportContexts.${contextIndex}.BolusCutOffTechnique`, undefined);
+			setFieldValue(`ImportContexts.${contextIndex}.BolusCutOffDelayTime`, undefined);
+		}
+	};
 
 	return (
 		<Card>
@@ -107,7 +163,7 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 						name={`ImportContexts.${contextIndex}.Paths`}
 						filepathType="dir"
 						dialogOptions={{ properties: ["multiSelections", "openDirectory"] }}
-						label="Subjects/Visits/Sessions Within this Context"
+						label="Subjects/Visits/Sessions that this Context Applies To"
 						helperText="Drop Subject, Visit, and/or Session folders into this field to indicate that these are the items that are encompassed by this context."
 						placeholderText="Drop Folders Here"
 					/>
@@ -177,20 +233,23 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									label="M0 Type"
 									helperText="The nature of the M0 scan (i.e. is it a separate scan or a volume within the ASL series?)."
 									options={M0TypeOptions}
+									onChange={handleM0TypeChange}
 								/>
 							</Grid>
-							<Grid item xs={12} md={6} xl={3}>
-								<RHFSlider
-									control={control}
-									name={`ImportContexts.${contextIndex}.M0Estimate`}
-									min={1}
-									max={1_000_000_000}
-									step={1}
-									renderTextfields
-									label="M0 Estimate"
-									helperText="A numerical value to use as the M0 estimate if no M0 scan is available."
-								/>
-							</Grid>
+							{contextValues.M0Type === "Estimate" && (
+								<Grid item xs={12} md={6} xl={3}>
+									<RHFSlider
+										control={control}
+										name={`ImportContexts.${contextIndex}.M0Estimate`}
+										min={1}
+										max={1_000_000_000}
+										step={1}
+										renderTextfields
+										label="M0 Estimate"
+										helperText="A numerical value to use as the M0 estimate if no M0 scan is available."
+									/>
+								</Grid>
+							)}
 						</Grid>
 					</OutlinedGroupBox>
 					<OutlinedGroupBox
@@ -209,87 +268,140 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 								/>
 							</Grid>
 							<Grid item xs={12} md={6} xl={3}>
+								<RHFSlider
+									control={control}
+									name={`ImportContexts.${contextIndex}.MagneticFieldStrength`}
+									renderTextfields
+									min={0.1}
+									max={14}
+									step={0.1}
+									label="Magnetic Field Strength (T)"
+									helperText="Strength of the magnetic field used to acquire the ASL series."
+								/>
+							</Grid>
+							<Grid item xs={12} md={6} xl={3}>
 								<RHFSelect
 									control={control}
 									name={`ImportContexts.${contextIndex}.PulseSequenceType`}
 									options={MRIPulseSequenceTypeOptions}
 									label="MRI Pulse Sequence Type"
 									helperText="The MRI pulse sequence used for image acquisition"
+									onChange={handlePulseSequenceTypeChange}
 								/>
 							</Grid>
+							{contextValues.PulseSequenceType === "2D_EPI" && (
+								<Grid item xs={12} md={6} xl={3}>
+									<RHFSlider
+										control={control}
+										name={`ImportContexts.${contextIndex}.SliceReadoutTime`}
+										min={0.001}
+										max={0.2}
+										step={0.001}
+										renderTextfields
+										label="Timing between 2D Slice Readouts"
+										helperText="The time elapsed between the completion of a 2D slice readout and the next complete 2D slice readout. Times are in seconds. This value is typically between 0.03 and 0.065 seconds."
+									/>
+								</Grid>
+							)}
 							<Grid item xs={12} md={6} xl={3}>
 								<RHFSelect
 									control={control}
 									name={`ImportContexts.${contextIndex}.ArterialSpinLabelingType`}
-									label="ASL Sequence Type"
-									helperText="The type of ASL sequence used"
+									label="Arterial Spin Labeling Type"
+									helperText="Describes the labeling strategy used during the ASL scan acquisition. ExploreASL will incorpate the same quantification strategy for CASL as PCASL."
 									options={ASLTypeOptions}
-									trigger={trigger}
-									triggerTarget={[
-										`ImportContexts.${contextIndex}.BolusCutOffFlag`,
-										`ImportContexts.${contextIndex}.LabelingDuration`,
-									]}
+									onChange={handleArterialSpinLabelingTypeChange}
 								/>
 							</Grid>
 							<Grid item xs={12} md={6} xl={3}>
-								<RHFSlider
+								<RHFTextField
 									control={control}
 									name={`ImportContexts.${contextIndex}.PostLabelingDelay`}
-									min={0}
-									max={5}
-									step={0.001}
-									renderTextfields
-									textFieldProps={{ sx: { minWidth: 90 } }}
 									label="Post Labeling Delay"
-									helperText="Units are in seconds. If you want this field ignored, set to 0."
+									fullWidth
+									debounceTime={2000}
+									helperText="Enter either a single positive number or a comma-separated list of numbers. Units are in seconds."
+									innerToField={(stringValue) => {
+										const numbers = getNumbersFromDelimitedString(stringValue, { sort: false, unique: false });
+										if (numbers.length === 1) {
+											return numbers[0];
+										}
+										return numbers;
+									}}
+									fieldToInner={(value) => {
+										if (lodashIsUndefined(value)) return "";
+										if (typeof value === "number") {
+											return value.toString();
+										} else {
+											return value.join(", ");
+										}
+									}}
 								/>
 							</Grid>
-							<Grid item xs={12} md={6} xl={3}>
-								<RHFSlider
-									control={control}
-									name={`ImportContexts.${contextIndex}.LabelingDuration`}
-									min={0}
-									max={5}
-									step={0.001}
-									renderTextfields
-									textFieldProps={{ sx: { minWidth: 90 } }}
-									label="Labeling Duration"
-									helperText="Units are in seconds. If you want this field ignored, set to 0."
-								/>
-							</Grid>
-							<Grid item xs={12} md={6} xl={3}>
-								<RHFCheckable
-									control={control}
-									name={`ImportContexts.${contextIndex}.BolusCutOffFlag`}
-									trigger={trigger}
-									triggerTarget={`ImportContexts.${contextIndex}.BolusCutOffTechnique`}
-									label="Bolus Cut-Off Flag"
-									helperText="Was a bolus cut-off technique used? (checked if yes)"
-									valWhenChecked={true}
-									valWhenUnchecked={false}
-								/>
-							</Grid>
-							<Grid item xs={12} md={6} xl={3}>
-								<RHFSelect
-									control={control}
-									name={`ImportContexts.${contextIndex}.BolusCutOffTechnique`}
-									label="Bolus Cut-Off Technique"
-									helperText="The technique used to perform the bolus cut-off."
-									options={ASLBolusCutOffTechniqueOptions}
-									trigger={trigger}
-									triggerTarget={[
-										`ImportContexts.${contextIndex}.BolusCutOffFlag`,
-										`ImportContexts.${contextIndex}.BolusCutOffDelayTime`,
-									]}
-								/>
-							</Grid>
-							<Grid item xs={12} md={6} xl={3}>
-								<BolusCutOffDelayTimeSlider
-									control={control}
-									contextIndex={contextIndex}
-									setFieldValue={setFieldValue}
-								/>
-							</Grid>
+							{contextValues.ArterialSpinLabelingType !== "PASL" && (
+								<Grid item xs={12} md={6} xl={3}>
+									<RHFTextField
+										control={control}
+										name={`ImportContexts.${contextIndex}.LabelingDuration`}
+										label="Labeling Duration"
+										fullWidth
+										debounceTime={2000}
+										helperText="Enter either a single positive number or a comma-separated list of numbers. Units are in seconds."
+										innerToField={(stringValue) => {
+											const numbers = getNumbersFromDelimitedString(stringValue, { sort: false, unique: false });
+											if (numbers.length === 1) {
+												return numbers[0];
+											}
+											return numbers;
+										}}
+										fieldToInner={(value) => {
+											if (lodashIsUndefined(value)) return "";
+											if (typeof value === "number") {
+												return value.toString();
+											} else {
+												return value.join(", ");
+											}
+										}}
+									/>
+								</Grid>
+							)}
+							{contextValues.ArterialSpinLabelingType === "PASL" && (
+								<>
+									<Grid item xs={12} md={6} xl={3}>
+										<RHFCheckable
+											control={control}
+											name={`ImportContexts.${contextIndex}.BolusCutOffFlag`}
+											trigger={trigger}
+											triggerTarget={`ImportContexts.${contextIndex}.BolusCutOffTechnique`}
+											label="Bolus Cut-Off Flag"
+											helperText="Was a bolus cut-off technique used? (checked if yes)"
+											valWhenChecked={true}
+											valWhenUnchecked={false}
+										/>
+									</Grid>
+									<Grid item xs={12} md={6} xl={3}>
+										<RHFSelect
+											control={control}
+											name={`ImportContexts.${contextIndex}.BolusCutOffTechnique`}
+											label="Bolus Cut-Off Technique"
+											helperText="The technique used to perform the bolus cut-off."
+											options={ASLBolusCutOffTechniqueOptions}
+											trigger={trigger}
+											triggerTarget={[
+												`ImportContexts.${contextIndex}.BolusCutOffFlag`,
+												`ImportContexts.${contextIndex}.BolusCutOffDelayTime`,
+											]}
+										/>
+									</Grid>
+									<Grid item xs={12} md={6} xl={3}>
+										<BolusCutOffDelayTimeSlider
+											control={control}
+											contextIndex={contextIndex}
+											setFieldValue={setFieldValue}
+										/>
+									</Grid>
+								</>
+							)}
 						</Grid>
 					</OutlinedGroupBox>
 					<OutlinedGroupBox
@@ -307,8 +419,10 @@ function SingleImportContext({ contextIndex, control, remove, trigger, setFieldV
 									label="Number of Background Suppression Pulses"
 									min={0}
 									max={10}
-									step={1}
-									marks={lodashRange(11).map((n) => ({ label: `${n}`, value: n }))}
+									step={2}
+									marks={lodashRange(11)
+										.map((n) => ({ label: `${n}`, value: n }))
+										.filter((n) => n.value % 2 === 0)}
 								/>
 							</Grid>
 							<Grid item xs={12} md={6} xl={3}>

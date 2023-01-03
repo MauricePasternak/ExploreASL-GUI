@@ -35,6 +35,7 @@ type MUIRestrictedSelectProps = Omit<SelectProps, keyof ControllerRenderProps | 
 
 type RHFSelectBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
 	options: RHFSelectOption<TFV, TName>[]; // options to display in the select
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
 	label?: React.ReactNode;
 	formControlProps?: Omit<FormControlProps<"fieldset">, "error" | "variant">;
 	helperText?: React.ReactNode;
@@ -69,6 +70,8 @@ export type RHFSelectProps<
  *    indicating whether the component should be rendered.
  *
  * ### Other Optional Props
+ * - `onChange`: A callback function to be called when the component changes. Expected to take in the new value of the
+ * 		field as the first argument.
  * - `helperText`: Additional text to render near the bottom of the component to help the end user understand the field.
  * - `label`: The field label to render for the component.
  * - `formControlProps`: Props to pass to the wrapping FormControl component that wraps the child components such as the
@@ -88,6 +91,7 @@ export function RHFSelect<
 	watchTarget,
 	onWatchedChange,
 	options,
+	onChange,
 	label,
 	formControlProps,
 	helperText,
@@ -103,9 +107,10 @@ export function RHFSelect<
 	const watchParams = isWatching ? { control, name: watchTarget } : { control };
 	const watchedValue = useWatch(watchParams);
 
-	const handleChange = (e: SelectChangeEvent<unknown>) => {
+	const handleChange = (e: SelectChangeEvent<FieldPathValue<TFV, TName>>) => {
 		field.onChange(e);
 		trigger && triggerTarget && trigger(triggerTarget);
+		onChange && onChange(e.target.value as FieldPathValue<TFV, TName>);
 	};
 
 	function render() {

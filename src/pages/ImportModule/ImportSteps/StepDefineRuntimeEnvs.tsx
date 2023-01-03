@@ -5,6 +5,7 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
+import Fade from "@mui/material/Fade";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
 import React from "react";
@@ -39,96 +40,97 @@ export function StepDefineRuntimeEnvs({
 	};
 
 	return (
-		<form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
-			<Box mt={1} pb={5}>
-				<Card>
-					<CardHeader
-						title={<Typography variant="h4">Define Runtime Environment</Typography>}
-						subheader={<Typography>Specify filepaths and describe the structure of DICOM scanner output</Typography>}
-						avatar={
-							<Avatar>
-								<FolderIcon />
-							</Avatar>
-						}
-						action={
-							<FabDialogWrapper maxWidth="xl" PaperProps={{ sx: { minWidth: "499px" } }} sx={{ marginTop: "40px" }}>
-								<HelpImport__StepDefineRuntimeEnvs />
-							</FabDialogWrapper>
-						}
-					/>
-					<Divider />
-					<CardContent>
-						<OutlinedGroupBox
-							label="ExploreASL Runtime"
-							labelBackgroundColor={(theme) => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
-							mt={3}
-						>
-							<Grid container rowSpacing={3} columnSpacing={3} marginTop={0} padding={1}>
-								<Grid item xs={12} md={6} xl={4}>
-									<RHFSelect
-										control={control}
-										name="EASLType"
-										label="ExploreASL Type"
-										options={ExploreASLTypeOptions}
-										helperText={
-											<Typography variant="caption">
-												Select Github if you cloned the{" "}
-												<SecureLink href="https://github.com/ExploreASL/ExploreASL">
-													ExploreASL GitHub repository
-												</SecureLink>
-											</Typography>
-										}
-									/>
+		<Fade in>
+			<form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
+				<Box mt={1} pb={5}>
+					<Card>
+						<CardHeader
+							title={<Typography variant="h4">Define Runtime Environment</Typography>}
+							subheader={<Typography>Specify filepaths and describe the structure of DICOM scanner output</Typography>}
+							avatar={
+								<Avatar>
+									<FolderIcon />
+								</Avatar>
+							}
+							action={
+								<FabDialogWrapper maxWidth="xl" PaperProps={{ sx: { minWidth: "499px" } }} sx={{ marginTop: "40px" }}>
+									<HelpImport__StepDefineRuntimeEnvs />
+								</FabDialogWrapper>
+							}
+						/>
+						<Divider />
+						<CardContent>
+							<OutlinedGroupBox
+								label="ExploreASL Runtime"
+								labelBackgroundColor={(theme) => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
+								mt={3}
+							>
+								<Grid container rowSpacing={3} columnSpacing={3} marginTop={0} padding={1}>
+									<Grid item xs={12} md={6} xl={4}>
+										<RHFSelect
+											control={control}
+											name="EASLType"
+											label="ExploreASL Type"
+											options={ExploreASLTypeOptions}
+											helperText={
+												<Typography variant="caption">
+													Select Github if you cloned the{" "}
+													<SecureLink href="https://github.com/ExploreASL/ExploreASL">
+														ExploreASL GitHub repository
+													</SecureLink>
+												</Typography>
+											}
+										/>
+									</Grid>
+									<Grid item xs={12} md={6} xl={4}>
+										<RHFFilepathInput
+											control={control}
+											name="EASLPath"
+											filepathType="dir"
+											dialogOptions={{ properties: ["openDirectory"], title: "Select ExploreASL Directory" }}
+											label="ExploreASL Path"
+											helperText="This is the folder that contains the ExploreASL executable."
+										/>
+									</Grid>
+									<Grid item xs={12} md={6} xl={4}>
+										<RHFFilepathInput
+											control={control}
+											name="MATLABRuntimePath"
+											filepathType="dir"
+											dialogOptions={{ properties: ["openDirectory"], title: "Select MATLAB Runtime v## Directory" }}
+											label="MATLAB Runtime Path"
+											helperText="This is the path to the MATLAB Runtime folder version (i.e. v96, v912). Optional when ExploreASL Type is 'Github'"
+										/>
+									</Grid>
 								</Grid>
-								<Grid item xs={12} md={6} xl={4}>
-									<RHFFilepathInput
-										control={control}
-										name="EASLPath"
-										filepathType="dir"
-										dialogOptions={{ properties: ["openDirectory"], title: "Select ExploreASL Directory" }}
-										label="ExploreASL Path"
-										helperText="This is the folder that contains the ExploreASL executable."
-									/>
+							</OutlinedGroupBox>
+							<OutlinedGroupBox
+								label="Study Structure"
+								mt={3}
+								p={0.5}
+								labelBackgroundColor={(theme) => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
+							>
+								<Grid container rowSpacing={3} columnSpacing={3} marginTop={0} padding={1}>
+									<Grid item xs={12} md={6} xl={4}>
+										<RHFFilepathInput
+											control={control}
+											name="StudyRootPath"
+											filepathType="dir"
+											dialogOptions={{ properties: ["openDirectory"] }}
+											label="Study Root Path"
+											helperText="This is the root of your dataset. Must contain a folder called sourcedata."
+										/>
+									</Grid>
+									<Grid item xs={12} md={6} xl={8}>
+										<StructureByParts trigger={trigger} control={control} name="SourcedataStructure" />
+									</Grid>
 								</Grid>
-								<Grid item xs={12} md={6} xl={4}>
-									<RHFFilepathInput
-										control={control}
-										name="MATLABRuntimePath"
-										filepathType="dir"
-										dialogOptions={{ properties: ["openDirectory"], title: "Select MATLAB Runtime v## Directory" }}
-										label="MATLAB Runtime Path"
-										helperText="This is the path to the MATLAB Runtime folder version (i.e. v96, v912). Optional when ExploreASL Type is 'Github'"
-									/>
-								</Grid>
-							</Grid>
-						</OutlinedGroupBox>
-
-						<OutlinedGroupBox
-							label="Study Structure"
-							mt={3}
-							p={0.5}
-							labelBackgroundColor={(theme) => (theme.palette.mode === "dark" ? "#1e1e1e" : "#ffffff")}
-						>
-							<Grid container rowSpacing={3} columnSpacing={3} marginTop={0} padding={1}>
-								<Grid item xs={12} md={6} xl={4}>
-									<RHFFilepathInput
-										control={control}
-										name="StudyRootPath"
-										filepathType="dir"
-										dialogOptions={{ properties: ["openDirectory"] }}
-										label="Study Root Path"
-										helperText="This is the root of your dataset. Must contain a folder called sourcedata."
-									/>
-								</Grid>
-								<Grid item xs={12} md={6} xl={8}>
-									<StructureByParts trigger={trigger} control={control} name="SourcedataStructure" />
-								</Grid>
-							</Grid>
-						</OutlinedGroupBox>
-					</CardContent>
-				</Card>
-			</Box>
-			<RHFMultiStepButtons currentStep={currentStep} setCurrentStep={setCurrentStep} />
-		</form>
+							</OutlinedGroupBox>
+						</CardContent>
+					</Card>
+				</Box>
+				<RHFMultiStepButtons currentStep={currentStep} setCurrentStep={setCurrentStep} />
+			</form>
+		</Fade>
 	);
 }

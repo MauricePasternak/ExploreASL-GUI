@@ -15,7 +15,7 @@ import {
 } from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 
-type MUIRestrictedRadioButtonProps = Omit<RadioProps, keyof ControllerRenderProps | "control" | "checked">;
+type MUIRestrictedRadioButtonProps = Omit<RadioProps, keyof ControllerRenderProps | "control" | "checked" | "onChange">;
 
 export type RHFRadioButtonOption<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
 	label: React.ReactNode; // label to display next to the checkbox
@@ -24,6 +24,7 @@ export type RHFRadioButtonOption<TFV extends FieldValues, TName extends FieldPat
 
 type RHFRadioGroupBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
 	options: RHFRadioButtonOption<TFV, TName>[]; // options to display
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
 	helperText?: React.ReactNode; // helper text to display below the checkbox
 	label?: React.ReactNode; // label to display next to the checkbox
 	row?: boolean; // display options in a row instead of a column
@@ -75,6 +76,7 @@ export function RHFRadioGroup<
 	watchTarget,
 	onWatchedChange,
 	options,
+	onChange,
 	label, // label to display above the radio buttons
 	helperText, // helper text to display below the checkbox
 	row, // display options in a row instead of a column
@@ -90,8 +92,10 @@ export function RHFRadioGroup<
 	const watchedValue = useWatch(watchParams);
 
 	const handleChange = (idx: number) => {
-		field.onChange(options[idx].value);
+		const newValue = options[idx].value;
+		field.onChange(newValue);
 		trigger && trigger(triggerTarget); // trigger validation
+		onChange && onChange(newValue); // call onChange callback
 	};
 
 	function render() {

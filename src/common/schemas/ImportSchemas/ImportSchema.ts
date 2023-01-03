@@ -1,4 +1,5 @@
 import * as Yup from "yup";
+import { isUndefined as lodashIsUndefined } from "lodash";
 import { YupShape } from "../../../common/types/validationSchemaTypes";
 import {
 	ASLLabelingType,
@@ -8,12 +9,15 @@ import {
 	ImportContextSchemaType,
 	ImportMultipleContextsSchemaType,
 	ImportRuntimeEnvsSchemaType,
+	PulseSequenceType,
 } from "../../types/ImportSchemaTypes";
 import { IsValidEASLPath, IsValidMATLABRuntimePath } from "../../utils/EASLFunctions";
 import {
 	Schema_ArterialSpinLabelingType,
+	Schema_LabelingDuration,
 	Schema_M0Estimate,
 	Schema_M0Type,
+	Schema_MagneticFieldStrength,
 	Schema_Manufacturer,
 	Schema_PostLabelingDelay,
 	Schema_PulseSequenceType,
@@ -123,24 +127,29 @@ export const SchemaImportDefineContext = Yup.object().shape<YupShape<ImportConte
 	M0Estimate: Schema_M0Estimate,
 
 	// ASL Sequence Info Fields
+	// Main Fields
 	Manufacturer: Schema_Manufacturer,
 	PulseSequenceType: Schema_PulseSequenceType,
+	MagneticFieldStrength: Schema_MagneticFieldStrength,
 	ArterialSpinLabelingType: Schema_ArterialSpinLabelingType,
 	PostLabelingDelay: Schema_PostLabelingDelay,
-	LabelingDuration: Yup.number().when("ArterialSpinLabelingType", {
-		is: (sequence: ASLLabelingType) => sequence !== "PASL",
-		then: Yup.number()
-			.required("This is a required field when working with CASL or PCASL")
-			.moreThan(0, "Labeling Duration must be greater than 0 when working with CASL or PCASL"),
+
+	// 2D Acquisition Fields
+	SliceReadoutTime: Yup.number().when("PulseSequenceType", {
+		is: (pulseSequenceType: PulseSequenceType) => pulseSequenceType === "2D_EPI",
+		then: (schema) => schema.required("This is a required field when working with 2D EPI"),
 		otherwise: (schema) =>
-			schema
-				.optional()
-				.max(
-					0,
-					"Labeling Duration must be 0 when working with PASL. " +
-						"You're probably thinking about Bolus Cut Off Delay Time which applies to PASL."
-				),
+			schema.test(
+				"SliceReadoutTimeMustBeUndefined",
+				"This field must not be present when the MRI pulse sequence is not a 2D acquisition",
+				(readoutTime) => lodashIsUndefined(readoutTime)
+			),
 	}),
+
+	// PCASL/CASL Fields
+	LabelingDuration: Schema_LabelingDuration,
+
+	// PASL Fields
 	BolusCutOffFlag: Yup.boolean().when("ArterialSpinLabelingType", {
 		is: (sequence: ASLLabelingType) => sequence === "PASL",
 		then: Yup.boolean().required("This is a required field when working with PASL"),

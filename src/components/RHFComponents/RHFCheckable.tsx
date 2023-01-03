@@ -8,38 +8,40 @@ import { FieldValues, FieldPath, FieldPathValue, useController, useWatch } from 
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 
 type RHFCheckboxBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
-  valWhenChecked: FieldPathValue<TFV, TName>; // The value to set when the checkbox is checked
-  valWhenUnchecked: FieldPathValue<TFV, TName>; // The value to set when the checkbox is unchecked
-  label?: React.ReactNode; // The label to display next to the checkbox
-  helperText?: React.ReactNode; // The helper text to display below the checkbox
-  isSwitch?: false; // Whether or not to render a switch instead of a checkbox
-  checkableProps?: CheckboxProps; // Props to pass to the underlying Checkbox component
+	valWhenChecked: FieldPathValue<TFV, TName>; // The value to set when the checkbox is checked
+	valWhenUnchecked: FieldPathValue<TFV, TName>; // The value to set when the checkbox is unchecked
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
+	label?: React.ReactNode; // The label to display next to the checkbox
+	helperText?: React.ReactNode; // The helper text to display below the checkbox
+	isSwitch?: false; // Whether or not to render a switch instead of a checkbox
+	checkableProps?: CheckboxProps; // Props to pass to the underlying Checkbox component
 };
 
 type RHFSwitchBaseProps<TFV extends FieldValues, TName extends FieldPath<TFV>> = {
-  valWhenChecked: FieldPathValue<TFV, TName>; // The value to set the field to when the switch is checked.
-  valWhenUnchecked: FieldPathValue<TFV, TName>; // The value to set the field to when the switch is unchecked.
-  label?: React.ReactNode; // The label to display for the switch.
-  helperText?: React.ReactNode; // The helper text to display for the switch.
-  isSwitch?: true; // Whether or not to render a switch instead of a checkbox.
-  checkableProps?: SwitchProps; // Props to pass to the underlying Switch component.
+	valWhenChecked: FieldPathValue<TFV, TName>; // The value to set the field to when the switch is checked.
+	valWhenUnchecked: FieldPathValue<TFV, TName>; // The value to set the field to when the switch is unchecked.
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
+	label?: React.ReactNode; // The label to display for the switch.
+	helperText?: React.ReactNode; // The helper text to display for the switch.
+	isSwitch?: true; // Whether or not to render a switch instead of a checkbox.
+	checkableProps?: SwitchProps; // Props to pass to the underlying Switch component.
 };
 
 type MUIRestrictedFormControlLabelProps = Omit<
-  FormControlLabelProps,
-  "control" | "onChange" | "label" | "value" | "checked"
+	FormControlLabelProps,
+	"control" | "onChange" | "label" | "value" | "checked"
 >;
 
 export type RHFCheckableProps<
-  TFV extends FieldValues,
-  TName extends FieldPath<TFV>,
-  TTrigger extends FieldPath<TFV>,
-  TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 > = MUIRestrictedFormControlLabelProps &
-  RHFControllerProps<TFV, TName> & // name, control
-  RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
-  RHFWatchProps<TFV, TWatch> & // watch & watchTarget
-  (RHFCheckboxBaseProps<TFV, TName> | RHFSwitchBaseProps<TFV, TName>);
+	RHFControllerProps<TFV, TName> & // name, control
+	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
+	RHFWatchProps<TFV, TWatch> & // watch & watchTarget
+	(RHFCheckboxBaseProps<TFV, TName> | RHFSwitchBaseProps<TFV, TName>);
 
 /**
  * A MaterialUI Checkbox or Switch checkable component meant to be used in a react-hook-form context, specifically
@@ -67,86 +69,89 @@ export type RHFCheckableProps<
  * - `...muiFormControlLabelProps`: All additional props are forwarded to the FormControlLabel component.
  */
 export function RHFCheckable<
-  TFV extends FieldValues,
-  TName extends FieldPath<TFV>,
-  TTrigger extends FieldPath<TFV>,
-  TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
-  name,
-  control,
-  trigger,
-  triggerTarget,
-  watchTarget,
-  onWatchedChange,
-  valWhenChecked, // value to set when checked
-  valWhenUnchecked, // value to set when unchecked
-  label, // label to display next to the checkbox/switch
-  helperText, // helper text to display below the checkbox/switch
-  isSwitch = false, // display as a switch instead of a checkbox
-  checkableProps, // props to pass to the checkbox/switch
-  ...muiFormControlLabelProps // props to pass to the FormControlLabel
+	name,
+	control,
+	trigger,
+	triggerTarget,
+	watchTarget,
+	onWatchedChange,
+	onChange,
+	valWhenChecked, // value to set when checked
+	valWhenUnchecked, // value to set when unchecked
+	label, // label to display next to the checkbox/switch
+	helperText, // helper text to display below the checkbox/switch
+	isSwitch = false, // display as a switch instead of a checkbox
+	checkableProps, // props to pass to the checkbox/switch
+	...muiFormControlLabelProps // props to pass to the FormControlLabel
 }: RHFCheckableProps<TFV, TName, TTrigger, TWatch>) {
-  // RHF Variables
-  const { field, fieldState } = useController({ name, control }); // field & fieldState
-  const hasError = !!fieldState.error;
-  const errorMessage = hasError ? fieldState.error?.message : "";
-  const isChecked = field.value === valWhenChecked;
+	// RHF Variables
+	const { field, fieldState } = useController({ name, control }); // field & fieldState
+	const hasError = !!fieldState.error;
+	const errorMessage = hasError ? fieldState.error?.message : "";
+	const isChecked = field.value === valWhenChecked;
 
-  // Watch-related variables
-  const isWatching = watchTarget && onWatchedChange;
-  const watchParams = isWatching ? { control, name: watchTarget } : { control };
-  const watchedValue = useWatch(watchParams);
+	// Watch-related variables
+	const isWatching = watchTarget && onWatchedChange;
+	const watchParams = isWatching ? { control, name: watchTarget } : { control };
+	const watchedValue = useWatch(watchParams);
 
-  /**
-   * When field.value changes, trigger the triggerTarget.
-   */
-  useEffect(() => {
-    trigger && trigger(triggerTarget);
-  }, [field.value]);
+	/**
+	 * When field.value changes, trigger the triggerTarget.
+	 */
+	useEffect(() => {
+		trigger && trigger(triggerTarget);
+	}, [JSON.stringify(field.value)]);
 
-  const handleChange = (checked: boolean) => {
-    field.onChange(checked ? valWhenChecked : valWhenUnchecked);
-    field.onBlur();
-    trigger && trigger(triggerTarget); // trigger the triggerTarget
-  };
+	const handleChange = (checked: boolean) => {
+		const newValue = checked ? valWhenChecked : valWhenUnchecked;
+		field.onChange(newValue);
+		field.onBlur();
+		trigger && trigger(triggerTarget); // trigger the triggerTarget
+		onChange && onChange(newValue);
+	};
 
-  function render() {
-    return (
-      <Box display="flex" flexDirection="column" alignItems="start" className="RHFCheckable__BoxWrapper">
-        <FormControlLabel
-          className="RHFCheckable__FormControlLabel"
-          componentsProps={{
-            typography: { color: hasError ? "error" : "default" },
-          }}
-          {...muiFormControlLabelProps}
-          inputRef={field.ref}
-          onBlur={field.onBlur}
-          name={field.name}
-          label={label}
-          checked={isChecked}
-          control={
-            isSwitch === true ? (
-              <Switch
-                className="RHFCheckable__Switch"
-                {...checkableProps}
-                onChange={(_, checked) => handleChange(checked)}
-                color={hasError ? "error" : "primary"}
-              />
-            ) : (
-              <Checkbox
-                className="RHFCheckable__Checkbox"
-                {...checkableProps}
-                onChange={(_, checked) => handleChange(checked)}
-                color={hasError ? "error" : "primary"}
-              />
-            )
-          }
-        />
-        {helperText && <FormHelperText error={hasError}>{helperText}</FormHelperText>}
-        {errorMessage && <FormHelperText error={hasError}>{errorMessage}</FormHelperText>}
-      </Box>
-    );
-  }
+	function render() {
+		return (
+			<Box display="flex" flexDirection="column" alignItems="start" className="RHFCheckable__BoxWrapper">
+				<FormControlLabel
+					className="RHFCheckable__FormControlLabel"
+					componentsProps={{
+						typography: { color: hasError ? "error" : "default" },
+					}}
+					{...muiFormControlLabelProps}
+					inputRef={field.ref}
+					onBlur={field.onBlur}
+					name={field.name}
+					label={label}
+					checked={isChecked}
+					control={
+						isSwitch === true ? (
+							<Switch
+								className="RHFCheckable__Switch"
+								{...checkableProps}
+								onChange={(_, checked) => handleChange(checked)}
+								color={hasError ? "error" : "primary"}
+							/>
+						) : (
+							<Checkbox
+								className="RHFCheckable__Checkbox"
+								{...checkableProps}
+								onChange={(_, checked) => handleChange(checked)}
+								color={hasError ? "error" : "primary"}
+							/>
+						)
+					}
+				/>
+				{helperText && <FormHelperText error={hasError}>{helperText}</FormHelperText>}
+				{errorMessage && <FormHelperText error={hasError}>{errorMessage}</FormHelperText>}
+			</Box>
+		);
+	}
 
-  return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
+	return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
 }

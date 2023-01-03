@@ -1,17 +1,25 @@
 import React from "react";
-import { ControllerRenderProps, FieldValues, FieldPath, useController, useWatch } from "react-hook-form";
+import {
+	ControllerRenderProps,
+	FieldValues,
+	FieldPath,
+	useController,
+	useWatch,
+	FieldPathValue,
+} from "react-hook-form";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedFilepathInput, DebouncedFilepathInputProps } from "../DebouncedComponents";
 
 export type RHFFilepathInputProps<
-  TFV extends FieldValues,
-  TName extends FieldPath<TFV>,
-  TTrigger extends FieldPath<TFV>,
-  TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
-> = Omit<DebouncedFilepathInputProps, keyof ControllerRenderProps> &
-  RHFControllerProps<TFV, TName> & // name & control
-  RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchedChange
-  RHFTriggerProps<TFV, TTrigger>; // trigger & triggerTarget
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
+> = Omit<DebouncedFilepathInputProps, keyof ControllerRenderProps> & {
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
+} & RHFControllerProps<TFV, TName> & // name & control
+	RHFWatchProps<TFV, TWatch> & // watchTarget & onWatchedChange
+	RHFTriggerProps<TFV, TTrigger>; // trigger & triggerTarget
 
 /**
  * MUI Textfield + Button component meant to be used with react-hook-form to provide a string value representing a
@@ -41,47 +49,49 @@ export type RHFFilepathInputProps<
  * - all other props are forwarded to the TextField component
  */
 export function RHFFilepathInput<
-  TFV extends FieldValues,
-  TName extends FieldPath<TFV>,
-  TTrigger extends FieldPath<TFV>,
-  TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
+	TFV extends FieldValues,
+	TName extends FieldPath<TFV>,
+	TTrigger extends FieldPath<TFV>,
+	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
 >({
-  name,
-  control,
-  trigger,
-  triggerTarget,
-  watchTarget,
-  onWatchedChange,
-  ...filepathInputProps
+	name,
+	control,
+	trigger,
+	triggerTarget,
+	watchTarget,
+	onWatchedChange,
+	onChange,
+	...filepathInputProps
 }: RHFFilepathInputProps<TFV, TName, TTrigger, TWatch>) {
-  // RHF Variables
-  const { field, fieldState } = useController({ name, control }); // field & fieldState
-  const hasError = !!fieldState.error;
+	// RHF Variables
+	const { field, fieldState } = useController({ name, control }); // field & fieldState
+	const hasError = !!fieldState.error;
 
-  // Watch-related variables
-  const isWatching = watchTarget && onWatchedChange;
-  const watchParams = isWatching ? { control, name: watchTarget } : { control };
-  const watchedValue = useWatch(watchParams);
+	// Watch-related variables
+	const isWatching = watchTarget && onWatchedChange;
+	const watchParams = isWatching ? { control, name: watchTarget } : { control };
+	const watchedValue = useWatch(watchParams);
 
-  /** Handles changes to the input and triggers validation of dependent fields */
-  const handleChange = (newValue: string) => {
-    field.onChange(newValue); // update the field value
-    trigger && trigger(triggerTarget); // trigger the validation
-  };
+	/** Handles changes to the input and triggers validation of dependent fields */
+	const handleChange = (newValue: string) => {
+		field.onChange(newValue); // update the field value
+		trigger && trigger(triggerTarget); // trigger the validation
+		onChange && onChange(newValue as FieldPathValue<TFV, TName>); // call the onChange callback
+	};
 
-  function render() {
-    return (
-      <DebouncedFilepathInput
-        className="RHFFilepathInput__DebouncedFilepathInput"
-        {...field}
-        ref={null}
-        {...filepathInputProps}
-        onChange={handleChange}
-        error={hasError}
-        errorMessage={fieldState.error?.message}
-      />
-    );
-  }
+	function render() {
+		return (
+			<DebouncedFilepathInput
+				className="RHFFilepathInput__DebouncedFilepathInput"
+				{...field}
+				ref={null}
+				{...filepathInputProps}
+				onChange={handleChange}
+				error={hasError}
+				errorMessage={fieldState.error?.message}
+			/>
+		);
+	}
 
-  return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
+	return isWatching ? (onWatchedChange(watchedValue as SingleFieldValueType<TFV, TWatch>) ? render() : null) : render();
 }

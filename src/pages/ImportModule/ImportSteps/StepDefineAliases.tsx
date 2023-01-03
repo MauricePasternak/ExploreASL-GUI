@@ -16,8 +16,9 @@ import { RHFMapping } from "../../../components/RHFComponents";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../../components/RHFComponents/RHFMultiStep";
 import HelpImport__StepDefineAliases from "../../Help/HelpImport__StepDefineAliases";
 import FieldCardScanAliases from "./FieldCardScanAliases";
-import { getAliasBasenames } from "../ImportModuleHelperFunctions";
-import { Divider } from "@mui/material";
+import { fetchGUIImportPar, getAliasBasenames } from "../ImportModuleHelperFunctions";
+import Divider from "@mui/material/Divider";
+import Fade from "@mui/material/Fade";
 
 export function StepDefineAliases({
 	currentStep,
@@ -27,13 +28,15 @@ export function StepDefineAliases({
 	getValues,
 	handleSubmit,
 }: RHFMultiStepReturnProps<ImportSchemaType>) {
-	// TODO Look into use a FSWatcher to invoke setupAliases in case a user tries to change filepaths mid-form
-	/**
-	 * Handler for populating the alias basenames with the most up-to-date values.
-	 */
+	const { api } = window;
+
+	/** Handler for populating the alias basenames with the most up-to-date values. */
 	const setupAliases = useCallback(async () => {
 		const { StudyRootPath, SourcedataStructure, MappingScanAliases, MappingSessionAliases, MappingVisitAliases } =
 			getValues();
+
+		// If there exists an EASLGUI_ImportPar.json file, then we can use the values from that file to populate the form.
+		const fetchGUIImportParResult = await fetchGUIImportPar(StudyRootPath);
 
 		// Retrieve a list of the basenames of files at the appropriate levels for
 		// Scan, Session, and Visit.
@@ -43,15 +46,35 @@ export function StepDefineAliases({
 		const { scanBasenames, sessionBasenames, visitBasenames } = result;
 
 		// Create default values for the aliases
-		const defaultScanAliases: Record<string, ImportScanType> = lodashZipObject(
-			scanBasenames,
-			scanBasenames.map(() => "Ignore")
-		);
-		const defaultSessionAliases: Record<string, string> = lodashZipObject(
-			sessionBasenames,
-			sessionBasenames.map((_, i) => `ASL_${i + 1}`) // +1 to account for MATLAB indexing
-		);
-		const defaultVisitAliases: Record<string, string> = lodashZipObject(visitBasenames, visitBasenames);
+		const defaultScanAliases: Record<string, ImportScanType> =
+			fetchGUIImportParResult && "MappingScanAliases" in fetchGUIImportParResult
+				? lodashZipObject(
+						scanBasenames,
+						scanBasenames.map((basename) => fetchGUIImportParResult.MappingScanAliases[basename] ?? "Ignore")
+				  )
+				: lodashZipObject(
+						scanBasenames,
+						scanBasenames.map(() => "Ignore")
+				  );
+		const defaultSessionAliases: Record<string, string> =
+			fetchGUIImportParResult && "MappingSessionAliases" in fetchGUIImportParResult
+				? lodashZipObject(
+						sessionBasenames,
+						sessionBasenames.map(
+							(basename, i) => fetchGUIImportParResult.MappingSessionAliases[basename] ?? `ASL_${i + 1}`
+						)
+				  )
+				: lodashZipObject(
+						sessionBasenames,
+						sessionBasenames.map((_, i) => `ASL_${i + 1}`) // +1 to account for MATLAB indexing
+				  );
+		const defaultVisitAliases: Record<string, string> =
+			fetchGUIImportParResult && "MappingVisitAliases" in fetchGUIImportParResult
+				? lodashZipObject(
+						visitBasenames,
+						visitBasenames.map((basename) => fetchGUIImportParResult.MappingVisitAliases[basename] ?? basename)
+				  )
+				: lodashZipObject(visitBasenames, visitBasenames);
 
 		// Overwrite the default values with the current form values
 		const updatedScanAliases = assignSelfKeysOnly(defaultScanAliases, MappingScanAliases);
@@ -82,66 +105,68 @@ export function StepDefineAliases({
 	};
 
 	return (
-		<form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
-			<Box mt={1} pb={5} display="flex" gap={2} flexDirection="column" position="relative">
-				<Card>
-					<CardHeader
-						title={<Typography variant="h4">Define Aliases</Typography>}
-						subheader={<Typography>Define mappings of current folder names to your preferred aliases</Typography>}
-						action={
-							<FabDialogWrapper
-								maxWidth="xl"
-								// fabProps={{ sx: { position: "absolute", top: "100px", right: "1rem", zIndex: 1 } }}
-								PaperProps={{ sx: { minWidth: "499px" } }}
-								sx={{ marginTop: "40px" }}
-							>
-								<HelpImport__StepDefineAliases />
-							</FabDialogWrapper>
-						}
-						avatar={
-							<Avatar>
-								<SvgIcon component={AliasIcon} inheritViewBox fontSize="large" />
-							</Avatar>
-						}
-					/>
-					<CardContent>
-						<FieldCardScanAliases control={control} name="MappingScanAliases" />
-						<RHFMapping
-							control={control}
-							name="MappingVisitAliases"
-							type="textfield"
-							title="Visit Aliases"
-							keysSubtitle="Folder Name"
-							valuesSubtitle="Visit Alias"
-							placeholder={
-								<>
-									<Divider />
-									<Typography padding={2}>
-										No Visit Folder Level was specified in the previous step. Go back if this was not expected.
-									</Typography>
-								</>
+		<Fade in>
+			<form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
+				<Box mt={1} pb={5} display="flex" gap={2} flexDirection="column" position="relative">
+					<Card>
+						<CardHeader
+							title={<Typography variant="h4">Define Aliases</Typography>}
+							subheader={<Typography>Define mappings of current folder names to your preferred aliases</Typography>}
+							action={
+								<FabDialogWrapper
+									maxWidth="xl"
+									// fabProps={{ sx: { position: "absolute", top: "100px", right: "1rem", zIndex: 1 } }}
+									PaperProps={{ sx: { minWidth: "499px" } }}
+									sx={{ marginTop: "40px" }}
+								>
+									<HelpImport__StepDefineAliases />
+								</FabDialogWrapper>
+							}
+							avatar={
+								<Avatar>
+									<SvgIcon component={AliasIcon} inheritViewBox fontSize="large" />
+								</Avatar>
 							}
 						/>
-						<RHFMapping
-							control={control}
-							name="MappingSessionAliases"
-							type="textfield"
-							title="Session Aliases"
-							keysSubtitle="Folder Name"
-							valuesSubtitle="Session Alias"
-							placeholder={
-								<>
-									<Divider />
-									<Typography padding={2}>
-										No Session Folder Level was specified in the previous step. Go back if this was not expected
-									</Typography>
-								</>
-							}
-						/>
-					</CardContent>
-				</Card>
-			</Box>
-			<RHFMultiStepButtons currentStep={currentStep} setCurrentStep={setCurrentStep} />
-		</form>
+						<CardContent>
+							<FieldCardScanAliases control={control} name="MappingScanAliases" />
+							<RHFMapping
+								control={control}
+								name="MappingVisitAliases"
+								type="textfield"
+								title="Visit Aliases"
+								keysSubtitle="Folder Name"
+								valuesSubtitle="Visit Alias"
+								placeholder={
+									<>
+										<Divider />
+										<Typography padding={2}>
+											No Visit Folder Level was specified in the previous step. Go back if this was not expected.
+										</Typography>
+									</>
+								}
+							/>
+							<RHFMapping
+								control={control}
+								name="MappingSessionAliases"
+								type="textfield"
+								title="Session Aliases"
+								keysSubtitle="Folder Name"
+								valuesSubtitle="Session Alias"
+								placeholder={
+									<>
+										<Divider />
+										<Typography padding={2}>
+											No Session Folder Level was specified in the previous step. Go back if this was not expected
+										</Typography>
+									</>
+								}
+							/>
+						</CardContent>
+					</Card>
+				</Box>
+				<RHFMultiStepButtons currentStep={currentStep} setCurrentStep={setCurrentStep} />
+			</form>
+		</Fade>
 	);
 }

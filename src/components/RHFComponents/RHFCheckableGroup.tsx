@@ -60,6 +60,7 @@ type RHFCheckableGroupBaseProps<
 	options: RHFCheckableOption<TCheck, TFV, TName>[]; // options to display
 	keepUncheckedValue: boolean; // keep unchecked options in the form values (default: false)
 	uncheckedValue: TValueWrapper<TFV, TName>;
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
 	helperText?: React.ReactNode; // helper text to display below the checkbox
 	label?: React.ReactNode; // label to display next to the checkbox
 	row?: boolean; // display options in a row instead of a column
@@ -124,6 +125,7 @@ export function RHFCheckableGroup<
 	options,
 	keepUncheckedValue,
 	uncheckedValue,
+	onChange,
 	helperText,
 	label,
 	row = false,
@@ -179,6 +181,7 @@ export function RHFCheckableGroup<
 		setInnerVal(innerValCopy);
 		field.onChange(finalVal);
 		trigger && trigger(triggerTarget);
+		onChange && onChange(finalVal);
 	};
 
 	function render() {

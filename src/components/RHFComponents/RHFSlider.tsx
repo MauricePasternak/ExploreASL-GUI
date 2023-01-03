@@ -1,5 +1,12 @@
 import React from "react";
-import { ControllerRenderProps, FieldValues, FieldPath, useController, useWatch } from "react-hook-form";
+import {
+	ControllerRenderProps,
+	FieldValues,
+	FieldPath,
+	useController,
+	useWatch,
+	FieldPathValue,
+} from "react-hook-form";
 import { parseFieldError } from "../../common/utils/formFunctions";
 import { RHFControllerProps, RHFTriggerProps, RHFWatchProps, SingleFieldValueType } from "../../common/types/formTypes";
 import { DebouncedSlider, DebouncedSliderProps } from "../DebouncedComponents";
@@ -9,8 +16,9 @@ export type RHFSliderProps<
 	TName extends FieldPath<TFV>,
 	TTrigger extends FieldPath<TFV>,
 	TWatch extends FieldPath<TFV> | readonly FieldPath<TFV>[]
-> = Omit<DebouncedSliderProps, keyof ControllerRenderProps | "onChangeCommitted"> &
-	RHFControllerProps<TFV, TName> & // name & control
+> = Omit<DebouncedSliderProps, keyof ControllerRenderProps | "onChangeCommitted"> & {
+	onChange?: (value: FieldPathValue<TFV, TName>, ...args: unknown[]) => void; // onChange callback
+} & RHFControllerProps<TFV, TName> & // name & control
 	RHFTriggerProps<TFV, TTrigger> & // trigger & triggerTarget
 	RHFWatchProps<TFV, TWatch>; // watchTarget & onWatchChange
 
@@ -31,6 +39,8 @@ export type RHFSliderProps<
  *    indicating whether the component should be rendered.
  *
  * ### Other Optional Props
+ * - `onChange`: A callback function to be called when the component changes. Expected to take in the new value of the
+ * 		field as the first argument.
  * - `helperText`: Additional text to render near the bottom of the component to help the end user understand the field.
  * - `label`: The field label to render for the component.
  * - `formControlProps`: Props to pass to the wrapping FormControl component that wraps the child components such as the
@@ -53,6 +63,7 @@ export function RHFSlider<
 	triggerTarget,
 	watchTarget,
 	onWatchedChange,
+	onChange,
 	debounceTime = 500,
 	renderTextfields = true,
 	...sliderProps
@@ -71,6 +82,7 @@ export function RHFSlider<
 	const handleChange = (value: number | number[]) => {
 		field.onChange(value);
 		trigger && trigger(triggerTarget);
+		onChange && onChange(value as FieldPathValue<TFV, TName>);
 	};
 
 	// Slider doesn't take in a ref

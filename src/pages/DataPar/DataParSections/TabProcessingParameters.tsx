@@ -50,8 +50,8 @@ const atlasOptions: RHFCheckableOption<"checkbox", DataParValuesType, "x.S.Atlas
 	{ label: "Hammers Atlas adapted to DARTEL template of IXI550 space", value: "HammersCAT12" },
 	{ label: "Harvard-Oxford Cortical", value: "HOcort_CONN" },
 	{ label: "Harvard-Oxford Subcortical", value: "HOsub_CONN" },
-	{ label: "OASIS Atlas", value: "Mindboggle_OASIS_DKT31_CMA" },
 	{ label: "Harvard-Oxford Thalamus", value: "Thalamus" },
+	{ label: "OASIS Atlas", value: "Mindboggle_OASIS_DKT31_CMA" },
 ];
 
 const bMaskingOptions: RHFCheckableOption<"checkbox", DataParValuesType, "x.S.bMasking">[] = [

@@ -1,7 +1,7 @@
-import { styled } from "@mui/material/styles";
 import Box, { BoxProps } from "@mui/material/Box";
+import { styled } from "@mui/material/styles";
 
-export interface OutlinedGroupBoxProps {
+export interface OutlinedGroupBoxProps extends BoxProps {
 	/**
 	 * The label of the group box.
 	 */
@@ -28,6 +28,14 @@ export interface OutlinedGroupBoxProps {
 	labelBackgroundColor?: BoxProps["bgcolor"];
 }
 
+const OutlinedGroupBoxDoNotForwardPropsSet = new Set<PropertyKey>([
+	"label",
+	"labelFontSize",
+	"labelLeftOffset",
+	"labelTopOffset",
+	"labelBackgroundColor",
+]);
+
 /**
  * Modified Material UI Box component to feature a hovering label around the top-left corner of the box.
  * Meant to act akin the Qt Groupbox widget (minus the checkable property).
@@ -38,36 +46,36 @@ export interface OutlinedGroupBoxProps {
  * @param labelBackgroundColor The background color behind the label.
  * @param props The rest of the props passed to the Box component.
  */
-export const OutlinedGroupBox = styled(Box)<OutlinedGroupBoxProps>(
-	({ theme, label, labelFontSize, labelLeftOffset, labelTopOffset, labelBackgroundColor }) => {
-		return {
-			borderWidth: theme.spacing(0.25),
-			borderStyle: "solid",
-			borderColor: theme.palette.primary.main,
-			borderRadius: theme.shape.borderRadius,
-			position: "relative",
-			"&:before": {
-				paddingLeft: theme.spacing(1),
-				paddingRight: theme.spacing(1),
-				content: `"${label}"`,
-				position: "absolute",
-				top: labelTopOffset
-					? typeof labelTopOffset === "function"
-						? labelTopOffset(theme)
-						: labelTopOffset
-					: `-${theme.spacing(2.25)}`,
-				left: labelLeftOffset
-					? typeof labelLeftOffset === "function"
-						? labelLeftOffset(theme)
-						: labelLeftOffset
-					: theme.spacing(2.25),
-				backgroundColor: labelBackgroundColor
-					? typeof labelBackgroundColor === "function"
-						? labelBackgroundColor(theme)
-						: labelBackgroundColor
-					: theme.palette.background.default,
-				fontSize: labelFontSize ?? theme.typography.h6.fontSize,
-			},
-		};
-	}
-);
+export const OutlinedGroupBox = styled(Box, {
+	shouldForwardProp: (propName) => !OutlinedGroupBoxDoNotForwardPropsSet.has(propName),
+})<OutlinedGroupBoxProps>(({ theme, label, labelFontSize, labelLeftOffset, labelTopOffset, labelBackgroundColor }) => {
+	return {
+		borderWidth: theme.spacing(0.25),
+		borderStyle: "solid",
+		borderColor: theme.palette.primary.main,
+		borderRadius: theme.shape.borderRadius,
+		position: "relative",
+		"&:before": {
+			paddingLeft: theme.spacing(1),
+			paddingRight: theme.spacing(1),
+			content: `"${label}"`,
+			position: "absolute",
+			top: labelTopOffset
+				? typeof labelTopOffset === "function"
+					? labelTopOffset(theme)
+					: labelTopOffset
+				: `-${theme.spacing(2.25)}`,
+			left: labelLeftOffset
+				? typeof labelLeftOffset === "function"
+					? labelLeftOffset(theme)
+					: labelLeftOffset
+				: theme.spacing(2.25),
+			backgroundColor: labelBackgroundColor
+				? typeof labelBackgroundColor === "function"
+					? labelBackgroundColor(theme)
+					: labelBackgroundColor
+				: theme.palette.background.default,
+			fontSize: labelFontSize ?? theme.typography.h6.fontSize,
+		},
+	};
+});

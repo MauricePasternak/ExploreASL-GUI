@@ -4,6 +4,7 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
+import Fade from "@mui/material/Fade";
 import Stack from "@mui/material/Stack";
 import SvgIcon from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
@@ -18,12 +19,13 @@ import { ImportSchemaType } from "../../../common/types/ImportSchemaTypes";
 import { YupValidate } from "../../../common/utils/formFunctions";
 import { RHFMultiStepButtons, RHFMultiStepReturnProps } from "../../../components/RHFComponents/RHFMultiStep";
 import { FabDialogWrapper } from "../../../components/WrapperComponents";
-import { DefaultImportSingleContext } from "../../../stores/ImportPageStore";
+import { ImportSingleContextDefault, ImportSingleContextDefaultValueMapping } from "../../../stores/ImportPageStore";
 import { atomImportModuleSnackbar } from "../../../stores/SnackbarStore";
 import HelpImport__StepDefineAdditionalContext from "../../Help/HelpImport__StepDefineAdditionalContext";
 import {
 	buildSourceStructureJSON,
 	buildStudyParJSON,
+	fetchGUIImportPar,
 	updateContextSpecificRegexps,
 } from "../ImportModuleHelperFunctions";
 import SingleImportContext from "./SingleImportContext";
@@ -137,30 +139,16 @@ export function StepDefineContexts({
 	useEffect(() => {
 		async function handleLoadImportPar() {
 			const currentValues = getValues();
-			console.log(
-				"Step 'Define Contexts' -- useEffect -- searching for ImportPar.json in ",
-				currentValues.StudyRootPath
-			);
 
 			try {
-				const importParPath = api.path.asPath(currentValues.StudyRootPath, GUIIMPORTFILE_BASENAME);
-				if (!(await api.path.filepathExists(importParPath.path))) return;
+				const payload = await fetchGUIImportPar(currentValues.StudyRootPath);
+				if (!payload || !("ImportContexts" in payload)) return;
 
-				console.log(
-					"Step 'Define Contexts' -- useEffect -- ImportPar.json found at ",
-					importParPath.path,
-					"...validating"
-				);
-				const { payload, error } = await api.path.readJSONSafe(importParPath.path);
-				if (!("ImportContexts" in payload) || error) return;
-
-				// Validate the data
-				const { errors, values } = await YupValidate(SchemaImportPar, payload as ImportSchemaType);
-				if (Object.keys(errors).length > 0) {
-					console.log("Step 'Define Contexts' -- useEffect -- loaded ImportPar.json did not pass validation: ", errors);
-					return;
-				}
-				setValue("ImportContexts", values.ImportContexts, { shouldValidate: false });
+				setValue("ImportContexts", payload.ImportContexts, {
+					shouldValidate: false,
+					shouldTouch: false,
+					shouldDirty: false,
+				});
 				return;
 			} catch (error) {
 				console.warn(`Step 'Define Contexts' -- useEffect -- Error while loading/validating ImportPar.json: `, error);
@@ -172,65 +160,66 @@ export function StepDefineContexts({
 	}, []);
 
 	return (
-		<form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
-			<Card elevation={3} sx={{ marginBottom: 2 }}>
-				<CardHeader
-					title={<Typography variant="h4">Define Scan Acquisition Context</Typography>}
-					subheader={
-						<Typography>
-							Define the specific nature of the ASL scan acquisition to allow for the Import Module to properly convert
-							the series into NIFTI format. Supports defining multiple acquisition contexts for complex datasets.
-						</Typography>
-					}
-					avatar={
-						<Avatar>
-							<SvgIcon component={ContextIcon} inheritViewBox />
-						</Avatar>
-					}
-					action={
-						<FabDialogWrapper
-							maxWidth="xl"
-							// fabProps={{ sx: { position: "absolute", top: "100px", right: "1rem", zIndex: 1 } }}
-							PaperProps={{ sx: { minWidth: "499px" } }}
-							sx={{ marginTop: "40px" }}
+		<Fade in>
+			<form onSubmit={handleSubmit(handleValidSubmit, handleInvalidSubmit)}>
+				<Card elevation={3} sx={{ marginBottom: 2 }}>
+					<CardHeader
+						title={<Typography variant="h4">Define Scan Acquisition Context</Typography>}
+						subheader={
+							<Typography>
+								Define the specific nature of the ASL scan acquisition to allow for the Import Module to properly convert
+								the series into NIFTI format. Supports defining multiple acquisition contexts for complex datasets.
+							</Typography>
+						}
+						avatar={
+							<Avatar>
+								<SvgIcon component={ContextIcon} inheritViewBox />
+							</Avatar>
+						}
+						action={
+							<FabDialogWrapper
+								maxWidth="xl"
+								// fabProps={{ sx: { position: "absolute", top: "100px", right: "1rem", zIndex: 1 } }}
+								PaperProps={{ sx: { minWidth: "499px" } }}
+								sx={{ marginTop: "40px" }}
+							>
+								<HelpImport__StepDefineAdditionalContext />
+							</FabDialogWrapper>
+						}
+					/>
+					<Divider />
+					<CardContent>
+						<Button
+							fullWidth
+							variant="contained"
+							onClick={() => {
+								const defaultContext = lodashCloneDeep(ImportSingleContextDefault);
+								append(defaultContext);
+							}}
 						>
-							<HelpImport__StepDefineAdditionalContext />
-						</FabDialogWrapper>
-					}
-				/>
-				<Divider />
-				<CardContent>
-					<Button
-						fullWidth
-						variant="contained"
-						onClick={() => {
-							const defaultContext = lodashCloneDeep(DefaultImportSingleContext);
-							// defaultContext.IsGlobal = false; // This allows for proper validation of the form.
-							append(defaultContext);
-						}}
-					>
-						Add a context
-					</Button>
-				</CardContent>
-				<Divider />
-				<CardContent>
-					<Stack spacing={1}>
-						{fields.map((field, fieldIndex) => {
-							return (
-								<SingleImportContext
-									key={field.id}
-									contextIndex={fieldIndex}
-									remove={remove}
-									control={control}
-									trigger={trigger}
-									setFieldValue={setValue}
-								/>
-							);
-						})}
-					</Stack>
-				</CardContent>
-			</Card>
-			<RHFMultiStepButtons currentStep={currentStep} setCurrentStep={setCurrentStep} />
-		</form>
+							Add a context
+						</Button>
+					</CardContent>
+					<Divider />
+					<CardContent>
+						<Stack spacing={1}>
+							{fields.map((field, fieldIndex) => {
+								return (
+									<SingleImportContext
+										key={field.id}
+										contextIndex={fieldIndex}
+										remove={remove}
+										control={control}
+										trigger={trigger}
+										setFieldValue={setValue}
+									/>
+								);
+							})}
+						</Stack>
+					</CardContent>
+				</Card>
+				<RHFMultiStepButtons currentStep={currentStep} setCurrentStep={setCurrentStep} />
+			</form>
+		</Fade>
 	);
 }

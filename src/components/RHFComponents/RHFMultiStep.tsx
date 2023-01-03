@@ -1,11 +1,12 @@
-import React, { useState } from "react";
 import Button, { ButtonProps } from "@mui/material/Button";
+import Divider from "@mui/material/Divider";
 import Paper, { PaperProps } from "@mui/material/Paper";
 import Step from "@mui/material/Step";
 import StepLabel from "@mui/material/StepLabel";
 import Stepper, { StepperProps } from "@mui/material/Stepper";
+import React, { useState } from "react";
+import { Control, DeepPartial, FieldPath, FieldValues, useForm, UseFormReturn, useFormState } from "react-hook-form";
 import * as Yup from "yup";
-import { Control, DeepPartial, FieldValues, FieldPath, useForm, UseFormReturn, useFormState } from "react-hook-form";
 import Lazy from "yup/lib/Lazy";
 import { ValidateOptions } from "yup/lib/types";
 import { ResolverFactory } from "../../common/utils/formFunctions";
@@ -18,8 +19,8 @@ import { ResolverFactory } from "../../common/utils/formFunctions";
  * - setCurrentStep: A function that sets the current step of the form.
  */
 export type RHFMultiStepReturnProps<TF extends FieldValues> = UseFormReturn<TF> & {
-  currentStep: number;
-  setCurrentStep: React.Dispatch<React.SetStateAction<number>>;
+	currentStep: number;
+	setCurrentStep: React.Dispatch<React.SetStateAction<number>>;
 };
 
 /**
@@ -32,22 +33,22 @@ export type RHFMultiStepReturnProps<TF extends FieldValues> = UseFormReturn<TF> 
  * a validation error occurs within any of them.
  */
 export type RHFMultiStepStepProps<TFV extends FieldValues = FieldValues> = {
-  label: React.ReactNode;
-  fieldNames: FieldPath<TFV>[];
+	label: React.ReactNode;
+	fieldNames: FieldPath<TFV>[];
 };
 
 export type RHFMultiStepStepperProps<TFV extends FieldValues> = {
-  control: Control<TFV>;
-  currentStep: number;
-  steps: RHFMultiStepStepProps<TFV>[];
+	control: Control<TFV>;
+	currentStep: number;
+	steps: RHFMultiStepStepProps<TFV>[];
 } & StepperProps;
 
 export type RHFMultiStepProps<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues> = {
-  schemas: TSchema[];
-  data: DeepPartial<TFV>;
-  resolverFactory?: ResolverFactory;
-  resolverOptions?: ValidateOptions<TFV>;
-  children: (RHFbag: RHFMultiStepReturnProps<TFV>) => React.ReactElement;
+	schemas: TSchema[];
+	data: DeepPartial<TFV>;
+	resolverFactory?: ResolverFactory;
+	resolverOptions?: ValidateOptions<TFV>;
+	children: (RHFbag: RHFMultiStepReturnProps<TFV>) => React.ReactElement;
 };
 
 /**
@@ -61,21 +62,21 @@ export type RHFMultiStepProps<TSchema extends Yup.AnyObjectSchema | Lazy<any>, T
  * - `setCurrentStep`: A function that sets the current step of the form.
  */
 export function RHFMultiStep<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TFV extends FieldValues>({
-  schemas,
-  data,
-  resolverFactory,
-  resolverOptions,
-  children,
+	schemas,
+	data,
+	resolverFactory,
+	resolverOptions,
+	children,
 }: RHFMultiStepProps<TSchema, TFV>) {
-  const [step, setStep] = useState(0);
-  const currentSchema = schemas[step];
-  const resolver = currentSchema != undefined ? resolverFactory(currentSchema, resolverOptions) : undefined;
-  const RHFbag = useForm({
-    defaultValues: data,
-    resolver,
-  });
+	const [step, setStep] = useState(0);
+	const currentSchema = schemas[step];
+	const resolver = currentSchema != undefined ? resolverFactory(currentSchema, resolverOptions) : undefined;
+	const RHFbag = useForm({
+		defaultValues: data,
+		resolver,
+	});
 
-  return children({ ...RHFbag, currentStep: step, setCurrentStep: setStep });
+	return children({ ...RHFbag, currentStep: step, setCurrentStep: setStep });
 }
 
 /**
@@ -93,38 +94,38 @@ export function RHFMultiStep<TSchema extends Yup.AnyObjectSchema | Lazy<any>, TF
  * - `...StepperProps`: Any other props to be passed to the Material UI Stepper component.
  */
 export function RHFMultiStepStepper<TFV extends FieldValues>({
-  control,
-  currentStep,
-  steps,
-  ...stepperProps
+	control,
+	currentStep,
+	steps,
+	...stepperProps
 }: RHFMultiStepStepperProps<TFV>) {
-  const currentStepNames = steps?.[currentStep]?.fieldNames ?? [];
-  const { errors } = useFormState({ control: control, name: currentStepNames });
-  const errKeys = Object.keys(errors);
+	const currentStepNames = steps?.[currentStep]?.fieldNames ?? [];
+	const { errors } = useFormState({ control: control, name: currentStepNames });
+	const errKeys = Object.keys(errors);
 
-  // console.log(`RHFMultiStepStepper: errKeys`, errKeys);
+	// console.log(`RHFMultiStepStepper: errKeys`, errKeys);
 
-  return (
-    <Stepper {...stepperProps} activeStep={currentStep}>
-      {steps.map((step, index) => {
-        const errsInCurrentStep = step.fieldNames.some((fieldName) => errKeys.includes(fieldName));
-        return (
-          <Step key={`${step.label}_${index}`}>
-            <StepLabel error={index === currentStep && errsInCurrentStep}>{step.label}</StepLabel>
-          </Step>
-        );
-      })}
-    </Stepper>
-  );
+	return (
+		<Stepper {...stepperProps} activeStep={currentStep}>
+			{steps.map((step, index) => {
+				const errsInCurrentStep = step.fieldNames.some((fieldName) => errKeys.includes(fieldName));
+				return (
+					<Step key={`${step.label}_${index}`}>
+						<StepLabel error={index === currentStep && errsInCurrentStep}>{step.label}</StepLabel>
+					</Step>
+				);
+			})}
+		</Stepper>
+	);
 }
 
 export type RHFMultiStepButtonsProps = {
-  currentStep: number;
-  setCurrentStep: React.Dispatch<React.SetStateAction<number>>;
-  backButtonProps?: ButtonProps;
-  nextButtonProps?: ButtonProps;
-  backButtonText?: React.ReactNode;
-  nextButtonText?: React.ReactNode;
+	currentStep: number;
+	setCurrentStep: React.Dispatch<React.SetStateAction<number>>;
+	backButtonProps?: ButtonProps;
+	nextButtonProps?: ButtonProps;
+	backButtonText?: React.ReactNode;
+	nextButtonText?: React.ReactNode;
 } & PaperProps;
 
 /**
@@ -145,35 +146,43 @@ export type RHFMultiStepButtonsProps = {
  * By default, this component is absolutely positioned at the bottom of the form and the buttons are spaced-between.
  */
 export function RHFMultiStepButtons({
-  currentStep,
-  setCurrentStep,
-  backButtonProps,
-  nextButtonProps,
-  backButtonText = "Back",
-  nextButtonText = "Next",
-  ...paperProps
+	currentStep,
+	setCurrentStep,
+	backButtonProps,
+	nextButtonProps,
+	backButtonText = "Back",
+	nextButtonText = "Next",
+	children,
+	...paperProps
 }: RHFMultiStepButtonsProps) {
-  return (
-    <Paper
-      elevation={10}
-      sx={{
-        position: "fixed",
-        left: 0,
-        bottom: 0,
-        width: "100%",
-        borderRadius: 0,
-        display: "flex",
-        justifyContent: "space-between",
-        zIndex: 10,
-      }}
-      {...paperProps}
-    >
-      <Button disabled={currentStep === 0} size="large" onClick={() => setCurrentStep(currentStep - 1)} {...backButtonProps}>
-        {backButtonText}
-      </Button>
-      <Button type="submit" size="large" {...nextButtonProps}>
-        {nextButtonText}
-      </Button>
-    </Paper>
-  );
+	return (
+		<Paper
+			elevation={10}
+			sx={{
+				position: "fixed",
+				left: 0,
+				bottom: 0,
+				width: "100%",
+				borderRadius: 0,
+				display: "flex",
+				justifyContent: "space-between",
+				zIndex: 10,
+			}}
+			{...paperProps}
+		>
+			<Button
+				disabled={currentStep === 0}
+				size="large"
+				onClick={() => setCurrentStep(currentStep - 1)}
+				{...backButtonProps}
+			>
+				{backButtonText}
+			</Button>
+			<Divider sx={{ borderWidth: 1 }} variant="middle" flexItem  orientation="vertical" />
+			<Button type="submit" size="large" {...nextButtonProps}>
+				{nextButtonText}
+			</Button>
+			{children}
+		</Paper>
+	);
 }

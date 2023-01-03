@@ -1,4 +1,7 @@
 import { isUndefined as lodashIsUndefined, pickBy as lodashPickBy, uniq as lodashUniq } from "lodash";
+import { SchemaImportPar } from "../../common/schemas/ImportSchemas/ImportSchema";
+import { YupValidate } from "../../common/utils/formFunctions";
+import { GUIIMPORTFILE_BASENAME } from "../../common/GLOBALS";
 import {
 	ImportContextSchemaType,
 	ImportSchemaType,
@@ -224,23 +227,41 @@ export async function buildStudyParJSON(
 			} = context;
 			const ASLContext = await getASLContext({ ASLSeriesPattern, NVolumes, M0PositionInASL, DummyPositionInASL });
 
+			// Construct the studyPar JSON output for a given context
 			const temp: SingleStudyParJSONOutputSchemaType = {
 				SubjectRegExp: SubjectRegExp !== "" ? SubjectRegExp : undefined,
 				VisitRegExp: VisitRegExp !== "" ? VisitRegExp : undefined,
 				SessionRegExp: SessionRegExp !== "" ? SessionRegExp : undefined,
 				ASLContext,
+
+				// M0 Info
 				M0Type: context.M0Type,
 				M0: context.M0Type === "Included" || context.M0Type === "Separate",
+				M0Estimate: context.M0Type === "Estimate" ? context.M0Estimate : undefined,
+
+				// MRI Info
 				Manufacturer: context.Manufacturer,
 				PulseSequenceType: context.PulseSequenceType,
 				MRAcquisitionType: context.PulseSequenceType === "2D_EPI" ? "2D" : "3D",
+				MagneticFieldStrength: context.MagneticFieldStrength,
+
+				// ASL Info
 				ArterialSpinLabelingType:
 					context.ArterialSpinLabelingType === "CASL" ? "PCASL" : context.ArterialSpinLabelingType,
 				PostLabelingDelay: context.PostLabelingDelay,
+
+				// 2D Acquisition Info
+				SliceReadoutTime: context.PulseSequenceType === "2D_EPI" ? context.SliceReadoutTime : undefined,
+
+				// PCASL/CASL Specific Info
 				LabelingDuration: context.LabelingDuration,
+
+				// PASL Specific Info
 				BolusCutOffFlag: context.BolusCutOffFlag,
 				BolusCutOffTechnique: context.BolusCutOffTechnique !== "" ? context.BolusCutOffTechnique : undefined,
 				BolusCutOffDelayTime: context.BolusCutOffDelayTime,
+
+				// Background Suppression Info
 				BackgroundSuppression: context.BackgroundSuppressionNumberPulses > 0 ? true : false,
 				BackgroundSuppressionNumberPulses: context.BackgroundSuppressionNumberPulses,
 				BackgroundSuppressionPulseTime: context.BackgroundSuppressionPulseTime,
@@ -441,4 +462,33 @@ export function expandImportContext(
 	});
 
 	return newContexts;
+}
+
+/**
+ * Fetches & validates a JSON Object from the "EASLGUI_ImportPar.json" file in the study root
+ * @param studyRootPath Absolute path to the study root
+ * @returns Either false or the JSON object from the "EASLGUI_ImportPar.json" file
+ */
+export async function fetchGUIImportPar(studyRootPath: string) {
+	try {
+		const importParPath = api.path.asPath(studyRootPath, GUIIMPORTFILE_BASENAME);
+
+		// If the file doesn't exist, return false
+		if (!(await api.path.filepathExists(importParPath.path))) return false;
+
+		// If the file exists, try to read it
+		const { payload, error } = await api.path.readJSONSafe(importParPath.path);
+		if (error) return false;
+
+		// Validate the data
+		const { errors, values } = await YupValidate(SchemaImportPar, payload as ImportSchemaType);
+		if (Object.keys(errors).length > 0) {
+			return false;
+		}
+
+		return values;
+	} catch (error) {
+		console.warn(`Error encountered in fetchGUIImportPar:`, error);
+		return false;
+	}
 }

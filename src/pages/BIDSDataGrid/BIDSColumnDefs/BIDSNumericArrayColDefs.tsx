@@ -56,7 +56,14 @@ export const BIDSNumericArrayFieldToColDef: BIDSNumericArrayFieldToColDefType = 
 		width: 500,
 		description: "The timings, in seconds, of the background suppression pulses relative to the start of the labeling.",
 		renderEditCell: (params: GridRenderCellParams<any, BIDSRow>) => {
-			return <BIDSCommaSepNumericField params={params} coerceSingleValueToNumber={false} shouldSortValues={true} />;
+			return (
+				<BIDSCommaSepNumericField
+					params={params}
+					coerceSingleValueToNumber={false}
+					shouldSortValues={true}
+					uniqueOnly={true}
+				/>
+			);
 		},
 		valueFormatter: formatAsCommaSeparatedValues,
 		defaultValue: [],
@@ -71,7 +78,14 @@ export const BIDSNumericArrayFieldToColDef: BIDSNumericArrayFieldToColDefType = 
 			`The time, in seconds, between the application of the RF excitation pulse and the peak of ` +
 			`the signal induced in the receiver coils`,
 		renderEditCell: (params: GridRenderCellParams<any, BIDSRow>) => {
-			return <BIDSCommaSepNumericField params={params} coerceSingleValueToNumber={true} shouldSortValues={true} />;
+			return (
+				<BIDSCommaSepNumericField
+					params={params}
+					coerceSingleValueToNumber={true}
+					shouldSortValues={false}
+					uniqueOnly={false}
+				/>
+			);
 		},
 	},
 	PostLabelingDelay: {
@@ -86,7 +100,14 @@ export const BIDSNumericArrayFieldToColDef: BIDSNumericArrayFieldToColDefType = 
 			`(for 3D acquisition) or first slice (for 2D acquisition). This can either be a single positive number ` +
 			`or a comma-separated list of positive numbers for multi-PLD acquisitions.`,
 		renderEditCell: (params: GridRenderCellParams<any, BIDSRow>) => {
-			return <BIDSCommaSepNumericField params={params} coerceSingleValueToNumber={true} shouldSortValues={false} />;
+			return (
+				<BIDSCommaSepNumericField
+					params={params}
+					coerceSingleValueToNumber={true}
+					shouldSortValues={false}
+					uniqueOnly={false}
+				/>
+			);
 		},
 		valueFormatter: formatAsCommaSeparatedValues,
 		defaultValue: 1.8,
@@ -103,7 +124,14 @@ export const BIDSNumericArrayFieldToColDef: BIDSNumericArrayFieldToColDefType = 
 			"labeling durations for each volume in the ASL series. " +
 			"This field should be omitted in PASL sequences.",
 		renderEditCell: (params: GridRenderCellParams<any, BIDSRow>) => {
-			return <BIDSCommaSepNumericField params={params} coerceSingleValueToNumber={true} shouldSortValues={false} />;
+			return (
+				<BIDSCommaSepNumericField
+					params={params}
+					coerceSingleValueToNumber={true}
+					shouldSortValues={false}
+					uniqueOnly={false}
+				/>
+			);
 		},
 		valueFormatter: formatAsCommaSeparatedValues,
 		defaultValue: 0.8,
@@ -118,7 +146,14 @@ export const BIDSNumericArrayFieldToColDef: BIDSNumericArrayFieldToColDefType = 
 			"The time at which each slice was acquired within each volume (frame) of the acquisition. " +
 			"Specify either a comma-separated list of numbers, one for each slice, or a single positive number. ",
 		renderEditCell: (params: GridRenderCellParams<any, BIDSRow>) => {
-			return <BIDSCommaSepNumericField params={params} coerceSingleValueToNumber={true} shouldSortValues={true} />;
+			return (
+				<BIDSCommaSepNumericField
+					params={params}
+					coerceSingleValueToNumber={true}
+					shouldSortValues={true}
+					uniqueOnly={true}
+				/>
+			);
 		},
 		valueFormatter: formatAsCommaSeparatedValues,
 		defaultValue: 0.03,
