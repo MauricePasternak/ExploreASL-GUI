@@ -2413,7 +2413,7 @@
   resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.14.182.tgz#05301a4d5e62963227eaafe0ce04dd77c54ea5c2"
   integrity sha512-/THyiqyQAP9AfARo4pF+aCGcyiQ94tX/Is2I7HofNRqoYLgN1PBoOWu2/zTA5zMxzP5EFutMtWtGAFRKUe961Q==
 
-"@types/lodash@^4.14.189":
+"@types/lodash@^4.14.191":
   version "4.14.191"
   resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.14.191.tgz#09511e7f7cba275acd8b419ddac8da9a6a79e2fa"
   integrity sha512-BdZ5BCCvho3EIXw6wUCXHe7rS53AIDPLE+JzwgT+OsJk53oBfbSmZZ7CX4VaRoN78N+TJpFi9QPlfIVNmJYWxQ==
@@ -5741,10 +5741,10 @@ html-minifier-terser@^6.0.2:
     relateurl "^0.2.7"
     terser "^5.10.0"
 
-html-to-image@^1.11.1:
-  version "1.11.1"
-  resolved "https://registry.yarnpkg.com/html-to-image/-/html-to-image-1.11.1.tgz#58d6e0ce609d78e40023e6ff48b3d512f93fff73"
-  integrity sha512-W6ZXctQQfhFA2tCcDbK1jCywwT9Oo1ucyXwlxku3zHacyhLPeMhs+h2OLBNeoYrPSgzgeOqhhSs+MbEmL2fDLw==
+html-to-image@^1.11.4:
+  version "1.11.4"
+  resolved "https://registry.yarnpkg.com/html-to-image/-/html-to-image-1.11.4.tgz#a5c7d4b13ed13bf9922661ae20629a971cbc1e86"
+  integrity sha512-I6jeGpjSI/pea+p/8q6HAWPxptZkEYaZ40ZLnpCHuhCJJnUHQ/YzMEQMNY/KMdPZJ4+GJIwo9dnJy76eW9p9cg==
 
 html-webpack-plugin@^5.3.1:
   version "5.5.0"
@@ -6263,10 +6263,10 @@ jest-worker@^27.4.5:
     merge-stream "^2.0.0"
     supports-color "^8.0.0"
 
-jotai@^1.11.1:
-  version "1.11.1"
-  resolved "https://registry.yarnpkg.com/jotai/-/jotai-1.11.1.tgz#a85d2ba34363e831e1e2aa74dead4a0b1ac9e5ae"
-  integrity sha512-pHpaZUdvIpcS12ryMCrwtvmT/IovZAbicfrlll/Rb9394rwhqKoDFsDs0kv4oWtBy/XHHNv7iSZnQFmntiQj+w==
+jotai@^1.12.1:
+  version "1.12.1"
+  resolved "https://registry.yarnpkg.com/jotai/-/jotai-1.12.1.tgz#18808724c96f8c038f6ee8b75f3ac37e1ac35608"
+  integrity sha512-t6gsYM1WkQHMOazaZYLykCA+fh9KPDGrA+tDYzDeV0268QsCqmX6S4lO46uswgt1LGUeG0EDFGuMd9ac8cWNTA==
 
 "js-tokens@^3.0.0 || ^4.0.0", js-tokens@^4.0.0:
   version "4.0.0"
@@ -7868,10 +7868,10 @@ react-fast-compare@^2.0.1:
   resolved "https://registry.yarnpkg.com/react-fast-compare/-/react-fast-compare-2.0.4.tgz#e84b4d455b0fec113e0402c329352715196f81f9"
   integrity sha512-suNP+J1VU1MWFKcyt7RtjiSWUjvidmQSlqu+eHslq+342xCbGTYmC0mEhPCOHxlW0CywylOC1u2DFAT+bv4dBw==
 
-react-hook-form@^7.41.2:
-  version "7.41.2"
-  resolved "https://registry.yarnpkg.com/react-hook-form/-/react-hook-form-7.41.2.tgz#db37b0bfd844b96d7b30d26ed3c55366e3c2c7cd"
-  integrity sha512-Uz5kNlfkEZve0sr5y2LsxPDGN3eNDjjKb1XJgand1E5Ay0S3zWo8YcJQNGu88/Zs6JaFnrJqTXbSr6B2q7wllA==
+react-hook-form@^7.41.3:
+  version "7.41.3"
+  resolved "https://registry.yarnpkg.com/react-hook-form/-/react-hook-form-7.41.3.tgz#1b85e95e70cb743d41cd9230ea2df71359d00151"
+  integrity sha512-5QNTmqJtDb88WV5n41b6+AmcDMVyaJ3tccPgHAgS215w3jZ3bmJhDO27kNTr8u4YHNYXmS7p1/4/KachBAlUtw==
 
 react-is@^16.13.1, react-is@^16.7.0:
   version "16.13.1"
