@@ -6,13 +6,15 @@
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
 [![LinkedIn][linkedin-shield]][linkedin-url]
+[![GitHub Actions][actions-shield]][actions-url]
+
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/mauricepasq)
 
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
   <a href="https://github.com/othneildrew/Best-README-Template">
-    <img src="./src/assets/appIcons/ExploreASLGUI_Logo_LightMode.png" fill="red" alt="Logo" width="80" height="80">
+    <img src="./src/assets/appIcons/ExploreASLGUI_Logo_LightMode.png" fill="red" alt="Logo" width="100" height="100">
   </a>
 
   <h3 align="center">ExploreASL GUI</h3>
@@ -25,9 +27,9 @@
     ·
     <a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?assignees=MauricePasternak&labels=enhancement&template=feature_request.md&title=">Request Feature</a>
     ·
-    <a href="https://github.com/MauricePasternak/ExploreASL-GUI/releases">Download</a>
-    ·
     <a href="https://mauricepasternak.github.io/ExploreASL-GUI-Docs/latest">Documentation</a>
+    ·
+    <a href="https://github.com/MauricePasternak/ExploreASL-GUI/releases">Download</a>
   </p>
 </div>
 
@@ -46,6 +48,9 @@
     </li>
     <li>
       <a href="#documentation">Documentation</a>
+    </li>
+    <li>
+      <a href="#download">Download</a>
     </li>
     <li>
       <a href="#workflow">Workflow</a>
@@ -73,11 +78,11 @@
 
 ---
 
-## <!-- ABOUT THE PROJECT -->
+<!-- ABOUT THE PROJECT -->
 
 ## About The Project
 
-This project wraps around [ExploreASL](https://exploreasl.github.io/Documentation/1.10.0beta/) to provide users with a friendly and modern interface for analyzing their arterial spin labeling datasets, including:
+This project wraps around [ExploreASL](https://exploreasl.github.io/Documentation/latest/) to provide users with a friendly and modern interface for analyzing their arterial spin labeling datasets, including:
 
 - Importing their ASL datasets into [Brain Imaging Data Standard](https://bids.neuroimaging.io/) (BIDS) format
 - Defining and re-using data parameters across studies for easier troubleshooting
@@ -92,7 +97,6 @@ This project wraps around [ExploreASL](https://exploreasl.github.io/Documentatio
 [![MaterialUI][mui.js]][mui-url]
 
 <p align="right">(<a href="#top">back to top</a>)</p>
-
 
 ---
 <!-- RELEASES -->
@@ -111,7 +115,137 @@ The latest downloadable releases for your operating system can be found [here](h
 
 Complete documentation for this project is hosted on [GitHub Pages](https://mauricepasternak.github.io/ExploreASL-GUI-Docs/latest/). While it is recommended to give it a general read-through before using the application, most of the inputs within the application are accompanied by helper captions that provide additional information when completing a specific step.
 
-**Installation instructions** are [also found within the documentation](https://mauricepasternak.github.io/ExploreASL-GUI-Docs/0.4/Installation/Users/).
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+---
+
+<!-- GETTING STARTED -->
+
+## Getting Started
+
+### Installation Instructions For Users
+
+#### 1) Get the pre-requisites
+
+Depending on the type of ExploreASL installation you have, you will need either:
+
+- A [standard MATLAB installation that preferrably at least R2019a](https://login.mathworks.com/embedded-login/landing.html?cid=getmatlab&s_tid=gn_getml)
+  and [ExploreASL](https://github.com/ExploreASL/ExploreASL) from GitHub. This is currently the more stable option.
+
+OR
+
+- [MATLAB Runtime R2019a (9.6)](https://www.mathworks.com/products/compiler/matlab-runtime.html) and a pre-compiled version of ExploreASL (currently not publically available; please contact the [developers of ExploreASL](https://sites.google.com/view/exploreasl/contact) for more information)
+
+#### 2) Download the latest release of this project and install it on your local machine
+
+Head on over to the [Releases](https://github.com/MauricePasternak/ExploreASL-GUI/releases) and download the appropriate version for your operating system
+
+
+#### 3) Run your OS-specific installer
+
+
+##### [![Windows][windows-shield]][windows-url]
+
+Just double-click the installer. The application will be silently installed in the background and will finish when a Desktop shortcut is created.
+
+##### [![Linux][linux-shield]][linux-url]
+
+Open a terminal, change the current working directory to the location of the `.deb` file and type in:
+
+```bash
+sudo apt install ./exploreasl-gui_0.5.0_amd64.deb
+```
+Where the version number within the filename may differ depending on the latest release.
+
+The GUI will then be installed and a shortcut is automatically available from typing out `exploreasl` in your Super key search bar.
+
+##### [![macOS][macos-shield]][macos-url]
+
+Open the `.dmg` file and drag the application to your Applications folder. The application will then be available from your Launchpad.
+
+NOTE: The application is not signed, and in all likeliness you will receive an error message akin to the following the first time you run the application:
+
+![macOS 1st Unauthorized Message](src/assets/img/READMEImages/MacOS_Unauthorized_Part1.png)
+
+Click on Cancel and then go to your Security & Privacy settings. Under the General tab, click on "Open Anyway" to allow the application to run.
+
+![macOS Security & Settings](src/assets/img/READMEImages/MacOS_Unauthorized_Part2.png)
+
+The second time you run the application, you will be prompted with a similar message, but this time you will be able to click on "Open" to run the application.
+
+![macOS 2nd Warning Message](src/assets/img/READMEImages/MacOS_Unauthorized_Part3.png)
+
+After this, you will be able to run the application without any issues and you will not be prompted with any more warning messages for subsequent attempts.
+
+### Uninstallation/Removal Instructions For Users
+
+#### [![Windows][windows-shield]][windows-url]
+
+In your search bar, look for "Add or remove programs". Select the application and click uninstall.
+
+#### [![Linux][linux-shield]][linux-url]
+Open a terminal and type in:
+
+```bash
+sudo apt remove ExploreASL-GUI
+```
+
+#### [![macOS][macos-shield]][macos-url]
+
+Go to the Applications folder and drag & drop the ExploreASL-GUI.app application to the Trash bin.
+
+### Installation Instructions For Developers
+
+#### 1) Ensure that you have NodeJS and NPM installed on your machine
+
+[Click here](https://nodejs.org/en/) for more information on NodeJS installation.
+
+#### 2) Ensure that you have the `yarn` package manager installed on your machine
+
+Simply install it via the command line:
+
+```sh
+npm install --global yarn
+```
+
+#### 3) Clone the repo and install the dependencies
+
+- Clone the repo using:
+  ```sh
+  git clone https://github.com/MauricePasternak/ExploreASL-GUI.git
+  ```
+- Install Javascript packages contained within `package.json`
+  ```sh
+  yarn install
+  ```
+- Start up the GUI with hot-reload and have a crack at it
+  ```sh
+  yarn start
+  ```
+- If you'd like to package the application for your operating system:
+  ```sh
+  yarn make
+  ```
+
+### General Project Structure
+
+```
+/---|
+    |-> assets (media such as icons)
+    |-> backend (logic executed by electron's IpcMain, i.e. spawning subprocesses to run ExploreASL)
+    |-> common -|
+    |           |-> schemas (form validators & form schemas)
+    |           |-> types (reusable types & typescript declarations)
+    |           |-> utilityFunctions (reusable functions for reducing code use)
+    |           |-> GLOBALS.ts (global variables used throughout)
+    |
+    |-> ipc (logic for type-safe IpcMain <-> IpcRenderer communication)
+    |-> components (reuseable React components)
+    |-> pages (non-reuseable React components that make up the pages of the GUI)
+    |-> stores (frontend-only collections of user-interface state)
+    ... other files relate to project setup, package-handling, etc.
+```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -304,14 +438,22 @@ For questions or concerns with the underlying ExploreASL program, the following 
 [issues-url]: https://github.com/MauricePasternak/ExploreASL-GUI/issues
 [license-shield]: https://img.shields.io/github/license/MauricePasternak/ExploreASL-GUI.svg?style=for-the-badge
 [license-url]: https://github.com/MauricePasternak/ExploreASL-GUI/blob/master/LICENSE.txt
+[actions-shield]: https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI/release_workflow.yml?label=build%20and%20release&style=for-the-badge
+[actions-url]: https://github.com/MauricePasternak/ExploreASL-GUI/releases
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://www.linkedin.com/in/maurice-pasternak-238957207/
+[windows-shield]: https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white
+[windows-url]: https://www.microsoft.com/en-ca/windows
+[macos-shield]: https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white
+[macos-url]: https://www.apple.com/ca/macos/big-sur/
+[linux-shield]: https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black
+[linux-url]: https://www.linux.org/
 
 <!-- Badges -->
 
 [react.js]: https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB
 [react-url]: https://reactjs.org/
-[electron-url]: https://www.electronjs.org
 [electronjs]: https://img.shields.io/badge/Electron-2b2e3a?style=for-the-badge&logo=electron&logoColor=white
+[electron-url]: https://www.electronjs.org
 [mui.js]: https://img.shields.io/badge/Material%20UI%20V5-0074e9?style=for-the-badge&logo=mui&logoColor=white
 [mui-url]: https://mui.com/

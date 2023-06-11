@@ -1,0 +1,130 @@
+on:
+  # Trigger the workflow on push of a tag
+  push:
+    tags:
+      - "v*.*.*"
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build"
+        required: true
+
+jobs:
+  build-ubuntu:
+    name: "Build and move executables to releases"
+
+    # Which operating systems to run the job on
+    runs-on: ubuntu-latest
+
+    # Steps to run on each operating system
+    steps:
+      # Checkout the repository
+      - uses: actions/checkout@v3
+
+      # Set up Node
+      - name: Set up Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18.12.1"
+
+      # Install dependencies
+      - name: Install dependencies
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: install # will run `yarn install` command
+
+      # Build the executables
+      - name: Build executables
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: make # will run `yarn make` command
+
+      # Upload binaries to GitHub releases
+      - name: Upload binaries
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: out/make/*/x64/exploreasl-gui*.deb
+          tag: ${{ github.ref }}
+          overwrite: true
+          file_glob: true
+
+  build-windows:
+    name: "Build and move executables to releases"
+
+    # Which operating systems to run the job on
+    runs-on: windows-latest
+
+    # Steps to run on each operating system
+    steps:
+      # Checkout the repository
+      - uses: actions/checkout@v3
+
+      # Set up Node
+      - name: Set up Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18.12.1"
+
+      # Install dependencies
+      - name: Install dependencies
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: install # will run `yarn install` command
+
+      # Build the executables
+      - name: Build executables
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: make # will run `yarn make` command
+
+      # Upload binaries to GitHub releases
+      - name: Upload binaries
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: out/make/*/x64/ExploreASL-GUI*.exe
+          tag: ${{ github.ref }}
+          overwrite: true
+          file_glob: true
+
+  build-macos:
+    name: "Build and move executables to releases"
+
+    # Which operating systems to run the job on
+    runs-on: macos-latest
+
+    # Steps to run on each operating system
+    steps:
+      # Checkout the repository
+      - uses: actions/checkout@v3
+
+      # Set up Node
+      - name: Set up Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18.12.1"
+
+      # Install dependencies
+      - name: Install dependencies
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: install # will run `yarn install` command
+
+      # Build the executables
+      - name: Build executables
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: make # will run `yarn make` command
+
+      # Upload binaries to GitHub releases
+      - name: Upload binaries
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: out/make/**/*.dmg
+          tag: ${{ github.ref }}
+          overwrite: true
+          file_glob: true
