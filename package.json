@@ -10,7 +10,8 @@
 		"package": "electron-forge package",
 		"make": "electron-forge make",
 		"publish": "electron-forge publish",
-		"lint": "eslint --ext .ts,.tsx ."
+		"lint": "eslint --ext .ts,.tsx .",
+		"patientinstall": "yarn install --network-timeout 120000"
 	},
 	"keywords": [],
 	"author": {
@@ -151,10 +152,10 @@
 		"@mui/lab": "5.0.0-alpha.129",
 		"@mui/material": "^5.13.0",
 		"@mui/x-data-grid": "^5.17.10",
-    "@nivo/core": "^0.79.0",
-    "@nivo/heatmap": "^0.79.1",
-    "@nivo/scatterplot": "^0.79.1",
-    "@nivo/swarmplot": "^0.79.1",
+		"@nivo/core": "^0.79.0",
+		"@nivo/heatmap": "^0.79.1",
+		"@nivo/scatterplot": "^0.79.1",
+		"@nivo/swarmplot": "^0.79.1",
 		"chokidar": "^3.5.3",
 		"colormap": "^2.3.2",
 		"cross-spawn": "^7.0.3",
