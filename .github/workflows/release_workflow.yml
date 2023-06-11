@@ -20,22 +20,18 @@ jobs:
 
     # Steps to run on each operating system
     steps:
-      # Checkout the repository
       - uses: actions/checkout@v3
 
-      # Set up Node
       - name: Set up Node
         uses: actions/setup-node@v2
         with:
           node-version: "18.12.1"
 
-      # Install dependencies
       - name: Install dependencies
         uses: borales/actions-yarn@v4
         with:
           cmd: patientinstall # will run `yarn install --network-timeout 120000` command
 
-      # Build the executables
       - name: Build executables
         uses: borales/actions-yarn@v4
         with:
@@ -59,22 +55,18 @@ jobs:
 
     # Steps to run on each operating system
     steps:
-      # Checkout the repository
       - uses: actions/checkout@v3
 
-      # Set up Node
       - name: Set up Node
         uses: actions/setup-node@v2
         with:
           node-version: "18.12.1"
 
-      # Install dependencies
       - name: Install dependencies
         uses: borales/actions-yarn@v4
         with:
           cmd: patientinstall # will run `yarn install --network-timeout 120000` command
 
-      # Build the executables
       - name: Build executables
         uses: borales/actions-yarn@v4
         with:
@@ -98,22 +90,18 @@ jobs:
 
     # Steps to run on each operating system
     steps:
-      # Checkout the repository
       - uses: actions/checkout@v3
 
-      # Set up Node
       - name: Set up Node
         uses: actions/setup-node@v2
         with:
           node-version: "18.12.1"
 
-      # Install dependencies
       - name: Install dependencies
         uses: borales/actions-yarn@v4
         with:
           cmd: patientinstall # will run `yarn install --network-timeout 120000` command
 
-      # Build the executables
       - name: Build executables
         uses: borales/actions-yarn@v4
         with:
