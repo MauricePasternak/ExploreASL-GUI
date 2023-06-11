@@ -188,7 +188,7 @@ In your search bar, look for "Add or remove programs". Select the application an
 Open a terminal and type in:
 
 ```bash
-sudo apt remove ExploreASL-GUI
+sudo apt remove exploreasl-gui
 ```
 
 #### [![macOS][macos-shield]][macos-url]
