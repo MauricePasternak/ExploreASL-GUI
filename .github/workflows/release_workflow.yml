@@ -35,7 +35,7 @@ jobs:
       - name: Build executables
         uses: borales/actions-yarn@v4
         with:
-          cmd: patientinstall # will run `yarn install --network-timeout 120000` command
+          cmd: make # will run `yarn install --network-timeout 120000` command
 
       # Upload binaries to GitHub releases
       - name: Upload binaries
