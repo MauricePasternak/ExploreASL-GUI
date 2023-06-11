@@ -13,7 +13,7 @@ on:
 
 jobs:
   build-ubuntu:
-    name: "Build and move executables to releases"
+    name: "Ubuntu - Build and move executables to releases"
 
     # Which operating systems to run the job on
     runs-on: ubuntu-latest
@@ -52,7 +52,7 @@ jobs:
           file_glob: true
 
   build-windows:
-    name: "Build and move executables to releases"
+    name: "Windows - Build and move executables to releases"
 
     # Which operating systems to run the job on
     runs-on: windows-latest
@@ -91,7 +91,7 @@ jobs:
           file_glob: true
 
   build-macos:
-    name: "Build and move executables to releases"
+    name: "MacOS - Build and move executables to releases"
 
     # Which operating systems to run the job on
     runs-on: macos-latest
