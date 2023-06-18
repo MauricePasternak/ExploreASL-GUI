@@ -62,6 +62,11 @@ export type ArrToStringMapping<T extends readonly any[]> = {
 };
 
 /**
+ * Gets the length of an array type.
+ */
+export type Length<T extends readonly any[]> = T extends { length: infer L } ? L : never;
+
+/**
  * Type to query whether an array type T is a tuple type.
  * @typeParam T - type which may be an array or tuple
  * @example
@@ -73,10 +78,18 @@ export type ArrToStringMapping<T extends readonly any[]> = {
 export type IsTuple<T extends readonly any[]> = number extends T["length"] ? true : false;
 
 /** Removes the first element from an array. */
-export type DropFirstElement<T extends ReadonlyArray<any>> = T extends [any, ...infer Rest] ? Rest : never;
+export type DropFirstElement<T extends ReadonlyArray<any>> = T extends [any, ...infer Rest]
+	? Rest
+	: Length<T> extends 0 // If the array is empty, return an empty array
+	? []
+	: never;
 
 /** Removes the last element from an array. */
-export type DropLastElement<T extends ReadonlyArray<any>> = T extends [...infer Rest, any] ? Rest : never;
+export type DropLastElement<T extends ReadonlyArray<any>> = T extends [...infer Rest, any]
+	? Rest
+	: Length<T> extends 0 // If the array is empty, return an empty array
+	? []
+	: never;
 
 /** Removes the first parameter from a function type. */
 export type DropFirstParameter<F extends (...args: any) => any> = DropFirstElement<Parameters<F>>;

@@ -32,6 +32,7 @@ import HelpDataPar__DataPar from "../Help/HelpDataPar__DataPar";
 import { TabProcessingParameters, TabSequenceParameters, TabStudyParameters } from "./DataParSections";
 import { DataParSliceReadoutTimeDialog } from "./DataParSliceReadoutTimeDialog";
 import DataParTabs from "./DataParTabs";
+import { cloneDeep as lodashCloneDeep } from "lodash";
 
 export const DataParPage = React.memo(() => {
 	const { api } = window;
@@ -54,19 +55,23 @@ export const DataParPage = React.memo(() => {
 	 * @param values The values from the form
 	 */
 	const handleValidSubmit: SubmitHandler<DataParValuesType> = async (values) => {
+		// Mutating values here actually impact the values in the form if we continue to use the form
+		// Therefore a deep clone is needed
+		const valuesClone = lodashCloneDeep(values);
+
 		// Correct the regex field using the known subjects
-		let subjectRegexp = stringArrToRegex(values.x.GUI.SUBJECTS, { isStartEndBound: false });
+		let subjectRegexp = stringArrToRegex(valuesClone.x.GUI.SUBJECTS, { isStartEndBound: false });
 		console.log("subjectRegexp", subjectRegexp);
 
 		subjectRegexp = `^${subjectRegexp}(?:_\\w+)?$`;
-		values.x.dataset.subjectRegexp = subjectRegexp;
+		valuesClone.x.dataset.subjectRegexp = subjectRegexp;
 
 		// Correct the excluded field
-		if (values.x.dataset.exclusion.length > 0) {
+		if (valuesClone.x.dataset.exclusion.length > 0) {
 			const updatedExclusionNames = [];
-			const exclusionRegexpInit = stringArrToRegex(values.x.dataset.exclusion, { isStartEndBound: false });
+			const exclusionRegexpInit = stringArrToRegex(valuesClone.x.dataset.exclusion, { isStartEndBound: false });
 			const exclusionRegexp = new RegExp(`^${exclusionRegexpInit}(?:_\\w+)?$`);
-			for (const fp of await api.path.glob(`${values.x.GUI.StudyRootPath}/derivatives/ExploreASL`, "*", {
+			for (const fp of await api.path.glob(`${valuesClone.x.GUI.StudyRootPath}/derivatives/ExploreASL`, "*", {
 				onlyDirectories: true,
 				onlyFiles: false,
 			})) {
@@ -75,15 +80,15 @@ export const DataParPage = React.memo(() => {
 					updatedExclusionNames.push(name);
 				}
 			}
-			values.x.dataset.exclusion = updatedExclusionNames;
+			valuesClone.x.dataset.exclusion = updatedExclusionNames;
 		}
 
-		// Save the values to the DataPar.json file in BOTH the studyRootPath and the derivatives
+		// Save the valuesClone to the DataPar.json file in BOTH the studyRootPath and the derivatives
 		try {
-			const dataParFilePath_1 = `${values.x.GUI.StudyRootPath}/${DATAPARFILE_BASENAME}`;
-			const dataParFilePath_2 = `${values.x.GUI.StudyRootPath}/derivatives/ExploreASL/${DATAPARFILE_BASENAME}`;
-			await api.path.writeJSON(dataParFilePath_1, values, { spaces: 1 });
-			await api.path.writeJSON(dataParFilePath_2, values, { spaces: 1 });
+			const dataParFilePath_1 = `${valuesClone.x.GUI.StudyRootPath}/${DATAPARFILE_BASENAME}`;
+			const dataParFilePath_2 = `${valuesClone.x.GUI.StudyRootPath}/derivatives/ExploreASL/${DATAPARFILE_BASENAME}`;
+			await api.path.writeJSON(dataParFilePath_1, valuesClone, { spaces: 1 });
+			await api.path.writeJSON(dataParFilePath_2, valuesClone, { spaces: 1 });
 			setDataParSnackbar({
 				severity: "success",
 				title: "Data Parameters saved successfully",

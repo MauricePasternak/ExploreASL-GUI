@@ -243,7 +243,7 @@ function ApplicationDrawer({ drawerWidth = 350 }: ApplicationDrawerProps) {
 					left: "1rem",
 				}}
 			>
-				ExploreASL GUI Version: 0.5.0
+				ExploreASL GUI Version: 0.5.1
 			</Typography>
 		</LoweredTemporaryDrawer>
 	);

@@ -7,7 +7,8 @@ import Path from "pathlib-js";
 import { getFilepathType, getTree, loadJSONSafe, recursiveDelete } from "./backend/filepathFunctions";
 // LOCAL IMPORTS
 import { ExtractChannelName } from "./common/types/utilityTypes";
-import MappingIPCMainEventsToHanders, {
+import  {
+	MappingIPCMainEventsToHanders,
 	InvokeEventNames,
 	InvokeHandlerSignature,
 } from "./ipc/MappingIPCMainEventsToHanders";

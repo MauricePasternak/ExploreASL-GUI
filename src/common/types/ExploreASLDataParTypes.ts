@@ -47,6 +47,7 @@ export type ASLProcessingParamsSchema = {
 	PVCNativeSpaceKernel: [number, number, number];
 	bPVCGaussianMM: number;
 	MakeNIfTI4DICOM: boolean;
+	ApplyQuantification: [number, number, number, number, number, number];
 };
 
 export type StructuralProcessingParamsSchema = {
@@ -66,7 +67,6 @@ export type ASLQuantificationParamsSchema = {
 	BloodT1: number;
 	TissueT1: number;
 	nCompartments: number;
-	ApplyQuantification: [number, number, number, number, number, number];
 	SaveCBF4D: boolean;
 };
 

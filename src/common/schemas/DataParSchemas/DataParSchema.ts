@@ -138,6 +138,15 @@ const SchemaDataParASLProcessingParamsSchema = Yup.object().shape<YupShape<ASLPr
 		),
 	bPVCGaussianMM: Yup.number().oneOf([0, 1], "Impossible value given for this field").default(0),
 	MakeNIfTI4DICOM: Yup.boolean().oneOf([true, false], "Impossible value given for this field"),
+	ApplyQuantification: Yup.array()
+		.required("This is a required field")
+		.typeError("Invalid value")
+		.length(6, "The length of this array of zeros or ones must be 6")
+		.test(
+			"ApplyQuantificationIsValid",
+			"These should be a collection of five numbers, each of which can be 0 or 1",
+			DataParModule__ApplyQuantificationTest
+		),
 });
 
 const SchemaDataParStructuralProcessingParams: Yup.ObjectSchema<StructuralProcessingParamsSchema> = Yup.object().shape({
@@ -193,15 +202,6 @@ const SchemaDataParASLQuantificationParams = Yup.object().shape<YupShape<ASLQuan
 		.max(5000, "This values cannot be greater than 5000")
 		.default(1240),
 	nCompartments: Yup.number().optional().oneOf([1, 2], "Impossible value given for this field.").default(1),
-	ApplyQuantification: Yup.array()
-		.required("This is a required field")
-		.typeError("Invalid value")
-		.length(6, "The length of this array of zeros or ones must be 6")
-		.test(
-			"ApplyQuantificationIsValid",
-			"These should be a collection of five numbers, each of which can be 0 or 1",
-			DataParModule__ApplyQuantificationTest
-		),
 	SaveCBF4D: Yup.boolean().optional().oneOf([true, false], "Impossible value given for this field").default(false),
 });
 
@@ -250,9 +250,13 @@ const SchemaDataParAtlasOptions = Yup.string().oneOf(
 
 const SchemDataParPopulationParams: Yup.ObjectSchema<PopulationParamsSchema> = Yup.object().shape({
 	bMasking: Yup.array()
-		.length(4, "The length of this array of zeros or ones must be 4")
-		.of(Yup.number().oneOf([0, 1], "This field must be an array of zeros or ones."))
 		.typeError("Expected an array of zeros or ones")
+		.test("is-valid-array", "Expected an array of zeros or ones", (value) => {
+			console.log(`value: ${value}`);
+			return true;
+		})
+		.of(Yup.number().oneOf([0, 1], "This field must be an array of zeros or ones."))
+		.length(4, "The length of this array of zeros or ones must be 4")
 		.default([1, 1, 1, 1]),
 	Atlases: Yup.array().optional().of(SchemaDataParAtlasOptions).default(["TotalGM", "DeepWM"]),
 });

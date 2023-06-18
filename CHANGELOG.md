@@ -6,6 +6,31 @@ Versions are in format: `[MAJOR.MINOR.BUGFIX]`
 
 Dates are in format: `YYYY-MM-DD`
 
+## [0.5.1] - 2023-06-20
+
+Minor bugfix release to address a few issues that were found in the 0.5.0 release.
+
+### Fixed
+
+- Fixed a few bugs associated with the Data Parameters Module, including:
+  - Under "Processing Parameters" > "Affine Registration", the value of "Affine Registration Disabled" repeats. The second option should read "Affine Registration Disabled". Underlying value is still correct.
+  - Under "Processing Parameters" > "Masking Options", the default save state leads to an error message: "The length of this array of zeros or ones must be 4". In addition, none of the checkboxes can be changed.
+  - The parameters `x.Q.ApplyQuantification` is in the wrong location. It should be moved to `x.modules.asl.ApplyQuantification`.
+  - When loading, the Subjects to Exclude field does not populate.
+
+### Added
+
+### Changed
+
+  - Bumped certain dependencies:
+    - `typescript` to version `5.1.3`.
+    - `jotai` to version `2.2.0`.
+    - `yup` to version `1.2.0`.
+    - `react-hook-form` to version `7.44.3`.
+
+  - Changed the type signatures of `DropFirstParameter` and `DropLastParameter` to be more accurate to their
+    functionality due to a bump in TypeScript version to version `5.1.3`.
+
 ## [0.5.0] - 2023-06-12
 
 Compatibility update to ExploreASL >=1.10.0

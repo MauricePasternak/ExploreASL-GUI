@@ -41,42 +41,44 @@ import { respondToIPCRenderer } from "./MappingIPCRendererEvents";
  *     * `Shortcut:Register` - Registers a event callbacks to be emitted when users click certain keyboard shortcuts.
  *     * `Shortcut:Unregister` - Halts the emission of event callbacks when users click certain keyboard shortcuts.
  */
-const MappingIPCMainEventsToHanders = {
-  "App:Minimize": () => mainWindow.minimize(),
-  "App:Maximize": () => (mainWindow.isMaximized() ? mainWindow.restore() : mainWindow.maximize()),
-  "App:Quit": () => mainWindow.close(),
-  "App:SoundNotification": () => {
-    console.log("App:SoundNotification");
-    shell.beep()
-  },
-  "Dialog:OpenDialog": handleFilepathDialogue,
-  "Dialog:OpenMessageBox": handleMessageBox,
-  "FSWatcher:Initialize": handleInitializeWatcher,
-  "FSWatcher:Shutdown": handleShutdownWatcher,
-  "ChildProcess:Resume": handleProcessResume,
-  "ChildProcess:Pause": handleProcessPause,
-  "ChildProcess:Terminate": handleProcessTerminate,
-  "ExploreASL:RunImportModule": handleRunImportModule,
-  "ExploreASL:RunExploreASL": handleRunExploreASL,
-  "NIFTI:Load": handleLoadNifti,
-  "Dataframe:Load": (event: IpcMainInvokeEvent, filepath: string) => handleLoadDataframe(filepath),
-  "Shortcut:Register": (event: IpcMainInvokeEvent, responseChannel: string, accelerator: string) => {
-    console.log(`Registering shortcut ${accelerator}`);
-    globalShortcut.register(accelerator, () => respondToIPCRenderer(event, `${responseChannel}:shortcutTriggered`));
-  },
-  "Shortcut:Unregister": (event: IpcMainInvokeEvent, accelerator: string) => {
-    console.log(`Unregistering shortcut ${accelerator}`);
-    globalShortcut.unregister(accelerator);
-  }
-};
+export const MappingIPCMainEventsToHanders = {
+	"App:Minimize": () => mainWindow.minimize(),
+	"App:Maximize": () => (mainWindow.isMaximized() ? mainWindow.restore() : mainWindow.maximize()),
+	"App:Quit": () => mainWindow.close(),
+	"App:SoundNotification": () => {
+		console.log("App:SoundNotification");
+		shell.beep();
+	},
+	"Dialog:OpenDialog": handleFilepathDialogue,
+	"Dialog:OpenMessageBox": handleMessageBox,
+	"FSWatcher:Initialize": handleInitializeWatcher,
+	"FSWatcher:Shutdown": handleShutdownWatcher,
+	"ChildProcess:Resume": handleProcessResume,
+	"ChildProcess:Pause": handleProcessPause,
+	"ChildProcess:Terminate": handleProcessTerminate,
+	"ExploreASL:RunImportModule": handleRunImportModule,
+	"ExploreASL:RunExploreASL": handleRunExploreASL,
+	"NIFTI:Load": handleLoadNifti,
+	"Dataframe:Load": (event: IpcMainInvokeEvent, filepath: string) => handleLoadDataframe(filepath),
+	"Shortcut:Register": (event: IpcMainInvokeEvent, responseChannel: string, accelerator: string) => {
+		console.log(`Registering shortcut ${accelerator}`);
+		globalShortcut.register(accelerator, () => respondToIPCRenderer(event, `${responseChannel}:shortcutTriggered`));
+	},
+	"Shortcut:Unregister": (event: IpcMainInvokeEvent, accelerator: string) => {
+		console.log(`Unregistering shortcut ${accelerator}`);
+		globalShortcut.unregister(accelerator);
+	},
+} as const;
 
-// These types will be used in the preload script
+/**
+ * A type which defines the names of Invoke events.
+ */
 export type InvokeEventNames = keyof typeof MappingIPCMainEventsToHanders;
+
 /**
  * A type which defines the parameters of IPCMain handlers.
  * The first parameter of the handler function, IPCMainInvokeEvent, is omitted.
  */
 export type InvokeHandlerSignature<N extends InvokeEventNames> = DropFirstParameter<
-  typeof MappingIPCMainEventsToHanders[N]
+	(typeof MappingIPCMainEventsToHanders)[N]
 >;
-export default MappingIPCMainEventsToHanders;

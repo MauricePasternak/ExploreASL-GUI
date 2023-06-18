@@ -32,7 +32,7 @@ const bRegistrationContrastOptions: RHFSelectOption<DataParValuesType, "x.module
 
 const bAffineRegistrationOptions: RHFSelectOption<DataParValuesType, "x.modules.asl.bAffineRegistration">[] = [
 	{ label: "Affine Registration Disabled", value: 0 },
-	{ label: "Affine Registration Disabled", value: 1 },
+	{ label: "Affine Registration Enabled", value: 1 },
 	{ label: "Affine Registration based on CoV of PWI", value: 2 },
 ];
 
@@ -343,7 +343,7 @@ export const TabProcessingParameters = React.memo(({ control }: { control: Contr
 								name="x.S.bMasking"
 								options={bMaskingOptions}
 								label="Masking Options"
-								keepUncheckedValue={false}
+								keepUncheckedValue={true}
 								uncheckedValue={0}
 								type="checkbox"
 							/>

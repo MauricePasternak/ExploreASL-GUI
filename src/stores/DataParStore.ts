@@ -58,6 +58,7 @@ export const atomDataParDefaultValues = atom<DataParValuesType>((get) => {
 					PVCNativeSpaceKernel: [5, 5, 1],
 					bPVCGaussianMM: 0,
 					MakeNIfTI4DICOM: false,
+					ApplyQuantification: [1, 1, 1, 1, 1, 1],
 				},
 
 				// Structural Module Processing Parameters
@@ -81,7 +82,6 @@ export const atomDataParDefaultValues = atom<DataParValuesType>((get) => {
 				BloodT1: 1650,
 				TissueT1: 1240,
 				nCompartments: 1,
-				ApplyQuantification: [1, 1, 1, 1, 1, 1],
 				SaveCBF4D: false,
 			},
 

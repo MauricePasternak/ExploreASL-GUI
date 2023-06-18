@@ -46,7 +46,7 @@ const dataParTabs: Record<DataParTabOption, DataParTabProps<DataParValuesType>> 
 			"x.Q.BloodT1",
 			"x.Q.TissueT1",
 			"x.Q.nCompartments",
-			"x.Q.ApplyQuantification",
+			"x.modules.asl.ApplyQuantification",
 			"x.Q.SaveCBF4D",
 		]),
 		icon: <FunctionsIcon />,

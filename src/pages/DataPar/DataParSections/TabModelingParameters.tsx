@@ -42,7 +42,7 @@ const T1TimeBloodMarks = [
 	...lodashRange(1000, 5001, 1000).map((i) => ({ label: i.toString(), value: i })),
 ];
 
-const ApplyQuantOptions: RHFCheckableOption<"checkbox", DataParValuesType, "x.Q.ApplyQuantification">[] = [
+const ApplyQuantOptions: RHFCheckableOption<"checkbox", DataParValuesType, "x.modules.asl.ApplyQuantification">[] = [
 	{ label: "Apply Scale Slopes to ASL Volumes", value: 1 },
 	{ label: "Apply Scale Slopes to M0 Volumes", value: 1 },
 	{ label: "Convert PWI arbitrary units to standard", value: 1 },
@@ -188,7 +188,7 @@ export const TabModelingParameters = React.memo(({ control }: TabModelingParamet
 						<Grid item xs={12} md={6} xl={4}>
 							<RHFCheckableGroup
 								control={control}
-								name="x.Q.ApplyQuantification"
+								name="x.modules.asl.ApplyQuantification"
 								type="checkbox"
 								keepUncheckedValue
 								uncheckedValue={0}

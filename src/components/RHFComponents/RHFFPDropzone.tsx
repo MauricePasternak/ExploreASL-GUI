@@ -150,7 +150,7 @@ export function RHFFPDropzone<
 	const isDialogOpened = useRef(false); // We use this to keep track of dialog state
 
 	// RHF Variables
-	const { field, fieldState, formState } = useController({ name, control }); // field & fieldState
+	const { field, fieldState } = useController({ name, control }); // field & fieldState
 	const hasError = !!fieldState.error;
 	const errorMessage = hasError ? fieldState.error?.message : "";
 
@@ -184,7 +184,7 @@ export function RHFFPDropzone<
 		if (FastIsEqual(field.value, innerVal)) return;
 
 		// Update self and trigger target validation
-		console.log(`InterdepFPTextfield ${field.name} is syncing with field.value and triggering ${triggerTarget}`, {
+		console.log(`RHFFPDropzone ${field.name} is syncing with field.value and triggering target ${triggerTarget}`, {
 			fieldValue: field.value,
 			innerVal,
 		});
