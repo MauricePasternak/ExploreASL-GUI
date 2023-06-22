@@ -1,4 +1,6 @@
-import { ValidationError, ObjectShape } from "yup";
+import { FieldPath, FieldPathValue, FieldValues } from "react-hook-form";
+import { ValidationError, ObjectShape, TestContext } from "yup";
+import { ParentPathValue } from "./formTypes";
 
 type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never;
 /**
@@ -14,7 +16,13 @@ type ObjectShapeValues = ObjectShape extends Record<string, infer V> ? V : never
  */
 export type YupShape<T extends Record<any, any>> = Partial<Record<keyof T, ObjectShapeValues>>;
 
-/**
- * Type representing the appropriate return for any schema invoking the `test()` method
- */
-export type YupTestReturnType = boolean | ValidationError;
+type YupTestReturnType = boolean | ValidationError;
+
+type YupHelper<TFV extends FieldValues, TName extends FieldPath<TFV>> = Omit<TestContext<TFV>, "path" | "parent"> & {
+	path: TName;
+	parent: ParentPathValue<TFV, TName>;
+};
+
+export type YupTestFunction<TFV extends FieldValues, TName extends FieldPath<TFV>> = (
+	...[value, helpers]: [FieldPathValue<TFV, TName>, YupHelper<TFV, TName>]
+) => YupTestReturnType | Promise<YupTestReturnType>;

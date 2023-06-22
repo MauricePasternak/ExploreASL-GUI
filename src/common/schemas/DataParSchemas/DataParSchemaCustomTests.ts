@@ -1,13 +1,12 @@
 import { DataParValuesType } from "../../types/ExploreASLDataParTypes";
-import * as Yup from "yup";
-import { YupTestReturnType } from "../../types/validationSchemaTypes";
+import { YupTestFunction } from "../../types/validationSchemaTypes";
 import { yupCreateError } from "../../utils/formFunctions";
 import { AreValidSubjects } from "../../utils/EASLFunctions";
 
-export const DataParModule__SUBJECTSTest = async (
-	subjectBasenames: string[],
-	helpers: Yup.TestContext<DataParValuesType>
-): Promise<YupTestReturnType> => {
+export const DataParModule__SUBJECTSTest: YupTestFunction<DataParValuesType, "x.GUI.SUBJECTS"> = async (
+	subjectBasenames,
+	helpers
+) => {
 	console.log("🚀 ~ DataParModule__SUBJECTSTest ~ subjectBasenames", subjectBasenames);
 
 	if (subjectBasenames.length < 1) {
@@ -21,6 +20,9 @@ export const DataParModule__SUBJECTSTest = async (
 	return await AreValidSubjects(subjectBasenames, helpers);
 };
 
-export const DataParModule__ApplyQuantificationTest = (values: unknown[]): YupTestReturnType => {
+export const DataParModule__ApplyQuantificationTest: YupTestFunction<
+	DataParValuesType,
+	"x.modules.asl.ApplyQuantification"
+> = (values) => {
 	return Array.isArray(values) && values.every((v) => v === 0 || v === 1);
 };

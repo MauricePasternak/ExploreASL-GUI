@@ -1,13 +1,12 @@
 import { LoadEASLDataFrameSchema } from "../../types/DataVizSchemaTypes";
-import * as Yup from "yup";
-import { YupTestReturnType } from "../../types/validationSchemaTypes";
+import { YupTestFunction } from "../../types/validationSchemaTypes";
 import { yupCreateError } from "../../utils/formFunctions";
 const { api } = window;
 
-export const DataVizLoadDFModule__AtlasesTest = async (
-	atlases: LoadEASLDataFrameSchema["Atlases"],
-	helpers: Yup.TestContext<LoadEASLDataFrameSchema>
-): Promise<YupTestReturnType> => {
+export const DataVizLoadDFModule__AtlasesTest: YupTestFunction<LoadEASLDataFrameSchema, "Atlases"> = async (
+	atlases,
+	helpers
+) => {
 	if (atlases.length === 0) return yupCreateError(helpers, "At least one atlas must be selected");
 
 	const studyRootPath = helpers.parent.StudyRootPath;
@@ -57,10 +56,10 @@ export const DataVizLoadDFModule__AtlasesTest = async (
 	return true;
 };
 
-export const DataVizLoadDFModule__MetadataPathTest = async (
-	filepath: LoadEASLDataFrameSchema["MetadataPath"],
-	helpers: Yup.TestContext<LoadEASLDataFrameSchema>
-): Promise<YupTestReturnType> => {
+export const DataVizLoadDFModule__MetadataPathTest: YupTestFunction<LoadEASLDataFrameSchema, "MetadataPath"> = async (
+	filepath,
+	helpers
+) => {
 	if (filepath === "") return true;
 	const asPath = api.path.asPath(filepath);
 	const filepathType = await api.path.getFilepathType(filepath);

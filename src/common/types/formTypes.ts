@@ -80,3 +80,11 @@ export type RHFInterDepBaseProps<
 	TFV extends FieldValues,
 	TName extends FieldPath<TFV> = FieldPath<TFV>
 > = RHFControlAndNameType<TFV, TName> & RHFTriggerProps<TFV, TName>;
+
+export type ParentPathValue<TFV extends FieldValues, TName extends FieldPath<TFV>> = TName extends keyof TFV
+	? TFV
+	: TName extends `${infer ParentPath extends FieldPath<TFV>}.${infer _}`
+	? FieldPathValue<TFV, ParentPath> extends ReadonlyArray<any>
+		? TFV[ParentPath][number]
+		: TFV[ParentPath]
+	: never;

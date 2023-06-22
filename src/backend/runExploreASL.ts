@@ -315,7 +315,11 @@ export async function handleRunExploreASL(
 
 		// Acquire lock, Respond to frontend, release lock
 		const { Module, Subject, Session } = isLockDir.groupsObject;
+
+		console.log(`addDir event -- Acquiring lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`);
 		const unlock = (await lock.lock()) as () => void | Promise<() => void>;
+		console.log(`addDir event -- Acquired lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`);
+
 		if (Module === "ASL") {
 			respondToIPCRenderer(
 				event,
@@ -334,6 +338,7 @@ export async function handleRunExploreASL(
 			respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, `Starting ${Module} Module`);
 		}
 		await unlock();
+		console.log(`addDir event -- Released lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`);
 	});
 
 	// Handler for files
@@ -353,7 +358,14 @@ export async function handleRunExploreASL(
 
 			// Early Exit. This is a completed status file
 			if (path.basename === "999_ready.status") {
+				// Acquire lock, Respond to frontend, release lock
+				console.log(
+					`add event 999_ready -- Acquiring lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`
+				);
 				const unlock = (await lock.lock()) as () => void | Promise<() => void>;
+				console.log(
+					`add event 999_ready -- Acquired lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`
+				);
 				if (Module === "ASL") {
 					respondToIPCRenderer(
 						event,
@@ -372,13 +384,20 @@ export async function handleRunExploreASL(
 					respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, `Finished ${Module} Module`);
 				}
 				await unlock();
+				console.log(
+					`add event 999_ready -- Released lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`
+				);
 				return;
 			}
 
 			// Early Exit. Not one of the anticipated status files or the status file isn't supported
-			if (!setOfAnticipatedFilepaths.has(path.path) || !(path.basename in workloadMapping)) return;
+			if (!setOfAnticipatedFilepaths.has(path.path) || !(path.basename in workloadMapping)) {
+				console.log(`This status file is not supported: ${path.path}`);
+				return;
+			}
 
 			const statusFileCriteria = workloadMapping[path.basename];
+			console.log(`This status file has a criteria of: ${JSON.stringify(statusFileCriteria)}`);
 
 			// Increment associated progressbar
 			const progressbarIncrementAmount =
@@ -393,7 +412,9 @@ export async function handleRunExploreASL(
 			respondToIPCRenderer(event, `${channelName}:progressBarIncrement`, progressbarIncrementAmount);
 
 			// Acquire lock, Respond to frontend, release lock
+			console.log(`add event -- Acquiring lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`);
 			const unlock = (await lock.lock()) as () => void | Promise<() => void>;
+			console.log(`add event -- Acquired lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`);
 
 			if (Module === "ASL") {
 				respondToIPCRenderer(
@@ -417,6 +438,7 @@ export async function handleRunExploreASL(
 				);
 			}
 			await unlock();
+			console.log(`add event -- Released lock for ${Module} Module, Subject: ${Subject}, Session: ${Session}`);
 			return; // END OF STATUS FILE SCENARIO
 		}
 		// Possibility #2 - This is an image file
@@ -435,13 +457,16 @@ export async function handleRunExploreASL(
 
 			// Acquire lock, Respond to frontend, release lock
 			SentImages.add(path.path);
+			console.log(`add event Image -- Acquiring lock for ${path.path}`);
 			const unlock = (await lock.lock()) as () => void | Promise<() => void>;
+			console.log(`add event Image -- Acquired lock for ${path.path}`);
 			await sleep(100);
 			console.log(`Sleeping for 100ms before sending image file ${path.path}`);
 			respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, statement, { bold: true });
 			respondToIPCRenderer(event, `${channelName}:childProcessRequestsMediaDisplay`, path.path);
 
 			await unlock();
+			console.log(`add event Image -- Released lock for ${path.path}`);
 			return; // END OF IMAGE FILE SCENARIO
 		}
 		return;
