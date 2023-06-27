@@ -41,6 +41,7 @@ export type MappingIPCRendererEventsType = {
   childProcessSTDERR: (errorText: string, quillFormat?: QuillFormat) => void;
   childProcessRequestsMediaDisplay: (url: string) => void;
   FSWatcherEvent: (event: "add" | "addDir" | "change" | "unlink" | "unlinkDir", filepath: string) => void;
+  textEditorClearText: () => void;
   progressBarIncrement: (amount: number) => void;
   progressBarReset: (resetTo?: number) => void;
   shortcutTriggered: () => void;

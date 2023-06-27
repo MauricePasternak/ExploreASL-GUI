@@ -52,6 +52,11 @@ export async function handleRunExploreASL(
 		};
 	}
 
+	respondToIPCRenderer(event, `${channelName}:textEditorClearText`);
+	respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, `Running on platform ${process.platform}`, {
+		bold: true,
+	});
+
 	/******************************************************************
 	 * STEP 1: get the ExploreASL Program version and the Workload type
 	 *****************************************************************/
@@ -91,6 +96,12 @@ export async function handleRunExploreASL(
 	// We use the version number to determine specific behaviors
 	console.log(`EASLProcess ${channelName} -- EASLVersionNumber:`, EASLVersionNumber);
 	const workloadMapping = EASLWorkloadMapping[EASLVersionPath.basename as keyof typeof EASLWorkloadMapping];
+	respondToIPCRenderer(
+		event,
+		`${channelName}:childProcessSTDOUT`,
+		`Determined ExploreASL version to be ${EASLVersionPath.basename}`,
+		{ bold: true }
+	);
 
 	/************************************************************************
 	 * STEP 2: Get the MATLAB Versions and Calculate the anticipated Workload
@@ -168,6 +179,12 @@ export async function handleRunExploreASL(
 		executablePath = xASL_runnable.path;
 	}
 	console.log(`EASL Process ${channelName} -- executablePath`, executablePath);
+	respondToIPCRenderer(
+		event,
+		`${channelName}:childProcessSTDOUT`,
+		`Determined MATLAB executable filepath to be ${executablePath}`,
+		{ bold: true }
+	);
 
 	/*************************************
 	 * STEP 4: Assess the workload results
@@ -211,6 +228,12 @@ export async function handleRunExploreASL(
 			payload: defaultPayload,
 		};
 	// console.log(`EASL Process ${channelName} -- EASLEnv`, EASLEnv);
+	respondToIPCRenderer(
+		event,
+		`${channelName}:childProcessSTDOUT`,
+		`Determined the necessary runtime environment for ExploreASL`,
+		{ bold: true }
+	);
 
 	/********************************************
 	 * STEP 6: Delete any folders called "locked"
@@ -238,6 +261,12 @@ export async function handleRunExploreASL(
 	) {
 		await RemoveBIDS2LegacyLockDirs(BIDS2LegacyLockDir, [...setOfAnticipatedFilepaths]);
 	}
+	respondToIPCRenderer(
+		event,
+		`${channelName}:childProcessSTDOUT`,
+		`Removed previous locked directories in ${StudyDerivExploreASLDir.path}`,
+		{ bold: true }
+	);
 
 	/*****************************************************
 	 * STEP 8: Define the behavior of the filepath watcher
@@ -501,6 +530,12 @@ export async function handleRunExploreASL(
 		await unlock();
 		return; // END OF IMAGE FILE SCENARIO
 	});
+	respondToIPCRenderer(
+		event,
+		`${channelName}:childProcessSTDOUT`,
+		`Set up progress watcher for this study. Preparing to run ExploreASL...`,
+		{ bold: true }
+	);
 
 	/****************************************************************************************
 	 * STEP 9: Spawn the child processs for the given module and define its callback behavior
@@ -585,7 +620,7 @@ export async function handleRunExploreASL(
 		child.on("spawn", () => {
 			console.log("ExploreASL process has spawned with PID", child.pid);
 			GLOBAL_CHILD_PROCESSES.push(child.pid);
-			respondToIPCRenderer(event, `${channelName}:childProcessHasSpawned`, child.pid);
+			// respondToIPCRenderer(event, `${channelName}:childProcessHasSpawned`, child.pid);
 			respondToIPCRenderer(event, `${channelName}:childProcessSTDOUT`, "STARTING UP MATLAB ExploreASL", { bold: true });
 		});
 
