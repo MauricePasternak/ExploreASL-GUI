@@ -1,0 +1,6 @@
+minimumReleaseAgeExclude:
+  - '@mantine/core@9.2.2'
+  - '@mantine/dropzone@9.2.2'
+  - '@mantine/notifications@9.2.2'
+  - '@mantine/store@9.2.2'
+  - '@mantine/hooks@9.2.2'

@@ -1,0 +1,69 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "dialog:default",
+    {
+      "identifier": "fs:default",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "/usr/local/**" },
+        { "path": "/opt/**" },
+        { "path": "/mnt/**" },
+        { "path": "/media/**" },
+        { "path": "$TEMP/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "/usr/local/**" },
+        { "path": "/opt/**" },
+        { "path": "/mnt/**" },
+        { "path": "/media/**" },
+        { "path": "$TEMP/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "/usr/local/**" },
+        { "path": "/opt/**" },
+        { "path": "/mnt/**" },
+        { "path": "/media/**" },
+        { "path": "$TEMP/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "/usr/local/**" },
+        { "path": "/opt/**" },
+        { "path": "/mnt/**" },
+        { "path": "/media/**" },
+        { "path": "$TEMP/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "/usr/local/**" },
+        { "path": "/opt/**" },
+        { "path": "/mnt/**" },
+        { "path": "/media/**" },
+        { "path": "$TEMP/**" }
+      ]
+    },
+    "os:default",
+    "store:default",
+    "log:default"
+  ]
+}
