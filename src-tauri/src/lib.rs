@@ -1,0 +1,52 @@
+mod commands;
+mod tracing;
+
+use commands::{create_symlink_tree, is_writable, walk_directory, which_matlab};
+use tauri::{LogicalSize, Manager, Size};
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin({
+            let mut builder = tauri_plugin_log::Builder::default();
+            #[cfg(debug_assertions)]
+            {
+                let log_dir = std::path::PathBuf::from("/tmp/opencode/exploreasl-gui-logs");
+                let _ = std::fs::create_dir_all(&log_dir);
+                builder = builder
+                    .level(log::LevelFilter::Debug)
+                    .target(tauri_plugin_log::Target::new(
+                        tauri_plugin_log::TargetKind::Folder {
+                            path: log_dir,
+                            file_name: Some("dev.log".into()),
+                        },
+                    ));
+            }
+            builder.build()
+        })
+        .invoke_handler(tauri::generate_handler![
+            which_matlab,
+            is_writable,
+            walk_directory,
+            create_symlink_tree,
+        ])
+        .setup(|app| {
+            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_icon(icon)?;
+                #[cfg(debug_assertions)]
+                {
+                    window.set_size(Size::Logical(LogicalSize::new(800.0, 900.0)))?;
+                    window.open_devtools();
+                }
+            }
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
