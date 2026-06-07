@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MantineProvider } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { MemoryRouter, Route, Routes } from "react-router";
 
+import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
+import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
+import ProjectPage from "../pages/ProjectPage";
 import Layout from "./Layout";
 
 function renderLayout(initialPath = "/") {
@@ -14,7 +18,7 @@ function renderLayout(initialPath = "/") {
         <Routes>
           <Route element={<Layout onOpenSettings={() => undefined} />}>
             <Route path="/" element={<div>Landing content</div>} />
-            <Route path="/project/:id/:phase" element={<div>Project content</div>} />
+            <Route path="/project/:id/:phase" element={<ProjectPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -30,11 +34,17 @@ function getLastButton(name: RegExp) {
 describe("Layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
+    useGlobalStore.setState({
+      loaded: true,
+      settings: DEFAULT_SETTINGS,
+    });
     useProjectStore.setState({
       project: null,
       isDirty: false,
       loaded: false,
     });
+    vi.mocked(writeTextFile).mockResolvedValue(undefined);
   });
 
   it("renders the global shell without a project navbar", () => {
@@ -48,7 +58,7 @@ describe("Layout", () => {
   it("shows project name and phase navigation when a project is loaded", () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0",
+        version: "0.1.0" as const,
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -83,45 +93,53 @@ describe("Layout", () => {
   });
 
   it("returns to the landing page immediately when leaving a clean project", async () => {
-    const closeProject = vi.fn(() => {
-      useProjectStore.setState({
-        project: null,
-        isDirty: false,
-        loaded: false,
-      });
+    const projectJson = {
+      version: "0.1.0" as const,
+      projectMeta: {
+        id: "project-1",
+        name: "Brain Study",
+        rootPath: "/tmp/brain-study",
+        createdAt: "2026-05-03T00:00:00.000Z",
+        lastOpened: "2026-05-03T00:00:00.000Z",
+        currentPhase: "import",
+      },
+      uiState: {},
+      mappingState: {},
+      exploreAslConfig: {
+        sourcestructure: {},
+        studyPar: {},
+        dataPar: {},
+      },
+    };
+
+    useGlobalStore.setState({
+      loaded: true,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        recentProjects: ["/tmp/brain-study/project.easl"],
+      },
     });
+    vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(projectJson));
 
     useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "project-1",
-          name: "Brain Study",
-          rootPath: "/tmp/brain-study",
-          createdAt: "2026-05-03T00:00:00.000Z",
-          lastOpened: "2026-05-03T00:00:00.000Z",
-          currentPhase: "import",
-        },
-        uiState: {},
-        mappingState: {},
-        exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
-          dataPar: {},
-        },
-      },
+      project: projectJson,
       isDirty: false,
       loaded: true,
-      closeProject,
     });
 
     renderLayout("/project/project-1/import");
 
+    expect(screen.getAllByTestId("layout-nav-import").length).toBeGreaterThan(0);
+
     fireEvent.click(getLastButton(/return to home/i));
 
     await waitFor(() => {
-      expect(closeProject).toHaveBeenCalled();
+      expect(useProjectStore.getState().project).toBeNull();
       expect(screen.getAllByText("Landing content").length).toBeGreaterThan(0);
+      expect(screen.queryAllByTestId("layout-nav-import")).toHaveLength(0);
+      expect(screen.queryAllByTestId("layout-nav-home")).toHaveLength(0);
+      expect(document.querySelectorAll(".mantine-AppShell-navbar")).toHaveLength(0);
+      expect(screen.getAllByText("Project: none").length).toBeGreaterThan(0);
     });
   });
 
@@ -137,7 +155,7 @@ describe("Layout", () => {
 
     useProjectStore.setState({
       project: {
-        version: "0.1.0",
+        version: "0.1.0" as const,
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -189,7 +207,7 @@ describe("Layout", () => {
 
     useProjectStore.setState({
       project: {
-        version: "0.1.0",
+        version: "0.1.0" as const,
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -235,7 +253,7 @@ describe("Layout", () => {
 
     useProjectStore.setState({
       project: {
-        version: "0.1.0",
+        version: "0.1.0" as const,
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -277,7 +295,7 @@ describe("Layout", () => {
           title: expect.stringMatching(/failed to save project/i),
         }),
       );
-      expect(screen.getAllByText("Project content").length).toBeGreaterThan(0);
+      expect(screen.getAllByTestId("layout-nav-import").length).toBeGreaterThan(0);
     });
   });
 });

@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import ImportPage from "./ImportPage";
@@ -125,7 +125,7 @@ describe("ImportPage metadata step", () => {
     store.setTokenizerConfig("VARYING/VARYING/VARYING", [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 1, subBlockIndex: null, tag: "Session" },
-      { blockIndex: 2, subBlockIndex: null, tag: "Run" },
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
     ]);
     store.addMetadataGroup({
       id: "global",
@@ -148,6 +148,23 @@ describe("ImportPage metadata step", () => {
   it("opens the defaults metadata modal on first entry", () => {
     const store = useImportStore.getState();
     store.setActiveStep(3);
+    store.setIngestionResults(
+      ["/data/BAR/01/01"],
+      [
+        {
+          signature: "VARYING/VARYING/VARYING",
+          samplePath: "BAR/01/01",
+          blocks: ["BAR", "01", "01"],
+          uniqueNames: { 0: ["BAR"], 1: ["01"], 2: ["01"] },
+          count: 1,
+          depth: 3,
+        },
+      ],
+    );
+    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+    ]);
     store.setSubjectRows([
       {
         id: "BAR/01/01",
@@ -199,7 +216,7 @@ describe("ImportPage metadata step", () => {
     store.setTokenizerConfig("VARYING/VARYING/VARYING", [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 1, subBlockIndex: null, tag: "Session" },
-      { blockIndex: 2, subBlockIndex: null, tag: "Run" },
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
     ]);
     store.addMetadataGroup({
       id: "global-defaults",
@@ -376,6 +393,50 @@ describe("ImportPage metadata step", () => {
       expect(useImportStore.getState().subjectRows).toEqual([]);
     });
   });
+
+  it("blocks navigation to step 5 (Run Import) if metadata is invalid", async () => {
+    const store = useImportStore.getState();
+    store.setActiveStep(3);
+    store.setSourceDataPath("/data");
+    store.setIngestionResults(
+      ["/data/BAR/01/01"],
+      [
+        {
+          signature: "VARYING/VARYING/VARYING",
+          samplePath: "BAR/01/01",
+          blocks: ["BAR", "01", "01"],
+          uniqueNames: { 0: ["BAR"], 1: ["01"], 2: ["01"] },
+          count: 1,
+          depth: 3,
+        },
+      ],
+    );
+    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+      { blockIndex: 1, subBlockIndex: null, tag: "Session" },
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+    ]);
+    store.addMetadataGroup({
+      id: "global-defaults",
+      label: "Global Defaults",
+      bidsParams: {},
+      subjectRegExp: "",
+      sessionRegExp: "",
+      runRegExp: "",
+    });
+
+    renderWithProviders();
+
+    const nextButtons = screen.getAllByRole("button", { name: /next: preview import/i });
+    const nextButton = nextButtons[nextButtons.length - 1];
+    expect(nextButton).toBeInTheDocument();
+    fireEvent.click(nextButton);
+
+    expect(useImportStore.getState().activeStep).toBe(3);
+
+    const { notifications } = await import("@mantine/notifications");
+    expect(notifications.show).toHaveBeenCalled();
+  });
 });
 
 describe("ImportPage alias resolution step", () => {
@@ -477,10 +538,11 @@ describe("ImportPage alias resolution step", () => {
     expect(useImportStore.getState().sessionAliases).toEqual([
       {
         captured: "12",
-        alias: "ASL_1",
+        alias: "12",
         index: 1,
       },
     ]);
+    expect(useImportStore.getState().runAliases).toEqual([]);
     expect(useImportStore.getState().modalityAliases).toEqual([
       {
         captured: "ASL",
@@ -533,15 +595,33 @@ describe("ImportPage alias resolution step", () => {
     await waitFor(() => {
       expect(useImportStore.getState().subjectRenames).toEqual([]);
       expect(useImportStore.getState().sessionAliases).toEqual([]);
+      expect(useImportStore.getState().runAliases).toEqual([]);
       expect(useImportStore.getState().modalityAliases).toEqual([]);
     });
   });
 });
 
 describe("ImportPage import runner step", () => {
-  it("renders JSON config previews and disables import when settings are missing", () => {
+  it("renders staging preview and config sections and disables import when settings are missing", () => {
     const store = useImportStore.getState();
     store.setActiveStep(4);
+    store.setIngestionResults(
+      ["/data/BAR/01/01"],
+      [
+        {
+          signature: "VARYING/VARYING/VARYING",
+          samplePath: "BAR/01/01",
+          blocks: ["BAR", "01", "01"],
+          uniqueNames: { 0: ["BAR"], 1: ["01"], 2: ["01"] },
+          count: 1,
+          depth: 3,
+        },
+      ],
+    );
+    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+    ]);
     store.setBMatchDirectories(true);
     store.setSessionAliases([{ captured: "01", alias: "ASL_1", index: 1 }]);
     store.setModalityAliases([{ captured: "pcasl", mapped: "ASL4D" }]);
@@ -556,8 +636,8 @@ describe("ImportPage import runner step", () => {
 
     renderWithProviders();
 
-    expect(screen.getAllByText("sourcestructure.json").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("studyPar.json").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Preview Import").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("ExploreASL Configuration").length).toBeGreaterThan(0);
     const runButtons = screen.getAllByRole("button", { name: /run import/i });
     expect(runButtons[runButtons.length - 1]).toBeDisabled();
   });
@@ -565,6 +645,23 @@ describe("ImportPage import runner step", () => {
   it("shows progress rows and enables import when global settings are configured", () => {
     const store = useImportStore.getState();
     store.setActiveStep(4);
+    store.setIngestionResults(
+      ["/data/BAR/01/01"],
+      [
+        {
+          signature: "VARYING/VARYING/VARYING",
+          samplePath: "BAR/01/01",
+          blocks: ["BAR", "01", "01"],
+          uniqueNames: { 0: ["BAR"], 1: ["01"], 2: ["01"] },
+          count: 1,
+          depth: 3,
+        },
+      ],
+    );
+    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+    ]);
     store.setBMatchDirectories(false);
     store.setSessionAliases([{ captured: "visit_1", alias: "ASL_1", index: 1 }]);
     store.setModalityAliases([{ captured: "t1_mpr", mapped: "T1w" }]);
@@ -600,5 +697,40 @@ describe("ImportPage import runner step", () => {
     expect(screen.getAllByText("DCM2NII").length).toBeGreaterThan(0);
     const runButtons = screen.getAllByRole("button", { name: /run import/i });
     expect(runButtons[runButtons.length - 1]).toBeEnabled();
+  });
+});
+
+describe("ImportPage stepper navigation", () => {
+  const pattern = {
+    signature: "VARYING/VARYING",
+    samplePath: "SUB/ASL",
+    blocks: ["SUB", "ASL"],
+    uniqueNames: { 0: ["SUB"], 1: ["ASL"] },
+    count: 1,
+    depth: 2,
+  };
+
+  it("keeps the stepper sidebar mounted for layout", () => {
+    renderWithProviders();
+    expect(screen.getAllByTestId("import-stepper-sidebar").length).toBeGreaterThan(0);
+  });
+
+  it("stepper clicks do not navigate (display-only)", () => {
+    const store = useImportStore.getState();
+    store.setActiveStep(1);
+    store.setIngestionResults(["/data/SUB/ASL"], [pattern]);
+    store.setTokenizerConfig("VARYING/VARYING", [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+      { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
+    ]);
+
+    renderWithProviders();
+    const sidebar = screen.getAllByTestId("import-stepper-sidebar")[0];
+
+    fireEvent.click(within(sidebar).getByTestId("import-step-2"));
+    expect(useImportStore.getState().activeStep).toBe(1);
+
+    fireEvent.click(within(sidebar).getByTestId("import-step-3"));
+    expect(useImportStore.getState().activeStep).toBe(1);
   });
 });

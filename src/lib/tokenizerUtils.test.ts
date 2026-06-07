@@ -392,6 +392,46 @@ describe("buildStagingMapping", () => {
 
     expect(result).toEqual([]);
   });
+
+  it("extracts sub-block tokens using hyphen delimiter", () => {
+    const pattern: PathPattern = {
+      signature: "VARYING/VARYING-VARYING/VARYING",
+      samplePath: "C9ORF007/C9ORF007-01-MR00/ASL",
+      blocks: ["C9ORF007", "C9ORF007-01-MR00", "ASL"],
+      uniqueNames: {
+        0: ["C9ORF007", "C9ORF059"],
+        1: ["C9ORF007-01-MR00", "C9ORF059-11"],
+        2: ["ASL", "T1"],
+      },
+      count: 4,
+      depth: 3,
+    };
+
+    const paths = [
+      "/data/C9ORF007/C9ORF007-01-MR00/ASL",
+      "/data/C9ORF059/C9ORF059-11/T1",
+    ];
+
+    const assignments: TokenAssignment[] = [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+      { blockIndex: 1, subBlockIndex: 1, tag: "Session" },
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+    ];
+
+    const result = buildStagingMapping(
+      paths,
+      "/data",
+      assignments,
+      pattern,
+      {},
+      { ASL: "ASL4D", T1: "T1w" },
+      ["_", "-"],
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ subject: "C9ORF007", session: "01", modality: "ASL4D" });
+    expect(result[1]).toMatchObject({ subject: "C9ORF059", session: "11", modality: "T1w" });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -399,7 +439,7 @@ describe("buildStagingMapping", () => {
 // ---------------------------------------------------------------------------
 describe("assembleSourcestructure", () => {
   it("always produces 4-level hierarchy", () => {
-    const result = assembleSourcestructure([], [], true);
+    const result = assembleSourcestructure([], [], [], true);
     expect(result.folderHierarchy).toHaveLength(4);
     expect(result.folderHierarchy).toEqual([
       "^(.*)$",
@@ -410,25 +450,30 @@ describe("assembleSourcestructure", () => {
   });
 
   it("always produces tokenOrdering [0, 1, 2, 3]", () => {
-    const result = assembleSourcestructure([], [], true);
+    const result = assembleSourcestructure([], [], [], true);
     expect(result.tokenOrdering).toEqual([0, 1, 2, 3]);
   });
 
   it("always includes default session alias 01 → ASL_1", () => {
-    const result = assembleSourcestructure([], [], true);
+    const result = assembleSourcestructure([], [], [], true);
     expect(result.tokenSessionAliases).toContain("^01$");
     expect(result.tokenSessionAliases).toContain("ASL_1");
   });
 
-  it("includes additional session aliases", () => {
+  it("includes additional session and run aliases", () => {
     const sessionAliases: SessionAlias[] = [
-      { captured: "visit_1", alias: "ASL_1", index: 1 },
-      { captured: "visit_2", alias: "ASL_2", index: 2 },
+      { captured: "visit_1", alias: "visit_1", index: 1 },
+      { captured: "visit_2", alias: "visit_2", index: 2 },
+    ];
+    const runAliases: SessionAlias[] = [
+      { captured: "run_a", alias: "ASL_1", index: 1 },
+      { captured: "run_b", alias: "ASL_2", index: 2 },
     ];
 
-    const result = assembleSourcestructure(sessionAliases, [], true);
+    const result = assembleSourcestructure(sessionAliases, runAliases, [], true);
     expect(result.tokenSessionAliases).toContain("^visit_1$");
     expect(result.tokenSessionAliases).toContain("^visit_2$");
+    expect(result.tokenSessionAliases).toContain("^run_a$");
     expect(result.tokenSessionAliases).toContain("ASL_2");
   });
 
@@ -439,7 +484,7 @@ describe("assembleSourcestructure", () => {
       { captured: "phoenix", mapped: null }, // Ignored
     ];
 
-    const result = assembleSourcestructure([], modalityAliases, true);
+    const result = assembleSourcestructure([], [], modalityAliases, true);
     expect(result.tokenScanAliases).toContain("^T1w$");
     expect(result.tokenScanAliases).toContain("T1w");
     expect(result.tokenScanAliases).toContain("^ASL4D$");
@@ -454,15 +499,15 @@ describe("assembleSourcestructure", () => {
       { captured: "t1_mpr_tra", mapped: "T1w" }, // Same mapped name
     ];
 
-    const result = assembleSourcestructure([], modalityAliases, true);
+    const result = assembleSourcestructure([], [], modalityAliases, true);
     // Count occurrences of "T1w" in scan aliases
     const t1wCount = result.tokenScanAliases.filter((a) => a === "T1w").length;
     expect(t1wCount).toBe(1);
   });
 
   it("passes through bMatchDirectories", () => {
-    expect(assembleSourcestructure([], [], true).bMatchDirectories).toBe(true);
-    expect(assembleSourcestructure([], [], false).bMatchDirectories).toBe(false);
+    expect(assembleSourcestructure([], [], [], true).bMatchDirectories).toBe(true);
+    expect(assembleSourcestructure([], [], [], false).bMatchDirectories).toBe(false);
   });
 });
 

@@ -45,34 +45,87 @@ export function labelSegment(values: string[]): string {
  * Compute a human-readable pattern signature from path blocks and their
  * unique values across all matching paths.
  *
- * Example: ["BAR", "05022026_01", "sernum-0001_ser-AAHead_Scout"]
- * with uniqueNames showing BAR/FOO varying → "VARYING/VARYING/VARYING"
+ * Shows sub-block template for varying positions with multiple sub-blocks
+ * (e.g. "<TOKEN>-<TOKEN>-<TOKEN>"), literal values for fixed positions,
+ * and "VARYING" for varying single-block positions.
  */
+function uniformSubBlockCount(values: string[], delimiters: string[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const counts = values.map((value) => splitBySubDelimiters(value, delimiters).subBlocks.length);
+  const first = counts[0];
+  return counts.every((count) => count === first) ? first : null;
+}
+
 export function computePatternSignature(
   uniqueNames: Record<number, string[]>,
   depth: number,
+  sampleBlocks: string[],
+  delimiters: string[] = ["_", "-"],
 ): string {
   const labels: string[] = [];
   for (let i = 0; i < depth; i++) {
     const values = uniqueNames[i] ?? [];
-    labels.push(labelSegment(values));
+    const unique = new Set(values);
+
+    if (unique.size === 1) {
+      labels.push(values[0]);
+    } else {
+      const sampleBlock = sampleBlocks[i] ?? values[0];
+      const { subBlocks: sampleSubBlocks, delimiters: sampleDelimiters } = splitBySubDelimiters(
+        sampleBlock,
+        delimiters,
+      );
+      const subBlockCount = uniformSubBlockCount(values, delimiters);
+      const isLeaf = i === depth - 1;
+
+      if (isLeaf) {
+        if (sampleSubBlocks.length > 1) {
+          labels.push(buildSubBlockTemplate(sampleSubBlocks.length, sampleDelimiters));
+        } else {
+          labels.push("<TOKEN>");
+        }
+      } else if (subBlockCount === 1) {
+        labels.push("<TOKEN>");
+      } else if (subBlockCount !== null && subBlockCount > 1) {
+        labels.push(buildSubBlockTemplate(subBlockCount, sampleDelimiters));
+      } else if (sampleSubBlocks.length > 1) {
+        labels.push(buildSubBlockTemplate(sampleSubBlocks.length, sampleDelimiters));
+      } else {
+        labels.push("VARYING");
+      }
+    }
   }
   return labels.join("/");
 }
 
 /**
+ * Build a template string showing sub-block structure with delimiters.
+ * E.g. 3 sub-blocks with ["-", "-"] delimiters → "<TOKEN>-<TOKEN>-<TOKEN>"
+ */
+function buildSubBlockTemplate(subBlockCount: number, subDelimiters: string[]): string {
+  const tokens = Array.from({ length: subBlockCount }, () => "<TOKEN>");
+  return tokens.reduce((result, token, idx) => {
+    if (idx === 0) return token;
+    return result + (subDelimiters[idx - 1] ?? "") + token;
+  }, "");
+}
+
+/**
  * Group paths by their structural depth pattern.
- * Paths with the same depth AND the same fixed-vs-varying pattern at each level
+ * Paths with the same depth AND the same sub-block structure at each level
  * are grouped together.
  *
- * The key insight: two paths have the same "structural pattern" if:
- * 1. They have the same depth (number of "/" segments)
- * 2. Fixed segments (where ALL paths in the group share the same value)
- *    appear at the same positions
+ * Two paths have the same "structural pattern" if, at every depth position,
+ * their folder names produce the same number of sub-blocks when split by
+ * the configured delimiters (default: ["_", "-"]).
  */
 export function discoverPathPatterns(
   paths: string[],
   rootPath: string,
+  delimiters: string[] = ["_", "-"],
 ): PathPattern[] {
   if (paths.length === 0) return [];
 
@@ -94,11 +147,8 @@ export function discoverPathPatterns(
   const patterns: PathPattern[] = [];
 
   for (const [depth, entries] of byDepth) {
-    // Within each depth group, further group by which positions are "fixed"
-    // (same literal value across all entries at that depth position)
-    // We need to iteratively refine: compute unique values per position,
-    // then compute a "shape key" based on fixed positions.
-    const subGroups = groupByStructure(entries, depth);
+    // Within each depth group, group by sub-block shape
+    const subGroups = groupByShape(entries, depth, delimiters);
 
     for (const group of subGroups) {
       const uniqueNames: Record<number, string[]> = {};
@@ -107,9 +157,9 @@ export function discoverPathPatterns(
         uniqueNames[i] = valuesAtDepth.sort();
       }
 
-      const signature = computePatternSignature(uniqueNames, depth);
-      const samplePath = group[0].original;
       const blocks = group[0].segments;
+      const signature = computePatternSignature(uniqueNames, depth, blocks, delimiters);
+      const samplePath = group[0].original;
 
       patterns.push({
         signature,
@@ -126,67 +176,44 @@ export function discoverPathPatterns(
 }
 
 /**
- * Group entries of the same depth by their structural "shape".
+ * Group entries of the same depth by their sub-block "shape".
  *
- * Strategy: find positions with low cardinality (few unique values relative
- * to the number of entries) — these are likely structural markers (e.g.,
- * "DICOM" folder). Group entries by their values at these positions.
+ * Two paths have the same shape if, at every depth position, their folder
+ * names produce the same number of sub-blocks when split by the configured
+ * delimiters. This correctly distinguishes structural patterns:
  *
- * A position is a "structural candidate" if:
- * - It has more than 1 unique value (not globally fixed)
- * - Its cardinality is lower than the total number of entries
- *   (if every entry has a unique value, it's data, not structure)
- * - Its cardinality is less than half the entry count
- *   (heuristic to distinguish structural markers from data)
+ * e.g. "C9ORF059-01-MR00" (3 sub-blocks by "-") vs "C9ORF059-11" (2 sub-blocks)
+ * are different shapes, while "C9ORF059-01-MR00" and "C9ORF007-02-MR00" (both
+ * 3 sub-blocks) are the same shape.
  */
-function groupByStructure(
+function groupByShape(
   entries: { original: string; segments: string[] }[],
   depth: number,
+  delimiters: string[] = ["_", "-"],
 ): { original: string; segments: string[] }[][] {
   if (entries.length <= 1) return [entries];
 
-  // Find the best structural position to split on
-  let bestPos = -1;
-  let bestCardinality = Infinity;
+  const groups = new Map<string, { original: string; segments: string[] }[]>();
 
-  for (let i = 0; i < depth; i++) {
-    const unique = new Set(entries.map((e) => e.segments[i]));
-    const cardinality = unique.size;
-
-    // A structural position has: more than 1 value, but fewer unique values
-    // than entries (meaning values repeat → structural, not data)
-    if (cardinality > 1 && cardinality < entries.length && cardinality < bestCardinality) {
-      bestPos = i;
-      bestCardinality = cardinality;
-    }
-  }
-
-  if (bestPos === -1) {
-    // No structural positions found — all positions are either globally
-    // fixed or fully varying. This is one group.
-    return [entries];
-  }
-
-  // Split by the values at the best structural position
-  const subGroupMap = new Map<
-    string,
-    { original: string; segments: string[] }[]
-  >();
+  // Leaf folder names (e.g. scan series) vary in token count but share parent structure.
+  const structuralDepth = Math.max(1, depth - 1);
 
   for (const entry of entries) {
-    const key = entry.segments[bestPos];
-    if (!subGroupMap.has(key)) {
-      subGroupMap.set(key, []);
+    const shapeKey = entry.segments
+      .slice(0, structuralDepth)
+      .map((seg) => {
+        const { subBlocks } = splitBySubDelimiters(seg, delimiters);
+        return subBlocks.length;
+      })
+      .join("/");
+
+    if (!groups.has(shapeKey)) {
+      groups.set(shapeKey, []);
     }
-    subGroupMap.get(key)!.push(entry);
+    groups.get(shapeKey)!.push(entry);
   }
 
-  // Recursively refine each sub-group (splitting may reveal new structure)
-  const result: { original: string; segments: string[] }[][] = [];
-  for (const group of subGroupMap.values()) {
-    result.push(...groupByStructure(group, depth));
-  }
-  return result;
+  return [...groups.values()];
 }
 
 /**

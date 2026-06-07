@@ -10,6 +10,12 @@ import {
   ProjectFileSchema,
   type ProjectFile,
 } from "../schemas/project";
+import {
+  clearSessionCheckpoint,
+  projectEaslPath,
+  syncSessionCheckpointFromProject,
+} from "../lib/sessionCheckpoint";
+import type { ImportState } from "./importStore";
 
 interface ProjectState {
   project: ProjectFile | null;
@@ -19,11 +25,12 @@ interface ProjectState {
   createProject: (rootPath: string, name: string) => Promise<void>;
   saveProject: () => Promise<void>;
   setPhase: (phase: ProjectMeta["currentPhase"]) => void;
+  syncImportState: (importState: ImportState) => void;
   closeProject: () => void;
 }
 
 function getProjectFilePath(rootPath: string) {
-  return `${rootPath}/${PROJECT_FILE_NAME}`;
+  return projectEaslPath(rootPath);
 }
 
 function isProjectFilePath(easlPath: string) {
@@ -57,6 +64,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       isDirty: false,
       loaded: true,
     });
+    syncSessionCheckpointFromProject(hydratedProject);
   },
 
   createProject: async (rootPath, name) => {
@@ -69,6 +77,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       isDirty: false,
       loaded: true,
     });
+    syncSessionCheckpointFromProject(project);
   },
 
   saveProject: async () => {
@@ -96,25 +105,57 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         return state;
       }
 
-      return {
-        project: {
-          ...state.project,
-          projectMeta: {
-            ...state.project.projectMeta,
-            currentPhase: phase,
-            lastOpened: new Date().toISOString(),
-          },
+      const nextProject = {
+        ...state.project,
+        projectMeta: {
+          ...state.project.projectMeta,
+          currentPhase: phase,
+          lastOpened: new Date().toISOString(),
         },
+      };
+
+      syncSessionCheckpointFromProject(nextProject, phase);
+
+      return {
+        project: nextProject,
         isDirty: true,
       };
     });
   },
 
   closeProject: () => {
+    clearSessionCheckpoint();
     set({
       project: null,
       isDirty: false,
       loaded: false,
+    });
+  },
+
+  syncImportState: (importState) => {
+    set((state) => {
+      if (!state.project) return state;
+
+      const { activeStep, importRunning, importProgress, importSummary, ...payload } = importState;
+
+      if (
+        JSON.stringify(state.project.mappingState) === JSON.stringify(payload) &&
+        state.project.uiState.importActiveStep === activeStep
+      ) {
+        return state;
+      }
+
+      return {
+        project: {
+          ...state.project,
+          mappingState: payload,
+          uiState: {
+            ...state.project.uiState,
+            importActiveStep: activeStep,
+          },
+        },
+        isDirty: true,
+      };
     });
   },
 }));

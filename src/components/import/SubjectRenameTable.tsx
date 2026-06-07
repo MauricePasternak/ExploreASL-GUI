@@ -18,7 +18,7 @@ export default function SubjectRenameTable() {
 
   if (subjectRenames.length === 0) {
     return (
-      <Card withBorder p="md">
+      <Card withBorder p="md" data-testid="subject-rename-empty">
         <Text c="dimmed" size="sm">
           No subjects detected. Complete the Path Tokenizer step first and
           assign a &quot;Subject&quot; tag.
@@ -33,7 +33,7 @@ export default function SubjectRenameTable() {
         Rename subjects to BIDS-compliant names. Leave unchanged to keep
         the original names.
       </Text>
-      <Table striped highlightOnHover>
+      <Table striped highlightOnHover data-testid="subject-rename-table">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Original</Table.Th>
@@ -59,6 +59,7 @@ export default function SubjectRenameTable() {
                   }
                   size="xs"
                   w={200}
+                  data-testid={`subject-rename-input-${rename.original.replace(/[^a-z0-9]/gi, "-")}`}
                 />
               </Table.Td>
             </Table.Tr>

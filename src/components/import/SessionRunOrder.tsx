@@ -7,34 +7,46 @@ import {
   TextInput,
 } from "@mantine/core";
 
-import { useImportStore } from "../../stores/importStore";
+import type { SessionAlias } from "../../schemas/importSchemas";
+
+interface OrderAliasTableProps {
+  aliases: SessionAlias[];
+  onAliasesChange: (aliases: SessionAlias[]) => void;
+  emptyMessage: string;
+  description: string;
+  emptyTestId: string;
+  tableTestId: string;
+}
 
 /**
- * Session / Run ordering table.
- * Shows captured session values with alias assignment and ordering.
+ * Session or run ordering table.
+ * Shows captured values with alias assignment and chronological ordering.
  */
-export default function SessionRunOrder() {
-  const sessionAliases = useImportStore((s) => s.sessionAliases);
-  const setSessionAliases = useImportStore((s) => s.setSessionAliases);
-
+export default function OrderAliasTable({
+  aliases,
+  onAliasesChange,
+  emptyMessage,
+  description,
+  emptyTestId,
+  tableTestId,
+}: OrderAliasTableProps) {
   function handleAliasChange(index: number, alias: string) {
-    const updated = [...sessionAliases];
+    const updated = [...aliases];
     updated[index] = { ...updated[index], alias };
-    setSessionAliases(updated);
+    onAliasesChange(updated);
   }
 
   function handleIndexChange(index: number, newOrder: number) {
-    const updated = [...sessionAliases];
+    const updated = [...aliases];
     updated[index] = { ...updated[index], index: newOrder };
-    setSessionAliases(updated);
+    onAliasesChange(updated);
   }
 
-  if (sessionAliases.length === 0) {
+  if (aliases.length === 0) {
     return (
-      <Card withBorder p="md">
+      <Card withBorder p="md" data-testid={emptyTestId}>
         <Text c="dimmed" size="sm">
-          No sessions detected. If your data has only one session per subject,
-          the default &quot;01&quot; will be used automatically.
+          {emptyMessage}
         </Text>
       </Card>
     );
@@ -43,10 +55,9 @@ export default function SessionRunOrder() {
   return (
     <Stack gap="sm">
       <Text size="sm" c="dimmed">
-        Assign display aliases and chronological ordering to each captured
-        session value.
+        {description}
       </Text>
-      <Table striped highlightOnHover>
+      <Table striped highlightOnHover data-testid={tableTestId}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Captured Value</Table.Th>
@@ -55,7 +66,7 @@ export default function SessionRunOrder() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {sessionAliases.map((alias, idx) => (
+          {aliases.map((alias, idx) => (
             <Table.Tr key={alias.captured}>
               <Table.Td>
                 <Text size="sm" ff="monospace">
@@ -68,6 +79,7 @@ export default function SessionRunOrder() {
                   onChange={(e) => handleAliasChange(idx, e.currentTarget.value)}
                   size="xs"
                   w={120}
+                  data-testid={`order-alias-input-${alias.captured.replace(/[^a-z0-9]/gi, "-")}`}
                 />
               </Table.Td>
               <Table.Td>
@@ -77,6 +89,7 @@ export default function SessionRunOrder() {
                   min={1}
                   size="xs"
                   w={70}
+                  data-testid={`order-index-input-${alias.captured.replace(/[^a-z0-9]/gi, "-")}`}
                 />
               </Table.Td>
             </Table.Tr>

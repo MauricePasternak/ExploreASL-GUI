@@ -19,7 +19,7 @@ export const GlobalSettingsSchema = z.object({
     .refine((delimiters) => new Set(delimiters).size === delimiters.length, {
       message: "Tokenizer delimiters must be unique",
     })
-    .default(["_"]),
+    .default(["_", "-"]),
 });
 
 export type MatlabInstallation = z.infer<typeof MatlabInstallationSchema>;
@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
   exploreAslPath: "",
   theme: "light",
   recentProjects: [],
-  tokenSubDelimiters: ["_"],
+  tokenSubDelimiters: ["_", "-"],
 };
 
 

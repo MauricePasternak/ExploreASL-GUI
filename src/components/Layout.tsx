@@ -37,7 +37,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ onOpenSettings }: LayoutProps) {
-  const [opened, { toggle }] = useDisclosure(false);
+  const [opened, { toggle, close: closeMobileNav }] = useDisclosure(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const project = useProjectStore((state) => state.project);
   const setPhase = useProjectStore((state) => state.setPhase);
@@ -74,9 +74,10 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       }
     }
 
-    closeProject();
     setLeaveModalOpen(false);
+    closeMobileNav();
     navigate("/");
+    closeProject();
   }
 
   function handleReturnHome() {
@@ -93,8 +94,9 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     }
 
     logAction("layout_return_home");
-    closeProject();
+    closeMobileNav();
     navigate("/");
+    closeProject();
   }
 
   return (

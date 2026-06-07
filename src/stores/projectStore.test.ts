@@ -2,10 +2,12 @@ import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PROJECT_FILE_NAME } from "../schemas/project";
+import { readSessionCheckpoint } from "../lib/sessionCheckpoint";
 import { useProjectStore } from "./projectStore";
 
 describe("useProjectStore", () => {
   beforeEach(() => {
+    sessionStorage.clear();
     useProjectStore.setState({
       project: null,
       isDirty: false,
@@ -24,6 +26,7 @@ describe("useProjectStore", () => {
       expect.stringContaining('"name": "Demo Project"'),
     );
     expect(useProjectStore.getState().project?.projectMeta.currentPhase).toBe("import");
+    expect(readSessionCheckpoint()?.projectId).toBe(useProjectStore.getState().project?.projectMeta.id);
   });
 
   it("loads a valid project file and clears the dirty flag", async () => {
@@ -59,6 +62,11 @@ describe("useProjectStore", () => {
           currentPhase: "parameters",
         },
       },
+    });
+    expect(readSessionCheckpoint()).toMatchObject({
+      easlPath: `/tmp/loaded/${PROJECT_FILE_NAME}`,
+      projectId: "project-1",
+      phase: "parameters",
     });
   });
 
@@ -105,5 +113,6 @@ describe("useProjectStore", () => {
       isDirty: false,
       loaded: false,
     });
+    expect(readSessionCheckpoint()).toBeNull();
   });
 });

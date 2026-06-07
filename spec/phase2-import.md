@@ -63,7 +63,7 @@ Three sub-sections presented as tabs or accordion panels:
 4. Multiple override groups can be defined. Each row belongs to exactly one group (defaults or an override).
 5. Generates `studyPar.json` with a `StudyPars` array: the first entry is the catch-all (no SubjectRegExp/SessionRegExp — catches everything). Subsequent entries are overrides with exact-match regex derived from row selection.
 
-### Step 5: Run Import
+### Step 5: Preview Import
 
 **Symlink Tree Normalization:** The raw DICOM paths have arbitrary depth and structure. Before running ExploreASL, the GUI constructs a clean, uniform staging tree:
 
@@ -137,11 +137,15 @@ Phase2Import (route: /project/:id/import)
 │   │   ├── SubjectsDataTable (Mantine DataTable with checkbox selection)
 │   │   ├── MetadataGroupModal (BIDS parameter form + group label)
 │   │   └── GroupLegend (color-coded group labels)
-│   └── Step5: Import Runner
-│       ├── ConfigPreview (read-only JSON of sourcestructure + studyPar)
-│       ├── RunButton
-│       ├── ProgressPerSubject (expandable rows, step status)
-│       └── ImportSummary (success/failure counts, error log)
+│   └── Step5: Preview Import
+│       ├── ImportPreview (orchestrator)
+│       │   ├── Summary (subjects, patterns, total locations)
+│       │   ├── StagingMappingTable (per-pattern raw→staging path mapping)
+│       │   ├── ConfigPreview (annotated sourcestructure + studyPar JSON)
+│       │   └── ImportRunner (execution controls + progress)
+│       │       ├── SettingsAlert (MATLAB/ExploreASL path check)
+│       │       ├── ProgressPerSubject (expandable rows, step status)
+│       │       └── ImportSummary (success/failure counts, error log)
 ```
 
 ## Data Model (Zod Schemas)

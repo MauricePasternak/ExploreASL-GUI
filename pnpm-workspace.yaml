@@ -4,3 +4,4 @@ minimumReleaseAgeExclude:
   - '@mantine/notifications@9.2.2'
   - '@mantine/store@9.2.2'
   - '@mantine/hooks@9.2.2'
+  - react-router@7.17.0

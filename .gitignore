@@ -34,3 +34,4 @@ notes/
 # Large test data
 test/test_GENFI/
 test/test_project_root/
+test/test_import_run/

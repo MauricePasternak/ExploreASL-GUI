@@ -61,6 +61,14 @@ describe("PathTokenizer", () => {
     expect(barElements.length).toBeGreaterThan(0);
   });
 
+  it("uses Ignore as the only non-semantic dropdown label", () => {
+    useImportStore.getState().setIngestionResults([], SAMPLE_PATTERNS);
+    renderWithProviders();
+
+    expect(screen.queryByText("— None —")).not.toBeInTheDocument();
+    expect(screen.queryAllByText("Ignore").length).toBeGreaterThan(0);
+  });
+
   it("shows regex preview with empty assignments", () => {
     useImportStore.getState().setIngestionResults([], SAMPLE_PATTERNS);
     const { container } = renderWithProviders();
@@ -84,7 +92,10 @@ describe("PathTokenizer", () => {
   });
 
   it("enables next button when Subject and Modality are assigned", () => {
-    useImportStore.getState().setIngestionResults([], SAMPLE_PATTERNS);
+    useImportStore.getState().setIngestionResults(
+      ["/data/BAR/05022026_01/sernum-0001_ser-AAHead_Scout"],
+      SAMPLE_PATTERNS,
+    );
     useImportStore
       .getState()
       .setTokenAssignment("VARYING/VARYING/VARYING", 0, null, "Subject");

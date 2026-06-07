@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Code,
   Group,
   Stack,
   Table,
@@ -12,11 +13,14 @@ import {
 } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconPlus } from "@tabler/icons-react";
 
-import type {
-  BidsAslMetadata,
-  MetadataGroup,
-  SubjectRow,
-  TokenAssignment,
+import { notifications } from "@mantine/notifications";
+
+import {
+  type BidsAslMetadata,
+  type MetadataGroup,
+  type SubjectRow,
+  type TokenAssignment,
+  validateBidsMetadataGroup,
 } from "../../schemas/importSchemas";
 import { splitBySubDelimiters } from "../../lib/pathUtils";
 import { useImportStore } from "../../stores/importStore";
@@ -147,6 +151,7 @@ export default function MetadataGrouping() {
   const subjectRows = useImportStore((state) => state.subjectRows);
   const setSubjectRows = useImportStore((state) => state.setSubjectRows);
   const addMetadataGroup = useImportStore((state) => state.addMetadataGroup);
+  const removeMetadataGroup = useImportStore((state) => state.removeMetadataGroup);
   const updateMetadataGroup = useImportStore((state) => state.updateMetadataGroup);
   const updateSubjectRowGroup = useImportStore((state) => state.updateSubjectRowGroup);
   const tokenSubDelimiters = useGlobalStore((state) => state.settings.tokenSubDelimiters);
@@ -154,7 +159,8 @@ export default function MetadataGrouping() {
     sourceDataPath.length > 0 && rawPaths.length > 0 && pathPatterns.length > 0;
 
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
-  const [modalMode, setModalMode] = useState<"defaults" | "override" | null>(null);
+  const [modalMode, setModalMode] = useState<"edit" | "override" | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
 
   const derivedRows = useMemo(
     () =>
@@ -208,7 +214,8 @@ export default function MetadataGrouping() {
         sessionRegExp: "",
         runRegExp: "",
       });
-      setModalMode("defaults");
+      setEditingGroupId(DEFAULT_GROUP_ID);
+      setModalMode("edit");
     }
   }, [addMetadataGroup, metadataGroups.length]);
 
@@ -225,6 +232,17 @@ export default function MetadataGrouping() {
   }
 
   function handleNext() {
+    for (const group of metadataGroups) {
+      const errors = validateBidsMetadataGroup(group.bidsParams);
+      if (errors.length > 0) {
+        notifications.show({
+          color: "red",
+          title: `Validation Error in Group "${group.label}"`,
+          message: errors.join(" "),
+        });
+        return;
+      }
+    }
     setActiveStep(4);
   }
 
@@ -234,12 +252,21 @@ export default function MetadataGrouping() {
     );
   }
 
+  function handleEditGroup(group: MetadataGroup) {
+    setEditingGroupId(group.id);
+    setModalMode("edit");
+  }
+
+  function handleDeleteGroup(groupId: string) {
+    removeMetadataGroup(groupId);
+  }
+
   function handleModalSubmit(values: {
     label: string;
     bidsParams: BidsAslMetadata;
   }) {
-    if (modalMode === "defaults" && defaultGroup) {
-      updateMetadataGroup(defaultGroup.id, {
+    if (modalMode === "edit" && editingGroupId) {
+      updateMetadataGroup(editingGroupId, {
         label: values.label,
         bidsParams: values.bidsParams,
       });
@@ -247,7 +274,7 @@ export default function MetadataGrouping() {
 
     if (modalMode === "override" && selectedRowIds.length > 0) {
       const selectedRows = subjectRows.filter((row) => selectedRowIds.includes(row.id));
-      const groupId = `override-${metadataGroups.length}`;
+      const groupId = `override-${Date.now()}`;
       const overrideGroup: MetadataGroup = {
         id: groupId,
         label: values.label,
@@ -263,6 +290,7 @@ export default function MetadataGrouping() {
     }
 
     setModalMode(null);
+    setEditingGroupId(null);
   }
 
   return (
@@ -273,13 +301,94 @@ export default function MetadataGrouping() {
         will become `studyPar.json` entries.
       </Text>
 
+      <Card withBorder p="md" data-testid="metadata-groups-list">
+        <Text fw={500} mb="md">
+          Defined Metadata Groups
+        </Text>
+        <Table striped highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Group Label</Table.Th>
+              <Table.Th>Scope / Target</Table.Th>
+              <Table.Th style={{ width: 150 }}>Actions</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {metadataGroups.map((group) => {
+              const isDefault = group.id === DEFAULT_GROUP_ID;
+              return (
+                <Table.Tr key={group.id} data-testid={`metadata-group-row-${group.id}`}>
+                  <Table.Td>
+                    <Text size="sm" fw={isDefault ? 600 : 400}>
+                      {group.label}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    {isDefault ? (
+                      <Badge variant="dot" color="blue">
+                        Global Defaults (Catch-All)
+                      </Badge>
+                    ) : (
+                      <Stack gap={2}>
+                        {group.subjectRegExp && (
+                          <Text size="xs">
+                            Subject: <Code>{group.subjectRegExp}</Code>
+                          </Text>
+                        )}
+                        {group.sessionRegExp && (
+                          <Text size="xs">
+                            Session: <Code>{group.sessionRegExp}</Code>
+                          </Text>
+                        )}
+                        {group.runRegExp && (
+                          <Text size="xs">
+                            Run: <Code>{group.runRegExp}</Code>
+                          </Text>
+                        )}
+                      </Stack>
+                    )}
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() => handleEditGroup(group)}
+                        data-testid={`edit-group-btn-${group.id}`}
+                      >
+                        Edit
+                      </Button>
+                      {!isDefault && (
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color="red"
+                          onClick={() => handleDeleteGroup(group.id)}
+                          data-testid={`delete-group-btn-${group.id}`}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
+          </Table.Tbody>
+        </Table>
+      </Card>
+
       <Card withBorder p="md">
         <Group justify="space-between" mb="md">
           <Text fw={500}>Discovered combinations</Text>
           <Group>
             <Button
               variant="light"
-              onClick={() => setModalMode("defaults")}
+              onClick={() => {
+                setEditingGroupId(DEFAULT_GROUP_ID);
+                setModalMode("edit");
+              }}
+              data-testid="metadata-edit-defaults-btn"
             >
               Edit Defaults
             </Button>
@@ -287,6 +396,7 @@ export default function MetadataGrouping() {
               leftSection={<IconPlus size={16} />}
               disabled={selectedRowIds.length === 0}
               onClick={() => setModalMode("override")}
+              data-testid="metadata-apply-override-btn"
             >
               Apply Override Metadata
             </Button>
@@ -298,7 +408,7 @@ export default function MetadataGrouping() {
             Complete the tokenizer and alias steps to generate metadata rows.
           </Text>
         ) : (
-          <Table striped highlightOnHover>
+          <Table striped highlightOnHover data-testid="metadata-table">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th />
@@ -318,6 +428,7 @@ export default function MetadataGrouping() {
                         toggleRowSelection(row.id, event.currentTarget.checked)
                       }
                       aria-label={`Select ${row.id}`}
+                      data-testid={`metadata-row-checkbox-${row.id.replace(/[^a-z0-9]/gi, "-")}`}
                     />
                   </Table.Td>
                   <Table.Td>{row.subject}</Table.Td>
@@ -340,14 +451,16 @@ export default function MetadataGrouping() {
           leftSection={<IconArrowLeft size={16} />}
           variant="light"
           onClick={handleBack}
+          data-testid="metadata-back-btn"
         >
           Back: Resolve Aliases
         </Button>
         <Button
           rightSection={<IconArrowRight size={16} />}
           onClick={handleNext}
+          data-testid="metadata-next-btn"
         >
-          Next: Run Import
+          Next: Preview Import
         </Button>
       </Group>
 
@@ -358,15 +471,23 @@ export default function MetadataGrouping() {
             ? "Apply Override Metadata"
             : "Configure Default BIDS Metadata"
         }
-        initialValues={{
-          label:
-            modalMode === "override"
-              ? `Override ${metadataGroups.length}`
-              : (defaultGroup?.label ?? "Global Defaults"),
-          bidsParams:
-            modalMode === "override" ? {} : (defaultGroup?.bidsParams ?? {}),
+        initialValues={(() => {
+          if (modalMode === "edit" && editingGroupId) {
+            const group = metadataGroups.find((g) => g.id === editingGroupId);
+            return {
+              label: group?.label ?? "",
+              bidsParams: group?.bidsParams ?? {},
+            };
+          }
+          return {
+            label: `Override ${metadataGroups.length}`,
+            bidsParams: {},
+          };
+        })()}
+        onClose={() => {
+          setModalMode(null);
+          setEditingGroupId(null);
         }}
-        onClose={() => setModalMode(null)}
         onSubmit={handleModalSubmit}
       />
     </Stack>

@@ -1,4 +1,52 @@
 import { z } from "zod";
+import {
+  parseCommaSeparatedNumbers,
+  parseNumberOrArray,
+} from "../components/import/metadataFormUtils";
+
+const preprocessCommaNumber = (val: unknown) => {
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (trimmed === "") return undefined;
+    const result = parseNumberOrArray(trimmed);
+    if (result.ok) {
+      return result.value;
+    }
+    return val;
+  }
+  return val;
+};
+
+const preprocessCommaArray = (val: unknown) => {
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (trimmed === "") return undefined;
+    const result = parseCommaSeparatedNumbers(trimmed);
+    if (result.ok) {
+      return result.value;
+    }
+    return val;
+  }
+  return val;
+};
+
+const CommaNumberSchema = z.preprocess(
+  preprocessCommaNumber,
+  z.custom<number | number[]>((val) => {
+    return typeof val === "number" || (Array.isArray(val) && val.every(item => typeof item === "number" && !Number.isNaN(item)));
+  }, {
+    message: "Invalid number or list of numbers",
+  })
+);
+
+const CommaArraySchema = z.preprocess(
+  preprocessCommaArray,
+  z.custom<number[]>((val) => {
+    return Array.isArray(val) && val.every(item => typeof item === "number" && !Number.isNaN(item));
+  }, {
+    message: "Invalid list of numbers",
+  })
+);
 
 // =============================================================================
 // Step 1: DICOM Ingestion — Path Patterns
@@ -16,7 +64,7 @@ export const PathPatternSchema = z.object({
   /** Path split by "/" — the folder-level blocks */
   blocks: z.array(z.string()),
   /** block index => unique values found at that depth across all matching paths */
-  uniqueNames: z.record(z.array(z.string())),
+  uniqueNames: z.record(z.number(), z.array(z.string())),
   /** How many paths match this pattern */
   count: z.number().int().min(1),
   /** The total folder depth of this pattern */
@@ -131,21 +179,183 @@ export type SubjectRename = z.infer<typeof SubjectRenameSchema>;
  * - BackgroundSuppression = true     → show NumberPulses, PulseTime
  * - MRAcquisitionType = "2D"         → show SliceTiming
  */
-export const BidsAslMetadataSchema = z
+function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
+  // Required fields validations
+  if (!data.ArterialSpinLabelingType) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Arterial Spin Labeling Type is required",
+      path: ["ArterialSpinLabelingType"],
+    });
+  }
+  if (data.PostLabelingDelay === undefined || data.PostLabelingDelay === null || (Array.isArray(data.PostLabelingDelay) && data.PostLabelingDelay.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Post Labeling Delay is required",
+      path: ["PostLabelingDelay"],
+    });
+  }
+  if (!data.MRAcquisitionType) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "MR Acquisition Type is required",
+      path: ["MRAcquisitionType"],
+    });
+  }
+  if (data.MagneticFieldStrength === undefined || data.MagneticFieldStrength === null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Magnetic Field Strength is required",
+      path: ["MagneticFieldStrength"],
+    });
+  }
+  if (!data.Manufacturer) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Manufacturer is required",
+      path: ["Manufacturer"],
+    });
+  }
+  if (!data.ASLContext) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "ASL Context is required",
+      path: ["ASLContext"],
+    });
+  }
+
+  const aslContextTokens = data.ASLContext
+    ? data.ASLContext.split(",").map((t) => t.trim()).filter(Boolean)
+    : [];
+  const hasM0Scan = aslContextTokens.includes("m0scan");
+
+  if (hasM0Scan) {
+    if (data.M0Type && data.M0Type !== "integrated") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "M0 Type must be 'integrated' when ASL Context contains 'm0scan'",
+        path: ["M0Type"],
+      });
+    }
+  } else {
+    if (!data.M0Type) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "M0 Type is required when ASL Context does not contain 'm0scan'",
+        path: ["M0Type"],
+      });
+    }
+    if (data.M0Type === "integrated") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "M0 Type cannot be 'integrated' when ASL Context does not contain 'm0scan'",
+        path: ["M0Type"],
+      });
+    }
+  }
+
+  // Conditional validations
+  const aslType = data.ArterialSpinLabelingType;
+  if (aslType === "PCASL" || aslType === "CASL") {
+    if (data.LabelingDuration === undefined || data.LabelingDuration === null || (Array.isArray(data.LabelingDuration) && data.LabelingDuration.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Labeling Duration is required for ${aslType}`,
+        path: ["LabelingDuration"],
+      });
+    }
+  }
+
+  if (aslType === "PASL") {
+    if (data.BolusCutOffFlag) {
+      if (data.BolusCutOffDelayTime === undefined || data.BolusCutOffDelayTime === null || (Array.isArray(data.BolusCutOffDelayTime) && data.BolusCutOffDelayTime.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Bolus Cut Off Delay Time is required when Bolus Cut Off Flag is enabled",
+          path: ["BolusCutOffDelayTime"],
+        });
+      }
+      if (!data.BolusCutOffTechnique) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Bolus Cut Off Technique is required when Bolus Cut Off Flag is enabled",
+          path: ["BolusCutOffTechnique"],
+        });
+      }
+    }
+  }
+
+  if (data.BackgroundSuppression) {
+    if (data.BackgroundSuppressionNumberPulses === undefined || data.BackgroundSuppressionNumberPulses === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Background Suppression Number Pulses is required when Background Suppression is enabled",
+        path: ["BackgroundSuppressionNumberPulses"],
+      });
+    }
+  }
+
+  if (data.MRAcquisitionType === "2D") {
+    if (!data.SliceTiming || data.SliceTiming.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Slice Timing is required when MR Acquisition Type is 2D",
+        path: ["SliceTiming"],
+      });
+    }
+  }
+
+  const pld = data.PostLabelingDelay;
+  const bcd = data.BolusCutOffDelayTime;
+
+  if (pld !== undefined && pld !== null && bcd !== undefined && bcd !== null) {
+    const pldArray = Array.isArray(pld) ? pld : [pld];
+    const bcdArray = Array.isArray(bcd) ? bcd : [bcd];
+
+    if (pldArray.length > 1 || bcdArray.length > 1) {
+      if (pldArray.length !== bcdArray.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements",
+          path: ["PostLabelingDelay"],
+        });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements",
+          path: ["BolusCutOffDelayTime"],
+        });
+      } else {
+        for (let i = 0; i < pldArray.length; i++) {
+          if ((pldArray[i] === 0) !== (bcdArray[i] === 0)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions",
+              path: ["PostLabelingDelay"],
+            });
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions",
+              path: ["BolusCutOffDelayTime"],
+            });
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+export const BidsAslMetadataBaseSchema = z
   .object({
     // === Required for all ASL ===
     ArterialSpinLabelingType: z.enum(["CASL", "PCASL", "PASL"]).optional(),
-    PostLabelingDelay: z
-      .union([z.number(), z.array(z.number())])
-      .optional(),
+    PostLabelingDelay: CommaNumberSchema.optional(),
     MRAcquisitionType: z.enum(["2D", "3D"]).optional(),
     MagneticFieldStrength: z.number().optional(),
     EchoTime: z.number().optional(),
 
     // === (P)CASL required ===
-    LabelingDuration: z
-      .union([z.number(), z.array(z.number())])
-      .optional(),
+    LabelingDuration: CommaNumberSchema.optional(),
 
     // === (P)CASL recommended (conditional) ===
     PCASLType: z.enum(["balanced", "unbalanced"]).optional(),
@@ -160,45 +370,49 @@ export const BidsAslMetadataSchema = z
     BolusCutOffFlag: z.boolean().optional(),
 
     // === PASL conditional (when BolusCutOffFlag=true) ===
-    BolusCutOffDelayTime: z
-      .union([z.number(), z.array(z.number())])
-      .optional(),
-    BolusCutOffTechnique: z.string().optional(),
+    BolusCutOffDelayTime: CommaNumberSchema.optional(),
+    BolusCutOffTechnique: z.enum(["Q2TIPS", "QUIPSS", "QUIPSSII"]).optional(),
 
     // === Recommended ===
     BackgroundSuppression: z.boolean().optional(),
     BackgroundSuppressionNumberPulses: z.number().optional(),
-    BackgroundSuppressionPulseTime: z.array(z.number()).optional(),
+    BackgroundSuppressionPulseTime: CommaArraySchema.optional(),
     VascularCrushing: z.boolean().optional(),
-    TotalAcquiredPairs: z.number().optional(),
+    
     RepetitionTimePreparation: z.number().optional(),
-    FlipAngle: z.union([z.number(), z.array(z.number())]).optional(),
-    SliceTiming: z.array(z.number()).optional(),
+    FlipAngle: CommaNumberSchema.optional(),
+    SliceTiming: CommaArraySchema.optional(),
 
-    // === Vendor (required for ASL quantification) ===
-    Vendor: z
-      .enum(["Siemens", "Philips", "GE_product", "GE_WIP"])
-      .optional(),
     PulseSequenceType: z.enum(["spiral", "GRASE", "EPI"]).optional(),
-    Manufacturer: z.string().optional(),
+    Manufacturer: z.enum(["GE_product", "Philips", "Siemens"]).optional(),
 
     // === M0 ===
-    M0: z.boolean().optional(),
     M0Type: z
       .enum(["separate", "integrated", "absent", "estimate"])
       .optional(),
+    M0_GMScaleFactor: z.number().positive().optional(),
 
     // === ExploreASL-specific ===
     ASLContext: z
-      .enum(["m0scan,deltam", "control,label", "label,control", "cbf"])
+      .string()
+      .refine(
+        (val) => {
+          if (!val) return false;
+          const tokens = val.split(",").map((t) => t.trim()).filter(Boolean);
+          const valid = new Set(["control", "label", "m0scan", "deltam"]);
+          return tokens.length > 0 && tokens.every((t) => valid.has(t));
+        },
+        { message: "Must contain comma-separated values from: control, label, m0scan, deltam" },
+      )
       .optional(),
     DatasetType: z.string().optional(),
     LabelingType: z.enum(["PASL", "CASL"]).optional(),
-    DummyScanPositionInASL4D: z.array(z.number()).optional(),
-    M0PositionInASL4D: z.array(z.number()).optional(),
-    RepetitionTimePreparationM0: z.array(z.number()).optional(),
+    DummyScanPositionInASL4D: CommaArraySchema.optional(),
+    RepetitionTimePreparationM0: CommaArraySchema.optional(),
   })
   .passthrough();
+
+export const BidsAslMetadataSchema = BidsAslMetadataBaseSchema.superRefine(refineBidsMetadata);
 
 export type BidsAslMetadata = z.infer<typeof BidsAslMetadataSchema>;
 
@@ -207,12 +421,12 @@ export type BidsAslMetadata = z.infer<typeof BidsAslMetadataSchema>;
  * The catch-all entry has no SubjectRegExp/SessionRegExp.
  * Override entries have exact-match regex from row selection.
  */
-export const StudyParEntrySchema = BidsAslMetadataSchema.extend({
+export const StudyParEntrySchema = BidsAslMetadataBaseSchema.extend({
   SubjectRegExp: z.string().optional(),
   VisitRegExp: z.string().optional(),
   SessionRegExp: z.string().optional(),
   RunRegExp: z.string().optional(),
-});
+}).superRefine(refineBidsMetadata);
 
 export type StudyParEntry = z.infer<typeof StudyParEntrySchema>;
 
@@ -312,3 +526,114 @@ export const StagingEntrySchema = z.object({
 });
 
 export type StagingEntry = z.infer<typeof StagingEntrySchema>;
+
+/** Aggregated staging mapping for one path pattern */
+export interface StagingMappingByPattern {
+  /** Pattern signature this mapping belongs to */
+  patternSignature: string;
+  /** The path pattern */
+  pattern: PathPattern;
+  /** Token assignments for this pattern */
+  assignments: TokenAssignment[];
+  /** Staging entries for paths matching this pattern */
+  entries: StagingEntry[];
+}
+
+/**
+ * Validate a BidsAslMetadata object against BIDS / ExploreASL schema requirements and conditional rules.
+ * Returns an array of user-friendly validation error messages.
+ */
+export function validateBidsMetadataGroup(params: BidsAslMetadata): string[] {
+  const errors: string[] = [];
+
+  // Required fields for all ASL
+  if (!params.ArterialSpinLabelingType) {
+    errors.push("Arterial Spin Labeling Type is required.");
+  }
+  if (params.PostLabelingDelay === undefined || params.PostLabelingDelay === null || (Array.isArray(params.PostLabelingDelay) && params.PostLabelingDelay.length === 0)) {
+    errors.push("Post Labeling Delay is required.");
+  }
+  if (!params.MRAcquisitionType) {
+    errors.push("MR Acquisition Type is required.");
+  }
+  if (params.MagneticFieldStrength === undefined || params.MagneticFieldStrength === null) {
+    errors.push("Magnetic Field Strength is required.");
+  }
+  if (!params.Manufacturer) {
+    errors.push("Manufacturer is required.");
+  }
+  if (!params.ASLContext) {
+    errors.push("ASL Context is required.");
+  }
+
+  const aslContextTokens = params.ASLContext
+    ? params.ASLContext.split(",").map((t) => t.trim()).filter(Boolean)
+    : [];
+  const hasM0Scan = aslContextTokens.includes("m0scan");
+
+  if (hasM0Scan) {
+    if (params.M0Type && params.M0Type !== "integrated") {
+      errors.push("M0 Type must be 'integrated' when ASL Context contains 'm0scan'.");
+    }
+  } else {
+    if (!params.M0Type) {
+      errors.push("M0 Type is required when ASL Context does not contain 'm0scan'.");
+    }
+    if (params.M0Type === "integrated") {
+      errors.push("M0 Type cannot be 'integrated' when ASL Context does not contain 'm0scan'.");
+    }
+  }
+
+  // Conditional rendering / validation rules
+  const aslType = params.ArterialSpinLabelingType;
+  if (aslType === "PCASL" || aslType === "CASL") {
+    if (params.LabelingDuration === undefined || params.LabelingDuration === null || (Array.isArray(params.LabelingDuration) && params.LabelingDuration.length === 0)) {
+      errors.push(`Labeling Duration is required for ${aslType}.`);
+    }
+  }
+
+  if (aslType === "PASL") {
+    if (params.BolusCutOffFlag) {
+      if (params.BolusCutOffDelayTime === undefined || params.BolusCutOffDelayTime === null || (Array.isArray(params.BolusCutOffDelayTime) && params.BolusCutOffDelayTime.length === 0)) {
+        errors.push("Bolus Cut Off Delay Time is required when Bolus Cut Off Flag is enabled.");
+      }
+      if (!params.BolusCutOffTechnique) {
+        errors.push("Bolus Cut Off Technique is required when Bolus Cut Off Flag is enabled.");
+      }
+    }
+  }
+
+  if (params.BackgroundSuppression) {
+    if (params.BackgroundSuppressionNumberPulses === undefined || params.BackgroundSuppressionNumberPulses === null) {
+      errors.push("Background Suppression Number Pulses is required when Background Suppression is enabled.");
+    }
+  }
+
+  if (params.MRAcquisitionType === "2D") {
+    if (!params.SliceTiming || params.SliceTiming.length === 0) {
+      errors.push("Slice Timing is required when MR Acquisition Type is 2D.");
+    }
+  }
+
+  // PostLabelingDelay & BolusCutOffDelayTime relation checks
+  const pld = params.PostLabelingDelay;
+  const bcd = params.BolusCutOffDelayTime;
+  if (pld !== undefined && pld !== null && bcd !== undefined && bcd !== null) {
+    const pldArray = Array.isArray(pld) ? pld : [pld];
+    const bcdArray = Array.isArray(bcd) ? bcd : [bcd];
+    if (pldArray.length > 1 || bcdArray.length > 1) {
+      if (pldArray.length !== bcdArray.length) {
+        errors.push("Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements.");
+      } else {
+        for (let i = 0; i < pldArray.length; i++) {
+          if ((pldArray[i] === 0) !== (bcdArray[i] === 0)) {
+            errors.push("Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions.");
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return errors;
+}

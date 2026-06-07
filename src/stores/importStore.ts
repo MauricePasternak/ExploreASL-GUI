@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { getMaxUnlockedImportStep } from "../lib/importStepAccess";
+
 import type {
   ImportProgress,
   MetadataGroup,
@@ -34,6 +36,7 @@ export interface ImportState {
   // Step 3: Aliases
   modalityAliases: ModalityAlias[];
   sessionAliases: SessionAlias[];
+  runAliases: SessionAlias[];
   subjectRenames: SubjectRename[];
 
   // Step 4: Metadata
@@ -75,6 +78,7 @@ export interface ImportState {
     mapped: ModalityAlias["mapped"],
   ) => void;
   setSessionAliases: (aliases: SessionAlias[]) => void;
+  setRunAliases: (aliases: SessionAlias[]) => void;
   setSubjectRenames: (renames: SubjectRename[]) => void;
   updateSubjectRename: (original: string, target: string) => void;
   addMetadataGroup: (group: MetadataGroup) => void;
@@ -85,6 +89,7 @@ export interface ImportState {
   setImportRunning: (running: boolean) => void;
   updateImportProgress: (subject: string, progress: ImportProgress) => void;
   setImportSummary: (summary: ImportState["importSummary"]) => void;
+  loadPersistedState: (persisted: Record<string, unknown>) => void;
   resetImport: () => void;
 }
 
@@ -95,20 +100,21 @@ export interface ImportState {
 const INITIAL_STATE = {
   activeStep: 0,
   sourceDataPath: "",
-  rawPaths: [],
-  pathPatterns: [],
+  rawPaths: [] as string[],
+  pathPatterns: [] as PathPattern[],
   bMatchDirectories: true,
   ingestionComplete: false,
   tokenizerConfigs: {} as Record<string, TokenAssignment[]>,
-  modalityAliases: [],
-  sessionAliases: [],
-  subjectRenames: [],
-  metadataGroups: [],
-  subjectRows: [],
+  modalityAliases: [] as ModalityAlias[],
+  sessionAliases: [] as SessionAlias[],
+  runAliases: [] as SessionAlias[],
+  subjectRenames: [] as SubjectRename[],
+  metadataGroups: [] as MetadataGroup[],
+  subjectRows: [] as SubjectRow[],
   importProgress: {} as Record<string, ImportProgress>,
   importRunning: false,
-  importSummary: null,
-} as const;
+  importSummary: null as ImportState["importSummary"],
+};
 
 // =============================================================================
 // Store
@@ -204,6 +210,10 @@ export const useImportStore = create<ImportState>((set) => ({
     set({ sessionAliases: aliases });
   },
 
+  setRunAliases: (aliases) => {
+    set({ runAliases: aliases });
+  },
+
   setSubjectRenames: (renames) => {
     set({ subjectRenames: renames });
   },
@@ -225,6 +235,9 @@ export const useImportStore = create<ImportState>((set) => ({
   removeMetadataGroup: (id) => {
     set((state) => ({
       metadataGroups: state.metadataGroups.filter((g) => g.id !== id),
+      subjectRows: state.subjectRows.map((row) =>
+        row.groupId === id ? { ...row, groupId: "global-defaults" } : row
+      ),
     }));
   },
 
@@ -263,6 +276,36 @@ export const useImportStore = create<ImportState>((set) => ({
 
   setImportSummary: (summary) => {
     set({ importSummary: summary });
+  },
+
+  loadPersistedState: (persisted) => {
+    const safe = (key: string, fallback: unknown) => {
+      const val = (persisted as Record<string, unknown>)[key];
+      return val !== undefined ? val : fallback;
+    };
+
+    const partialState = {
+      sourceDataPath: safe("sourceDataPath", INITIAL_STATE.sourceDataPath) as string,
+      rawPaths: safe("rawPaths", INITIAL_STATE.rawPaths) as string[],
+      pathPatterns: safe("pathPatterns", INITIAL_STATE.pathPatterns) as PathPattern[],
+      bMatchDirectories: safe("bMatchDirectories", INITIAL_STATE.bMatchDirectories) as boolean,
+      ingestionComplete: safe("ingestionComplete", INITIAL_STATE.ingestionComplete) as boolean,
+      tokenizerConfigs: safe("tokenizerConfigs", INITIAL_STATE.tokenizerConfigs) as Record<string, TokenAssignment[]>,
+      modalityAliases: safe("modalityAliases", INITIAL_STATE.modalityAliases) as ModalityAlias[],
+      sessionAliases: safe("sessionAliases", INITIAL_STATE.sessionAliases) as SessionAlias[],
+      runAliases: safe("runAliases", INITIAL_STATE.runAliases) as SessionAlias[],
+      subjectRenames: safe("subjectRenames", INITIAL_STATE.subjectRenames) as SubjectRename[],
+      metadataGroups: safe("metadataGroups", INITIAL_STATE.metadataGroups) as MetadataGroup[],
+      subjectRows: safe("subjectRows", INITIAL_STATE.subjectRows) as SubjectRow[],
+    };
+
+    const requestedStep = safe("activeStep", INITIAL_STATE.activeStep) as number;
+    const maxStep = getMaxUnlockedImportStep(partialState);
+
+    set({
+      ...partialState,
+      activeStep: Math.min(requestedStep, maxStep),
+    });
   },
 
   resetImport: () => {
