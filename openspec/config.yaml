@@ -1,0 +1,29 @@
+# 1. Activate your custom schema by name (matching the 'name' field in your schema.yaml)
+schema: spec-driven-super-grill
+
+# 2. Provide global development context for the AI agents running your pipeline
+context: |
+  Project Stack: [e.g., Node.js, TypeScript, Next.js, Jest for testing]
+  Repository Mode: Monorepo / Single Package
+  Deployment Target: AWS / Vercel
+
+# 3. Supply validation and generation rules mapped to your artifact IDs
+rules:
+  proposal:
+    - "Ensure all proposals explicitly contrast the new changes against existing capabilities."
+    - "Always flag breaking changes clearly in the What Changes section."
+  
+  specs:
+    - "Every scenario MUST use exactly 4 hashtags (#### Scenario: ) as per schema layout."
+    - "All specifications must use strict normative language (SHALL/MUST)."
+  
+  design:
+    - "Include at least two alternative architectures considered for major decisions."
+    - "Ensure a clear mitigation is written for every identified risk."
+  
+  tasks:
+    - "Break down items so no individual task takes more than 2 hours to complete."
+    - "Ensure tasks strictly map to the requirements defined in the specs phase."
+
+  plan:
+    - "Strictly follow the superpowers:writing-plans TDD structure."
