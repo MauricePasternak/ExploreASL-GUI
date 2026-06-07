@@ -1,6 +1,7 @@
 import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { MemoryRouter } from "react-router";
 
 import ImportPage from "./ImportPage";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
@@ -10,7 +11,9 @@ import { useGlobalStore } from "../stores/globalStore";
 function renderWithProviders() {
   return render(
     <MantineProvider>
-      <ImportPage />
+      <MemoryRouter>
+        <ImportPage />
+      </MemoryRouter>
     </MantineProvider>,
   );
 }
@@ -602,9 +605,21 @@ describe("ImportPage alias resolution step", () => {
 });
 
 describe("ImportPage import runner step", () => {
-  it("renders staging preview and config sections and disables import when settings are missing", () => {
+  const validBidsParams = {
+    ArterialSpinLabelingType: "PCASL" as const,
+    PostLabelingDelay: [1.8],
+    MRAcquisitionType: "3D" as const,
+    MagneticFieldStrength: 3,
+    Manufacturer: "Siemens" as const,
+    ASLContext: "control,label",
+    M0Type: "separate" as const,
+    LabelingDuration: 1.8,
+  };
+
+  it("renders preview-only navigation and gates Run Import when settings are missing", () => {
     const store = useImportStore.getState();
     store.setActiveStep(4);
+    store.setSourceDataPath("/data");
     store.setIngestionResults(
       ["/data/BAR/01/01"],
       [
@@ -624,11 +639,11 @@ describe("ImportPage import runner step", () => {
     ]);
     store.setBMatchDirectories(true);
     store.setSessionAliases([{ captured: "01", alias: "ASL_1", index: 1 }]);
-    store.setModalityAliases([{ captured: "pcasl", mapped: "ASL4D" }]);
+    store.setModalityAliases([{ captured: "01", mapped: "ASL4D" }]);
     store.addMetadataGroup({
       id: "global-defaults",
       label: "Global Defaults",
-      bidsParams: { ArterialSpinLabelingType: "PCASL" },
+      bidsParams: validBidsParams,
       subjectRegExp: "",
       sessionRegExp: "",
       runRegExp: "",
@@ -638,13 +653,16 @@ describe("ImportPage import runner step", () => {
 
     expect(screen.getAllByText("Preview Import").length).toBeGreaterThan(0);
     expect(screen.getAllByText("ExploreASL Configuration").length).toBeGreaterThan(0);
-    const runButtons = screen.getAllByRole("button", { name: /run import/i });
-    expect(runButtons[runButtons.length - 1]).toBeDisabled();
+    const backButtons = screen.getAllByRole("button", { name: /back: metadata/i });
+    expect(backButtons[backButtons.length - 1]).toBeEnabled();
+    const nextButtons = screen.getAllByRole("button", { name: /next: run import/i });
+    expect(nextButtons[nextButtons.length - 1]).toBeDisabled();
   });
 
-  it("shows progress rows and enables import when global settings are configured", () => {
+  it("navigates from preview to run import when metadata and settings are configured", () => {
     const store = useImportStore.getState();
     store.setActiveStep(4);
+    store.setSourceDataPath("/data");
     store.setIngestionResults(
       ["/data/BAR/01/01"],
       [
@@ -664,11 +682,11 @@ describe("ImportPage import runner step", () => {
     ]);
     store.setBMatchDirectories(false);
     store.setSessionAliases([{ captured: "visit_1", alias: "ASL_1", index: 1 }]);
-    store.setModalityAliases([{ captured: "t1_mpr", mapped: "T1w" }]);
+    store.setModalityAliases([{ captured: "01", mapped: "T1w" }]);
     store.addMetadataGroup({
       id: "global-defaults",
       label: "Global Defaults",
-      bidsParams: { ArterialSpinLabelingType: "PASL" },
+      bidsParams: validBidsParams,
       subjectRegExp: "",
       sessionRegExp: "",
       runRegExp: "",
@@ -693,10 +711,37 @@ describe("ImportPage import runner step", () => {
 
     renderWithProviders();
 
-    expect(screen.getAllByText("BAR").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("DCM2NII").length).toBeGreaterThan(0);
-    const runButtons = screen.getAllByRole("button", { name: /run import/i });
-    expect(runButtons[runButtons.length - 1]).toBeEnabled();
+    const nextButtons = screen.getAllByRole("button", { name: /next: run import/i });
+    const nextButton = nextButtons[nextButtons.length - 1];
+    expect(nextButton).toBeEnabled();
+
+    fireEvent.click(nextButton);
+
+    expect(useImportStore.getState().activeStep).toBe(5);
+    expect(screen.getAllByText("Run Import Module").length).toBeGreaterThan(0);
+  });
+
+  it("locks step 5 back navigation while import is running and unlocks it after failure", () => {
+    const store = useImportStore.getState();
+    store.setActiveStep(5);
+    store.setImportPhase("running");
+
+    const { rerender } = renderWithProviders();
+
+    const runningBackButtons = screen.getAllByRole("button", { name: /back: preview/i });
+    expect(runningBackButtons[runningBackButtons.length - 1]).toBeDisabled();
+
+    store.setImportPhase("failed");
+    rerender(
+      <MantineProvider>
+        <MemoryRouter>
+          <ImportPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    const failedBackButtons = screen.getAllByRole("button", { name: /back: preview/i });
+    expect(failedBackButtons[failedBackButtons.length - 1]).toBeEnabled();
   });
 });
 

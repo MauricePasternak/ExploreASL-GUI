@@ -176,11 +176,7 @@ pub fn create_symlink_tree(
 
         // Create the target directory
         fs::create_dir_all(&target_dir).map_err(|e| {
-            let err = format!(
-                "Failed to create directory {}: {}",
-                target_dir.display(),
-                e
-            );
+            let err = format!("Failed to create directory {}: {}", target_dir.display(), e);
             trace.error(&err);
             err
         })?;
@@ -203,13 +199,11 @@ pub fn create_symlink_tree(
             }
         } else if source.is_file() {
             // Single file — link/copy directly
-            let file_name = source
-                .file_name()
-                .ok_or_else(|| {
-                    let err = format!("Invalid file path: {}", source.display());
-                    trace.error(&err);
-                    err
-                })?;
+            let file_name = source.file_name().ok_or_else(|| {
+                let err = format!("Invalid file path: {}", source.display());
+                trace.error(&err);
+                err
+            })?;
             let target_file = target_dir.join(file_name);
             link_or_copy(source, &target_file)?;
         } else {
@@ -248,15 +242,13 @@ fn link_or_copy(source: &Path, target: &Path) -> Result<(), String> {
             return Ok(());
         }
         // Fall back to copy
-        fs::copy(source, target)
-            .map(|_| ())
-            .map_err(|e| {
-                format!(
-                    "Failed to copy {} -> {}: {}",
-                    source.display(),
-                    target.display(),
-                    e
-                )
-            })
+        fs::copy(source, target).map(|_| ()).map_err(|e| {
+            format!(
+                "Failed to copy {} -> {}: {}",
+                source.display(),
+                target.display(),
+                e
+            )
+        })
     }
 }

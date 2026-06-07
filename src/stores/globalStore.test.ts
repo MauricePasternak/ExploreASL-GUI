@@ -75,6 +75,19 @@ describe("useGlobalStore", () => {
     await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_", "-", "."]);
   });
 
+  it("loads and saves import settings", async () => {
+    const store = await Store.load("settings.json");
+    await store.set("import", { preserveStagingDir: true });
+    await store.save();
+
+    await useGlobalStore.getState().loadSettings();
+    expect(useGlobalStore.getState().settings.import.preserveStagingDir).toBe(true);
+
+    await useGlobalStore.getState().saveSettings();
+
+    await expect(store.get("import")).resolves.toEqual({ preserveStagingDir: true });
+  });
+
   it("backfills the default tokenizer delimiters when missing from persisted settings", async () => {
     const store = await Store.load("settings.json");
     await store.set("tokenSubDelimiters", undefined);

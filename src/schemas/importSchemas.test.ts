@@ -649,6 +649,19 @@ describe("ImportProgressSchema", () => {
     expect(ImportProgressSchema.parse(data)).toMatchObject(data);
   });
 
+  it("accepts execution details for cancelled or failed progress", () => {
+    const data = {
+      subject: "BAR",
+      session: "01",
+      status: "cancelled",
+      errorStep: "NII2BIDS",
+      warnings: ["Missing optional M0 image"],
+      duration: 42,
+    };
+
+    expect(ImportProgressSchema.parse(data)).toEqual(data);
+  });
+
   it("rejects invalid status", () => {
     expect(() =>
       ImportProgressSchema.parse({

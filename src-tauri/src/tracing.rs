@@ -41,6 +41,10 @@ impl<'a> CommandTrace<'a> {
 
 impl<'a> Drop for CommandTrace<'a> {
     fn drop(&mut self) {
-        log::info!("[COMMAND] {} — dropped after {:?}", self.name, self.start.elapsed());
+        log::info!(
+            "[COMMAND] {} — dropped after {:?}",
+            self.name,
+            self.start.elapsed()
+        );
     }
 }

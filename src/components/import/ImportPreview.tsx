@@ -1,17 +1,19 @@
 import { useMemo } from "react";
-import { Stack, Text, Title } from "@mantine/core";
+import { Button, Group, Stack, Text, Title } from "@mantine/core";
+import { IconArrowLeft, IconArrowRight } from "@tabler/icons-react";
 
 import { buildAllStagingMappings } from "../../lib/importPreviewUtils";
+import { canEnterStep5 } from "../../lib/importStepAccess";
 import { assembleSourcestructure, assembleStudyPar } from "../../lib/tokenizerUtils";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useImportStore } from "../../stores/importStore";
 import ConfigPreview from "./ConfigPreview";
-import ImportRunner from "./ImportRunner";
 import StagingMappingTable from "./StagingMappingTable";
 
 export default function ImportPreview() {
   const rawPaths = useImportStore((s) => s.rawPaths);
   const sourceDataPath = useImportStore((s) => s.sourceDataPath);
+  const ingestionComplete = useImportStore((s) => s.ingestionComplete);
   const pathPatterns = useImportStore((s) => s.pathPatterns);
   const tokenizerConfigs = useImportStore((s) => s.tokenizerConfigs);
   const modalityAliases = useImportStore((s) => s.modalityAliases);
@@ -21,6 +23,8 @@ export default function ImportPreview() {
   const bMatchDirectories = useImportStore((s) => s.bMatchDirectories);
   const metadataGroups = useImportStore((s) => s.metadataGroups);
   const subjectRows = useImportStore((s) => s.subjectRows);
+  const setActiveStep = useImportStore((s) => s.setActiveStep);
+  const settings = useGlobalStore((s) => s.settings);
   const tokenSubDelimiters = useGlobalStore((s) => s.settings.tokenSubDelimiters);
 
   const subjectRenamesMap = useMemo(
@@ -56,6 +60,19 @@ export default function ImportPreview() {
   const totalSubjects = new Set(
     mappings.flatMap((m) => m.entries.map((e) => e.subject)),
   ).size;
+  const canProceedToStep5 = canEnterStep5(
+    {
+      ingestionComplete,
+      pathPatterns,
+      tokenizerConfigs,
+      modalityAliases,
+      sessionAliases,
+      runAliases,
+      bMatchDirectories,
+      metadataGroups,
+    },
+    settings,
+  );
 
   return (
     <Stack gap="md">
@@ -82,7 +99,22 @@ export default function ImportPreview() {
 
       <StagingMappingTable mappings={mappings} subjectRows={subjectRows} metadataGroups={metadataGroups} />
       <ConfigPreview sourcestructure={sourcestructure} studyPar={studyPar} />
-      <ImportRunner />
+      <Group justify="space-between">
+        <Button
+          leftSection={<IconArrowLeft size={16} />}
+          variant="light"
+          onClick={() => setActiveStep(3)}
+        >
+          Back: Metadata
+        </Button>
+        <Button
+          leftSection={<IconArrowRight size={16} />}
+          disabled={!canProceedToStep5}
+          onClick={() => setActiveStep(5)}
+        >
+          Next: Run Import
+        </Button>
+      </Group>
     </Stack>
   );
 }

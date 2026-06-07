@@ -1,12 +1,18 @@
 mod commands;
+pub mod import;
 mod tracing;
 
 use commands::{create_symlink_tree, is_writable, walk_directory, which_matlab};
+use import::{
+    clean_import_status, copy_lock_files, move_import_output, run_import_pipeline, stop_import,
+    stop_running_import_for_exit, AppState,
+};
 use tauri::{LogicalSize, Manager, Size};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(AppState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -18,14 +24,15 @@ pub fn run() {
             {
                 let log_dir = std::path::PathBuf::from("/tmp/opencode/exploreasl-gui-logs");
                 let _ = std::fs::create_dir_all(&log_dir);
-                builder = builder
-                    .level(log::LevelFilter::Debug)
-                    .target(tauri_plugin_log::Target::new(
-                        tauri_plugin_log::TargetKind::Folder {
-                            path: log_dir,
-                            file_name: Some("dev.log".into()),
-                        },
-                    ));
+                builder =
+                    builder
+                        .level(log::LevelFilter::Debug)
+                        .target(tauri_plugin_log::Target::new(
+                            tauri_plugin_log::TargetKind::Folder {
+                                path: log_dir,
+                                file_name: Some("dev.log".into()),
+                            },
+                        ));
             }
             builder.build()
         })
@@ -34,6 +41,11 @@ pub fn run() {
             is_writable,
             walk_directory,
             create_symlink_tree,
+            run_import_pipeline,
+            stop_import,
+            clean_import_status,
+            move_import_output,
+            copy_lock_files,
         ])
         .setup(|app| {
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
@@ -47,6 +59,20 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                match stop_running_import_for_exit(app_handle) {
+                    Ok(true) => {
+                        api.prevent_exit();
+                        app_handle.exit(code.unwrap_or(0));
+                    }
+                    Ok(false) => {}
+                    Err(error) => {
+                        log::error!("Failed to stop running import during app exit: {}", error);
+                    }
+                }
+            }
+        });
 }

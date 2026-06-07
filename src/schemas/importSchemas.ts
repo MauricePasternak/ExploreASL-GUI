@@ -468,6 +468,7 @@ export const IMPORT_STATUSES = [
   "running",
   "completed",
   "failed",
+  "cancelled",
 ] as const;
 
 export const ImportProgressSchema = z.object({
@@ -475,7 +476,10 @@ export const ImportProgressSchema = z.object({
   session: z.string(),
   status: z.enum(IMPORT_STATUSES),
   currentStep: z.enum(IMPORT_STEPS).optional(),
+  errorStep: z.enum(IMPORT_STEPS).optional(),
   error: z.string().optional(),
+  warnings: z.array(z.string()).optional(),
+  duration: z.number().optional(),
 });
 
 export type ImportProgress = z.infer<typeof ImportProgressSchema>;

@@ -1,5 +1,31 @@
 import type { ImportState } from "../stores/importStore";
+import type { GlobalSettings } from "../schemas/globalSettings";
 import type { TokenAssignment, TokenTag } from "../schemas/importSchemas";
+import {
+  SourcestructureJsonSchema,
+  StudyParJsonSchema,
+} from "../schemas/importSchemas";
+import { assembleSourcestructure, assembleStudyPar } from "./tokenizerUtils";
+
+export const TOTAL_IMPORT_STEPS = 6;
+
+type StepPrerequisiteState = Pick<
+  ImportState,
+  "ingestionComplete" | "pathPatterns" | "tokenizerConfigs" | "modalityAliases"
+>;
+
+type Step5State = StepPrerequisiteState &
+  Partial<
+    Pick<
+      ImportState,
+      "sessionAliases" | "runAliases" | "bMatchDirectories" | "metadataGroups"
+    >
+  >;
+
+type ImportExecutionSettings = Pick<
+  GlobalSettings,
+  "matlabInstallations" | "exploreAslPath"
+>;
 
 /** Step 0 complete: scan finished with at least one path pattern. */
 export function isIngestionComplete(
@@ -47,10 +73,8 @@ export function isAliasResolutionComplete(
  * Mirrors the gates on each step's "Next" button.
  */
 export function getMaxUnlockedImportStep(
-  state: Pick<
-    ImportState,
-    "ingestionComplete" | "pathPatterns" | "tokenizerConfigs" | "modalityAliases"
-  >,
+  state: Step5State,
+  settings?: ImportExecutionSettings,
 ): number {
   if (!isIngestionComplete(state)) {
     return 0;
@@ -64,15 +88,76 @@ export function getMaxUnlockedImportStep(
     return 2;
   }
 
-  return 4;
+  if (!settings || !canEnterStep5(state, settings)) {
+    return 4;
+  }
+
+  return 5;
+}
+
+export function getMaxRestorableImportStep(state: Step5State): number {
+  if (!isIngestionComplete(state)) {
+    return 0;
+  }
+
+  if (!isTokenizerComplete(state)) {
+    return 1;
+  }
+
+  if (!isAliasResolutionComplete(state)) {
+    return 2;
+  }
+
+  if (!hasValidStep5ProjectPrerequisites(state)) {
+    return 4;
+  }
+
+  return 5;
 }
 
 export function canSelectImportStep(
   stepIndex: number,
-  state: Pick<
-    ImportState,
-    "ingestionComplete" | "pathPatterns" | "tokenizerConfigs" | "modalityAliases"
-  >,
+  state: Step5State,
+  settings?: ImportExecutionSettings,
 ): boolean {
-  return stepIndex >= 0 && stepIndex <= getMaxUnlockedImportStep(state);
+  return stepIndex >= 0 && stepIndex <= getMaxUnlockedImportStep(state, settings);
+}
+
+export function canEnterStep5(
+  state: Step5State,
+  settings: ImportExecutionSettings,
+): boolean {
+  if (
+    !isIngestionComplete(state) ||
+    !isTokenizerComplete(state) ||
+    !isAliasResolutionComplete(state)
+  ) {
+    return false;
+  }
+
+  const matlabConfigured = settings.matlabInstallations.some(
+    (installation) => installation.path.trim().length > 0,
+  );
+  const exploreAslConfigured = settings.exploreAslPath.trim().length > 0;
+
+  if (!matlabConfigured || !exploreAslConfigured) {
+    return false;
+  }
+
+  return hasValidStep5ProjectPrerequisites(state);
+}
+
+function hasValidStep5ProjectPrerequisites(state: Step5State): boolean {
+  const sourcestructure = assembleSourcestructure(
+    state.sessionAliases ?? [],
+    state.runAliases ?? [],
+    state.modalityAliases,
+    state.bMatchDirectories ?? true,
+  );
+  const studyPar = assembleStudyPar(state.metadataGroups ?? []);
+
+  return (
+    SourcestructureJsonSchema.safeParse(sourcestructure).success &&
+    StudyParJsonSchema.safeParse(studyPar).success
+  );
 }

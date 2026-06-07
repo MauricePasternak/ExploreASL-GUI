@@ -17,6 +17,7 @@ interface GlobalState {
   setExploreAslPath: (path: string) => void;
   setTheme: (theme: "light" | "dark") => void;
   setTokenSubDelimiters: (delimiters: string[]) => void;
+  setPreserveStagingDir: (preserve: boolean) => void;
   addRecentProject: (path: string) => void;
   removeRecentProject: (path: string) => void;
 }
@@ -122,6 +123,15 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     const normalized = normalizeTokenSubDelimiters(delimiters);
     set((state) => ({
       settings: { ...state.settings, tokenSubDelimiters: normalized },
+    }));
+  },
+
+  setPreserveStagingDir: (preserve) => {
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        import: { ...state.settings.import, preserveStagingDir: preserve },
+      },
     }));
   },
 

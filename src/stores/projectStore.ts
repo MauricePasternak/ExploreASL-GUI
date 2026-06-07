@@ -136,11 +136,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((state) => {
       if (!state.project) return state;
 
-      const { activeStep, importRunning, importProgress, importSummary, ...payload } = importState;
+      const {
+        activeStep,
+        importPhase,
+        importCompleted,
+        importLog,
+        failedSubjects,
+        importRunning,
+        importProgress,
+        importSummary,
+        ...payload
+      } = importState;
 
       if (
         JSON.stringify(state.project.mappingState) === JSON.stringify(payload) &&
-        state.project.uiState.importActiveStep === activeStep
+        state.project.uiState.importActiveStep === activeStep &&
+        state.project.uiState.importPhase === importPhase &&
+        state.project.uiState.importCompleted === importCompleted
       ) {
         return state;
       }
@@ -152,6 +164,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           uiState: {
             ...state.project.uiState,
             importActiveStep: activeStep,
+            importPhase,
+            importCompleted,
           },
         },
         isDirty: true,

@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canEnterStep5,
   canSelectImportStep,
   getMaxUnlockedImportStep,
   isAliasResolutionComplete,
   isIngestionComplete,
   isTokenizerComplete,
+  TOTAL_IMPORT_STEPS,
 } from "./importStepAccess";
 import type { PathPattern } from "../schemas/importSchemas";
+import type { GlobalSettings } from "../schemas/globalSettings";
 
 const PATTERN: PathPattern = {
   signature: "VARYING/VARYING",
@@ -18,7 +21,52 @@ const PATTERN: PathPattern = {
   depth: 2,
 };
 
+const VALID_METADATA = {
+  id: "global-defaults",
+  label: "Global Defaults",
+  bidsParams: {
+    ArterialSpinLabelingType: "PCASL" as const,
+    PostLabelingDelay: [1.8],
+    MRAcquisitionType: "3D" as const,
+    MagneticFieldStrength: 3,
+    Manufacturer: "Siemens" as const,
+    ASLContext: "control,label",
+    M0Type: "separate" as const,
+    LabelingDuration: 1.8,
+  },
+  subjectRegExp: "",
+  sessionRegExp: "",
+  runRegExp: "",
+};
+
+const SETTINGS: Pick<GlobalSettings, "matlabInstallations" | "exploreAslPath"> = {
+  matlabInstallations: [
+    { id: "matlab-r2025a", label: "MATLAB R2025a", path: "/opt/matlab" },
+  ],
+  exploreAslPath: "/opt/ExploreASL",
+};
+
+const READY_FOR_PREVIEW_STATE = {
+  ingestionComplete: true,
+  pathPatterns: [PATTERN],
+  tokenizerConfigs: {
+    "VARYING/VARYING": [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" as const },
+      { blockIndex: 1, subBlockIndex: null, tag: "Modality" as const },
+    ],
+  },
+  modalityAliases: [{ captured: "ASL", mapped: "ASL4D" as const }],
+  sessionAliases: [],
+  runAliases: [],
+  bMatchDirectories: true,
+  metadataGroups: [VALID_METADATA],
+};
+
 describe("importStepAccess", () => {
+  it("defines six import wizard steps", () => {
+    expect(TOTAL_IMPORT_STEPS).toBe(6);
+  });
+
   it("requires ingestion results before unlocking tokenizer", () => {
     expect(
       isIngestionComplete({ ingestionComplete: false, pathPatterns: [] }),
@@ -98,5 +146,35 @@ describe("importStepAccess", () => {
     expect(isAliasResolutionComplete(mapped)).toBe(true);
     expect(getMaxUnlockedImportStep(mapped)).toBe(4);
     expect(canSelectImportStep(3, mapped)).toBe(true);
+  });
+
+  it("keeps run import locked until metadata and settings are valid", () => {
+    expect(canEnterStep5(READY_FOR_PREVIEW_STATE, SETTINGS)).toBe(true);
+    expect(getMaxUnlockedImportStep(READY_FOR_PREVIEW_STATE, SETTINGS)).toBe(5);
+    expect(canSelectImportStep(5, READY_FOR_PREVIEW_STATE, SETTINGS)).toBe(true);
+
+    expect(
+      canEnterStep5(
+        {
+          ...READY_FOR_PREVIEW_STATE,
+          metadataGroups: [{ ...VALID_METADATA, bidsParams: {} }],
+        },
+        SETTINGS,
+      ),
+    ).toBe(false);
+
+    expect(
+      canEnterStep5(READY_FOR_PREVIEW_STATE, {
+        ...SETTINGS,
+        matlabInstallations: [],
+      }),
+    ).toBe(false);
+
+    expect(
+      canEnterStep5(READY_FOR_PREVIEW_STATE, {
+        ...SETTINGS,
+        exploreAslPath: "   ",
+      }),
+    ).toBe(false);
   });
 });

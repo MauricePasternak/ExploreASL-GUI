@@ -119,6 +119,25 @@ describe("SettingsModal", () => {
     });
   });
 
+  it("toggles preserve staging directory for import debug mode", async () => {
+    render(
+      <MantineProvider>
+        <SettingsModal opened onClose={() => undefined} />
+      </MantineProvider>,
+    );
+
+    const dialogs = screen.getAllByRole("dialog", { name: /settings/i });
+    const dialog = dialogs[dialogs.length - 1];
+    const toggle = within(dialog).getByTestId("settings-preserve-staging-dir");
+    expect(toggle).not.toBeChecked();
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(useGlobalStore.getState().settings.import.preserveStagingDir).toBe(true);
+    });
+  });
+
   it("ignores duplicate tokenizer delimiters", async () => {
     render(
       <MantineProvider>

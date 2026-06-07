@@ -26,10 +26,21 @@ vi.mock("@tauri-apps/api/core", () => ({
         return Promise.resolve([]);
       case "is_writable":
         return Promise.resolve(true);
+      case "run_import_pipeline":
+        return Promise.resolve(12345);
+      case "stop_import":
+      case "clean_import_status":
+      case "move_import_output":
+      case "copy_lock_files":
+        return Promise.resolve(null);
       default:
         return Promise.resolve(null);
     }
   }),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
 }));
 
 vi.mock("@tauri-apps/api/path", () => ({

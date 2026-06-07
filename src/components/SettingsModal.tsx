@@ -5,6 +5,7 @@ import {
   Modal,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
 } from "@mantine/core";
@@ -29,6 +30,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const setExploreAslPath = useGlobalStore((state) => state.setExploreAslPath);
   const setTheme = useGlobalStore((state) => state.setTheme);
   const setTokenSubDelimiters = useGlobalStore((state) => state.setTokenSubDelimiters);
+  const setPreserveStagingDir = useGlobalStore((state) => state.setPreserveStagingDir);
   const saveSettings = useGlobalStore((state) => state.saveSettings);
   const [newDelimiter, setNewDelimiter] = useState("");
 
@@ -216,6 +218,19 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
             }
           }}
         />
+
+        <div>
+          <Text fw={600} mb="xs">
+            Import
+          </Text>
+          <Switch
+            label="Preserve staging directory"
+            description="Keep .easl_staging after a successful import and copy configs to derivatives/ExploreASL_GUI/."
+            checked={settings.import.preserveStagingDir}
+            onChange={(event) => setPreserveStagingDir(event.currentTarget.checked)}
+            data-testid="settings-preserve-staging-dir"
+          />
+        </div>
 
         <div>
           <Text fw={600} mb="xs">

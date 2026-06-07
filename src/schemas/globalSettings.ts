@@ -8,6 +8,10 @@ export const MatlabInstallationSchema = z.object({
 
 const TokenSubDelimiterSchema = z.string().trim().min(1).max(1);
 
+export const ImportSettingsSchema = z.object({
+  preserveStagingDir: z.boolean().default(false),
+});
+
 export const GlobalSettingsSchema = z.object({
   matlabInstallations: z.array(MatlabInstallationSchema).default([]),
   exploreAslPath: z.string().default(""),
@@ -20,8 +24,10 @@ export const GlobalSettingsSchema = z.object({
       message: "Tokenizer delimiters must be unique",
     })
     .default(["_", "-"]),
+  import: ImportSettingsSchema.default({ preserveStagingDir: false }),
 });
 
+export type ImportSettings = z.infer<typeof ImportSettingsSchema>;
 export type MatlabInstallation = z.infer<typeof MatlabInstallationSchema>;
 export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>;
 
@@ -31,6 +37,9 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
   theme: "light",
   recentProjects: [],
   tokenSubDelimiters: ["_", "-"],
+  import: {
+    preserveStagingDir: false,
+  },
 };
 
 

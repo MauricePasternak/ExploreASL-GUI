@@ -81,29 +81,8 @@ artifacts:
 
   - id: tasks
     generates: tasks.md
-    description: Implementation checklist with trackable tasks
+    description: Implementation plan and checklist with trackable micro-tasks
     template: tasks.md
-    instruction: |
-      Create the task list that breaks down the implementation work.
-
-      **IMPORTANT: Follow the template below exactly.** The apply phase parses
-      checkbox format to track progress. Tasks not using `- [ ]` won't be tracked.
-
-      Guidelines:
-      - Group related tasks under ## numbered headings
-      - Each task MUST be a checkbox: `- [ ] X.Y Task description`
-      - Tasks should be small enough to complete in one session
-      - Order tasks by dependency (what must be done first?)
-
-      Reference specs for what needs to be built, design for how to build it.
-    requires:
-      - specs
-      - design
-
-  - id: plan
-    generates: plan.md
-    description: Micro-task implementation plan using Superpowers writing-plans
-    template: plan.md
     instruction: |
       PRECHECK — required skill availability:
       Before invoking, confirm `superpowers:writing-plans` appears in
@@ -113,19 +92,24 @@ artifacts:
 
       IMPORTANT output redirection:
       - Do NOT write to `docs/superpowers/plans/` or any `docs/` folder.
-      - Instead, strictly write the plan directly to this change's `openspec/changes/<change-name>/plan.md`.
+      - Instead, strictly write the plan directly to this change's `openspec/changes/<change-name>/tasks.md`.
       - Mandatory reference: `openspec/changes/<change-name>`.
 
       The writing-plans skill will:
-      1. Read the tasks.md and design.md for context
-      2. Break each task into 2-5 minute micro-steps (TDD style)
-      3. Include exact file paths, code snippets, test commands
-      4. Add commit points after each task
+      1. Read the specs and design.md for context
+      2. Identify the coarse implementation tasks
+      3. Break each task into 2-5 minute micro-steps (TDD style)
+      4. Include exact file paths, code snippets, test commands
+      5. Format tasks as checkboxes: `- [ ] X.Y Task description` for coarse tasks, and nested checkboxes for micro-steps if necessary, OR just a flat list of detailed checkboxes.
+      6. Add commit points after each logical group.
+
+      **IMPORTANT**: The apply phase parses `- [ ]` checkboxes to track progress.
     requires:
-      - tasks
+      - specs
+      - design
 
 apply:
-  requires: [plan]
+  requires: [tasks]
   tracks: tasks.md
   instruction: |
     Before implementing, set up an isolated workspace and executor:
@@ -140,10 +124,10 @@ apply:
     1. **Workspace**: Use the Skill tool to invoke **superpowers:using-git-worktrees** to create an isolated git worktree for this change.
 
     2. **Executor — subagent-driven-development**:
-       Use the Skill tool to invoke **superpowers:subagent-driven-development** to execute the plan.md micro-tasks.
+       Use the Skill tool to invoke **superpowers:subagent-driven-development** to execute the tasks.md micro-tasks.
        Tell the executor:
-       - Read plan.md in this change directory for micro-tasks
-       - Update tasks.md checkboxes as coarse tasks complete
+       - Read tasks.md in this change directory for micro-tasks
+       - Update tasks.md checkboxes as tasks complete
        - Work within the created worktree
 
        IMPORTANT: You MUST use subagent-driven-development to ensure transitive test-driven-development (RED-GREEN-REFACTOR) and requesting-code-review. Do NOT use executing-plans.
