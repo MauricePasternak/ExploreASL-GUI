@@ -97,14 +97,15 @@ describe("labelSegment", () => {
 // computePatternSignature
 // ---------------------------------------------------------------------------
 describe("computePatternSignature", () => {
-  it("generates signature for BAR-like pattern", () => {
+  it("generates signature for BAR-like pattern with sub-block template", () => {
     const uniqueNames: Record<number, string[]> = {
       0: ["BAR"],
       1: ["05022026_01"],
       2: ["sernum-0001_ser-AAHead_Scout", "sernum-0018_ser-pcasl_3d_multiTI"],
     };
-    expect(computePatternSignature(uniqueNames, 3)).toBe(
-      "BAR/05022026_01/VARYING",
+    const sampleBlocks = ["BAR", "05022026_01", "sernum-0001_ser-AAHead_Scout"];
+    expect(computePatternSignature(uniqueNames, 3, sampleBlocks, ["_", "-"])).toBe(
+      "BAR/05022026_01/<TOKEN>-<TOKEN>_<TOKEN>-<TOKEN>_<TOKEN>",
     );
   });
 
@@ -115,8 +116,22 @@ describe("computePatternSignature", () => {
       2: ["DICOM"],
       3: ["sernum-0001_ser-AAHead_Scout", "sernum-0018_ser-pcasl_3d_multiTI"],
     };
-    expect(computePatternSignature(uniqueNames, 4)).toBe(
-      "FOO/05022026_01/DICOM/VARYING",
+    const sampleBlocks = ["FOO", "05022026_01", "DICOM", "sernum-0001_ser-AAHead_Scout"];
+    expect(computePatternSignature(uniqueNames, 4, sampleBlocks, ["_", "-"])).toBe(
+      "FOO/05022026_01/DICOM/<TOKEN>-<TOKEN>_<TOKEN>-<TOKEN>_<TOKEN>",
+    );
+  });
+
+  it("shows VARYING for single-block varying positions", () => {
+    const uniqueNames: Record<number, string[]> = {
+      0: ["C9ORF007", "C9ORF059"],
+      1: ["C9ORF007-01-MR00", "C9ORF007-11"],
+      2: ["ASL", "T1", "T2"],
+      3: ["DICOM"],
+    };
+    const sampleBlocks = ["C9ORF007", "C9ORF007-01-MR00", "ASL", "DICOM"];
+    expect(computePatternSignature(uniqueNames, 4, sampleBlocks, ["_", "-"])).toBe(
+      "<TOKEN>/<TOKEN>-<TOKEN>-<TOKEN>/<TOKEN>/DICOM",
     );
   });
 
@@ -124,10 +139,10 @@ describe("computePatternSignature", () => {
     const uniqueNames: Record<number, string[]> = {
       0: ["A", "B"],
     };
+    const sampleBlocks = ["A", "B"];
     // Depth 2 but only index 0 has data — missing index gets empty array
-    // which labelSegment treats as a single unique value (edge case)
-    const result = computePatternSignature(uniqueNames, 2);
-    expect(result).toMatch(/^VARYING\//); // first segment is VARYING
+    const result = computePatternSignature(uniqueNames, 2, sampleBlocks, ["_", "-"]);
+    expect(result).toMatch(/^<TOKEN>\//); // first segment is VARYING
   });
 });
 
@@ -151,7 +166,7 @@ describe("discoverPathPatterns", () => {
     expect(patterns).toHaveLength(1);
     expect(patterns[0].depth).toBe(3);
     expect(patterns[0].count).toBe(BAR_PATHS.length);
-    expect(patterns[0].uniqueNames[0]).toEqual(["BAR"]);
+    expect(patterns[0].uniqueNames[0]!).toEqual(["BAR"]);
   });
 
   it("groups FOO paths into one depth-4 pattern", () => {
@@ -181,7 +196,7 @@ describe("discoverPathPatterns", () => {
     const pattern = patterns[0];
 
     // Depth level 2 (0-indexed) should have multiple unique scan names
-    expect(pattern.uniqueNames[2].length).toBe(BAR_PATHS.length);
+    expect(pattern.uniqueNames[2]!.length).toBe(BAR_PATHS.length);
   });
 
   it("correctly identifies fixed segment (DICOM) in FOO paths", () => {
@@ -192,38 +207,94 @@ describe("discoverPathPatterns", () => {
     expect(pattern.uniqueNames[2]).toEqual(["DICOM"]);
   });
 
-  it("separates patterns when fixed segments differ at same depth", () => {
-    // Two groups at depth 3 with different fixed middle segments
-    // Each group has 3+ paths so the algorithm can distinguish fixed vs varying
-    const pathsA = [
-      `${ROOT}/X/FIXED_A/scan1`,
-      `${ROOT}/Y/FIXED_A/scan2`,
-      `${ROOT}/Z/FIXED_A/scan3`,
+  it("groups paths by sub-block shape, not by value cardinality", () => {
+    // GENFI-style: paths with 3-sub-block vs 2-sub-block session names
+    // should be separate patterns when delimiters include "-"
+    const paths = [
+      `${ROOT}/C9ORF007/C9ORF007-01-MR00/ASL/DICOM`,
+      `${ROOT}/C9ORF007/C9ORF007-01-MR00/T1/DICOM`,
+      `${ROOT}/C9ORF007/C9ORF007-11/ASL/DICOM`,
+      `${ROOT}/C9ORF007/C9ORF007-11/T1/DICOM`,
     ];
-    const pathsB = [
-      `${ROOT}/X/FIXED_B/scan4`,
-      `${ROOT}/Y/FIXED_B/scan5`,
-      `${ROOT}/Z/FIXED_B/scan6`,
-    ];
-    const patterns = discoverPathPatterns([...pathsA, ...pathsB], ROOT);
 
-    // Should produce 2 patterns because the middle segment differs
+    const patterns = discoverPathPatterns(paths, ROOT, ["_", "-"]);
     expect(patterns).toHaveLength(2);
-    const fixedValues = patterns.map(
-      (p) => p.uniqueNames[1][0],
-    ).sort();
-    expect(fixedValues).toEqual(["FIXED_A", "FIXED_B"]);
+
+    const sessionSubBlockCount = (pattern: (typeof patterns)[number]) =>
+      splitBySubDelimiters(pattern.blocks[1] ?? "", ["_", "-"]).subBlocks.length;
+
+    const threeSubBlock = patterns.find((p) => sessionSubBlockCount(p) === 3);
+    const twoSubBlock = patterns.find((p) => sessionSubBlockCount(p) === 2);
+
+    expect(threeSubBlock).toBeDefined();
+    expect(twoSubBlock).toBeDefined();
+    expect(threeSubBlock!.count).toBe(2);
+    expect(twoSubBlock!.count).toBe(2);
   });
 
-  it("merges all paths when no fixed segments differ", () => {
+  it("groups all GENFI paths into correct 2 patterns by sub-block shape", () => {
+    const genfiRoot = "/test/GENFI/sourcedata";
+    const paths = [
+      `${genfiRoot}/C9ORF007/C9ORF007-01-MR00/ASL/DICOM`,
+      `${genfiRoot}/C9ORF007/C9ORF007-01-MR00/T1/DICOM`,
+      `${genfiRoot}/C9ORF007/C9ORF007-01-MR00/T2/DICOM`,
+      `${genfiRoot}/C9ORF007/C9ORF007-02-MR00/ASL/DICOM`,
+      `${genfiRoot}/C9ORF007/C9ORF007-02-MR00/T1/DICOM`,
+      `${genfiRoot}/C9ORF007/C9ORF007-02-MR00/T2/DICOM`,
+      `${genfiRoot}/C9ORF007/C9ORF007-11/ASL/DICOM`,
+      `${genfiRoot}/C9ORF007/C9ORF007-11/T1/DICOM`,
+      `${genfiRoot}/C9ORF007/C9ORF007-11/T2/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-01-MR00/ASL/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-01-MR00/M0/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-01-MR00/T1/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-01-MR00/T2/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-02-MR00/ASL/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-02-MR00/M0/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-02-MR00/T1/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-02-MR00/T2/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-11/ASL/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-11/T1/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-11/T2/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-12-R1/ASL/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-12-R1/T1/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-12-R1/T2/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-13/ASL/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-13/T1/DICOM`,
+      `${genfiRoot}/C9ORF059/C9ORF059-13/T2/DICOM`,
+    ];
+
+    const patterns = discoverPathPatterns(paths, genfiRoot, ["_", "-"]);
+    expect(patterns).toHaveLength(2);
+
+    const threeSubBlock = patterns.find((p) =>
+      p.signature.includes("<TOKEN>-<TOKEN>-<TOKEN>"),
+    );
+    const twoSubBlock = patterns.find(
+      (p) => !p.signature.includes("<TOKEN>-<TOKEN>-<TOKEN>"),
+    );
+
+    expect(threeSubBlock).toBeDefined();
+    expect(twoSubBlock).toBeDefined();
+    expect(threeSubBlock!.count).toBe(17); // all paths with XXX-XX-XXX pattern
+    expect(twoSubBlock!.count).toBe(9); // all paths with XXX-XX pattern
+    expect(threeSubBlock!.depth).toBe(4);
+    expect(twoSubBlock!.depth).toBe(4);
+
+    // Check unique names are correct
+    expect(threeSubBlock!.uniqueNames[0]).toEqual(["C9ORF007", "C9ORF059"]);
+    expect(threeSubBlock!.uniqueNames[3]).toEqual(["DICOM"]);
+    expect(twoSubBlock!.uniqueNames[3]).toEqual(["DICOM"]);
+  });
+
+  it("merges all paths when no structural differences exist", () => {
     const paths = [
       `${ROOT}/A/1/x`,
       `${ROOT}/B/2/y`,
       `${ROOT}/C/3/z`,
     ];
-    const patterns = discoverPathPatterns(paths, ROOT);
+    const patterns = discoverPathPatterns(paths, ROOT, ["_", "-"]);
 
-    // All varying, same depth → one pattern
+    // All varying, same depth, same shape → one pattern
     expect(patterns).toHaveLength(1);
     expect(patterns[0].count).toBe(3);
   });
@@ -243,6 +314,19 @@ describe("discoverPathPatterns", () => {
         expect(values).toEqual(sorted);
       }
     }
+  });
+
+  it("uses underscore-only delimiters when specified", () => {
+    // When only "_" is used as delimiter, "C9ORF007-01-MR00" has 1 sub-block
+    // (no "-" splitting), so all paths have the same shape
+    const paths = [
+      `${ROOT}/C9ORF007/C9ORF007-01-MR00/ASL/DICOM`,
+      `${ROOT}/C9ORF007/C9ORF007-11/ASL/DICOM`,
+    ];
+
+    const patterns = discoverPathPatterns(paths, ROOT, ["_"]);
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].count).toBe(2);
   });
 });
 

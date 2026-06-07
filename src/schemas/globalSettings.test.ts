@@ -12,10 +12,10 @@ describe("GlobalSettingsSchema", () => {
     expect(parsed).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("provides underscore as the default tokenizer delimiter", () => {
+  it("provides underscore and hyphen as the default tokenizer delimiters", () => {
     const parsed = GlobalSettingsSchema.parse({});
 
-    expect(parsed.tokenSubDelimiters).toEqual(["_"]);
+    expect(parsed.tokenSubDelimiters).toEqual(["_", "-"]);
     expect(parsed).toEqual(DEFAULT_SETTINGS);
   });
 

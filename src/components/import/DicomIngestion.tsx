@@ -23,6 +23,7 @@ import { invoke } from "@tauri-apps/api/core";
 import HelpTooltip from "../HelpTooltip";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { useGlobalStore } from "../../stores/globalStore";
 import { discoverPathPatterns } from "../../lib/pathUtils";
 import { logAction } from "../../lib/debug";
 
@@ -34,6 +35,7 @@ import { logAction } from "../../lib/debug";
  */
 export default function DicomIngestion() {
   const project = useProjectStore((state) => state.project);
+  const tokenSubDelimiters = useGlobalStore((s) => s.settings.tokenSubDelimiters);
   const sourceDataPath = useImportStore((s) => s.sourceDataPath);
   const setSourceDataPath = useImportStore((s) => s.setSourceDataPath);
   const bMatchDirectories = useImportStore((s) => s.bMatchDirectories);
@@ -87,7 +89,7 @@ export default function DicomIngestion() {
 
       // Convert to full paths for pattern discovery
       const fullPaths = paths.map((p) => `${sourceDataPath}/${p}`);
-      const patterns = discoverPathPatterns(fullPaths, sourceDataPath);
+      const patterns = discoverPathPatterns(fullPaths, sourceDataPath, tokenSubDelimiters);
 
       setIngestionResults(fullPaths, patterns);
       logAction("dicom_scan_success", { path: sourceDataPath, pathCount: paths.length, patternCount: patterns.length });

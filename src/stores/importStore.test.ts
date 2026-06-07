@@ -59,6 +59,7 @@ describe("importStore initial state", () => {
     const state = useImportStore.getState();
     expect(state.modalityAliases).toEqual([]);
     expect(state.sessionAliases).toEqual([]);
+    expect(state.runAliases).toEqual([]);
     expect(state.subjectRenames).toEqual([]);
   });
 
@@ -204,6 +205,16 @@ describe("importStore alias actions", () => {
     ];
     setSessionAliases(aliases);
     expect(useImportStore.getState().sessionAliases).toEqual(aliases);
+  });
+
+  it("setRunAliases stores run aliases", () => {
+    const { setRunAliases } = useImportStore.getState();
+    const aliases = [
+      { captured: "run_a", alias: "ASL_1", index: 1 },
+      { captured: "run_b", alias: "ASL_2", index: 2 },
+    ];
+    setRunAliases(aliases);
+    expect(useImportStore.getState().runAliases).toEqual(aliases);
   });
 
   it("setSubjectRenames stores renames", () => {

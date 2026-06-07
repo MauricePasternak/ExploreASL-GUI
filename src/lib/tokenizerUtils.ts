@@ -208,6 +208,7 @@ export function buildStagingMapping(
   pattern: PathPattern,
   subjectRenames: Record<string, string>,
   modalityAliases: Record<string, string | null>,
+  tokenSubDelimiters: string[] = ["_"],
 ): StagingEntry[] {
   const entries: StagingEntry[] = [];
 
@@ -226,14 +227,14 @@ export function buildStagingMapping(
 
     if (segments.length !== pattern.depth) continue;
 
-    const rawSubject = extractValue(segments, subjectAssignment);
+    const rawSubject = extractValue(segments, subjectAssignment, tokenSubDelimiters);
     const rawSession = sessionAssignment
-      ? extractValue(segments, sessionAssignment)
+      ? extractValue(segments, sessionAssignment, tokenSubDelimiters)
       : "01";
     const rawRun = runAssignment
-      ? extractValue(segments, runAssignment)
+      ? extractValue(segments, runAssignment, tokenSubDelimiters)
       : "01";
-    const rawModality = extractValue(segments, modalityAssignment);
+    const rawModality = extractValue(segments, modalityAssignment, tokenSubDelimiters);
 
     // Apply subject rename
     const subject = subjectRenames[rawSubject] ?? rawSubject;
@@ -257,11 +258,11 @@ export function buildStagingMapping(
 /**
  * Extract a value from path segments based on a token assignment.
  */
-function extractValue(segments: string[], assignment: TokenAssignment): string {
+function extractValue(segments: string[], assignment: TokenAssignment, tokenSubDelimiters: string[] = ["_"]): string {
   if (assignment.subBlockIndex === null) {
     return segments[assignment.blockIndex] ?? "";
   }
-  const parts = splitFolderByDelimiters(segments[assignment.blockIndex] ?? "");
+  const parts = splitFolderByDelimiters(segments[assignment.blockIndex] ?? "", tokenSubDelimiters);
   return parts.segments[assignment.subBlockIndex] ?? "";
 }
 
@@ -274,6 +275,7 @@ function extractValue(segments: string[], assignment: TokenAssignment): string {
  */
 export function assembleSourcestructure(
   sessionAliases: SessionAlias[],
+  runAliases: SessionAlias[],
   modalityAliases: ModalityAlias[],
   bMatchDirectories: boolean,
 ): SourcestructureJson {
@@ -289,12 +291,15 @@ export function assembleSourcestructure(
   // Build session aliases as flat alternating [regex, alias] pairs
   // Always include the default "01" → "ASL_1"
   const tokenSessionAliases: string[] = ["^01$", "ASL_1"];
-  for (const alias of sessionAliases) {
+  const seenSessionRegexes = new Set(["^01$"]);
+
+  for (const alias of [...sessionAliases, ...runAliases]) {
     const regex = `^${escapeRegex(alias.captured)}$`;
-    // Don't duplicate the default
-    if (regex !== "^01$") {
-      tokenSessionAliases.push(regex, alias.alias);
+    if (seenSessionRegexes.has(regex)) {
+      continue;
     }
+    seenSessionRegexes.add(regex);
+    tokenSessionAliases.push(regex, alias.alias);
   }
 
   // Build scan (modality) aliases as flat alternating [regex, alias] pairs
@@ -375,7 +380,7 @@ function splitFolderByDelimiters(
   return { segments: subBlocks, delimiters };
 }
 
-function pathMatchesPattern(segments: string[], pattern: PathPattern): boolean {
+export function pathMatchesPattern(segments: string[], pattern: PathPattern): boolean {
   if (segments.length !== pattern.depth) {
     return false;
   }

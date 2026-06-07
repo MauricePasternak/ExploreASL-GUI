@@ -34,7 +34,7 @@ export default function ModalityMappingTable() {
 
   if (modalityAliases.length === 0) {
     return (
-      <Card withBorder p="md">
+      <Card withBorder p="md" data-testid="modality-empty">
         <Text c="dimmed" size="sm">
           No modalities detected. Complete the Path Tokenizer step first and
           assign a &quot;Modality&quot; tag.
@@ -49,7 +49,7 @@ export default function ModalityMappingTable() {
         Map each captured scan name to an ExploreASL modality. Ignored
         modalities will be excluded from the import.
       </Text>
-      <Table striped highlightOnHover>
+      <Table striped highlightOnHover data-testid="modality-table">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Captured Name</Table.Th>
@@ -72,6 +72,7 @@ export default function ModalityMappingTable() {
                   size="xs"
                   w={160}
                   comboboxProps={{ withinPortal: false }}
+                  data-testid={`modality-select-${alias.captured.replace(/[^a-z0-9]/gi, "-")}`}
                 />
               </Table.Td>
             </Table.Tr>

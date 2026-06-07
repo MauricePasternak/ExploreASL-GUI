@@ -196,7 +196,7 @@ pub fn create_symlink_tree(
             })?;
 
             for file_entry in entries.flatten() {
-                if file_entry.file_type().map_or(false, |ft| ft.is_file()) {
+                if file_entry.file_type().is_ok_and(|ft| ft.is_file()) {
                     let target_file = target_dir.join(file_entry.file_name());
                     link_or_copy(&file_entry.path(), &target_file)?;
                 }

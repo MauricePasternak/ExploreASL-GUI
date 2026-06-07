@@ -6,7 +6,7 @@
  * - Store snapshot: Ctrl+Shift+D copies full app state to clipboard
  */
 
-import { trace, debug, info, warn, error } from "@tauri-apps/plugin-log";
+import { debug, info, warn, error } from "@tauri-apps/plugin-log";
 
 // =============================================================================
 // Console Bridge

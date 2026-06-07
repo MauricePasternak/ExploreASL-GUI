@@ -15,6 +15,7 @@ import {
   SubjectRowSchema,
   TokenAssignmentSchema,
   TokenizerConfigSchema,
+  validateBidsMetadataGroup,
 } from "./importSchemas";
 
 // ---------------------------------------------------------------------------
@@ -170,41 +171,47 @@ describe("SubjectRenameSchema", () => {
 // BidsAslMetadataSchema
 // ---------------------------------------------------------------------------
 describe("BidsAslMetadataSchema", () => {
+  const validBase = {
+    ArterialSpinLabelingType: "PCASL" as const,
+    PostLabelingDelay: 1.8,
+    MRAcquisitionType: "3D" as const,
+    MagneticFieldStrength: 3,
+    Manufacturer: "Siemens" as const,
+    M0Type: "integrated" as const,
+    ASLContext: "m0scan,deltam",
+    LabelingDuration: 1.8,
+  };
+
   it("accepts full valid metadata", () => {
     const data = {
-      ArterialSpinLabelingType: "PCASL",
-      PostLabelingDelay: [1.8],
-      MRAcquisitionType: "3D",
-      MagneticFieldStrength: 3,
-      LabelingDuration: 1.8,
-      PCASLType: "balanced",
+      ...validBase,
+      PCASLType: "balanced" as const,
       BackgroundSuppression: true,
       BackgroundSuppressionNumberPulses: 4,
       BackgroundSuppressionPulseTime: [1.465, 2.1, 2.6, 2.88],
-      Vendor: "Siemens",
-      PulseSequenceType: "GRASE",
-      M0: true,
+      PulseSequenceType: "GRASE" as const,
+      M0_GMScaleFactor: 1.5,
     };
     expect(BidsAslMetadataSchema.parse(data)).toMatchObject(data);
   });
 
-  it("accepts empty object (all fields optional)", () => {
-    expect(BidsAslMetadataSchema.parse({})).toEqual({});
+  it("rejects empty object (required fields missing)", () => {
+    expect(() => BidsAslMetadataSchema.parse({})).toThrow();
   });
 
   it("accepts PostLabelingDelay as single number", () => {
-    const data = { PostLabelingDelay: 1.8 };
+    const data = { ...validBase, PostLabelingDelay: 1.8 };
     expect(BidsAslMetadataSchema.parse(data)).toMatchObject(data);
   });
 
   it("accepts PostLabelingDelay as array of numbers", () => {
-    const data = { PostLabelingDelay: [1.8, 2.0, 2.2] };
+    const data = { ...validBase, PostLabelingDelay: [1.8, 2.0, 2.2] };
     expect(BidsAslMetadataSchema.parse(data)).toMatchObject(data);
   });
 
   it("allows unknown BIDS fields via passthrough", () => {
     const data = {
-      ArterialSpinLabelingType: "PCASL",
+      ...validBase,
       CustomField: "custom_value",
       AnotherField: 42,
     };
@@ -214,14 +221,281 @@ describe("BidsAslMetadataSchema", () => {
 
   it("rejects invalid ArterialSpinLabelingType", () => {
     expect(() =>
-      BidsAslMetadataSchema.parse({ ArterialSpinLabelingType: "INVALID" }),
+      BidsAslMetadataSchema.parse({ ...validBase, ArterialSpinLabelingType: "INVALID" as any }),
     ).toThrow();
   });
 
-  it("rejects invalid Vendor", () => {
+  it("rejects invalid Manufacturer", () => {
     expect(() =>
-      BidsAslMetadataSchema.parse({ Vendor: "InvalidVendor" }),
+      BidsAslMetadataSchema.parse({ ...validBase, Manufacturer: "InvalidManufacturer" as any }),
     ).toThrow();
+  });
+
+  it("rejects invalid BolusCutOffTechnique", () => {
+    expect(() =>
+      BidsAslMetadataSchema.parse({ ...validBase, BolusCutOffTechnique: "InvalidTechnique" as any }),
+    ).toThrow();
+  });
+
+  it("rejects invalid M0_GMScaleFactor <= 0", () => {
+    expect(() =>
+      BidsAslMetadataSchema.parse({ ...validBase, M0_GMScaleFactor: 0 }),
+    ).toThrow();
+    expect(() =>
+      BidsAslMetadataSchema.parse({ ...validBase, M0_GMScaleFactor: -0.5 }),
+    ).toThrow();
+  });
+
+  it("accepts string representation of number or array of numbers and parses it", () => {
+    // Single integer
+    expect(BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "1234" })).toMatchObject({
+      PostLabelingDelay: 1234,
+    });
+    // Single float
+    expect(BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "3.14" })).toMatchObject({
+      PostLabelingDelay: 3.14,
+    });
+    // Comma-separated floats & ints
+    expect(BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "1.8, 2, 2.2" })).toMatchObject({
+      PostLabelingDelay: [1.8, 2, 2.2],
+    });
+  });
+
+  it("rejects invalid string inputs for comma number or array fields", () => {
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "1.a" })).toThrow();
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "abc" })).toThrow();
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, SliceTiming: "1, a, 3" })).toThrow();
+  });
+
+  it("enforces matching number of elements between PostLabelingDelay and BolusCutOffDelayTime if multiple values are provided", () => {
+    // Valid: both single values
+    expect(
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        PostLabelingDelay: 1.8,
+        BolusCutOffDelayTime: 0.8,
+      })
+    ).toMatchObject({
+      PostLabelingDelay: 1.8,
+      BolusCutOffDelayTime: 0.8,
+    });
+
+    // Valid: both arrays of same length
+    expect(
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        PostLabelingDelay: [1.8, 2.0],
+        BolusCutOffDelayTime: [0.8, 0.9],
+      })
+    ).toMatchObject({
+      PostLabelingDelay: [1.8, 2.0],
+      BolusCutOffDelayTime: [0.8, 0.9],
+    });
+
+    // Invalid: array vs single
+    expect(() =>
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        PostLabelingDelay: [1.8, 2.0],
+        BolusCutOffDelayTime: 0.8,
+      })
+    ).toThrow();
+
+    // Invalid: differing array lengths
+    expect(() =>
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        PostLabelingDelay: [1.8, 2.0],
+        BolusCutOffDelayTime: [0.8, 0.9, 1.0],
+      })
+    ).toThrow();
+  });
+
+  it("enforces matching zero index positions between PostLabelingDelay and BolusCutOffDelayTime", () => {
+    // Valid: matching zero positions
+    expect(
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        PostLabelingDelay: [1.8, 0, 2.0],
+        BolusCutOffDelayTime: [0.8, 0, 0.9],
+      })
+    ).toMatchObject({
+      PostLabelingDelay: [1.8, 0, 2.0],
+      BolusCutOffDelayTime: [0.8, 0, 0.9],
+    });
+
+    // Invalid: mismatching zero positions
+    expect(() =>
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        PostLabelingDelay: [1.8, 0, 2.0],
+        BolusCutOffDelayTime: [0.8, 0.9, 0],
+      })
+    ).toThrow();
+  });
+
+  it("accepts ASLContext with comma-separated control,label,m0scan,deltam tokens", () => {
+    expect(
+      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "m0scan,deltam" })
+    ).toMatchObject({ ASLContext: "m0scan,deltam" });
+    expect(
+      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "control,label", M0Type: "separate" })
+    ).toMatchObject({ ASLContext: "control,label", M0Type: "separate" });
+    expect(
+      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "m0scan, label, control, label, control" })
+    ).toMatchObject({ ASLContext: "m0scan, label, control, label, control" });
+  });
+
+  it("rejects ASLContext with invalid tokens", () => {
+    expect(() =>
+      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "cbf" })
+    ).toThrow();
+    expect(() =>
+      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "control,label,invalid" })
+    ).toThrow();
+  });
+
+  it("rejects M0Type 'integrated' when ASLContext does not contain m0scan", () => {
+    expect(() =>
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        ASLContext: "control,label",
+        M0Type: "integrated",
+      })
+    ).toThrow();
+  });
+
+  it("accepts M0Type 'separate' when ASLContext does not contain m0scan", () => {
+    expect(
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        ASLContext: "control,label",
+        M0Type: "separate",
+      })
+    ).toMatchObject({ M0Type: "separate" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateBidsMetadataGroup
+// ---------------------------------------------------------------------------
+describe("validateBidsMetadataGroup", () => {
+  const validData = {
+    ArterialSpinLabelingType: "PCASL" as const,
+    PostLabelingDelay: [1.8],
+    MRAcquisitionType: "3D" as const,
+    MagneticFieldStrength: 3,
+    EchoTime: 0.014,
+    RepetitionTimePreparation: 4,
+    Manufacturer: "Siemens" as const,
+    M0Type: "integrated" as const,
+    ASLContext: "m0scan,deltam",
+    LabelingDuration: 1.8,
+  };
+
+  it("returns no errors for complete valid metadata", () => {
+    expect(validateBidsMetadataGroup(validData)).toEqual([]);
+  });
+
+  it("flags missing required base fields", () => {
+    const errors = validateBidsMetadataGroup({});
+    expect(errors).toContain("Arterial Spin Labeling Type is required.");
+    expect(errors).toContain("Post Labeling Delay is required.");
+    expect(errors).toContain("MR Acquisition Type is required.");
+    expect(errors).toContain("Magnetic Field Strength is required.");
+    expect(errors).not.toContain("Echo Time is required.");
+    expect(errors).not.toContain("Repetition Time Preparation is required.");
+    expect(errors).toContain("Manufacturer is required.");
+    expect(errors).toContain("ASL Context is required.");
+    expect(errors).toContain("M0 Type is required when ASL Context does not contain 'm0scan'.");
+  });
+
+  it("flags M0Type 'integrated' as invalid when no m0scan in ASLContext", () => {
+    const errors = validateBidsMetadataGroup({
+      ...validData,
+      ASLContext: "control,label",
+      M0Type: "integrated",
+    });
+    expect(errors).toContain("M0 Type cannot be 'integrated' when ASL Context does not contain 'm0scan'.");
+  });
+
+  it("auto-accepts M0Type 'integrated' when m0scan is in ASLContext", () => {
+    const errors = validateBidsMetadataGroup({
+      ...validData,
+      M0Type: "integrated",
+      ASLContext: "m0scan,deltam",
+    });
+    expect(errors).not.toContain("M0 Type cannot be 'integrated' when ASL Context does not contain 'm0scan'.");
+  });
+
+  it("does not require M0Type when m0scan is in ASLContext", () => {
+    const errors = validateBidsMetadataGroup({
+      ...validData,
+      M0Type: undefined,
+      ASLContext: "m0scan,deltam",
+    });
+    expect(errors).not.toContain("M0 Type is required when ASL Context does not contain 'm0scan'.");
+  });
+
+  it("flags missing LabelingDuration for PCASL or CASL", () => {
+    const data = { ...validData, LabelingDuration: undefined };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain("Labeling Duration is required for PCASL.");
+  });
+
+  it("flags missing BolusCutOffDelayTime or BolusCutOffTechnique for PASL with flag enabled", () => {
+    const data = {
+      ...validData,
+      ArterialSpinLabelingType: "PASL" as const,
+      BolusCutOffFlag: true,
+      BolusCutOffDelayTime: undefined,
+      BolusCutOffTechnique: undefined,
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain("Bolus Cut Off Delay Time is required when Bolus Cut Off Flag is enabled.");
+    expect(errors).toContain("Bolus Cut Off Technique is required when Bolus Cut Off Flag is enabled.");
+  });
+
+  it("flags missing BackgroundSuppressionNumberPulses when background suppression is enabled", () => {
+    const data = {
+      ...validData,
+      BackgroundSuppression: true,
+      BackgroundSuppressionNumberPulses: undefined,
+      BackgroundSuppressionPulseTime: undefined,
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain("Background Suppression Number Pulses is required when Background Suppression is enabled.");
+    expect(errors).not.toContain("Background Suppression Pulse Time is required when Background Suppression is enabled.");
+  });
+
+  it("flags missing SliceTiming when MR Acquisition Type is 2D", () => {
+    const data = {
+      ...validData,
+      MRAcquisitionType: "2D" as const,
+      SliceTiming: undefined,
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain("Slice Timing is required when MR Acquisition Type is 2D.");
+  });
+
+  it("flags mismatch in number of elements for PostLabelingDelay and BolusCutOffDelayTime when multiple values are provided", () => {
+    const data = {
+      ...validData,
+      PostLabelingDelay: [1.8, 2.0],
+      BolusCutOffDelayTime: [0.8],
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain("Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements.");
+  });
+
+  it("flags mismatch in zero positions for PostLabelingDelay and BolusCutOffDelayTime", () => {
+    const data = {
+      ...validData,
+      PostLabelingDelay: [1.8, 0, 2.0],
+      BolusCutOffDelayTime: [0.8, 0.9, 0],
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain("Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions.");
   });
 });
 
@@ -236,6 +510,11 @@ describe("StudyParJsonSchema", () => {
           ArterialSpinLabelingType: "PCASL",
           MRAcquisitionType: "3D",
           PostLabelingDelay: [1.8],
+          MagneticFieldStrength: 3,
+          Manufacturer: "Siemens",
+          ASLContext: "control,label",
+          M0Type: "separate",
+          LabelingDuration: 1.8,
         },
       ],
     };
@@ -248,11 +527,22 @@ describe("StudyParJsonSchema", () => {
         {
           ArterialSpinLabelingType: "PCASL",
           MRAcquisitionType: "3D",
+          PostLabelingDelay: [1.8],
+          MagneticFieldStrength: 3,
+          Manufacturer: "Siemens",
+          ASLContext: "control,label",
+          M0Type: "separate",
+          LabelingDuration: 1.8,
         },
         {
           SubjectRegExp: "^BAR$",
           ArterialSpinLabelingType: "PASL",
-          MRAcquisitionType: "2D",
+          MRAcquisitionType: "3D",
+          PostLabelingDelay: [1.8],
+          MagneticFieldStrength: 3,
+          Manufacturer: "Philips",
+          ASLContext: "control,label",
+          M0Type: "separate",
         },
       ],
     };
@@ -268,6 +558,13 @@ describe("StudyParJsonSchema", () => {
       SubjectRegExp: "^FOO$",
       SessionRegExp: "^01$",
       ArterialSpinLabelingType: "PCASL",
+      MRAcquisitionType: "3D",
+      PostLabelingDelay: [1.8],
+      MagneticFieldStrength: 3,
+      Manufacturer: "Siemens",
+      ASLContext: "control,label",
+      M0Type: "separate",
+      LabelingDuration: 1.8,
     };
     expect(StudyParEntrySchema.parse(entry)).toMatchObject(entry);
   });
@@ -371,7 +668,16 @@ describe("MetadataGroupSchema", () => {
     const data = {
       id: "global-defaults",
       label: "Global Defaults",
-      bidsParams: { ArterialSpinLabelingType: "PCASL" },
+      bidsParams: {
+        ArterialSpinLabelingType: "PCASL",
+        MRAcquisitionType: "3D",
+        PostLabelingDelay: [1.8],
+        MagneticFieldStrength: 3,
+        Manufacturer: "Siemens",
+        ASLContext: "control,label",
+        M0Type: "separate",
+        LabelingDuration: 1.8,
+      },
     };
     const result = MetadataGroupSchema.parse(data);
     expect(result.subjectRegExp).toBe("");
@@ -383,7 +689,15 @@ describe("MetadataGroupSchema", () => {
     const data = {
       id: "override-1",
       label: "BAR Override",
-      bidsParams: { ArterialSpinLabelingType: "PASL" },
+      bidsParams: {
+        ArterialSpinLabelingType: "PASL",
+        MRAcquisitionType: "3D",
+        PostLabelingDelay: [1.8],
+        MagneticFieldStrength: 3,
+        Manufacturer: "Philips",
+        ASLContext: "control,label",
+        M0Type: "separate",
+      },
       subjectRegExp: "^BAR$",
       sessionRegExp: "^01$",
       runRegExp: "",

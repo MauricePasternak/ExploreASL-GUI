@@ -89,7 +89,7 @@ describe("copySnapshotToClipboard", () => {
     await copySnapshotToClipboard(snapshot);
 
     expect(writeText).toHaveBeenCalledOnce();
-    const written = writeText.mock.calls[0][0] as string;
+    const written = writeText.mock.calls[0]![0] as string;
     expect(JSON.parse(written)).toEqual(snapshot);
   });
 });

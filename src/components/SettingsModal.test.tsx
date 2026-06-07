@@ -135,7 +135,7 @@ describe("SettingsModal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /add delimiter/i }));
 
     await waitFor(() => {
-      expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_"]);
+      expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_", "-"]);
     });
   });
 });

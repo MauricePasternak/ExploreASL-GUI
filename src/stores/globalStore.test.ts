@@ -82,8 +82,8 @@ describe("useGlobalStore", () => {
 
     await useGlobalStore.getState().loadSettings();
 
-    expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_"]);
-    await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_"]);
+    expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_", "-"]);
+    await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_", "-"]);
   });
 
   it("falls back to the default tokenizer delimiters when persisted values are malformed", async () => {
@@ -93,16 +93,16 @@ describe("useGlobalStore", () => {
 
     await useGlobalStore.getState().loadSettings();
 
-    expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_"]);
-    await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_"]);
+    expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_", "-"]);
+    await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_", "-"]);
 
     await store.set("tokenSubDelimiters", ["", "_"]);
     await store.save();
 
     await useGlobalStore.getState().loadSettings();
 
-    expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_"]);
-    await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_"]);
+    expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_", "-"]);
+    await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_", "-"]);
   });
 
   it("does not persist duplicate tokenizer delimiters", async () => {
@@ -121,8 +121,8 @@ describe("useGlobalStore", () => {
     useGlobalStore.getState().setTokenSubDelimiters([" ", "\t"]);
     await useGlobalStore.getState().saveSettings();
 
-    expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_"]);
-    await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_"]);
+    expect(useGlobalStore.getState().settings.tokenSubDelimiters).toEqual(["_", "-"]);
+    await expect(store.get("tokenSubDelimiters")).resolves.toEqual(["_", "-"]);
   });
 
   it("persists recent project updates automatically", async () => {

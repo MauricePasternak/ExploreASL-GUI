@@ -1,9 +1,12 @@
-import { useEffect } from "react";
-import { Text } from "@mantine/core";
+import { useEffect, useRef, useState } from "react";
+import { Center, Loader, Stack, Text } from "@mantine/core";
 import { useNavigate, useParams } from "react-router";
 
+import { resolveRestoredPhase, tryRestoreProjectSession } from "../lib/restoreProjectSession";
+import { syncSessionCheckpointFromProject } from "../lib/sessionCheckpoint";
 import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/project";
 import { useProjectStore } from "../stores/projectStore";
+import { useImportStore } from "../stores/importStore";
 import ImportPage from "./ImportPage";
 
 function isProjectPhase(value: string | undefined): value is ProjectPhase {
@@ -16,6 +19,106 @@ export default function ProjectPage() {
   const project = useProjectStore((state) => state.project);
   const setPhase = useProjectStore((state) => state.setPhase);
   const saveProject = useProjectStore((state) => state.saveProject);
+  const loadPersistedState = useImportStore((state) => state.loadPersistedState);
+  const [restoring, setRestoring] = useState(() => !useProjectStore.getState().project);
+  const restoreInFlight = useRef(false);
+  const hadProjectRef = useRef(Boolean(useProjectStore.getState().project));
+  const hydratedProjectId = useRef<string | null>(null);
+
+  // Hydrate import store once per opened project (not on every mappingState autosave)
+  useEffect(() => {
+    if (!project) {
+      hydratedProjectId.current = null;
+      return;
+    }
+
+    if (hydratedProjectId.current === project.projectMeta.id) {
+      return;
+    }
+
+    hydratedProjectId.current = project.projectMeta.id;
+    const mappingState = project.mappingState;
+    if (Object.keys(mappingState).length > 0) {
+      const persistedState = {
+        ...mappingState,
+        activeStep: project.uiState?.importActiveStep,
+      };
+      loadPersistedState(persistedState as Record<string, unknown>);
+    }
+  }, [project?.projectMeta.id, loadPersistedState, project]);
+
+  // After reload, rehydrate project from session checkpoint or recent projects
+  useEffect(() => {
+    if (project) {
+      hadProjectRef.current = true;
+      restoreInFlight.current = false;
+      setRestoring(false);
+      return;
+    }
+
+    if (!params.id) {
+      navigate("/", { replace: true });
+      return;
+    }
+
+    if (hadProjectRef.current) {
+      hadProjectRef.current = false;
+      setRestoring(false);
+      navigate("/", { replace: true });
+      return;
+    }
+
+    if (restoreInFlight.current) {
+      return;
+    }
+
+    restoreInFlight.current = true;
+    let cancelled = false;
+
+    async function restore() {
+      setRestoring(true);
+      const restored = await tryRestoreProjectSession(params.id!);
+      if (cancelled) {
+        return;
+      }
+
+      if (!restored) {
+        restoreInFlight.current = false;
+        setRestoring(false);
+        navigate("/", { replace: true });
+        return;
+      }
+
+      const loaded = useProjectStore.getState().project;
+      if (!loaded) {
+        restoreInFlight.current = false;
+        setRestoring(false);
+        navigate("/", { replace: true });
+        return;
+      }
+
+      const phase = resolveRestoredPhase(params.phase, loaded.projectMeta.currentPhase);
+      navigate(`/project/${loaded.projectMeta.id}/${phase}`, { replace: true });
+      restoreInFlight.current = false;
+      setRestoring(false);
+    }
+
+    void restore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, params.id, params.phase, project]);
+
+  // Keep checkpoint aligned with the active route while a project is open
+  useEffect(() => {
+    if (!project) {
+      return;
+    }
+
+    const phase = isProjectPhase(params.phase) ? params.phase : project.projectMeta.currentPhase;
+    syncSessionCheckpointFromProject(project, phase);
+  }, [params.phase, project]);
 
   useEffect(() => {
     if (!project) {
@@ -39,7 +142,18 @@ export default function ProjectPage() {
   }, [navigate, params.phase, project, saveProject, setPhase]);
 
   if (!project) {
-    return <Text>No project is currently loaded.</Text>;
+    if (restoring) {
+      return (
+        <Center h={240} data-testid="project-restoring">
+          <Stack align="center" gap="sm">
+            <Loader size="sm" />
+            <Text c="dimmed">Restoring project…</Text>
+          </Stack>
+        </Center>
+      );
+    }
+
+    return null;
   }
 
   // Route to the appropriate phase component
@@ -47,9 +161,9 @@ export default function ProjectPage() {
     case "import":
       return <ImportPage />;
     case "parameters":
-      return <Text>Parameters configuration (Phase 3 — coming soon)</Text>;
+      return <Text data-testid="project-parameters-placeholder">Parameters configuration (Phase 3 — coming soon)</Text>;
     case "processing":
-      return <Text>Processing dashboard (Phase 4 — coming soon)</Text>;
+      return <Text data-testid="project-processing-placeholder">Processing dashboard (Phase 4 — coming soon)</Text>;
     default:
       return <Text>Current phase: {project.projectMeta.currentPhase}</Text>;
   }

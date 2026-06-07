@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -14,11 +15,13 @@ function renderWithProviders() {
 }
 
 afterEach(() => {
+  cleanup();
   useImportStore.getState().resetImport();
 });
 
 describe("AliasResolution", () => {
-  it("derives alias tables from tokenizer output when store aliases are empty", () => {
+  it("derives alias tables from tokenizer output when store aliases are empty", async () => {
+    const user = userEvent.setup();
     const store = useImportStore.getState();
     store.setSourceDataPath("/data");
     store.setIngestionResults(
@@ -47,14 +50,16 @@ describe("AliasResolution", () => {
 
     renderWithProviders();
 
+    await user.click(screen.getByTestId("alias-tab-modality"));
     expect(screen.getByText("sernum-0001_ser-AAHead_Scout")).toBeInTheDocument();
 
-    const sessionTabs = screen.queryAllByText("Session / Run Order");
-    sessionTabs[0].click();
-    expect(screen.getByText("05022026")).toBeInTheDocument();
+    await user.click(screen.getByTestId("alias-tab-session"));
+    expect(screen.getByDisplayValue("05022026")).toBeInTheDocument();
 
-    const subjectTabs = screen.queryAllByText("Subject Rename");
-    subjectTabs[0].click();
+    await user.click(screen.getByTestId("alias-tab-run"));
+    expect(screen.getByDisplayValue("ASL_1")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("alias-tab-subjects"));
     expect(screen.getByDisplayValue("BAR")).toBeInTheDocument();
   });
 
@@ -63,14 +68,18 @@ describe("AliasResolution", () => {
     expect(screen.getAllByText("Alias Resolution")[0]).toBeInTheDocument();
   });
 
-  it("renders all three tab labels", () => {
+  it("renders all four tab labels", () => {
     renderWithProviders();
-    const modality = screen.queryAllByText("Modality Map");
-    const session = screen.queryAllByText("Session / Run Order");
-    const subjects = screen.queryAllByText("Subject Rename");
-    expect(modality.length).toBeGreaterThan(0);
-    expect(session.length).toBeGreaterThan(0);
-    expect(subjects.length).toBeGreaterThan(0);
+    expect(screen.getByText("Subject Rename")).toBeInTheDocument();
+    expect(screen.getByText("Session Order")).toBeInTheDocument();
+    expect(screen.getByText("Run Order")).toBeInTheDocument();
+    expect(screen.getByText("Modality Map")).toBeInTheDocument();
+  });
+
+  it("disables session and run tabs when those tags are not assigned", () => {
+    renderWithProviders();
+    expect(screen.getByTestId("alias-tab-session")).toHaveAttribute("data-disabled", "true");
+    expect(screen.getByTestId("alias-tab-run")).toHaveAttribute("data-disabled", "true");
   });
 
   it("shows empty state for modality tab when no aliases", () => {
@@ -92,30 +101,42 @@ describe("AliasResolution", () => {
     expect(pcasl.length).toBeGreaterThan(0);
   });
 
-  it("shows subject renames when present and tab is clicked", () => {
+  it("shows subject renames when present and tab is clicked", async () => {
+    const user = userEvent.setup();
     useImportStore.getState().setSubjectRenames([
       { original: "BAR", target: "BAR" },
       { original: "FOO", target: "FOO" },
     ]);
     renderWithProviders();
 
-    // Click on Subject Rename tab using role
-    const subjectTabs = screen.queryAllByText("Subject Rename");
-    // Click the tab button (first occurrence)
-    subjectTabs[0].click();
+    await user.click(screen.getByTestId("alias-tab-subjects"));
 
-    // Should display input values
-    const barInputs = screen.queryAllByDisplayValue("BAR");
-    const fooInputs = screen.queryAllByDisplayValue("FOO");
-    expect(barInputs.length).toBeGreaterThan(0);
-    expect(fooInputs.length).toBeGreaterThan(0);
+    expect(screen.getByDisplayValue("BAR")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("FOO")).toBeInTheDocument();
   });
 
   it("renders navigation buttons", () => {
     renderWithProviders();
-    const backButtons = screen.queryAllByText(/Back: Tokenize Paths/);
-    const nextButtons = screen.queryAllByText(/Next: Metadata/);
-    expect(backButtons.length).toBeGreaterThan(0);
-    expect(nextButtons.length).toBeGreaterThan(0);
+    expect(screen.getByText(/Back: Tokenize Paths/)).toBeInTheDocument();
+    expect(screen.getByText(/Next: Metadata/)).toBeInTheDocument();
+  });
+
+  it("blocks metadata until ASL4D or T1w is mapped", () => {
+    useImportStore.getState().setModalityAliases([
+      { captured: "scout", mapped: null },
+    ]);
+    renderWithProviders();
+
+    expect(screen.getByTestId("alias-next-btn")).toBeDisabled();
+    expect(screen.getByTestId("alias-modality-required")).toBeInTheDocument();
+  });
+
+  it("allows metadata when ASL4D or T1w is mapped", () => {
+    useImportStore.getState().setModalityAliases([
+      { captured: "t1", mapped: "T1w" },
+    ]);
+    renderWithProviders();
+
+    expect(screen.getByTestId("alias-next-btn")).not.toBeDisabled();
   });
 });

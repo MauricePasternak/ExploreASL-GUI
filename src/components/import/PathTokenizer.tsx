@@ -14,6 +14,7 @@ import {
   IconArrowRight,
 } from "@tabler/icons-react";
 
+import { isTokenizerComplete } from "../../lib/importStepAccess";
 import { useImportStore } from "../../stores/importStore";
 import { splitBySubDelimiters } from "../../lib/pathUtils";
 import {
@@ -32,10 +33,14 @@ const TAG_COLORS: Record<TokenTag, string> = {
   Ignore: "gray",
 };
 
-const TAG_OPTIONS = TOKEN_TAGS.map((tag) => ({
-  value: tag,
-  label: tag,
-}));
+const TAG_OPTIONS = TOKEN_TAGS
+  .filter((tag) => tag !== "Ignore")
+  .map((tag) => ({
+    value: tag,
+    label: tag,
+  }));
+
+const IGNORE_OPTION = { value: "—", label: "Ignore" };
 
 /**
  * Step 2: Visual Path Tokenizer
@@ -49,6 +54,7 @@ const TAG_OPTIONS = TOKEN_TAGS.map((tag) => ({
  */
 export default function PathTokenizer() {
   const pathPatterns = useImportStore((s) => s.pathPatterns);
+  const ingestionComplete = useImportStore((s) => s.ingestionComplete);
   const tokenizerConfigs = useImportStore((s) => s.tokenizerConfigs);
   const setActiveStep = useImportStore((s) => s.setActiveStep);
 
@@ -60,12 +66,10 @@ export default function PathTokenizer() {
     setActiveStep(2);
   }
 
-  // Validation: each pattern needs at least Subject and Modality
-  const allConfigured = pathPatterns.every((pattern) => {
-    const assignments = tokenizerConfigs[pattern.signature] ?? [];
-    const hasSubject = assignments.some((a) => a.tag === "Subject");
-    const hasModality = assignments.some((a) => a.tag === "Modality");
-    return hasSubject && hasModality;
+  const allConfigured = isTokenizerComplete({
+    ingestionComplete,
+    pathPatterns,
+    tokenizerConfigs,
   });
 
   return (
@@ -213,7 +217,10 @@ function BlockAssigner({
     }
   }
 
-  const tagColor = wholeAssignment ? TAG_COLORS[wholeAssignment.tag] : undefined;
+  const wholeAssignmentValue =
+    wholeAssignment?.tag === "Ignore" ? "—" : wholeAssignment?.tag ?? "—";
+  const tagColor =
+    wholeAssignment && wholeAssignment.tag !== "Ignore" ? TAG_COLORS[wholeAssignment.tag] : undefined;
 
   if (!hasSubBlocks || (wholeAssignment && !hasSubBlockAssignments)) {
     // Simple: one select for the whole level
@@ -234,8 +241,8 @@ function BlockAssigner({
             {blockName}
           </Badge>
           <Select
-            data={[{ value: "—", label: "— None —" }, ...TAG_OPTIONS]}
-            value={wholeAssignment?.tag ?? "—"}
+            data={[IGNORE_OPTION, ...TAG_OPTIONS]}
+            value={wholeAssignmentValue}
             onChange={handleWholeAssign}
             size="xs"
             w={100}
@@ -264,9 +271,12 @@ function BlockAssigner({
           const subAssignment = blockAssignments.find(
             (a) => a.subBlockIndex === subIndex,
           );
-          const subColor = subAssignment
-            ? TAG_COLORS[subAssignment.tag]
-            : undefined;
+          const subColor =
+            subAssignment && subAssignment.tag !== "Ignore"
+              ? TAG_COLORS[subAssignment.tag]
+              : undefined;
+          const subAssignmentValue =
+            subAssignment?.tag === "Ignore" ? "—" : subAssignment?.tag ?? "—";
 
           return (
             <Group key={`${blockIndex}-${subIndex}`} gap={2}>
@@ -284,8 +294,8 @@ function BlockAssigner({
                   {subBlock}
                 </Badge>
                 <Select
-                  data={[{ value: "—", label: "— None —" }, ...TAG_OPTIONS]}
-                  value={subAssignment?.tag ?? "—"}
+                  data={[IGNORE_OPTION, ...TAG_OPTIONS]}
+                  value={subAssignmentValue}
                   onChange={(v) => handleSubBlockAssign(subIndex, v)}
                   size="xs"
                   w={90}

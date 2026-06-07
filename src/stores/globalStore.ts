@@ -54,13 +54,13 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
           const parsed = GlobalSettingsSchema.shape[key].safeParse(value);
           if (parsed.success) {
             if (key === "tokenSubDelimiters") {
-              const normalized = normalizeTokenSubDelimiters(parsed.data);
+              const normalized = normalizeTokenSubDelimiters(parsed.data as string[]);
               merged.tokenSubDelimiters = normalized;
-              if (!areEqualStringArrays(normalized, parsed.data)) {
+              if (!areEqualStringArrays(normalized, parsed.data as string[])) {
                 needsWrite = true;
               }
             } else {
-              merged[key] = parsed.data;
+              (merged as Record<string, unknown>)[key] = parsed.data;
             }
           } else {
             needsWrite = true;
