@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PROJECT_FILE_NAME } from "../schemas/project";
 import { readSessionCheckpoint } from "../lib/sessionCheckpoint";
+import { useImportStore } from "./importStore";
 import { useProjectStore } from "./projectStore";
 
 describe("useProjectStore", () => {
@@ -114,5 +115,25 @@ describe("useProjectStore", () => {
       loaded: false,
     });
     expect(readSessionCheckpoint()).toBeNull();
+  });
+
+  it("syncs import completion state into project uiState", async () => {
+    await useProjectStore.getState().createProject("/tmp/import-project", "Import Project");
+
+    useProjectStore.getState().syncImportState({
+      ...useImportStore.getState(),
+      activeStep: 5,
+      importPhase: "completed",
+      importCompleted: true,
+    });
+
+    const project = useProjectStore.getState().project;
+    expect(project?.uiState).toMatchObject({
+      importActiveStep: 5,
+      importPhase: "completed",
+      importCompleted: true,
+    });
+    expect(project?.mappingState).not.toHaveProperty("importPhase");
+    expect(project?.mappingState).not.toHaveProperty("importCompleted");
   });
 });

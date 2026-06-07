@@ -4,6 +4,7 @@ import {
   IconDatabase,
   IconEye,
   IconFileImport,
+  IconPlayerPlay,
   IconRoute,
   IconTags,
 } from "@tabler/icons-react";
@@ -14,6 +15,7 @@ import DicomIngestion from "../components/import/DicomIngestion";
 import PathTokenizer from "../components/import/PathTokenizer";
 import AliasResolution from "../components/import/AliasResolution";
 import MetadataGrouping from "../components/import/MetadataGrouping";
+import ImportExecution from "../components/import/ImportExecution";
 import ImportPreview from "../components/import/ImportPreview";
 
 const IMPORT_STEPS = [
@@ -21,7 +23,8 @@ const IMPORT_STEPS = [
   { label: "Tokenize Paths", icon: IconRoute, description: "Assign tags" },
   { label: "Resolve Aliases", icon: IconTags, description: "Map names" },
   { label: "Metadata", icon: IconFileImport, description: "BIDS params" },
-  { label: "Preview Import", icon: IconEye, description: "Review & run" },
+  { label: "Preview Import", icon: IconEye, description: "Review" },
+  { label: "Run Import Module", icon: IconPlayerPlay, description: "Execute" },
 ] as const;
 
 const AUTOSAVE_DEBOUNCE_MS = 2000;
@@ -114,6 +117,7 @@ export default function ImportPage() {
         {activeStep === 2 && <AliasResolution />}
         {activeStep === 3 && <MetadataGrouping />}
         {activeStep === 4 && <ImportPreview />}
+        {activeStep === 5 && <ImportExecution />}
       </Box>
     </Group>
   );

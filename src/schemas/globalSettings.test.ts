@@ -19,6 +19,13 @@ describe("GlobalSettingsSchema", () => {
     expect(parsed).toEqual(DEFAULT_SETTINGS);
   });
 
+  it("defaults import staging preservation to false", () => {
+    const parsed = GlobalSettingsSchema.parse({});
+
+    expect(parsed.import.preserveStagingDir).toBe(false);
+    expect(parsed).toEqual(DEFAULT_SETTINGS);
+  });
+
   it("rejects whitespace-only tokenizer delimiters", () => {
     expect(() =>
       GlobalSettingsSchema.parse({

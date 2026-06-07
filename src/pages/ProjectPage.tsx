@@ -38,13 +38,23 @@ export default function ProjectPage() {
 
     hydratedProjectId.current = project.projectMeta.id;
     const mappingState = project.mappingState;
-    if (Object.keys(mappingState).length > 0) {
-      const persistedState = {
-        ...mappingState,
-        activeStep: project.uiState?.importActiveStep,
-      };
-      loadPersistedState(persistedState as Record<string, unknown>);
+    const hasPersistedImportState =
+      Object.keys(mappingState).length > 0 ||
+      project.uiState?.importActiveStep !== undefined ||
+      project.uiState?.importPhase !== undefined ||
+      project.uiState?.importCompleted !== undefined;
+
+    if (!hasPersistedImportState) {
+      return;
     }
+
+    const persistedState = {
+      ...mappingState,
+      activeStep: project.uiState?.importActiveStep,
+      importPhase: project.uiState?.importPhase,
+      importCompleted: project.uiState?.importCompleted,
+    };
+    loadPersistedState(persistedState as Record<string, unknown>);
   }, [project?.projectMeta.id, loadPersistedState, project]);
 
   // After reload, rehydrate project from session checkpoint or recent projects

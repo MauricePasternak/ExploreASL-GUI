@@ -1,6 +1,14 @@
 import { z } from "zod";
 
 export const PROJECT_PHASES = ["import", "parameters", "processing"] as const;
+export const IMPORT_EXECUTION_PHASES = [
+  "idle",
+  "preparing",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
 
 export const ProjectMetaSchema = z.object({
   id: z.string(),
@@ -14,7 +22,14 @@ export const ProjectMetaSchema = z.object({
 export const ProjectFileSchema = z.object({
   version: z.literal("0.1.0"),
   projectMeta: ProjectMetaSchema,
-  uiState: z.object({}).passthrough().default({}),
+  uiState: z
+    .object({
+      importActiveStep: z.number().int().min(0).optional(),
+      importCompleted: z.boolean().optional(),
+      importPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
+    })
+    .passthrough()
+    .default({}),
   mappingState: z.object({}).passthrough().default({}),
   exploreAslConfig: z
     .object({

@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { writeSessionCheckpoint } from "../lib/sessionCheckpoint";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { useGlobalStore } from "../stores/globalStore";
+import { useImportStore } from "../stores/importStore";
 import ProjectPage from "./ProjectPage";
 import { useProjectStore } from "../stores/projectStore";
 
@@ -33,6 +34,7 @@ describe("ProjectPage", () => {
   beforeEach(() => {
     sessionStorage.clear();
     useGlobalStore.setState({ loaded: true, settings: DEFAULT_SETTINGS });
+    useImportStore.getState().resetImport();
     useProjectStore.setState({
       project: {
         version: "0.1.0",
@@ -99,6 +101,38 @@ describe("ProjectPage", () => {
 
     await waitFor(() => {
       expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-1");
+    });
+  });
+
+  it("hydrates import execution ui state into the import store when mapping state is empty", async () => {
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            uiState: {
+              importCompleted: true,
+              importPhase: "completed",
+            },
+            mappingState: {},
+          }
+        : null,
+    }));
+
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={["/project/project-1/import"]}>
+          <Routes>
+            <Route path="/project/:id/:phase" element={<ProjectPage />} />
+          </Routes>
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    await waitFor(() => {
+      expect(useImportStore.getState()).toMatchObject({
+        importCompleted: true,
+        importPhase: "completed",
+      });
     });
   });
 

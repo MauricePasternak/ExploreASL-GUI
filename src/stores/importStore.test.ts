@@ -32,6 +32,24 @@ const SAMPLE_PATTERNS: PathPattern[] = [
 
 const SAMPLE_PATHS = ["/data/BAR/05022026_01/sernum-0001_ser-AAHead_Scout"];
 
+const VALID_METADATA_GROUP: MetadataGroup = {
+  id: "global-defaults",
+  label: "Global Defaults",
+  bidsParams: {
+    ArterialSpinLabelingType: "PCASL",
+    PostLabelingDelay: [1.8],
+    MRAcquisitionType: "3D",
+    MagneticFieldStrength: 3,
+    Manufacturer: "Siemens",
+    ASLContext: "control,label",
+    M0Type: "separate",
+    LabelingDuration: 1.8,
+  },
+  subjectRegExp: "",
+  sessionRegExp: "",
+  runRegExp: "",
+};
+
 // ---------------------------------------------------------------------------
 // Initial State
 // ---------------------------------------------------------------------------
@@ -67,6 +85,10 @@ describe("importStore initial state", () => {
     const state = useImportStore.getState();
     expect(state.importRunning).toBe(false);
     expect(state.importSummary).toBeNull();
+    expect(state.importPhase).toBe("idle");
+    expect(state.importCompleted).toBe(false);
+    expect(state.importLog).toEqual([]);
+    expect(state.failedSubjects).toEqual([]);
   });
 });
 
@@ -359,6 +381,281 @@ describe("importStore import execution actions", () => {
     setImportSummary(summary);
     expect(useImportStore.getState().importSummary).toEqual(summary);
   });
+
+  it("startImport prepares progress rows from subject rows", () => {
+    const store = useImportStore.getState();
+    store.setSubjectRows([
+      {
+        id: "BAR/01/01",
+        subject: "BAR",
+        session: "01",
+        run: "01",
+        groupId: "global",
+      },
+      {
+        id: "BAR/01/02",
+        subject: "BAR",
+        session: "01",
+        run: "02",
+        groupId: "global",
+      },
+      {
+        id: "FOO/02/01",
+        subject: "FOO",
+        session: "02",
+        run: "01",
+        groupId: "global",
+      },
+    ]);
+    store.addLogLine("stale line");
+    store.markSubjectFailed("OLD", "DCM2NII", "stale failure");
+
+    store.startImport();
+
+    const state = useImportStore.getState();
+    expect(state.importPhase).toBe("preparing");
+    expect(state.importCompleted).toBe(false);
+    expect(state.importLog).toEqual([]);
+    expect(state.failedSubjects).toEqual([]);
+    expect(state.importProgress).toEqual({
+      BAR: {
+        subject: "BAR",
+        session: "01",
+        status: "pending",
+      },
+      FOO: {
+        subject: "FOO",
+        session: "02",
+        status: "pending",
+      },
+    });
+  });
+
+  it("startImport clears progress when no subject rows exist", () => {
+    const store = useImportStore.getState();
+    store.updateImportProgress("STALE", {
+      subject: "STALE",
+      session: "01",
+      status: "failed",
+      error: "previous run",
+    });
+
+    store.startImport();
+
+    expect(useImportStore.getState()).toMatchObject({
+      importPhase: "preparing",
+      failedSubjects: [],
+      importLog: [],
+    });
+    expect(useImportStore.getState().importProgress).toEqual({});
+  });
+
+  it("tracks idle to completed import transitions", () => {
+    const store = useImportStore.getState();
+
+    expect(store.importPhase).toBe("idle");
+    store.setImportPhase("preparing");
+    expect(useImportStore.getState().importPhase).toBe("preparing");
+    store.setImportPhase("running");
+    expect(useImportStore.getState().importPhase).toBe("running");
+    store.completeImport();
+
+    expect(useImportStore.getState()).toMatchObject({
+      importPhase: "completed",
+      importCompleted: true,
+      importRunning: false,
+    });
+  });
+
+  it("tracks failed import transitions", () => {
+    const store = useImportStore.getState();
+
+    store.setImportPhase("running");
+    store.failImport();
+
+    expect(useImportStore.getState()).toMatchObject({
+      importPhase: "failed",
+      importCompleted: false,
+      importRunning: false,
+    });
+  });
+
+  it("cancels running imports and running subjects", () => {
+    const store = useImportStore.getState();
+    store.updateImportProgress("BAR", {
+      subject: "BAR",
+      session: "01",
+      status: "running",
+      currentStep: "DCM2NII",
+    });
+    store.updateImportProgress("FOO", {
+      subject: "FOO",
+      session: "01",
+      status: "completed",
+      duration: 12,
+    });
+    store.setImportPhase("running");
+
+    store.cancelImport();
+
+    const state = useImportStore.getState();
+    expect(state.importPhase).toBe("cancelled");
+    expect(state.importRunning).toBe(false);
+    expect(state.importProgress.BAR.status).toBe("cancelled");
+    expect(state.importProgress.FOO.status).toBe("completed");
+  });
+
+  it("updates subject running, completed, failed, and cancelled status", () => {
+    const store = useImportStore.getState();
+    store.updateImportProgress("BAR", {
+      subject: "BAR",
+      session: "01",
+      status: "pending",
+    });
+
+    store.markSubjectRunning("BAR");
+    expect(useImportStore.getState().importProgress.BAR).toMatchObject({
+      status: "running",
+    });
+
+    store.markSubjectCompleted("BAR", 42);
+    expect(useImportStore.getState().importProgress.BAR).toMatchObject({
+      status: "completed",
+      duration: 42,
+    });
+    expect(useImportStore.getState().failedSubjects).toEqual([]);
+
+    store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
+    expect(useImportStore.getState().importProgress.BAR).toMatchObject({
+      status: "failed",
+      errorStep: "NII2BIDS",
+      error: "Bad metadata",
+    });
+    expect(useImportStore.getState().failedSubjects).toEqual(["BAR"]);
+
+    store.markSubjectCancelled("BAR");
+    expect(useImportStore.getState().importProgress.BAR.status).toBe("cancelled");
+    expect(useImportStore.getState().failedSubjects).toEqual([]);
+  });
+
+  it("removes subjects from failedSubjects when they later complete", () => {
+    const store = useImportStore.getState();
+    store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
+    store.markSubjectFailed("FOO", "DCM2NII", "Conversion failed");
+
+    store.markSubjectCompleted("BAR", 9);
+
+    expect(useImportStore.getState().failedSubjects).toEqual(["FOO"]);
+  });
+
+  it("removes subjects from failedSubjects when they are cancelled", () => {
+    const store = useImportStore.getState();
+    store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
+    store.markSubjectFailed("FOO", "DCM2NII", "Conversion failed");
+
+    store.markSubjectCancelled("BAR");
+
+    expect(useImportStore.getState().failedSubjects).toEqual(["FOO"]);
+  });
+
+  it("removes running subjects from failedSubjects when the import is cancelled", () => {
+    const store = useImportStore.getState();
+    store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
+    store.markSubjectFailed("FOO", "DCM2NII", "Conversion failed");
+    store.markSubjectRunning("BAR");
+    store.setImportPhase("running");
+
+    store.cancelImport();
+
+    expect(useImportStore.getState().failedSubjects).toEqual(["FOO"]);
+  });
+
+  it("accumulates import log lines", () => {
+    const store = useImportStore.getState();
+
+    store.addLogLine("first line");
+    store.addLogLine("second line");
+
+    expect(useImportStore.getState().importLog).toEqual([
+      "first line",
+      "second line",
+    ]);
+  });
+
+  it("resetImportPhase returns execution state to idle", () => {
+    const store = useImportStore.getState();
+    store.updateImportProgress("BAR", {
+      subject: "BAR",
+      session: "01",
+      status: "running",
+    });
+    store.addLogLine("line");
+    store.markSubjectFailed("BAR", "DCM2NII", "Conversion failed");
+    store.setImportPhase("failed");
+
+    store.resetImportPhase();
+
+    expect(useImportStore.getState()).toMatchObject({
+      importPhase: "idle",
+      importCompleted: false,
+      importLog: [],
+      failedSubjects: [],
+      importRunning: false,
+    });
+  });
+
+  it("normalizes persisted preparing imports to failed on hydration", () => {
+    const store = useImportStore.getState();
+
+    store.loadPersistedState({
+      importPhase: "preparing",
+      importCompleted: true,
+    });
+
+    expect(useImportStore.getState()).toMatchObject({
+      importPhase: "failed",
+      importCompleted: false,
+      importRunning: false,
+    });
+  });
+
+  it("normalizes persisted running imports to failed on hydration", () => {
+    const store = useImportStore.getState();
+
+    store.loadPersistedState({
+      importPhase: "running",
+      importCompleted: true,
+    });
+
+    expect(useImportStore.getState()).toMatchObject({
+      importPhase: "failed",
+      importCompleted: false,
+      importRunning: false,
+    });
+  });
+
+  it("restores step 5 during hydration when project prerequisites are valid", () => {
+    const store = useImportStore.getState();
+
+    store.loadPersistedState({
+      activeStep: 5,
+      rawPaths: SAMPLE_PATHS,
+      pathPatterns: SAMPLE_PATTERNS,
+      ingestionComplete: true,
+      tokenizerConfigs: {
+        "VARYING/VARYING/VARYING": [
+          { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+          { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+        ],
+      },
+      modalityAliases: [
+        { captured: "sernum-0001_ser-AAHead_Scout", mapped: "ASL4D" },
+      ],
+      metadataGroups: [VALID_METADATA_GROUP],
+    });
+
+    expect(useImportStore.getState().activeStep).toBe(5);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -389,6 +686,10 @@ describe("importStore reset", () => {
     expect(state.modalityAliases).toEqual([]);
     expect(state.importRunning).toBe(false);
     expect(state.importSummary).toBeNull();
+    expect(state.importPhase).toBe("idle");
+    expect(state.importCompleted).toBe(false);
+    expect(state.importLog).toEqual([]);
+    expect(state.failedSubjects).toEqual([]);
   });
 });
 

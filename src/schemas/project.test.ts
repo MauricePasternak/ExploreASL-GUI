@@ -43,6 +43,34 @@ describe("ProjectFileSchema", () => {
     expect(parsed.projectMeta.currentPhase).toBe("import");
   });
 
+  it("parses import execution ui state", () => {
+    const parsed = ProjectFileSchema.parse({
+      ...DEFAULT_PROJECT_FILE("project-3", "Import State Project", "/tmp/import-state"),
+      uiState: {
+        importActiveStep: 5,
+        importCompleted: true,
+        importPhase: "completed",
+      },
+    });
+
+    expect(parsed.uiState).toMatchObject({
+      importActiveStep: 5,
+      importCompleted: true,
+      importPhase: "completed",
+    });
+  });
+
+  it("rejects invalid import execution phases", () => {
+    expect(() =>
+      ProjectFileSchema.parse({
+        ...DEFAULT_PROJECT_FILE("project-4", "Invalid Import State", "/tmp/invalid"),
+        uiState: {
+          importPhase: "done",
+        },
+      }),
+    ).toThrow();
+  });
+
   it("exposes the project persistence location constants", () => {
     expect(PROJECT_FILE_NAME).toBe("project.easl");
   });
