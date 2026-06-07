@@ -102,7 +102,7 @@ describe("TokenizerConfigSchema", () => {
     const data = {
       patternSignature: "SUBJECT/FIXED/VARYING",
       folderHierarchy: ["^(.*)$", "^.*$", "^(.*)$", "^(.*)$"],
-      tokenOrdering: [0, 1, 2, 3],
+      tokenOrdering: [1, 2, 3, 4],
       assignments: [
         { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
         { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
@@ -577,7 +577,7 @@ describe("SourcestructureJsonSchema", () => {
   it("accepts valid 4-level sourcestructure", () => {
     const data = {
       folderHierarchy: ["^(.*)$", "^(.*)$", "^(.*)$", "^(.*)$"],
-      tokenOrdering: [1, 0, 2, 3],
+      tokenOrdering: [1, 2, 3, 4],
       tokenSessionAliases: ["^01$", "ASL_1"],
       tokenScanAliases: ["^T1w$", "T1w", "^ASL4D$", "ASL4D"],
       bMatchDirectories: true,

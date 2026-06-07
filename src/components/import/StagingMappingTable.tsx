@@ -28,7 +28,7 @@ export default function StagingMappingTable({ mappings, subjectRows, metadataGro
   }
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="staging-mapping-table">
       <Title order={4}>Staging Preview</Title>
       <Text c="dimmed" size="sm">
         Raw DICOM paths are organized into a normalized{" "}
@@ -40,7 +40,7 @@ export default function StagingMappingTable({ mappings, subjectRows, metadataGro
       </Text>
 
       {mappings.map((mapping) => (
-        <Card key={mapping.patternSignature} withBorder p="md">
+        <Card key={mapping.patternSignature} withBorder p="md" data-testid={`staging-mapping-${mapping.patternSignature}`}>
           <Text fw={600} size="sm" mb="xs">
             Pattern: {mapping.patternSignature}
           </Text>

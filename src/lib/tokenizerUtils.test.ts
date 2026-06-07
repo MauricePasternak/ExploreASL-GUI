@@ -179,8 +179,8 @@ describe("generateTokenOrdering", () => {
     const hierarchy = ["^(.*)$", "^.*$", "^(.*)$"];
 
     const result = generateTokenOrdering(assignments, hierarchy);
-    // Subject=0, Visit(Session)=-1, Session(Run)=-1, Scan(Modality)=1
-    expect(result).toEqual([0, -1, -1, 1]);
+    // Subject=1, Visit(Session)=0, Session(Run)=0, Scan(Modality)=2
+    expect(result).toEqual([1, 0, 0, 2]);
   });
 
   it("maps GUI terminology correctly to ExploreASL ordering", () => {
@@ -193,8 +193,8 @@ describe("generateTokenOrdering", () => {
     const hierarchy = ["^(.*)$", "^(.*)$", "^(.*)$", "^(.*)$"];
 
     const result = generateTokenOrdering(assignments, hierarchy);
-    // [Subject=0, Visit=1, Session=2, Scan=3]
-    expect(result).toEqual([0, 1, 2, 3]);
+    // [Subject=1, Visit=2, Session=3, Scan=4]
+    expect(result).toEqual([1, 2, 3, 4]);
   });
 
   it("handles non-sequential capture group indices", () => {
@@ -208,8 +208,8 @@ describe("generateTokenOrdering", () => {
     const hierarchy = ["^(.*)$", "^.*$", "^(.*)$", "^(.*)$"];
 
     const result = generateTokenOrdering(assignments, hierarchy);
-    // Subject=group 0, Session(Visit)=group 1, Modality(Scan)=group 2
-    expect(result).toEqual([0, 1, -1, 2]);
+    // Subject=group 1, Session(Visit)=group 2, Modality(Scan)=group 3
+    expect(result).toEqual([1, 2, 0, 3]);
   });
 
   it("handles sub-block assignments", () => {
@@ -221,8 +221,8 @@ describe("generateTokenOrdering", () => {
     const hierarchy = ["^(.*)_(.*)$", "^(.*)$"];
 
     const result = generateTokenOrdering(assignments, hierarchy);
-    // Subject=group 0, Session(Visit)=group 1, Modality(Scan)=group 2
-    expect(result).toEqual([0, 1, -1, 2]);
+    // Subject=group 1, Session(Visit)=group 2, Modality(Scan)=group 3
+    expect(result).toEqual([1, 2, 0, 3]);
   });
 });
 
@@ -449,9 +449,9 @@ describe("assembleSourcestructure", () => {
     ]);
   });
 
-  it("always produces tokenOrdering [0, 1, 2, 3]", () => {
+  it("always produces tokenOrdering [1, 2, 3, 4]", () => {
     const result = assembleSourcestructure([], [], [], true);
-    expect(result.tokenOrdering).toEqual([0, 1, 2, 3]);
+    expect(result.tokenOrdering).toEqual([1, 2, 3, 4]);
   });
 
   it("always includes default session alias 01 → ASL_1", () => {

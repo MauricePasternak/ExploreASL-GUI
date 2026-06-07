@@ -75,7 +75,7 @@ export default function ImportPreview() {
   );
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="import-preview">
       <Title order={3}>Preview Import</Title>
       <Text c="dimmed" size="sm">
         Review how your DICOM data will be organized before running the import.
@@ -104,6 +104,7 @@ export default function ImportPreview() {
           leftSection={<IconArrowLeft size={16} />}
           variant="light"
           onClick={() => setActiveStep(3)}
+          data-testid="preview-back-btn"
         >
           Back: Metadata
         </Button>
@@ -111,6 +112,7 @@ export default function ImportPreview() {
           leftSection={<IconArrowRight size={16} />}
           disabled={!canProceedToStep5}
           onClick={() => setActiveStep(5)}
+          data-testid="preview-next-btn"
         >
           Next: Run Import
         </Button>

@@ -94,14 +94,60 @@ describe("setupImportListeners", () => {
   });
 
   it("accumulates raw log lines and transitions preparing to running", async () => {
+    vi.useFakeTimers();
     useImportStore.getState().setImportPhase("preparing");
     await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
 
     emitRaw("ExploreASL import started");
-    emitPrepareComplete();
+    vi.advanceTimersByTime(16);
 
     expect(useImportStore.getState().importLog).toEqual(["ExploreASL import started"]);
+
+    emitPrepareComplete();
     expect(useImportStore.getState().importPhase).toBe("running");
+
+    vi.useRealTimers();
+  });
+
+  it("flushes section dividers immediately without waiting for rAF", async () => {
+    vi.useFakeTimers();
+    useImportStore.getState().startImport();
+    const cleanup = await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+
+    emitRaw("[ ======================================== ExploreASL Settings ==================================]");
+    expect(useImportStore.getState().importLog).toEqual([
+      "[ ======================================== ExploreASL Settings ==================================]",
+    ]);
+
+    emitRaw("some regular line");
+    expect(useImportStore.getState().importLog).toEqual([
+      "[ ======================================== ExploreASL Settings ==================================]",
+    ]);
+
+    vi.advanceTimersByTime(16);
+    expect(useImportStore.getState().importLog).toEqual([
+      "[ ======================================== ExploreASL Settings ==================================]",
+      "some regular line",
+    ]);
+
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it("flushes remaining buffered lines on cleanup", async () => {
+    vi.useFakeTimers();
+    useImportStore.getState().startImport();
+    const cleanup = await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+
+    emitRaw("buffered line 1");
+    emitRaw("buffered line 2");
+
+    expect(useImportStore.getState().importLog).toEqual([]);
+
+    cleanup();
+
+    expect(useImportStore.getState().importLog).toEqual(["buffered line 1", "buffered line 2"]);
+    vi.useRealTimers();
   });
 
   it("runs post-processing on import_complete with partial success", async () => {

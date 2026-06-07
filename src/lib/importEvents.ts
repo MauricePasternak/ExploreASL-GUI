@@ -3,6 +3,10 @@
  *
  * Bridges Rust backend events → Zustand store actions.
  * Also exposes thin wrappers around Tauri `invoke` for running/stopping the import.
+ *
+ * Raw log lines are batched before flushing to the store:
+ * - Section dividers (e.g. "[ ======...") flush immediately for atomic rendering
+ * - All other lines accumulate and flush once per animation frame
  */
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -10,6 +14,53 @@ import { listen } from "@tauri-apps/api/event";
 import type { StagingEntry } from "../schemas/importSchemas";
 import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
+
+// =============================================================================
+// Log batching
+// =============================================================================
+
+/**
+ * Matches ExploreASL section dividers like:
+ *   [ ==============================================================================================]
+ *   [ ======================================== ExploreASL Settings ==================================]
+ *
+ * The character after `[` may be a regular space, non-breaking space (\\u00A0),
+ * or other whitespace — the \\s pattern handles all of these.
+ * The line must contain 5+ `=` chars to qualify as a divider.
+ */
+const SECTION_DIVIDER_RE = /^\[\s={5,}/;
+
+type LogFlusher = (lines: string[]) => void;
+
+function createLogBatcher(flusher: LogFlusher) {
+  let buffer: string[] = [];
+  let rafId: number | null = null;
+
+  function flush() {
+    if (buffer.length > 0) {
+      flusher([...buffer]);
+      buffer = [];
+    }
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  }
+
+  function push(line: string) {
+    buffer.push(line);
+    if (SECTION_DIVIDER_RE.test(line)) {
+      flush();
+    } else if (rafId === null) {
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        flush();
+      });
+    }
+  }
+
+  return { push, flush };
+}
 
 // =============================================================================
 // Event Payload Types (matching Rust event shapes)
@@ -134,12 +185,14 @@ export async function setupImportListeners(
   allSubjects: string[],
 ): Promise<() => void> {
   const {
-    addLogLine,
+    addLogLines,
     setImportPhase,
     markSubjectRunning,
     markSubjectCompleted,
     markSubjectFailed,
   } = useImportStore.getState();
+
+  const logBatcher = createLogBatcher(addLogLines);
 
   // 1. import-structured-event
   const unlistenStructured = await listen<ImportStructuredEventPayload>(
@@ -150,7 +203,7 @@ export async function setupImportListeners(
       switch (payload.type) {
         case "subject_start":
           if (payload.subject) {
-            markSubjectRunning(payload.subject);
+            markSubjectRunning(payload.subject, payload.step as "DCM2NII" | "NII2BIDS");
           }
           break;
 
@@ -184,11 +237,11 @@ export async function setupImportListeners(
     },
   );
 
-  // 2. import-raw-event
+  // 2. import-raw-event (batched)
   const unlistenRaw = await listen<ImportRawEventPayload>(
     "import-raw-event",
     (event) => {
-      addLogLine(event.payload.line);
+      logBatcher.push(event.payload.line);
     },
   );
 
@@ -203,7 +256,7 @@ export async function setupImportListeners(
   // 4. MatlabExitError
   const unlistenExitError = await listen<MatlabExitErrorPayload>(
     "MatlabExitError",
-    (event) => {
+    (_event) => {
       // Mark all currently-running subjects as failed
       const { importProgress } = useImportStore.getState();
       for (const [subject, progress] of Object.entries(importProgress)) {
@@ -222,6 +275,7 @@ export async function setupImportListeners(
 
   // Return cleanup function
   return () => {
+    logBatcher.flush();
     unlistenStructured();
     unlistenRaw();
     unlistenPrepare();

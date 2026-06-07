@@ -22,7 +22,7 @@ const FIELD_ANNOTATIONS: Record<string, string> = {
 
 export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPreviewProps) {
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="config-preview">
       <Title order={4}>ExploreASL Configuration</Title>
       <Text c="dimmed" size="sm">
         These config files describe the normalized staging tree. Raw DICOM paths
@@ -31,7 +31,7 @@ export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPrevi
       </Text>
 
       <Accordion variant="separated">
-        <Accordion.Item value="sourcestructure">
+        <Accordion.Item value="sourcestructure" data-testid="config-sourcestructure-accordion">
           <Accordion.Control>
             <Text fw={600} component="span">
               sourcestructure.json
@@ -57,7 +57,7 @@ export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPrevi
           </Accordion.Panel>
         </Accordion.Item>
 
-        <Accordion.Item value="studypar">
+        <Accordion.Item value="studypar" data-testid="config-studypar-accordion">
           <Accordion.Control>
             <Text fw={600} component="span">
               studyPar.json

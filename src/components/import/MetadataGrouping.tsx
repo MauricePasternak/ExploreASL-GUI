@@ -294,7 +294,7 @@ export default function MetadataGrouping() {
   }
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="metadata-grouping">
       <Title order={3}>Metadata Grouping</Title>
       <Text c="dimmed" size="sm">
         Assign subject, session, and run combinations to metadata groups that

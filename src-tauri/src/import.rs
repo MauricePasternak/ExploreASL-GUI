@@ -25,6 +25,7 @@ pub const DCM2NII_FAILED_RE: &str = r"DCM2NII failed for (.+)";
 pub const IMPORT_COMPLETE_RE: &str = r"xASL_module_Import completed 100%";
 pub const STATUS_CODE_RE: &str = r"status: (-?\d+)";
 pub const MESSAGE_LINE_RE: &str = r"Message:\s*(.*)";
+pub const PROGRESS_BAR_RE: &str = r"^[\d%\s]+$";
 
 #[derive(Debug)]
 pub struct ImportState {
@@ -91,6 +92,7 @@ impl StagingEntry {
 pub enum ImportStructuredEvent {
     SubjectStart {
         subject: String,
+        step: String,
     },
     SubjectComplete {
         subject: String,
@@ -836,6 +838,11 @@ fn message_line_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(MESSAGE_LINE_RE).expect("message line regex should compile"))
 }
 
+fn progress_bar_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(PROGRESS_BAR_RE).expect("progress bar regex should compile"))
+}
+
 #[derive(Debug)]
 struct PendingFailure {
     subject: String,
@@ -848,6 +855,8 @@ struct ImportOutputParser {
     subject_list: Vec<String>,
     current_subject: Option<String>,
     pending_failures: Vec<PendingFailure>,
+    failed_subjects: std::collections::HashSet<String>,
+    current_step: String,
 }
 
 impl ImportOutputParser {
@@ -856,10 +865,12 @@ impl ImportOutputParser {
             subject_list: subject_list.to_vec(),
             current_subject: None,
             pending_failures: Vec::new(),
+            failed_subjects: std::collections::HashSet::new(),
+            current_step: "DCM2NII".to_string(),
         }
     }
 
-    fn push_line(&mut self, line: &str) -> Vec<ImportStructuredEvent> {
+    fn push_line(&mut self, line: &str, source: ImportOutputLineSource) -> Vec<ImportStructuredEvent> {
         if !self.pending_failures.is_empty() {
             if let Some(captures) = message_line_re().captures(line) {
                 let detail = captures
@@ -879,51 +890,73 @@ impl ImportOutputParser {
             if line.trim().is_empty() {
                 return events;
             }
-            events.extend(self.parse_non_message_line(line));
+            events.extend(self.parse_non_message_line(line, source));
             return events;
         }
 
-        self.parse_non_message_line(line)
+        self.parse_non_message_line(line, source)
     }
 
     fn finish(&mut self) -> Vec<ImportStructuredEvent> {
         self.flush_pending_failures()
     }
 
-    fn parse_non_message_line(&mut self, line: &str) -> Vec<ImportStructuredEvent> {
-        if let Some(captures) = subject_start_re().captures(line) {
-            if let Some(subject) = captures.get(1).map(|value| value.as_str().to_string()) {
-                self.current_subject = Some(subject.clone());
-                return vec![ImportStructuredEvent::SubjectStart { subject }];
+    fn parse_non_message_line(&mut self, line: &str, source: ImportOutputLineSource) -> Vec<ImportStructuredEvent> {
+        if source == ImportOutputLineSource::Stdout {
+            if line.contains("DICOM to NIFTI CONVERSION") {
+                self.current_step = "DCM2NII".to_string();
+            } else if line.contains("NIFTI to BIDS CONVERSION") {
+                self.current_step = "NII2BIDS".to_string();
+                if let Some(ref subject) = self.current_subject {
+                    return vec![ImportStructuredEvent::SubjectStart {
+                        subject: subject.clone(),
+                        step: self.current_step.clone(),
+                    }];
+                }
             }
-        }
 
-        if let Some(captures) = job_iteration_re().captures(line) {
-            if let (Some(subject), Some(duration)) = (
-                self.current_subject.clone(),
-                captures
-                    .get(2)
-                    .and_then(|value| value.as_str().parse::<u64>().ok()),
-            ) {
-                return vec![ImportStructuredEvent::SubjectComplete {
-                    subject,
-                    duration_secs: duration,
-                }];
+            if let Some(captures) = subject_start_re().captures(line) {
+                if let Some(subject) = captures.get(1).map(|value| value.as_str().to_string()) {
+                    self.current_subject = Some(subject.clone());
+                    self.current_step = "DCM2NII".to_string();
+                    return vec![ImportStructuredEvent::SubjectStart {
+                        subject,
+                        step: self.current_step.clone(),
+                    }];
+                }
             }
-        }
 
-        if import_complete_re().is_match(line) {
-            return vec![ImportStructuredEvent::ImportComplete];
-        }
+            if let Some(captures) = job_iteration_re().captures(line) {
+                if let (Some(subject), Some(duration)) = (
+                    self.current_subject.clone(),
+                    captures
+                        .get(2)
+                        .and_then(|value| value.as_str().parse::<u64>().ok()),
+                ) {
+                    if !self.failed_subjects.contains(&subject) {
+                        return vec![ImportStructuredEvent::SubjectComplete {
+                            subject,
+                            duration_secs: duration,
+                        }];
+                    } else {
+                        return Vec::new();
+                    }
+                }
+            }
 
-        if let Some(captures) = status_code_re().captures(line) {
-            if let (Some(subject), Some(exit_code)) = (
-                self.current_subject.clone(),
-                captures
-                    .get(1)
-                    .and_then(|value| value.as_str().parse::<i32>().ok()),
-            ) {
-                return vec![ImportStructuredEvent::Dcm2NiiStatus { subject, exit_code }];
+            if import_complete_re().is_match(line) {
+                return vec![ImportStructuredEvent::ImportComplete];
+            }
+
+            if let Some(captures) = status_code_re().captures(line) {
+                if let (Some(subject), Some(exit_code)) = (
+                    self.current_subject.clone(),
+                    captures
+                        .get(1)
+                        .and_then(|value| value.as_str().parse::<i32>().ok()),
+                ) {
+                    return vec![ImportStructuredEvent::Dcm2NiiStatus { subject, exit_code }];
+                }
             }
         }
 
@@ -949,16 +982,18 @@ impl ImportOutputParser {
             .map(|value| value.as_str())
             .unwrap_or(fallback_message);
 
-        self.pending_failures = self
-            .subject_list
-            .iter()
-            .filter(|subject| description.contains(subject.as_str()))
-            .map(|subject| PendingFailure {
-                subject: subject.clone(),
-                step: step.to_string(),
-                message: fallback_message.to_string(),
-            })
-            .collect();
+        let mut pending = Vec::new();
+        for subject in &self.subject_list {
+            if description.contains(subject) {
+                self.failed_subjects.insert(subject.clone());
+                pending.push(PendingFailure {
+                    subject: subject.clone(),
+                    step: step.to_string(),
+                    message: fallback_message.to_string(),
+                });
+            }
+        }
+        self.pending_failures = pending;
     }
 
     fn flush_pending_failures(&mut self) -> Vec<ImportStructuredEvent> {
@@ -978,7 +1013,7 @@ pub fn parse_import_lines(lines: &[String], subject_list: &[String]) -> Vec<Impo
     let mut events = Vec::new();
 
     for line in lines {
-        events.extend(parser.push_line(line));
+        events.extend(parser.push_line(line, ImportOutputLineSource::Stdout));
     }
     events.extend(parser.finish());
 
@@ -998,12 +1033,9 @@ pub fn parse_import_stream_lines(
             line: output_line.line.clone(),
         });
 
-        if output_line.source == ImportOutputLineSource::Stdout {
-            structured_events.extend(parser.push_line(&output_line.line));
-        }
+        structured_events.extend(parser.push_line(&output_line.line, output_line.source));
     }
     structured_events.extend(parser.finish());
-
     ParsedImportStream {
         raw_events,
         structured_events,
@@ -1071,16 +1103,16 @@ fn stream_import_output(
     output_line: ImportOutputLine,
     parser: &mut ImportOutputParser,
 ) {
-    let _ = app.emit(
-        "import-raw-event",
-        ImportRawEvent {
-            line: output_line.line.clone(),
-        },
-    );
-
-    if output_line.source == ImportOutputLineSource::Stdout {
-        emit_structured_events(app, parser.push_line(&output_line.line));
+    if !progress_bar_re().is_match(&output_line.line) {
+        let _ = app.emit(
+            "import-raw-event",
+            ImportRawEvent {
+                line: output_line.line.clone(),
+            },
+        );
     }
+
+    emit_structured_events(app, parser.push_line(&output_line.line, output_line.source));
 }
 
 fn supervise_import_process(
@@ -2069,7 +2101,8 @@ mod tests {
         assert_eq!(
             events,
             vec![ImportStructuredEvent::SubjectStart {
-                subject: "BADDIE".to_string()
+                subject: "BADDIE".to_string(),
+                step: "DCM2NII".to_string(),
             }]
         );
     }
@@ -2088,7 +2121,8 @@ mod tests {
             events,
             vec![
                 ImportStructuredEvent::SubjectStart {
-                    subject: "BADDIE".to_string()
+                    subject: "BADDIE".to_string(),
+                    step: "DCM2NII".to_string(),
                 },
                 ImportStructuredEvent::SubjectComplete {
                     subject: "BADDIE".to_string(),
@@ -2161,11 +2195,105 @@ mod tests {
             events,
             vec![
                 ImportStructuredEvent::SubjectStart {
-                    subject: "BADDIE".to_string()
+                    subject: "BADDIE".to_string(),
+                    step: "DCM2NII".to_string(),
                 },
                 ImportStructuredEvent::Dcm2NiiStatus {
                     subject: "BADDIE".to_string(),
                     exit_code: 1
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parser_does_not_emit_subject_completion_if_subject_failed() {
+        let events = parse_import_lines(
+            &[
+                "Subject: BADDIE, Module: xASL_module_Import".to_string(),
+                "NII2BIDS failed for perfusion image of BADDIE_ses-01_run-1".to_string(),
+                "Message: LabelingDuration has invalid value".to_string(),
+                "".to_string(),
+                "Job-iteration 1 stopped at 12:34:56 and took 42 seconds".to_string(),
+            ],
+            &["BADDIE".to_string()],
+        );
+
+        assert!(events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed { .. })));
+        assert!(!events.iter().any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })));
+    }
+
+    #[test]
+    fn parser_user_reported_failure() {
+        let events = parse_import_lines(
+            &[
+                "Subject: C9ORF059Siemens, Module: xASL_module_Import".to_string(),
+                "[=========================================== CONVERT RUN ======================================]".to_string(),
+                "Converting subject C9ORF059Siemens, session 11, run ASL_1, scan sub-C9ORF059Siemens_ses-11_T1w ...".to_string(),
+                "scan sub-C9ORF059Siemens_ses-11_T2w ...".to_string(),
+                "scan sub-C9ORF059Siemens_ses-11_asl ...".to_string(),
+                "Warning: The following user-defined/DICOM fields and DICOM-Phoenix fields differ:  SoftwareVersions PostLabelingDelay BolusCutOffDelayTime".to_string(),
+                "".to_string(),
+                "[==============================================================================================]".to_string(),
+                "NII2BIDS failed for perfusion image of C9ORF059Siemens_ses-11_run-1".to_string(),
+                "Message: Unknown value in BIDS fields M0Type".to_string(),
+                "xASL_imp_NII2BIDS_Subject_DefineM0Type, line 47...".to_string(),
+                "Continuing...".to_string(),
+                "Job-iteration 1 stopped at 12:34:56 and took 42 seconds".to_string(),
+            ],
+            &["C9ORF059Siemens".to_string()],
+        );
+
+        assert!(events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
+            ref subject,
+            ref step,
+            ref message,
+        } if subject == "C9ORF059Siemens" && step == "NII2BIDS" && message.contains("Unknown value in BIDS fields M0Type"))));
+        assert!(!events.iter().any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })));
+    }
+
+    #[test]
+    fn parser_detects_step_transitions_and_updates_subject_start_step() {
+        let events = parse_import_lines(
+            &[
+                "Subject: BADDIE, Module: xASL_module_Import".to_string(),
+                "DICOM to NIFTI CONVERSION".to_string(),
+                "NIFTI to BIDS CONVERSION".to_string(),
+                "Job-iteration 1 stopped at 12:34:56 and took 10 seconds".to_string(),
+                "Subject: GOODIE, Module: xASL_module_Import".to_string(),
+                "DICOM to NIFTI CONVERSION".to_string(),
+                "NIFTI to BIDS CONVERSION".to_string(),
+                "Job-iteration 2 stopped at 12:35:56 and took 15 seconds".to_string(),
+            ],
+            &["BADDIE".to_string(), "GOODIE".to_string()],
+        );
+
+        assert_eq!(
+            events,
+            vec![
+                ImportStructuredEvent::SubjectStart {
+                    subject: "BADDIE".to_string(),
+                    step: "DCM2NII".to_string(),
+                },
+                ImportStructuredEvent::SubjectStart {
+                    subject: "BADDIE".to_string(),
+                    step: "NII2BIDS".to_string(),
+                },
+                ImportStructuredEvent::SubjectComplete {
+                    subject: "BADDIE".to_string(),
+                    duration_secs: 10
+                },
+                ImportStructuredEvent::SubjectStart {
+                    subject: "GOODIE".to_string(),
+                    step: "DCM2NII".to_string(),
+                },
+                ImportStructuredEvent::SubjectStart {
+                    subject: "GOODIE".to_string(),
+                    step: "NII2BIDS".to_string(),
+                },
+                ImportStructuredEvent::SubjectComplete {
+                    subject: "GOODIE".to_string(),
+                    duration_secs: 15
                 },
             ]
         );
@@ -2202,7 +2330,8 @@ mod tests {
             parsed.structured_events,
             vec![
                 ImportStructuredEvent::SubjectStart {
-                    subject: "BADDIE".to_string()
+                    subject: "BADDIE".to_string(),
+                    step: "DCM2NII".to_string(),
                 },
                 ImportStructuredEvent::SubjectComplete {
                     subject: "BADDIE".to_string(),

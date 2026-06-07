@@ -538,14 +538,15 @@ describe("importStore import execution actions", () => {
     expect(useImportStore.getState().failedSubjects).toEqual([]);
   });
 
-  it("removes subjects from failedSubjects when they later complete", () => {
+  it("does not remove subjects from failedSubjects or mark them completed if they already failed", () => {
     const store = useImportStore.getState();
     store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
     store.markSubjectFailed("FOO", "DCM2NII", "Conversion failed");
 
     store.markSubjectCompleted("BAR", 9);
 
-    expect(useImportStore.getState().failedSubjects).toEqual(["FOO"]);
+    expect(useImportStore.getState().failedSubjects).toEqual(["BAR", "FOO"]);
+    expect(useImportStore.getState().importProgress.BAR.status).toBe("failed");
   });
 
   it("removes subjects from failedSubjects when they are cancelled", () => {
@@ -558,7 +559,7 @@ describe("importStore import execution actions", () => {
     expect(useImportStore.getState().failedSubjects).toEqual(["FOO"]);
   });
 
-  it("removes running subjects from failedSubjects when the import is cancelled", () => {
+  it("does not allow failed subjects to transition to running during the run", () => {
     const store = useImportStore.getState();
     store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
     store.markSubjectFailed("FOO", "DCM2NII", "Conversion failed");
@@ -567,7 +568,8 @@ describe("importStore import execution actions", () => {
 
     store.cancelImport();
 
-    expect(useImportStore.getState().failedSubjects).toEqual(["FOO"]);
+    // Since BAR remained failed (not running), cancelImport keeps it in failedSubjects.
+    expect(useImportStore.getState().failedSubjects).toEqual(["BAR", "FOO"]);
   });
 
   it("accumulates import log lines", () => {
