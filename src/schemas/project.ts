@@ -27,6 +27,7 @@ export const ProjectFileSchema = z.object({
       importActiveStep: z.number().int().min(0).optional(),
       importCompleted: z.boolean().optional(),
       importPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
+      navbarCollapsed: z.boolean().optional(),
     })
     .passthrough()
     .default({}),
@@ -62,7 +63,7 @@ export const DEFAULT_PROJECT_FILE = (
     lastOpened: new Date().toISOString(),
     currentPhase: "import",
   },
-  uiState: {},
+  uiState: { navbarCollapsed: true },
   mappingState: {},
   exploreAslConfig: {
     sourcestructure: {},

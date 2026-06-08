@@ -25,6 +25,7 @@ interface ProjectState {
   createProject: (rootPath: string, name: string) => Promise<void>;
   saveProject: () => Promise<void>;
   setPhase: (phase: ProjectMeta["currentPhase"]) => void;
+  toggleNavbar: () => void;
   syncImportState: (importState: ImportState) => void;
   closeProject: () => void;
 }
@@ -118,6 +119,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
       return {
         project: nextProject,
+        isDirty: true,
+      };
+    });
+  },
+
+  toggleNavbar: () => {
+    set((state) => {
+      if (!state.project) return state;
+      return {
+        project: {
+          ...state.project,
+          uiState: {
+            ...state.project.uiState,
+            navbarCollapsed: !state.project.uiState.navbarCollapsed,
+          },
+        },
         isDirty: true,
       };
     });

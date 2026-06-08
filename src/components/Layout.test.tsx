@@ -67,7 +67,7 @@ describe("Layout", () => {
           lastOpened: "2026-05-03T00:00:00.000Z",
           currentPhase: "import",
         },
-        uiState: {},
+        uiState: { navbarCollapsed: false },
         mappingState: {},
         exploreAslConfig: {
           sourcestructure: {},
@@ -101,9 +101,9 @@ describe("Layout", () => {
         rootPath: "/tmp/brain-study",
         createdAt: "2026-05-03T00:00:00.000Z",
         lastOpened: "2026-05-03T00:00:00.000Z",
-        currentPhase: "import",
+        currentPhase: "import" as const,
       },
-      uiState: {},
+      uiState: { navbarCollapsed: false },
       mappingState: {},
       exploreAslConfig: {
         sourcestructure: {},
@@ -164,7 +164,7 @@ describe("Layout", () => {
           lastOpened: "2026-05-03T00:00:00.000Z",
           currentPhase: "import",
         },
-        uiState: {},
+        uiState: { navbarCollapsed: false },
         mappingState: {},
         exploreAslConfig: {
           sourcestructure: {},
@@ -216,7 +216,7 @@ describe("Layout", () => {
           lastOpened: "2026-05-03T00:00:00.000Z",
           currentPhase: "import",
         },
-        uiState: {},
+        uiState: { navbarCollapsed: false },
         mappingState: {},
         exploreAslConfig: {
           sourcestructure: {},
@@ -262,7 +262,7 @@ describe("Layout", () => {
           lastOpened: "2026-05-03T00:00:00.000Z",
           currentPhase: "import",
         },
-        uiState: {},
+        uiState: { navbarCollapsed: false },
         mappingState: {},
         exploreAslConfig: {
           sourcestructure: {},
@@ -296,6 +296,145 @@ describe("Layout", () => {
         }),
       );
       expect(screen.getAllByTestId("layout-nav-import").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("defaults to collapsed navbar for new projects", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: {},
+        mappingState: {},
+        exploreAslConfig: {
+          sourcestructure: {},
+          studyPar: {},
+          dataPar: {},
+        },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    renderLayout("/project/project-1/import");
+
+    expect(screen.getAllByTestId("layout-navbar-toggle").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Import")).toBeNull();
+    expect(screen.queryByText("Return to home")).toBeNull();
+  });
+
+  it("expands navbar when toggle is clicked", async () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: { navbarCollapsed: true },
+        mappingState: {},
+        exploreAslConfig: {
+          sourcestructure: {},
+          studyPar: {},
+          dataPar: {},
+        },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    renderLayout("/project/project-1/import");
+
+    expect(screen.queryByText("Import")).toBeNull();
+
+    fireEvent.click(screen.getAllByTestId("layout-navbar-toggle")[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Import").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Parameters").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Processing").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Return to home").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("collapses navbar when toggle is clicked while expanded", async () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: {},
+        exploreAslConfig: {
+          sourcestructure: {},
+          studyPar: {},
+          dataPar: {},
+        },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    renderLayout("/project/project-1/import");
+
+    expect(screen.getAllByText("Import").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByTestId("layout-navbar-toggle")[0]);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Import")).toBeNull();
+      expect(screen.queryByText("Return to home")).toBeNull();
+    });
+  });
+
+  it("persists navbar collapsed state to uiState", async () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: { navbarCollapsed: true },
+        mappingState: {},
+        exploreAslConfig: {
+          sourcestructure: {},
+          studyPar: {},
+          dataPar: {},
+        },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    renderLayout("/project/project-1/import");
+
+    fireEvent.click(screen.getAllByTestId("layout-navbar-toggle")[0]);
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().project?.uiState.navbarCollapsed).toBe(false);
+      expect(useProjectStore.getState().isDirty).toBe(true);
     });
   });
 });
