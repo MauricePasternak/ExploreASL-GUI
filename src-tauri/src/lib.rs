@@ -18,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin({
             let mut builder = tauri_plugin_log::Builder::default();
             #[cfg(debug_assertions)]

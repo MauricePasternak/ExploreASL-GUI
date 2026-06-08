@@ -112,7 +112,7 @@ export default function DicomIngestion() {
   const totalPaths = pathPatterns.reduce((sum, p) => sum + p.count, 0);
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="dicom-ingestion">
       <Title order={3}>DICOM Ingestion</Title>
       <Text c="dimmed" size="sm">
         Choose the folder that contains this study&apos;s scan files, then scan it
@@ -160,6 +160,7 @@ export default function DicomIngestion() {
               description="Use this when each scan series is saved in its own folder."
               checked={bMatchDirectories}
               onChange={(e) => setBMatchDirectories(e.currentTarget.checked)}
+              data-testid="dicom-match-directories"
             />
           </div>
 
@@ -182,6 +183,7 @@ export default function DicomIngestion() {
           title="Scan Error"
           color="red"
           variant="light"
+          data-testid="dicom-scan-error"
         >
           {error}
         </Alert>
@@ -201,7 +203,7 @@ export default function DicomIngestion() {
             </Group>
 
             {pathPatterns.map((pattern) => (
-              <Card key={pattern.signature} withBorder p="sm">
+              <Card key={pattern.signature} withBorder p="sm" data-testid={`pattern-result-card-${pattern.signature}`}>
                 <Group gap="xs" mb="xs">
                   <Badge variant="light" size="sm">
                     {pattern.count} path{pattern.count !== 1 ? "s" : ""}

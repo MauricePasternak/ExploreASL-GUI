@@ -64,6 +64,7 @@
     },
     "os:default",
     "store:default",
-    "log:default"
+    "log:default",
+    "clipboard-manager:default"
   ]
 }

@@ -124,10 +124,10 @@ export function generateTokenOrdering(
 
   // Map GUI tags to ExploreASL ordering positions
   return [
-    tagToGroupIndex.get("Subject") ?? -1,   // Subject → ExploreASL Subject
-    tagToGroupIndex.get("Session") ?? -1,    // Session → ExploreASL Visit
-    tagToGroupIndex.get("Run") ?? -1,        // Run → ExploreASL Session
-    tagToGroupIndex.get("Modality") ?? -1,   // Modality → ExploreASL Scan
+    tagToGroupIndex.has("Subject") ? tagToGroupIndex.get("Subject")! + 1 : 0,
+    tagToGroupIndex.has("Session") ? tagToGroupIndex.get("Session")! + 1 : 0,
+    tagToGroupIndex.has("Run") ? tagToGroupIndex.get("Run")! + 1 : 0,
+    tagToGroupIndex.has("Modality") ? tagToGroupIndex.get("Modality")! + 1 : 0,
   ];
 }
 
@@ -285,8 +285,8 @@ export function assembleSourcestructure(
   const folderHierarchy = ["^(.*)$", "^(.*)$", "^(.*)$", "^(.*)$"];
 
   // tokenOrdering for the normalized tree is always:
-  // [Subject=0, Visit(Session)=1, Session(Run)=2, Scan(Modality)=3]
-  const tokenOrdering: [number, number, number, number] = [0, 1, 2, 3];
+  // [Subject=1, Visit(Session)=2, Session(Run)=3, Scan(Modality)=4]
+  const tokenOrdering: [number, number, number, number] = [1, 2, 3, 4];
 
   // Build session aliases as flat alternating [regex, alias] pairs
   // Always include the default "01" → "ASL_1"

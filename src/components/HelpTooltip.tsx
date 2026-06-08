@@ -24,6 +24,7 @@ export default function HelpTooltip({ label, tooltip }: HelpTooltipProps) {
         color="gray"
         onFocus={() => setOpened(true)}
         onBlur={() => setOpened(false)}
+        data-testid="help-tooltip"
       >
         <IconHelpCircle size={16} />
       </ActionIcon>

@@ -73,7 +73,7 @@ export default function PathTokenizer() {
   });
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="path-tokenizer">
       <Title order={3}>Path Tokenizer</Title>
       <Text c="dimmed" size="sm">
         Assign semantic tags to each folder level. Click a block to expand
@@ -90,6 +90,7 @@ export default function PathTokenizer() {
           leftSection={<IconArrowLeft size={16} />}
           variant="light"
           onClick={handleBack}
+          data-testid="tokenizer-back-btn"
         >
           Back: Ingest DICOMs
         </Button>
@@ -97,6 +98,7 @@ export default function PathTokenizer() {
           rightSection={<IconArrowRight size={16} />}
           disabled={!allConfigured}
           onClick={handleNext}
+          data-testid="tokenizer-next-btn"
         >
           Next: Resolve Aliases
         </Button>
@@ -328,7 +330,7 @@ function RegexPreview({
   ];
 
   return (
-    <Card withBorder p="xs">
+    <Card withBorder p="xs" data-testid="tokenizer-regex-preview">
       <Text size="xs" fw={500} mb={4}>
         Generated Configuration
       </Text>
@@ -345,8 +347,8 @@ function RegexPreview({
             <Text
               component="span"
               size="xs"
-              fw={ordering[i] >= 0 ? 600 : 400}
-              c={ordering[i] >= 0 ? undefined : "dimmed"}
+              fw={ordering[i] > 0 ? 600 : 400}
+              c={ordering[i] > 0 ? undefined : "dimmed"}
             >
               {label}={ordering[i]}
             </Text>

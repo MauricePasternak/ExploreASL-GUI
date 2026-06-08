@@ -97,3 +97,11 @@ vi.mock("@tauri-apps/plugin-log", () => ({
   warn: vi.fn(() => Promise.resolve()),
   error: vi.fn(() => Promise.resolve()),
 }));
+
+vi.mock("react-virtuoso", () => ({
+  Virtuoso: ({ data, itemContent }: { data: string[]; itemContent: (index: number, line: string) => React.ReactNode }) => (
+    <div data-testid="virtuoso">
+      {data?.map((item: string, index: number) => itemContent(index, item))}
+    </div>
+  ),
+}));

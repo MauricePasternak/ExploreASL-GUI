@@ -154,7 +154,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
   }
 
   return (
-    <Modal opened={opened} onClose={handleClose} title="Settings" size="lg">
+    <Modal opened={opened} onClose={handleClose} title="Settings" size="lg" data-testid="settings-modal">
       <Stack gap="md">
         <div>
           <Text fw={600} mb="xs">
@@ -203,6 +203,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
           placeholder="/path/to/ExploreASL"
           value={settings.exploreAslPath}
           onChange={(event) => setExploreAslPath(event.currentTarget.value)}
+          data-testid="settings-exploreasl-path"
         />
 
         <Select
@@ -217,6 +218,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
               setTheme(value);
             }
           }}
+          data-testid="settings-theme-select"
         />
 
         <div>
@@ -249,6 +251,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 disabled={delimiter === "_"}
                 leftSection={delimiter === "_" ? undefined : <IconTrash size={14} />}
                 onClick={() => removeDelimiter(delimiter)}
+                data-testid={`settings-delimiter-btn-${delimiter}`}
                 aria-label={
                   delimiter === "_"
                     ? `Default delimiter ${delimiter}`
@@ -266,8 +269,9 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
               placeholder="-"
               value={newDelimiter}
               onChange={(event) => setNewDelimiter(event.currentTarget.value)}
+              data-testid="settings-add-delimiter-input"
             />
-            <Button onClick={addDelimiter}>Add Delimiter</Button>
+            <Button onClick={addDelimiter} data-testid="settings-add-delimiter-btn">Add Delimiter</Button>
           </Group>
         </div>
 

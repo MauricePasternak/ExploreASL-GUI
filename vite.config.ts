@@ -34,7 +34,7 @@ export default defineConfig(async () => ({
   // Vitest configuration
   test: {
     environment: "jsdom",
-    setupFiles: ["./src/test/setup.ts"],
+    setupFiles: ["./src/test/setup.tsx"],
     exclude: ["**/node_modules/**", "**/.worktrees/**"],
   },
 }));

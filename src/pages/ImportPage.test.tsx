@@ -64,7 +64,7 @@ describe("ImportPage metadata step", () => {
     const patternCards = screen.getAllByTestId("pattern-card-VARYING/ASL");
     const patternCard = patternCards[patternCards.length - 1];
     expect(patternCard.textContent).toContain("^(.*)\\\\.(.*)$");
-    expect(patternCard.textContent).toContain("Subject=0, Session (Visit)=1");
+    expect(patternCard.textContent).toContain("Subject=1, Session (Visit)=2");
   });
 
   it("shows hyphen-delimited sub-blocks in the tokenizer when configured globally", () => {

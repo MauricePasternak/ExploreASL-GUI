@@ -101,7 +101,8 @@ export interface ImportState {
   startImport: () => void;
   setImportPhase: (phase: ImportPhase) => void;
   addLogLine: (line: string) => void;
-  markSubjectRunning: (subject: string) => void;
+  addLogLines: (lines: string[]) => void;
+  markSubjectRunning: (subject: string, step?: "DCM2NII" | "NII2BIDS") => void;
   markSubjectCompleted: (subject: string, duration: number) => void;
   markSubjectFailed: (
     subject: string,
@@ -330,14 +331,26 @@ export const useImportStore = create<ImportState>((set) => ({
       }
 
       const importProgress = Object.fromEntries(
-        Array.from(rowsBySubject.values()).map((row) => [
-          row.subject,
-          {
-            subject: row.subject,
-            session: row.session,
-            status: "pending" as const,
-          },
-        ]),
+        Array.from(rowsBySubject.values()).map((row) => {
+          const existing = state.importProgress[row.subject];
+          const status =
+            existing && existing.status === "completed"
+              ? ("completed" as const)
+              : ("pending" as const);
+          const duration =
+            existing && existing.status === "completed"
+              ? existing.duration
+              : undefined;
+          return [
+            row.subject,
+            {
+              subject: row.subject,
+              session: row.session,
+              status,
+              duration,
+            },
+          ];
+        }),
       );
 
       return {
@@ -365,16 +378,26 @@ export const useImportStore = create<ImportState>((set) => ({
     }));
   },
 
-  markSubjectRunning: (subject) => {
+  addLogLines: (lines) => {
+    if (lines.length === 0) return;
+    set((state) => ({
+      importLog: [...state.importLog, ...lines],
+    }));
+  },
+
+  markSubjectRunning: (subject, step) => {
     set((state) => {
+      if (state.failedSubjects.includes(subject)) {
+        return {};
+      }
       const current = subjectProgress(subject, state.importProgress[subject]);
       return {
-        failedSubjects: state.failedSubjects.filter((failed) => failed !== subject),
         importProgress: {
           ...state.importProgress,
           [subject]: {
             ...current,
             status: "running",
+            currentStep: step,
           },
         },
       };
@@ -383,9 +406,11 @@ export const useImportStore = create<ImportState>((set) => ({
 
   markSubjectCompleted: (subject, duration) => {
     set((state) => {
+      if (state.failedSubjects.includes(subject)) {
+        return {};
+      }
       const current = subjectProgress(subject, state.importProgress[subject]);
       return {
-        failedSubjects: state.failedSubjects.filter((failed) => failed !== subject),
         importProgress: {
           ...state.importProgress,
           [subject]: {
@@ -457,7 +482,7 @@ export const useImportStore = create<ImportState>((set) => ({
       const importProgress = Object.fromEntries(
         Object.entries(state.importProgress).map(([subject, progress]) => [
           subject,
-          progress.status === "running"
+          progress.status === "running" || progress.status === "pending"
             ? { ...progress, status: "cancelled" as const }
             : progress,
         ]),

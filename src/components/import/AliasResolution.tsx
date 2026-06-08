@@ -214,7 +214,7 @@ export default function AliasResolution() {
   }
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="alias-resolution">
       <Title order={3}>Alias Resolution</Title>
       <Text c="dimmed" size="sm">
         Map raw folder names to standardized BIDS identifiers.

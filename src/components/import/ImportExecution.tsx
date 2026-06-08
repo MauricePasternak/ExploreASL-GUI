@@ -3,7 +3,6 @@ import {
   Badge,
   Button,
   Card,
-  Code,
   Group,
   Paper,
   Stack,
@@ -11,8 +10,9 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconArrowLeft, IconPlayerPlay, IconPlayerStop, IconRefresh } from "@tabler/icons-react";
+import { IconArrowLeft, IconCopy, IconPlayerPlay, IconPlayerStop, IconRefresh } from "@tabler/icons-react";
 import { useNavigate } from "react-router";
+import { Virtuoso } from "react-virtuoso";
 
 import {
   copyLockFilesForRetry,
@@ -62,7 +62,7 @@ function ImportExecutionHeader({ phase }: { phase: ImportPhase }) {
   const meta = PHASE_META[phase];
 
   return (
-    <Group justify="space-between" align="flex-start">
+    <Group justify="space-between" align="flex-start" data-testid="import-execution-header">
       <div>
         <Title order={3}>Run Import Module</Title>
         <Text c="dimmed" size="sm">
@@ -96,11 +96,12 @@ function ImportExecutionControls({
   const showRetry = phase === "failed" || phase === "cancelled";
 
   return (
-    <Group>
+    <Group data-testid="import-execution-controls">
       <Button
         leftSection={<IconPlayerPlay size={16} />}
         disabled={!runAllowedByPhase || !canRun}
         onClick={onRun}
+        data-testid="run-import-btn"
       >
         Run Import
       </Button>
@@ -110,6 +111,7 @@ function ImportExecutionControls({
         variant="light"
         disabled={phase !== "running"}
         onClick={onStop}
+        data-testid="stop-import-btn"
       >
         Stop
       </Button>
@@ -119,6 +121,7 @@ function ImportExecutionControls({
           variant="light"
           disabled={!canRun}
           onClick={onRun}
+          data-testid="retry-import-btn"
         >
           Retry Import
         </Button>
@@ -132,7 +135,7 @@ function ImportProgressTable({ rows }: { rows: ImportProgress[] }) {
 
   if (rows.length === 0) {
     return (
-      <Paper withBorder p="md">
+      <Paper withBorder p="md" data-testid="import-progress-empty">
         <Text c="dimmed" size="sm">
           Progress will appear here when import preparation starts.
         </Text>
@@ -141,7 +144,7 @@ function ImportProgressTable({ rows }: { rows: ImportProgress[] }) {
   }
 
   return (
-    <Table withTableBorder withColumnBorders verticalSpacing="sm">
+    <Table withTableBorder withColumnBorders verticalSpacing="sm" data-testid="import-progress-table">
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Subject</Table.Th>
@@ -215,20 +218,68 @@ function ImportProgressTable({ rows }: { rows: ImportProgress[] }) {
 }
 
 function ImportLogPanel({ lines }: { lines: string[] }) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  const handleCopy = useCallback(async () => {
+    const text = lines.join("\n");
+    try {
+      const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+      await writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
-  }, [lines.length]);
+  }, [lines]);
+
+  if (lines.length === 0) {
+    return (
+      <Paper withBorder p="md" data-testid="import-log-empty">
+        <Stack gap="xs">
+          <Group justify="space-between">
+            <Text fw={600}>Import log</Text>
+            <Button variant="subtle" size="compact-sm" leftSection={<IconCopy size={14} />} disabled>
+              Copy
+            </Button>
+          </Group>
+          <Text c="dimmed" size="sm">Waiting for import output...</Text>
+        </Stack>
+      </Paper>
+    );
+  }
 
   return (
-    <Paper withBorder p="md">
+    <Paper withBorder p="md" data-testid="import-log-panel">
       <Stack gap="xs">
-        <Text fw={600}>Import log</Text>
-        <div ref={scrollRef} style={{ maxHeight: 180, overflow: "auto" }}>
-          <Code block>{lines.length > 0 ? lines.join("\n") : "Waiting for import output..."}</Code>
+        <Group justify="space-between">
+          <Text fw={600}>Import log</Text>
+          <Button
+            variant="subtle"
+            size="compact-sm"
+            leftSection={<IconCopy size={14} />}
+            onClick={handleCopy}
+          >
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </Group>
+        <div style={{ height: 300 }}>
+          <Virtuoso
+            data={lines}
+            followOutput="smooth"
+            itemContent={(_index, line) => (
+              <div style={{
+                fontFamily: "var(--mantine-font-family-monospace)",
+                fontSize: "var(--mantine-font-size-xs)",
+                lineHeight: 1.4,
+                whiteSpace: "pre",
+                minHeight: "1.4em",
+              }}>
+                {line || "\u00A0"}
+              </div>
+            )}
+          />
         </div>
       </Stack>
     </Paper>
@@ -250,7 +301,7 @@ function ImportSummary({
   const failed = rows.filter((row) => row.status === "failed").length;
 
   return (
-    <Card withBorder p="md">
+    <Card withBorder p="md" data-testid="import-summary">
       <Group justify="space-between">
         <div>
           <Text fw={600}>Import summary</Text>
@@ -258,10 +309,10 @@ function ImportSummary({
           <Text size="sm">Failed: {failed}</Text>
         </div>
         {phase === "completed" ? (
-          <Button onClick={onNextParameters}>Next: Parameters</Button>
+          <Button onClick={onNextParameters} data-testid="import-next-params-btn">Next: Parameters</Button>
         ) : null}
         {phase === "failed" ? (
-          <Button leftSection={<IconRefresh size={16} />} variant="light" onClick={onRetry}>
+          <Button leftSection={<IconRefresh size={16} />} variant="light" onClick={onRetry} data-testid="import-retry-btn">
             Retry Import
           </Button>
         ) : null}
@@ -293,37 +344,23 @@ export default function ImportExecution() {
 
   const pidRef = useRef<number | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const isMountedRef = useRef(true);
 
-  // Set up event listeners when entering "preparing" phase, clean up on unmount or terminal phase
   useEffect(() => {
-    if (importPhase !== "preparing") return;
-
-    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
-    const stagingRoot = `${projectRoot}/.easl_staging`;
-    const allSubjects = [
-      ...new Set(useImportStore.getState().subjectRows.map((r) => r.subject)),
-    ];
-
-    let cancelled = false;
-
-    void setupImportListeners(stagingRoot, projectRoot, allSubjects).then(
-      (cleanup) => {
-        if (cancelled) {
-          cleanup();
-        } else {
-          cleanupRef.current = cleanup;
-        }
-      },
-    );
-
+    isMountedRef.current = true;
     return () => {
-      cancelled = true;
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
-  }, [importPhase]);
+  }, []);
 
-  const runImport = useCallback(() => {
+  const runImport = useCallback(async () => {
     const previousPhase = importPhase;
     const succeededForRetry =
       previousPhase === "failed" || previousPhase === "cancelled"
@@ -337,76 +374,86 @@ export default function ImportExecution() {
     }
     startImport();
 
-    // Launch Tauri import pipeline asynchronously
-    const launchPipeline = async () => {
-      try {
-        const store = useImportStore.getState();
-        const globalSettings = useGlobalStore.getState().settings;
-        const projectRoot =
-          useProjectStore.getState().project?.projectMeta.rootPath ?? "";
+    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
+    const stagingRoot = `${projectRoot}/.easl_staging`;
+    const allSubjects = [
+      ...new Set(useImportStore.getState().subjectRows.map((r) => r.subject)),
+    ];
 
-        // Build staging entries from the full mapping pipeline
-        const subjectRenamesMap = Object.fromEntries(
-          store.subjectRenames.map((r) => [r.original, r.target]),
-        );
-        const mappings = buildAllStagingMappings(
-          store.rawPaths,
-          store.sourceDataPath,
-          store.pathPatterns,
-          store.tokenizerConfigs,
-          subjectRenamesMap,
-          store.modalityAliases,
-          globalSettings.tokenSubDelimiters,
-        );
-        const stagingEntries = mappings.flatMap((m) => m.entries);
-
-        // Build sourcestructure.json and studyPar.json
-        const sourcestructureJson = assembleSourcestructure(
-          store.sessionAliases,
-          store.runAliases,
-          store.modalityAliases,
-          store.bMatchDirectories,
-        ) as Record<string, unknown>;
-
-        const studyparJson = assembleStudyPar(
-          store.metadataGroups,
-        ) as Record<string, unknown>;
-
-        const matlabPath = globalSettings.matlabInstallations[0]?.path ?? "";
-        const exploreaslPath = globalSettings.exploreAslPath;
-        const subjectList = [
-          ...new Set(store.subjectRows.map((r) => r.subject)),
-        ];
-        const stagingRoot = `${projectRoot}/.easl_staging`;
-
-        if (succeededForRetry.length > 0) {
-          await copyLockFilesForRetry({
-            projectRoot,
-            stagingRoot,
-            subjects: succeededForRetry,
-          });
-        }
-
-        const pid = await runImportPipeline({
-          projectRoot,
-          stagingEntries,
-          sourcestructureJson,
-          studyparJson,
-          matlabPath,
-          exploreaslPath,
-          subjectList,
-        });
-
-        pidRef.current = pid;
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to start import";
-        addLogLine(message);
-        failImport();
+    try {
+      const cleanup = await setupImportListeners(stagingRoot, projectRoot, allSubjects);
+      if (!isMountedRef.current) {
+        cleanup();
+        return;
       }
-    };
+      cleanupRef.current = cleanup;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to set up import listeners";
+      addLogLine(message);
+      failImport();
+      return;
+    }
 
-    void launchPipeline();
+    try {
+      const store = useImportStore.getState();
+      const globalSettings = useGlobalStore.getState().settings;
+
+      const subjectRenamesMap = Object.fromEntries(
+        store.subjectRenames.map((r) => [r.original, r.target]),
+      );
+      const mappings = buildAllStagingMappings(
+        store.rawPaths,
+        store.sourceDataPath,
+        store.pathPatterns,
+        store.tokenizerConfigs,
+        subjectRenamesMap,
+        store.modalityAliases,
+        globalSettings.tokenSubDelimiters,
+      );
+      const stagingEntries = mappings.flatMap((m) => m.entries);
+
+      const sourcestructureJson = assembleSourcestructure(
+        store.sessionAliases,
+        store.runAliases,
+        store.modalityAliases,
+        store.bMatchDirectories,
+      ) as Record<string, unknown>;
+
+      const studyparJson = assembleStudyPar(
+        store.metadataGroups,
+      ) as Record<string, unknown>;
+
+      const matlabPath = globalSettings.matlabInstallations[0]?.path ?? "";
+      const exploreaslPath = globalSettings.exploreAslPath;
+      const subjectList = [
+        ...new Set(store.subjectRows.map((r) => r.subject)),
+      ];
+
+      if (succeededForRetry.length > 0) {
+        await copyLockFilesForRetry({
+          projectRoot,
+          stagingRoot,
+          subjects: succeededForRetry,
+        });
+      }
+
+      const pid = await runImportPipeline({
+        projectRoot,
+        stagingEntries,
+        sourcestructureJson,
+        studyparJson,
+        matlabPath,
+        exploreaslPath,
+        subjectList,
+      });
+
+      pidRef.current = pid;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to start import";
+      addLogLine(message);
+      failImport();
+    }
   }, [importPhase, resetImportPhase, startImport, addLogLine, failImport]);
 
   const handleStop = useCallback(() => {
@@ -442,7 +489,7 @@ export default function ImportExecution() {
   };
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="import-execution">
       <ImportExecutionHeader phase={importPhase} />
 
       <ImportExecutionControls
@@ -486,6 +533,7 @@ export default function ImportExecution() {
           variant="light"
           disabled={backLocked}
           onClick={() => setActiveStep(4)}
+          data-testid="import-back-btn"
         >
           Back: Preview
         </Button>
