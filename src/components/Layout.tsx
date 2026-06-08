@@ -9,11 +9,14 @@ import {
   NavLink,
   Stack,
   Text,
+  Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconAdjustments,
+  IconChevronLeft,
+  IconChevronRight,
   IconHome,
   IconPlayerPlay,
   IconSettings,
@@ -41,9 +44,12 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const project = useProjectStore((state) => state.project);
   const setPhase = useProjectStore((state) => state.setPhase);
+  const toggleNavbar = useProjectStore((state) => state.toggleNavbar);
   const saveProject = useProjectStore((state) => state.saveProject);
   const closeProject = useProjectStore((state) => state.closeProject);
   const navigate = useNavigate();
+
+  const navbarCollapsed = project?.uiState.navbarCollapsed ?? true;
 
   async function handlePhaseNavigation(phase: ProjectPhase) {
     if (!project || !canAccessPhase(project.projectMeta.currentPhase, phase)) {
@@ -104,7 +110,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       header={{ height: 56 }}
       footer={{ height: 40 }}
       navbar={{
-        width: 240,
+        width: navbarCollapsed ? 60 : 240,
         breakpoint: "sm",
         collapsed: { desktop: !project, mobile: !opened },
       }}
@@ -139,29 +145,64 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
 
       {project ? (
         <AppShell.Navbar p="xs">
-          <Stack gap="xs" h="100%">
-            <div>
-              {PHASE_NAV.map(({ phase, label, icon: Icon }) => (
-                <NavLink
-                  key={phase}
-                  active={project.projectMeta.currentPhase === phase}
-                  component="button"
-                  disabled={!canAccessPhase(project.projectMeta.currentPhase, phase)}
-                  label={label}
-                  leftSection={<Icon size={18} />}
-                  onClick={() => void handlePhaseNavigation(phase)}
-                  data-testid={`layout-nav-${phase}`}
-                />
-              ))}
+          <Stack gap="xs" h="100%" align={navbarCollapsed ? "center" : "stretch"}>
+            <Tooltip label={navbarCollapsed ? "Expand navigation" : "Collapse navigation"} position="right" withArrow>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={toggleNavbar}
+                aria-label={navbarCollapsed ? "Expand navigation" : "Collapse navigation"}
+                data-testid="layout-navbar-toggle"
+                size="lg"
+              >
+                {navbarCollapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
+              </ActionIcon>
+            </Tooltip>
+
+            <div style={{ width: "100%" }}>
+              {PHASE_NAV.map(({ phase, label, icon: Icon }) => {
+                const active = project.projectMeta.currentPhase === phase;
+                const disabled = !canAccessPhase(project.projectMeta.currentPhase, phase);
+                const iconElement = (
+                  <NavLink
+                    key={phase}
+                    active={active}
+                    component="button"
+                    disabled={disabled}
+                    label={navbarCollapsed ? undefined : label}
+                    leftSection={<Icon size={18} />}
+                    onClick={() => void handlePhaseNavigation(phase)}
+                    data-testid={`layout-nav-${phase}`}
+                  />
+                );
+                return navbarCollapsed ? (
+                  <Tooltip key={phase} label={label} position="right" withArrow>
+                    {iconElement}
+                  </Tooltip>
+                ) : iconElement;
+              })}
             </div>
-            <NavLink
-              component="button"
-              label="Return to home"
-              leftSection={<IconHome size={18} />}
-              mt="auto"
-              onClick={handleReturnHome}
-              data-testid="layout-nav-home"
-            />
+
+            <div style={{ marginTop: "auto", width: "100%" }}>
+              {navbarCollapsed ? (
+                <Tooltip label="Return to home" position="right" withArrow>
+                  <NavLink
+                    component="button"
+                    leftSection={<IconHome size={18} />}
+                    onClick={handleReturnHome}
+                    data-testid="layout-nav-home"
+                  />
+                </Tooltip>
+              ) : (
+                <NavLink
+                  component="button"
+                  label="Return to home"
+                  leftSection={<IconHome size={18} />}
+                  onClick={handleReturnHome}
+                  data-testid="layout-nav-home"
+                />
+              )}
+            </div>
           </Stack>
         </AppShell.Navbar>
       ) : null}
