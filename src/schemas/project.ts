@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DataParSchema } from "./dataParSchema";
 
 export const PROJECT_PHASES = ["import", "parameters", "processing"] as const;
 export const IMPORT_EXECUTION_PHASES = [
@@ -28,6 +29,7 @@ export const ProjectFileSchema = z.object({
       importCompleted: z.boolean().optional(),
       importPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
       navbarCollapsed: z.boolean().optional(),
+      showAdvancedParameters: z.boolean().default(false),
     })
     .passthrough()
     .default({}),
@@ -36,7 +38,7 @@ export const ProjectFileSchema = z.object({
     .object({
       sourcestructure: z.object({}).passthrough().default({}),
       studyPar: z.object({}).passthrough().default({}),
-      dataPar: z.object({}).passthrough().default({}),
+      dataPar: DataParSchema.default({}),
     })
     .default({
       sourcestructure: {},
@@ -63,7 +65,7 @@ export const DEFAULT_PROJECT_FILE = (
     lastOpened: new Date().toISOString(),
     currentPhase: "import",
   },
-  uiState: { navbarCollapsed: true },
+  uiState: { navbarCollapsed: true, showAdvancedParameters: false },
   mappingState: {},
   exploreAslConfig: {
     sourcestructure: {},
