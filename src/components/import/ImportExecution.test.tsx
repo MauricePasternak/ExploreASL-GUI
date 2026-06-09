@@ -36,8 +36,8 @@ function configureRuntimeSettings() {
 
 function configureSubjects() {
   useImportStore.getState().setSubjectRows([
-    { id: "SUB01/01/01", subject: "SUB01", session: "01", run: "01", groupId: "global" },
-    { id: "SUB02/01/01", subject: "SUB02", session: "01", run: "01", groupId: "global" },
+    { id: "SUB01/01", subject: "SUB01", session: "01", groupId: "global" },
+    { id: "SUB02/01", subject: "SUB02", session: "01", groupId: "global" },
   ]);
 }
 

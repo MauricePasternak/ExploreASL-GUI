@@ -378,7 +378,7 @@ const BidsAslMetadata = z.object({
 
   // === M0 ===
   M0: z.boolean().optional(),
-  M0Type: z.enum(["separate", "integrated", "absent", "estimate"]).optional(),
+  M0Type: z.enum(["Separate", "Integrated", "Absent", "Estimate"]).optional(),
 
   // === Other ExploreASL-specific ===
   ASLContext: z.enum(["m0scan,deltam", "control,label", "label,control", "cbf"]).optional(),

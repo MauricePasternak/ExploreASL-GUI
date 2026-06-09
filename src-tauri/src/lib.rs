@@ -1,5 +1,6 @@
 mod commands;
 pub mod import;
+pub mod import_parser;
 mod tracing;
 
 use commands::{create_symlink_tree, is_writable, walk_directory, which_matlab};

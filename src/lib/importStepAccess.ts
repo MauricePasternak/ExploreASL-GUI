@@ -18,7 +18,7 @@ type Step5State = StepPrerequisiteState &
   Partial<
     Pick<
       ImportState,
-      "sessionAliases" | "runAliases" | "bMatchDirectories" | "metadataGroups"
+      "sessionAliases" | "runAliases" | "bMatchDirectories" | "metadataGroups" | "subjectRows"
     >
   >;
 
@@ -154,7 +154,7 @@ function hasValidStep5ProjectPrerequisites(state: Step5State): boolean {
     state.modalityAliases,
     state.bMatchDirectories ?? true,
   );
-  const studyPar = assembleStudyPar(state.metadataGroups ?? []);
+  const studyPar = assembleStudyPar(state.metadataGroups ?? [], state.subjectRows ?? []);
 
   return (
     SourcestructureJsonSchema.safeParse(sourcestructure).success &&

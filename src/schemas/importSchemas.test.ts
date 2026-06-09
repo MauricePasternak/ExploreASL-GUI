@@ -177,7 +177,7 @@ describe("BidsAslMetadataSchema", () => {
     MRAcquisitionType: "3D" as const,
     MagneticFieldStrength: 3,
     Manufacturer: "Siemens" as const,
-    M0Type: "integrated" as const,
+    M0Type: "Integrated" as const,
     ASLContext: "m0scan,deltam",
     LabelingDuration: 1.8,
   };
@@ -339,8 +339,8 @@ describe("BidsAslMetadataSchema", () => {
       BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "m0scan,deltam" })
     ).toMatchObject({ ASLContext: "m0scan,deltam" });
     expect(
-      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "control,label", M0Type: "separate" })
-    ).toMatchObject({ ASLContext: "control,label", M0Type: "separate" });
+      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "control,label", M0Type: "Separate" })
+    ).toMatchObject({ ASLContext: "control,label", M0Type: "Separate" });
     expect(
       BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "m0scan, label, control, label, control" })
     ).toMatchObject({ ASLContext: "m0scan, label, control, label, control" });
@@ -360,7 +360,7 @@ describe("BidsAslMetadataSchema", () => {
       BidsAslMetadataSchema.parse({
         ...validBase,
         ASLContext: "control,label",
-        M0Type: "integrated",
+        M0Type: "Integrated",
       })
     ).toThrow();
   });
@@ -370,9 +370,9 @@ describe("BidsAslMetadataSchema", () => {
       BidsAslMetadataSchema.parse({
         ...validBase,
         ASLContext: "control,label",
-        M0Type: "separate",
+        M0Type: "Separate",
       })
-    ).toMatchObject({ M0Type: "separate" });
+    ).toMatchObject({ M0Type: "Separate" });
   });
 });
 
@@ -388,7 +388,7 @@ describe("validateBidsMetadataGroup", () => {
     EchoTime: 0.014,
     RepetitionTimePreparation: 4,
     Manufacturer: "Siemens" as const,
-    M0Type: "integrated" as const,
+    M0Type: "Integrated" as const,
     ASLContext: "m0scan,deltam",
     LabelingDuration: 1.8,
   };
@@ -414,18 +414,18 @@ describe("validateBidsMetadataGroup", () => {
     const errors = validateBidsMetadataGroup({
       ...validData,
       ASLContext: "control,label",
-      M0Type: "integrated",
+      M0Type: "Integrated",
     });
-    expect(errors).toContain("M0 Type cannot be 'integrated' when ASL Context does not contain 'm0scan'.");
+    expect(errors).toContain("M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.");
   });
 
   it("auto-accepts M0Type 'integrated' when m0scan is in ASLContext", () => {
     const errors = validateBidsMetadataGroup({
       ...validData,
-      M0Type: "integrated",
+      M0Type: "Integrated",
       ASLContext: "m0scan,deltam",
     });
-    expect(errors).not.toContain("M0 Type cannot be 'integrated' when ASL Context does not contain 'm0scan'.");
+    expect(errors).not.toContain("M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.");
   });
 
   it("does not require M0Type when m0scan is in ASLContext", () => {
@@ -513,7 +513,7 @@ describe("StudyParJsonSchema", () => {
           MagneticFieldStrength: 3,
           Manufacturer: "Siemens",
           ASLContext: "control,label",
-          M0Type: "separate",
+          M0Type: "Separate",
           LabelingDuration: 1.8,
         },
       ],
@@ -531,7 +531,7 @@ describe("StudyParJsonSchema", () => {
           MagneticFieldStrength: 3,
           Manufacturer: "Siemens",
           ASLContext: "control,label",
-          M0Type: "separate",
+          M0Type: "Separate",
           LabelingDuration: 1.8,
         },
         {
@@ -542,7 +542,7 @@ describe("StudyParJsonSchema", () => {
           MagneticFieldStrength: 3,
           Manufacturer: "Philips",
           ASLContext: "control,label",
-          M0Type: "separate",
+          M0Type: "Separate",
         },
       ],
     };
@@ -553,17 +553,17 @@ describe("StudyParJsonSchema", () => {
     expect(() => StudyParJsonSchema.parse({ StudyPars: [] })).toThrow();
   });
 
-  it("override entry can have SubjectRegExp and SessionRegExp", () => {
+  it("override entry can have SubjectRegExp and VisitRegExp", () => {
     const entry = {
       SubjectRegExp: "^FOO$",
-      SessionRegExp: "^01$",
+      VisitRegExp: "^01$",
       ArterialSpinLabelingType: "PCASL",
       MRAcquisitionType: "3D",
       PostLabelingDelay: [1.8],
       MagneticFieldStrength: 3,
       Manufacturer: "Siemens",
       ASLContext: "control,label",
-      M0Type: "separate",
+      M0Type: "Separate",
       LabelingDuration: 1.8,
     };
     expect(StudyParEntrySchema.parse(entry)).toMatchObject(entry);
@@ -688,17 +688,16 @@ describe("MetadataGroupSchema", () => {
         MagneticFieldStrength: 3,
         Manufacturer: "Siemens",
         ASLContext: "control,label",
-        M0Type: "separate",
+        M0Type: "Separate",
         LabelingDuration: 1.8,
       },
     };
     const result = MetadataGroupSchema.parse(data);
-    expect(result.subjectRegExp).toBe("");
-    expect(result.sessionRegExp).toBe("");
-    expect(result.runRegExp).toBe("");
+    expect(result.id).toBe("global-defaults");
+    expect(result.label).toBe("Global Defaults");
   });
 
-  it("accepts override group with regex", () => {
+  it("accepts override group", () => {
     const data = {
       id: "override-1",
       label: "BAR Override",
@@ -709,11 +708,8 @@ describe("MetadataGroupSchema", () => {
         MagneticFieldStrength: 3,
         Manufacturer: "Philips",
         ASLContext: "control,label",
-        M0Type: "separate",
+        M0Type: "Separate",
       },
-      subjectRegExp: "^BAR$",
-      sessionRegExp: "^01$",
-      runRegExp: "",
     };
     expect(MetadataGroupSchema.parse(data)).toMatchObject(data);
   });
@@ -725,10 +721,9 @@ describe("MetadataGroupSchema", () => {
 describe("SubjectRowSchema", () => {
   it("accepts valid subject row", () => {
     const data = {
-      id: "BAR/01/01",
+      id: "BAR/01",
       subject: "BAR",
       session: "01",
-      run: "01",
       groupId: "global-defaults",
     };
     expect(SubjectRowSchema.parse(data)).toEqual(data);

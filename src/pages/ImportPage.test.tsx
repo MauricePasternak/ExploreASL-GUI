@@ -134,9 +134,6 @@ describe("ImportPage metadata step", () => {
       id: "global",
       label: "Global Defaults",
       bidsParams: { ArterialSpinLabelingType: "PCASL" },
-      subjectRegExp: "",
-      sessionRegExp: "",
-      runRegExp: "",
     });
 
     renderWithProviders();
@@ -170,10 +167,9 @@ describe("ImportPage metadata step", () => {
     ]);
     store.setSubjectRows([
       {
-        id: "BAR/01/01",
+        id: "BAR/01",
         subject: "BAR",
         session: "01",
-        run: "01",
         groupId: "global",
       },
     ]);
@@ -225,24 +221,17 @@ describe("ImportPage metadata step", () => {
       id: "global-defaults",
       label: "Global Defaults",
       bidsParams: { ArterialSpinLabelingType: "PCASL" },
-      subjectRegExp: "",
-      sessionRegExp: "",
-      runRegExp: "",
     });
     store.addMetadataGroup({
       id: "override-1",
       label: "Override 1",
       bidsParams: { ArterialSpinLabelingType: "PASL" },
-      subjectRegExp: "^BAR$",
-      sessionRegExp: "^01$",
-      runRegExp: "^01$",
     });
     store.setSubjectRows([
       {
-        id: "BAR/01/01",
+        id: "BAR/01",
         subject: "BAR",
         session: "01",
-        run: "01",
         groupId: "override-1",
       },
     ]);
@@ -292,10 +281,9 @@ describe("ImportPage metadata step", () => {
 
     expect(useImportStore.getState().subjectRows).toEqual([
       {
-        id: "C9ORF059/12/R1",
+        id: "C9ORF059/12",
         subject: "C9ORF059",
         session: "12",
-        run: "R1",
         groupId: "global-defaults",
       },
     ]);
@@ -343,10 +331,9 @@ describe("ImportPage metadata step", () => {
 
     expect(useImportStore.getState().subjectRows).toEqual([
       {
-        id: "sub-001/01/01",
+        id: "sub-001/01",
         subject: "sub-001",
         session: "01",
-        run: "01",
         groupId: "global-defaults",
       },
     ]);
@@ -423,9 +410,6 @@ describe("ImportPage metadata step", () => {
       id: "global-defaults",
       label: "Global Defaults",
       bidsParams: {},
-      subjectRegExp: "",
-      sessionRegExp: "",
-      runRegExp: "",
     });
 
     renderWithProviders();
@@ -612,7 +596,7 @@ describe("ImportPage import runner step", () => {
     MagneticFieldStrength: 3,
     Manufacturer: "Siemens" as const,
     ASLContext: "control,label",
-    M0Type: "separate" as const,
+    M0Type: "Separate" as const,
     LabelingDuration: 1.8,
   };
 
@@ -644,9 +628,6 @@ describe("ImportPage import runner step", () => {
       id: "global-defaults",
       label: "Global Defaults",
       bidsParams: validBidsParams,
-      subjectRegExp: "",
-      sessionRegExp: "",
-      runRegExp: "",
     });
 
     renderWithProviders();
@@ -687,10 +668,10 @@ describe("ImportPage import runner step", () => {
       id: "global-defaults",
       label: "Global Defaults",
       bidsParams: validBidsParams,
-      subjectRegExp: "",
-      sessionRegExp: "",
-      runRegExp: "",
     });
+    store.setSubjectRows([
+      { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
+    ]);
     store.updateImportProgress("BAR", {
       subject: "BAR",
       session: "01",

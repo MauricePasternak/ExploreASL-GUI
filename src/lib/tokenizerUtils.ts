@@ -6,6 +6,7 @@ import type {
   SourcestructureJson,
   StagingEntry,
   StudyParJson,
+  SubjectRow,
   TokenAssignment,
   TokenTag,
 } from "../schemas/importSchemas";
@@ -207,6 +208,7 @@ export function buildStagingMapping(
   assignments: TokenAssignment[],
   pattern: PathPattern,
   subjectRenames: Record<string, string>,
+  sessionRenames: Record<string, string>,
   modalityAliases: Record<string, string | null>,
   tokenSubDelimiters: string[] = ["_"],
 ): StagingEntry[] {
@@ -239,13 +241,16 @@ export function buildStagingMapping(
     // Apply subject rename
     const subject = subjectRenames[rawSubject] ?? rawSubject;
 
+    // Apply BIDS session rename
+    const session = sessionRenames[rawSession] ?? rawSession;
+
     // Apply modality alias — skip if mapped to null (Ignore)
     const mappedModality = modalityAliases[rawModality];
     if (mappedModality === null || mappedModality === undefined) continue;
 
     entries.push({
       subject,
-      session: rawSession,
+      session,
       run: rawRun,
       modality: mappedModality,
       sourcePath: fullPath,
@@ -274,7 +279,7 @@ function extractValue(segments: string[], assignment: TokenAssignment, tokenSubD
  * are injected to maintain the fixed 4-level structure.
  */
 export function assembleSourcestructure(
-  sessionAliases: SessionAlias[],
+  _sessionAliases: SessionAlias[],
   runAliases: SessionAlias[],
   modalityAliases: ModalityAlias[],
   bMatchDirectories: boolean,
@@ -293,7 +298,7 @@ export function assembleSourcestructure(
   const tokenSessionAliases: string[] = ["^01$", "ASL_1"];
   const seenSessionRegexes = new Set(["^01$"]);
 
-  for (const alias of [...sessionAliases, ...runAliases]) {
+  for (const alias of runAliases) {
     const regex = `^${escapeRegex(alias.captured)}$`;
     if (seenSessionRegexes.has(regex)) {
       continue;
@@ -322,33 +327,78 @@ export function assembleSourcestructure(
 }
 
 /**
- * Assemble the final studyPar.json from metadata groups.
+ * Assemble the final studyPar.json from metadata groups and subject row assignments.
  *
- * The catch-all group (empty subjectRegExp) is always first.
- * Override groups follow with their regex selectors.
+ * Every StudyPars block emits explicit SubjectRegExp and VisitRegExp derived
+ * from subjectRows. Subjects within each group are sub-grouped by their
+ * session signatures to produce compressed regex blocks.
  */
 export function assembleStudyPar(
   metadataGroups: MetadataGroup[],
+  subjectRows: SubjectRow[],
 ): StudyParJson {
-  // Separate catch-all from overrides
-  const catchAll = metadataGroups.find((g) => g.subjectRegExp === "");
-  const overrides = metadataGroups.filter((g) => g.subjectRegExp !== "");
+  // Group subjectRows by groupId
+  const rowsByGroup = new Map<string, SubjectRow[]>();
+  for (const row of subjectRows) {
+    const existing = rowsByGroup.get(row.groupId);
+    if (existing) {
+      existing.push(row);
+    } else {
+      rowsByGroup.set(row.groupId, [row]);
+    }
+  }
 
   const studyPars = [];
 
-  // Catch-all first (no regex selectors)
-  if (catchAll) {
-    studyPars.push({ ...catchAll.bidsParams });
-  }
+  for (const group of metadataGroups) {
+    const rows = rowsByGroup.get(group.id);
+    if (!rows || rows.length === 0) continue;
 
-  // Override entries with regex selectors
-  for (const group of overrides) {
-    studyPars.push({
-      ...group.bidsParams,
-      ...(group.subjectRegExp && { SubjectRegExp: group.subjectRegExp }),
-      ...(group.sessionRegExp && { SessionRegExp: group.sessionRegExp }),
-      ...(group.runRegExp && { RunRegExp: group.runRegExp }),
-    });
+    // Build per-subject session lists
+    const subjectSessions = new Map<string, string[]>();
+    for (const row of rows) {
+      const existing = subjectSessions.get(row.subject);
+      if (existing) {
+        if (!existing.includes(row.session)) {
+          existing.push(row.session);
+        }
+      } else {
+        subjectSessions.set(row.subject, [row.session]);
+      }
+    }
+
+    // Sub-group subjects by their session set signature
+    const sessionSignatureMap = new Map<string, Set<string>>();
+    for (const [subject, sessions] of subjectSessions) {
+      const signature = [...sessions].sort().join(",");
+      const existing = sessionSignatureMap.get(signature);
+      if (existing) {
+        existing.add(subject);
+      } else {
+        sessionSignatureMap.set(signature, new Set([subject]));
+      }
+    }
+
+    // Emit one StudyPars block per session signature
+    for (const [signature, subjects] of sessionSignatureMap) {
+      const sessions = signature.split(",");
+      const escapedSubjects = [...subjects].map(escapeRegex);
+      const subjectRegEx =
+        escapedSubjects.length === 1
+          ? `^(${escapedSubjects[0]})$`
+          : `^(${escapedSubjects.join("|")})$`;
+      const escapedSessions = sessions.map(escapeRegex);
+      const visitRegEx =
+        escapedSessions.length === 1
+          ? `^(${escapedSessions[0]})$`
+          : `^(${escapedSessions.join("|")})$`;
+
+      studyPars.push({
+        ...group.bidsParams,
+        SubjectRegExp: subjectRegEx,
+        VisitRegExp: visitRegEx,
+      });
+    }
   }
 
   // Ensure at least one entry
@@ -397,3 +447,44 @@ export function pathMatchesPattern(segments: string[], pattern: PathPattern): bo
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+/**
+ * Decode pattern signature using user-defined token assignments.
+ * Translates generic <TOKEN> and VARYING placeholders to uppercase tag names
+ * (e.g. <SUBJECT>, <SESSION>, <RUN>, <MODALITY>, <IGNORE>) where assigned.
+ */
+export function decodePatternSignature(
+  signature: string,
+  assignments: TokenAssignment[],
+  subDelimiters: string[] = ["_", "-"],
+): string {
+  const blocks = signature.split("/");
+  const decodedBlocks = blocks.map((block, blockIndex) => {
+    const blockAssignments = assignments.filter((a) => a.blockIndex === blockIndex);
+    if (blockAssignments.length === 0) {
+      return block;
+    }
+
+    const wholeAssignment = blockAssignments.find((a) => a.subBlockIndex === null);
+    if (wholeAssignment) {
+      return wholeAssignment.tag === "Ignore" ? "<IGNORE>" : `<${wholeAssignment.tag.toUpperCase()}>`;
+    }
+
+    const { subBlocks, delimiters } = splitBySubDelimiters(block, subDelimiters);
+    const decodedSubBlocks = subBlocks.map((subBlock, subBlockIndex) => {
+      const assignment = blockAssignments.find((a) => a.subBlockIndex === subBlockIndex);
+      if (assignment) {
+        return assignment.tag === "Ignore" ? "<IGNORE>" : `<${assignment.tag.toUpperCase()}>`;
+      }
+      return subBlock;
+    });
+
+    return decodedSubBlocks.reduce((result, sub, idx) => {
+      if (idx === 0) return sub;
+      return result + (delimiters[idx - 1] ?? "") + sub;
+    }, "");
+  });
+
+  return decodedBlocks.join("/");
+}
+

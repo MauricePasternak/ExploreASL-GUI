@@ -66,7 +66,7 @@ export default function MetadataModal({
             ...values,
             bidsParams: stripEmptyBidsParams({
               ...values.bidsParams,
-              M0Type: hasM0ScanInContext ? "integrated" : values.bidsParams.M0Type,
+              M0Type: hasM0ScanInContext ? "Integrated" : values.bidsParams.M0Type,
             }),
           }),
         )}
@@ -105,7 +105,7 @@ export default function MetadataModal({
                 name="bidsParams.M0Type"
                 label="M0 Type"
                 hint={BIDS_FIELD_HINTS.M0Type}
-                data={["separate", "absent", "estimate"]}
+                data={["Separate", "Absent", "Estimate"]}
                 testId="field-m0-type"
               />
             )}
@@ -115,7 +115,7 @@ export default function MetadataModal({
                 name="bidsParams.M0Type"
                 label="M0 Type"
                 hint={BIDS_FIELD_HINTS.M0Type}
-                data={["integrated"]}
+                data={["Integrated"]}
                 testId="field-m0-type"
               />
             )}
