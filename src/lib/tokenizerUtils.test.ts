@@ -5,12 +5,14 @@ import type {
   ModalityAlias,
   PathPattern,
   SessionAlias,
+  SubjectRow,
   TokenAssignment,
 } from "../schemas/importSchemas";
 import {
   assembleSourcestructure,
   assembleStudyPar,
   buildStagingMapping,
+  decodePatternSignature,
   extractUniqueValues,
   generateFolderHierarchy,
   generateTokenOrdering,
@@ -319,6 +321,7 @@ describe("buildStagingMapping", () => {
       assignments,
       BAR_PATTERN,
       {},
+      {},
       {
         "sernum-0001_ser-AAHead_Scout": "T1w",
         "sernum-0018_ser-pcasl_3d_multiTI": "ASL4D",
@@ -346,6 +349,7 @@ describe("buildStagingMapping", () => {
       assignments,
       BAR_PATTERN,
       { BAR: "sub-BAR" },
+      {},
       { "sernum-0001_ser-AAHead_Scout": "T1w" },
     );
 
@@ -363,6 +367,7 @@ describe("buildStagingMapping", () => {
       ROOT,
       assignments,
       BAR_PATTERN,
+      {},
       {},
       {
         "sernum-0001_ser-AAHead_Scout": null,
@@ -386,6 +391,7 @@ describe("buildStagingMapping", () => {
       ROOT,
       assignments,
       BAR_PATTERN,
+      {},
       {},
       { "sernum-0001_ser-AAHead_Scout": "T1w" },
     );
@@ -424,6 +430,7 @@ describe("buildStagingMapping", () => {
       assignments,
       pattern,
       {},
+      {},
       { ASL: "ASL4D", T1: "T1w" },
       ["_", "-"],
     );
@@ -460,7 +467,7 @@ describe("assembleSourcestructure", () => {
     expect(result.tokenSessionAliases).toContain("ASL_1");
   });
 
-  it("includes additional session and run aliases", () => {
+  it("includes additional run aliases but excludes session aliases", () => {
     const sessionAliases: SessionAlias[] = [
       { captured: "visit_1", alias: "visit_1", index: 1 },
       { captured: "visit_2", alias: "visit_2", index: 2 },
@@ -471,8 +478,8 @@ describe("assembleSourcestructure", () => {
     ];
 
     const result = assembleSourcestructure(sessionAliases, runAliases, [], true);
-    expect(result.tokenSessionAliases).toContain("^visit_1$");
-    expect(result.tokenSessionAliases).toContain("^visit_2$");
+    expect(result.tokenSessionAliases).not.toContain("^visit_1$");
+    expect(result.tokenSessionAliases).not.toContain("^visit_2$");
     expect(result.tokenSessionAliases).toContain("^run_a$");
     expect(result.tokenSessionAliases).toContain("ASL_2");
   });
@@ -515,112 +522,206 @@ describe("assembleSourcestructure", () => {
 // assembleStudyPar
 // ---------------------------------------------------------------------------
 describe("assembleStudyPar", () => {
-  it("puts catch-all group first (no regex selectors)", () => {
+  it("emits explicit regex for single-group with all subjects", () => {
     const groups: MetadataGroup[] = [
       {
         id: "global",
         label: "Global Defaults",
         bidsParams: { ArterialSpinLabelingType: "PCASL", MRAcquisitionType: "3D" },
-        subjectRegExp: "",
-        sessionRegExp: "",
-        runRegExp: "",
       },
     ];
+    const rows: SubjectRow[] = [
+      { id: "SubjA/01", subject: "SubjA", session: "01", groupId: "global" },
+      { id: "SubjB/01", subject: "SubjB", session: "01", groupId: "global" },
+    ];
 
-    const result = assembleStudyPar(groups);
+    const result = assembleStudyPar(groups, rows);
     expect(result.StudyPars).toHaveLength(1);
     expect(result.StudyPars[0].ArterialSpinLabelingType).toBe("PCASL");
-    expect(result.StudyPars[0]).not.toHaveProperty("SubjectRegExp");
+    expect(result.StudyPars[0].SubjectRegExp).toBe("^(SubjA|SubjB)$");
+    expect(result.StudyPars[0].VisitRegExp).toBe("^(01)$");
   });
 
-  it("adds override entries with regex selectors after catch-all", () => {
+  it("emits separate blocks for override group", () => {
     const groups: MetadataGroup[] = [
       {
         id: "global",
         label: "Global Defaults",
         bidsParams: { ArterialSpinLabelingType: "PCASL" },
-        subjectRegExp: "",
-        sessionRegExp: "",
-        runRegExp: "",
       },
       {
         id: "bar-override",
         label: "BAR Override",
         bidsParams: { ArterialSpinLabelingType: "PASL" },
-        subjectRegExp: "^BAR$",
-        sessionRegExp: "",
-        runRegExp: "",
       },
     ];
+    const rows: SubjectRow[] = [
+      { id: "FOO/01", subject: "FOO", session: "01", groupId: "global" },
+      { id: "BAR/01", subject: "BAR", session: "01", groupId: "bar-override" },
+    ];
 
-    const result = assembleStudyPar(groups);
+    const result = assembleStudyPar(groups, rows);
     expect(result.StudyPars).toHaveLength(2);
-    expect(result.StudyPars[0]).not.toHaveProperty("SubjectRegExp");
-    expect(result.StudyPars[1].SubjectRegExp).toBe("^BAR$");
+    expect(result.StudyPars[0].SubjectRegExp).toBe("^(FOO)$");
+    expect(result.StudyPars[0].ArterialSpinLabelingType).toBe("PCASL");
+    expect(result.StudyPars[1].SubjectRegExp).toBe("^(BAR)$");
     expect(result.StudyPars[1].ArterialSpinLabelingType).toBe("PASL");
   });
 
-  it("includes SessionRegExp when set on override", () => {
+  it("splits subjects with different session profiles within same group", () => {
     const groups: MetadataGroup[] = [
       {
         id: "global",
         label: "Global",
-        bidsParams: {},
-        subjectRegExp: "",
-        sessionRegExp: "",
-        runRegExp: "",
-      },
-      {
-        id: "override",
-        label: "Override",
         bidsParams: { MRAcquisitionType: "2D" },
-        subjectRegExp: "^FOO$",
-        sessionRegExp: "^01$",
-        runRegExp: "",
       },
     ];
+    const rows: SubjectRow[] = [
+      { id: "SubjA/01", subject: "SubjA", session: "01", groupId: "global" },
+      { id: "SubjA/02", subject: "SubjA", session: "02", groupId: "global" },
+      { id: "SubjC/01", subject: "SubjC", session: "01", groupId: "global" },
+    ];
 
-    const result = assembleStudyPar(groups);
-    expect(result.StudyPars[1].SessionRegExp).toBe("^01$");
+    const result = assembleStudyPar(groups, rows);
+    expect(result.StudyPars).toHaveLength(2);
+
+    // SubjA has sessions [01, 02]
+    const subjABlock = result.StudyPars.find((b) => b.SubjectRegExp === "^(SubjA)$");
+    expect(subjABlock).toBeDefined();
+    expect(subjABlock!.VisitRegExp).toBe("^(01|02)$");
+
+    // SubjC has sessions [01]
+    const subjCBlock = result.StudyPars.find((b) => b.SubjectRegExp === "^(SubjC)$");
+    expect(subjCBlock).toBeDefined();
+    expect(subjCBlock!.VisitRegExp).toBe("^(01)$");
   });
 
-  it("produces at least one entry even with no groups", () => {
-    const result = assembleStudyPar([]);
-    expect(result.StudyPars).toHaveLength(1);
-  });
-
-  it("handles multiple override groups", () => {
+  it("drops groups with zero assigned subjects", () => {
     const groups: MetadataGroup[] = [
       {
         id: "global",
         label: "Global",
         bidsParams: { ArterialSpinLabelingType: "PCASL" },
-        subjectRegExp: "",
-        sessionRegExp: "",
-        runRegExp: "",
       },
       {
-        id: "bar",
-        label: "BAR",
+        id: "empty",
+        label: "Empty Group",
         bidsParams: { ArterialSpinLabelingType: "PASL" },
-        subjectRegExp: "^BAR$",
-        sessionRegExp: "",
-        runRegExp: "",
-      },
-      {
-        id: "foo",
-        label: "FOO",
-        bidsParams: { ArterialSpinLabelingType: "CASL" },
-        subjectRegExp: "^FOO$",
-        sessionRegExp: "",
-        runRegExp: "",
       },
     ];
+    const rows: SubjectRow[] = [
+      { id: "FOO/01", subject: "FOO", session: "01", groupId: "global" },
+    ];
 
-    const result = assembleStudyPar(groups);
-    expect(result.StudyPars).toHaveLength(3);
-    expect(result.StudyPars[0].ArterialSpinLabelingType).toBe("PCASL");
-    expect(result.StudyPars[1].SubjectRegExp).toBe("^BAR$");
-    expect(result.StudyPars[2].SubjectRegExp).toBe("^FOO$");
+    const result = assembleStudyPar(groups, rows);
+    expect(result.StudyPars).toHaveLength(1);
+    expect(result.StudyPars[0].SubjectRegExp).toBe("^(FOO)$");
+  });
+
+  it("produces at least one entry even with no groups and no rows", () => {
+    const result = assembleStudyPar([], []);
+    expect(result.StudyPars).toHaveLength(1);
+  });
+
+  it("compresses subjects with identical session profiles into one block", () => {
+    const groups: MetadataGroup[] = [
+      {
+        id: "global",
+        label: "Global",
+        bidsParams: {},
+      },
+    ];
+    const rows: SubjectRow[] = [
+      { id: "A/01", subject: "A", session: "01", groupId: "global" },
+      { id: "A/02", subject: "A", session: "02", groupId: "global" },
+      { id: "B/01", subject: "B", session: "01", groupId: "global" },
+      { id: "B/02", subject: "B", session: "02", groupId: "global" },
+    ];
+
+    const result = assembleStudyPar(groups, rows);
+    expect(result.StudyPars).toHaveLength(1);
+    expect(result.StudyPars[0].SubjectRegExp).toBe("^(A|B)$");
+    expect(result.StudyPars[0].VisitRegExp).toBe("^(01|02)$");
+  });
+
+  it("escapes regex-special characters in subject and session names", () => {
+    const groups: MetadataGroup[] = [
+      {
+        id: "global",
+        label: "Global",
+        bidsParams: {},
+      },
+    ];
+    const rows: SubjectRow[] = [
+      { id: "C9ORF059.12/01", subject: "C9ORF059.12", session: "01", groupId: "global" },
+      { id: "FOO+BAR/01", subject: "FOO+BAR", session: "01", groupId: "global" },
+    ];
+
+    const result = assembleStudyPar(groups, rows);
+    expect(result.StudyPars).toHaveLength(1);
+    expect(result.StudyPars[0].SubjectRegExp).toBe("^(C9ORF059\\.12|FOO\\+BAR)$");
+    expect(result.StudyPars[0].VisitRegExp).toBe("^(01)$");
   });
 });
+
+// ---------------------------------------------------------------------------
+// decodePatternSignature
+// ---------------------------------------------------------------------------
+describe("decodePatternSignature", () => {
+  it("translates a whole-level assignment", () => {
+    const signature = "<TOKEN>/DICOM";
+    const assignments: TokenAssignment[] = [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+    ];
+    const result = decodePatternSignature(signature, assignments);
+    expect(result).toBe("<SUBJECT>/DICOM");
+  });
+
+  it("translates sub-block assignments in a multi-token level", () => {
+    const signature = "<TOKEN>-<TOKEN>-<TOKEN>";
+    const assignments: TokenAssignment[] = [
+      { blockIndex: 0, subBlockIndex: 1, tag: "Session" },
+    ];
+    const result = decodePatternSignature(signature, assignments);
+    expect(result).toBe("<TOKEN>-<SESSION>-<TOKEN>");
+  });
+
+  it("handles mixed whole-block, sub-block, and unassigned/fixed levels", () => {
+    const signature = "<TOKEN>/<TOKEN>-<TOKEN>-<TOKEN>/<TOKEN>/DICOM";
+    const assignments: TokenAssignment[] = [
+      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+      { blockIndex: 1, subBlockIndex: 1, tag: "Session" },
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+    ];
+    const result = decodePatternSignature(signature, assignments);
+    expect(result).toBe("<SUBJECT>/<TOKEN>-<SESSION>-<TOKEN>/<MODALITY>/DICOM");
+  });
+
+  it("leaves signature unchanged when there are no assignments", () => {
+    const signature = "<TOKEN>/<TOKEN>-<TOKEN>/DICOM";
+    const result = decodePatternSignature(signature, []);
+    expect(result).toBe(signature);
+  });
+
+  it("translates Ignore tag to <IGNORE>", () => {
+    const signature = "<TOKEN>/<TOKEN>-<TOKEN>";
+    const assignments: TokenAssignment[] = [
+      { blockIndex: 0, subBlockIndex: null, tag: "Ignore" },
+      { blockIndex: 1, subBlockIndex: 0, tag: "Ignore" },
+      { blockIndex: 1, subBlockIndex: 1, tag: "Session" },
+    ];
+    const result = decodePatternSignature(signature, assignments);
+    expect(result).toBe("<IGNORE>/<IGNORE>-<SESSION>");
+  });
+
+  it("supports custom sub-block delimiters", () => {
+    const signature = "<TOKEN>_<TOKEN>#<TOKEN>";
+    const assignments: TokenAssignment[] = [
+      { blockIndex: 0, subBlockIndex: 1, tag: "Run" },
+    ];
+    // Custom subDelimiters including "_" and "#"
+    const result = decodePatternSignature(signature, assignments, ["_", "#"]);
+    expect(result).toBe("<TOKEN>_<RUN>#<TOKEN>");
+  });
+});
+

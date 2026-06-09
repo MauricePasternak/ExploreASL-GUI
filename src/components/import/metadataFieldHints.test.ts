@@ -23,12 +23,12 @@ describe("stripEmptyBidsParams", () => {
   it("keeps explicit false booleans", () => {
     const result = stripEmptyBidsParams({
       BackgroundSuppression: false,
-      M0Type: "separate",
+      M0Type: "Separate",
     });
 
     expect(result).toEqual({
       BackgroundSuppression: false,
-      M0Type: "separate",
+      M0Type: "Separate",
     });
   });
 });

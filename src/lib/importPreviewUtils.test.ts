@@ -71,6 +71,7 @@ describe("buildAllStagingMappings", () => {
         [PATTERN_2DASH.signature]: CONFIGS_2DASH,
       },
       {},
+      [],
       MODALITY_ALIASES,
       ["_", "-"],
     );
@@ -85,6 +86,7 @@ describe("buildAllStagingMappings", () => {
       [PATTERN_3DASH],
       { [PATTERN_3DASH.signature]: CONFIGS_3DASH },
       {},
+      [],
       MODALITY_ALIASES,
       ["_", "-"],
     );
@@ -109,6 +111,7 @@ describe("buildAllStagingMappings", () => {
       [PATTERN_2DASH],
       { [PATTERN_2DASH.signature]: CONFIGS_2DASH },
       {},
+      [],
       MODALITY_ALIASES,
       ["_", "-"],
     );
@@ -137,6 +140,7 @@ describe("buildAllStagingMappings", () => {
       [PATTERN_3DASH],
       { [PATTERN_3DASH.signature]: CONFIGS_3DASH },
       {},
+      [],
       aliasesWithIgnore,
       ["_", "-"],
     );
@@ -166,6 +170,7 @@ describe("buildAllStagingMappings", () => {
       [simplePattern],
       { [simplePattern.signature]: noSession },
       {},
+      [],
       [{ captured: "ASL", mapped: "ASL4D" }],
     );
 
@@ -173,5 +178,20 @@ describe("buildAllStagingMappings", () => {
       session: "01",
       run: "01",
     });
+  });
+
+  it("applies BIDS session aliases renaming to staging entry session field", () => {
+    const results = buildAllStagingMappings(
+      RAW_PATHS.slice(4, 5), // C9ORF007-11
+      ROOT,
+      [PATTERN_2DASH],
+      { [PATTERN_2DASH.signature]: CONFIGS_2DASH },
+      {},
+      [{ captured: "11", alias: "visit_11", index: 1 }],
+      MODALITY_ALIASES,
+      ["_", "-"],
+    );
+
+    expect(results[0].entries[0].session).toBe("visit_11");
   });
 });

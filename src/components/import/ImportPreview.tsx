@@ -40,10 +40,11 @@ export default function ImportPreview() {
         pathPatterns,
         tokenizerConfigs,
         subjectRenamesMap,
+        sessionAliases,
         modalityAliases,
         tokenSubDelimiters,
       ),
-    [rawPaths, sourceDataPath, pathPatterns, tokenizerConfigs, subjectRenamesMap, modalityAliases, tokenSubDelimiters],
+    [rawPaths, sourceDataPath, pathPatterns, tokenizerConfigs, subjectRenamesMap, sessionAliases, modalityAliases, tokenSubDelimiters],
   );
 
   const sourcestructure = useMemo(
@@ -52,8 +53,8 @@ export default function ImportPreview() {
   );
 
   const studyPar = useMemo(
-    () => assembleStudyPar(metadataGroups),
-    [metadataGroups],
+    () => assembleStudyPar(metadataGroups, subjectRows),
+    [metadataGroups, subjectRows],
   );
 
   const totalEntries = mappings.reduce((sum, m) => sum + m.entries.length, 0);
@@ -70,6 +71,7 @@ export default function ImportPreview() {
       runAliases,
       bMatchDirectories,
       metadataGroups,
+      subjectRows,
     },
     settings,
   );

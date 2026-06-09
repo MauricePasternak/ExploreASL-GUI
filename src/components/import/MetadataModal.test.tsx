@@ -18,7 +18,7 @@ const validBidsParams = {
   MagneticFieldStrength: 3,
   Manufacturer: "Siemens" as const,
   ASLContext: "control,label",
-  M0Type: "separate" as const,
+  M0Type: "Separate" as const,
   LabelingDuration: 1.8,
 };
 
@@ -109,7 +109,7 @@ describe("MetadataModal", () => {
           Manufacturer: "Siemens",
           ArterialSpinLabelingType: "PCASL",
           PostLabelingDelay: [1.8, 2.0],
-          M0Type: "separate",
+          M0Type: "Separate",
           M0_GMScaleFactor: 1.5,
         },
       },
@@ -118,7 +118,7 @@ describe("MetadataModal", () => {
     expect(testId("modal-group-label-input")).toHaveValue("GENFI Defaults");
     expect(testId("field-post-labeling-delay")).toHaveValue("1.8, 2");
     expect(testId("field-manufacturer")).toHaveValue("Siemens");
-    expect(testId("field-m0-type")).toHaveValue("separate");
+    expect(testId("field-m0-type")).toHaveValue("Separate");
     expect(testId("field-m0-gm-scale-factor")).toHaveValue("1.5");
   });
 
@@ -315,7 +315,7 @@ describe("MetadataModal", () => {
           MagneticFieldStrength: 3,
           Manufacturer: "Siemens" as const,
           ASLContext: "control,label",
-          M0Type: "separate" as const,
+          M0Type: "Separate" as const,
           BolusCutOffFlag: true,
           BolusCutOffDelayTime: [0.8, 0],
           BolusCutOffTechnique: "Q2TIPS" as const,

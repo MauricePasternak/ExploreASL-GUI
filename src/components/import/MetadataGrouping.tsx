@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Code,
   Group,
   Stack,
   Table,
@@ -55,18 +54,6 @@ function extractAssignmentValue(
   return parts[assignment.subBlockIndex] ?? "";
 }
 
-function buildExactMatchRegex(values: string[]): string {
-  const escaped = [...new Set(values)]
-    .filter(Boolean)
-    .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-
-  if (escaped.length === 0) {
-    return "";
-  }
-
-  return `^(${escaped.join("|")})$`;
-}
-
 function deriveSubjectRows({
   rawPaths,
   sourceDataPath,
@@ -94,7 +81,6 @@ function deriveSubjectRows({
     }
 
     const sessionAssignment = assignments.find((assignment) => assignment.tag === "Session");
-    const runAssignment = assignments.find((assignment) => assignment.tag === "Run");
 
     for (const fullPath of rawPaths) {
       if (!fullPath.startsWith(sourceDataPath)) {
@@ -120,17 +106,13 @@ function deriveSubjectRows({
       const session = sessionAssignment
         ? extractAssignmentValue(segments, sessionAssignment, tokenSubDelimiters) || "01"
         : "01";
-      const run = runAssignment
-        ? extractAssignmentValue(segments, runAssignment, tokenSubDelimiters) || "01"
-        : "01";
 
-      const id = `${subject}/${session}/${run}`;
+      const id = `${subject}/${session}`;
       if (!rows.has(id)) {
         rows.set(id, {
           id,
           subject,
           session,
-          run,
           groupId: DEFAULT_GROUP_ID,
         });
       }
@@ -210,9 +192,6 @@ export default function MetadataGrouping() {
         id: DEFAULT_GROUP_ID,
         label: "Global Defaults",
         bidsParams: {},
-        subjectRegExp: "",
-        sessionRegExp: "",
-        runRegExp: "",
       });
       setEditingGroupId(DEFAULT_GROUP_ID);
       setModalMode("edit");
@@ -273,15 +252,11 @@ export default function MetadataGrouping() {
     }
 
     if (modalMode === "override" && selectedRowIds.length > 0) {
-      const selectedRows = subjectRows.filter((row) => selectedRowIds.includes(row.id));
       const groupId = `override-${Date.now()}`;
       const overrideGroup: MetadataGroup = {
         id: groupId,
         label: values.label,
         bidsParams: values.bidsParams,
-        subjectRegExp: buildExactMatchRegex(selectedRows.map((row) => row.subject)),
-        sessionRegExp: buildExactMatchRegex(selectedRows.map((row) => row.session)),
-        runRegExp: buildExactMatchRegex(selectedRows.map((row) => row.run)),
       };
 
       addMetadataGroup(overrideGroup);
@@ -297,7 +272,7 @@ export default function MetadataGrouping() {
     <Stack gap="md" data-testid="metadata-grouping">
       <Title order={3}>Metadata Grouping</Title>
       <Text c="dimmed" size="sm">
-        Assign subject, session, and run combinations to metadata groups that
+        Assign subject and session combinations to metadata groups that
         will become `studyPar.json` entries.
       </Text>
 
@@ -324,29 +299,24 @@ export default function MetadataGrouping() {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    {isDefault ? (
-                      <Badge variant="dot" color="blue">
-                        Global Defaults (Catch-All)
-                      </Badge>
-                    ) : (
-                      <Stack gap={2}>
-                        {group.subjectRegExp && (
-                          <Text size="xs">
-                            Subject: <Code>{group.subjectRegExp}</Code>
+                    {(() => {
+                      const groupRows = subjectRows.filter((row) => row.groupId === group.id);
+                      const uniqueSubjects = new Set(groupRows.map((r) => r.subject)).size;
+                      const uniqueSessions = new Set(groupRows.map((r) => r.session)).size;
+                      if (uniqueSubjects === 0) {
+                        return (
+                          <Text size="xs" c="dimmed">
+                            No subjects assigned
                           </Text>
-                        )}
-                        {group.sessionRegExp && (
-                          <Text size="xs">
-                            Session: <Code>{group.sessionRegExp}</Code>
-                          </Text>
-                        )}
-                        {group.runRegExp && (
-                          <Text size="xs">
-                            Run: <Code>{group.runRegExp}</Code>
-                          </Text>
-                        )}
-                      </Stack>
-                    )}
+                        );
+                      }
+                      return (
+                        <Text size="xs">
+                          Assigned to {uniqueSubjects} subject{uniqueSubjects !== 1 ? "s" : ""}{" "}
+                          ({uniqueSessions} session{uniqueSessions !== 1 ? "s" : ""})
+                        </Text>
+                      );
+                    })()}
                   </Table.Td>
                   <Table.Td>
                     <Group gap="xs">
@@ -414,7 +384,6 @@ export default function MetadataGrouping() {
                 <Table.Th />
                 <Table.Th>Subject</Table.Th>
                 <Table.Th>Session</Table.Th>
-                <Table.Th>Run</Table.Th>
                 <Table.Th>Metadata Group</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -433,7 +402,6 @@ export default function MetadataGrouping() {
                   </Table.Td>
                   <Table.Td>{row.subject}</Table.Td>
                   <Table.Td>{row.session}</Table.Td>
-                  <Table.Td>{row.run}</Table.Td>
                   <Table.Td>
                     <Badge variant="light">
                       {groupLabelById.get(row.groupId) ?? "Global Defaults"}

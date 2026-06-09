@@ -73,7 +73,7 @@ describe("captureSnapshot", () => {
 
 describe("copySnapshotToClipboard", () => {
   it("writes JSON snapshot to clipboard", async () => {
-    const writeText = vi.fn(() => Promise.resolve());
+    const writeText = vi.fn((_text: string) => Promise.resolve());
     Object.assign(navigator, { clipboard: { writeText } });
 
     const snapshot: StoreSnapshot = {

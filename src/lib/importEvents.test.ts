@@ -45,7 +45,7 @@ beforeEach(() => {
 
   vi.mocked(listen).mockImplementation(async (event, handler) => {
     handlers[event] = handler as EventHandler;
-    return vi.fn();
+    return () => {};
   });
 
   vi.mocked(invoke).mockImplementation(async (cmd: string) => {

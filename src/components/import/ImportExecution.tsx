@@ -407,6 +407,7 @@ export default function ImportExecution() {
         store.pathPatterns,
         store.tokenizerConfigs,
         subjectRenamesMap,
+        store.sessionAliases,
         store.modalityAliases,
         globalSettings.tokenSubDelimiters,
       );
@@ -421,6 +422,7 @@ export default function ImportExecution() {
 
       const studyparJson = assembleStudyPar(
         store.metadataGroups,
+        store.subjectRows,
       ) as Record<string, unknown>;
 
       const matlabPath = globalSettings.matlabInstallations[0]?.path ?? "";

@@ -31,12 +31,9 @@ const VALID_METADATA = {
     MagneticFieldStrength: 3,
     Manufacturer: "Siemens" as const,
     ASLContext: "control,label",
-    M0Type: "separate" as const,
+    M0Type: "Separate" as const,
     LabelingDuration: 1.8,
   },
-  subjectRegExp: "",
-  sessionRegExp: "",
-  runRegExp: "",
 };
 
 const SETTINGS: Pick<GlobalSettings, "matlabInstallations" | "exploreAslPath"> = {
@@ -60,6 +57,9 @@ const READY_FOR_PREVIEW_STATE = {
   runAliases: [],
   bMatchDirectories: true,
   metadataGroups: [VALID_METADATA],
+  subjectRows: [
+    { id: "SUB/01", subject: "SUB", session: "01", groupId: "global-defaults" },
+  ],
 };
 
 describe("importStepAccess", () => {
