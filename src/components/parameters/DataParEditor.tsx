@@ -2,14 +2,14 @@ import { useEffect, useCallback, useRef } from "react";
 import { Accordion, Switch, Stack, Text, Group } from "@mantine/core";
 import { useDataParStore } from "../../stores/dataParStore";
 import { useProjectStore } from "../../stores/projectStore";
-import type { DataParState } from "../../schemas/dataPar";
-import M0Section from "./M0Section";
-import QuantificationSection from "./QuantificationSection";
-import GeneralSettingsSection from "./GeneralSettingsSection";
-import ASLProcessingSection from "./ASLProcessingSection";
-import AtlasesSection from "./AtlasesSection";
-import StructuralSection from "./StructuralSection";
-import EnvironmentSection from "./EnvironmentSection";
+import type { DataParState } from "../../schemas/dataParSchema";
+import { M0Section } from "./M0Section";
+import { QuantificationSection } from "./QuantificationSection";
+import { GeneralSettingsSection } from "./GeneralSettingsSection";
+import { ASLProcessingSection } from "./ASLProcessingSection";
+import { AtlasesSection } from "./AtlasesSection";
+import { StructuralSection } from "./StructuralSection";
+import { EnvironmentSection } from "./EnvironmentSection";
 
 export default function DataParEditor() {
   const dataPar = useDataParStore((s) => s.dataPar);
@@ -24,21 +24,24 @@ export default function DataParEditor() {
   // Load from project on mount
   useEffect(() => {
     if (project?.exploreAslConfig?.dataPar) {
-      loadDataPar(project.exploreAslConfig.dataPar);
+      loadDataPar(project.exploreAslConfig.dataPar as DataParState);
     }
     if (project?.uiState?.showAdvancedParameters) {
       setShowAdvanced(true);
     }
-    // only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced save
+  // Debounced save to project
   const saveTimeout = useRef<ReturnType<typeof setTimeout>>();
   const debouncedSave = useCallback(() => {
     clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => saveToProject(), 500);
   }, [saveToProject]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => clearTimeout(saveTimeout.current);
+  }, []);
 
   const handleFieldChange = useCallback(
     (field: string, value: unknown) => {
@@ -52,17 +55,24 @@ export default function DataParEditor() {
     [setDataParField, clearDataParField, debouncedSave],
   );
 
+  const handleAdvancedToggle = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setShowAdvanced(e.currentTarget.checked);
+      debouncedSave();
+    },
+    [setShowAdvanced, debouncedSave],
+  );
+
   return (
-    <Stack>
-      <Group>
-        <Text fw={500}>ExploreASL Processing Parameters</Text>
+    <Stack p="md" data-testid="data-par-editor">
+      <Group justify="space-between">
+        <Text fw={500} size="lg">
+          ExploreASL Processing Parameters
+        </Text>
         <Switch
           label="Show advanced parameters"
           checked={showAdvanced}
-          onChange={(e) => {
-            setShowAdvanced(e.currentTarget.checked);
-            debouncedSave();
-          }}
+          onChange={handleAdvancedToggle}
           data-testid="advanced-toggle"
         />
       </Group>
@@ -82,14 +92,14 @@ export default function DataParEditor() {
           </Accordion.Panel>
         </Accordion.Item>
 
-        <Accordion.Item value="general">
+        <Accordion.Item value="generalSettings">
           <Accordion.Control>General Settings</Accordion.Control>
           <Accordion.Panel>
             <GeneralSettingsSection dataPar={dataPar} onFieldChange={handleFieldChange} />
           </Accordion.Panel>
         </Accordion.Item>
 
-        <Accordion.Item value="asl">
+        <Accordion.Item value="aslProcessing">
           <Accordion.Control>ASL Processing</Accordion.Control>
           <Accordion.Panel>
             <ASLProcessingSection dataPar={dataPar} onFieldChange={handleFieldChange} />
@@ -97,7 +107,7 @@ export default function DataParEditor() {
         </Accordion.Item>
 
         <Accordion.Item value="atlases">
-          <Accordion.Control>Atlases & Masking</Accordion.Control>
+          <Accordion.Control>Atlases</Accordion.Control>
           <Accordion.Panel>
             <AtlasesSection dataPar={dataPar} onFieldChange={handleFieldChange} />
           </Accordion.Panel>

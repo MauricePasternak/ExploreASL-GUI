@@ -21,7 +21,7 @@ describe("ProjectFileSchema", () => {
         rootPath: "/tmp/project-root",
         currentPhase: "import",
       },
-      uiState: {},
+      uiState: { showAdvancedParameters: false },
       mappingState: {},
       exploreAslConfig: {
         sourcestructure: {},
@@ -73,5 +73,85 @@ describe("ProjectFileSchema", () => {
 
   it("exposes the project persistence location constants", () => {
     expect(PROJECT_FILE_NAME).toBe("project.easl");
+  });
+
+  it("defaults showAdvancedParameters to false in uiState", () => {
+    const parsed = ProjectFileSchema.parse(
+      DEFAULT_PROJECT_FILE("project-adv", "Adv Project", "/tmp/adv"),
+    );
+    expect(parsed.uiState.showAdvancedParameters).toBe(false);
+  });
+
+  it("parses showAdvancedParameters true in uiState", () => {
+    const parsed = ProjectFileSchema.parse({
+      ...DEFAULT_PROJECT_FILE("project-adv2", "Adv2", "/tmp/adv2"),
+      uiState: { showAdvancedParameters: true },
+    });
+    expect(parsed.uiState.showAdvancedParameters).toBe(true);
+  });
+
+  it("accepts empty dataPar object (backward compat)", () => {
+    const parsed = ProjectFileSchema.parse({
+      version: "0.1.0",
+      projectMeta: {
+        id: "bc-1", name: "BC", rootPath: "/tmp/bc",
+        createdAt: "2026-01-01", lastOpened: "2026-01-01",
+        currentPhase: "import",
+      },
+      exploreAslConfig: { dataPar: {} },
+    });
+    expect(parsed.exploreAslConfig.dataPar).toEqual({});
+  });
+
+  it("accepts dataPar with known fields", () => {
+    const parsed = ProjectFileSchema.parse({
+      version: "0.1.0",
+      projectMeta: {
+        id: "bc-2", name: "BC2", rootPath: "/tmp/bc2",
+        createdAt: "2026-01-01", lastOpened: "2026-01-01",
+        currentPhase: "import",
+      },
+      exploreAslConfig: {
+        dataPar: {
+          M0: "UseControlAsM0",
+          motionCorrection: true,
+          Quality: 0.5,
+        },
+      },
+    });
+    expect(parsed.exploreAslConfig.dataPar.M0).toBe("UseControlAsM0");
+    expect(parsed.exploreAslConfig.dataPar.motionCorrection).toBe(true);
+    expect(parsed.exploreAslConfig.dataPar.Quality).toBe(0.5);
+  });
+
+  it("accepts dataPar with unknown extra fields (passthrough)", () => {
+    const parsed = ProjectFileSchema.parse({
+      version: "0.1.0",
+      projectMeta: {
+        id: "bc-3", name: "BC3", rootPath: "/tmp/bc3",
+        createdAt: "2026-01-01", lastOpened: "2026-01-01",
+        currentPhase: "import",
+      },
+      exploreAslConfig: {
+        dataPar: { someFutureField: 42 },
+      },
+    });
+    expect((parsed.exploreAslConfig.dataPar as Record<string, unknown>).someFutureField).toBe(42);
+  });
+
+  it("rejects invalid dataPar field types", () => {
+    expect(() =>
+      ProjectFileSchema.parse({
+        version: "0.1.0",
+        projectMeta: {
+          id: "bc-4", name: "BC4", rootPath: "/tmp/bc4",
+          createdAt: "2026-01-01", lastOpened: "2026-01-01",
+          currentPhase: "import",
+        },
+        exploreAslConfig: {
+          dataPar: { M0: true },
+        },
+      }),
+    ).toThrow();
   });
 });
