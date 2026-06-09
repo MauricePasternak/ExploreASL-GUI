@@ -11,6 +11,13 @@ import { useImportStore } from "../stores/importStore";
 import ProjectPage from "./ProjectPage";
 import { useProjectStore } from "../stores/projectStore";
 
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  readTextFile: vi.fn(),
+  writeTextFile: vi.fn().mockResolvedValue(undefined),
+  exists: vi.fn(),
+  mkdir: vi.fn(),
+}));
+
 const PROJECT_JSON = {
   version: "0.1.0",
   projectMeta: {
@@ -76,7 +83,7 @@ describe("ProjectPage", () => {
       expect(writeTextFile).toHaveBeenCalled();
     });
 
-    expect(screen.getByText(/Parameters configuration/)).toBeInTheDocument();
+    expect(screen.getByText("ExploreASL Processing Parameters")).toBeInTheDocument();
   });
 
   it("restores the project from the session checkpoint after reload", async () => {
