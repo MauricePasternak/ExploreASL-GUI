@@ -411,7 +411,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   SpikeRemovalThreshold: {
     label: "Spike removal threshold",
     description: "Z-score threshold for spike removal in ASL timeseries.",
-    defaultHint: "",
+    defaultHint: "0.01",
     section: "aslProcessing",
     tier: "advanced",
     widget: "number",
@@ -419,7 +419,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   SpikeRemovalAbsoluteThreshold: {
     label: "Absolute spike removal threshold",
     description: "Absolute value threshold for spike removal.",
-    defaultHint: "",
+    defaultHint: "0",
     section: "aslProcessing",
     tier: "advanced",
     widget: "number",
@@ -514,7 +514,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   MinimalROIVolume: {
     label: "Minimal ROI volume",
     description: "Minimum volume (mm³) for an ROI to be included in analysis.",
-    defaultHint: "",
+    defaultHint: "1",
     section: "atlases",
     tier: "advanced",
     widget: "number",
@@ -529,8 +529,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   },
   DataTypes: {
     label: "Data types",
-    description: "Output data types to generate (e.g., CBF, ATT).",
-    defaultHint: "",
+    description: "Output data types to generate (e.g., CBF, ATT). Default: qCBF.",
+    defaultHint: "qCBF",
     section: "atlases",
     tier: "advanced",
     widget: "tags",
