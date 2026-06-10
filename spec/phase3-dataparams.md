@@ -27,12 +27,6 @@ Groups match the exact hierarchy from [ExploreASL Processing Parameters document
 | `bAutomaticallyDetectFSL` | boolean | `false` |
 | `bAutomaticallyDetectVABY` | boolean | `false` |
 
-### 2. Study Parameters (`x`)
-| Field | Type | Default |
-|---|---|---|
-| `SESSIONS` | string[] (multi-input) | `["ASL_1"]` |
-| `session.options` | string[] (multi-input) | `[]` |
-
 Pre-populated from Phase 2 session aliases if import was run.
 
 ### 3. Dataset Parameters — DEFERRED TO PHASE 4
@@ -134,7 +128,7 @@ Atlas selection: render all available atlases from docs as checked/unchecked. Pr
 Phase3DataParams (route: /project/:id/parameters)
 ├── Layout (sidebar + content)
 │   ├── Sidebar: GroupNav
-│   │   └── NavLinks: Environment, Study, M0, Quantification, ASL, Structural, General, Masking
+│   │   └── NavLinks: Environment, M0, Quantification, ASL, Structural, General, Masking
 │   └── Content: GroupForm (dynamic based on selected group)
 │       ├── ParameterField (reusable: renders correct input for type)
 │       │   ├── BooleanField (Mantine Switch)
@@ -157,13 +151,6 @@ Phase3DataParams (route: /project/:id/parameters)
 const EnvironmentParams = z.object({
   bAutomaticallyDetectFSL: z.boolean().default(false),
   bAutomaticallyDetectVABY: z.boolean().default(false),
-});
-
-const StudyParams = z.object({
-  SESSIONS: z.array(z.string()).default(["ASL_1"]),
-  session: z.object({
-    options: z.array(z.string()).default([]),
-  }).optional(),
 });
 
 const M0Params = z.object({
@@ -259,8 +246,6 @@ const MaskingAtlasParams = z.object({
 const DataParConfig = z.object({
   x: z.object({
     external: EnvironmentParams.optional(),
-    SESSIONS: z.array(z.string()).optional(),
-    session: z.object({ options: z.array(z.string()) }).optional(),
     Q: QuantificationParams.optional(),
     settings: GeneralParams.optional(),
     S: MaskingAtlasParams.optional(),
@@ -316,7 +301,6 @@ write_data_par(project_root: String, contents: String) -> ()
 | `TissueThreshold` length must match `Atlases` length if provided | Masking params |
 | `ApplyQuantification` must have exactly 6 boolean elements | ASL params |
 | `bMasking` must have exactly 4 boolean elements | Masking params |
-| `SESSIONS` must not be empty if provided | Study params |
 
 ## Error Handling
 

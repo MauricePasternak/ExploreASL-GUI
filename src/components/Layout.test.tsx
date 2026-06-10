@@ -88,7 +88,7 @@ describe("Layout", () => {
       expect(screen.getAllByRole("button", { name: /return to home/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/status: idle/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/subjects: 0/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /parameters/i })[0]).toHaveAttribute("data-disabled", "true");
+    expect(screen.getAllByRole("button", { name: /parameters/i })[0]).not.toHaveAttribute("data-disabled", "true");
     expect(screen.getAllByRole("button", { name: /processing/i })[0]).toHaveAttribute("data-disabled", "true");
   });
 

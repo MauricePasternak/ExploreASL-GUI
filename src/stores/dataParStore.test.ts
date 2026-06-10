@@ -13,11 +13,22 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 describe("dataParStore initial state", () => {
   it("starts with empty dataPar", () => {
-    expect(useDataParStore.getState().dataPar).toEqual({});
+    expect(useDataParStore.getState().dataPar).toEqual({
+      Atlases: ["Total", "DeepWM"],
+      TissueMasking: ["GM", "WM"],
+      TissueThreshold: [0.7, 0.7],
+    });
   });
 
-  it("starts with showAdvanced false", () => {
-    expect(useDataParStore.getState().showAdvanced).toBe(false);
+  it("starts with advancedVisibility defaults", () => {
+    expect(useDataParStore.getState().advancedVisibility).toEqual({
+      showAdvancedSections: false,
+      showAdvancedM0Params: false,
+      showAdvancedQuantification: false,
+      showAdvancedGeneralSettings: false,
+      showAdvancedASLProcessing: false,
+      showAdvancedAtlases: false,
+    });
   });
 });
 
@@ -59,9 +70,12 @@ describe("dataParStore setDataParField", () => {
     expect(dp.Quality).toBe(1);
   });
 
-  it("sets an array field", () => {
-    useDataParStore.getState().setDataParField("Atlases", ["TotalGM", "DeepWM"]);
-    expect(useDataParStore.getState().dataPar.Atlases).toEqual(["TotalGM", "DeepWM"]);
+  it("sets an array field and aligns corresponding atlas arrays", () => {
+    useDataParStore.getState().setDataParField("Atlases", ["Total", "DeepWM", "AAL3v1"]);
+    const dp = useDataParStore.getState().dataPar;
+    expect(dp.Atlases).toEqual(["Total", "DeepWM", "AAL3v1"]);
+    expect(dp.TissueMasking).toEqual(["GM", "WM", "GM"]);
+    expect(dp.TissueThreshold).toEqual([0.7, 0.7, 0.7]);
   });
 
   it("sets a tuple field", () => {
@@ -94,18 +108,21 @@ describe("dataParStore clearDataParField", () => {
 });
 
 // ---------------------------------------------------------------------------
-// setShowAdvanced
+// setAdvancedVisibility
 // ---------------------------------------------------------------------------
-describe("dataParStore setShowAdvanced", () => {
-  it("sets showAdvanced to true", () => {
-    useDataParStore.getState().setShowAdvanced(true);
-    expect(useDataParStore.getState().showAdvanced).toBe(true);
+describe("dataParStore setAdvancedVisibility", () => {
+  it("sets showAdvancedSections to true", () => {
+    useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
+    expect(useDataParStore.getState().advancedVisibility.showAdvancedSections).toBe(true);
   });
 
-  it("sets showAdvanced to false", () => {
-    useDataParStore.getState().setShowAdvanced(true);
-    useDataParStore.getState().setShowAdvanced(false);
-    expect(useDataParStore.getState().showAdvanced).toBe(false);
+  it("updates individual section advanced visibilities", () => {
+    useDataParStore.getState().setAdvancedVisibility({ showAdvancedM0Params: true, showAdvancedQuantification: true });
+    expect(useDataParStore.getState().advancedVisibility).toMatchObject({
+      showAdvancedM0Params: true,
+      showAdvancedQuantification: true,
+      showAdvancedSections: false,
+    });
   });
 });
 
@@ -113,19 +130,30 @@ describe("dataParStore setShowAdvanced", () => {
 // loadDataPar
 // ---------------------------------------------------------------------------
 describe("dataParStore loadDataPar", () => {
-  it("replaces dataPar state", () => {
+  it("replaces dataPar state and aligns atlas arrays", () => {
     useDataParStore.getState().setDataParField("bTopUp", true);
-    useDataParStore.getState().loadDataPar({ Quality: 2, Lambda: 0.9 });
+    useDataParStore.getState().loadDataPar({
+      Quality: 2,
+      Lambda: 0.9,
+      Atlases: ["WholeBrain"],
+    });
     const dp = useDataParStore.getState().dataPar;
     expect(dp.bTopUp).toBeUndefined();
     expect(dp.Quality).toBe(2);
     expect(dp.Lambda).toBe(0.9);
+    expect(dp.Atlases).toEqual(["WholeBrain"]);
+    expect(dp.TissueMasking).toEqual(["GM"]);
+    expect(dp.TissueThreshold).toEqual([0.7]);
   });
 
-  it("loads empty object clearing all fields", () => {
+  it("loads empty object clearing all fields and restoring aligned defaults", () => {
     useDataParStore.getState().setDataParField("bTopUp", true);
     useDataParStore.getState().loadDataPar({});
-    expect(useDataParStore.getState().dataPar).toEqual({});
+    expect(useDataParStore.getState().dataPar).toEqual({
+      Atlases: ["Total", "DeepWM"],
+      TissueMasking: ["GM", "WM"],
+      TissueThreshold: [0.7, 0.7],
+    });
   });
 });
 
@@ -137,13 +165,17 @@ describe("dataParStore resetDataPar", () => {
     useDataParStore.getState().setDataParField("bTopUp", true);
     useDataParStore.getState().setDataParField("Quality", 1);
     useDataParStore.getState().resetDataPar();
-    expect(useDataParStore.getState().dataPar).toEqual({});
+    expect(useDataParStore.getState().dataPar).toEqual({
+      Atlases: ["Total", "DeepWM"],
+      TissueMasking: ["GM", "WM"],
+      TissueThreshold: [0.7, 0.7],
+    });
   });
 
-  it("resets showAdvanced to false", () => {
-    useDataParStore.getState().setShowAdvanced(true);
+  it("resets advancedVisibility to defaults", () => {
+    useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
     useDataParStore.getState().resetDataPar();
-    expect(useDataParStore.getState().showAdvanced).toBe(false);
+    expect(useDataParStore.getState().advancedVisibility.showAdvancedSections).toBe(false);
   });
 });
 
@@ -166,15 +198,22 @@ describe("dataParStore saveToProject", () => {
     expect(useProjectStore.getState().isDirty).toBe(true);
   });
 
-  it("syncs showAdvanced into project uiState.showAdvancedParameters", async () => {
+  it("syncs advancedVisibility into project uiState.dataParametersAdvancedVisibility", async () => {
     await useProjectStore.getState().createProject("/tmp/test2", "Test2");
-    useDataParStore.getState().setShowAdvanced(true);
+    useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
 
     useDataParStore.getState().saveToProject();
 
     const project = useProjectStore.getState().project;
     expect(project?.uiState).toMatchObject({
-      showAdvancedParameters: true,
+      dataParametersAdvancedVisibility: {
+        showAdvancedSections: true,
+        showAdvancedM0Params: false,
+        showAdvancedQuantification: false,
+        showAdvancedGeneralSettings: false,
+        showAdvancedASLProcessing: false,
+        showAdvancedAtlases: false,
+      },
     });
   });
 

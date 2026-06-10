@@ -290,12 +290,10 @@ function ImportSummary({
   phase,
   rows,
   onRetry,
-  onNextParameters,
 }: {
   phase: ImportPhase;
   rows: ImportProgress[];
   onRetry: () => void;
-  onNextParameters: () => void;
 }) {
   const succeeded = rows.filter((row) => row.status === "completed").length;
   const failed = rows.filter((row) => row.status === "failed").length;
@@ -308,9 +306,6 @@ function ImportSummary({
           <Text size="sm">Succeeded: {succeeded}</Text>
           <Text size="sm">Failed: {failed}</Text>
         </div>
-        {phase === "completed" ? (
-          <Button onClick={onNextParameters} data-testid="import-next-params-btn">Next: Parameters</Button>
-        ) : null}
         {phase === "failed" ? (
           <Button leftSection={<IconRefresh size={16} />} variant="light" onClick={onRetry} data-testid="import-retry-btn">
             Retry Import
@@ -468,24 +463,9 @@ export default function ImportExecution() {
 
   const advanceToParameters = () => {
     const project = useProjectStore.getState().project;
-    useProjectStore.setState((state) => {
-      if (!state.project || state.project.projectMeta.currentPhase === "parameters") {
-        return state;
-      }
-
-      return {
-        project: {
-          ...state.project,
-          projectMeta: {
-            ...state.project.projectMeta,
-            currentPhase: "parameters",
-            lastOpened: new Date().toISOString(),
-          },
-        },
-        isDirty: true,
-      };
-    });
     if (project) {
+      useProjectStore.getState().setPhase("parameters");
+      void useProjectStore.getState().saveProject();
       navigate(`/project/${project.projectMeta.id}/parameters`);
     }
   };
@@ -525,7 +505,6 @@ export default function ImportExecution() {
           phase={importPhase}
           rows={progressRows}
           onRetry={runImport}
-          onNextParameters={advanceToParameters}
         />
       ) : null}
 
@@ -538,6 +517,13 @@ export default function ImportExecution() {
           data-testid="import-back-btn"
         >
           Back: Preview
+        </Button>
+        <Button
+          onClick={advanceToParameters}
+          disabled={importPhase === "running"}
+          data-testid="import-next-params-btn"
+        >
+          Next: Parameters
         </Button>
       </Group>
     </Stack>

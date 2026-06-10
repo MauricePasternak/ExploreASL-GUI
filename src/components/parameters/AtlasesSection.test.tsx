@@ -13,8 +13,22 @@ function renderWithMantine(ui: React.ReactNode) {
 function clickSwitch(text: RegExp) {
   const textEl = screen.getAllByText(text)[0];
   const switchRoot = textEl.closest("[data-label-position]");
-  const labelBody = switchRoot?.querySelector(".mantine-Switch-body");
-  fireEvent.click(labelBody!);
+  if (switchRoot) {
+    const labelBody = switchRoot.querySelector(".mantine-Switch-body");
+    if (labelBody) {
+      fireEvent.click(labelBody);
+      return;
+    }
+  }
+  const group = textEl.closest(".mantine-Group-root");
+  if (group) {
+    const input = group.querySelector("input[type='checkbox']");
+    if (input) {
+      fireEvent.click(input);
+      return;
+    }
+  }
+  fireEvent.click(textEl);
 }
 
 afterEach(() => cleanup());

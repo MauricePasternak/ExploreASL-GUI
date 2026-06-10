@@ -1,4 +1,5 @@
-import { Switch, NumberInput, Group, Stack, Text } from "@mantine/core";
+import { Switch, NumberInput, Group, Stack } from "@mantine/core";
+import { DataParFieldLabel } from "./DataParFieldLabel";
 
 interface PVCConfigProps {
   bPVCNativeSpace: boolean | undefined;
@@ -7,6 +8,7 @@ interface PVCConfigProps {
   onBpvChange: (v: boolean) => void;
   onGaussianChange: (v: boolean) => void;
   onKernelChange: (v: [number, number, number]) => void;
+  showAdvanced: boolean;
 }
 
 export function PVCConfig({
@@ -16,6 +18,7 @@ export function PVCConfig({
   onBpvChange,
   onGaussianChange,
   onKernelChange,
+  showAdvanced,
 }: PVCConfigProps) {
   const pvcEnabled = bPVCNativeSpace !== false;
   const gaussianEnabled = bPVCGaussianMM === true;
@@ -30,21 +33,30 @@ export function PVCConfig({
 
   return (
     <Stack gap="sm">
-      <Switch
-        label="Partial volume correction (native space)"
-        checked={pvcEnabled}
-        onChange={() => onBpvChange(!pvcEnabled)}
-      />
-      {pvcEnabled && (
+      <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
+        <Switch
+          id="switch-bPVCNativeSpace"
+          checked={pvcEnabled}
+          onChange={() => onBpvChange(!pvcEnabled)}
+          data-testid="field-bPVCNativeSpace"
+        />
+        <DataParFieldLabel fieldKey="bPVCNativeSpace" htmlFor="switch-bPVCNativeSpace" />
+      </Group>
+      {pvcEnabled && showAdvanced && (
         <Stack gap="xs" pl="md">
-          <Switch
-            label="Gaussian kernel (mm)"
-            checked={gaussianEnabled}
-            onChange={() => onGaussianChange(!gaussianEnabled)}
+          <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
+            <Switch
+              id="switch-bPVCGaussianMM"
+              checked={gaussianEnabled}
+              onChange={() => onGaussianChange(!gaussianEnabled)}
+              data-testid="field-bPVCGaussianMM"
+            />
+            <DataParFieldLabel fieldKey="bPVCGaussianMM" htmlFor="switch-bPVCGaussianMM" />
+          </Group>
+          <DataParFieldLabel
+            fieldKey="PVCNativeSpaceKernel"
+            label={gaussianEnabled ? "Kernel FWHM (mm)" : "Kernel size (voxels)"}
           />
-          <Text size="sm" fw={500}>
-            {gaussianEnabled ? "Kernel FWHM (mm)" : "Kernel size (voxels)"}
-          </Text>
           <Group gap="xs">
             {(["X", "Y", "Z"] as const).map((axis, i) => (
               <NumberInput
@@ -55,6 +67,7 @@ export function PVCConfig({
                 size="xs"
                 w={80}
                 min={0}
+                data-testid={`field-PVCNativeSpaceKernel-${axis}`}
               />
             ))}
           </Group>

@@ -3,9 +3,9 @@ schema: spec-driven-super-grill
 
 # 2. Provide global development context for the AI agents running your pipeline
 context: |
-  Project Stack: [e.g., Node.js, TypeScript, Next.js, Jest for testing]
-  Repository Mode: Monorepo / Single Package
-  Deployment Target: AWS / Vercel
+  Project Stack: Rust, Tauri, React, TypeScript, Vitest for testing
+  Repository Mode: Monorepo
+  Deployment Target: Tauri App
 
 # 3. Supply validation and generation rules mapped to your artifact IDs
 rules:

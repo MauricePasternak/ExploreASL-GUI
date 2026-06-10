@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,32 +13,68 @@ function renderWithMantine(ui: React.ReactNode) {
 function clickSwitch(text: RegExp) {
   const textEl = screen.getAllByText(text)[0];
   const switchRoot = textEl.closest("[data-label-position]");
-  const labelBody = switchRoot?.querySelector(".mantine-Switch-body");
-  fireEvent.click(labelBody!);
+  if (switchRoot) {
+    const labelBody = switchRoot.querySelector(".mantine-Switch-body");
+    if (labelBody) {
+      fireEvent.click(labelBody);
+      return;
+    }
+  }
+  const group = textEl.closest(".mantine-Group-root");
+  if (group) {
+    const input = group.querySelector("input[type='checkbox']");
+    if (input) {
+      fireEvent.click(input);
+      return;
+    }
+  }
+  fireEvent.click(textEl);
 }
 
 afterEach(() => cleanup());
 
 const emptyState: DataParState = {};
 
+function QuantificationSectionWrapper({
+  dataPar = emptyState,
+  initialShow = false,
+  onFieldChange = () => {},
+  onToggleAdvanced,
+}: {
+  dataPar?: DataParState;
+  initialShow?: boolean;
+  onFieldChange?: (field: string, value: unknown) => void;
+  onToggleAdvanced?: () => void;
+}) {
+  const [showAdvanced, setShowAdvanced] = useState(initialShow);
+  return (
+    <QuantificationSection
+      dataPar={dataPar}
+      onFieldChange={onFieldChange}
+      showAdvanced={showAdvanced}
+      onToggleAdvanced={onToggleAdvanced ?? (() => setShowAdvanced(!showAdvanced))}
+    />
+  );
+}
+
 describe("QuantificationSection", () => {
   it("renders nCompartments field", () => {
     renderWithMantine(
-      <QuantificationSection dataPar={emptyState} onFieldChange={() => {}} />,
+      <QuantificationSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
     );
     expect(screen.getAllByText(/number of compartments/i).length).toBeGreaterThan(0);
   });
 
   it("renders Show advanced toggle", () => {
     renderWithMantine(
-      <QuantificationSection dataPar={emptyState} onFieldChange={() => {}} />,
+      <QuantificationSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
     );
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
   });
 
   it("shows advanced fields when toggled on", () => {
     renderWithMantine(
-      <QuantificationSection dataPar={emptyState} onFieldChange={() => {}} />,
+      <QuantificationSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
     );
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/blood-brain partition/i).length).toBeGreaterThan(0);
@@ -47,7 +84,7 @@ describe("QuantificationSection", () => {
 
   it("shows external quantification subtree when bUseExternalQuantification is true", () => {
     renderWithMantine(
-      <QuantificationSection
+      <QuantificationSectionWrapper
         dataPar={{ bUseExternalQuantification: true }}
         onFieldChange={() => {}}
       />,
@@ -61,7 +98,7 @@ describe("QuantificationSection", () => {
 
   it("hides external quantification subtree when bUseExternalQuantification is false", () => {
     const { container } = renderWithMantine(
-      <QuantificationSection
+      <QuantificationSectionWrapper
         dataPar={{ bUseExternalQuantification: false }}
         onFieldChange={() => {}}
       />,
@@ -74,10 +111,24 @@ describe("QuantificationSection", () => {
   it("calls onFieldChange when bUseExternalQuantification toggled", () => {
     const onFieldChange = vi.fn();
     renderWithMantine(
-      <QuantificationSection dataPar={emptyState} onFieldChange={onFieldChange} />,
+      <QuantificationSectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />,
     );
     clickSwitch(/show advanced/i);
     clickSwitch(/use external quantification/i);
     expect(onFieldChange).toHaveBeenCalledWith("bUseExternalQuantification", expect.any(Boolean));
+  });
+
+  it("calls onToggleAdvanced when Show advanced is toggled", () => {
+    const onToggle = vi.fn();
+    renderWithMantine(
+      <QuantificationSection
+        dataPar={emptyState}
+        onFieldChange={() => {}}
+        showAdvanced={false}
+        onToggleAdvanced={onToggle}
+      />,
+    );
+    clickSwitch(/show advanced/i);
+    expect(onToggle).toHaveBeenCalled();
   });
 });

@@ -29,7 +29,16 @@ export const ProjectFileSchema = z.object({
       importCompleted: z.boolean().optional(),
       importPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
       navbarCollapsed: z.boolean().optional(),
-      showAdvancedParameters: z.boolean().default(false),
+      dataParametersAdvancedVisibility: z
+        .object({
+          showAdvancedSections: z.boolean().default(false),
+          showAdvancedM0Params: z.boolean().default(false),
+          showAdvancedQuantification: z.boolean().default(false),
+          showAdvancedGeneralSettings: z.boolean().default(false),
+          showAdvancedASLProcessing: z.boolean().default(false),
+          showAdvancedAtlases: z.boolean().default(false),
+        })
+        .default({}),
     })
     .passthrough()
     .default({}),
@@ -65,7 +74,17 @@ export const DEFAULT_PROJECT_FILE = (
     lastOpened: new Date().toISOString(),
     currentPhase: "import",
   },
-  uiState: { navbarCollapsed: true, showAdvancedParameters: false },
+  uiState: {
+    navbarCollapsed: true,
+    dataParametersAdvancedVisibility: {
+      showAdvancedSections: false,
+      showAdvancedM0Params: false,
+      showAdvancedQuantification: false,
+      showAdvancedGeneralSettings: false,
+      showAdvancedASLProcessing: false,
+      showAdvancedAtlases: false,
+    },
+  },
   mappingState: {},
   exploreAslConfig: {
     sourcestructure: {},
@@ -76,6 +95,16 @@ export const DEFAULT_PROJECT_FILE = (
 
 export const PROJECT_FILE_NAME = "project.easl";
 
-export function canAccessPhase(currentPhase: ProjectPhase, targetPhase: ProjectPhase) {
-  return PROJECT_PHASES.indexOf(targetPhase) <= PROJECT_PHASES.indexOf(currentPhase);
+export function canAccessPhase(project: ProjectFile, targetPhase: ProjectPhase) {
+  const currentPhase = project.projectMeta.currentPhase;
+  if (PROJECT_PHASES.indexOf(targetPhase) <= PROJECT_PHASES.indexOf(currentPhase)) {
+    return true;
+  }
+  if (targetPhase === "parameters") {
+    return true;
+  }
+  if (targetPhase === "processing") {
+    return project.uiState?.importCompleted === true;
+  }
+  return false;
 }

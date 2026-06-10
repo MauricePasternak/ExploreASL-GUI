@@ -27,7 +27,7 @@ describe("DataParFieldLabel", () => {
     await userEvent.hover(icons[0]);
 
     expect(
-      screen.getByText(/M0 handling strategy/i),
+      screen.getByText(/equilibrium magnetization/i),
     ).toBeInTheDocument();
   });
 

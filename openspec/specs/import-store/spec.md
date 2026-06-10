@@ -59,3 +59,21 @@ The progress table SHALL be populated immediately when `importPhase` transitions
 #### Scenario: Subject starts processing
 - **WHEN** a `subject_start` event arrives for subject "GOOD"
 - **THEN** `importProgress["GOOD"].status` transitions from `"pending"` to `"running"`
+
+## MODIFIED Requirements
+
+### Requirement: DataPar state in project file schema
+
+The `ProjectFileSchema` in `src/schemas/project.ts` SHALL replace the current `exploreAslConfig.dataPar` field from `z.object({}).passthrough()` with a structured Zod object `DataParSchema`. All fields within `DataParSchema` SHALL use `.optional()`. The `assembleDataPar` function SHALL convert stored `DataParSchema` state to the nested `x.*` JSON structure for ExploreASL consumption. The `uiState` object SHALL include `showAdvancedParameters: z.boolean().default(false)`.
+
+#### Scenario: Existing project file with empty dataPar loads successfully
+- **WHEN** a `.easl` file with `exploreAslConfig: { dataPar: {} }` is loaded
+- **THEN** all dataPar fields initialize to `undefined` and the editor shows ghost placeholder defaults
+
+#### Scenario: Existing project file with passthrough dataPar loads successfully
+- **WHEN** a `.easl` file with `exploreAslConfig: { dataPar: { "x": { "Q": { "Lambda": 0.9 } } } }` is loaded
+- **THEN** the `Lambda` value of 0.9 is parsed and displayed in the Quantification section
+
+#### Scenario: Toggle state persists across sessions
+- **WHEN** user enables "Show advanced parameters" and closes the app
+- **THEN** on next load, `uiState.showAdvancedParameters` is `true` and Structural and Environment sections are visible

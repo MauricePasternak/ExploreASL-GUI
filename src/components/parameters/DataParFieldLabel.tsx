@@ -1,21 +1,51 @@
-import { Group, Text, Box, Tooltip } from "@mantine/core";
-import { IconInfoCircle } from "@tabler/icons-react";
+import { Text, Box, Tooltip } from "@mantine/core";
 
+import { FieldInfoIcon } from "../FieldInfoIcon";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
 
 interface DataParFieldLabelProps {
   fieldKey: string;
+  label?: string;
+  htmlFor?: string;
 }
 
-export function DataParFieldLabel({ fieldKey }: DataParFieldLabelProps) {
+export function DataParFieldLabel({ fieldKey, label, htmlFor }: DataParFieldLabelProps) {
   const meta = FIELD_METADATA[fieldKey];
-  if (!meta) return <Text size="sm" fw={500} span>{fieldKey}</Text>;
+  
+  if (!meta) {
+    const textNode = <Text size="sm" fw={500} span>{label ?? fieldKey}</Text>;
+    return htmlFor ? (
+      <label htmlFor={htmlFor} style={{ cursor: "pointer" }}>
+        {textNode}
+      </label>
+    ) : (
+      textNode
+    );
+  }
+
+  const labelNode = htmlFor ? (
+    <label htmlFor={htmlFor} style={{ cursor: "pointer" }}>
+      <Text size="sm" fw={500} span>
+        {label ?? meta.label}
+      </Text>
+    </label>
+  ) : (
+    <Text size="sm" fw={500} span>
+      {label ?? meta.label}
+    </Text>
+  );
 
   return (
-    <Group gap={6} align="center" style={{ display: "inline-flex", verticalAlign: "middle" }}>
-      <Text size="sm" fw={500} span>
-        {meta.label}
-      </Text>
+    <Box
+      component="span"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        verticalAlign: "middle",
+      }}
+    >
+      {labelNode}
       <Tooltip
         label={meta.description}
         multiline
@@ -26,30 +56,19 @@ export function DataParFieldLabel({ fieldKey }: DataParFieldLabelProps) {
         openDelay={0}
         closeDelay={0}
       >
-        <Box
-          component="span"
-          display="inline-flex"
-          style={{
-            cursor: "pointer",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "18px",
-            height: "18px",
-            borderRadius: "50%",
-            backgroundColor: "#066fd1",
-            color: "white",
+        <FieldInfoIcon
+          aria-label={`Info for ${meta.label}`}
+          onClick={(e) => {
+            // Prevent clicking the tooltip info icon from toggling the checkbox/switch or focusing text input
+            e.preventDefault();
+            e.stopPropagation();
           }}
-        >
-          <IconInfoCircle
-            size={13}
-            stroke={2.5}
-            color="white"
-            style={{ display: "block" }}
-            aria-label={`Info for ${meta.label}`}
-            role="img"
-          />
-        </Box>
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        />
       </Tooltip>
-    </Group>
+    </Box>
   );
 }

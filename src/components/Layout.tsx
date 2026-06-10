@@ -52,7 +52,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const navbarCollapsed = project?.uiState.navbarCollapsed ?? true;
 
   async function handlePhaseNavigation(phase: ProjectPhase) {
-    if (!project || !canAccessPhase(project.projectMeta.currentPhase, phase)) {
+    if (!project || !canAccessPhase(project, phase)) {
       return;
     }
 
@@ -162,7 +162,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
             <div style={{ width: "100%" }}>
               {PHASE_NAV.map(({ phase, label, icon: Icon }) => {
                 const active = project.projectMeta.currentPhase === phase;
-                const disabled = !canAccessPhase(project.projectMeta.currentPhase, phase);
+                const disabled = !canAccessPhase(project, phase);
                 const iconElement = (
                   <NavLink
                     key={phase}

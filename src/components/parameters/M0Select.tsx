@@ -5,9 +5,10 @@ import { M0_OPTIONS } from "../../lib/dataParFieldMetadata";
 interface M0SelectProps {
   value: string | number | undefined;
   onChange: (value: string | number) => void;
+  "data-testid"?: string;
 }
 
-export function M0Select({ value, onChange }: M0SelectProps) {
+export function M0Select({ value, onChange, "data-testid": dataTestId }: M0SelectProps) {
   const namedValues = M0_OPTIONS.map((o) => o.value);
   const isNumber = typeof value === "number";
   const isCustom = value === "__custom__" || (isNumber && !namedValues.includes(String(value)));
@@ -28,6 +29,7 @@ export function M0Select({ value, onChange }: M0SelectProps) {
           }
         }}
         placeholder="Select M0 source"
+        data-testid={dataTestId}
       />
       {isCustom && (
         <NumberInput
@@ -37,6 +39,7 @@ export function M0Select({ value, onChange }: M0SelectProps) {
           }}
           placeholder="Custom M0 value"
           label="Custom value"
+          data-testid={`${dataTestId}-custom`}
         />
       )}
     </Stack>

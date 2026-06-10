@@ -28,6 +28,13 @@ GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agen
 
 ---
 
+## Rules
+
+- All components should have a `data-testid` attribute for testing and easier referencing for agents.
+- Git commits cannot be made without explicit user confirmation and must follow conventional commit message format.
+
+---
+
 ## Debug
 
 **Frontend (`src/lib/debug.ts`):**
@@ -50,7 +57,7 @@ GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agen
 ---
 
 ## Agent Can / Cannot
-
+x
 **Can:**
 1. Read dev logs (predictable path)
 2. Run `pnpm test`

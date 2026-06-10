@@ -1,6 +1,6 @@
 import { MultiSelect, Select, NumberInput, Group, Text, Stack } from "@mantine/core";
 
-import { ATLAS_OPTIONS } from "../../lib/dataParFieldMetadata";
+import { ATLAS_OPTIONS, ATLAS_DISPLAY_LABELS } from "../../lib/dataParFieldMetadata";
 
 const TISSUE_MASKING_OPTIONS = [
   { value: "GM", label: "GM" },
@@ -11,8 +11,20 @@ const TISSUE_MASKING_OPTIONS = [
 ];
 
 const atlasData = [
-  { group: "Free", items: ATLAS_OPTIONS.free },
-  { group: "Commercial", items: ATLAS_OPTIONS.commercial },
+  {
+    group: "Free",
+    items: ATLAS_OPTIONS.free.map((val) => ({
+      value: val,
+      label: ATLAS_DISPLAY_LABELS[val] ?? val,
+    })),
+  },
+  {
+    group: "Non-commercial only",
+    items: ATLAS_OPTIONS.commercial.map((val) => ({
+      value: val,
+      label: ATLAS_DISPLAY_LABELS[val] ?? val,
+    })),
+  },
 ];
 
 interface AtlasSelectProps {
@@ -34,7 +46,8 @@ export function AtlasSelect({
 }: AtlasSelectProps) {
   const handleAdd = (added: string) => {
     onAtlasesChange([...atlases, added]);
-    onTissueMaskingChange([...tissueMasking, "GM+WM"]);
+    const defaultMask = added === "DeepWM" ? "WM" : "GM";
+    onTissueMaskingChange([...tissueMasking, defaultMask]);
     onTissueThresholdChange([...tissueThreshold, 0.7]);
   };
 
@@ -73,29 +86,36 @@ export function AtlasSelect({
         onChange={handleChange}
         placeholder="Select atlases"
         searchable
+        data-testid="field-Atlases"
       />
       {atlases.map((atlas, idx) => (
         <Group key={atlas} gap="xs" align="center" wrap="nowrap">
-          <Text size="sm" w={120} fw={500}>
-            {atlas}
+          <Text
+            size="sm"
+            w={260}
+            fw={500}
+            style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}
+          >
+            {ATLAS_DISPLAY_LABELS[atlas] ?? atlas}
           </Text>
           <Select
             data={TISSUE_MASKING_OPTIONS}
-            value={tissueMasking[idx] ?? "GM+WM"}
+            value={tissueMasking[idx] ?? (atlas === "DeepWM" ? "WM" : "GM")}
             onChange={(v) => v && updateMasking(idx, v)}
             placeholder="Tissue masking"
             size="xs"
             w={130}
+            data-testid={`field-TissueMasking-${atlas}`}
           />
           <NumberInput
             value={tissueThreshold[idx] ?? 0.7}
             onChange={(v) => updateThreshold(idx, v ?? 0.7)}
-            suffix=" mL"
             step={0.1}
             min={0}
             max={1}
             size="xs"
             w={110}
+            data-testid={`field-TissueThreshold-${atlas}`}
           />
         </Group>
       ))}

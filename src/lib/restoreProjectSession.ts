@@ -1,4 +1,4 @@
-import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/project";
+import { canAccessPhase, PROJECT_PHASES, type ProjectPhase, type ProjectFile } from "../schemas/project";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
 import { clearSessionCheckpoint, readSessionCheckpoint } from "./sessionCheckpoint";
@@ -9,13 +9,13 @@ function isProjectPhase(value: string | undefined): value is ProjectPhase {
 
 export function resolveRestoredPhase(
   routePhase: string | undefined,
-  currentPhase: ProjectPhase,
+  project: ProjectFile,
 ): ProjectPhase {
-  if (isProjectPhase(routePhase) && canAccessPhase(currentPhase, routePhase)) {
+  if (isProjectPhase(routePhase) && canAccessPhase(project, routePhase)) {
     return routePhase;
   }
 
-  return currentPhase;
+  return project.projectMeta.currentPhase;
 }
 
 /**
