@@ -1,0 +1,258 @@
+import { render, within, fireEvent, cleanup } from "@testing-library/react";
+import { MantineProvider } from "@mantine/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import DataParEditor from "../components/parameters/DataParEditor";
+import { useDataParStore } from "../stores/dataParStore";
+import { useProjectStore } from "../stores/projectStore";
+import { assembleDataPar } from "../lib/assembleDataPar";
+import type { DataParState } from "../schemas/dataParSchema";
+
+function renderWithMantine(ui: React.ReactNode) {
+  return render(<MantineProvider>{ui}</MantineProvider>);
+}
+
+function clickSwitchByLabel(container: HTMLElement, pattern: RegExp) {
+  const w = within(container);
+  const label = w.getAllByText(pattern)[0];
+  const switchRoot = label.closest("[data-label-position]");
+  const body = switchRoot?.querySelector(".mantine-Switch-body");
+  fireEvent.click(body!);
+}
+
+afterEach(() => cleanup());
+
+beforeEach(() => {
+  useDataParStore.setState({ dataPar: {}, showAdvanced: false });
+  useProjectStore.setState({ project: null, isDirty: false, loaded: false });
+});
+
+// ---------------------------------------------------------------------------
+// 8.1 — End-to-end parameter flow
+// ---------------------------------------------------------------------------
+
+describe("dataPar flow: store ↔ project sync", () => {
+  it("setDataParField → saveToProject → project has the value", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0",
+        projectMeta: {
+          id: "p1",
+          name: "Test",
+          rootPath: "/tmp",
+          createdAt: "",
+          lastOpened: "",
+          currentPhase: "parameters",
+        },
+        uiState: { showAdvancedParameters: false },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    useDataParStore.getState().setDataParField("bTopUp", true);
+    useDataParStore.getState().setDataParField("Quality", 1);
+    useDataParStore.getState().saveToProject();
+
+    const project = useProjectStore.getState().project!;
+    expect(project.exploreAslConfig.dataPar).toMatchObject({
+      bTopUp: true,
+      Quality: 1,
+    });
+    expect(useProjectStore.getState().isDirty).toBe(true);
+  });
+
+  it("multiple fields round-trip through saveToProject", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0",
+        projectMeta: {
+          id: "p2",
+          name: "Test2",
+          rootPath: "/tmp",
+          createdAt: "",
+          lastOpened: "",
+          currentPhase: "parameters",
+        },
+        uiState: { showAdvancedParameters: false },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    const fields: Partial<DataParState> = {
+      M0: "UseControlAsM0",
+      bTopUp: true,
+      Lambda: 0.9,
+      Quality: 1,
+      Atlases: ["MNI_Structural"],
+    };
+
+    const store = useDataParStore.getState();
+    for (const [k, v] of Object.entries(fields)) {
+      store.setDataParField(k as keyof DataParState, v);
+    }
+    store.saveToProject();
+
+    const saved = useProjectStore.getState().project!.exploreAslConfig.dataPar;
+    expect(saved).toMatchObject(fields);
+  });
+
+  it("showAdvanced syncs to project uiState.showAdvancedParameters", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0",
+        projectMeta: {
+          id: "p3",
+          name: "Test3",
+          rootPath: "/tmp",
+          createdAt: "",
+          lastOpened: "",
+          currentPhase: "parameters",
+        },
+        uiState: { showAdvancedParameters: false },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    useDataParStore.getState().setShowAdvanced(true);
+    useDataParStore.getState().saveToProject();
+
+    expect(useProjectStore.getState().project!.uiState.showAdvancedParameters).toBe(true);
+  });
+});
+
+describe("dataPar flow: advanced toggle shows/hides sections", () => {
+  it("Structural and Environment hidden by default", () => {
+    const { container } = renderWithMantine(<DataParEditor />);
+    const w = within(container);
+    expect(w.queryByText("Structural")).toBeNull();
+    expect(w.queryByText("Environment")).toBeNull();
+  });
+
+  it("Structural and Environment visible after toggle", () => {
+    const { container } = renderWithMantine(<DataParEditor />);
+    clickSwitchByLabel(container, /show advanced parameters/i);
+    const w = within(container);
+    expect(w.getAllByText("Structural").length).toBeGreaterThanOrEqual(1);
+    expect(w.getAllByText("Environment").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("Structural and Environment hidden after toggle off", () => {
+    const { container } = renderWithMantine(<DataParEditor />);
+    clickSwitchByLabel(container, /show advanced parameters/i);
+    clickSwitchByLabel(container, /show advanced parameters/i);
+    const w = within(container);
+    expect(w.queryByText("Structural")).toBeNull();
+    expect(w.queryByText("Environment")).toBeNull();
+  });
+
+  it("showAdvanced state updates in store on toggle", () => {
+    const { container } = renderWithMantine(<DataParEditor />);
+    expect(useDataParStore.getState().showAdvanced).toBe(false);
+    clickSwitchByLabel(container, /show advanced parameters/i);
+    expect(useDataParStore.getState().showAdvanced).toBe(true);
+  });
+});
+
+describe("dataPar flow: M0 conditional logic", () => {
+  it("BackgroundSuppressionPulseTime hidden when M0 is not UseControlAsM0", () => {
+    const { container } = renderWithMantine(<DataParEditor />);
+    const w = within(container);
+    // Default M0 is not set — pulse time should be hidden
+    expect(w.queryAllByText(/background suppression pulse time/i).length).toBe(0);
+  });
+
+  it("BackgroundSuppressionPulseTime appears when UseControlAsM0 selected and pulses > 0", () => {
+    useDataParStore.getState().setDataParField("M0", "UseControlAsM0");
+    useDataParStore.getState().setDataParField("BackgroundSuppressionNumberPulses", 4);
+    const { container } = renderWithMantine(<DataParEditor />);
+    const w = within(container);
+    expect(w.getAllByText(/background suppression pulse time/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("BackgroundSuppressionPulseTime hidden when pulses = 0 even with UseControlAsM0", () => {
+    useDataParStore.getState().setDataParField("M0", "UseControlAsM0");
+    useDataParStore.getState().setDataParField("BackgroundSuppressionNumberPulses", 0);
+    const { container } = renderWithMantine(<DataParEditor />);
+    const w = within(container);
+    expect(w.queryAllByText(/background suppression pulse time/i).length).toBe(0);
+  });
+});
+
+describe("dataPar flow: PVC conditional logic", () => {
+  it("PVC toggle renders in ASL Processing section", () => {
+    const { container } = renderWithMantine(<DataParEditor />);
+    const w = within(container);
+    expect(w.getAllByText(/partial volume correction/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("bPVCNativeSpace field is set in store via toggle", () => {
+    const { container } = renderWithMantine(<DataParEditor />);
+    clickSwitchByLabel(container, /partial volume correction/i);
+    expect(useDataParStore.getState().dataPar.bPVCNativeSpace).toBeDefined();
+  });
+});
+
+describe("dataPar flow: assembly from filled state", () => {
+  it("assembles correct nested JSON after setting fields in store", () => {
+    useDataParStore.getState().setDataParField("M0", "separate_scan");
+    useDataParStore.getState().setDataParField("Lambda", 0.9);
+    useDataParStore.getState().setDataParField("bTopUp", true);
+    useDataParStore.getState().setDataParField("Quality", 1);
+    useDataParStore.getState().setDataParField("Atlases", ["MNI_Structural"]);
+    useDataParStore.getState().setDataParField("bRunLongReg", true);
+    useDataParStore.getState().setDataParField("bAutomaticallyDetectFSL", true);
+
+    const result = assembleDataPar(useDataParStore.getState().dataPar);
+
+    expect(result.x.Q?.M0).toBe("separate_scan");
+    expect(result.x.Q?.Lambda).toBe(0.9);
+    expect(result.x.modules?.asl?.bTopUp).toBe(true);
+    expect(result.x.settings?.Quality).toBe(1);
+    expect(result.x.S?.Atlases).toEqual(["MNI_Structural"]);
+    expect(result.x.modules?.structural?.bRunLongReg).toBe(true);
+    expect(result.x.bAutomaticallyDetectFSL).toBe(true);
+  });
+
+  it("assembles empty sections when only some fields set", () => {
+    useDataParStore.getState().setDataParField("Quality", 1);
+    const result = assembleDataPar(useDataParStore.getState().dataPar);
+
+    expect(result.x.Q).toBeUndefined();
+    expect(result.x.modules).toBeUndefined();
+    expect(result.x.S).toBeUndefined();
+    expect(result.x.external).toBeUndefined();
+    expect(result.x.settings).toEqual({ Quality: 1 });
+  });
+});
+
+describe("dataPar flow: loadDataPar → assemble round-trip", () => {
+  it("loading state then assembling produces same JSON", () => {
+    const state: DataParState = {
+      M0: "UseControlAsM0",
+      bTopUp: true,
+      Quality: 1,
+      Lambda: 0.9,
+      Atlases: ["TotalGM"],
+      bAutomaticallyDetectFSL: false,
+    };
+
+    useDataParStore.getState().loadDataPar(state);
+    const assembled = assembleDataPar(useDataParStore.getState().dataPar);
+
+    expect(assembled.x.Q?.M0).toBe("UseControlAsM0");
+    expect(assembled.x.modules?.asl?.bTopUp).toBe(true);
+    expect(assembled.x.settings?.Quality).toBe(1);
+    expect(assembled.x.Q?.Lambda).toBe(0.9);
+    expect(assembled.x.S?.Atlases).toEqual(["TotalGM"]);
+    expect(assembled.x.bAutomaticallyDetectFSL).toBe(false);
+  });
+});
