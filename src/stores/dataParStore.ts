@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { DataParState } from "../schemas/dataPar";
+
+import type { DataParState } from "../schemas/dataParSchema";
 import { useProjectStore } from "./projectStore";
 
 interface DataParSlice {
@@ -13,10 +14,8 @@ interface DataParSlice {
   saveToProject: () => void;
 }
 
-const INITIAL_STATE: DataParState = {};
-
 export const useDataParStore = create<DataParSlice>((set, get) => ({
-  dataPar: { ...INITIAL_STATE },
+  dataPar: {},
   showAdvanced: false,
 
   setDataParField: (field, value) => {
@@ -26,11 +25,9 @@ export const useDataParStore = create<DataParSlice>((set, get) => ({
   },
 
   clearDataParField: (field) => {
-    set((state) => {
-      const next = { ...state.dataPar };
-      delete next[field];
-      return { dataPar: next };
-    });
+    set((state) => ({
+      dataPar: { ...state.dataPar, [field]: undefined },
+    }));
   },
 
   setShowAdvanced: (value) => {
@@ -38,32 +35,34 @@ export const useDataParStore = create<DataParSlice>((set, get) => ({
   },
 
   loadDataPar: (state) => {
-    set({ dataPar: { ...state } });
+    set({ dataPar: state });
   },
 
   resetDataPar: () => {
-    set({ dataPar: { ...INITIAL_STATE }, showAdvanced: false });
+    set({ dataPar: {}, showAdvanced: false });
   },
 
   saveToProject: () => {
     const { dataPar, showAdvanced } = get();
-    const projectStore = useProjectStore.getState();
-    const { project } = projectStore;
-    if (!project) return;
+    const projectState = useProjectStore.getState();
+    if (!projectState.project) return;
 
-    useProjectStore.setState({
-      project: {
-        ...project,
-        uiState: {
-          ...project.uiState,
-          showAdvancedParameters: showAdvanced,
+    useProjectStore.setState((prev) => {
+      if (!prev.project) return prev;
+      return {
+        project: {
+          ...prev.project,
+          exploreAslConfig: {
+            ...prev.project.exploreAslConfig,
+            dataPar,
+          },
+          uiState: {
+            ...prev.project.uiState,
+            showAdvancedParameters: showAdvanced,
+          },
         },
-        exploreAslConfig: {
-          ...project.exploreAslConfig,
-          dataPar,
-        },
-      },
-      isDirty: true,
+        isDirty: true,
+      };
     });
   },
 }));
