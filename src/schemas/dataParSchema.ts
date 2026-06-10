@@ -18,11 +18,11 @@ export const PVCNativeSpaceKernelSchema = z.tuple([
 export const M0SectionSchema = z.object({
   M0: M0Schema.optional(),
   BackgroundSuppressionNumberPulses: z.number().optional(),
-  BackgroundSuppressionPulseTime: z.number().optional(),
+  BackgroundSuppressionPulseTime: z.union([z.number(), z.array(z.number())]).optional(),
   M0_GMScaleFactor: z.number().optional(),
   bRegisterM02ASL: z.boolean().optional(),
   M0_conventionalProcessing: z.boolean().optional(),
-  RepetitionTimePreparationM0: z.number().optional(),
+  RepetitionTimePreparationM0: z.union([z.number(), z.array(z.number())]).optional(),
 });
 
 export const QuantificationSectionSchema = z.object({
@@ -79,8 +79,19 @@ export const ASLProcessingSectionSchema = z.object({
 export const AtlasesSectionSchema = z.object({
   Atlases: z.array(z.string()).optional(),
   TissueMasking: z.array(z.string()).optional(),
-  TissueThreshold: z.array(z.number()).optional(),
-  bMasking: z.array(z.union([z.boolean(), z.number()])).optional(),
+  TissueThreshold: z.array(z.number().min(0).max(1)).optional(),
+  bMasking: z
+    .union([
+      z.literal(0),
+      z.literal(1),
+      z.tuple([
+        z.union([z.literal(0), z.literal(1)]),
+        z.union([z.literal(0), z.literal(1)]),
+        z.union([z.literal(0), z.literal(1)]),
+        z.union([z.literal(0), z.literal(1)]),
+      ]),
+    ])
+    .optional(),
   MinimalROIVolume: z.number().optional(),
   bWMH: z.boolean().optional(),
   DataTypes: z.array(z.string()).optional(),

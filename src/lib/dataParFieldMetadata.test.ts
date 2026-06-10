@@ -302,7 +302,6 @@ describe("widget assignments", () => {
       "bInferT1BASIL",
       "bInferATTBASIL",
       "bCleanUpExternal",
-      "bMasking",
       "bWMH",
       "bRunLongReg",
       "bRunDARTEL",

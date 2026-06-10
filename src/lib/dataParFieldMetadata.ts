@@ -83,7 +83,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "M0 grey-matter scale factor",
     description:
       "Scaling factor applied to the M0 image based on grey-matter segmentation.",
-    defaultHint: "",
+    defaultHint: "1",
     section: "m0",
     tier: "basic",
     widget: "number",
@@ -136,7 +136,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   T2art: {
     label: "T2 of arterial blood",
     description: "T2 relaxation time (ms) of arterial blood.",
-    defaultHint: "",
+    defaultHint: "50",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -152,7 +152,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   T1GM: {
     label: "T1 of grey matter",
     description: "T1 relaxation time (ms) of grey matter.",
-    defaultHint: "",
+    defaultHint: "1240",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -160,7 +160,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   T1WM: {
     label: "T1 of white matter",
     description: "T1 relaxation time (ms) of white matter.",
-    defaultHint: "",
+    defaultHint: "800",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -168,7 +168,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   T2GM: {
     label: "T2 of grey matter",
     description: "T2 relaxation time (ms) of grey matter.",
-    defaultHint: "",
+    defaultHint: "85",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -176,7 +176,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   T2WM: {
     label: "T2 of white matter",
     description: "T2 relaxation time (ms) of white matter.",
-    defaultHint: "",
+    defaultHint: "76",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -184,7 +184,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   T2tissueMultiTE: {
     label: "T2 tissue (multi-TE)",
     description: "T2 tissue value (ms) for multi-TE ASL sequences.",
-    defaultHint: "",
+    defaultHint: "85",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -200,7 +200,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   ExternalQuantificationType: {
     label: "External quantification type",
     description: "Select the external quantification method to use.",
-    defaultHint: "",
+    defaultHint: "BASIL",
     section: "quantification",
     tier: "advanced",
     widget: "select",
@@ -255,7 +255,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   ExchBASIL: {
     label: "BASIL exchange model",
     description: "Water exchange model used in BASIL quantification.",
-    defaultHint: "",
+    defaultHint: "simple",
     section: "quantification",
     tier: "advanced",
     widget: "select",
@@ -264,7 +264,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   DispBASIL: {
     label: "BASIL dispersion model",
     description: "Arterial dispersion model used in BASIL quantification.",
-    defaultHint: "",
+    defaultHint: "none",
     section: "quantification",
     tier: "advanced",
     widget: "select",
@@ -273,7 +273,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   ATTSDBASIL: {
     label: "BASIL ATT standard deviation",
     description: "Standard deviation of arterial transit time prior in BASIL.",
-    defaultHint: "",
+    defaultHint: "1.0",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -385,7 +385,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bPVCGaussianMM: {
     label: "PVC Gaussian kernel (mm)",
     description: "Gaussian smoothing kernel size (mm) for partial volume correction.",
-    defaultHint: "",
+    defaultHint: "false",
     section: "aslProcessing",
     tier: "advanced",
     widget: "number",
@@ -394,7 +394,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   PVCNativeSpaceKernel: {
     label: "PVC native-space kernel",
     description: "Kernel dimensions [x, y, z] for native-space PVC.",
-    defaultHint: "",
+    defaultHint: "5, 5, 1",
     section: "aslProcessing",
     tier: "advanced",
     widget: "numberTuple",
@@ -428,7 +428,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Registration contrast",
     description:
       "Select which image contrast to use for ASL-to-structural registration.",
-    defaultHint: "",
+    defaultHint: "2",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -436,7 +436,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bAffineRegistration: {
     label: "Affine registration",
     description: "Enable affine registration step.",
-    defaultHint: "",
+    defaultHint: "0",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -444,7 +444,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bDCTRegistration: {
     label: "DCT registration",
     description: "Enable discrete cosine transform (non-linear) registration.",
-    defaultHint: "",
+    defaultHint: "0",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -462,7 +462,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Hct to blood T1 conversion",
     description:
       "Method for converting hematocrit to blood T1 relaxation time.",
-    defaultHint: "",
+    defaultHint: "0",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -503,12 +503,13 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "number",
   },
   bMasking: {
-    label: "Enable masking",
-    description: "Apply brain masking to atlas ROI analysis.",
-    defaultHint: "false",
+    label: "ROI masking",
+    description:
+      "Vector specifying if we should mask a ROI with a subject-specific mask (1 = yes, 0 = no): [1 0 0 0] = susceptibility mask, [0 1 0 0] = vascular mask, [0 0 1 0] = subject-specific tissue-masking (e.g. pGM>0.5), [0 0 0 1] = WholeBrain masking (memory compression). Can also be used as boolean: 1 = [1 1 1 1], 0 = [0 0 0 0].",
+    defaultHint: "1",
     section: "atlases",
     tier: "advanced",
-    widget: "toggle",
+    widget: "checkboxGroup",
   },
   MinimalROIVolume: {
     label: "Minimal ROI volume",
@@ -555,7 +556,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   WMHsegmAlg: {
     label: "WMH segmentation algorithm",
     description: "Algorithm for white-matter hyperintensity segmentation.",
-    defaultHint: "",
+    defaultHint: "LPA",
     section: "structural",
     tier: "advanced",
     widget: "select",
@@ -609,8 +610,43 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
 // ---------------------------------------------------------------------------
 
 export const ATLAS_OPTIONS = {
-  free: ["Total", "DeepWM", "Cortical", "Subcortical", "WMH"],
-  commercial: ["Thalamus", "BrainStem", "Hippocampus", "Amygdala"],
+  free: [
+    "WholeBrain",
+    "Total",
+    "DeepWM",
+    "Supratentorial_GM_WM",
+    "AAL3v1",
+    "MNI_Structural",
+    "Tatu_ACA_MCA_PCA",
+    "Mindboggle_OASIS_DKT31_CMA",
+    "Schaefer_100Parcels_7Networks",
+    "Schaefer_100Parcels_17Networks",
+    "Desikan_Killiany_MNI_SPM12",
+  ],
+  commercial: [
+    "HOcort_CONN",
+    "HOsub_CONN",
+    "Thalamus",
+    "Hammers",
+  ],
+};
+
+export const ATLAS_DISPLAY_LABELS: Record<string, string> = {
+  WholeBrain: "Whole Brain Combined Grey & White Matter",
+  Total: "Whole Brain Grey and White Matter",
+  DeepWM: "Deep White Matter",
+  Supratentorial_GM_WM: "Supratentorial Grey & White Matter",
+  AAL3v1: "Automated Anatomical Labeling (AAL) Atlas - Version 3",
+  MNI_Structural: "MNI Structural Atlas",
+  Tatu_ACA_MCA_PCA: "Vascular Territories by Tatu et al.",
+  Mindboggle_OASIS_DKT31_CMA: "Mindboggle-101 Cortical Atlas",
+  Schaefer_100Parcels_7Networks: "Schaefer's Atlas with 100 parcels and 7 networks",
+  Schaefer_100Parcels_17Networks: "Schaefer's Atlas with 100 parcels and 17 networks",
+  Desikan_Killiany_MNI_SPM12: "Desikan-Killiany Atlas",
+  HOcort_CONN: "Harvard-Oxford Cortical Atlas",
+  HOsub_CONN: "Harvard-Oxford Subcortical Atlas",
+  Thalamus: "Harvard-Oxford Thalamic Atlas",
+  Hammers: "Alexander Hammers's Brain Atlas",
 };
 
 export const M0_OPTIONS = [
