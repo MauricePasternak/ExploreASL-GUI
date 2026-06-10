@@ -45,15 +45,17 @@ describe("DataParSchema", () => {
     const result = DataParSchema.parse({
       M0: "Absent",
       BackgroundSuppressionNumberPulses: 4,
-      BackgroundSuppressionPulseTime: 0.5,
+      BackgroundSuppressionPulseTime: [0.5, 1.2],
       M0_GMScaleFactor: 1.0,
       bRegisterM02ASL: true,
       M0_conventionalProcessing: false,
-      RepetitionTimePreparationM0: 8.0,
+      RepetitionTimePreparationM0: [8.0, 4.0],
     });
     expect(result.M0).toBe("Absent");
     expect(result.BackgroundSuppressionNumberPulses).toBe(4);
+    expect(result.BackgroundSuppressionPulseTime).toEqual([0.5, 1.2]);
     expect(result.M0_GMScaleFactor).toBe(1.0);
+    expect(result.RepetitionTimePreparationM0).toEqual([8.0, 4.0]);
   });
 
   it("accepts all Quantification section fields", () => {
@@ -111,13 +113,23 @@ describe("DataParSchema", () => {
       Atlases: ["MNI_Structural"],
       TissueMasking: ["GM", "WM"],
       TissueThreshold: [0.7, 0.7],
-      bMasking: [true, true, false, false],
+      bMasking: 1,
       MinimalROIVolume: 10,
       bWMH: true,
       DataTypes: ["CBF", "M0map"],
     });
     expect(result.Atlases).toEqual(["MNI_Structural"]);
-    expect(result.bMasking).toEqual([true, true, false, false]);
+    expect(result.bMasking).toBe(1);
+  });
+
+  it("accepts bMasking as tuple", () => {
+    const result = DataParSchema.parse({ bMasking: [1, 0, 1, 0] });
+    expect(result.bMasking).toEqual([1, 0, 1, 0]);
+  });
+
+  it("accepts bMasking as scalar 0", () => {
+    const result = DataParSchema.parse({ bMasking: 0 });
+    expect(result.bMasking).toBe(0);
   });
 
   it("accepts all Structural section fields", () => {

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Switch, NumberInput, TextInput, Checkbox, Stack, Group, Text } from "@mantine/core";
 
 import type { DataParState } from "../../schemas/dataParSchema";
@@ -10,21 +9,54 @@ import { AtlasSelect } from "./AtlasSelect";
 interface AtlasesSectionProps {
   dataPar: DataParState;
   onFieldChange: (field: string, value: unknown) => void;
+  showAdvanced: boolean;
+  onToggleAdvanced: () => void;
 }
 
-const MASK_LABELS = ["GM", "WM", "CSF", "Background"] as const;
+const MASK_LABELS = [
+  "Susceptibility mask",
+  "Vascular mask",
+  "Subject-specific tissue mask (e.g. pGM>0.5)",
+  "WholeBrain masking (memory compression)",
+] as const;
 
-export function AtlasesSection({ dataPar, onFieldChange }: AtlasesSectionProps) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
+function bMaskingToTuple(
+  val: number | [number, number, number, number] | undefined,
+): [boolean, boolean, boolean, boolean] {
+  if (val === undefined || val === 1) return [true, true, true, true];
+  if (val === 0) return [false, false, false, false];
+  return [!!val[0], !!val[1], !!val[2], !!val[3]];
+}
+
+function tupleToBMasking(
+  tuple: [boolean, boolean, boolean, boolean],
+): number | [number, number, number, number] {
+  const nums: [number, number, number, number] = [
+    tuple[0] ? 1 : 0,
+    tuple[1] ? 1 : 0,
+    tuple[2] ? 1 : 0,
+    tuple[3] ? 1 : 0,
+  ];
+  if (nums[0] === 1 && nums[1] === 1 && nums[2] === 1 && nums[3] === 1) return 1;
+  if (nums[0] === 0 && nums[1] === 0 && nums[2] === 0 && nums[3] === 0) return 0;
+  return nums;
+}
+
+export function AtlasesSection({
+  dataPar,
+  onFieldChange,
+  showAdvanced,
+  onToggleAdvanced,
+}: AtlasesSectionProps) {
 
   const atlases = dataPar.Atlases ?? [];
   const tissueMasking = dataPar.TissueMasking ?? [];
   const tissueThreshold = dataPar.TissueThreshold ?? [];
-  const bMasking = dataPar.bMasking ?? [false, false, false, false];
+  const bMaskingTuple = bMaskingToTuple(dataPar.bMasking);
 
-  const allMasked = bMasking.every(Boolean);
+  const allMasked = bMaskingTuple.every(Boolean);
   const toggleAllMasks = () => {
-    onFieldChange("bMasking", allMasked ? [false, false, false, false] : [true, true, true, true]);
+    onFieldChange("bMasking", allMasked ? 0 : 1);
   };
 
   return (
@@ -38,7 +70,7 @@ export function AtlasesSection({ dataPar, onFieldChange }: AtlasesSectionProps) 
         onTissueThresholdChange={(v) => onFieldChange("TissueThreshold", v)}
       />
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
 
       {showAdvanced && (
         <>
@@ -58,11 +90,11 @@ export function AtlasesSection({ dataPar, onFieldChange }: AtlasesSectionProps) 
               <Checkbox
                 key={label}
                 label={label}
-                checked={bMasking[i] ?? false}
+                checked={bMaskingTuple[i]}
                 onChange={() => {
-                  const next = [...bMasking];
+                  const next: [boolean, boolean, boolean, boolean] = [...bMaskingTuple];
                   next[i] = !next[i];
-                  onFieldChange("bMasking", next);
+                  onFieldChange("bMasking", tupleToBMasking(next));
                 }}
               />
             ))}
