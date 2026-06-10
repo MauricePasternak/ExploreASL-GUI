@@ -28,25 +28,26 @@ describe("ApplyQuantificationGroup", () => {
     expect(checked.length).toBeGreaterThanOrEqual(6);
   });
 
-  it("toggles all off via deselect button", () => {
+  it("toggles all off via deselect checkbox", () => {
     const onChange = vi.fn();
     const { container } = renderWithMantine(
       <ApplyQuantificationGroup value={[1, 1, 1, 1, 1, 1]} onChange={onChange} />,
     );
 
-    const button = container.querySelector("button") as HTMLButtonElement;
-    fireEvent.click(button);
+    const labels = container.querySelectorAll(".mantine-Checkbox-label");
+    // First label is the "Deselect all" checkbox
+    fireEvent.click(labels[0]);
     expect(onChange).toHaveBeenCalledWith([0, 0, 0, 0, 0, 0]);
   });
 
-  it("toggles all on via select button", () => {
+  it("toggles all on via select checkbox", () => {
     const onChange = vi.fn();
     const { container } = renderWithMantine(
       <ApplyQuantificationGroup value={[0, 0, 0, 0, 0, 0]} onChange={onChange} />,
     );
 
-    const button = container.querySelector("button") as HTMLButtonElement;
-    fireEvent.click(button);
+    const labels = container.querySelectorAll(".mantine-Checkbox-label");
+    fireEvent.click(labels[0]);
     expect(onChange).toHaveBeenCalledWith([1, 1, 1, 1, 1, 1]);
   });
 

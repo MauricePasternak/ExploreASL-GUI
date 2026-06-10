@@ -1,4 +1,6 @@
-import { Checkbox, Group, Button, Stack } from "@mantine/core";
+import { Checkbox, Group, Stack, Text } from "@mantine/core";
+
+import { DataParFieldLabel } from "./DataParFieldLabel";
 
 const LABELS = [
   "Apply ScaleSlopes ASL4D",
@@ -30,17 +32,26 @@ export function ApplyQuantificationGroup({ value, onChange }: ApplyQuantificatio
 
   return (
     <Stack gap="xs">
-      <Button variant="subtle" size="compact-xs" onClick={toggleAll}>
-        {allChecked ? "Deselect all" : "Select all"}
-      </Button>
+      <Group gap="xs" align="center">
+        <Text size="sm" fw={500}>
+          <DataParFieldLabel fieldKey="ApplyQuantification" />
+        </Text>
+        <Checkbox
+          label={allChecked ? "Deselect all" : "Select all"}
+          checked={allChecked}
+          onChange={toggleAll}
+          size="xs"
+          data-testid="toggle-all-apply-quantification"
+        />
+      </Group>
       {LABELS.map((label, i) => (
-        <Group key={label} gap="xs">
-          <Checkbox
-            label={label}
-            checked={effective[i] === 1}
-            onChange={() => toggle(i)}
-          />
-        </Group>
+        <Checkbox
+          key={label}
+          label={label}
+          checked={effective[i] === 1}
+          onChange={() => toggle(i)}
+          data-testid={`checkbox-applyQuantification-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+        />
       ))}
     </Stack>
   );
