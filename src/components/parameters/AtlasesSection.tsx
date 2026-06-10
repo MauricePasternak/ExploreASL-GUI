@@ -84,6 +84,7 @@ export function AtlasesSection({
                 checked={allMasked}
                 onChange={toggleAllMasks}
                 size="xs"
+                data-testid="field-bMasking-select-all"
               />
             </Group>
             {MASK_LABELS.map((label, i) => (
@@ -96,6 +97,7 @@ export function AtlasesSection({
                   next[i] = !next[i];
                   onFieldChange("bMasking", tupleToBMasking(next));
                 }}
+                data-testid={`field-bMasking-${i}`}
               />
             ))}
           </Stack>
@@ -106,13 +108,18 @@ export function AtlasesSection({
             value={dataPar.MinimalROIVolume}
             onChange={(v) => onFieldChange("MinimalROIVolume", v === "" ? undefined : v)}
             suffix=" mL"
+            data-testid="field-MinimalROIVolume"
           />
 
-          <Switch
-            label={<DataParFieldLabel fieldKey="bWMH" />}
-            checked={dataPar.bWMH ?? false}
-            onChange={(e) => onFieldChange("bWMH", e.currentTarget.checked)}
-          />
+          <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
+            <Switch
+              id="switch-bWMH"
+              checked={dataPar.bWMH ?? false}
+              onChange={(e) => onFieldChange("bWMH", e.currentTarget.checked)}
+              data-testid="field-bWMH"
+            />
+            <DataParFieldLabel fieldKey="bWMH" htmlFor="switch-bWMH" />
+          </Group>
 
           <TextInput
             label={<DataParFieldLabel fieldKey="DataTypes" />}
@@ -122,6 +129,7 @@ export function AtlasesSection({
               const val = e.currentTarget.value;
               onFieldChange("DataTypes", val ? val.split(",").map((s) => s.trim()) : []);
             }}
+            data-testid="field-DataTypes"
           />
         </>
       )}

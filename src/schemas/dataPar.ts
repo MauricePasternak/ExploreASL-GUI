@@ -51,7 +51,7 @@ export const DataParStateSchema = z.object({
   DataTypes: z.array(z.string()).optional(),
   Atlases: z.array(z.string()).optional(),
   TissueMasking: z.array(z.string()).optional(),
-  TissueThreshold: z.array(z.number()).optional(),
+  TissueThreshold: z.array(z.number().min(0).max(1)).optional(),
   LesionROIThreshold: z.number().optional(),
 
   bRunLongReg: z.union([z.literal(0), z.literal(1)]).optional(),

@@ -101,8 +101,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         return state;
       }
 
-      const currentPhase = state.project.projectMeta.currentPhase as ProjectPhase;
-      if (!canAccessPhase(currentPhase, phase)) {
+      if (!canAccessPhase(state.project, phase)) {
         return state;
       }
 

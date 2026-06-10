@@ -108,7 +108,7 @@ export default function ProjectPage() {
         return;
       }
 
-      const phase = resolveRestoredPhase(params.phase, loaded.projectMeta.currentPhase);
+      const phase = resolveRestoredPhase(params.phase, loaded);
       navigate(`/project/${loaded.projectMeta.id}/${phase}`, { replace: true });
       restoreInFlight.current = false;
       setRestoring(false);
@@ -141,7 +141,7 @@ export default function ProjectPage() {
       return;
     }
 
-    if (!canAccessPhase(project.projectMeta.currentPhase, params.phase)) {
+    if (!canAccessPhase(project, params.phase)) {
       navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`, { replace: true });
       return;
     }

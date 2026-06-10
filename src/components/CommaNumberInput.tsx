@@ -5,11 +5,12 @@ import {
   formatNumberOrArray,
   parseCommaSeparatedNumbers,
   parseNumberOrArray,
-} from "./metadataFormUtils";
+} from "../lib/commaNumbers";
 
 export interface CommaNumberInputProps {
   label: React.ReactNode;
   description?: string;
+  placeholder?: string;
   value: number | number[] | string | undefined;
   onChange: (value: number | number[] | string | undefined) => void;
   error?: string;
@@ -19,6 +20,7 @@ export interface CommaNumberInputProps {
 export function CommaNumberInput({
   label,
   description,
+  placeholder,
   value,
   onChange,
   error,
@@ -63,6 +65,7 @@ export function CommaNumberInput({
     <TextInput
       label={label}
       description={description}
+      placeholder={placeholder}
       value={localText}
       onChange={handleChange}
       error={error}
@@ -74,6 +77,7 @@ export function CommaNumberInput({
 export interface CommaArrayInputProps {
   label: React.ReactNode;
   description?: string;
+  placeholder?: string;
   value: number[] | string | undefined;
   onChange: (value: number[] | string | undefined) => void;
   error?: string;
@@ -83,6 +87,7 @@ export interface CommaArrayInputProps {
 export function CommaArrayInput({
   label,
   description,
+  placeholder,
   value,
   onChange,
   error,
@@ -127,6 +132,7 @@ export function CommaArrayInput({
     <TextInput
       label={label}
       description={description}
+      placeholder={placeholder}
       value={localText}
       onChange={handleChange}
       error={error}

@@ -16,14 +16,38 @@ function clickSwitchByLabel(container: HTMLElement, pattern: RegExp) {
   const w = within(container);
   const label = w.getAllByText(pattern)[0];
   const switchRoot = label.closest("[data-label-position]");
-  const body = switchRoot?.querySelector(".mantine-Switch-body");
-  fireEvent.click(body!);
+  if (switchRoot) {
+    const body = switchRoot.querySelector(".mantine-Switch-body");
+    if (body) {
+      fireEvent.click(body);
+      return;
+    }
+  }
+  const group = label.closest(".mantine-Group-root");
+  if (group) {
+    const input = group.querySelector("input[type='checkbox']");
+    if (input) {
+      fireEvent.click(input);
+      return;
+    }
+  }
+  fireEvent.click(label);
 }
 
 afterEach(() => cleanup());
 
 beforeEach(() => {
-  useDataParStore.setState({ dataPar: {}, showAdvanced: false });
+  useDataParStore.setState({
+    dataPar: {},
+    advancedVisibility: {
+      showAdvancedSections: false,
+      showAdvancedM0Params: false,
+      showAdvancedQuantification: false,
+      showAdvancedGeneralSettings: false,
+      showAdvancedASLProcessing: false,
+      showAdvancedAtlases: false,
+    },
+  });
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
 });
 
@@ -44,7 +68,16 @@ describe("dataPar flow: store ↔ project sync", () => {
           lastOpened: "",
           currentPhase: "parameters",
         },
-        uiState: { showAdvancedParameters: false },
+        uiState: {
+          dataParametersAdvancedVisibility: {
+            showAdvancedSections: false,
+            showAdvancedM0Params: false,
+            showAdvancedQuantification: false,
+            showAdvancedGeneralSettings: false,
+            showAdvancedASLProcessing: false,
+            showAdvancedAtlases: false,
+          },
+        },
         mappingState: {},
         exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
       },
@@ -76,7 +109,16 @@ describe("dataPar flow: store ↔ project sync", () => {
           lastOpened: "",
           currentPhase: "parameters",
         },
-        uiState: { showAdvancedParameters: false },
+        uiState: {
+          dataParametersAdvancedVisibility: {
+            showAdvancedSections: false,
+            showAdvancedM0Params: false,
+            showAdvancedQuantification: false,
+            showAdvancedGeneralSettings: false,
+            showAdvancedASLProcessing: false,
+            showAdvancedAtlases: false,
+          },
+        },
         mappingState: {},
         exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
       },
@@ -102,7 +144,7 @@ describe("dataPar flow: store ↔ project sync", () => {
     expect(saved).toMatchObject(fields);
   });
 
-  it("showAdvanced syncs to project uiState.showAdvancedParameters", () => {
+  it("showAdvancedSections syncs to project uiState.dataParametersAdvancedVisibility", () => {
     useProjectStore.setState({
       project: {
         version: "0.1.0",
@@ -114,7 +156,16 @@ describe("dataPar flow: store ↔ project sync", () => {
           lastOpened: "",
           currentPhase: "parameters",
         },
-        uiState: { showAdvancedParameters: false },
+        uiState: {
+          dataParametersAdvancedVisibility: {
+            showAdvancedSections: false,
+            showAdvancedM0Params: false,
+            showAdvancedQuantification: false,
+            showAdvancedGeneralSettings: false,
+            showAdvancedASLProcessing: false,
+            showAdvancedAtlases: false,
+          },
+        },
         mappingState: {},
         exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
       },
@@ -122,10 +173,10 @@ describe("dataPar flow: store ↔ project sync", () => {
       loaded: true,
     });
 
-    useDataParStore.getState().setShowAdvanced(true);
+    useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
     useDataParStore.getState().saveToProject();
 
-    expect(useProjectStore.getState().project!.uiState.showAdvancedParameters).toBe(true);
+    expect(useProjectStore.getState().project!.uiState.dataParametersAdvancedVisibility.showAdvancedSections).toBe(true);
   });
 });
 
@@ -154,11 +205,11 @@ describe("dataPar flow: advanced toggle shows/hides sections", () => {
     expect(w.queryByText("Environment")).toBeNull();
   });
 
-  it("showAdvanced state updates in store on toggle", () => {
+  it("showAdvancedSections state updates in store on toggle", () => {
     const { container } = renderWithMantine(<DataParEditor />);
-    expect(useDataParStore.getState().showAdvanced).toBe(false);
+    expect(useDataParStore.getState().advancedVisibility.showAdvancedSections).toBe(false);
     clickSwitchByLabel(container, /show advanced parameters/i);
-    expect(useDataParStore.getState().showAdvanced).toBe(true);
+    expect(useDataParStore.getState().advancedVisibility.showAdvancedSections).toBe(true);
   });
 });
 

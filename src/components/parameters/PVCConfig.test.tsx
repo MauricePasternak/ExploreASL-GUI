@@ -18,13 +18,14 @@ describe("PVCConfig", () => {
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
         onKernelChange={() => {}}
+        showAdvanced={false}
       />,
     );
 
     expect(screen.getAllByText(/partial volume correction/i).length).toBeGreaterThan(0);
   });
 
-  it("shows kernel fields when PVC is enabled", () => {
+  it("shows kernel fields when PVC and showAdvanced are enabled", () => {
     renderWithMantine(
       <PVCConfig
         bPVCNativeSpace={true}
@@ -33,13 +34,14 @@ describe("PVCConfig", () => {
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
         onKernelChange={() => {}}
+        showAdvanced={true}
       />,
     );
 
     expect(screen.getAllByText(/kernel size/i).length).toBeGreaterThan(0);
   });
 
-  it("hides kernel fields when PVC is disabled", () => {
+  it("hides kernel fields when PVC is disabled, even if showAdvanced is true", () => {
     const { container } = renderWithMantine(
       <PVCConfig
         bPVCNativeSpace={false}
@@ -48,11 +50,32 @@ describe("PVCConfig", () => {
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
         onKernelChange={() => {}}
+        showAdvanced={true}
       />,
     );
 
-    const kernelTexts = container.querySelectorAll("p");
-    const kernelEl = Array.from(kernelTexts).find((el) =>
+    const labels = container.querySelectorAll("span");
+    const kernelEl = Array.from(labels).find((el) =>
+      el.textContent?.match(/kernel size/i),
+    );
+    expect(kernelEl).toBeUndefined();
+  });
+
+  it("hides kernel fields when showAdvanced is false, even if PVC is enabled", () => {
+    const { container } = renderWithMantine(
+      <PVCConfig
+        bPVCNativeSpace={true}
+        bPVCGaussianMM={false}
+        PVCNativeSpaceKernel={[5, 5, 1]}
+        onBpvChange={() => {}}
+        onGaussianChange={() => {}}
+        onKernelChange={() => {}}
+        showAdvanced={false}
+      />,
+    );
+
+    const labels = container.querySelectorAll("span");
+    const kernelEl = Array.from(labels).find((el) =>
       el.textContent?.match(/kernel size/i),
     );
     expect(kernelEl).toBeUndefined();
@@ -67,13 +90,14 @@ describe("PVCConfig", () => {
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
         onKernelChange={() => {}}
+        showAdvanced={true}
       />,
     );
 
     expect(screen.getAllByText(/kernel fwhm/i).length).toBeGreaterThan(0);
   });
 
-  it("shows Gaussian toggle when PVC is enabled", () => {
+  it("shows Gaussian toggle when PVC is enabled and showAdvanced is true", () => {
     renderWithMantine(
       <PVCConfig
         bPVCNativeSpace={true}
@@ -82,6 +106,7 @@ describe("PVCConfig", () => {
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
         onKernelChange={() => {}}
+        showAdvanced={true}
       />,
     );
 
@@ -97,6 +122,7 @@ describe("PVCConfig", () => {
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
         onKernelChange={() => {}}
+        showAdvanced={true}
       />,
     );
 

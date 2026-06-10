@@ -12,14 +12,14 @@ import {
   type ComboboxItem,
 } from "@mantine/core";
 import { Controller, type Control, type FieldPath } from "react-hook-form";
-import { IconInfoCircle } from "@tabler/icons-react";
+import { FieldInfoIcon } from "../FieldInfoIcon";
 
 import {
   BIDS_FIELD_HINTS,
   type MetadataFieldHint,
 } from "./metadataFieldHints";
 import type { MetadataGroupFormValues } from "./metadataModalTypes";
-import { CommaNumberInput, CommaArrayInput } from "./CommaNumberInput";
+import { CommaNumberInput, CommaArrayInput } from "../CommaNumberInput";
 import { BIDS_FIELD_DESCRIPTIONS } from "./metadataFieldDescriptions";
 
 function resolveFieldDescription(
@@ -91,31 +91,7 @@ export function BidsFieldLabel({ label, fieldName }: BidsFieldLabelProps) {
         openDelay={0}
         closeDelay={0}
       >
-        <Box
-          component="span"
-          display="inline-flex"
-          style={{
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "18px",
-            height: "18px",
-            borderRadius: "50%",
-            backgroundColor: "#066fd1",
-            color: "white",
-            transition: "transform 0.15s ease",
-          }}
-        >
-          <IconInfoCircle
-            size={13}
-            stroke={2.5}
-            color="white"
-            style={{ display: "block" }}
-            aria-label={`Info for ${label}`}
-            role="img"
-          />
-        </Box>
+        <FieldInfoIcon aria-label={`Info for ${label}`} />
       </Tooltip>
     </Group>
   );

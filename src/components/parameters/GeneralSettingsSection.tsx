@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Switch, NumberInput, Select, Stack } from "@mantine/core";
+import { Switch, NumberInput, Select, Stack, Group } from "@mantine/core";
 
 import type { DataParState } from "../../schemas/dataParSchema";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
@@ -9,14 +8,20 @@ import { AdvancedDivider } from "./AdvancedDivider";
 interface GeneralSettingsSectionProps {
   dataPar: DataParState;
   onFieldChange: (field: string, value: unknown) => void;
+  showAdvanced: boolean;
+  onToggleAdvanced: () => void;
 }
 
 const ADVANCED_TOGGLE_FIELDS = [
   "DELETETEMP", "SkipIfNoFlair", "SkipIfNoASL", "SkipIfNoM0", "bLesionFilling", "bAutoACPC",
 ] as const;
 
-export function GeneralSettingsSection({ dataPar, onFieldChange }: GeneralSettingsSectionProps) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
+export function GeneralSettingsSection({
+  dataPar,
+  onFieldChange,
+  showAdvanced,
+  onToggleAdvanced,
+}: GeneralSettingsSectionProps) {
 
   return (
     <Stack gap="md">
@@ -29,19 +34,23 @@ export function GeneralSettingsSection({ dataPar, onFieldChange }: GeneralSettin
         value={dataPar.Quality != null ? String(dataPar.Quality) : null}
         onChange={(v) => onFieldChange("Quality", v ? Number(v) : undefined)}
         placeholder={FIELD_METADATA.Quality.defaultHint}
+        data-testid="field-Quality"
       />
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
 
       {showAdvanced && (
         <>
           {ADVANCED_TOGGLE_FIELDS.map((key) => (
-            <Switch
-              key={key}
-              label={<DataParFieldLabel fieldKey={key} />}
-              checked={dataPar[key] ?? false}
-              onChange={(e) => onFieldChange(key, e.currentTarget.checked)}
-            />
+            <Group key={key} gap="xs" align="center" style={{ minHeight: "32px" }}>
+              <Switch
+                id={`switch-${key}`}
+                checked={dataPar[key] ?? false}
+                onChange={(e) => onFieldChange(key, e.currentTarget.checked)}
+                data-testid={`field-${key}`}
+              />
+              <DataParFieldLabel fieldKey={key} htmlFor={`switch-${key}`} />
+            </Group>
           ))}
 
           <NumberInput
@@ -49,6 +58,7 @@ export function GeneralSettingsSection({ dataPar, onFieldChange }: GeneralSettin
             placeholder={FIELD_METADATA.stopAfterErrors.defaultHint}
             value={dataPar.stopAfterErrors}
             onChange={(v) => onFieldChange("stopAfterErrors", v === "" ? undefined : v)}
+            data-testid="field-stopAfterErrors"
           />
         </>
       )}

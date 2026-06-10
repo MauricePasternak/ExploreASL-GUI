@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Switch, NumberInput, Select, Stack } from "@mantine/core";
+import { Switch, NumberInput, Select, Stack, Group } from "@mantine/core";
 
 import type { DataParState } from "../../schemas/dataParSchema";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
@@ -9,6 +8,8 @@ import { AdvancedDivider } from "./AdvancedDivider";
 interface QuantificationSectionProps {
   dataPar: DataParState;
   onFieldChange: (field: string, value: unknown) => void;
+  showAdvanced: boolean;
+  onToggleAdvanced: () => void;
 }
 
 const NUMBER_FIELDS = [
@@ -19,8 +20,12 @@ const EXTERNAL_TOGGLE_FIELDS = [
   "bMaskingExternal", "bSpatialBASIL", "bInferT1BASIL", "bInferATTBASIL", "bCleanUpExternal",
 ] as const;
 
-export function QuantificationSection({ dataPar, onFieldChange }: QuantificationSectionProps) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
+export function QuantificationSection({
+  dataPar,
+  onFieldChange,
+  showAdvanced,
+  onToggleAdvanced,
+}: QuantificationSectionProps) {
 
   const externalEnabled = dataPar.bUseExternalQuantification === true;
 
@@ -35,9 +40,10 @@ export function QuantificationSection({ dataPar, onFieldChange }: Quantification
         value={dataPar.nCompartments != null ? String(dataPar.nCompartments) : null}
         onChange={(v) => onFieldChange("nCompartments", v ? Number(v) : undefined)}
         placeholder={FIELD_METADATA.nCompartments.defaultHint}
+        data-testid="field-nCompartments"
       />
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
 
       {showAdvanced && (
         <>
@@ -48,16 +54,21 @@ export function QuantificationSection({ dataPar, onFieldChange }: Quantification
               placeholder={FIELD_METADATA[key].defaultHint}
               value={dataPar[key]}
               onChange={(v) => onFieldChange(key, v === "" ? undefined : v)}
+              data-testid={`field-${key}`}
             />
           ))}
 
-          <Switch
-            label={<DataParFieldLabel fieldKey="bUseExternalQuantification" />}
-            checked={externalEnabled}
-            onChange={(e) =>
-              onFieldChange("bUseExternalQuantification", e.currentTarget.checked)
-            }
-          />
+          <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
+            <Switch
+              id="switch-bUseExternalQuantification"
+              checked={externalEnabled}
+              onChange={(e) =>
+                onFieldChange("bUseExternalQuantification", e.currentTarget.checked)
+              }
+              data-testid="field-bUseExternalQuantification"
+            />
+            <DataParFieldLabel fieldKey="bUseExternalQuantification" htmlFor="switch-bUseExternalQuantification" />
+          </Group>
 
           {externalEnabled && (
             <>
@@ -66,6 +77,8 @@ export function QuantificationSection({ dataPar, onFieldChange }: Quantification
                 data={["BASIL", "FABBER", "VABY"]}
                 value={dataPar.ExternalQuantificationType ?? null}
                 onChange={(v) => onFieldChange("ExternalQuantificationType", v)}
+                placeholder={FIELD_METADATA.ExternalQuantificationType.defaultHint}
+                data-testid="field-ExternalQuantificationType"
               />
 
               <NumberInput
@@ -80,15 +93,19 @@ export function QuantificationSection({ dataPar, onFieldChange }: Quantification
                     existing[2],
                   ]);
                 }}
+                data-testid="field-ExternalQuantificationSmoothGaussianMM"
               />
 
               {EXTERNAL_TOGGLE_FIELDS.map((key) => (
-                <Switch
-                  key={key}
-                  label={<DataParFieldLabel fieldKey={key} />}
-                  checked={dataPar[key] ?? false}
-                  onChange={(e) => onFieldChange(key, e.currentTarget.checked)}
-                />
+                <Group key={key} gap="xs" align="center" style={{ minHeight: "32px" }}>
+                  <Switch
+                    id={`switch-${key}`}
+                    checked={dataPar[key] ?? false}
+                    onChange={(e) => onFieldChange(key, e.currentTarget.checked)}
+                    data-testid={`field-${key}`}
+                  />
+                  <DataParFieldLabel fieldKey={key} htmlFor={`switch-${key}`} />
+                </Group>
               ))}
 
               <Select
@@ -96,6 +113,8 @@ export function QuantificationSection({ dataPar, onFieldChange }: Quantification
                 data={["mix", "simple", "2cpt", "spa"]}
                 value={dataPar.ExchBASIL ?? null}
                 onChange={(v) => onFieldChange("ExchBASIL", v)}
+                placeholder={FIELD_METADATA.ExchBASIL.defaultHint}
+                data-testid="field-ExchBASIL"
               />
 
               <Select
@@ -103,6 +122,8 @@ export function QuantificationSection({ dataPar, onFieldChange }: Quantification
                 data={["none", "gamma", "gauss", "sgauss"]}
                 value={dataPar.DispBASIL ?? null}
                 onChange={(v) => onFieldChange("DispBASIL", v)}
+                placeholder={FIELD_METADATA.DispBASIL.defaultHint}
+                data-testid="field-DispBASIL"
               />
 
               <NumberInput
@@ -110,6 +131,7 @@ export function QuantificationSection({ dataPar, onFieldChange }: Quantification
                 placeholder={FIELD_METADATA.ATTSDBASIL.defaultHint}
                 value={dataPar.ATTSDBASIL}
                 onChange={(v) => onFieldChange("ATTSDBASIL", v === "" ? undefined : v)}
+                data-testid="field-ATTSDBASIL"
               />
             </>
           )}

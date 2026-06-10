@@ -21,7 +21,16 @@ describe("ProjectFileSchema", () => {
         rootPath: "/tmp/project-root",
         currentPhase: "import",
       },
-      uiState: { showAdvancedParameters: false },
+      uiState: {
+        dataParametersAdvancedVisibility: {
+          showAdvancedSections: false,
+          showAdvancedM0Params: false,
+          showAdvancedQuantification: false,
+          showAdvancedGeneralSettings: false,
+          showAdvancedASLProcessing: false,
+          showAdvancedAtlases: false,
+        },
+      },
       mappingState: {},
       exploreAslConfig: {
         sourcestructure: {},
@@ -75,19 +84,28 @@ describe("ProjectFileSchema", () => {
     expect(PROJECT_FILE_NAME).toBe("project.easl");
   });
 
-  it("defaults showAdvancedParameters to false in uiState", () => {
+  it("defaults showAdvancedSections to false in uiState", () => {
     const parsed = ProjectFileSchema.parse(
       DEFAULT_PROJECT_FILE("project-adv", "Adv Project", "/tmp/adv"),
     );
-    expect(parsed.uiState.showAdvancedParameters).toBe(false);
+    expect(parsed.uiState.dataParametersAdvancedVisibility?.showAdvancedSections).toBe(false);
   });
 
-  it("parses showAdvancedParameters true in uiState", () => {
+  it("parses showAdvancedSections true in uiState", () => {
     const parsed = ProjectFileSchema.parse({
       ...DEFAULT_PROJECT_FILE("project-adv2", "Adv2", "/tmp/adv2"),
-      uiState: { showAdvancedParameters: true },
+      uiState: {
+        dataParametersAdvancedVisibility: {
+          showAdvancedSections: true,
+          showAdvancedM0Params: false,
+          showAdvancedQuantification: false,
+          showAdvancedGeneralSettings: false,
+          showAdvancedASLProcessing: false,
+          showAdvancedAtlases: false,
+        },
+      },
     });
-    expect(parsed.uiState.showAdvancedParameters).toBe(true);
+    expect(parsed.uiState.dataParametersAdvancedVisibility?.showAdvancedSections).toBe(true);
   });
 
   it("accepts empty dataPar object (backward compat)", () => {
