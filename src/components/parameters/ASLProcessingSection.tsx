@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Switch, NumberInput, Select, Stack, Text } from "@mantine/core";
 
 import type { DataParState } from "../../schemas/dataParSchema";
@@ -6,14 +5,21 @@ import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
 import { DataParFieldLabel } from "./DataParFieldLabel";
 import { AdvancedDivider } from "./AdvancedDivider";
 import { ApplyQuantificationGroup } from "./ApplyQuantificationGroup";
+import { PVCConfig } from "./PVCConfig";
 
 interface ASLProcessingSectionProps {
   dataPar: DataParState;
   onFieldChange: (field: string, value: unknown) => void;
+  showAdvanced: boolean;
+  onToggleAdvanced: () => void;
 }
 
-export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSectionProps) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
+export function ASLProcessingSection({
+  dataPar,
+  onFieldChange,
+  showAdvanced,
+  onToggleAdvanced,
+}: ASLProcessingSectionProps) {
 
   return (
     <Stack gap="md">
@@ -21,27 +27,34 @@ export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSe
         label={<DataParFieldLabel fieldKey="motionCorrection" />}
         checked={dataPar.motionCorrection ?? true}
         onChange={(e) => onFieldChange("motionCorrection", e.currentTarget.checked)}
+        data-testid="field-motionCorrection"
       />
 
       <Switch
         label={<DataParFieldLabel fieldKey="bTopUp" />}
         checked={dataPar.bTopUp ?? true}
         onChange={(e) => onFieldChange("bTopUp", e.currentTarget.checked)}
+        data-testid="field-bTopUp"
       />
 
-      <Switch
-        label={<DataParFieldLabel fieldKey="bPVCNativeSpace" />}
-        checked={dataPar.bPVCNativeSpace ?? true}
-        onChange={(e) => onFieldChange("bPVCNativeSpace", e.currentTarget.checked)}
+      <PVCConfig
+        bPVCNativeSpace={dataPar.bPVCNativeSpace}
+        bPVCGaussianMM={dataPar.bPVCGaussianMM}
+        PVCNativeSpaceKernel={dataPar.PVCNativeSpaceKernel}
+        onBpvChange={(v) => onFieldChange("bPVCNativeSpace", v)}
+        onGaussianChange={(v) => onFieldChange("bPVCGaussianMM", v)}
+        onKernelChange={(v) => onFieldChange("PVCNativeSpaceKernel", v)}
+        showAdvanced={showAdvanced}
       />
 
       <Switch
         label={<DataParFieldLabel fieldKey="SaveCBF4D" />}
         checked={dataPar.SaveCBF4D ?? false}
         onChange={(e) => onFieldChange("SaveCBF4D", e.currentTarget.checked)}
+        data-testid="field-SaveCBF4D"
       />
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
 
       {showAdvanced && (
         <>
@@ -50,6 +63,7 @@ export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSe
             placeholder={FIELD_METADATA.SpikeRemovalThreshold.defaultHint}
             value={dataPar.SpikeRemovalThreshold}
             onChange={(v) => onFieldChange("SpikeRemovalThreshold", v === "" ? undefined : v)}
+            data-testid="field-SpikeRemovalThreshold"
           />
 
           <NumberInput
@@ -59,6 +73,7 @@ export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSe
             onChange={(v) =>
               onFieldChange("SpikeRemovalAbsoluteThreshold", v === "" ? undefined : v)
             }
+            data-testid="field-SpikeRemovalAbsoluteThreshold"
           />
 
           <Select
@@ -66,6 +81,8 @@ export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSe
             data={["0", "1", "2", "3"]}
             value={dataPar.bRegistrationContrast != null ? String(dataPar.bRegistrationContrast) : null}
             onChange={(v) => onFieldChange("bRegistrationContrast", v ? Number(v) : undefined)}
+            placeholder={FIELD_METADATA.bRegistrationContrast.defaultHint}
+            data-testid="field-bRegistrationContrast"
           />
 
           <Select
@@ -73,6 +90,8 @@ export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSe
             data={["0", "1", "2"]}
             value={dataPar.bAffineRegistration != null ? String(dataPar.bAffineRegistration) : null}
             onChange={(v) => onFieldChange("bAffineRegistration", v ? Number(v) : undefined)}
+            placeholder={FIELD_METADATA.bAffineRegistration.defaultHint}
+            data-testid="field-bAffineRegistration"
           />
 
           <Select
@@ -80,6 +99,8 @@ export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSe
             data={["0", "1", "2"]}
             value={dataPar.bDCTRegistration != null ? String(dataPar.bDCTRegistration) : null}
             onChange={(v) => onFieldChange("bDCTRegistration", v ? Number(v) : undefined)}
+            placeholder={FIELD_METADATA.bDCTRegistration.defaultHint}
+            data-testid="field-bDCTRegistration"
           />
 
           <Switch
@@ -88,6 +109,7 @@ export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSe
             onChange={(e) =>
               onFieldChange("bUseMNIasDummyStructural", e.currentTarget.checked)
             }
+            data-testid="field-bUseMNIasDummyStructural"
           />
 
           <Select
@@ -95,17 +117,14 @@ export function ASLProcessingSection({ dataPar, onFieldChange }: ASLProcessingSe
             data={["0", "1", "2"]}
             value={dataPar.bHct2BloodT1 != null ? String(dataPar.bHct2BloodT1) : null}
             onChange={(v) => onFieldChange("bHct2BloodT1", v ? Number(v) : undefined)}
+            placeholder={FIELD_METADATA.bHct2BloodT1.defaultHint}
+            data-testid="field-bHct2BloodT1"
           />
 
-          <Stack gap={4}>
-            <Text size="sm" fw={500}>
-              <DataParFieldLabel fieldKey="ApplyQuantification" />
-            </Text>
-            <ApplyQuantificationGroup
-              value={dataPar.ApplyQuantification}
-              onChange={(v) => onFieldChange("ApplyQuantification", v)}
-            />
-          </Stack>
+          <ApplyQuantificationGroup
+            value={dataPar.ApplyQuantification}
+            onChange={(v) => onFieldChange("ApplyQuantification", v)}
+          />
         </>
       )}
     </Stack>
