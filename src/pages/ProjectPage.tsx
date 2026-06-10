@@ -8,6 +8,7 @@ import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/pr
 import { useProjectStore } from "../stores/projectStore";
 import { useImportStore } from "../stores/importStore";
 import ImportPage from "./ImportPage";
+import DataParEditor from "../components/parameters/DataParEditor";
 
 function isProjectPhase(value: string | undefined): value is ProjectPhase {
   return PROJECT_PHASES.includes(value as ProjectPhase);
@@ -171,7 +172,7 @@ export default function ProjectPage() {
     case "import":
       return <ImportPage />;
     case "parameters":
-      return <Text data-testid="project-parameters-placeholder">Parameters configuration (Phase 3 — coming soon)</Text>;
+      return <DataParEditor />;
     case "processing":
       return <Text data-testid="project-processing-placeholder">Processing dashboard (Phase 4 — coming soon)</Text>;
     default:
