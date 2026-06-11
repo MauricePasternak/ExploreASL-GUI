@@ -1,5 +1,15 @@
 import "@testing-library/jest-dom/vitest";
 
+// ResizeObserver polyfill for mantine-datatable
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+if (typeof window.ResizeObserver === "undefined") {
+  (window as unknown as Record<string, unknown>).ResizeObserver = ResizeObserverMock;
+}
+
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
@@ -57,6 +67,12 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openPath: vi.fn(),
+  openUrl: vi.fn(),
+  revealItemInDir: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-store", () => {

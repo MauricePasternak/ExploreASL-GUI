@@ -1,7 +1,9 @@
-import { Accordion, Group, Stack, Switch, Text } from "@mantine/core";
+import { Accordion, Alert, Group, Stack, Switch, Text } from "@mantine/core";
+import { IconAlertTriangle } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef } from "react";
 import type { DataParState } from "../../schemas/dataParSchema";
 import { useDataParStore } from "../../stores/dataParStore";
+import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { ASLProcessingSection } from "./ASLProcessingSection";
 import { AtlasesSection } from "./AtlasesSection";
@@ -20,6 +22,7 @@ export default function DataParEditor() {
 	const saveToProject = useDataParStore((s) => s.saveToProject);
 	const loadDataPar = useDataParStore((s) => s.loadDataPar);
 	const project = useProjectStore((s) => s.project);
+	const processingPhase = useProcessingStore((s) => s.processingPhase);
 
 	// Load from project on mount
 	useEffect(() => {
@@ -76,6 +79,18 @@ export default function DataParEditor() {
 					data-testid="advanced-toggle"
 				/>
 			</Group>
+
+			{(processingPhase === "running" || processingPhase === "preparing") && (
+				<Alert
+					color="yellow"
+					icon={<IconAlertTriangle size={16} />}
+					data-testid="datapar-running-warning"
+				>
+					<Text size="sm">
+						Processing is running. Changes will take effect on next run.
+					</Text>
+				</Alert>
+			)}
 
 			<Accordion multiple defaultValue={[]} variant="separated">
 				<Accordion.Item value="generalSettings" data-testid="accordion-item-generalSettings">

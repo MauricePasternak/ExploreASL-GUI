@@ -8,6 +8,7 @@ import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/pr
 import { useProjectStore } from "../stores/projectStore";
 import { useImportStore } from "../stores/importStore";
 import ImportPage from "./ImportPage";
+import ProcessingPage from "./ProcessingPage";
 import DataParEditor from "../components/parameters/DataParEditor";
 
 function isProjectPhase(value: string | undefined): value is ProjectPhase {
@@ -174,7 +175,7 @@ export default function ProjectPage() {
     case "parameters":
       return <DataParEditor />;
     case "processing":
-      return <Text data-testid="project-processing-placeholder">Processing dashboard (Phase 4 — coming soon)</Text>;
+      return <ProcessingPage />;
     default:
       return <Text>Current phase: {project.projectMeta.currentPhase}</Text>;
   }

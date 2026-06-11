@@ -1,5 +1,6 @@
 use crate::commands::{create_symlink_tree, SymlinkEntry};
 use crate::import_parser::*;
+use crate::processing::ProcessState;
 use serde::Deserialize;
 use serde_json::Value;
 use std::env;
@@ -55,6 +56,7 @@ impl Default for ImportState {
 #[derive(Default)]
 pub struct AppState {
   pub import_state: Mutex<ImportState>,
+  pub processing_state: Mutex<ProcessState>,
 }
 
 #[derive(Debug, Deserialize)]

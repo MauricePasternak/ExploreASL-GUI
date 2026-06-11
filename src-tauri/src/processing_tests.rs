@@ -1,0 +1,406 @@
+#[cfg(test)]
+mod tests {
+    use crate::processing::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_path(name: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("exploreasl-gui-proc-{name}-{suffix}"))
+    }
+
+    // -------------------------------------------------------------------------
+    // module_index_to_name
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn module_index_to_name_maps_0_to_structural() {
+        assert_eq!(module_index_to_name(0), "xASL_module_Structural");
+    }
+
+    #[test]
+    fn module_index_to_name_maps_1_to_asl() {
+        assert_eq!(module_index_to_name(1), "xASL_module_ASL");
+    }
+
+    #[test]
+    fn module_index_to_name_maps_2_to_population() {
+        assert_eq!(module_index_to_name(2), "xASL_module_Population");
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid module index")]
+    fn module_index_to_name_panics_on_invalid_index() {
+        module_index_to_name(3);
+    }
+
+    // -------------------------------------------------------------------------
+    // list_subjects
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn list_subjects_returns_empty_when_rawdata_missing() {
+        let root = unique_temp_path("no-rawdata");
+        fs::create_dir_all(&root).expect("test root should be created");
+
+        let subjects = list_subjects(root.to_string_lossy().to_string())
+            .expect("list_subjects should succeed");
+
+        assert!(subjects.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn list_subjects_returns_subjects_with_sessions() {
+        let root = unique_temp_path("list-subjects");
+        let rawdata = root.join("rawdata");
+        fs::create_dir_all(rawdata.join("sub-001").join("ses-01").join("anat")).unwrap();
+        fs::create_dir_all(rawdata.join("sub-001").join("ses-01").join("perf")).unwrap();
+        fs::create_dir_all(rawdata.join("sub-002").join("ses-02")).unwrap();
+
+        let subjects = list_subjects(root.to_string_lossy().to_string())
+            .expect("list_subjects should succeed");
+
+        assert_eq!(subjects.len(), 2);
+
+        let sub001 = subjects.iter().find(|s| s.subject == "001").unwrap();
+        assert_eq!(sub001.session, "01");
+        assert_eq!(sub001.subject_session, "sub-001_01");
+        assert!(sub001.has_structural);
+        assert!(sub001.has_asl);
+
+        let sub002 = subjects.iter().find(|s| s.subject == "002").unwrap();
+        assert_eq!(sub002.session, "02");
+        assert!(!sub002.has_structural);
+        assert!(!sub002.has_asl);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn list_subjects_skips_non_sub_directories() {
+        let root = unique_temp_path("list-skip");
+        let rawdata = root.join("rawdata");
+        fs::create_dir_all(rawdata.join("sub-001").join("ses-01")).unwrap();
+        fs::create_dir_all(rawdata.join("README")).unwrap();
+        fs::create_dir_all(rawdata.join("dataset")).unwrap();
+
+        let subjects = list_subjects(root.to_string_lossy().to_string())
+            .expect("list_subjects should succeed");
+
+        assert_eq!(subjects.len(), 1);
+        assert_eq!(subjects[0].subject, "001");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    // -------------------------------------------------------------------------
+    // determine_status
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn determine_status_returns_pending_when_no_status_files() {
+        let dir = unique_temp_path("det-pending");
+        fs::create_dir_all(&dir).unwrap();
+
+        let (status, steps, locked) = determine_status(&dir);
+        assert_eq!(status, "pending");
+        assert!(steps.is_empty());
+        assert!(!locked);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn determine_status_returns_complete_when_ready_file_exists() {
+        let dir = unique_temp_path("det-complete");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(dir.join("999_ready.status"), "").unwrap();
+
+        let (status, steps, locked) = determine_status(&dir);
+        assert_eq!(status, "complete");
+        assert!(steps.contains(&"060_Segment_T1w".to_string()));
+        assert!(!locked);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn determine_status_returns_incomplete_when_status_files_without_ready() {
+        let dir = unique_temp_path("det-incomplete");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(dir.join("070_SkullStrip_T1w.status"), "").unwrap();
+
+        let (status, steps, locked) = determine_status(&dir);
+        assert_eq!(status, "incomplete");
+        assert_eq!(steps.len(), 2);
+        assert!(!locked);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn determine_status_detects_locked_directory() {
+        let dir = unique_temp_path("det-locked");
+        fs::create_dir_all(dir.join("locked")).unwrap();
+        fs::write(dir.join("060_Segment_T1w.status"), "").unwrap();
+
+        let (status, steps, locked) = determine_status(&dir);
+        assert_eq!(status, "incomplete");
+        assert!(locked);
+        assert!(steps.contains(&"060_Segment_T1w".to_string()));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // -------------------------------------------------------------------------
+    // read_lock_status
+    // -------------------------------------------------------------------------
+
+    fn create_lock_tree(root: &PathBuf) {
+        let lock = root.join("derivatives").join("ExploreASL").join("lock");
+
+        // Structural: sub-001_01 complete
+        let struct_sub = lock
+            .join("xASL_module_Structural")
+            .join("sub-001_01")
+            .join("xASL_module_Structural");
+        fs::create_dir_all(&struct_sub).unwrap();
+        fs::write(struct_sub.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(struct_sub.join("999_ready.status"), "").unwrap();
+
+        // ASL: sub-001_01 run 01 incomplete, locked
+        let asl_run = lock
+            .join("xASL_module_ASL")
+            .join("sub-001_01")
+            .join("xASL_module_ASL")
+            .join("xASL_module_ASL_ASL_01");
+        fs::create_dir_all(asl_run.join("locked")).unwrap();
+        fs::write(asl_run.join("ASL.status"), "").unwrap();
+
+        // Population: complete
+        let pop = lock
+            .join("xASL_module_Population")
+            .join("xASL_module_Population");
+        fs::create_dir_all(&pop).unwrap();
+        fs::write(pop.join("999_ready.status"), "").unwrap();
+    }
+
+    #[test]
+    fn read_lock_status_returns_empty_when_lock_dir_missing() {
+        let root = unique_temp_path("no-lock");
+        fs::create_dir_all(&root).unwrap();
+
+        let statuses = read_lock_status(root.to_string_lossy().to_string())
+            .expect("should succeed");
+
+        assert!(statuses.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_lock_status_parses_all_modules() {
+        let root = unique_temp_path("lock-all-modules");
+        create_lock_tree(&root);
+
+        let statuses = read_lock_status(root.to_string_lossy().to_string())
+            .expect("should succeed");
+
+        // Structural
+        let structural = statuses
+            .iter()
+            .find(|s| s.module_name == "xASL_module_Structural")
+            .expect("structural status should exist");
+        assert_eq!(structural.subject_session, "sub-001_01");
+        assert_eq!(structural.status, "complete");
+        assert!(!structural.locked);
+
+        // ASL
+        let asl = statuses
+            .iter()
+            .find(|s| s.module_name == "xASL_module_ASL")
+            .expect("asl status should exist");
+        assert_eq!(asl.subject_session, "sub-001_01");
+        assert_eq!(asl.status, "incomplete");
+        assert!(asl.locked);
+        assert_eq!(asl.run, Some("01".to_string()));
+
+        // Population
+        let pop = statuses
+            .iter()
+            .find(|s| s.module_name == "xASL_module_Population")
+            .expect("population status should exist");
+        assert_eq!(pop.status, "complete");
+        assert!(pop.subject_session.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    // -------------------------------------------------------------------------
+    // clear_stale_lock_dirs
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn clear_stale_lock_dirs_removes_only_locked_subdirs_preserves_status_files() {
+        let lock_root = unique_temp_path("clear-locked-only");
+        let module_dir = lock_root
+            .join("xASL_module_Structural")
+            .join("sub-001_01")
+            .join("xASL_module_Structural");
+        fs::create_dir_all(module_dir.join("locked")).unwrap();
+        fs::write(module_dir.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(module_dir.join("999_ready.status"), "").unwrap();
+
+        let asl_module = lock_root
+            .join("xASL_module_ASL")
+            .join("sub-001_01")
+            .join("xASL_module_ASL");
+        fs::create_dir_all(asl_module.join("locked")).unwrap();
+        fs::write(asl_module.join("ASL.status"), "").unwrap();
+
+        clear_stale_lock_dirs(&lock_root, &[true, false, false]).unwrap();
+
+        // locked/ directories removed
+        assert!(!module_dir.join("locked").exists());
+        // .status files preserved
+        assert!(module_dir.join("060_Segment_T1w.status").exists());
+        assert!(module_dir.join("999_ready.status").exists());
+        // Module directory itself preserved
+        assert!(module_dir.exists());
+        // Non-enabled module untouched
+        assert!(asl_module.join("locked").exists());
+        assert!(asl_module.join("ASL.status").exists());
+
+        let _ = fs::remove_dir_all(lock_root);
+    }
+
+    #[test]
+    fn clear_stale_lock_dirs_removes_locked_in_population_module() {
+        let lock_root = unique_temp_path("clear-pop-locked");
+        let pop_dir = lock_root
+            .join("xASL_module_Population")
+            .join("xASL_module_Population");
+        fs::create_dir_all(pop_dir.join("locked")).unwrap();
+        fs::write(pop_dir.join("999_ready.status"), "").unwrap();
+
+        clear_stale_lock_dirs(&lock_root, &[false, false, true]).unwrap();
+
+        assert!(!pop_dir.join("locked").exists());
+        assert!(pop_dir.join("999_ready.status").exists());
+        assert!(pop_dir.exists());
+
+        let _ = fs::remove_dir_all(lock_root);
+    }
+
+    #[test]
+    fn clear_stale_lock_dirs_handles_nested_asl_runs() {
+        let lock_root = unique_temp_path("clear-asl-locked");
+        let run_dir = lock_root
+            .join("xASL_module_ASL")
+            .join("sub-001_01")
+            .join("xASL_module_ASL")
+            .join("xASL_module_ASL_ASL_01");
+        fs::create_dir_all(run_dir.join("locked")).unwrap();
+        fs::write(run_dir.join("ASL.status"), "").unwrap();
+
+        clear_stale_lock_dirs(&lock_root, &[false, true, false]).unwrap();
+
+        assert!(!run_dir.join("locked").exists());
+        assert!(run_dir.join("ASL.status").exists());
+
+        let _ = fs::remove_dir_all(lock_root);
+    }
+
+    // -------------------------------------------------------------------------
+    // delete_status_files_for_modules
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn delete_status_files_removes_only_status_files_in_matching_subjects() {
+        let root = unique_temp_path("del-status");
+        let lock = root.join("derivatives").join("ExploreASL").join("lock");
+        let module_dir = lock
+            .join("xASL_module_Structural")
+            .join("sub-001_01")
+            .join("xASL_module_Structural");
+        fs::create_dir_all(&module_dir).unwrap();
+        fs::write(module_dir.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(module_dir.join("999_ready.status"), "").unwrap();
+        fs::write(module_dir.join("keep.txt"), "data").unwrap();
+
+        delete_status_files_for_modules(&root, &[true, false, false], "^sub-001_01$").unwrap();
+
+        assert!(!module_dir.join("060_Segment_T1w.status").exists());
+        assert!(!module_dir.join("999_ready.status").exists());
+        assert!(module_dir.join("keep.txt").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    // -------------------------------------------------------------------------
+    // ProcessState defaults for watcher_stop
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn process_state_default_has_no_watcher_stop() {
+        let state = ProcessState::default();
+        assert!(state.watcher_stop.is_none());
+        assert!(state.watcher_handle.is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // EventKind matching (Bug #4)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn parse_lock_path_works_regardless_of_create_kind() {
+        // Verify that parse_lock_path works on any .status file path.
+        // The actual fix is in the event kind matching in watch_lock_dir,
+        // which switches from CreateKind::File to EventKind::Create(_).
+        // This test ensures parse_lock_path correctly handles paths
+        // that would come from CreateKind::Any or CreateKind::Folder.
+        let lock_root = PathBuf::from("/tmp/test/lock");
+        let path = PathBuf::from("/tmp/test/lock/xASL_module_Structural/sub-001_01/xASL_module_Structural/060_Segment_T1w.status");
+        let result = parse_lock_path(&lock_root, &path);
+        assert!(result.is_some());
+        let event = result.unwrap();
+        assert_eq!(event.module, "xASL_module_Structural");
+        assert_eq!(event.subject_session, Some("sub-001_01".to_string()));
+        assert_eq!(event.step_code, "060_Segment_T1w");
+    }
+
+    #[test]
+    fn delete_status_files_respects_subject_regexp_filter() {
+        let root = unique_temp_path("del-regexp");
+        let lock = root.join("derivatives").join("ExploreASL").join("lock");
+
+        let dir_001 = lock
+            .join("xASL_module_Structural")
+            .join("sub-001_01")
+            .join("xASL_module_Structural");
+        fs::create_dir_all(&dir_001).unwrap();
+        fs::write(dir_001.join("step.status"), "").unwrap();
+
+        let dir_002 = lock
+            .join("xASL_module_Structural")
+            .join("sub-002_01")
+            .join("xASL_module_Structural");
+        fs::create_dir_all(&dir_002).unwrap();
+        fs::write(dir_002.join("step.status"), "").unwrap();
+
+        delete_status_files_for_modules(&root, &[true, false, false], "^sub-001_01$").unwrap();
+
+        assert!(!dir_001.join("step.status").exists());
+        assert!(dir_002.join("step.status").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+}

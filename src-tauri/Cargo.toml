@@ -31,6 +31,7 @@ serde_json = "1"
 walkdir = "2"
 regex = "1.12.3"
 nix = { version = "0.31.3", features = ["signal"] }
-windows-sys = { version = "0.61.2", features = ["Win32_System_Threading", "Win32_Foundation", "Win32_System_Console"] }
+windows-sys = { version = "0.61.2", features = ["Win32_System_Threading", "Win32_Foundation", "Win32_System_Console", "Win32_System_Memory"] }
 tauri-plugin-clipboard-manager = "2.3.2"
+notify = "8.2.0"
 
