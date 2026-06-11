@@ -117,6 +117,70 @@ describe("useProjectStore", () => {
     expect(readSessionCheckpoint()).toBeNull();
   });
 
+  describe("syncProcessingState", () => {
+    it("syncs config to uiState.processingConfig", async () => {
+      await useProjectStore.getState().createProject("/tmp/proc-project", "Proc Project");
+
+      const config = {
+        modules: { structural: true, asl: false, population: false },
+        iterations: 1,
+        skipIfDone: true,
+      } as any;
+
+      useProjectStore.getState().syncProcessingState({
+        config,
+        processingPhase: "idle",
+      });
+
+      const project = useProjectStore.getState().project;
+      expect(project?.uiState.processingConfig).toEqual(config);
+      expect(project?.uiState.processingPhase).toBe("idle");
+      expect(useProjectStore.getState().isDirty).toBe(true);
+    });
+
+    it("syncs processingPhase to uiState.processingPhase", async () => {
+      await useProjectStore.getState().createProject("/tmp/phase-project", "Phase Project");
+
+      useProjectStore.getState().syncProcessingState({
+        config: undefined,
+        processingPhase: "running",
+      });
+
+      const project = useProjectStore.getState().project;
+      expect(project?.uiState.processingPhase).toBe("running");
+      expect(project?.uiState.processingConfig).toBeUndefined();
+    });
+
+    it("handles null config without throwing", async () => {
+      await useProjectStore.getState().createProject("/tmp/null-config", "Null Config");
+
+      useProjectStore.getState().syncProcessingState({
+        config: null as any,
+        processingPhase: "idle",
+      });
+
+      const project = useProjectStore.getState().project;
+      expect(project?.uiState.processingConfig).toBeUndefined();
+    });
+
+    it("skips update when values are equal (equality no-op guard)", async () => {
+      await useProjectStore.getState().createProject("/tmp/noop-project", "Noop Project");
+
+      useProjectStore.getState().syncProcessingState({
+        config: undefined,
+        processingPhase: "idle",
+      });
+
+      const stateBefore = useProjectStore.getState();
+      useProjectStore.getState().syncProcessingState({
+        config: undefined,
+        processingPhase: "idle",
+      });
+
+      expect(useProjectStore.getState()).toBe(stateBefore);
+    });
+  });
+
   it("syncs import completion state into project uiState", async () => {
     await useProjectStore.getState().createProject("/tmp/import-project", "Import Project");
 

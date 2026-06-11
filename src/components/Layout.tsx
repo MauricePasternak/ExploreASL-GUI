@@ -26,8 +26,10 @@ import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 
 import { canAccessPhase, type ProjectPhase } from "../schemas/project";
+import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { logAction } from "../lib/debug";
+import ProcessingStatusBar from "./processing/ProcessingStatusBar";
 
 const PHASE_NAV = [
   { phase: "import", label: "Import", icon: IconUpload },
@@ -49,6 +51,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const closeProject = useProjectStore((state) => state.closeProject);
   const navigate = useNavigate();
 
+  const subjectCount = useProcessingStore((s) => s.availableSubjects.length);
   const navbarCollapsed = project?.uiState.navbarCollapsed ?? true;
 
   async function handlePhaseNavigation(phase: ProjectPhase) {
@@ -209,9 +212,9 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
 
       <AppShell.Footer>
         <Group h="100%" px="md" justify="space-between">
-          <Text size="sm">Status: idle</Text>
+          <ProcessingStatusBar />
           <Text size="sm">{project ? `Project: ${project.projectMeta.name}` : "Project: none"}</Text>
-          <Text size="sm">Subjects: 0</Text>
+          <Text size="sm">Subjects: {subjectCount}</Text>
         </Group>
       </AppShell.Footer>
 

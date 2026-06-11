@@ -1,0 +1,587 @@
+import { useCallback, useMemo, useState } from "react";
+import {
+  Accordion,
+  ActionIcon,
+  Badge,
+  Button,
+  Divider,
+  Group,
+  Modal,
+  Progress,
+  Stack,
+  Text,
+  Tooltip,
+} from "@mantine/core";
+import {
+  IconCheck,
+  IconLoader,
+  IconMinus,
+  IconTrash,
+} from "@tabler/icons-react";
+import { invoke } from "@tauri-apps/api/core";
+
+import type {
+  SubjectInfo,
+  SubjectModuleStatus,
+} from "../../schemas/processingSchemas";
+import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
+import { useProcessingStore } from "../../stores/processingStore";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type ModuleName = (typeof PROCESSING_MODULES)[number];
+
+interface StepStatus {
+  name: string;
+  status: "pending" | "running" | "complete";
+}
+
+interface RowActionsProps {
+  subjectSession: string;
+  disabled?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Step icon
+// ---------------------------------------------------------------------------
+
+function StepIcon({ status }: { status: StepStatus["status"] }) {
+  switch (status) {
+    case "complete":
+      return <IconCheck size={14} color="var(--mantine-color-teal-6)" data-testid="step-complete" />;
+    case "running":
+      return (
+        <IconLoader
+          size={14}
+          color="var(--mantine-color-orange-6)"
+          className="spin"
+          data-testid="step-running"
+        />
+      );
+    case "pending":
+    default:
+      return <IconMinus size={14} color="var(--mantine-color-gray-5)" data-testid="step-pending" />;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step timeline
+// ---------------------------------------------------------------------------
+
+function StepTimeline({ steps }: { steps: StepStatus[] }) {
+  if (steps.length === 0) {
+    return (
+      <Text size="xs" c="dimmed">
+        No steps recorded
+      </Text>
+    );
+  }
+
+  return (
+    <Group gap="xs" wrap="wrap" data-testid="step-timeline">
+      {steps.map((step, i) => (
+        <Tooltip key={`${step.name}-${i}`} label={step.name}>
+          <Group gap={4}>
+            <StepIcon status={step.status} />
+            {i < steps.length - 1 && (
+              <div
+                style={{
+                  width: 16,
+                  height: 1,
+                  background:
+                    step.status === "complete"
+                      ? "var(--mantine-color-teal-4)"
+                      : "var(--mantine-color-gray-3)",
+                }}
+              />
+            )}
+          </Group>
+        </Tooltip>
+      ))}
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Default row actions (Clean Subject Output)
+// ---------------------------------------------------------------------------
+
+function DefaultRowActions({ subjectSession, disabled }: RowActionsProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
+
+  const handleClean = useCallback(async () => {
+    setCleaning(true);
+    try {
+      await invoke("clean_subject_output", { subject: subjectSession });
+    } catch (err) {
+      console.error("Failed to clean subject output:", err);
+    } finally {
+      setCleaning(false);
+      setConfirmOpen(false);
+    }
+  }, [subjectSession]);
+
+  return (
+    <>
+      <Tooltip label="Clean Subject Output">
+        <ActionIcon
+          variant="subtle"
+          color="red"
+          size="sm"
+          onClick={() => setConfirmOpen(true)}
+          disabled={disabled || cleaning}
+          data-testid="clean-subject-btn"
+        >
+          <IconTrash size={14} />
+        </ActionIcon>
+      </Tooltip>
+
+      <Modal
+        opened={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Clean Subject Output"
+        size="sm"
+        data-testid="clean-confirm-modal"
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            Delete all output files for <strong>{subjectSession}</strong>? This
+            cannot be undone.
+          </Text>
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="default"
+              size="xs"
+              onClick={() => setConfirmOpen(false)}
+              data-testid="clean-cancel-btn"
+            >
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              size="xs"
+              loading={cleaning}
+              onClick={handleClean}
+              data-testid="clean-confirm-btn"
+            >
+              Delete
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Subject row (with actions slot)
+// ---------------------------------------------------------------------------
+
+interface SubjectRowProps {
+  subjectSession: string;
+  steps: StepStatus[];
+  status: SubjectModuleStatus["status"];
+  locked: boolean;
+  /** Default actions are always shown; pass extra via this slot */
+  extraActions?: React.ReactNode;
+}
+
+function SubjectRow({
+  subjectSession,
+  steps,
+  status,
+  locked,
+  extraActions,
+}: SubjectRowProps) {
+  const isRunning = locked || status === "incomplete";
+
+  return (
+    <Group
+      justify="space-between"
+      align="center"
+      px="md"
+      py={6}
+      data-testid="subject-row"
+    >
+      <Group gap="md" align="center" style={{ flex: 1, minWidth: 0 }}>
+        <Text size="sm" ff="monospace" style={{ flexShrink: 0 }} w={140} truncate>
+          {subjectSession}
+        </Text>
+        <StepTimeline steps={steps} />
+      </Group>
+
+      <Group gap="xs" align="center" style={{ flexShrink: 0 }}>
+        {isRunning && (
+          <Badge size="xs" color="orange" variant="light">
+            Running
+          </Badge>
+        )}
+        {status === "complete" && (
+          <Badge size="xs" color="teal" variant="light">
+            Done
+          </Badge>
+        )}
+        {extraActions}
+        <DefaultRowActions
+          subjectSession={subjectSession}
+          disabled={isRunning}
+        />
+      </Group>
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Run sub-row (for ASL with multiple runs)
+// ---------------------------------------------------------------------------
+
+function RunSubRow({
+  run,
+  steps,
+  locked,
+  status,
+}: {
+  run: string;
+  steps: StepStatus[];
+  locked: boolean;
+  status: SubjectModuleStatus["status"];
+}) {
+  const isRunning = locked || status === "incomplete";
+
+  return (
+    <Group
+      justify="space-between"
+      align="center"
+      pl="xl"
+      pr="md"
+      py={4}
+      data-testid="run-sub-row"
+    >
+      <Group gap="md" align="center" style={{ flex: 1, minWidth: 0 }}>
+        <Text size="xs" c="dimmed" style={{ flexShrink: 0 }} w={140}>
+          Run {run}
+        </Text>
+        <StepTimeline steps={steps} />
+      </Group>
+
+      <Group gap="xs" align="center" style={{ flexShrink: 0 }}>
+        {isRunning && (
+          <Badge size="xs" color="orange" variant="light">
+            Running
+          </Badge>
+        )}
+        {status === "complete" && (
+          <Badge size="xs" color="teal" variant="light">
+            Done
+          </Badge>
+        )}
+      </Group>
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+export function getStepsForSubject(
+  subjectSession: string,
+  module: ModuleName,
+  statuses: SubjectModuleStatus[],
+  run?: string,
+): StepStatus[] {
+  const entry = statuses.find(
+    (s) =>
+      s.subjectSession === subjectSession &&
+      s.module === module &&
+      (run === undefined || s.run === run),
+  );
+  if (!entry) return [];
+  const steps: StepStatus[] = entry.completedSteps.map((name) => ({
+    name,
+    status: "complete" as const,
+  }));
+  if (entry.locked) {
+    steps.push({ name: "Processing...", status: "running" });
+  }
+  return steps;
+}
+
+function getStatusForSubject(
+  subjectSession: string,
+  module: ModuleName,
+  statuses: SubjectModuleStatus[],
+  run?: string,
+): SubjectModuleStatus | undefined {
+  return statuses.find(
+    (s) =>
+      s.subjectSession === subjectSession &&
+      s.module === module &&
+      (run === undefined || s.run === run),
+  );
+}
+
+function getRunsForSubject(
+  subjectSession: string,
+  module: ModuleName,
+  statuses: SubjectModuleStatus[],
+): string[] {
+  return statuses
+    .filter(
+      (s) =>
+        s.subjectSession === subjectSession &&
+        s.module === module &&
+        s.run !== undefined,
+    )
+    .map((s) => s.run!)
+    .filter((r, i, arr) => arr.indexOf(r) === i)
+    .sort();
+}
+
+function calcModuleProgress(
+  subjects: SubjectInfo[],
+  module: ModuleName,
+  statuses: SubjectModuleStatus[],
+): { complete: number; total: number } {
+  const eligible = subjects.filter((s) => {
+    if (module === "structural") return s.hasStructural;
+    if (module === "asl") return s.hasASL;
+    return true;
+  });
+  const complete = eligible.filter((s) => {
+    const entry = getStatusForSubject(s.subjectSession, module, statuses);
+    return entry?.status === "complete";
+  }).length;
+  return { complete, total: eligible.length };
+}
+
+// ---------------------------------------------------------------------------
+// Module section labels
+// ---------------------------------------------------------------------------
+
+const MODULE_LABELS: Record<ModuleName, string> = {
+  structural: "Structural",
+  asl: "ASL",
+  population: "Population",
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function ExecutionDashboard() {
+  const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
+  const config = useProcessingStore((s) => s.config);
+  const availableSubjects = useProcessingStore((s) => s.availableSubjects);
+
+  const selectedSubjects = useMemo(() => {
+    if (!config) return [];
+    const set = new Set(config.subjects);
+    return availableSubjects.filter((s) => set.has(s.subjectSession));
+  }, [config, availableSubjects]);
+
+  const enabledModules = useMemo(() => {
+    return (config?.modules ?? []) as ModuleName[];
+  }, [config?.modules]);
+
+  if (!config || enabledModules.length === 0) {
+    return (
+      <Text size="sm" c="dimmed" data-testid="execution-dashboard-empty">
+        Configure pipeline and select subjects to view execution dashboard.
+      </Text>
+    );
+  }
+
+  return (
+    <Stack gap="sm" data-testid="execution-dashboard">
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .spin { animation: spin 1s linear infinite; }`}</style>
+
+      <Accordion
+        multiple
+        defaultValue={enabledModules}
+        variant="separated"
+      >
+        {enabledModules.map((module) => (
+          <Accordion.Item key={module} value={module}>
+            <Accordion.Control>
+              <ModuleHeader
+                module={module}
+                subjects={selectedSubjects}
+                statuses={subjectStatuses}
+              />
+            </Accordion.Control>
+            <Accordion.Panel>
+              {module === "population" ? (
+                <PopulationSection
+                  statuses={subjectStatuses}
+                />
+              ) : (
+                <SubjectModuleSection
+                  module={module}
+                  subjects={selectedSubjects}
+                  statuses={subjectStatuses}
+                />
+              )}
+            </Accordion.Panel>
+          </Accordion.Item>
+        ))}
+      </Accordion>
+    </Stack>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Module header (in accordion control)
+// ---------------------------------------------------------------------------
+
+function ModuleHeader({
+  module,
+  subjects,
+  statuses,
+}: {
+  module: ModuleName;
+  subjects: SubjectInfo[];
+  statuses: SubjectModuleStatus[];
+}) {
+  const { complete, total } = calcModuleProgress(subjects, module, statuses);
+  const pct = total === 0 ? 0 : Math.round((complete / total) * 100);
+
+  return (
+    <Group justify="space-between" align="center" pr="md" data-testid="module-header">
+      <Group gap="sm">
+        <Text fw={600} size="sm">
+          {MODULE_LABELS[module]}
+        </Text>
+        <Badge size="xs" variant="light" color={complete === total && total > 0 ? "teal" : "blue"}>
+          {complete}/{total}
+        </Badge>
+      </Group>
+      <Progress
+        value={pct}
+        size="xs"
+        w={100}
+        color={complete === total && total > 0 ? "teal" : "blue"}
+      />
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Structural / ASL section
+// ---------------------------------------------------------------------------
+
+function SubjectModuleSection({
+  module,
+  subjects,
+  statuses,
+}: {
+  module: "structural" | "asl";
+  subjects: SubjectInfo[];
+  statuses: SubjectModuleStatus[];
+}) {
+  const eligible = useMemo(
+    () =>
+      subjects.filter((s) =>
+        module === "structural" ? s.hasStructural : s.hasASL,
+      ),
+    [subjects, module],
+  );
+
+  if (eligible.length === 0) {
+    return (
+      <Text size="xs" c="dimmed" data-testid="no-subjects-msg">
+        No eligible subjects for {MODULE_LABELS[module]}.
+      </Text>
+    );
+  }
+
+  return (
+    <Stack gap={0} data-testid={`${module}-section`}>
+      {eligible.map((subject) => {
+        const entry = getStatusForSubject(
+          subject.subjectSession,
+          module,
+          statuses,
+        );
+        const steps = getStepsForSubject(
+          subject.subjectSession,
+          module,
+          statuses,
+        );
+        const runs = getRunsForSubject(subject.subjectSession, module, statuses);
+
+        const showRuns = module === "asl" && runs.length > 1;
+
+        return (
+          <div key={subject.subjectSession}>
+            <SubjectRow
+              subjectSession={subject.subjectSession}
+              steps={steps}
+              status={entry?.status ?? "pending"}
+              locked={entry?.locked ?? false}
+            />
+            {showRuns &&
+              runs.map((run) => {
+                const runEntry = getStatusForSubject(
+                  subject.subjectSession,
+                  module,
+                  statuses,
+                  run,
+                );
+                const runSteps = getStepsForSubject(
+                  subject.subjectSession,
+                  module,
+                  statuses,
+                  run,
+                );
+                return (
+                  <RunSubRow
+                    key={`${subject.subjectSession}-${run}`}
+                    run={run}
+                    steps={runSteps}
+                    locked={runEntry?.locked ?? false}
+                    status={runEntry?.status ?? "pending"}
+                  />
+                );
+              })}
+            <Divider />
+          </div>
+        );
+      })}
+    </Stack>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Population section (single row)
+// ---------------------------------------------------------------------------
+
+function PopulationSection({
+  statuses,
+}: {
+  statuses: SubjectModuleStatus[];
+}) {
+  const entry = statuses.find((s) => s.module === "population");
+  const steps: StepStatus[] = (entry?.completedSteps.map((name) => ({
+    name,
+    status: "complete" as const,
+  })) ?? []);
+  if (entry?.locked) {
+    steps.push({ name: "Processing...", status: "running" });
+  }
+
+  return (
+    <Stack gap={0} data-testid="population-section">
+      <SubjectRow
+        subjectSession="Population (group)"
+        steps={steps}
+        status={entry?.status ?? "pending"}
+        locked={entry?.locked ?? false}
+      />
+      <Divider />
+    </Stack>
+  );
+}

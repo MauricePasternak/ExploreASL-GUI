@@ -69,6 +69,56 @@ describe("ProjectFileSchema", () => {
     });
   });
 
+  it("parses processingConfig in uiState", () => {
+    const parsed = ProjectFileSchema.parse({
+      ...DEFAULT_PROJECT_FILE("project-pc", "PC Project", "/tmp/pc"),
+      uiState: {
+        processingConfig: {
+          subjects: ["sub-01", "sub-02"],
+          modules: ["asl"],
+          matlabPath: "/usr/local/bin/matlab",
+          exploreAslPath: "/opt/ExploreASL",
+          workers: 4,
+          subjectRegexp: ".*",
+        },
+      },
+    });
+    expect(parsed.uiState.processingConfig).toMatchObject({
+      subjects: ["sub-01", "sub-02"],
+      modules: ["asl"],
+      workers: 4,
+    });
+  });
+
+  it("parses processingPhase in uiState", () => {
+    const parsed = ProjectFileSchema.parse({
+      ...DEFAULT_PROJECT_FILE("project-pp", "PP Project", "/tmp/pp"),
+      uiState: {
+        processingPhase: "running",
+      },
+    });
+    expect(parsed.uiState.processingPhase).toBe("running");
+  });
+
+  it("rejects invalid processingPhase values", () => {
+    expect(() =>
+      ProjectFileSchema.parse({
+        ...DEFAULT_PROJECT_FILE("project-pp2", "PP2", "/tmp/pp2"),
+        uiState: {
+          processingPhase: "done",
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("allows uiState without processingConfig or processingPhase", () => {
+    const parsed = ProjectFileSchema.parse(
+      DEFAULT_PROJECT_FILE("project-no-pc", "NoPC", "/tmp/nopc"),
+    );
+    expect(parsed.uiState.processingConfig).toBeUndefined();
+    expect(parsed.uiState.processingPhase).toBeUndefined();
+  });
+
   it("rejects invalid import execution phases", () => {
     expect(() =>
       ProjectFileSchema.parse({

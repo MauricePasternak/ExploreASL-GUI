@@ -1,13 +1,15 @@
 mod commands;
 pub mod import;
 pub mod import_parser;
+pub mod processing;
 mod tracing;
 
-use commands::{create_symlink_tree, is_writable, walk_directory, which_matlab};
+use commands::{create_symlink_tree, get_available_memory_mb, get_cpu_cores, is_writable, walk_directory, which_matlab};
 use import::{
     clean_import_status, copy_lock_files, move_import_output, run_import_pipeline, stop_import,
     stop_running_import_for_exit, AppState,
 };
+use processing::{clean_subject_output, kill_pipeline, list_subjects, read_lock_status, run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir};
 use tauri::{LogicalSize, Manager, Size};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,11 +45,20 @@ pub fn run() {
             is_writable,
             walk_directory,
             create_symlink_tree,
+            get_cpu_cores,
+            get_available_memory_mb,
             run_import_pipeline,
             stop_import,
             clean_import_status,
             move_import_output,
             copy_lock_files,
+            list_subjects,
+            read_lock_status,
+            run_pipeline,
+            kill_pipeline,
+            watch_lock_dir,
+            stop_watch_lock_dir,
+            clean_subject_output,
         ])
         .setup(|app| {
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
@@ -65,15 +76,34 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                let mut should_prevent = false;
+
                 match stop_running_import_for_exit(app_handle) {
                     Ok(true) => {
-                        api.prevent_exit();
-                        app_handle.exit(code.unwrap_or(0));
+                        should_prevent = true;
                     }
                     Ok(false) => {}
                     Err(error) => {
                         log::error!("Failed to stop running import during app exit: {}", error);
                     }
+                }
+
+                match stop_running_processing_for_exit(app_handle) {
+                    Ok(true) => {
+                        should_prevent = true;
+                    }
+                    Ok(false) => {}
+                    Err(error) => {
+                        log::error!(
+                            "Failed to stop running processing during app exit: {}",
+                            error
+                        );
+                    }
+                }
+
+                if should_prevent {
+                    api.prevent_exit();
+                    app_handle.exit(code.unwrap_or(0));
                 }
             }
         });

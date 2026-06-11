@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DataParSchema } from "./dataParSchema";
+import { ProcessConfigSchema, ProcessingPhaseSchema } from "./processingSchemas";
 
 export const PROJECT_PHASES = ["import", "parameters", "processing"] as const;
 export const IMPORT_EXECUTION_PHASES = [
@@ -29,6 +30,8 @@ export const ProjectFileSchema = z.object({
       importCompleted: z.boolean().optional(),
       importPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
       navbarCollapsed: z.boolean().optional(),
+      processingConfig: ProcessConfigSchema.optional(),
+      processingPhase: ProcessingPhaseSchema.optional(),
       dataParametersAdvancedVisibility: z
         .object({
           showAdvancedSections: z.boolean().default(false),

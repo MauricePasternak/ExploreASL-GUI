@@ -16,6 +16,7 @@ import {
   syncSessionCheckpointFromProject,
 } from "../lib/sessionCheckpoint";
 import type { ImportState } from "./importStore";
+import type { ProcessingState } from "./processingStore";
 
 interface ProjectState {
   project: ProjectFile | null;
@@ -27,6 +28,7 @@ interface ProjectState {
   setPhase: (phase: ProjectMeta["currentPhase"]) => void;
   toggleNavbar: () => void;
   syncImportState: (importState: ImportState) => void;
+  syncProcessingState: (processingState: Pick<ProcessingState, "config" | "processingPhase">) => void;
   closeProject: () => void;
 }
 
@@ -182,6 +184,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             importActiveStep: activeStep,
             importPhase,
             importCompleted,
+          },
+        },
+        isDirty: true,
+      };
+    });
+  },
+
+  syncProcessingState: ({ config, processingPhase }) => {
+    set((state) => {
+      if (!state.project) return state;
+
+      if (
+        JSON.stringify(state.project.uiState.processingConfig) === JSON.stringify(config) &&
+        state.project.uiState.processingPhase === processingPhase
+      ) {
+        return state;
+      }
+
+      return {
+        project: {
+          ...state.project,
+          uiState: {
+            ...state.project.uiState,
+            processingConfig: config ?? undefined,
+            processingPhase,
           },
         },
         isDirty: true,
