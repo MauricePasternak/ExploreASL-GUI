@@ -26,6 +26,7 @@ vi.mock("../../stores/processingStore", () => ({
       config: mockConfig,
       subjectStatuses: mockSubjectStatuses,
       availableSubjects: mockAvailableSubjects,
+      processingPhase: "running",
     }),
 }));
 

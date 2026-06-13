@@ -5,6 +5,7 @@ import {
   IconCheck,
   IconMinus,
   IconBan,
+  IconExclamationMark,
   IconLoader,
   IconSelector,
   IconSquareCheck,
@@ -38,7 +39,13 @@ type ModuleDisplayStatus = "complete" | "incomplete" | "pending" | "skipped";
 // Status icon
 // ---------------------------------------------------------------------------
 
-function StatusIcon({ status }: { status: ModuleDisplayStatus }) {
+function StatusIcon({
+  status,
+  processingPhase,
+}: {
+  status: ModuleDisplayStatus;
+  processingPhase: string;
+}) {
   switch (status) {
     case "complete":
       return (
@@ -47,6 +54,17 @@ function StatusIcon({ status }: { status: ModuleDisplayStatus }) {
         </Tooltip>
       );
     case "incomplete":
+      if (processingPhase === "failed" || processingPhase === "cancelled") {
+        return (
+          <Tooltip label="Incomplete">
+            <IconExclamationMark
+              size={18}
+              color="var(--mantine-color-red-6)"
+              data-testid="status-incomplete-stalled"
+            />
+          </Tooltip>
+        );
+      }
       return (
         <Tooltip label="In progress">
           <IconLoader
@@ -127,7 +145,7 @@ const FILTER_OPTIONS = [
 // Columns
 // ---------------------------------------------------------------------------
 
-function buildColumns(): DataTableColumn<SubjectRow>[] {
+function buildColumns(processingPhase: string): DataTableColumn<SubjectRow>[] {
   return [
     {
       accessor: "subject",
@@ -153,19 +171,19 @@ function buildColumns(): DataTableColumn<SubjectRow>[] {
       accessor: "_structuralStatus",
       title: "Structural",
       textAlign: "center",
-      render: (row) => <StatusIcon status={row._structuralStatus} />,
+      render: (row) => <StatusIcon status={row._structuralStatus} processingPhase={processingPhase} />,
     },
     {
       accessor: "_aslStatus",
       title: "ASL",
       textAlign: "center",
-      render: (row) => <StatusIcon status={row._aslStatus} />,
+      render: (row) => <StatusIcon status={row._aslStatus} processingPhase={processingPhase} />,
     },
     {
       accessor: "_populationStatus",
       title: "Population",
       textAlign: "center",
-      render: (row) => <StatusIcon status={row._populationStatus} />,
+      render: (row) => <StatusIcon status={row._populationStatus} processingPhase={processingPhase} />,
     },
   ];
 }
@@ -179,6 +197,7 @@ export default function SubjectSelection() {
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
   const config = useProcessingStore((s) => s.config);
   const setConfig = useProcessingStore((s) => s.setConfig);
+  const processingPhase = useProcessingStore((s) => s.processingPhase);
 
   const [filter, setFilter] = useState<FilterValue>("all");
 
@@ -241,7 +260,7 @@ export default function SubjectSelection() {
     updateSubjects([]);
   }, [updateSubjects]);
 
-  const columns = useMemo(() => buildColumns(), []);
+  const columns = useMemo(() => buildColumns(processingPhase), [processingPhase]);
 
   const statusCounts = useMemo(() => {
     const counts = { all: rows.length, pending: 0, incomplete: 0, complete: 0 };
