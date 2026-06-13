@@ -19,6 +19,7 @@ import type {
   SubjectInfo,
   SubjectModuleStatus,
 } from "../../schemas/processingSchemas";
+import type { ProcessingPhase } from "../../schemas/processingSchemas";
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";
 
@@ -103,6 +104,7 @@ interface SubjectRowProps {
   steps: StepStatus[];
   status: SubjectModuleStatus["status"];
   locked: boolean;
+  processingPhase: ProcessingPhase;
 }
 
 function SubjectRow({
@@ -110,8 +112,12 @@ function SubjectRow({
   steps,
   status,
   locked,
+  processingPhase,
 }: SubjectRowProps) {
-  const isRunning = locked || status === "incomplete";
+  const isRunning =
+    (locked || status === "incomplete") &&
+    processingPhase !== "failed" &&
+    processingPhase !== "cancelled";
 
   return (
     <Group
@@ -153,13 +159,18 @@ function RunSubRow({
   steps,
   locked,
   status,
+  processingPhase,
 }: {
   run: string;
   steps: StepStatus[];
   locked: boolean;
   status: SubjectModuleStatus["status"];
+  processingPhase: ProcessingPhase;
 }) {
-  const isRunning = locked || status === "incomplete";
+  const isRunning =
+    (locked || status === "incomplete") &&
+    processingPhase !== "failed" &&
+    processingPhase !== "cancelled";
 
   return (
     <Group
@@ -286,6 +297,7 @@ export default function ExecutionDashboard() {
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
   const config = useProcessingStore((s) => s.config);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
+  const processingPhase = useProcessingStore((s) => s.processingPhase);
 
   const selectedSubjects = useMemo(() => {
     if (!config) return [];
@@ -327,12 +339,14 @@ export default function ExecutionDashboard() {
               {module === "population" ? (
                 <PopulationSection
                   statuses={subjectStatuses}
+                  processingPhase={processingPhase}
                 />
               ) : (
                 <SubjectModuleSection
                   module={module}
                   subjects={selectedSubjects}
                   statuses={subjectStatuses}
+                  processingPhase={processingPhase}
                 />
               )}
             </Accordion.Panel>
@@ -387,10 +401,12 @@ function SubjectModuleSection({
   module,
   subjects,
   statuses,
+  processingPhase,
 }: {
   module: "structural" | "asl";
   subjects: SubjectInfo[];
   statuses: SubjectModuleStatus[];
+  processingPhase: ProcessingPhase;
 }) {
   const eligible = useMemo(
     () =>
@@ -432,6 +448,7 @@ function SubjectModuleSection({
               steps={steps}
               status={entry?.status ?? "pending"}
               locked={entry?.locked ?? false}
+              processingPhase={processingPhase}
             />
             {showRuns &&
               runs.map((run) => {
@@ -454,6 +471,7 @@ function SubjectModuleSection({
                     steps={runSteps}
                     locked={runEntry?.locked ?? false}
                     status={runEntry?.status ?? "pending"}
+                    processingPhase={processingPhase}
                   />
                 );
               })}
@@ -471,8 +489,10 @@ function SubjectModuleSection({
 
 function PopulationSection({
   statuses,
+  processingPhase,
 }: {
   statuses: SubjectModuleStatus[];
+  processingPhase: ProcessingPhase;
 }) {
   const entry = statuses.find((s) => s.module === "population");
   const steps: StepStatus[] = (entry?.completedSteps.map((name) => ({
@@ -490,6 +510,7 @@ function PopulationSection({
         steps={steps}
         status={entry?.status ?? "pending"}
         locked={entry?.locked ?? false}
+        processingPhase={processingPhase}
       />
       <Divider />
     </Stack>
