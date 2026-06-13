@@ -99,6 +99,21 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn test_subject_info_serialization_casing() {
+        let info = SubjectInfo {
+            subject_session: "sub-001_01".to_string(),
+            subject: "001".to_string(),
+            session: "01".to_string(),
+            has_structural: true,
+            has_asl: true,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains(r#""hasASL":true"#));
+        assert!(!json.contains(r#""hasAsl""#));
+        assert!(json.contains(r#""subjectSession":"sub-001_01""#));
+    }
+
     // -------------------------------------------------------------------------
     // determine_status
     // -------------------------------------------------------------------------
@@ -180,7 +195,6 @@ mod tests {
         let asl_run = lock
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL")
             .join("xASL_module_ASL_ASL_01");
         fs::create_dir_all(asl_run.join("locked")).unwrap();
         fs::write(asl_run.join("ASL.status"), "").unwrap();
@@ -262,7 +276,7 @@ mod tests {
         let asl_module = lock_root
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL");
+            .join("xASL_module_ASL_ASL_01");
         fs::create_dir_all(asl_module.join("locked")).unwrap();
         fs::write(asl_module.join("ASL.status"), "").unwrap();
 
@@ -306,7 +320,6 @@ mod tests {
         let run_dir = lock_root
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL")
             .join("xASL_module_ASL_ASL_01");
         fs::create_dir_all(run_dir.join("locked")).unwrap();
         fs::write(run_dir.join("ASL.status"), "").unwrap();
@@ -375,6 +388,16 @@ mod tests {
         assert_eq!(event.module, "xASL_module_Structural");
         assert_eq!(event.subject_session, Some("sub-001_01".to_string()));
         assert_eq!(event.step_code, "060_Segment_T1w");
+
+        // ASL path
+        let asl_path = PathBuf::from("/tmp/test/lock/xASL_module_ASL/sub-001_01/xASL_module_ASL_ASL_01/020_RealignASL.status");
+        let asl_result = parse_lock_path(&lock_root, &asl_path);
+        assert!(asl_result.is_some());
+        let asl_event = asl_result.unwrap();
+        assert_eq!(asl_event.module, "xASL_module_ASL");
+        assert_eq!(asl_event.subject_session, Some("sub-001_01".to_string()));
+        assert_eq!(asl_event.step_code, "020_RealignASL");
+        assert_eq!(asl_event.run, Some("01".to_string()));
     }
 
     #[test]
@@ -400,6 +423,28 @@ mod tests {
 
         assert!(!dir_001.join("step.status").exists());
         assert!(dir_002.join("step.status").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn delete_status_files_removes_asl_status_files() {
+        let root = unique_temp_path("del-asl-status");
+        let lock = root.join("derivatives").join("ExploreASL").join("lock");
+        let run_dir = lock
+            .join("xASL_module_ASL")
+            .join("sub-001_01")
+            .join("xASL_module_ASL_ASL_01");
+        fs::create_dir_all(&run_dir).unwrap();
+        fs::write(run_dir.join("020_RealignASL.status"), "").unwrap();
+        fs::write(run_dir.join("999_ready.status"), "").unwrap();
+        fs::write(run_dir.join("keep.txt"), "data").unwrap();
+
+        delete_status_files_for_modules(&root, &[false, true, false], "^sub-001_01$").unwrap();
+
+        assert!(!run_dir.join("020_RealignASL.status").exists());
+        assert!(!run_dir.join("999_ready.status").exists());
+        assert!(run_dir.join("keep.txt").exists());
 
         let _ = fs::remove_dir_all(root);
     }

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Badge, Button, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
+import { Badge, Box, Button, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import {
   IconCheck,
@@ -301,19 +301,25 @@ export default function SubjectSelection() {
         />
       </Group>
 
-      <DataTable
-        records={filteredRows}
-        columns={columns}
-        selectedRecords={selectedRecords}
-        onSelectedRecordsChange={handleSelectedRecordsChange}
-        idAccessor="subjectSession"
-        striped
-        highlightOnHover
-        height={300}
-        borderRadius="sm"
-        withTableBorder
-        data-testid="subject-table"
-      />
+      <Box
+        h={300}
+        style={{ flexShrink: 0, overflow: "hidden", isolation: "isolate" }}
+        data-testid="subject-table-container"
+      >
+        <DataTable
+          records={filteredRows}
+          columns={columns}
+          selectedRecords={selectedRecords}
+          onSelectedRecordsChange={handleSelectedRecordsChange}
+          idAccessor="subjectSession"
+          striped
+          highlightOnHover
+          height={300}
+          borderRadius="sm"
+          withTableBorder
+          data-testid="subject-table"
+        />
+      </Box>
     </Stack>
   );
 }

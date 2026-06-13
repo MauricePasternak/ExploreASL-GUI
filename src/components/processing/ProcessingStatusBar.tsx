@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Badge, Group, Text } from "@mantine/core";
 import { IconPlayerPlay } from "@tabler/icons-react";
 import { useNavigate, useParams } from "react-router";
@@ -24,25 +23,18 @@ const PHASE_COLORS: Record<string, string> = {
 
 export default function ProcessingStatusBar() {
   const processingPhase = useProcessingStore((s) => s.processingPhase);
+  const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
   const navigate = useNavigate();
   const params = useParams();
   const project = useProjectStore((s) => s.project);
 
-  const [progress, setProgress] = useState({ completeCount: 0, totalCount: 0 });
-
-  useEffect(() => {
-    const state = useProcessingStore.getState();
-    setProgress({
-      completeCount: state.subjectStatuses.filter((s) => s.status === "complete").length,
-      totalCount: state.subjectStatuses.length,
-    });
-  }, [processingPhase]);
+  const completeCount = subjectStatuses.filter((s) => s.status === "complete").length;
+  const totalCount = subjectStatuses.length;
 
   if (processingPhase === "idle") {
     return null;
   }
 
-  const { completeCount, totalCount } = progress;
   const label = PHASE_LABELS[processingPhase] ?? processingPhase;
   const color = PHASE_COLORS[processingPhase] ?? "gray";
 

@@ -14,7 +14,7 @@ import type {
 } from "../schemas/processingSchemas";
 import { modulesToBProcess, PROCESSING_MODULES } from "../schemas/processingSchemas";
 import type { DataParJson } from "./assembleDataPar";
-import { useProcessingStore } from "../stores/processingStore";
+import { useProcessingStore, clearProcessingListeners } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 
 // =============================================================================
@@ -29,6 +29,12 @@ export interface StatusFileCreatedPayload {
 }
 
 export interface LockCreatedPayload {
+  module: string;
+  subjectSession: string;
+  run?: string;
+}
+
+export interface LockRemovedPayload {
   module: string;
   subjectSession: string;
   run?: string;
@@ -79,6 +85,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
     "StatusFileCreated",
     (event) => {
       const { subjectSession, stepCode, run } = event.payload;
+      console.log(`[${new Date().toISOString()}] [FRONTEND_WATCHER] StatusFileCreated event:`, event.payload);
       const module = mapModuleName(event.payload.module);
       if (!module) return;
 
@@ -106,7 +113,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
         run: run ?? undefined,
         status: isComplete ? "complete" : "incomplete",
         completedSteps,
-        locked: existing?.locked ?? false,
+        locked: isComplete ? false : (existing?.locked ?? false),
       });
     },
   );
@@ -116,6 +123,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
     "LockCreated",
     (event) => {
       const { subjectSession, run } = event.payload;
+      console.log(`[${new Date().toISOString()}] [FRONTEND_WATCHER] LockCreated event:`, event.payload);
       const module = mapModuleName(event.payload.module);
       if (!module) return;
 
@@ -139,22 +147,53 @@ export async function setupProcessingListeners(): Promise<() => void> {
     },
   );
 
+  // 2b. LockRemoved
+  const unlistenLockRemoved = await listen<LockRemovedPayload>(
+    "LockRemoved",
+    (event) => {
+      const { subjectSession, run } = event.payload;
+      console.log(`[${new Date().toISOString()}] [FRONTEND_WATCHER] LockRemoved event:`, event.payload);
+      const module = mapModuleName(event.payload.module);
+      if (!module) return;
+
+      const store = useProcessingStore.getState();
+
+      const existing = store.subjectStatuses.find(
+        (s) =>
+          s.subjectSession === (subjectSession ?? "") &&
+          s.module === module &&
+          s.run === (run ?? undefined),
+      );
+
+      if (existing) {
+        updateSubjectStatus({
+          ...existing,
+          locked: false,
+        });
+      }
+    },
+  );
+
   // 3. WorkerExited
   const unlistenWorker = await listen<WorkerExitedPayload>(
     "WorkerExited",
     async (event) => {
       const { pid } = event.payload;
+      console.log(`[${new Date().toISOString()}] [FRONTEND_WATCHER] WorkerExited event:`, event.payload);
       removeWorkerPid(pid);
 
-      // Check if all workers done
       const remaining = useProcessingStore.getState().workerPids;
       if (remaining.length > 0) return;
 
-      // All workers exited — read final lock status
       const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
       if (!projectRoot) return;
 
+      const currentPhase = useProcessingStore.getState().processingPhase;
+      if (currentPhase === "cancelled") return;
+
       try {
+        await stopWatcher();
+        await clearStaleLocks(projectRoot);
         const finalStatuses = await loadLockStatus(projectRoot);
         useProcessingStore.setState({ subjectStatuses: finalStatuses });
 
@@ -163,6 +202,8 @@ export async function setupProcessingListeners(): Promise<() => void> {
         setPhase(allComplete ? "completed" : "failed");
       } catch {
         setPhase("failed");
+      } finally {
+        clearProcessingListeners();
       }
     },
   );
@@ -171,6 +212,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
   return () => {
     unlistenStatus();
     unlistenLock();
+    unlistenLockRemoved();
     unlistenWorker();
   };
 }
@@ -221,6 +263,14 @@ export async function loadSubjects(projectRoot: string): Promise<SubjectInfo[]> 
 }
 
 /**
+ * Invoke the Rust `clear_stale_locks` command.
+ * Removes all `locked` directories under the lock folder.
+ */
+export async function clearStaleLocks(projectRoot: string): Promise<void> {
+  await invoke("clear_stale_locks", { projectRoot });
+}
+
+/**
  * Invoke the Rust `read_lock_status` command.
  */
 export async function loadLockStatus(projectRoot: string): Promise<SubjectModuleStatus[]> {
@@ -233,6 +283,7 @@ export async function loadLockStatus(projectRoot: string): Promise<SubjectModule
         ...entry,
         subjectSession: entry.subjectSession ?? "",
         module,
+        run: entry.run ?? undefined,
       };
     })
     .filter((entry): entry is SubjectModuleStatus => entry !== null);
@@ -245,4 +296,12 @@ export async function loadLockStatus(projectRoot: string): Promise<SubjectModule
 export async function watchLockDir(projectRoot: string): Promise<void> {
   await invoke("stop_watch_lock_dir").catch(() => {});
   await invoke("watch_lock_dir", { projectRoot });
+}
+
+/**
+ * Invoke the Rust `stop_watch_lock_dir` command.
+ * Stops the file watcher if one is running.
+ */
+export async function stopWatcher(): Promise<void> {
+  await invoke("stop_watch_lock_dir").catch(() => {});
 }

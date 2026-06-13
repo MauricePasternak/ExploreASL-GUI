@@ -60,6 +60,13 @@ function generateSubjectRegexp(subjects: string[]): string {
 
 let processingCleanup: (() => void) | null = null;
 
+export function clearProcessingListeners() {
+  if (processingCleanup) {
+    processingCleanup();
+    processingCleanup = null;
+  }
+}
+
 // =============================================================================
 // Store
 // =============================================================================
@@ -94,24 +101,43 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     const dataPar = useDataParStore.getState().dataPar;
     const { assembleDataPar } = await import("../lib/assembleDataPar");
     const dataParJson = assembleDataPar(dataPar);
+    dataParJson.x.dataset = {
+      subjectRegexp: config.subjectRegexp,
+    };
 
     try {
       const pids = await runProcessingPipeline(config, dataParJson);
       set({ workerPids: pids, processingPhase: "running" });
     } catch (err) {
-      if (processingCleanup) {
-        processingCleanup();
-        processingCleanup = null;
-      }
+      clearProcessingListeners();
+      const { stopWatcher: stopW } = await import("../lib/processingEvents");
+      await stopW();
       set({ ...INITIAL_STATE });
       throw err;
     }
   },
 
   killProcessing: async () => {
-    const { stopProcessingPipeline } = await import("../lib/processingEvents");
+    const { stopProcessingPipeline, clearStaleLocks, loadLockStatus, stopWatcher } =
+      await import("../lib/processingEvents");
+
+    clearProcessingListeners();
+
+    await stopWatcher();
     await stopProcessingPipeline();
-    set({ processingPhase: "cancelled" });
+
+    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
+    if (projectRoot) {
+      try {
+        await clearStaleLocks(projectRoot);
+        const statuses = await loadLockStatus(projectRoot);
+        set({ processingPhase: "cancelled", subjectStatuses: statuses });
+      } catch {
+        set({ processingPhase: "cancelled" });
+      }
+    } else {
+      set({ processingPhase: "cancelled" });
+    }
   },
 
   updateSubjectStatus: (status) => {
@@ -120,14 +146,25 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
         (s) =>
           s.subjectSession === status.subjectSession &&
           s.module === status.module &&
-          s.run === status.run,
+          (s.run ?? undefined) === (status.run ?? undefined),
       );
       if (idx >= 0) {
         const next = [...state.subjectStatuses];
-        next[idx] = status;
+        next[idx] = {
+          ...status,
+          run: status.run ?? undefined,
+        };
         return { subjectStatuses: next };
       }
-      return { subjectStatuses: [...state.subjectStatuses, status] };
+      return {
+        subjectStatuses: [
+          ...state.subjectStatuses,
+          {
+            ...status,
+            run: status.run ?? undefined,
+          },
+        ],
+      };
     });
   },
 
@@ -162,10 +199,10 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
   },
 
   resetProcessing: () => {
-    if (processingCleanup) {
-      processingCleanup();
-      processingCleanup = null;
-    }
+    clearProcessingListeners();
+    import("../lib/processingEvents").then(({ stopWatcher }) => {
+      stopWatcher().catch(() => {});
+    });
     set({ ...INITIAL_STATE });
   },
 }));

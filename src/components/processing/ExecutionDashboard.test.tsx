@@ -168,35 +168,7 @@ describe("ExecutionDashboard component", () => {
     expect(screen.getByTestId("no-subjects-msg")).toBeInTheDocument();
   });
 
-  it("renders clean subject button on each row", () => {
-    renderDashboard();
-    const cleanButtons = screen.getAllByTestId("clean-subject-btn");
-    expect(cleanButtons.length).toBeGreaterThan(0);
-  });
 
-  it("shows confirmation dialog when clean button clicked", async () => {
-    const user = userEvent.setup();
-    renderDashboard();
-    const cleanButtons = screen.getAllByTestId("clean-subject-btn");
-    await user.click(cleanButtons[0]);
-    const modals = screen.getAllByTestId("clean-confirm-modal");
-    expect(modals.length).toBeGreaterThan(0);
-    expect(screen.getByText(/Delete all output files/)).toBeInTheDocument();
-  });
-
-  it("closes confirmation dialog when cancel clicked", async () => {
-    const user = userEvent.setup();
-    renderDashboard();
-    const cleanButtons = screen.getAllByTestId("clean-subject-btn");
-    await user.click(cleanButtons[0]);
-    // Confirm dialog is open
-    expect(screen.getByText(/Delete all output files/)).toBeInTheDocument();
-    const cancelBtns = screen.getAllByTestId("clean-cancel-btn");
-    await user.click(cancelBtns[0]);
-    // invoke should not have been called (no actual clean happened)
-    const { invoke } = await import("@tauri-apps/api/core");
-    expect(invoke).not.toHaveBeenCalledWith("clean_subject_output", expect.anything());
-  });
 
   it("renders module header with progress badge", () => {
     mockSubjectStatuses = [

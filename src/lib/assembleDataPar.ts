@@ -10,6 +10,9 @@ export interface DataParJson {
     settings?: Record<string, unknown>;
     S?: Record<string, unknown>;
     external?: Record<string, unknown>;
+    dataset?: {
+      subjectRegexp?: string;
+    };
     bAutomaticallyDetectFSL?: boolean;
     bAutomaticallyDetectVABY?: boolean;
   };

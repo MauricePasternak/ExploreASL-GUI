@@ -4,11 +4,11 @@ Tauri v2 desktop GUI wrapping ExploreASL (MATLAB ASL MRI pipeline).
 
 **Stack:** Tauri v2 + React 19 + TS 6 + Mantine 9 + Zustand 5 + Zod 4 + React Router 7
 **Dev:** `pnpm tauri dev` → `http://localhost:1420`
-**Specs:** `spec/master.md`, `spec/phase{1..4}-*.md`, `spec/plan-phase1-setup.md`
+**Specs:** `openspec/specs/` (authoritative), `openspec/changes/` (in-progress)
 
 **Architecture:**
 - Rust thin. Prefer Tauri plugins (dialog, fs) over custom commands. Custom: subprocess, file watcher, debug logs.
-- Project state: `.easl` JSON in `<root>/derivatives/ExploreASL_GUI/`. Global settings: `@tauri-apps/plugin-store` (`settings.json` in app data dir).
+- Project state: `.easl` JSON in `<root>/project.easl`. Global settings: `@tauri-apps/plugin-store` (`settings.json` in app data dir).
 - Import: MATLAB stdout parsing. Processing: lock file watcher (`.status` files).
 - Staging tree: 4-level `Subject/Session/Run/Modality`. Session/Run default to `01`.
 - ExploreASL invoked: `ExploreASL(root, importModules, processModules, ...)`.
