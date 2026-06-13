@@ -166,7 +166,7 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
 
       {/* Modules */}
       <div>
-        <Text fw={600} size="sm" mb="xs">
+        <Text fw={600} size="sm" mb="xs" data-testid="modules-label">
           Modules
         </Text>
         <Stack gap="xs">

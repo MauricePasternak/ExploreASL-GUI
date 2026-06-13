@@ -6,7 +6,6 @@ import ControlButtons from "../components/processing/ControlButtons";
 import ExecutionDashboard from "../components/processing/ExecutionDashboard";
 import PipelineConfig from "../components/processing/PipelineConfig";
 import PreflightCheck from "../components/processing/PreflightCheck";
-import ResultsSummary from "../components/processing/ResultsSummary";
 import SubjectSelection from "../components/processing/SubjectSelection";
 import { useProcessingSync } from "../hooks/useProcessingSync";
 import { useProcessingStore } from "../stores/processingStore";
@@ -63,13 +62,6 @@ export default function ProcessingPage() {
       )}
 
       {isRunning && <ExecutionDashboard />}
-
-      {(processingPhase === "completed" || processingPhase === "failed" || processingPhase === "cancelled") && (
-        <>
-          <ExecutionDashboard />
-          <ResultsSummary />
-        </>
-      )}
     </Stack>
   );
 }

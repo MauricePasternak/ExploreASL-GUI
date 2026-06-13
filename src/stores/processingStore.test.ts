@@ -8,6 +8,7 @@ import {
 	setupProcessingListeners,
 	stopProcessingPipeline,
 	watchLockDir,
+	clearStaleLocks,
 } from "../lib/processingEvents";
 import { useProcessingStore } from "./processingStore";
 
@@ -16,8 +17,10 @@ vi.mock("../lib/processingEvents", () => ({
 	stopProcessingPipeline: vi.fn().mockResolvedValue(undefined),
 	setupProcessingListeners: vi.fn().mockReturnValue(() => {}),
 	watchLockDir: vi.fn().mockResolvedValue(undefined),
+	stopWatcher: vi.fn().mockResolvedValue(undefined),
 	loadSubjects: vi.fn().mockResolvedValue([]),
 	loadLockStatus: vi.fn().mockResolvedValue([]),
+	clearStaleLocks: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./projectStore", () => ({

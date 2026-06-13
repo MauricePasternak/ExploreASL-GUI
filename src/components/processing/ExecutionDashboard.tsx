@@ -1,12 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Accordion,
-  ActionIcon,
   Badge,
-  Button,
   Divider,
   Group,
-  Modal,
   Progress,
   Stack,
   Text,
@@ -16,9 +13,7 @@ import {
   IconCheck,
   IconLoader,
   IconMinus,
-  IconTrash,
 } from "@tabler/icons-react";
-import { invoke } from "@tauri-apps/api/core";
 
 import type {
   SubjectInfo,
@@ -36,11 +31,6 @@ type ModuleName = (typeof PROCESSING_MODULES)[number];
 interface StepStatus {
   name: string;
   status: "pending" | "running" | "complete";
-}
-
-interface RowActionsProps {
-  subjectSession: string;
-  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,79 +95,7 @@ function StepTimeline({ steps }: { steps: StepStatus[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Default row actions (Clean Subject Output)
-// ---------------------------------------------------------------------------
-
-function DefaultRowActions({ subjectSession, disabled }: RowActionsProps) {
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [cleaning, setCleaning] = useState(false);
-
-  const handleClean = useCallback(async () => {
-    setCleaning(true);
-    try {
-      await invoke("clean_subject_output", { subject: subjectSession });
-    } catch (err) {
-      console.error("Failed to clean subject output:", err);
-    } finally {
-      setCleaning(false);
-      setConfirmOpen(false);
-    }
-  }, [subjectSession]);
-
-  return (
-    <>
-      <Tooltip label="Clean Subject Output">
-        <ActionIcon
-          variant="subtle"
-          color="red"
-          size="sm"
-          onClick={() => setConfirmOpen(true)}
-          disabled={disabled || cleaning}
-          data-testid="clean-subject-btn"
-        >
-          <IconTrash size={14} />
-        </ActionIcon>
-      </Tooltip>
-
-      <Modal
-        opened={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        title="Clean Subject Output"
-        size="sm"
-        data-testid="clean-confirm-modal"
-      >
-        <Stack gap="md">
-          <Text size="sm">
-            Delete all output files for <strong>{subjectSession}</strong>? This
-            cannot be undone.
-          </Text>
-          <Group justify="flex-end" gap="sm">
-            <Button
-              variant="default"
-              size="xs"
-              onClick={() => setConfirmOpen(false)}
-              data-testid="clean-cancel-btn"
-            >
-              Cancel
-            </Button>
-            <Button
-              color="red"
-              size="xs"
-              loading={cleaning}
-              onClick={handleClean}
-              data-testid="clean-confirm-btn"
-            >
-              Delete
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Subject row (with actions slot)
+// Subject row
 // ---------------------------------------------------------------------------
 
 interface SubjectRowProps {
@@ -185,8 +103,6 @@ interface SubjectRowProps {
   steps: StepStatus[];
   status: SubjectModuleStatus["status"];
   locked: boolean;
-  /** Default actions are always shown; pass extra via this slot */
-  extraActions?: React.ReactNode;
 }
 
 function SubjectRow({
@@ -194,7 +110,6 @@ function SubjectRow({
   steps,
   status,
   locked,
-  extraActions,
 }: SubjectRowProps) {
   const isRunning = locked || status === "incomplete";
 
@@ -224,11 +139,6 @@ function SubjectRow({
             Done
           </Badge>
         )}
-        {extraActions}
-        <DefaultRowActions
-          subjectSession={subjectSession}
-          disabled={isRunning}
-        />
       </Group>
     </Group>
   );
