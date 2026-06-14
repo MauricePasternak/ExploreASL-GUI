@@ -139,7 +139,7 @@ describe("Layout", () => {
       expect(screen.queryAllByTestId("layout-nav-import")).toHaveLength(0);
       expect(screen.queryAllByTestId("layout-nav-home")).toHaveLength(0);
       expect(document.querySelectorAll(".mantine-AppShell-navbar")).toHaveLength(0);
-      expect(screen.getAllByText("Project: none").length).toBeGreaterThan(0);
+      expect(screen.queryByTestId("layout-footer")).not.toBeInTheDocument();
     });
   });
 
