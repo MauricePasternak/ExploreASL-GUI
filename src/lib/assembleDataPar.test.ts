@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DataParState } from "../schemas/dataParSchema";
-import { assembleDataPar, type DataParJson } from "./assembleDataPar";
+import { assembleDataPar } from "./assembleDataPar";
 
 describe("assembleDataPar", () => {
   it("returns empty x object for empty state", () => {
@@ -134,7 +134,7 @@ describe("assembleDataPar", () => {
       Atlases: ["MNI_Structural", "Hammers"],
       TissueMasking: ["GM", "WM"],
       TissueThreshold: [0.7, 0.7],
-      bMasking: [true, true, false, false],
+      bMasking: [1, 1, 0, 0],
       MinimalROIVolume: 10,
       bWMH: true,
       DataTypes: ["CBF", "M0map"],
@@ -144,7 +144,7 @@ describe("assembleDataPar", () => {
       Atlases: ["MNI_Structural", "Hammers"],
       TissueMasking: ["GM", "WM"],
       TissueThreshold: [0.7, 0.7],
-      bMasking: [true, true, false, false],
+      bMasking: [1, 1, 0, 0],
       MinimalROIVolume: 10,
       bWMH: true,
       DataTypes: ["CBF", "M0map"],
@@ -317,7 +317,7 @@ describe("assembleDataPar", () => {
       Atlases: ["MNI_Structural", "Hammers"],
       TissueMasking: ["GM", "WM"],
       TissueThreshold: [0.7, 0.7],
-      bMasking: [true, true, false, false],
+      bMasking: [1, 1, 0, 0],
       MinimalROIVolume: 10,
       bWMH: true,
       DataTypes: ["CBF", "M0map"],

@@ -176,7 +176,7 @@ describe("dataPar flow: store ↔ project sync", () => {
     useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
     useDataParStore.getState().saveToProject();
 
-    expect(useProjectStore.getState().project!.uiState.dataParametersAdvancedVisibility.showAdvancedSections).toBe(true);
+    expect(useProjectStore.getState().project!.uiState.dataParametersAdvancedVisibility!.showAdvancedSections).toBe(true);
   });
 });
 

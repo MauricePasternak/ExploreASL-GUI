@@ -41,7 +41,15 @@ export const ProjectFileSchema = z.object({
           showAdvancedASLProcessing: z.boolean().default(false),
           showAdvancedAtlases: z.boolean().default(false),
         })
-        .default({}),
+        .default({
+          showAdvancedSections: false,
+          showAdvancedM0Params: false,
+          showAdvancedQuantification: false,
+          showAdvancedGeneralSettings: false,
+          showAdvancedASLProcessing: false,
+          showAdvancedAtlases: false,
+        })
+        .optional(),
     })
     .passthrough()
     .default({}),

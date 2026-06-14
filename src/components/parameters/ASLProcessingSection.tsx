@@ -1,4 +1,4 @@
-import { Switch, NumberInput, Select, Stack, Text, Group } from "@mantine/core";
+import { Switch, NumberInput, Select, Stack, Group } from "@mantine/core";
 
 import type { DataParState } from "../../schemas/dataParSchema";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";

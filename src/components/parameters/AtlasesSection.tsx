@@ -25,7 +25,8 @@ function bMaskingToTuple(
 ): [boolean, boolean, boolean, boolean] {
   if (val === undefined || val === 1) return [true, true, true, true];
   if (val === 0) return [false, false, false, false];
-  return [!!val[0], !!val[1], !!val[2], !!val[3]];
+  if (Array.isArray(val)) return [!!val[0], !!val[1], !!val[2], !!val[3]];
+  return [true, true, true, true];
 }
 
 function tupleToBMasking(

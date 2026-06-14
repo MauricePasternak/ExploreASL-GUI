@@ -69,7 +69,7 @@ describe("processing config round-trip persistence", () => {
       .createProject("/tmp/phase-roundtrip", "Phase Roundtrip");
 
     useProjectStore.getState().syncProcessingState({
-      config: undefined,
+      config: null,
       processingPhase: "running",
     });
 

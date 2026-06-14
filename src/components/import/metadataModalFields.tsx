@@ -7,7 +7,6 @@ import {
   Stack,
   Text,
   TextInput,
-  Box,
   Tooltip,
   type ComboboxItem,
 } from "@mantine/core";

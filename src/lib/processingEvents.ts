@@ -275,7 +275,7 @@ export async function clearStaleLocks(projectRoot: string): Promise<void> {
  */
 export async function loadLockStatus(projectRoot: string): Promise<SubjectModuleStatus[]> {
   const raw = await invoke<SubjectModuleStatus[]>("read_lock_status", { projectRoot });
-  return raw
+  const mapped = raw
     .map((entry) => {
       const module = mapModuleName(entry.module as string);
       if (!module) return null;
@@ -286,7 +286,9 @@ export async function loadLockStatus(projectRoot: string): Promise<SubjectModule
         run: entry.run ?? undefined,
       };
     })
-    .filter((entry): entry is SubjectModuleStatus => entry !== null);
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  return mapped as SubjectModuleStatus[];
 }
 
 /**

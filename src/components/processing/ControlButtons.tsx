@@ -73,7 +73,6 @@ export default function ControlButtons() {
         title="Kill Processing"
         size="sm"
         data-testid="kill-confirm-modal"
-        transitionDuration={0}
         returnFocus={false}
       >
         <Stack gap="md">
