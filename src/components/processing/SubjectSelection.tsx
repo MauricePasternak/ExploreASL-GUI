@@ -169,21 +169,15 @@ function buildColumns(processingPhase: string): DataTableColumn<SubjectRow>[] {
     },
     {
       accessor: "_structuralStatus",
-      title: "Structural",
+      title: <>Structural<br/>Status</>,
       textAlign: "center",
       render: (row) => <StatusIcon status={row._structuralStatus} processingPhase={processingPhase} />,
     },
     {
       accessor: "_aslStatus",
-      title: "ASL",
+      title: <>ASL<br/>Status</>,
       textAlign: "center",
       render: (row) => <StatusIcon status={row._aslStatus} processingPhase={processingPhase} />,
-    },
-    {
-      accessor: "_populationStatus",
-      title: "Population",
-      textAlign: "center",
-      render: (row) => <StatusIcon status={row._populationStatus} processingPhase={processingPhase} />,
     },
   ];
 }

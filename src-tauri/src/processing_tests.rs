@@ -448,4 +448,189 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
     }
+
+    // -------------------------------------------------------------------------
+    // delete_module_log_files
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn delete_module_log_files_removes_structural_log_for_matching_subject() {
+        let root = unique_temp_path("del-log-structural");
+        let log_dir = root
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("log");
+        fs::create_dir_all(&log_dir).unwrap();
+        fs::write(
+            log_dir.join("xASL_module_Structural_sub-001_01.log"),
+            "old log",
+        )
+        .unwrap();
+        fs::write(
+            log_dir.join("xASL_module_Structural_sub-002_01.log"),
+            "old log",
+        )
+        .unwrap();
+
+        delete_module_log_files(&root, &[true, false, false], "^sub-001_01$").unwrap();
+
+        assert!(!log_dir.join("xASL_module_Structural_sub-001_01.log").exists());
+        assert!(log_dir.join("xASL_module_Structural_sub-002_01.log").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn delete_module_log_files_removes_all_asl_runs_for_matching_subject() {
+        let root = unique_temp_path("del-log-asl-runs");
+        let log_dir = root
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("log");
+        fs::create_dir_all(&log_dir).unwrap();
+        fs::write(
+            log_dir.join("xASL_module_ASL_sub-001_01_ASL_1.log"),
+            "old log",
+        )
+        .unwrap();
+        fs::write(
+            log_dir.join("xASL_module_ASL_sub-001_01_ASL_2.log"),
+            "old log",
+        )
+        .unwrap();
+        fs::write(
+            log_dir.join("xASL_module_ASL_sub-002_01_ASL_1.log"),
+            "old log",
+        )
+        .unwrap();
+
+        delete_module_log_files(&root, &[false, true, false], "^sub-001_01$").unwrap();
+
+        assert!(!log_dir.join("xASL_module_ASL_sub-001_01_ASL_1.log").exists());
+        assert!(!log_dir.join("xASL_module_ASL_sub-001_01_ASL_2.log").exists());
+        assert!(log_dir.join("xASL_module_ASL_sub-002_01_ASL_1.log").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn delete_module_log_files_respects_subject_regexp_filter() {
+        let root = unique_temp_path("del-log-regexp");
+        let log_dir = root
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("log");
+        fs::create_dir_all(&log_dir).unwrap();
+        fs::write(
+            log_dir.join("xASL_module_Structural_sub-001_01.log"),
+            "old",
+        )
+        .unwrap();
+        fs::write(
+            log_dir.join("xASL_module_Structural_sub-002_01.log"),
+            "old",
+        )
+        .unwrap();
+
+        delete_module_log_files(&root, &[true, false, false], "^sub-001_01$").unwrap();
+
+        assert!(!log_dir.join("xASL_module_Structural_sub-001_01.log").exists());
+        assert!(log_dir.join("xASL_module_Structural_sub-002_01.log").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn delete_module_log_files_preserves_non_log_files() {
+        let root = unique_temp_path("del-log-nonlog");
+        let log_dir = root
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("log");
+        fs::create_dir_all(&log_dir).unwrap();
+        fs::write(
+            log_dir.join("xASL_module_Structural_sub-001_01.log"),
+            "old",
+        )
+        .unwrap();
+        fs::write(
+            log_dir.join("bids_report_sub-001_ses-01.json"),
+            "{}",
+        )
+        .unwrap();
+        fs::write(
+            log_dir.join("import_summary_sub-001.csv"),
+            "csv",
+        )
+        .unwrap();
+
+        delete_module_log_files(&root, &[true, false, false], "^sub-001_01$").unwrap();
+
+        assert!(!log_dir.join("xASL_module_Structural_sub-001_01.log").exists());
+        assert!(log_dir.join("bids_report_sub-001_ses-01.json").exists());
+        assert!(log_dir.join("import_summary_sub-001.csv").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn delete_module_log_files_skips_disabled_modules() {
+        let root = unique_temp_path("del-log-skip");
+        let log_dir = root
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("log");
+        fs::create_dir_all(&log_dir).unwrap();
+        fs::write(
+            log_dir.join("xASL_module_Structural_sub-001_01.log"),
+            "old",
+        )
+        .unwrap();
+        fs::write(
+            log_dir.join("xASL_module_ASL_sub-001_01_ASL_1.log"),
+            "old",
+        )
+        .unwrap();
+
+        delete_module_log_files(&root, &[true, false, false], "^sub-001_01$").unwrap();
+
+        assert!(!log_dir.join("xASL_module_Structural_sub-001_01.log").exists());
+        assert!(log_dir.join("xASL_module_ASL_sub-001_01_ASL_1.log").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn delete_module_log_files_handles_missing_log_dir() {
+        let root = unique_temp_path("del-log-missing");
+
+        let result = delete_module_log_files(&root, &[true, false, false], "^sub-001_01$");
+
+        assert!(result.is_ok());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn delete_module_log_files_deletes_population_log() {
+        let root = unique_temp_path("del-log-pop");
+        let log_dir = root
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("log");
+        fs::create_dir_all(&log_dir).unwrap();
+        fs::write(log_dir.join("xASL_module_Population.log"), "old").unwrap();
+        fs::write(
+            log_dir.join("xASL_module_Structural_sub-001_01.log"),
+            "old",
+        )
+        .unwrap();
+
+        delete_module_log_files(&root, &[false, false, true], "^sub-001_01$").unwrap();
+
+        assert!(!log_dir.join("xASL_module_Population.log").exists());
+        assert!(log_dir.join("xASL_module_Structural_sub-001_01.log").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

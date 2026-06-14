@@ -583,6 +583,78 @@ fn delete_status_files_in_dir(dir: &PathBuf) -> Result<(), String> {
   Ok(())
 }
 
+pub(crate) fn delete_module_log_files(
+  project_root: &PathBuf,
+  b_process: &[bool],
+  subject_regexp: &str,
+) -> Result<(), String> {
+  let log_dir = project_root
+    .join("derivatives")
+    .join("ExploreASL")
+    .join("log");
+  if !log_dir.exists() {
+    return Ok(());
+  }
+
+  let subject_re = if subject_regexp.is_empty() {
+    None
+  } else {
+    Some(
+      regex::Regex::new(subject_regexp)
+        .map_err(|e| format!("Invalid subject regexp '{}': {}", subject_regexp, e))?,
+    )
+  };
+
+  let subject_session_re =
+    regex::Regex::new(r"sub-[^_]+_\d+").expect("subject_session pattern should compile");
+
+  for (i, &enabled) in b_process.iter().enumerate() {
+    if !enabled {
+      continue;
+    }
+    let module_name = module_index_to_name(i);
+    let prefix = module_name.to_string();
+
+    for entry in fs::read_dir(&log_dir).map_err(|e| {
+      format!("Failed to read log dir {}: {}", log_dir.display(), e)
+    })? {
+      let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+      let file_name = entry.file_name().to_string_lossy().to_string();
+
+      if !file_name.starts_with(&prefix) {
+        continue;
+      }
+
+      let should_delete = match &subject_re {
+        Some(re) => {
+          if let Some(mat) = subject_session_re.find(&file_name) {
+            re.is_match(mat.as_str())
+          } else {
+            true
+          }
+        }
+        None => true,
+      };
+
+      if should_delete {
+        match fs::remove_file(entry.path()) {
+          Ok(()) => {}
+          Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+          Err(e) => {
+            return Err(format!(
+              "Failed to delete log file {}: {}",
+              entry.path().display(),
+              e
+            ));
+          }
+        }
+      }
+    }
+  }
+
+  Ok(())
+}
+
 fn supervise_processing_worker(
   app: AppHandle,
   child_pid: u32,
@@ -656,6 +728,7 @@ pub fn run_pipeline(
   let lock_root = ensure_lock_dir(&project_root)?;
   clear_stale_lock_dirs(&lock_root, &b_process)?;
   delete_status_files_for_modules(&project_root, &b_process, &subject_regexp)?;
+  delete_module_log_files(&project_root, &b_process, &subject_regexp)?;
 
   {
     let mut processing_state = state

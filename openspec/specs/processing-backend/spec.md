@@ -11,8 +11,9 @@ Before spawning workers, the command SHALL:
 2. Create `<project_root>/derivatives/ExploreASL/lock/` if it doesn't exist
 3. Clear all stale `locked/` directories under the lock path
 4. Delete `.status` files for modules matching `b_process` on subjects matching `subject_regexp`
-5. Sanity-check that no lock file watcher is already running
-6. Spawn N workers via `matlab -batch "addpath('...'); ExploreASL(root, 0, bProcess, 0, i, n)"`
+5. Delete existing module log files for modules matching `b_process` on subjects matching `subject_regexp` from `<project_root>/derivatives/ExploreASL/log/`
+6. Sanity-check that no lock file watcher is already running
+7. Spawn N workers via `matlab -batch "addpath('...'); ExploreASL(root, 0, bProcess, 0, i, n)"`
 
 #### Scenario: Status file deletion for selected modules
 - **WHEN** `run_pipeline` is called with `b_process = [true, true, false]` and `subject_regexp = "^sub-.*$"`
@@ -25,6 +26,29 @@ Before spawning workers, the command SHALL:
 #### Scenario: Watcher already running
 - **WHEN** `run_pipeline` is called while a lock file watcher is already active
 - **THEN** the command SHALL return an error and SHALL NOT spawn workers
+
+### Requirement: Module Log File Cleanup
+During preparation, `run_pipeline` SHALL delete existing ExploreASL module log files from `<project_root>/derivatives/ExploreASL/log/` for each enabled module matching the subject regexp filter. Log files follow the naming pattern `{module_name}_sub-{Subject}_{Session}[_...].log`. The subject_session SHALL be extracted from the filename using the pattern `sub-[^_]+_\d+` and tested against `subject_regexp`. The Population module SHALL have its log file deleted regardless of subject regexp match (no per-subject granularity). Non-log files (`.json`, `.csv`) in the log directory SHALL NOT be affected. If the log directory does not exist, the cleanup SHALL succeed silently.
+
+#### Scenario: Structural log deleted for matching subject
+- **WHEN** `run_pipeline` is called with `b_process = [true, false, false]` and `subject_regexp = "^sub-001_01$"`
+- **THEN** `xASL_module_Structural_sub-001_01.log` SHALL be deleted; `xASL_module_Structural_sub-002_01.log` SHALL be preserved
+
+#### Scenario: All ASL run logs deleted for matching subject
+- **WHEN** `run_pipeline` is called with `b_process = [false, true, false]` and `subject_regexp = "^sub-001_01$"`
+- **THEN** ALL log files starting with `xASL_module_ASL_sub-001_01_` SHALL be deleted regardless of run number; logs for `sub-002_01` SHALL be preserved
+
+#### Scenario: Disabled module logs preserved
+- **WHEN** `run_pipeline` is called with `b_process = [true, false, false]` (only Structural enabled)
+- **THEN** ASL and Population log files SHALL NOT be deleted
+
+#### Scenario: Population log always deleted when module enabled
+- **WHEN** `run_pipeline` is called with `b_process = [false, false, true]`
+- **THEN** `xASL_module_Population.log` SHALL be deleted regardless of `subject_regexp` value
+
+#### Scenario: Non-log files preserved
+- **WHEN** the log directory contains `bids_report_*.json` and `import_summary_*.csv` files
+- **THEN** those files SHALL remain untouched by the log cleanup
 
 ### Requirement: kill_pipeline Command
 The `kill_pipeline` Tauri command SHALL accept no arguments. It SHALL read all worker PIDs from `AppState.processing_state` and send SIGTERM to each. If a process does not exit within 5 seconds, it SHALL send SIGKILL. It SHALL wait for all processes to exit before returning.
@@ -80,7 +104,7 @@ The `list_subjects` Tauri command SHALL accept `project_root: String` and return
 - **THEN** all worker processes SHALL be terminated (SIGTERM → SIGKILL after 5s) and the file watcher SHALL be stopped
 
 ### Requirement: Module Name Mapping
-The `b_process` vector SHALL map to ExploreASL lock directory names: index 0 → `xASL_module_Structural`, index 1 → `xASL_module_ASL`, index 2 → `xASL_module_Population`. This mapping SHALL be used by `run_pipeline` for status file deletion and by `read_lock_status` for directory traversal.
+The `b_process` vector SHALL map to ExploreASL lock directory names: index 0 → `xASL_module_Structural`, index 1 → `xASL_module_ASL`, index 2 → `xASL_module_Population`. This mapping SHALL be used by `run_pipeline` for status file deletion, log file cleanup, and by `read_lock_status` for directory traversal.
 
 #### Scenario: Delete status files for structural module only
 - **WHEN** `b_process = [true, false, false]` is passed to `run_pipeline`
