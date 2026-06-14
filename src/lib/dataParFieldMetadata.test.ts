@@ -4,7 +4,6 @@ import {
   ATLAS_OPTIONS,
   FIELD_METADATA,
   M0_OPTIONS,
-  type FieldMeta,
   type SectionId,
   type Tier,
   type WidgetType,

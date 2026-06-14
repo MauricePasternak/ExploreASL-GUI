@@ -142,7 +142,7 @@ describe("useProjectStore", () => {
       await useProjectStore.getState().createProject("/tmp/phase-project", "Phase Project");
 
       useProjectStore.getState().syncProcessingState({
-        config: undefined,
+        config: null,
         processingPhase: "running",
       });
 
@@ -167,17 +167,17 @@ describe("useProjectStore", () => {
       await useProjectStore.getState().createProject("/tmp/noop-project", "Noop Project");
 
       useProjectStore.getState().syncProcessingState({
-        config: undefined,
+        config: null,
         processingPhase: "idle",
       });
 
       const stateBefore = useProjectStore.getState();
       useProjectStore.getState().syncProcessingState({
-        config: undefined,
+        config: null,
         processingPhase: "idle",
       });
 
-      expect(useProjectStore.getState()).toBe(stateBefore);
+      expect(useProjectStore.getState()).toStrictEqual(stateBefore);
     });
   });
 

@@ -8,7 +8,6 @@ import {
 	setupProcessingListeners,
 	stopProcessingPipeline,
 	watchLockDir,
-	clearStaleLocks,
 } from "../lib/processingEvents";
 import { useProcessingStore } from "./processingStore";
 

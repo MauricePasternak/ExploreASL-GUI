@@ -6,7 +6,6 @@ import {
   DEFAULT_PROJECT_FILE,
   PROJECT_FILE_NAME,
   type ProjectMeta,
-  type ProjectPhase,
   ProjectFileSchema,
   type ProjectFile,
 } from "../schemas/project";
