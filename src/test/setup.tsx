@@ -42,6 +42,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "clean_import_status":
       case "move_import_output":
       case "copy_lock_files":
+      case "detect_exploreasl_version":
         return Promise.resolve(null);
       default:
         return Promise.resolve(null);

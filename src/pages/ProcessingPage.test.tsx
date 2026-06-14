@@ -54,7 +54,7 @@ vi.mock("../../stores/globalStore", () => ({
   useGlobalStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       settings: {
-        matlabInstallations: [{ label: "R2024a", path: "/usr/bin/matlab" }],
+        matlabInstallations: [{ label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" }],
         exploreAslPath: "/opt/ExploreASL",
       },
     }),
@@ -111,7 +111,7 @@ describe("ProcessingPage", () => {
   it("renders SubjectSelection with subjects from store", () => {
     renderPage();
     expect(screen.getByTestId("subject-selection")).toBeInTheDocument();
-    expect(screen.getByText("Select Subjects")).toBeInTheDocument();
+    expect(screen.getByText("Select Subject/Session Entries")).toBeInTheDocument();
   });
 
   it("renders PipelineConfig with module checkboxes", () => {

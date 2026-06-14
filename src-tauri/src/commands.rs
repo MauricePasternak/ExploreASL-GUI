@@ -1,45 +1,243 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::env;
 use std::fs;
-use std::path::Path;
-use std::process::Command;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 use walkdir::WalkDir;
 
 use crate::tracing::CommandTrace;
 
 #[tauri::command]
-pub fn which_matlab() -> Vec<serde_json::Value> {
+pub async fn which_matlab(custom_paths: Option<Vec<String>>) -> Vec<serde_json::Value> {
     let trace = CommandTrace::new("which_matlab");
-    let mut results = Vec::new();
+    let mut seen = HashSet::new();
+    let mut paths: Vec<PathBuf> = Vec::new();
 
-    if let Ok(output) = Command::new("which").arg("-a").arg("matlab").output() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for (index, line) in stdout.lines().enumerate() {
-            let path = line.trim();
-            if !path.is_empty() {
-                results.push(serde_json::json!({
-                    "id": format!("matlab_{}", index),
-                    "label": format!("MATLAB ({})", path),
-                    "path": path,
-                }));
+    let scan_all = match &custom_paths {
+        None => true,
+        Some(custom) => custom.is_empty(),
+    };
+
+    if let Some(custom) = custom_paths {
+        for path_str in custom {
+            if path_str.trim().is_empty() {
+                continue;
+            }
+            let p = PathBuf::from(&path_str);
+            if p.is_file() && is_matlab_executable(&p) {
+                if let Ok(canonical) = fs::canonicalize(&p) {
+                    if seen.insert(canonical) {
+                        paths.push(p);
+                    }
+                }
             }
         }
     }
 
-    if let Ok(entries) = fs::read_dir("/usr/local/MATLAB") {
-        for entry in entries.flatten() {
-            let matlab_binary = entry.path().join("bin").join("matlab");
-            if matlab_binary.exists() {
-                results.push(serde_json::json!({
-                    "id": format!("matlab_common_{}", entry.file_name().to_string_lossy()),
-                    "label": format!("MATLAB ({})", matlab_binary.display()),
-                    "path": matlab_binary.display().to_string(),
-                }));
-            }
+    if scan_all {
+        find_matlab_on_path(&mut paths, &mut seen);
+        find_matlab_standard_dirs(&mut paths, &mut seen);
+    }
+
+    log::info!(
+        "[COMMAND] which_matlab — found {} candidate binaries",
+        paths.len()
+    );
+    for p in &paths {
+        log::info!("[COMMAND] which_matlab — candidate: {:?}", p);
+    }
+
+    let mut handles = Vec::new();
+    for (i, path) in paths.into_iter().enumerate() {
+        let handle = tauri::async_runtime::spawn_blocking(move || {
+            let version = detect_matlab_version_impl(&path);
+            log::info!(
+                "[COMMAND] which_matlab — version for {:?}: {:?}",
+                path,
+                version
+            );
+            serde_json::json!({
+                "id": format!("matlab_{}", i),
+                "label": format!("MATLAB ({})", path.display()),
+                "path": path.to_string_lossy(),
+                "version": version,
+            })
+        });
+        handles.push(handle);
+    }
+
+    let mut results: Vec<serde_json::Value> = Vec::with_capacity(handles.len());
+    for handle in handles {
+        if let Ok(item) = handle.await {
+            results.push(item);
         }
     }
 
     trace.success(&results);
     results
+}
+
+fn find_matlab_on_path(paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
+    let path_var = env::var_os("PATH")
+        .and_then(|v| v.into_string().ok())
+        .unwrap_or_default();
+
+    for dir in env::split_paths(&path_var) {
+        for candidate in matlab_executable_candidates(&dir) {
+            if candidate.is_file() && is_matlab_executable(&candidate) {
+                if let Ok(canonical) = fs::canonicalize(&candidate) {
+                    if seen.insert(canonical) {
+                        paths.push(candidate);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn find_matlab_standard_dirs(paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
+    for search_root in matlab_search_roots() {
+        if let Ok(entries) = fs::read_dir(&search_root) {
+            for entry in entries.flatten() {
+                let dir = entry.path();
+                if !dir.is_dir() {
+                    continue;
+                }
+                let bin_dir = dir.join("bin");
+                for candidate in matlab_executable_candidates(&bin_dir) {
+                    if candidate.is_file() && is_matlab_executable(&candidate) {
+                        if let Ok(canonical) = fs::canonicalize(&candidate) {
+                            if seen.insert(canonical) {
+                                paths.push(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn matlab_executable_candidates(bin_dir: &Path) -> Vec<PathBuf> {
+    #[cfg(windows)]
+    {
+        let pathext =
+            env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+        let mut candidates: Vec<PathBuf> = pathext
+            .split(';')
+            .filter(|ext| !ext.is_empty())
+            .map(|ext| bin_dir.join(format!("matlab{}", ext)))
+            .collect();
+        candidates.push(bin_dir.join("matlab"));
+        candidates
+    }
+    #[cfg(not(windows))]
+    {
+        vec![bin_dir.join("matlab")]
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn is_matlab_executable(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(unix)]
+fn is_matlab_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path)
+        .map(|m| m.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn is_matlab_executable(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(target_os = "linux")]
+fn matlab_search_roots() -> Vec<PathBuf> {
+    vec![PathBuf::from("/usr/local/MATLAB")]
+}
+
+#[cfg(target_os = "macos")]
+fn matlab_search_roots() -> Vec<PathBuf> {
+    vec![
+        PathBuf::from("/Applications"),
+        PathBuf::from("/usr/local/MATLAB"),
+    ]
+}
+
+#[cfg(target_os = "windows")]
+fn matlab_search_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for key in &["ProgramFiles", "ProgramFiles(x86)"] {
+        if let Some(pf) = env::var_os(key) {
+            let p = PathBuf::from(pf).join("MATLAB");
+            roots.push(p);
+        }
+    }
+    roots.dedup();
+    roots
+}
+
+fn detect_matlab_version_impl(binary: &Path) -> Option<String> {
+    let (tx, rx) = mpsc::channel();
+    let binary = binary.to_path_buf();
+    let timeout = Duration::from_secs(15);
+
+    thread::spawn(move || {
+        let result = run_matlab_release(&binary);
+        let _ = tx.send(result);
+    });
+
+    rx.recv_timeout(timeout).ok().flatten()
+}
+
+fn run_matlab_release(binary: &Path) -> Option<String> {
+    log::info!("[COMMAND] which_matlab — executing {:?}", binary);
+    let output = match Command::new(binary)
+        .args(["-batch", "disp(version('-release'))"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            log::warn!("[COMMAND] which_matlab — failed to spawn {:?}: {}", binary, e);
+            return None;
+        }
+    };
+
+    if !output.status.success() {
+        log::warn!(
+            "[COMMAND] which_matlab — {:?} exited with {}: {}",
+            binary,
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let release = stdout.trim();
+
+    log::info!(
+        "[COMMAND] which_matlab — {:?} stdout: {:?}",
+        binary,
+        stdout
+    );
+
+    if release.is_empty() {
+        log::warn!("[COMMAND] which_matlab — {:?} produced empty output", binary);
+        return None;
+    }
+
+    Some(format!("R{}", release))
 }
 
 #[tauri::command]
@@ -56,9 +254,7 @@ pub fn is_writable(path: &str) -> bool {
 #[tauri::command]
 pub fn get_cpu_cores() -> usize {
     let trace = CommandTrace::new("get_cpu_cores");
-    let cores = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
+    let cores = num_cpus::get_physical();
     trace.success(&cores);
     cores
 }
@@ -160,7 +356,6 @@ pub fn walk_directory(
         .follow_links(true);
 
     let result = if b_match_directories {
-        // Find directories containing .dcm files
         let mut dcm_dirs = std::collections::HashSet::new();
 
         for entry in walker.into_iter().filter_map(|e| e.ok()) {
@@ -181,7 +376,6 @@ pub fn walk_directory(
         result.sort();
         Ok(result)
     } else {
-        // Find individual .dcm files
         let mut dcm_files = Vec::new();
 
         for entry in walker.into_iter().filter_map(|e| e.ok()) {
@@ -242,7 +436,6 @@ pub fn create_symlink_tree(
             .join(&entry.run)
             .join(&entry.modality);
 
-        // Create the target directory
         fs::create_dir_all(&target_dir).map_err(|e| {
             let err = format!("Failed to create directory {}: {}", target_dir.display(), e);
             trace.error(&err);
@@ -252,7 +445,6 @@ pub fn create_symlink_tree(
         let source = Path::new(&entry.source_path);
 
         if source.is_dir() {
-            // Link/copy all files from the source directory
             let entries = fs::read_dir(source).map_err(|e| {
                 let err = format!("Failed to read directory {}: {}", source.display(), e);
                 trace.error(&err);
@@ -266,7 +458,6 @@ pub fn create_symlink_tree(
                 }
             }
         } else if source.is_file() {
-            // Single file — link/copy directly
             let file_name = source.file_name().ok_or_else(|| {
                 let err = format!("Invalid file path: {}", source.display());
                 trace.error(&err);
@@ -301,15 +492,12 @@ fn link_or_copy(source: &Path, target: &Path) -> Result<(), String> {
 
     #[cfg(windows)]
     {
-        // Try symlink first (requires Developer Mode)
         if std::os::windows::fs::symlink_file(source, target).is_ok() {
             return Ok(());
         }
-        // Try hard link (same-volume only)
         if fs::hard_link(source, target).is_ok() {
             return Ok(());
         }
-        // Fall back to copy
         fs::copy(source, target).map(|_| ()).map_err(|e| {
             format!(
                 "Failed to copy {} -> {}: {}",
@@ -318,5 +506,70 @@ fn link_or_copy(source: &Path, target: &Path) -> Result<(), String> {
                 e
             )
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[cfg(unix)]
+    #[test]
+    fn detect_matlab_version_from_fake_binary() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("easl-gui-matlab-test-{}", ts));
+        fs::create_dir_all(&dir).unwrap();
+
+        let fake_matlab = dir.join("matlab");
+        {
+            let mut f = fs::File::create(&fake_matlab).unwrap();
+            writeln!(f, "#!/bin/sh").unwrap();
+            writeln!(f, "echo '2022b'").unwrap();
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&fake_matlab, PermissionsExt::from_mode(0o755)).unwrap();
+        }
+
+        let version = run_matlab_release(&fake_matlab);
+        assert_eq!(version, Some("R2022b".to_string()));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_matlab_release_rejects_failure() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("easl-gui-matlab-fail-{}", ts));
+        fs::create_dir_all(&dir).unwrap();
+
+        let fake_matlab = dir.join("matlab");
+        {
+            let mut f = fs::File::create(&fake_matlab).unwrap();
+            writeln!(f, "#!/bin/sh").unwrap();
+            writeln!(f, "echo nope >&2").unwrap();
+            writeln!(f, "exit 1").unwrap();
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&fake_matlab, PermissionsExt::from_mode(0o755)).unwrap();
+        }
+
+        let version = run_matlab_release(&fake_matlab);
+        assert_eq!(version, None);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

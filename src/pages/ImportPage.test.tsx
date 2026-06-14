@@ -683,7 +683,7 @@ describe("ImportPage import runner step", () => {
       settings: {
         ...DEFAULT_SETTINGS,
         matlabInstallations: [
-          { id: "matlab-r2025a", label: "MATLAB R2025a", path: "/opt/matlab" },
+          { id: "matlab-r2025a", label: "MATLAB R2025a", path: "/opt/matlab", version: "" },
         ],
         exploreAslPath: "/opt/ExploreASL",
       },

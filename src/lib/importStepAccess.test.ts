@@ -38,7 +38,7 @@ const VALID_METADATA = {
 
 const SETTINGS: Pick<GlobalSettings, "matlabInstallations" | "exploreAslPath"> = {
   matlabInstallations: [
-    { id: "matlab-r2025a", label: "MATLAB R2025a", path: "/opt/matlab" },
+    { id: "matlab-r2025a", label: "MATLAB R2025a", path: "/opt/matlab", version: "" },
   ],
   exploreAslPath: "/opt/ExploreASL",
 };

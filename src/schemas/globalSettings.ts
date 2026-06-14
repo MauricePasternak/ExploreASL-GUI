@@ -4,6 +4,7 @@ export const MatlabInstallationSchema = z.object({
   id: z.string(),
   label: z.string().min(1, "Label is required"),
   path: z.string().min(1, "Path is required"),
+  version: z.string().nullable().default(""),
 });
 
 const TokenSubDelimiterSchema = z.string().trim().min(1).max(1);
@@ -15,6 +16,7 @@ export const ImportSettingsSchema = z.object({
 export const GlobalSettingsSchema = z.object({
   matlabInstallations: z.array(MatlabInstallationSchema).default([]),
   exploreAslPath: z.string().default(""),
+  exploreAslVersion: z.string().optional().default(""),
   theme: z.enum(["light", "dark"]).default("light"),
   recentProjects: z.array(z.string()).default([]),
   tokenSubDelimiters: z
@@ -34,6 +36,7 @@ export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>;
 export const DEFAULT_SETTINGS: GlobalSettings = {
   matlabInstallations: [],
   exploreAslPath: "",
+  exploreAslVersion: "",
   theme: "light",
   recentProjects: [],
   tokenSubDelimiters: ["_", "-"],

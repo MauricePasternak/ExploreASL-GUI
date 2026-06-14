@@ -138,3 +138,33 @@ Worker supervisor threads SHALL NOT stream stdout to the frontend. They SHALL on
 - **WHEN** a MATLAB worker prints warnings or errors to stdout
 - **THEN** the output SHALL be discarded; progress SHALL only be tracked via lock file events
 
+### Requirement: ExploreASL Version Detection
+The system SHALL detect the ExploreASL version by scanning the ExploreASL installation directory for files named `VERSION_*`. The version string SHALL be the portion after the `VERSION_` prefix (e.g., `VERSION_1.11.0` → `"1.11.0"`, `VERSION_2.0.0_BETA` → `"2.0.0_BETA"`). If multiple `VERSION_*` files exist, the first found SHALL be used. If no such file exists, the version SHALL be `None`. If the directory does not exist, the version SHALL be `None`.
+
+A Tauri command `detect_exploreasl_version(explore_asl_path: String) -> Option<String>` SHALL expose this detection to the frontend. The version SHALL be detected and displayed in three scenarios:
+1. **On app startup**: after settings are loaded, if `exploreAslPath` is non-empty
+2. **When global settings are saved**: after validating the ExploreASL path, the version SHALL be re-detected and stored
+3. **During preparation phase of `run_pipeline`**: after validating the ExploreASL path and before any destructive operations, the version SHALL be logged to the Rust log
+
+The frontend SHALL display the detected version as colored text below the ExploreASL path input in the Settings modal. A detected version SHALL appear in teal text ("ExploreASL v{version} detected"). A missing version on a valid path SHALL appear in orange text ("ExploreASL version not detected"). No version text SHALL be shown when the path is empty.
+
+#### Scenario: Version file found
+- **WHEN** `VERSION_1.11.0` exists in the ExploreASL directory
+- **THEN** `detect_exploreasl_version` SHALL return `Some("1.11.0")`
+
+#### Scenario: Beta version detected
+- **WHEN** `VERSION_2.0.0_BETA` exists in the ExploreASL directory
+- **THEN** `detect_exploreasl_version` SHALL return `Some("2.0.0_BETA")`
+
+#### Scenario: No version file
+- **WHEN** the ExploreASL directory exists but contains no `VERSION_*` file
+- **THEN** `detect_exploreasl_version` SHALL return `None` and the settings modal SHALL display orange "ExploreASL version not detected"
+
+#### Scenario: Directory missing
+- **WHEN** the ExploreASL directory does not exist
+- **THEN** `detect_exploreasl_version` SHALL return `None` without error
+
+#### Scenario: Version logged during preparation
+- **WHEN** `run_pipeline` is called with a valid ExploreASL path
+- **THEN** the detected version (or `"unknown"`) SHALL be logged via `log::info!` before any destructive operations
+
