@@ -116,7 +116,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   return (
     <AppShell
       header={{ height: 56 }}
-      footer={{ height: 40 }}
+      footer={project ? { height: 40 } : undefined}
       navbar={{
         width: navbarCollapsed ? 60 : 240,
         breakpoint: "sm",
@@ -152,7 +152,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       </AppShell.Header>
 
       {project ? (
-        <AppShell.Navbar p="xs">
+        <AppShell.Navbar p="xs" data-testid="layout-navbar">
           <Stack gap="xs" h="100%" align={navbarCollapsed ? "center" : "stretch"}>
             <Tooltip label={navbarCollapsed ? "Expand navigation" : "Collapse navigation"} position="right" withArrow>
               <ActionIcon
@@ -167,7 +167,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
               </ActionIcon>
             </Tooltip>
 
-            <div style={{ width: "100%" }}>
+            <div style={{ width: "100%" }} data-testid="layout-navbar-phases">
               {PHASE_NAV.map(({ phase, label, icon: Icon }) => {
                 const active = project.projectMeta.currentPhase === phase;
                 const disabled = !canAccessPhase(project, phase);
@@ -191,7 +191,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
               })}
             </div>
 
-            <div style={{ marginTop: "auto", width: "100%" }}>
+            <div style={{ marginTop: "auto", width: "100%" }} data-testid="layout-navbar-home">
               {navbarCollapsed ? (
                 <Tooltip label="Return to home" position="right" withArrow>
                   <NavLink
@@ -215,13 +215,15 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         </AppShell.Navbar>
       ) : null}
 
-      <AppShell.Footer>
-        <Group h="100%" px="md" justify="space-between">
-          <ProcessingStatusBar />
-          <Text size="sm">{project ? `Project: ${project.projectMeta.name}` : "Project: none"}</Text>
-          <Text size="sm">Subjects: {subjectCount}</Text>
-        </Group>
-      </AppShell.Footer>
+      {project ? (
+        <AppShell.Footer data-testid="layout-footer">
+          <Group h="100%" px="md" justify="space-between" data-testid="layout-footer-content">
+            <ProcessingStatusBar />
+            <Text size="sm">Project: {project.projectMeta.name}</Text>
+            <Text size="sm">Subjects: {subjectCount}</Text>
+          </Group>
+        </AppShell.Footer>
+      ) : null}
 
       <AppShell.Main>
         <Modal
@@ -229,17 +231,18 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           onClose={() => setLeaveModalOpen(false)}
           title="Leave project"
           centered
+          data-testid="layout-leave-modal"
         >
           <Stack gap="md">
             <Text>Save your changes before leaving this project?</Text>
             <Group justify="flex-end">
-              <Button variant="default" onClick={() => setLeaveModalOpen(false)} data-testid="layout-leave-cancel-btn">
+              <Button variant="default" onClick={() => setLeaveModalOpen(false)} data-testid="layout-leave-modal-cancel-btn">
                 Cancel
               </Button>
-              <Button variant="light" color="red" onClick={() => void leaveProject({ saveChanges: false })} data-testid="layout-leave-without-saving-btn">
+              <Button variant="light" color="red" onClick={() => void leaveProject({ saveChanges: false })} data-testid="layout-leave-modal-leave-without-saving-btn">
                 Leave without saving
               </Button>
-              <Button onClick={() => void leaveProject({ saveChanges: true })} data-testid="layout-save-and-leave-btn">Save and leave</Button>
+              <Button onClick={() => void leaveProject({ saveChanges: true })} data-testid="layout-leave-modal-save-and-leave-btn">Save and leave</Button>
             </Group>
           </Stack>
         </Modal>

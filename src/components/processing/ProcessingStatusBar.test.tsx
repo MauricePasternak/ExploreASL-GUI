@@ -83,9 +83,33 @@ describe("ProcessingStatusBar", () => {
     expect(screen.queryByTestId("processing-status-bar")).not.toBeInTheDocument();
   });
 
-  it("shows progress count text", () => {
+  it("shows per-module progress counts", () => {
     mockPhase = "running";
     renderBar();
-    expect(screen.getByText(/1\/2 subjects/)).toBeInTheDocument();
+    // Default mock has 2 sessions with only structural: 1 complete, 1 pending
+    expect(screen.getByText(/Structural 1\/2/)).toBeInTheDocument();
+  });
+
+  it("shows per-module breakdown for multi-module statuses (regression: 8/16 bug)", () => {
+    // 2 sessions × 2 modules = 4 entries; structural all complete, ASL all incomplete
+    const multiModuleStatuses = [
+      { subjectSession: "sub-001_01", module: "structural", status: "complete", completedSteps: [], locked: false },
+      { subjectSession: "sub-001_01", module: "asl", status: "incomplete", completedSteps: [], locked: false },
+      { subjectSession: "sub-002_01", module: "structural", status: "complete", completedSteps: [], locked: false },
+      { subjectSession: "sub-002_01", module: "asl", status: "incomplete", completedSteps: [], locked: false },
+    ];
+    mockSubjectStatuses.splice(0, mockSubjectStatuses.length, ...multiModuleStatuses);
+    mockPhase = "failed";
+    renderBar();
+    // Should show per-module: "Structural 2/2 · ASL 0/2"
+    expect(screen.getByText(/Structural 2\/2/)).toBeInTheDocument();
+    expect(screen.getByText(/ASL 0\/2/)).toBeInTheDocument();
+    // Restore
+    mockSubjectStatuses.splice(
+      0,
+      mockSubjectStatuses.length,
+      { subjectSession: "sub-001_01", module: "structural", status: "complete", completedSteps: [], locked: false },
+      { subjectSession: "sub-002_01", module: "structural", status: "pending", completedSteps: [], locked: false },
+    );
   });
 });
