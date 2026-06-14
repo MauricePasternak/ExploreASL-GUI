@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Box, Button, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import {
@@ -194,6 +194,12 @@ export default function SubjectSelection() {
   const processingPhase = useProcessingStore((s) => s.processingPhase);
 
   const [filter, setFilter] = useState<FilterValue>("all");
+  const [page, setPage] = useState(1);
+  const [recordsPerPage, setRecordsPerPage] = useState(10);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, recordsPerPage]);
 
   const selectedSet = useMemo(
     () => new Set(config?.subjects ?? []),
@@ -201,7 +207,10 @@ export default function SubjectSelection() {
   );
 
   const rows: SubjectRow[] = useMemo(() => {
-    return availableSubjects.map((info) => {
+    const sorted = [...availableSubjects].sort((a, b) =>
+      a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
+    );
+    return sorted.map((info) => {
       const structural = resolveModuleDisplay(info, "structural", subjectStatuses);
       const asl = resolveModuleDisplay(info, "asl", subjectStatuses);
       const population = resolveModuleDisplay(info, "population", subjectStatuses);
@@ -221,9 +230,14 @@ export default function SubjectSelection() {
     return rows.filter((r) => r._overallStatus === filter);
   }, [rows, filter]);
 
+  const paginatedRows = useMemo(() => {
+    const from = (page - 1) * recordsPerPage;
+    return filteredRows.slice(from, from + recordsPerPage);
+  }, [filteredRows, page, recordsPerPage]);
+
   const selectedRecords = useMemo(
-    () => filteredRows.filter((r) => r._selected),
-    [filteredRows],
+    () => paginatedRows.filter((r) => r._selected),
+    [paginatedRows],
   );
 
   const updateSubjects = useCallback(
@@ -268,7 +282,7 @@ export default function SubjectSelection() {
     <Stack gap="sm" data-testid="subject-selection">
       <Group justify="space-between" align="center">
         <Text fw={600} size="sm">
-          Select Subjects
+          Select Subject/Session Entries
         </Text>
         <Group gap="xs">
           <Button
@@ -315,21 +329,26 @@ export default function SubjectSelection() {
       </Group>
 
       <Box
-        h={300}
-        style={{ flexShrink: 0, overflow: "hidden", isolation: "isolate" }}
+        style={{ flexShrink: 0, isolation: "isolate" }}
         data-testid="subject-table-container"
       >
         <DataTable
-          records={filteredRows}
+          records={paginatedRows}
           columns={columns}
           selectedRecords={selectedRecords}
           onSelectedRecordsChange={handleSelectedRecordsChange}
           idAccessor="subjectSession"
           striped
           highlightOnHover
-          height={300}
           borderRadius="sm"
           withTableBorder
+          page={page}
+          onPageChange={setPage}
+          totalRecords={filteredRows.length}
+          recordsPerPage={recordsPerPage}
+          recordsPerPageOptions={[10, 25, 50]}
+          onRecordsPerPageChange={setRecordsPerPage}
+          paginationSize="sm"
           data-testid="subject-table"
         />
       </Box>

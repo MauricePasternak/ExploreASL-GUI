@@ -80,7 +80,9 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
     () =>
       settings.matlabInstallations.map((inst) => ({
         value: inst.path,
-        label: `${inst.label} (${inst.path})`,
+        label: inst.version
+          ? `${inst.label} [${inst.version}] — ${inst.path}`
+          : `${inst.label} (${inst.path})`,
       })),
     [settings.matlabInstallations],
   );

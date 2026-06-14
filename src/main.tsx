@@ -6,6 +6,7 @@ import { createHashRouter, RouterProvider } from "react-router";
 
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
+import "mantine-datatable/styles.css";
 
 import App from "./App";
 import {

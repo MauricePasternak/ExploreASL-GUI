@@ -53,7 +53,7 @@ describe("GlobalSettingsSchema", () => {
   it("rejects invalid matlab installation entries", () => {
     expect(() =>
       GlobalSettingsSchema.parse({
-        matlabInstallations: [{ id: "matlab-1", label: "", path: "" }],
+        matlabInstallations: [{ id: "matlab-1", label: "", path: "", version: "" }],
       }),
     ).toThrow(/required/i);
   });

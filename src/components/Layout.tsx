@@ -51,7 +51,10 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const closeProject = useProjectStore((state) => state.closeProject);
   const navigate = useNavigate();
 
-  const subjectCount = useProcessingStore((s) => s.availableSubjects.length);
+  const subjectCount = useProcessingStore((s) => {
+    const subjects = new Set(s.availableSubjects.map((info) => info.subject));
+    return subjects.size;
+  });
   const navbarCollapsed = project?.uiState.navbarCollapsed ?? true;
 
   async function handlePhaseNavigation(phase: ProjectPhase) {

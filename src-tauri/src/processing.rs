@@ -395,6 +395,38 @@ fn validate_exploreasl_path(path: &str) -> Result<PathBuf, String> {
   Ok(path)
 }
 
+fn get_exploreasl_version(path: &PathBuf) -> Option<String> {
+  let entries = match fs::read_dir(path) {
+    Ok(entries) => entries,
+    Err(_) => return None,
+  };
+  for entry in entries.flatten() {
+    let file_name = entry.file_name().to_string_lossy().to_string();
+    if let Some(version) = file_name.strip_prefix("VERSION_") {
+      if !version.is_empty() {
+        return Some(version.to_string());
+      }
+    }
+  }
+  None
+}
+
+#[tauri::command]
+pub fn detect_exploreasl_version(explore_asl_path: String) -> Option<String> {
+  let trace = CommandTrace::new("detect_exploreasl_version");
+  trace.arg("explore_asl_path", &explore_asl_path);
+
+  let path = PathBuf::from(explore_asl_path.trim());
+  let version = if path.exists() {
+    get_exploreasl_version(&path)
+  } else {
+    None
+  };
+
+  trace.success(&version);
+  version
+}
+
 fn write_data_par_json(project_root: &PathBuf, data_par_json: &str) -> Result<(), String> {
   let data_par_dir = project_root.join("derivatives").join("ExploreASL");
   fs::create_dir_all(&data_par_dir).map_err(|e| {
@@ -722,6 +754,14 @@ pub fn run_pipeline(
 
   let matlab_path = validate_matlab_path(&matlab_path)?;
   let exploreasl_path = validate_exploreasl_path(&explore_asl_path)?;
+
+  {
+    let version = get_exploreasl_version(&exploreasl_path);
+    log::info!(
+      "ExploreASL version: {}",
+      version.as_deref().unwrap_or("unknown")
+    );
+  }
 
   write_data_par_json(&project_root, &data_par_json)?;
 

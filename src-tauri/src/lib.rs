@@ -9,7 +9,7 @@ use import::{
     clean_import_status, copy_lock_files, move_import_output, run_import_pipeline, stop_import,
     stop_running_import_for_exit, AppState,
 };
-use processing::{clear_stale_locks, kill_pipeline, list_subjects, read_lock_status, run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir};
+use processing::{clear_stale_locks, detect_exploreasl_version, kill_pipeline, list_subjects, read_lock_status, run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir};
 use tauri::{LogicalSize, Manager, Size};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -59,6 +59,7 @@ pub fn run() {
             watch_lock_dir,
             stop_watch_lock_dir,
             clear_stale_locks,
+            detect_exploreasl_version,
         ])
         .setup(|app| {
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMantineColorScheme } from "@mantine/core";
 import { Route, Routes } from "react-router";
+import { invoke } from "@tauri-apps/api/core";
 
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
@@ -18,6 +19,19 @@ export default function App() {
   useEffect(() => {
     async function initialize() {
       await loadSettings();
+
+      const state = useGlobalStore.getState();
+      const exploreAslPath = state.settings.exploreAslPath;
+      if (exploreAslPath.trim().length > 0) {
+        try {
+          const version = await invoke<string | null>("detect_exploreasl_version", {
+            exploreAslPath,
+          });
+          state.setExploreAslVersion(version);
+        } catch {
+          // path may not exist; version detection is best-effort
+        }
+      }
     }
 
     void initialize();

@@ -27,7 +27,7 @@ function configureRuntimeSettings() {
     settings: {
       ...DEFAULT_SETTINGS,
       matlabInstallations: [
-        { id: "matlab-1", label: "MATLAB R2025b", path: "/opt/matlab/bin/matlab" },
+        { id: "matlab-1", label: "MATLAB R2025b", path: "/opt/matlab/bin/matlab", version: "" },
       ],
       exploreAslPath: "/opt/ExploreASL",
     },

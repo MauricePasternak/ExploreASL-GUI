@@ -49,7 +49,7 @@ describe("useGlobalStore", () => {
     useGlobalStore.getState().setTheme("dark");
     useGlobalStore.getState().setExploreAslPath("/srv/exploreasl");
     useGlobalStore.getState().setMatlabInstallations([
-      { id: "matlab-1", label: "MATLAB R2025a", path: "/usr/local/bin/matlab" },
+      { id: "matlab-1", label: "MATLAB R2025a", path: "/usr/local/bin/matlab", version: "" },
     ]);
     useGlobalStore.getState().addRecentProject("/tmp/a/project.easl");
 

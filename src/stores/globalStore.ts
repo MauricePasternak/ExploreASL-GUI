@@ -15,6 +15,7 @@ interface GlobalState {
   saveSettings: () => Promise<void>;
   setMatlabInstallations: (list: MatlabInstallation[]) => void;
   setExploreAslPath: (path: string) => void;
+  setExploreAslVersion: (version: string | null) => void;
   setTheme: (theme: "light" | "dark") => void;
   setTokenSubDelimiters: (delimiters: string[]) => void;
   setPreserveStagingDir: (preserve: boolean) => void;
@@ -110,6 +111,12 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
   setExploreAslPath: (path) => {
     set((state) => ({
       settings: { ...state.settings, exploreAslPath: path },
+    }));
+  },
+
+  setExploreAslVersion: (version) => {
+    set((state) => ({
+      settings: { ...state.settings, exploreAslVersion: version ?? "" },
     }));
   },
 

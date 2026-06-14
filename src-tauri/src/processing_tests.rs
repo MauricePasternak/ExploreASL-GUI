@@ -633,4 +633,71 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
     }
+
+    // -------------------------------------------------------------------------
+    // get_exploreasl_version
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn get_exploreasl_version_finds_version_file() {
+        let root = unique_temp_path("version-find");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("VERSION_1.11.0"), "").unwrap();
+
+        let version = get_exploreasl_version(&root);
+
+        assert_eq!(version, Some("1.11.0".to_string()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn get_exploreasl_version_finds_beta_version() {
+        let root = unique_temp_path("version-beta");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("VERSION_2.0.0_BETA"), "").unwrap();
+
+        let version = get_exploreasl_version(&root);
+
+        assert_eq!(version, Some("2.0.0_BETA".to_string()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn get_exploreasl_version_returns_none_when_no_version_file() {
+        let root = unique_temp_path("version-none");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("ExploreASL.m"), "").unwrap();
+        fs::write(root.join("README.md"), "").unwrap();
+
+        let version = get_exploreasl_version(&root);
+
+        assert_eq!(version, None);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn get_exploreasl_version_returns_none_when_dir_missing() {
+        let root = unique_temp_path("version-missing");
+
+        let version = get_exploreasl_version(&root);
+
+        assert_eq!(version, None);
+    }
+
+    #[test]
+    fn get_exploreasl_version_returns_first_when_multiple() {
+        let root = unique_temp_path("version-multi");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("VERSION_1.11.0"), "").unwrap();
+        fs::write(root.join("VERSION_2.0.0_BETA"), "").unwrap();
+
+        let version = get_exploreasl_version(&root);
+
+        assert!(version == Some("1.11.0".to_string()) || version == Some("2.0.0_BETA".to_string()));
+
+        let _ = fs::remove_dir_all(root);
+    }
 }
