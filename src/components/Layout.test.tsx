@@ -50,7 +50,7 @@ describe("Layout", () => {
   it("renders the global shell without a project navbar", () => {
     renderLayout();
 
-    expect(screen.getByText("ExploreASL GUI")).toBeInTheDocument();
+    expect(screen.getByAltText("ExploreASL GUI")).toBeInTheDocument();
     expect(screen.getByText("Landing content")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /import/i })).not.toBeInTheDocument();
   });
