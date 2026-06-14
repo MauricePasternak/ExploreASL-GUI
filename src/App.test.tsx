@@ -30,6 +30,6 @@ describe("App", () => {
       </MantineProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: /exploreasl gui/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /welcome to exploreasl/i })).toBeInTheDocument();
   });
 });

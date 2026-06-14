@@ -5,12 +5,14 @@ import {
   Button,
   Burger,
   Group,
+  Image,
   Modal,
   NavLink,
   Stack,
   Text,
   Tooltip,
 } from "@mantine/core";
+import appLogo from "../../src-tauri/icons/easl_gui_logo.png";
 import { notifications } from "@mantine/notifications";
 import { useDisclosure } from "@mantine/hooks";
 import {
@@ -126,7 +128,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         <Group h="100%" px="md" justify="space-between">
           <Group gap="sm">
             {project ? <Burger opened={opened} onClick={toggle} size="sm" hiddenFrom="sm" data-testid="layout-mobile-nav-toggle" /> : null}
-            <Text fw={700}>ExploreASL GUI</Text>
+            <Image src={appLogo} alt="ExploreASL GUI" h={32} w={32} style={{ flexShrink: 0 }} />
             {project ? <Text c="dimmed">{project.projectMeta.name}</Text> : null}
           </Group>
 

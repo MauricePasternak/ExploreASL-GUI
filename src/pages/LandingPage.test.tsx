@@ -39,7 +39,7 @@ describe("LandingPage", () => {
       </MantineProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: /exploreasl gui/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /welcome to exploreasl/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /new project/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /open project/i })).toBeInTheDocument();
 
