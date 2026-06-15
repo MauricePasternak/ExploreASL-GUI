@@ -35,6 +35,9 @@ interface SubjectRow extends SubjectInfo {
   _populationStatus: ModuleDisplayStatus;
   /** derived overall status for filtering */
   _overallStatus: FilterValue;
+  /** log file info for columns */
+  _structuralLogInfo?: LogFileInfo[];
+  _aslLogInfo?: LogFileInfo[];
 }
 
 type ModuleDisplayStatus = "complete" | "incomplete" | "pending" | "skipped";
@@ -183,8 +186,8 @@ function buildColumns(
       render: (row) => <StatusIcon status={row._structuralStatus} processingPhase={processingPhase} />,
     },
     {
-      accessor: "_structuralLogInfo" as keyof SubjectRow,
-      title: <>Structural<br/>Logs</>,
+      accessor: "_structuralLogInfo",
+      title: <>Structural<br/>Logs/Errors</>,
       textAlign: "center",
       render: (row) => {
         if (row._structuralStatus === "skipped") return null;
@@ -214,8 +217,8 @@ function buildColumns(
       render: (row) => <StatusIcon status={row._aslStatus} processingPhase={processingPhase} />,
     },
     {
-      accessor: "_aslLogInfo" as keyof SubjectRow,
-      title: <>ASL<br/>Logs</>,
+      accessor: "_aslLogInfo",
+      title: <>ASL<br/>Logs/Errors</>,
       textAlign: "center",
       render: (row) => {
         if (row._aslStatus === "skipped") return null;
@@ -258,6 +261,8 @@ export default function SubjectSelection() {
   const [modalModule, setModalModule] = useState<"structural" | "asl">("structural");
   const [modalSubjectSession, setModalSubjectSession] = useState("");
   const [modalContent, setModalContent] = useState<LogContent | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectRoot) return;
@@ -303,11 +308,16 @@ export default function SubjectSelection() {
       setModalModule(module);
       setModalSubjectSession(subjectSession);
       setModalOpened(true);
+      setModalLoading(true);
+      setModalError(null);
       try {
         const content = await fetchLogContent(projectRoot, subjectSession, module);
         setModalContent(content);
       } catch {
-        setModalContent({});
+        setModalError("Failed to load log content");
+        setModalContent(null);
+      } finally {
+        setModalLoading(false);
       }
     },
     [projectRoot],
@@ -316,6 +326,8 @@ export default function SubjectSelection() {
   const handleCloseModal = useCallback(() => {
     setModalOpened(false);
     setModalContent(null);
+    setModalLoading(false);
+    setModalError(null);
   }, []);
 
   const [filter, setFilter] = useState<FilterValue>("all");
@@ -346,6 +358,8 @@ export default function SubjectSelection() {
         _aslStatus: asl,
         _populationStatus: population,
         _overallStatus: deriveOverallStatus(structural, asl, population),
+        _structuralLogInfo: structuralLogInfo.get(info.subjectSession),
+        _aslLogInfo: aslLogInfo.get(info.subjectSession),
       };
     });
   }, [availableSubjects, subjectStatuses, selectedSet]);
@@ -397,6 +411,18 @@ export default function SubjectSelection() {
     () => buildColumns(processingPhase, structuralLogInfo, aslLogInfo, handleViewLog),
     [processingPhase, structuralLogInfo, aslLogInfo, handleViewLog],
   );
+
+  const modalRunErrorMap = useMemo(() => {
+    const files = modalModule === "structural"
+      ? structuralLogInfo.get(modalSubjectSession)
+      : aslLogInfo.get(modalSubjectSession);
+    if (!files) return {};
+    const map: Record<string, boolean> = {};
+    for (const f of files) {
+      map[f.filename] = f.hasError;
+    }
+    return map;
+  }, [modalModule, modalSubjectSession, structuralLogInfo, aslLogInfo]);
 
   const statusCounts = useMemo(() => {
     const counts = { all: rows.length, pending: 0, incomplete: 0, complete: 0 };
@@ -486,6 +512,9 @@ export default function SubjectSelection() {
         logContent={modalContent}
         module={modalModule}
         subjectSession={modalSubjectSession}
+        loading={modalLoading}
+        error={modalError}
+        runErrorMap={modalRunErrorMap}
       />
     </Stack>
   );
