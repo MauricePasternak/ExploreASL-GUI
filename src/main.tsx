@@ -21,8 +21,20 @@ import { useImportStore } from "./stores/importStore";
 import { useProjectStore } from "./stores/projectStore";
 
 const theme = createTheme({
-  primaryColor: "red",
+  primaryColor: "teal",
   colors: {
+    teal: [
+      "#e3fafc",
+      "#c5f6fa",
+      "#99e9f2",
+      "#66d9e8",
+      "#3bc9db",
+      "#15aabf",
+      "#0c8599",
+      "#0b7285",
+      "#09677a",
+      "#084e5b",
+    ],
     red: [
       "#fff5f5",
       "#ffe3e3",

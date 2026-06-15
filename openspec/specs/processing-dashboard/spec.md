@@ -11,19 +11,41 @@ The processing route SHALL be `/project/:id/processing`. It SHALL be inaccessibl
 - **THEN** the app SHALL redirect to `/project/:id/import`
 
 ### Requirement: Subject Selection DataTable
-The processing page SHALL display a Mantine DataTable with checkboxes for subject/session selection. Columns SHALL include: checkbox, subject, session, Structural status icon, ASL status icon, Population status icon. Above the table, filter chips SHALL allow filtering by status: All, Pending, Incomplete, Complete. "Select all" and "Deselect all" buttons SHALL be provided.
+The processing page SHALL display a Mantine DataTable with checkboxes for subject/session selection. Columns SHALL include: checkbox, subject, session, Structural status icon, Structural Logs/Errors, ASL status icon, ASL Logs/Errors, Population status icon. Above the table, filter chips SHALL allow filtering by status: All, Pending, Incomplete, Complete. "Select all" and "Deselect all" buttons SHALL be provided.
+
+The two new columns SHALL render as follows:
+- **Has log, no error**: teal `Badge` with text "View Logs", clickable to open LogViewerModal
+- **Has log, has error**: red `Badge` with text "View Errors", clickable to open LogViewerModal
+- **No log file, module not skipped**: grey text "No Logs"
+- **Module skipped**: empty cell (no content)
 
 #### Scenario: Status icons reflect lock file state
 - **WHEN** a SubjectSession has `999_ready.status` for Structural module
-- **THEN** the Structural column SHALL show a green checkmark icon
+- **THEN** the Structural status column SHALL show a green checkmark icon
 
 #### Scenario: ASL module unavailable for subject
 - **WHEN** a SubjectSession's `rawdata/sub-X/ses-Y/` lacks a `perf/` subdirectory
-- **THEN** the ASL column SHALL show a "skipped" icon and the cell SHALL be marked as unavailable
+- **THEN** the ASL status column SHALL show a "skipped" icon and the ASL Logs/Errors column SHALL show an empty cell
 
 #### Scenario: Filter by incomplete
 - **WHEN** the user clicks the "Incomplete" filter chip
 - **THEN** the table SHALL show only SubjectSessions where at least one module has status "incomplete"
+
+#### Scenario: Subject with errored ASL log
+- **WHEN** `list_module_logs` returns `has_error: true` for an ASL log file belonging to subject "sub-001" session "01"
+- **THEN** the ASL Logs/Errors column for that row SHALL display a red Badge labeled "View Errors"
+
+#### Scenario: Subject with completed Structural log
+- **WHEN** `list_module_logs` returns a Structural log file with `has_error: false` for subject "sub-001" session "01"
+- **THEN** the Structural Logs/Errors column for that row SHALL display a teal Badge labeled "View Logs"
+
+#### Scenario: Subject with no log file yet
+- **WHEN** `list_module_logs` returns no entries for subject "sub-001" session "01" for the Structural module
+- **THEN** the Structural Logs/Errors column for that row SHALL display grey text "No Logs"
+
+#### Scenario: Skipped module shows nothing
+- **WHEN** a subject session has `hasStructural: false`
+- **THEN** the Structural Logs/Errors column for that row SHALL show an empty cell
 
 ### Requirement: Pipeline Configuration Panel
 The pipeline configuration panel SHALL include: MATLAB version dropdown (populated from global settings `matlabInstallations`), module checkboxes (Structural, ASL, Population — at least one required), and worker count number input with default `Math.min(ceil(availableMemory / 4GB), cpuCores, 4)` and hard cap at `cpuCores`. When Population is selected, worker count SHALL be forced to 1 with a visible warning.

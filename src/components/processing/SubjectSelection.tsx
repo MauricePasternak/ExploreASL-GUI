@@ -200,7 +200,7 @@ function buildColumns(
           <Badge
             size="sm"
             color={hasError ? "red" : "teal"}
-            variant="light"
+            variant="outline"
             style={{ cursor: "pointer" }}
             onClick={() => onViewLog(row.subjectSession, "structural")}
             data-testid={hasError ? "view-structural-errors" : "view-structural-logs"}
@@ -231,7 +231,7 @@ function buildColumns(
           <Badge
             size="sm"
             color={hasError ? "red" : "teal"}
-            variant="light"
+            variant="outline"
             style={{ cursor: "pointer" }}
             onClick={() => onViewLog(row.subjectSession, "asl")}
             data-testid={hasError ? "view-asl-errors" : "view-asl-logs"}

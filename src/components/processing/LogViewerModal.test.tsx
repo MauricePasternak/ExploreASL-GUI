@@ -64,14 +64,21 @@ describe("LogViewerModal", () => {
     expect(screen.getByTestId("log-content-pre")).toBeInTheDocument();
   });
 
-  it("highlights error lines with red background", () => {
+  it("highlights error lines with red background for ERROR and Error but not lowercase error", () => {
     renderModal({
       opened: true,
-      logContent: { "xASL_module_Structural_sub-001_01.log": "Normal line\nERROR: something failed\nAfter error" },
+      logContent: {
+        "xASL_module_Structural_sub-001_01.log":
+          "Normal line\nERROR: something failed\nError: another thing failed\nSome lowercase error in text\nAfter error",
+      },
       module: "structural",
     });
     const lines = screen.getAllByTestId(/^log-line-/);
+    expect(lines[0].style.backgroundColor).toBeFalsy();
     expect(lines[1].style.backgroundColor).toBeTruthy();
+    expect(lines[2].style.backgroundColor).toBeTruthy();
+    expect(lines[3].style.backgroundColor).toBeFalsy();
+    expect(lines[4].style.backgroundColor).toBeFalsy();
   });
 
   it("shows ERRORS DETECTED badge when hasError", () => {

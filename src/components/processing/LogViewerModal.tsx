@@ -10,9 +10,8 @@ interface LogLine {
 }
 
 function classifyLine(text: string): LogLine["type"] {
-  const lower = text.toLowerCase();
-  if (lower.includes("error")) return "error";
-  if (lower.includes("warning")) return "warning";
+  if (text.includes("ERROR") || text.includes("Error")) return "error";
+  if (text.toLowerCase().includes("warning")) return "warning";
   return "default";
 }
 
