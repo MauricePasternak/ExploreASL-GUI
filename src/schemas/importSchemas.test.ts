@@ -248,8 +248,8 @@ describe("BidsAslMetadataSchema", () => {
 
   it("accepts string representation of number or array of numbers and parses it", () => {
     // Single integer
-    expect(BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "1234" })).toMatchObject({
-      PostLabelingDelay: 1234,
+    expect(BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "2" })).toMatchObject({
+      PostLabelingDelay: 2,
     });
     // Single float
     expect(BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "3.14" })).toMatchObject({
@@ -374,6 +374,38 @@ describe("BidsAslMetadataSchema", () => {
       })
     ).toMatchObject({ M0Type: "Separate" });
   });
+
+  it("rejects PostLabelingDelay, BolusCutOffDelayTime, and LabelingDuration values outside [0.01, 10] range (excluding 0)", () => {
+    // PostLabelingDelay too high (e.g. milliseconds)
+    expect(() =>
+      BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: 1800 })
+    ).toThrow();
+    // PostLabelingDelay too low (excluding 0)
+    expect(() =>
+      BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: 0.005 })
+    ).toThrow();
+    // BolusCutOffDelayTime too high
+    expect(() =>
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        ArterialSpinLabelingType: "PASL",
+        BolusCutOffFlag: true,
+        BolusCutOffDelayTime: 1200,
+        BolusCutOffTechnique: "Q2TIPS",
+      })
+    ).toThrow();
+    // LabelingDuration too high
+    expect(() =>
+      BidsAslMetadataSchema.parse({ ...validBase, LabelingDuration: 1500 })
+    ).toThrow();
+    // Accepts 0 as a valid special value
+    expect(
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        PostLabelingDelay: [1.8, 0, 2.0],
+      })
+    ).toMatchObject({ PostLabelingDelay: [1.8, 0, 2.0] });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -496,6 +528,17 @@ describe("validateBidsMetadataGroup", () => {
     };
     const errors = validateBidsMetadataGroup(data);
     expect(errors).toContain("Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions.");
+  });
+
+  it("flags values outside [0.01, 10] range (excluding 0) for ASL parameters", () => {
+    const data = {
+      ...validData,
+      PostLabelingDelay: [1800], // ms instead of seconds
+      LabelingDuration: [0.002], // too small
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain("Post Labeling Delay must be between 0.01 and 10 seconds.");
+    expect(errors).toContain("Labeling Duration must be between 0.01 and 10 seconds.");
   });
 });
 

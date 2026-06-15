@@ -350,12 +350,32 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
 							message: "Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions",
 							path: ["BolusCutOffDelayTime"],
 						});
-						break;
 					}
 				}
 			}
 		}
 	}
+
+	const validateRange = (val: unknown, fieldName: string, label: string) => {
+		if (val === undefined || val === null) return;
+		const arr = Array.isArray(val) ? val : [val];
+		for (const v of arr) {
+			if (typeof v === "number" && !Number.isNaN(v)) {
+				if (v !== 0 && (v < 0.01 || v > 10)) {
+					ctx.addIssue({
+						code: z.ZodIssueCode.custom,
+						message: `${label} must be between 0.01 and 10 seconds`,
+						path: [fieldName],
+					});
+					break;
+				}
+			}
+		}
+	};
+
+	validateRange(data.PostLabelingDelay, "PostLabelingDelay", "Post Labeling Delay");
+	validateRange(data.BolusCutOffDelayTime, "BolusCutOffDelayTime", "Bolus Cut Off Delay Time");
+	validateRange(data.LabelingDuration, "LabelingDuration", "Labeling Duration");
 }
 
 export const BidsAslMetadataBaseSchema = z
@@ -651,6 +671,23 @@ export function validateBidsMetadataGroup(params: BidsAslMetadata): string[] {
 			}
 		}
 	}
+
+	const validateRange = (val: unknown, label: string) => {
+		if (val === undefined || val === null) return;
+		const arr = Array.isArray(val) ? val : [val];
+		for (const v of arr) {
+			if (typeof v === "number" && !Number.isNaN(v)) {
+				if (v !== 0 && (v < 0.01 || v > 10)) {
+					errors.push(`${label} must be between 0.01 and 10 seconds.`);
+					break;
+				}
+			}
+		}
+	};
+
+	validateRange(params.PostLabelingDelay, "Post Labeling Delay");
+	validateRange(params.BolusCutOffDelayTime, "Bolus Cut Off Delay Time");
+	validateRange(params.LabelingDuration, "Labeling Duration");
 
 	return errors;
 }
