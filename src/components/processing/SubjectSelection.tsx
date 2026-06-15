@@ -15,6 +15,10 @@ import {
 import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";
+import { useProjectStore } from "../../stores/projectStore";
+import type { LogFileInfo, LogContent } from "../../lib/logViewer";
+import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
+import LogViewerModal from "./LogViewerModal";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -145,7 +149,12 @@ const FILTER_OPTIONS = [
 // Columns
 // ---------------------------------------------------------------------------
 
-function buildColumns(processingPhase: string): DataTableColumn<SubjectRow>[] {
+function buildColumns(
+  processingPhase: string,
+  structuralLogInfo: Map<string, LogFileInfo[]>,
+  aslLogInfo: Map<string, LogFileInfo[]>,
+  onViewLog: (subjectSession: string, module: "structural" | "asl") => void,
+): DataTableColumn<SubjectRow>[] {
   return [
     {
       accessor: "subject",
@@ -174,10 +183,60 @@ function buildColumns(processingPhase: string): DataTableColumn<SubjectRow>[] {
       render: (row) => <StatusIcon status={row._structuralStatus} processingPhase={processingPhase} />,
     },
     {
+      accessor: "_structuralLogInfo" as keyof SubjectRow,
+      title: <>Structural<br/>Logs</>,
+      textAlign: "center",
+      render: (row) => {
+        if (row._structuralStatus === "skipped") return null;
+        const files = structuralLogInfo.get(row.subjectSession);
+        if (!files || files.length === 0) {
+          return <Text size="xs" c="dimmed" data-testid="no-structural-logs">No Logs</Text>;
+        }
+        const hasError = files.some((f) => f.hasError);
+        return (
+          <Badge
+            size="sm"
+            color={hasError ? "red" : "teal"}
+            variant="light"
+            style={{ cursor: "pointer" }}
+            onClick={() => onViewLog(row.subjectSession, "structural")}
+            data-testid={hasError ? "view-structural-errors" : "view-structural-logs"}
+          >
+            {hasError ? "View Errors" : "View Logs"}
+          </Badge>
+        );
+      },
+    },
+    {
       accessor: "_aslStatus",
       title: <>ASL<br/>Status</>,
       textAlign: "center",
       render: (row) => <StatusIcon status={row._aslStatus} processingPhase={processingPhase} />,
+    },
+    {
+      accessor: "_aslLogInfo" as keyof SubjectRow,
+      title: <>ASL<br/>Logs</>,
+      textAlign: "center",
+      render: (row) => {
+        if (row._aslStatus === "skipped") return null;
+        const files = aslLogInfo.get(row.subjectSession);
+        if (!files || files.length === 0) {
+          return <Text size="xs" c="dimmed" data-testid="no-asl-logs">No Logs</Text>;
+        }
+        const hasError = files.some((f) => f.hasError);
+        return (
+          <Badge
+            size="sm"
+            color={hasError ? "red" : "teal"}
+            variant="light"
+            style={{ cursor: "pointer" }}
+            onClick={() => onViewLog(row.subjectSession, "asl")}
+            data-testid={hasError ? "view-asl-errors" : "view-asl-logs"}
+          >
+            {hasError ? "View Errors" : "View Logs"}
+          </Badge>
+        );
+      },
     },
   ];
 }
@@ -192,6 +251,72 @@ export default function SubjectSelection() {
   const config = useProcessingStore((s) => s.config);
   const setConfig = useProcessingStore((s) => s.setConfig);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
+  const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
+
+  const [logFiles, setLogFiles] = useState<Map<string, LogFileInfo[]>>(new Map());
+  const [modalOpened, setModalOpened] = useState(false);
+  const [modalModule, setModalModule] = useState<"structural" | "asl">("structural");
+  const [modalSubjectSession, setModalSubjectSession] = useState("");
+  const [modalContent, setModalContent] = useState<LogContent | null>(null);
+
+  useEffect(() => {
+    if (!projectRoot) return;
+    fetchModuleLogs(projectRoot).then((files) => {
+      const map = new Map<string, LogFileInfo[]>();
+      for (const f of files) {
+        const key = `${f.subjectSession}:${f.module}`;
+        const existing = map.get(key) ?? [];
+        existing.push(f);
+        map.set(key, existing);
+      }
+      setLogFiles(map);
+    }).catch(() => {
+      setLogFiles(new Map());
+    });
+  }, [projectRoot]);
+
+  const structuralLogInfo = useMemo(() => {
+    const map = new Map<string, LogFileInfo[]>();
+    for (const [key, files] of logFiles) {
+      if (key.endsWith(":structural")) {
+        const ss = key.replace(/:structural$/, "");
+        map.set(ss, files);
+      }
+    }
+    return map;
+  }, [logFiles]);
+
+  const aslLogInfo = useMemo(() => {
+    const map = new Map<string, LogFileInfo[]>();
+    for (const [key, files] of logFiles) {
+      if (key.endsWith(":asl")) {
+        const ss = key.replace(/:asl$/, "");
+        map.set(ss, files);
+      }
+    }
+    return map;
+  }, [logFiles]);
+
+  const handleViewLog = useCallback(
+    async (subjectSession: string, module: "structural" | "asl") => {
+      if (!projectRoot) return;
+      setModalModule(module);
+      setModalSubjectSession(subjectSession);
+      setModalOpened(true);
+      try {
+        const content = await fetchLogContent(projectRoot, subjectSession, module);
+        setModalContent(content);
+      } catch {
+        setModalContent({});
+      }
+    },
+    [projectRoot],
+  );
+
+  const handleCloseModal = useCallback(() => {
+    setModalOpened(false);
+    setModalContent(null);
+  }, []);
 
   const [filter, setFilter] = useState<FilterValue>("all");
   const [page, setPage] = useState(1);
@@ -268,7 +393,10 @@ export default function SubjectSelection() {
     updateSubjects([]);
   }, [updateSubjects]);
 
-  const columns = useMemo(() => buildColumns(processingPhase), [processingPhase]);
+  const columns = useMemo(
+    () => buildColumns(processingPhase, structuralLogInfo, aslLogInfo, handleViewLog),
+    [processingPhase, structuralLogInfo, aslLogInfo, handleViewLog],
+  );
 
   const statusCounts = useMemo(() => {
     const counts = { all: rows.length, pending: 0, incomplete: 0, complete: 0 };
@@ -352,6 +480,13 @@ export default function SubjectSelection() {
           data-testid="subject-table"
         />
       </Box>
+      <LogViewerModal
+        opened={modalOpened}
+        onClose={handleCloseModal}
+        logContent={modalContent}
+        module={modalModule}
+        subjectSession={modalSubjectSession}
+      />
     </Stack>
   );
 }
