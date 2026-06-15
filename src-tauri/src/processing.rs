@@ -62,6 +62,45 @@ pub struct SubjectModuleStatus {
   pub locked: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogFileInfo {
+    pub filename: String,
+    pub module: String,
+    pub subject_session: String,
+    pub run: Option<String>,
+    pub has_error: bool,
+}
+
+fn check_log_for_error(path: &std::path::Path) -> bool {
+    let file_size = match fs::metadata(path) {
+        Ok(m) => m.len(),
+        Err(_) => return false,
+    };
+
+    let offset = if file_size > 2048 { file_size - 2048 } else { 0 };
+    let mut file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+
+    use std::io::{Read, Seek, SeekFrom};
+    if offset > 0 {
+        if file.seek(SeekFrom::Start(offset)).is_err() {
+            return false;
+        }
+    }
+
+    let mut buf = vec![0u8; 2048];
+    let bytes_read = match file.read(&mut buf) {
+        Ok(n) => n,
+        Err(_) => return false,
+    };
+
+    let content = String::from_utf8_lossy(&buf[..bytes_read]);
+    content.to_lowercase().contains("error")
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkerExited {
@@ -285,6 +324,143 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
 
   trace.success(&statuses);
   Ok(statuses)
+}
+
+#[tauri::command]
+pub fn list_module_logs(project_root: String) -> Result<Vec<LogFileInfo>, String> {
+    let trace = CommandTrace::new("list_module_logs");
+    trace.arg("project_root", &project_root);
+
+    let project_root = PathBuf::from(project_root);
+    let log_dir = project_root
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("log");
+
+    if !log_dir.exists() {
+        trace.success(&Vec::<LogFileInfo>::new());
+        return Ok(Vec::new());
+    }
+
+    let subject_session_re =
+        regex::Regex::new(r"sub-[^_]+_\d+").expect("subject_session pattern should compile");
+
+    let asl_run_re =
+        regex::Regex::new(r"_ASL_(\d+)\.").expect("ASL run pattern should compile");
+
+    let mut results = Vec::new();
+
+    let entries = fs::read_dir(&log_dir).map_err(|e| {
+        format!("Failed to read log dir {}: {}", log_dir.display(), e)
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+
+        let module = if file_name.starts_with("xASL_module_Structural") {
+            "structural"
+        } else if file_name.starts_with("xASL_module_ASL") {
+            "asl"
+        } else {
+            continue;
+        };
+
+        let subject_session = subject_session_re
+            .find(&file_name)
+            .map(|m| m.as_str().to_string());
+
+        let subject_session_val = match subject_session {
+            Some(s) => s,
+            None => continue,
+        };
+
+        let run = if module == "asl" {
+            asl_run_re
+                .captures(&file_name)
+                .and_then(|caps| caps.get(1))
+                .map(|m| m.as_str().to_string())
+        } else {
+            None
+        };
+
+        let has_error = check_log_for_error(&entry.path());
+
+        results.push(LogFileInfo {
+            filename: file_name,
+            module: module.to_string(),
+            subject_session: subject_session_val,
+            run,
+            has_error,
+        });
+    }
+
+    trace.success(&results);
+    Ok(results)
+}
+
+#[tauri::command]
+pub fn read_module_logs(
+    project_root: String,
+    subject_session: String,
+    module: String,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let trace = CommandTrace::new("read_module_logs");
+    trace.arg("project_root", &project_root);
+    trace.arg("subject_session", &subject_session);
+    trace.arg("module", &module);
+
+    let project_root = PathBuf::from(&project_root);
+    let log_dir = project_root
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("log");
+
+    if !log_dir.exists() {
+        trace.success(&std::collections::HashMap::<String, String>::new());
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let module_prefix = match module.as_str() {
+        "structural" => "xASL_module_Structural",
+        "asl" => "xASL_module_ASL",
+        _ => return Err(format!("Unknown module: {}", module)),
+    };
+
+    let search_prefix = format!("{}_{}", module_prefix, subject_session);
+
+    let mut results = std::collections::HashMap::new();
+
+    let entries = fs::read_dir(&log_dir).map_err(|e| {
+        format!("Failed to read log dir {}: {}", log_dir.display(), e)
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+
+        if !file_name.starts_with(&search_prefix) {
+            continue;
+        }
+
+        let content = match fs::read_to_string(entry.path()) {
+            Ok(c) => c,
+            Err(_) => {
+                let bytes = match fs::read(&entry.path()) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        return Err(format!("Failed to read log file {}: {}", file_name, e));
+                    }
+                };
+                String::from_utf8_lossy(&bytes).to_string()
+            }
+        };
+
+        results.insert(file_name, content);
+    }
+
+    trace.success(&results);
+    Ok(results)
 }
 
 fn escape_matlab_string(value: &str) -> String {

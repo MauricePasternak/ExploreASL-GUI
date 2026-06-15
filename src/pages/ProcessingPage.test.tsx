@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -67,6 +67,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn((cmd: string) => {
     if (cmd === "get_cpu_cores") return Promise.resolve(8);
     if (cmd === "get_available_memory_mb") return Promise.resolve(16384);
+    if (cmd === "list_module_logs") return Promise.resolve([]);
     return Promise.resolve(null);
   }),
 }));
@@ -148,5 +149,12 @@ describe("ProcessingPage", () => {
   it("renders worker count input", () => {
     renderPage();
     expect(screen.getByTestId("worker-count-input")).toBeInTheDocument();
+  });
+
+  it("renders LogViewerModal as part of log column integration", async () => {
+    renderPage();
+    // LogViewerModal is always rendered (closed) by SubjectSelection
+    const modal = await screen.findByTestId("log-viewer-modal");
+    expect(modal).toBeInTheDocument();
   });
 });
