@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -151,10 +151,8 @@ describe("ProcessingPage", () => {
     expect(screen.getByTestId("worker-count-input")).toBeInTheDocument();
   });
 
-  it("renders LogViewerModal as part of log column integration", async () => {
+  it("renders LogViewerModal as part of log column integration", () => {
     renderPage();
-    // LogViewerModal is always rendered (closed) by SubjectSelection
-    const modal = await screen.findByTestId("log-viewer-modal");
-    expect(modal).toBeInTheDocument();
+    expect(screen.getByTestId("log-viewer-modal")).toBeInTheDocument();
   });
 });

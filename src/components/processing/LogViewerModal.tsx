@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from "react";
-import { Badge, Box, Modal, Select, Stack } from "@mantine/core";
+import { Alert, Badge, Box, Loader, Modal, Select, Stack } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 
 import type { LogContent } from "../../lib/logViewer";
@@ -35,6 +35,9 @@ interface LogViewerModalProps {
   logContent: LogContent | null;
   module: "structural" | "asl";
   subjectSession: string;
+  loading?: boolean;
+  error?: string | null;
+  runErrorMap?: Record<string, boolean>;
 }
 
 export default function LogViewerModal({
@@ -43,6 +46,9 @@ export default function LogViewerModal({
   logContent,
   module,
   subjectSession,
+  loading = false,
+  error = null,
+  runErrorMap = {},
 }: LogViewerModalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -56,20 +62,19 @@ export default function LogViewerModal({
       return entries.map(([filename]) => ({
         value: filename,
         label: "Structural Log",
-        hasError: checkEntryError(logContent!, filename),
+        hasError: runErrorMap[filename] ?? false,
       }));
     }
     return entries.map(([filename]) => {
       const match = filename.match(/_ASL_(\d+)\.log$/);
       const runNum = match ? match[1] : "1";
-      const hasErr = checkEntryError(logContent!, filename);
       return {
         value: filename,
         label: `Run ${runNum}`,
-        hasError: hasErr,
+        hasError: runErrorMap[filename] ?? false,
       };
     });
-  }, [entries, module, logContent]);
+  }, [entries, module, runErrorMap]);
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
@@ -126,84 +131,89 @@ export default function LogViewerModal({
       data-testid="log-viewer-modal"
     >
       <Stack gap="sm">
-        {showSelect && (
-          <Select
-            data={runOptions.map((o) => ({
-              value: o.value,
-              label: o.label,
-            }))}
-            value={selectedFile}
-            onChange={(val) => setSelectedFile(val)}
-            renderOption={({ option }) => {
-              const runOpt = runOptions.find((o) => o.value === option.value);
-              return (
-                <span>
-                  {option.label}
-                  {runOpt?.hasError && (
-                    <IconAlertCircle
-                      size={14}
-                      color="var(--mantine-color-red-6)"
-                      style={{ marginLeft: 4, verticalAlign: "middle" }}
-                    />
-                  )}
-                </span>
-              );
-            }}
-            data-testid="log-run-select"
-          />
+        {error && (
+          <Alert color="red" icon={<IconAlertCircle size={16} />} data-testid="log-error-alert">
+            {error}
+          </Alert>
         )}
-        <Box
-          ref={scrollRef}
-          style={{
-            maxHeight: "70vh",
-            overflow: "auto",
-            backgroundColor: "var(--mantine-color-gray-0)",
-            borderRadius: "var(--mantine-radius-sm)",
-            padding: "var(--mantine-spacing-xs)",
-          }}
-          data-testid="log-content-scroll"
-        >
-          <pre
-            style={{ margin: 0, fontSize: "0.8rem", lineHeight: 1.4 }}
-            data-testid="log-content-pre"
-          >
-            {lines.map((line, i) => (
-              <div
-                key={i}
-                style={
-                  line.type === "error"
-                    ? {
-                        backgroundColor: "var(--mantine-color-red-1)",
-                        color: "var(--mantine-color-red-9)",
-                        padding: "0 4px",
-                        borderRadius: 2,
-                      }
-                    : line.type === "warning"
-                      ? {
-                          backgroundColor: "var(--mantine-color-yellow-1)",
-                          color: "var(--mantine-color-yellow-9)",
-                          padding: "0 4px",
-                          borderRadius: 2,
-                        }
-                      : undefined
-                }
-                data-testid={`log-line-${i}`}
+        {loading && !logContent ? (
+          <Box style={{ display: "flex", justifyContent: "center", padding: 40 }} data-testid="log-loading">
+            <Loader />
+          </Box>
+        ) : (
+          <>
+            {showSelect && (
+              <Select
+                data={runOptions.map((o) => ({
+                  value: o.value,
+                  label: o.label,
+                }))}
+                value={selectedFile}
+                onChange={(val) => setSelectedFile(val)}
+                renderOption={({ option }) => {
+                  const runOpt = runOptions.find((o) => o.value === option.value);
+                  return (
+                    <span>
+                      {option.label}
+                      {runOpt?.hasError && (
+                        <IconAlertCircle
+                          size={14}
+                          color="var(--mantine-color-red-6)"
+                          style={{ marginLeft: 4, verticalAlign: "middle" }}
+                        />
+                      )}
+                    </span>
+                  );
+                }}
+                data-testid="log-run-select"
+              />
+            )}
+            <Box
+              ref={scrollRef}
+              style={{
+                maxHeight: "70vh",
+                overflow: "auto",
+                backgroundColor: "var(--mantine-color-gray-0)",
+                borderRadius: "var(--mantine-radius-sm)",
+                padding: "var(--mantine-spacing-xs)",
+              }}
+              data-testid="log-content-scroll"
+            >
+              <pre
+                style={{ margin: 0, fontSize: "0.8rem", lineHeight: 1.4 }}
+                data-testid="log-content-pre"
               >
-                {line.text}
-              </div>
-            ))}
-          </pre>
-        </Box>
+                {lines.map((line, i) => (
+                  <div
+                    key={i}
+                    style={
+                      line.type === "error"
+                        ? {
+                            backgroundColor: "var(--mantine-color-red-1)",
+                            color: "var(--mantine-color-red-9)",
+                            padding: "0 4px",
+                            borderRadius: 2,
+                          }
+                        : line.type === "warning"
+                          ? {
+                              backgroundColor: "var(--mantine-color-yellow-1)",
+                              color: "var(--mantine-color-yellow-9)",
+                              padding: "0 4px",
+                              borderRadius: 2,
+                            }
+                          : undefined
+                    }
+                    data-testid={`log-line-${i}`}
+                  >
+                    {line.text}
+                  </div>
+                ))}
+              </pre>
+            </Box>
+          </>
+        )}
       </Stack>
     </Modal>
   );
 }
 
-function checkEntryError(logContent: LogContent, filename: string): boolean {
-  const content = logContent[filename] ?? "";
-  const lower = content.toLowerCase();
-  if (lower.length > 2048) {
-    return lower.slice(lower.length - 2048).includes("error");
-  }
-  return lower.includes("error");
-}

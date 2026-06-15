@@ -23,6 +23,9 @@ function renderModal(props: {
   logContent?: LogContent | null;
   module?: "structural" | "asl";
   subjectSession?: string;
+  loading?: boolean;
+  error?: string | null;
+  runErrorMap?: Record<string, boolean>;
 }) {
   return render(
     <MantineProvider>
@@ -32,6 +35,9 @@ function renderModal(props: {
         logContent={props.logContent ?? null}
         module={props.module ?? "structural"}
         subjectSession={props.subjectSession ?? "sub-001_01"}
+        loading={props.loading ?? false}
+        error={props.error ?? null}
+        runErrorMap={props.runErrorMap ?? {}}
       />
     </MantineProvider>,
   );
@@ -73,6 +79,7 @@ describe("LogViewerModal", () => {
       opened: true,
       logContent: { "xASL_module_Structural_sub-001_01.log": "ERROR: crash" },
       module: "structural",
+      runErrorMap: { "xASL_module_Structural_sub-001_01.log": true },
     });
     expect(screen.getByTestId("log-error-badge")).toBeInTheDocument();
   });
@@ -94,6 +101,10 @@ describe("LogViewerModal", () => {
         "xASL_module_ASL_sub-001_01_ASL_2.log": "ERROR: run 2 failed",
       },
       module: "asl",
+      runErrorMap: {
+        "xASL_module_ASL_sub-001_01_ASL_1.log": false,
+        "xASL_module_ASL_sub-001_01_ASL_2.log": true,
+      },
     });
     expect(screen.getByTestId("log-run-select")).toBeInTheDocument();
   });
@@ -115,5 +126,17 @@ describe("LogViewerModal", () => {
     expect(modal).toBeInTheDocument();
     const innerModal = modal.closest('[role="dialog"]') ?? modal;
     expect(innerModal).toBeTruthy();
+  });
+
+  it("shows Loader when loading and no content", () => {
+    renderModal({ opened: true, loading: true, logContent: null });
+    expect(screen.getByTestId("log-loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("log-content-pre")).not.toBeInTheDocument();
+  });
+
+  it("shows error alert when error prop is set", () => {
+    renderModal({ opened: true, error: "Failed to load log content", logContent: null });
+    expect(screen.getByTestId("log-error-alert")).toBeInTheDocument();
+    expect(screen.getByText("Failed to load log content")).toBeInTheDocument();
   });
 });
