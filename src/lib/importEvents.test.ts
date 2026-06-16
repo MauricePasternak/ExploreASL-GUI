@@ -208,6 +208,37 @@ describe("setupImportListeners", () => {
     );
     expect(useImportStore.getState().importProgress.DONE.status).toBe("completed");
   });
+
+  it("marks pending subjects failed and sets importPhase to failed on MatlabExitError during initialization", async () => {
+    useImportStore.setState({
+      subjectRows: [
+        { id: "GOOD/01", subject: "GOOD", session: "01", groupId: "global-defaults" },
+        { id: "PENDING_SUBJ/01", subject: "PENDING_SUBJ", session: "01", groupId: "global-defaults" },
+      ],
+    });
+    useImportStore.getState().startImport();
+    useImportStore.getState().setImportPhase("running");
+    // All subjects are still in "pending" status on initialization failure
+
+    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
+      "GOOD",
+      "PENDING_SUBJ",
+    ]);
+
+    emitMatlabExitError(1);
+    await vi.waitFor(() => {
+      expect(useImportStore.getState().importProgress.GOOD.status).toBe("failed");
+      expect(useImportStore.getState().importProgress.PENDING_SUBJ.status).toBe("failed");
+    });
+
+    expect(useImportStore.getState().importProgress.GOOD.error).toBe(
+      "MATLAB process exited unexpectedly",
+    );
+    expect(useImportStore.getState().importProgress.PENDING_SUBJ.error).toBe(
+      "MATLAB process exited unexpectedly",
+    );
+    expect(useImportStore.getState().importPhase).toBe("failed");
+  });
 });
 
 describe("copyLockFilesForRetry", () => {

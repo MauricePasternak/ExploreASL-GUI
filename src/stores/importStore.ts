@@ -1,9 +1,11 @@
 import { create } from "zustand";
 
+import { type ImportSubjectStatus } from "../lib/importStatus";
 import { getMaxRestorableImportStep } from "../lib/importStepAccess";
 
 import type {
   ImportProgress,
+  ImportSnapshot,
   MetadataGroup,
   ModalityAlias,
   PathPattern,
@@ -64,6 +66,13 @@ export interface ImportState {
     errors: string[];
   } | null;
 
+  // Snapshot
+  mostRecentConfig: ImportSnapshot | null;
+
+  // MATLAB selection
+  selectedMatlabPath: string;
+  setSelectedMatlabPath: (path: string) => void;
+
   // Actions
   setActiveStep: (step: number) => void;
   setSourceDataPath: (path: string) => void;
@@ -117,6 +126,9 @@ export interface ImportState {
   setImportRunning: (running: boolean) => void;
   updateImportProgress: (subject: string, progress: ImportProgress) => void;
   setImportSummary: (summary: ImportState["importSummary"]) => void;
+  setMostRecentConfig: (snapshot: ImportSnapshot) => void;
+  applyStaleness: (staleness: Record<string, boolean>) => void;
+  reconstructProgressFromLockFiles: (statuses: ImportSubjectStatus[], subjects: string[], staleness: Record<string, boolean>) => void;
   loadPersistedState: (persisted: Record<string, unknown>) => void;
   resetImport: () => void;
 }
@@ -146,6 +158,8 @@ const INITIAL_STATE = {
   importProgress: {} as Record<string, ImportProgress>,
   importRunning: false,
   importSummary: null as ImportState["importSummary"],
+  mostRecentConfig: null as ImportSnapshot | null,
+  selectedMatlabPath: "",
 };
 
 function subjectProgress(
@@ -323,6 +337,19 @@ export const useImportStore = create<ImportState>((set) => ({
 
   startImport: () => {
     set((state) => {
+      const snapshot: ImportSnapshot = {
+        sourceDataPath: state.sourceDataPath,
+        pathPatterns: state.pathPatterns,
+        tokenizerConfigs: state.tokenizerConfigs,
+        bMatchDirectories: state.bMatchDirectories,
+        modalityAliases: state.modalityAliases,
+        sessionAliases: state.sessionAliases,
+        runAliases: state.runAliases,
+        subjectRenames: state.subjectRenames,
+        metadataGroups: state.metadataGroups,
+        subjectRows: state.subjectRows,
+      };
+
       const rowsBySubject = new Map<string, SubjectRow>();
       for (const row of state.subjectRows) {
         if (!rowsBySubject.has(row.subject)) {
@@ -361,6 +388,7 @@ export const useImportStore = create<ImportState>((set) => ({
         importProgress,
         importRunning: false,
         importSummary: null,
+        mostRecentConfig: snapshot,
       };
     });
   },
@@ -373,16 +401,35 @@ export const useImportStore = create<ImportState>((set) => ({
   },
 
   addLogLine: (line) => {
-    set((state) => ({
-      importLog: [...state.importLog, line],
-    }));
+    set((state) => {
+      const trimmed = line.trim();
+      const isDup = state.importLog.slice(-40).some((l) => l.trim() === trimmed);
+      if (isDup) return {};
+      return {
+        importLog: [...state.importLog, line],
+      };
+    });
   },
 
   addLogLines: (lines) => {
     if (lines.length === 0) return;
-    set((state) => ({
-      importLog: [...state.importLog, ...lines],
-    }));
+    set((state) => {
+      const filtered: string[] = [];
+      const currentLog = [...state.importLog];
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const isDup =
+          currentLog.slice(-40).some((l) => l.trim() === trimmed) ||
+          filtered.slice(-40).some((l) => l.trim() === trimmed);
+        if (!isDup) {
+          filtered.push(line);
+        }
+      }
+      if (filtered.length === 0) return {};
+      return {
+        importLog: [...state.importLog, ...filtered],
+      };
+    });
   },
 
   markSubjectRunning: (subject, step) => {
@@ -528,6 +575,63 @@ export const useImportStore = create<ImportState>((set) => ({
     set({ importSummary: summary });
   },
 
+  setMostRecentConfig: (snapshot) => {
+    set({ mostRecentConfig: snapshot });
+  },
+
+  setSelectedMatlabPath: (path) => {
+    set({ selectedMatlabPath: path });
+  },
+
+  applyStaleness: (staleness) => {
+    set((state) => {
+      const importProgress = { ...state.importProgress };
+      for (const [subject, stale] of Object.entries(staleness)) {
+        if (importProgress[subject]) {
+          importProgress[subject] = { ...importProgress[subject], stale };
+        }
+      }
+      return { importProgress };
+    });
+  },
+
+  reconstructProgressFromLockFiles: (statuses, subjects, staleness) => {
+    set((state) => {
+      if (state.importPhase === "running" || state.importPhase === "preparing") {
+        return {};
+      }
+
+      const statusMap = new Map(statuses.map((s) => [s.subject, s]));
+      const importProgress = { ...state.importProgress };
+
+      for (const subject of subjects) {
+        const lockStatus = statusMap.get(subject);
+        const stale = staleness[subject] ?? false;
+        const existing = importProgress[subject];
+
+        if (lockStatus) {
+          importProgress[subject] = {
+            ...(existing ?? { subject, session: "" }),
+            status: lockStatus.status,
+            stale,
+          };
+        } else {
+          importProgress[subject] = {
+            ...(existing ?? { subject, session: "" }),
+            status: "pending" as const,
+            stale,
+          };
+        }
+
+        if (!importProgress[subject].subject) {
+          importProgress[subject].subject = subject;
+        }
+      }
+
+      return { importProgress };
+    });
+  },
+
   loadPersistedState: (persisted) => {
     const safe = (key: string, fallback: unknown) => {
       const val = (persisted as Record<string, unknown>)[key];
@@ -555,6 +659,7 @@ export const useImportStore = create<ImportState>((set) => ({
       subjectRenames: safe("subjectRenames", INITIAL_STATE.subjectRenames) as SubjectRename[],
       metadataGroups: safe("metadataGroups", INITIAL_STATE.metadataGroups) as MetadataGroup[],
       subjectRows: safe("subjectRows", INITIAL_STATE.subjectRows) as SubjectRow[],
+      mostRecentConfig: (safe("mostRecentConfig", INITIAL_STATE.mostRecentConfig) ?? null) as ImportSnapshot | null,
       importPhase,
       importCompleted,
       importRunning: false,

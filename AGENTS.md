@@ -24,7 +24,8 @@ Tauri v2 desktop GUI wrapping ExploreASL (MATLAB ASL MRI pipeline).
 GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agents MUST translate.
 
 **Test data:** `test/test_project_root/sourcedata/`. GENFI ASL dataset at `test/test_GENFI/` — see its `README.md` for subject details, ASL parameters, and M0 handling quirks.
-**Testing:** `pnpm test` (Vitest + jsdom). Mock Tauri APIs in `src/test/setup.ts`. UNIT TEST schemas, stores, utilities. Component tests for critical paths.
+**Testing:** `pnpm test` (Vitest + jsdom). Mock Tauri APIs in `src/test/setup.tsx`. UNIT TEST schemas, stores, utilities. Component tests for critical paths.
+**Known test artefact:** React 19 + jsdom teardown race causes `ReferenceError: window is not defined` in 0–7 unhandled exceptions per run. These are NOT test failures — they fire when React's scheduler accesses `window` after jsdom teardown between parallel test files. Ignore.
 
 ---
 

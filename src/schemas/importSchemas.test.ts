@@ -540,6 +540,46 @@ describe("validateBidsMetadataGroup", () => {
     expect(errors).toContain("Post Labeling Delay must be between 0.01 and 10 seconds.");
     expect(errors).toContain("Labeling Duration must be between 0.01 and 10 seconds.");
   });
+
+  it("flags unsupported PulseSequenceType + MRAcquisitionType combinations", () => {
+    expect(
+      validateBidsMetadataGroup({
+        ...validData,
+        PulseSequenceType: "EPI",
+        MRAcquisitionType: "3D",
+      }),
+    ).toContain("EPI readout with 3D acquisition is not supported by ExploreASL");
+
+    expect(
+      validateBidsMetadataGroup({
+        ...validData,
+        PulseSequenceType: "GRASE",
+        MRAcquisitionType: "2D",
+      }),
+    ).toContain("GRASE readout with 2D acquisition is not supported by ExploreASL");
+
+    expect(
+      validateBidsMetadataGroup({
+        ...validData,
+        PulseSequenceType: "spiral",
+        MRAcquisitionType: "2D",
+      }),
+    ).toContain("spiral readout with 2D acquisition is not supported by ExploreASL");
+  });
+
+  it("accepts supported PulseSequenceType + MRAcquisitionType combinations", () => {
+    expect(
+      validateBidsMetadataGroup({ ...validData, PulseSequenceType: "EPI", MRAcquisitionType: "2D" }),
+    ).not.toContain(expect.stringContaining("not supported by ExploreASL"));
+
+    expect(
+      validateBidsMetadataGroup({ ...validData, PulseSequenceType: "GRASE", MRAcquisitionType: "3D" }),
+    ).not.toContain(expect.stringContaining("not supported by ExploreASL"));
+
+    expect(
+      validateBidsMetadataGroup({ ...validData, PulseSequenceType: "spiral", MRAcquisitionType: "3D" }),
+    ).not.toContain(expect.stringContaining("not supported by ExploreASL"));
+  });
 });
 
 // ---------------------------------------------------------------------------

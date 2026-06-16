@@ -71,6 +71,12 @@ Hardcoded — part of ExploreASL's contract. Rarely changes.
 **Population:**
 010_CreatePopulationTemplates, 020_CreateAnalysisMask, 030_CreateBiasfield, 040_GetDICOMStatistics, 050_GetVolumeStatistics, 060_GetMotionStatistics, 065_GetRegistrationStatistics, 070_GetROIstatistics, 080_SortBySpatialCoV, 090_DeleteTempFiles, 100_GZipAllFiles, 999_ready
 
+## Import Module
+
+- **Stale import subject**: An import subject whose result may no longer reflect current configuration. Structural config changes (tokenizer, aliases, renames) stale all subjects; metadata group changes stale only subjects in affected groups.
+- **Fresh import subject**: An import subject whose result is still valid — no relevant config has changed since its import run.
+- **Import status**: What happened during the last run: pending, running, completed, failed, or cancelled. Independent of staleness.
+
 ## Key Design Decisions
 
 - **bPVCNativeSpace**: GUI default is `true` (on), overriding ExploreASL's default of `0`. User choice persisted; only explicit user selection written to dataPar.json.

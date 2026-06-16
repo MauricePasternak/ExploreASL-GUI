@@ -42,9 +42,9 @@ export default function ProjectPage() {
     const mappingState = project.mappingState;
     const hasPersistedImportState =
       Object.keys(mappingState).length > 0 ||
-      project.uiState?.importActiveStep !== undefined ||
-      project.uiState?.importPhase !== undefined ||
-      project.uiState?.importCompleted !== undefined;
+      project.uiState?.import?.activeStep !== undefined ||
+      project.uiState?.import?.currentPhase !== undefined ||
+      project.uiState?.import?.completed !== undefined;
 
     if (!hasPersistedImportState) {
       return;
@@ -52,9 +52,9 @@ export default function ProjectPage() {
 
     const persistedState = {
       ...mappingState,
-      activeStep: project.uiState?.importActiveStep,
-      importPhase: project.uiState?.importPhase,
-      importCompleted: project.uiState?.importCompleted,
+      activeStep: project.uiState?.import?.activeStep,
+      importPhase: project.uiState?.import?.currentPhase,
+      importCompleted: project.uiState?.import?.completed,
     };
     loadPersistedState(persistedState as Record<string, unknown>);
   }, [project?.projectMeta.id, loadPersistedState, project]);

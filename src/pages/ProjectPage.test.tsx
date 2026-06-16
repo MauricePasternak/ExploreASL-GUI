@@ -118,8 +118,10 @@ describe("ProjectPage", () => {
             ...state.project,
             uiState: {
               ...state.project.uiState,
-              importCompleted: true,
-              importPhase: "completed",
+              import: {
+                completed: true,
+                currentPhase: "completed",
+              },
             },
             mappingState: {},
           }

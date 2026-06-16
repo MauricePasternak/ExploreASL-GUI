@@ -193,9 +193,11 @@ describe("useProjectStore", () => {
 
     const project = useProjectStore.getState().project;
     expect(project?.uiState).toMatchObject({
-      importActiveStep: 5,
-      importPhase: "completed",
-      importCompleted: true,
+      import: {
+        activeStep: 5,
+        currentPhase: "completed",
+        completed: true,
+      },
     });
     expect(project?.mappingState).not.toHaveProperty("importPhase");
     expect(project?.mappingState).not.toHaveProperty("importCompleted");

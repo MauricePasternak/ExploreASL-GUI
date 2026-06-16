@@ -32,7 +32,7 @@ interface LogViewerModalProps {
   opened: boolean;
   onClose: () => void;
   logContent: LogContent | null;
-  module: "structural" | "asl";
+  module: "structural" | "asl" | "import";
   subjectSession: string;
   loading?: boolean;
   error?: string | null;
@@ -57,10 +57,11 @@ export default function LogViewerModal({
   }, [logContent]);
 
   const runOptions: RunOption[] = useMemo(() => {
-    if (module === "structural") {
+    if (module === "structural" || module === "import") {
+      const label = module === "structural" ? "Structural Log" : "Import Log";
       return entries.map(([filename]) => ({
         value: filename,
-        label: "Structural Log",
+        label,
         hasError: runErrorMap[filename] ?? false,
       }));
     }
@@ -103,7 +104,7 @@ export default function LogViewerModal({
   }, [selectedFile, currentHasError]);
 
   const modalTitle = useMemo(() => {
-    const moduleLabel = module === "structural" ? "Structural" : "ASL";
+    const moduleLabel = module === "structural" ? "Structural" : module === "asl" ? "ASL" : "Import";
     const [sub, ses] = subjectSession.split("_");
     const subLabel = sub ?? subjectSession;
     const sesLabel = ses ? ` / ses-${ses}` : "";

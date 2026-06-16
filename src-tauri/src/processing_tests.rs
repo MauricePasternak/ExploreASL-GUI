@@ -700,4 +700,63 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
     }
+
+    // -------------------------------------------------------------------------
+    // list_module_logs / read_module_logs
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn list_module_logs_finds_import_logs_in_staging_when_project_log_dir_missing() {
+        let root = unique_temp_path("import-staging-logs");
+        let staging_log = root
+            .join(".easl_staging")
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("log");
+        fs::create_dir_all(&staging_log).unwrap();
+        fs::write(
+            staging_log.join("xASL_module_Import_sub-C9ORF007Philips.log"),
+            "ExploreASL import output",
+        )
+        .unwrap();
+
+        let logs = list_module_logs(root.to_string_lossy().to_string())
+            .expect("list_module_logs should succeed");
+
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].module, "import");
+        assert_eq!(logs[0].subject_session, "sub-C9ORF007Philips");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_module_logs_reads_import_logs_from_staging() {
+        let root = unique_temp_path("read-import-staging-logs");
+        let staging_log = root
+            .join(".easl_staging")
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("log");
+        fs::create_dir_all(&staging_log).unwrap();
+        fs::write(
+            staging_log.join("xASL_module_Import_sub-C9ORF007Philips.log"),
+            "import log body",
+        )
+        .unwrap();
+
+        let content = read_module_logs(
+            root.to_string_lossy().to_string(),
+            "sub-C9ORF007Philips".to_string(),
+            "import".to_string(),
+        )
+        .expect("read_module_logs should succeed");
+
+        assert_eq!(
+            content["xASL_module_Import_sub-C9ORF007Philips.log"],
+            "import log body"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

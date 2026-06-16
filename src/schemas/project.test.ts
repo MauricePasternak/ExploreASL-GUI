@@ -56,16 +56,20 @@ describe("ProjectFileSchema", () => {
     const parsed = ProjectFileSchema.parse({
       ...DEFAULT_PROJECT_FILE("project-3", "Import State Project", "/tmp/import-state"),
       uiState: {
-        importActiveStep: 5,
-        importCompleted: true,
-        importPhase: "completed",
+        import: {
+          activeStep: 5,
+          completed: true,
+          currentPhase: "completed",
+        },
       },
     });
 
     expect(parsed.uiState).toMatchObject({
-      importActiveStep: 5,
-      importCompleted: true,
-      importPhase: "completed",
+      import: {
+        activeStep: 5,
+        completed: true,
+        currentPhase: "completed",
+      },
     });
   });
 
@@ -124,7 +128,9 @@ describe("ProjectFileSchema", () => {
       ProjectFileSchema.parse({
         ...DEFAULT_PROJECT_FILE("project-4", "Invalid Import State", "/tmp/invalid"),
         uiState: {
-          importPhase: "done",
+          import: {
+            currentPhase: "done",
+          },
         },
       }),
     ).toThrow();

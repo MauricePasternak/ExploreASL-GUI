@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export const LogFileInfoSchema = z.object({
   filename: z.string(),
-  module: z.enum(["structural", "asl"]),
+  module: z.enum(["structural", "asl", "import"]),
   subjectSession: z.string(),
   run: z.string().nullable().optional().transform(v => v ?? undefined),
   hasError: z.boolean(),
@@ -14,15 +14,27 @@ export const LogContentSchema = z.record(z.string(), z.string());
 export type LogFileInfo = z.infer<typeof LogFileInfoSchema>;
 export type LogContent = z.infer<typeof LogContentSchema>;
 
+/** ExploreASL import log filenames use a `sub-` prefix; GUI subject rows do not. */
+export function importLogSubjectKey(subject: string): string {
+  return subject.startsWith("sub-") ? subject : `sub-${subject}`;
+}
+
+export function importLogSubjectFromSession(subjectSession: string): string {
+  return subjectSession.startsWith("sub-") ? subjectSession.slice(4) : subjectSession;
+}
+
 export async function fetchModuleLogs(projectRoot: string): Promise<LogFileInfo[]> {
   const raw = await invoke<unknown[]>("list_module_logs", { projectRoot });
+  if (!Array.isArray(raw)) {
+    return [];
+  }
   return raw.map((item) => LogFileInfoSchema.parse(item));
 }
 
 export async function fetchLogContent(
   projectRoot: string,
   subjectSession: string,
-  module: "structural" | "asl",
+  module: "structural" | "asl" | "import",
 ): Promise<LogContent> {
   const raw = await invoke<Record<string, string>>("read_module_logs", {
     projectRoot,

@@ -15,6 +15,12 @@ import type { StagingEntry } from "../schemas/importSchemas";
 import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
 
+declare global {
+  interface Window {
+    __IMPORT_CLEANUP__?: () => void;
+  }
+}
+
 // =============================================================================
 // Log batching
 // =============================================================================
@@ -112,6 +118,7 @@ async function runPostProcessing(
   stagingRoot: string,
   projectRoot: string,
   allSubjects: string[],
+  isExitError = false,
 ): Promise<void> {
   const { failedSubjects, completeImport, failImport } =
     useImportStore.getState();
@@ -136,7 +143,7 @@ async function runPostProcessing(
   );
 
   // 3. Move output and update store
-  if (failedSubjects.length === 0) {
+  if (failedSubjects.length === 0 && !isExitError) {
     // All succeeded
     try {
       await invoke("move_import_output", {
@@ -184,6 +191,15 @@ export async function setupImportListeners(
   projectRoot: string,
   allSubjects: string[],
 ): Promise<() => void> {
+  if (typeof window !== "undefined" && window.__IMPORT_CLEANUP__) {
+    try {
+      window.__IMPORT_CLEANUP__();
+    } catch (e) {
+      console.warn("Failed to run previous import cleanup:", e);
+    }
+    window.__IMPORT_CLEANUP__ = undefined;
+  }
+
   const {
     addLogLines,
     setImportPhase,
@@ -257,10 +273,10 @@ export async function setupImportListeners(
   const unlistenExitError = await listen<MatlabExitErrorPayload>(
     "MatlabExitError",
     (_event) => {
-      // Mark all currently-running subjects as failed
+      // Mark all currently-running or pending subjects as failed
       const { importProgress } = useImportStore.getState();
       for (const [subject, progress] of Object.entries(importProgress)) {
-        if (progress.status === "running") {
+        if (progress.status === "running" || progress.status === "pending") {
           markSubjectFailed(
             subject,
             "DCM2NII",
@@ -269,18 +285,27 @@ export async function setupImportListeners(
         }
       }
 
-      void runPostProcessing(stagingRoot, projectRoot, allSubjects);
+      void runPostProcessing(stagingRoot, projectRoot, allSubjects, true);
     },
   );
 
   // Return cleanup function
-  return () => {
+  const cleanup = () => {
     logBatcher.flush();
     unlistenStructured();
     unlistenRaw();
     unlistenPrepare();
     unlistenExitError();
+    if (typeof window !== "undefined" && window.__IMPORT_CLEANUP__ === cleanup) {
+      window.__IMPORT_CLEANUP__ = undefined;
+    }
   };
+
+  if (typeof window !== "undefined") {
+    window.__IMPORT_CLEANUP__ = cleanup;
+  }
+
+  return cleanup;
 }
 
 /**
@@ -296,6 +321,7 @@ export async function runImportPipeline(params: {
   matlabPath: string;
   exploreaslPath: string;
   subjectList: string[];
+  subjectsToPreserve?: string[];
 }): Promise<number> {
   const stagingRoot = `${params.projectRoot}/.easl_staging`;
 
@@ -307,6 +333,7 @@ export async function runImportPipeline(params: {
     matlabPath: params.matlabPath,
     exploreaslPath: params.exploreaslPath,
     subjectList: params.subjectList,
+    subjectsToPreserve: params.subjectsToPreserve ?? null,
   });
 
   return pid;
