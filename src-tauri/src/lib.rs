@@ -6,8 +6,8 @@ mod tracing;
 
 use commands::{create_symlink_tree, get_available_memory_mb, get_cpu_cores, is_writable, walk_directory, which_matlab};
 use import::{
-    clean_import_status, copy_lock_files, move_import_output, run_import_pipeline, stop_import,
-    stop_running_import_for_exit, AppState,
+    clean_import_status, copy_lock_files, move_import_output, read_import_status,
+    run_import_pipeline, stop_import, stop_running_import_for_exit, AppState,
 };
 use processing::{clear_stale_locks, detect_exploreasl_version, kill_pipeline, list_module_logs, list_subjects, read_lock_status, read_module_logs, run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir};
 use tauri::{LogicalSize, Manager, Size};
@@ -52,6 +52,7 @@ pub fn run() {
             clean_import_status,
             move_import_output,
             copy_lock_files,
+            read_import_status,
             list_subjects,
             read_lock_status,
             run_pipeline,

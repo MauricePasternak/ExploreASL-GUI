@@ -13,6 +13,8 @@ import {
   assembleStudyPar,
   buildStagingMapping,
   decodePatternSignature,
+  deriveSequence,
+  deriveVendor,
   extractUniqueValues,
   generateFolderHierarchy,
   generateTokenOrdering,
@@ -661,6 +663,118 @@ describe("assembleStudyPar", () => {
     expect(result.StudyPars).toHaveLength(1);
     expect(result.StudyPars[0].SubjectRegExp).toBe("^(C9ORF059\\.12|FOO\\+BAR)$");
     expect(result.StudyPars[0].VisitRegExp).toBe("^(01)$");
+  });
+
+  it("injects derived Sequence and Vendor fields into studyPar entries", () => {
+    const groups: MetadataGroup[] = [
+      {
+        id: "global",
+        label: "Global",
+        bidsParams: {
+          PulseSequenceType: "GRASE",
+          MRAcquisitionType: "3D",
+          Manufacturer: "Siemens",
+        },
+      },
+    ];
+    const rows: SubjectRow[] = [
+      { id: "SubA/01", subject: "SubA", session: "01", groupId: "global" },
+    ];
+
+    const result = assembleStudyPar(groups, rows);
+    expect(result.StudyPars[0].Sequence).toBe("3D_GRASE");
+    expect(result.StudyPars[0].Vendor).toBe("Siemens");
+    expect(result.StudyPars[0].PulseSequenceType).toBe("GRASE");
+    expect(result.StudyPars[0].MRAcquisitionType).toBe("3D");
+    expect(result.StudyPars[0].Manufacturer).toBe("Siemens");
+  });
+
+  it("maps GE_product Manufacturer to Vendor 'GE'", () => {
+    const groups: MetadataGroup[] = [
+      {
+        id: "global",
+        label: "Global",
+        bidsParams: {
+          PulseSequenceType: "spiral",
+          MRAcquisitionType: "3D",
+          Manufacturer: "GE_product",
+        },
+      },
+    ];
+    const rows: SubjectRow[] = [
+      { id: "SubA/01", subject: "SubA", session: "01", groupId: "global" },
+    ];
+
+    const result = assembleStudyPar(groups, rows);
+    expect(result.StudyPars[0].Vendor).toBe("GE");
+    expect(result.StudyPars[0].Sequence).toBe("3D_spiral");
+  });
+
+  it("omits Sequence and Vendor when source fields are missing", () => {
+    const groups: MetadataGroup[] = [
+      {
+        id: "global",
+        label: "Global",
+        bidsParams: { ArterialSpinLabelingType: "PCASL" },
+      },
+    ];
+    const rows: SubjectRow[] = [
+      { id: "SubA/01", subject: "SubA", session: "01", groupId: "global" },
+    ];
+
+    const result = assembleStudyPar(groups, rows);
+    expect(result.StudyPars[0].Sequence).toBeUndefined();
+    expect(result.StudyPars[0].Vendor).toBeUndefined();
+  });
+
+  it("derives Sequence for 2D_EPI and Vendor for Philips", () => {
+    const groups: MetadataGroup[] = [
+      {
+        id: "global",
+        label: "Global",
+        bidsParams: {
+          PulseSequenceType: "EPI",
+          MRAcquisitionType: "2D",
+          Manufacturer: "Philips",
+        },
+      },
+    ];
+    const rows: SubjectRow[] = [
+      { id: "SubA/01", subject: "SubA", session: "01", groupId: "global" },
+    ];
+
+    const result = assembleStudyPar(groups, rows);
+    expect(result.StudyPars[0].Sequence).toBe("2D_EPI");
+    expect(result.StudyPars[0].Vendor).toBe("Philips");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deriveSequence / deriveVendor
+// ---------------------------------------------------------------------------
+describe("deriveSequence", () => {
+  it("combines MRAcquisitionType and PulseSequenceType", () => {
+    expect(deriveSequence("2D", "EPI")).toBe("2D_EPI");
+    expect(deriveSequence("3D", "GRASE")).toBe("3D_GRASE");
+    expect(deriveSequence("3D", "spiral")).toBe("3D_spiral");
+  });
+
+  it("returns undefined when either field is missing", () => {
+    expect(deriveSequence(undefined, "EPI")).toBeUndefined();
+    expect(deriveSequence("2D", undefined)).toBeUndefined();
+    expect(deriveSequence(undefined, undefined)).toBeUndefined();
+  });
+});
+
+describe("deriveVendor", () => {
+  it("maps Manufacturer to ExploreASL Vendor string", () => {
+    expect(deriveVendor("GE_product")).toBe("GE");
+    expect(deriveVendor("Philips")).toBe("Philips");
+    expect(deriveVendor("Siemens")).toBe("Siemens");
+  });
+
+  it("returns undefined for missing Manufacturer", () => {
+    expect(deriveVendor(undefined)).toBeUndefined();
   });
 });
 

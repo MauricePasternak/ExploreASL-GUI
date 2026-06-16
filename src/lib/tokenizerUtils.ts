@@ -1,4 +1,5 @@
 import type {
+  BidsAslMetadata,
   MetadataGroup,
   ModalityAlias,
   PathPattern,
@@ -11,6 +12,34 @@ import type {
   TokenTag,
 } from "../schemas/importSchemas";
 import { getRelativePath, splitBySubDelimiters } from "./pathUtils";
+
+const VENDOR_MAP: Record<string, string> = {
+  GE_product: "GE",
+  Philips: "Philips",
+  Siemens: "Siemens",
+};
+
+export function deriveVendor(manufacturer: string | undefined): string | undefined {
+  if (!manufacturer) return undefined;
+  return VENDOR_MAP[manufacturer];
+}
+
+export function deriveSequence(
+  mrAcquisitionType: string | undefined,
+  pulseSequenceType: string | undefined,
+): string | undefined {
+  if (!mrAcquisitionType || !pulseSequenceType) return undefined;
+  return `${mrAcquisitionType}_${pulseSequenceType}`;
+}
+
+function injectDerivedFields(params: BidsAslMetadata): BidsAslMetadata {
+  const derived: BidsAslMetadata = { ...params };
+  const vendor = deriveVendor(params.Manufacturer as string | undefined);
+  const sequence = deriveSequence(params.MRAcquisitionType, params.PulseSequenceType);
+  if (vendor) (derived as Record<string, string>).Vendor = vendor;
+  if (sequence) (derived as Record<string, string>).Sequence = sequence;
+  return derived;
+}
 
 /**
  * Generate the folderHierarchy regex array from token assignments.
@@ -394,7 +423,7 @@ export function assembleStudyPar(
           : `^(${escapedSessions.join("|")})$`;
 
       studyPars.push({
-        ...group.bidsParams,
+        ...injectDerivedFields(group.bidsParams),
         SubjectRegExp: subjectRegEx,
         VisitRegExp: visitRegEx,
       });

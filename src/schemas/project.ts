@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DataParSchema } from "./dataParSchema";
+import { ImportSnapshotSchema } from "./importSchemas";
 import { ProcessConfigSchema, ProcessingPhaseSchema } from "./processingSchemas";
 
 export const PROJECT_PHASES = ["import", "parameters", "processing"] as const;
@@ -21,14 +22,19 @@ export const ProjectMetaSchema = z.object({
   currentPhase: z.enum(PROJECT_PHASES),
 });
 
+export const ImportUiStateSchema = z.object({
+	activeStep: z.number().int().min(0).optional(),
+	completed: z.boolean().optional(),
+	currentPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
+	mostRecentConfig: ImportSnapshotSchema.nullable().optional(),
+});
+
 export const ProjectFileSchema = z.object({
   version: z.literal("0.1.0"),
   projectMeta: ProjectMetaSchema,
   uiState: z
     .object({
-      importActiveStep: z.number().int().min(0).optional(),
-      importCompleted: z.boolean().optional(),
-      importPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
+      import: ImportUiStateSchema.optional(),
       navbarCollapsed: z.boolean().optional(),
       processingConfig: ProcessConfigSchema.optional(),
       processingPhase: ProcessingPhaseSchema.optional(),
@@ -67,6 +73,7 @@ export const ProjectFileSchema = z.object({
     }),
 });
 
+export type ImportUiState = z.infer<typeof ImportUiStateSchema>;
 export type ProjectMeta = z.infer<typeof ProjectMetaSchema>;
 export type ProjectFile = z.infer<typeof ProjectFileSchema>;
 export type ProjectPhase = (typeof PROJECT_PHASES)[number];
@@ -115,7 +122,7 @@ export function canAccessPhase(project: ProjectFile, targetPhase: ProjectPhase) 
     return true;
   }
   if (targetPhase === "processing") {
-    return project.uiState?.importCompleted === true;
+    return project.uiState?.import?.completed === true;
   }
   return false;
 }

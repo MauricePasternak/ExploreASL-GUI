@@ -376,6 +376,20 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
 	validateRange(data.PostLabelingDelay, "PostLabelingDelay", "Post Labeling Delay");
 	validateRange(data.BolusCutOffDelayTime, "BolusCutOffDelayTime", "Bolus Cut Off Delay Time");
 	validateRange(data.LabelingDuration, "LabelingDuration", "Labeling Duration");
+
+	// Validate supported PulseSequenceType + MRAcquisitionType combinations
+	const unsupportedCombo =
+		(data.PulseSequenceType === "EPI" && data.MRAcquisitionType === "3D") ||
+		(data.PulseSequenceType === "GRASE" && data.MRAcquisitionType === "2D") ||
+		(data.PulseSequenceType === "spiral" && data.MRAcquisitionType === "2D");
+
+	if (unsupportedCombo) {
+		ctx.addIssue({
+			code: z.ZodIssueCode.custom,
+			message: `${data.PulseSequenceType} readout with ${data.MRAcquisitionType} acquisition is not supported by ExploreASL`,
+			path: ["PulseSequenceType"],
+		});
+	}
 }
 
 export const BidsAslMetadataBaseSchema = z
@@ -506,6 +520,7 @@ export const ImportProgressSchema = z.object({
 	error: z.string().optional(),
 	warnings: z.array(z.string()).optional(),
 	duration: z.number().optional(),
+	stale: z.boolean().optional(),
 });
 
 export type ImportProgress = z.infer<typeof ImportProgressSchema>;
@@ -533,6 +548,25 @@ export const SubjectRowSchema = z.object({
 });
 
 export type SubjectRow = z.infer<typeof SubjectRowSchema>;
+
+// =============================================================================
+// Import Snapshot (staleness detection)
+// =============================================================================
+
+export const ImportSnapshotSchema = z.object({
+	sourceDataPath: z.string(),
+	pathPatterns: z.array(PathPatternSchema),
+	tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)),
+	bMatchDirectories: z.boolean(),
+	modalityAliases: z.array(ModalityAliasSchema),
+	sessionAliases: z.array(SessionAliasSchema),
+	runAliases: z.array(SessionAliasSchema),
+	subjectRenames: z.array(SubjectRenameSchema),
+	metadataGroups: z.array(MetadataGroupSchema),
+	subjectRows: z.array(SubjectRowSchema),
+});
+
+export type ImportSnapshot = z.infer<typeof ImportSnapshotSchema>;
 
 // =============================================================================
 // Staging Entry (for symlink tree creation)
@@ -688,6 +722,18 @@ export function validateBidsMetadataGroup(params: BidsAslMetadata): string[] {
 	validateRange(params.PostLabelingDelay, "Post Labeling Delay");
 	validateRange(params.BolusCutOffDelayTime, "Bolus Cut Off Delay Time");
 	validateRange(params.LabelingDuration, "Labeling Duration");
+
+	// Validate supported PulseSequenceType + MRAcquisitionType combinations
+	const unsupportedCombo =
+		(params.PulseSequenceType === "EPI" && params.MRAcquisitionType === "3D") ||
+		(params.PulseSequenceType === "GRASE" && params.MRAcquisitionType === "2D") ||
+		(params.PulseSequenceType === "spiral" && params.MRAcquisitionType === "2D");
+
+	if (unsupportedCombo) {
+		errors.push(
+			`${params.PulseSequenceType} readout with ${params.MRAcquisitionType} acquisition is not supported by ExploreASL`,
+		);
+	}
 
 	return errors;
 }

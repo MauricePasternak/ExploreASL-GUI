@@ -37,7 +37,7 @@ pub const DCM2NII_FAILED_RE: &str = r"DCM2NII failed for (.+)";
 pub const IMPORT_COMPLETE_RE: &str = r"xASL_module_Import completed 100%";
 pub const STATUS_CODE_RE: &str = r"status: (-?\d+)";
 pub const MESSAGE_LINE_RE: &str = r"Message:\s*(.*)";
-pub const PROGRESS_BAR_RE: &str = r"^[\d%\s]+$";
+pub const PROGRESS_BAR_RE: &str = r"(^[\d%\s]+$)|(^\s*\d{1,3}%)";
 /// Matches the ExploreASL error line emitted when a subject's import iteration
 /// fails unexpectedly (e.g. a bug in the pipeline or a broken sourcestructure).
 ///
@@ -218,6 +218,7 @@ pub struct ImportOutputParser {
     pending_module_error: Option<PendingModuleError>,
     failed_subjects: std::collections::HashSet<String>,
     current_step: String,
+    recent_lines: std::collections::VecDeque<String>,
 }
 
 impl ImportOutputParser {
@@ -229,7 +230,19 @@ impl ImportOutputParser {
             pending_module_error: None,
             failed_subjects: std::collections::HashSet::new(),
             current_step: "DCM2NII".to_string(),
+            recent_lines: std::collections::VecDeque::with_capacity(40),
         }
+    }
+
+    pub fn is_duplicate(&self, line: &str) -> bool {
+        self.recent_lines.contains(&line.to_string())
+    }
+
+    pub fn record_line(&mut self, line: String) {
+        if self.recent_lines.len() >= 40 {
+            self.recent_lines.pop_front();
+        }
+        self.recent_lines.push_back(line);
     }
 
     pub fn push_line(
@@ -559,9 +572,16 @@ pub fn parse_import_stream_lines(
     let mut structured_events = Vec::new();
 
     for output_line in lines {
-        raw_events.push(ImportRawEvent {
-            line: output_line.line.clone(),
-        });
+        let is_progress = progress_bar_re().is_match(&output_line.line);
+        if !is_progress {
+            let trimmed = output_line.line.trim().to_string();
+            if !parser.is_duplicate(&trimmed) {
+                parser.record_line(trimmed);
+                raw_events.push(ImportRawEvent {
+                    line: output_line.line.clone(),
+                });
+            }
+        }
 
         structured_events.extend(parser.push_line(&output_line.line, output_line.source));
     }
@@ -1097,5 +1117,19 @@ mod tests {
             build_module_terminated_message(&lines),
             "Import module terminated unexpectedly"
         );
+    }
+
+    #[test]
+    fn progress_bar_regex_matches_various_formats() {
+        let re = progress_bar_re();
+        assert!(re.is_match("20%"));
+        assert!(re.is_match(" 20%"));
+        assert!(re.is_match("100%"));
+        assert!(re.is_match("  "));
+        assert!(re.is_match("10 20 30"));
+        assert!(re.is_match("20%[Warning: MXAGetFloat64ArrayAsDouble: cannot get element"));
+        assert!(re.is_match("100%[Warning: something"));
+        assert!(!re.is_match("Subject: BADDIE"));
+        assert!(!re.is_match("Warning: general warning"));
     }
 }

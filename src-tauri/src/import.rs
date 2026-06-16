@@ -81,6 +81,20 @@ impl StagingEntry {
   }
 }
 
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportSubjectStatus {
+    pub subject: String,
+    pub status: ImportSubjectStatusKind,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImportSubjectStatusKind {
+    Completed,
+    Failed,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ImportPrepareComplete;
 
@@ -792,13 +806,18 @@ fn stream_import_output(
   output_line: ImportOutputLine,
   parser: &mut ImportOutputParser,
 ) {
-  if !progress_bar_re().is_match(&output_line.line) {
-    let _ = app.emit(
-      "import-raw-event",
-      ImportRawEvent {
-        line: output_line.line.clone(),
-      },
-    );
+  let is_progress = progress_bar_re().is_match(&output_line.line);
+  if !is_progress {
+    let trimmed = output_line.line.trim().to_string();
+    if !parser.is_duplicate(&trimmed) {
+      parser.record_line(trimmed);
+      let _ = app.emit(
+        "import-raw-event",
+        ImportRawEvent {
+          line: output_line.line.clone(),
+        },
+      );
+    }
   }
 
   emit_structured_events(app, parser.push_line(&output_line.line, output_line.source));
@@ -1086,6 +1105,7 @@ pub fn run_import_pipeline(
   matlab_path: String,
   exploreasl_path: String,
   subject_list: Vec<String>,
+  subjects_to_preserve: Option<Vec<String>>,
 ) -> Result<u32, String> {
   let staging_root = validate_path_input("staging_root", &staging_root)?;
   validate_staging_root(&staging_root)?;
@@ -1102,7 +1122,7 @@ pub fn run_import_pipeline(
 
   let project_root = derive_project_root(&staging_root);
   let stream_subject_list = subject_list.clone();
-  reserve_import_state(&state, staging_root.clone(), project_root, subject_list)?;
+  reserve_import_state(&state, staging_root.clone(), project_root.clone(), subject_list)?;
 
   cleanup_staging_root(&staging_root).inspect_err(|_| {
     clear_reserved_import(&state);
@@ -1133,6 +1153,13 @@ pub fn run_import_pipeline(
   .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
   write_config_json(&staging_root.join("studyPar.json"), &studypar_json)
     .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
+
+  if let Some(ref subjects) = subjects_to_preserve {
+    if !subjects.is_empty() {
+      copy_lock_files_paths(&project_root, &staging_root, subjects)
+        .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
+    }
+  }
 
   app
     .emit("ImportPrepareComplete", ImportPrepareComplete)
@@ -1214,6 +1241,79 @@ pub fn copy_lock_files(
   let staging_root = validate_path_input("staging_root", &staging_root)?;
   validate_staging_root(&staging_root)?;
   copy_lock_files_paths(&project_root, &staging_root, &subjects)
+}
+
+#[tauri::command]
+pub async fn read_import_status(project_root: String) -> Result<Vec<ImportSubjectStatus>, String> {
+    let project_root = validate_path_input("project_root", &project_root)?;
+
+    let lock_base = project_root
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("lock")
+        .join("xASL_module_Import");
+
+    if !lock_base.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = fs::read_dir(&lock_base).map_err(|e| {
+        format!(
+            "Failed to read lock directory {}: {}",
+            lock_base.display(),
+            e
+        )
+    })?;
+
+    let mut results = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let metadata = entry.metadata().map_err(|e| {
+            format!(
+                "Failed to inspect entry {}: {}",
+                entry.path().display(),
+                e
+            )
+        })?;
+
+        if !metadata.is_dir() {
+            continue;
+        }
+
+        let subject = entry.file_name().to_string_lossy().to_string();
+        let subject_lock_dir = lock_base.join(&subject).join("xASL_module_Import");
+
+        if !subject_lock_dir.exists() {
+            continue;
+        }
+
+        let ready_path = subject_lock_dir.join("999_ready.status");
+        if ready_path.exists() {
+            results.push(ImportSubjectStatus {
+                subject,
+                status: ImportSubjectStatusKind::Completed,
+            });
+        } else {
+            let has_status_files = fs::read_dir(&subject_lock_dir)
+                .ok()
+                .map(|dir_entries| {
+                    dir_entries
+                        .filter_map(|e| e.ok())
+                        .any(|e| e.path().extension().is_some_and(|ext| ext == "status"))
+                })
+                .unwrap_or(false);
+
+            if has_status_files {
+                results.push(ImportSubjectStatus {
+                    subject,
+                    status: ImportSubjectStatusKind::Failed,
+                });
+            }
+        }
+    }
+
+    Ok(results)
 }
 
 fn validate_string_input(name: &str, value: &str) -> Result<String, String> {

@@ -67,7 +67,7 @@ describe("restoreProjectSession", () => {
   it("keeps the route phase when it is accessible", () => {
     const mockProject = {
       projectMeta: { currentPhase: "processing" },
-      uiState: { importCompleted: true },
+      uiState: { import: { completed: true } },
     } as any;
     expect(resolveRestoredPhase("parameters", mockProject)).toBe("parameters");
   });
@@ -75,7 +75,7 @@ describe("restoreProjectSession", () => {
   it("falls back to the saved current phase for inaccessible routes", () => {
     const mockProject = {
       projectMeta: { currentPhase: "import" },
-      uiState: { importCompleted: false },
+      uiState: { import: { completed: false } },
     } as any;
     expect(resolveRestoredPhase("processing", mockProject)).toBe("import");
   });

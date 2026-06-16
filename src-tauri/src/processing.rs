@@ -326,18 +326,83 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
   Ok(statuses)
 }
 
+/// ExploreASL log directories, project root first so persisted logs win over staging copies.
+fn exploreasl_log_dirs(project_root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut dirs = Vec::new();
+    let project_log = project_root
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("log");
+    if project_log.is_dir() {
+        dirs.push(project_log);
+    }
+    let staging_log = project_root
+        .join(".easl_staging")
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("log");
+    if staging_log.is_dir() {
+        dirs.push(staging_log);
+    }
+    dirs
+}
+
+fn parse_module_log_file(
+    file_name: &str,
+    path: &std::path::Path,
+    subject_session_re: &regex::Regex,
+    import_subject_re: &regex::Regex,
+    asl_run_re: &regex::Regex,
+) -> Option<LogFileInfo> {
+    let module = if file_name.starts_with("xASL_module_Structural") {
+        "structural"
+    } else if file_name.starts_with("xASL_module_ASL") {
+        "asl"
+    } else if file_name.starts_with("xASL_module_Import") {
+        "import"
+    } else {
+        return None;
+    };
+
+    let subject_identifier = if module == "import" {
+        import_subject_re
+            .find(file_name)
+            .map(|m| m.as_str().to_string())
+    } else {
+        subject_session_re
+            .find(file_name)
+            .map(|m| m.as_str().to_string())
+    };
+
+    let subject_identifier_val = subject_identifier?;
+
+    let run = if module == "asl" {
+        asl_run_re
+            .captures(file_name)
+            .and_then(|caps| caps.get(1))
+            .map(|m| m.as_str().to_string())
+    } else {
+        None
+    };
+
+    Some(LogFileInfo {
+        filename: file_name.to_string(),
+        module: module.to_string(),
+        subject_session: subject_identifier_val,
+        run,
+        has_error: check_log_for_error(path),
+    })
+}
+
 #[tauri::command]
 pub fn list_module_logs(project_root: String) -> Result<Vec<LogFileInfo>, String> {
     let trace = CommandTrace::new("list_module_logs");
     trace.arg("project_root", &project_root);
 
     let project_root = PathBuf::from(project_root);
-    let log_dir = project_root
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("log");
+    let log_dirs = exploreasl_log_dirs(&project_root);
 
-    if !log_dir.exists() {
+    if log_dirs.is_empty() {
         trace.success(&Vec::<LogFileInfo>::new());
         return Ok(Vec::new());
     }
@@ -345,54 +410,41 @@ pub fn list_module_logs(project_root: String) -> Result<Vec<LogFileInfo>, String
     let subject_session_re =
         regex::Regex::new(r"sub-[^_]+_\d+").expect("subject_session pattern should compile");
 
+    let import_subject_re =
+        regex::Regex::new(r"sub-[^_\s.]+").expect("import subject pattern should compile");
+
     let asl_run_re =
         regex::Regex::new(r"_ASL_(\d+)\.").expect("ASL run pattern should compile");
 
     let mut results = Vec::new();
+    let mut seen_filenames = std::collections::HashSet::new();
 
-    let entries = fs::read_dir(&log_dir).map_err(|e| {
-        format!("Failed to read log dir {}: {}", log_dir.display(), e)
-    })?;
+    for log_dir in log_dirs {
+        let entries = fs::read_dir(&log_dir).map_err(|e| {
+            format!("Failed to read log dir {}: {}", log_dir.display(), e)
+        })?;
 
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
-        let file_name = entry.file_name().to_string_lossy().to_string();
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+            let file_name = entry.file_name().to_string_lossy().to_string();
 
-        let module = if file_name.starts_with("xASL_module_Structural") {
-            "structural"
-        } else if file_name.starts_with("xASL_module_ASL") {
-            "asl"
-        } else {
-            continue;
-        };
+            if seen_filenames.contains(&file_name) {
+                continue;
+            }
 
-        let subject_session = subject_session_re
-            .find(&file_name)
-            .map(|m| m.as_str().to_string());
+            let Some(info) = parse_module_log_file(
+                &file_name,
+                &entry.path(),
+                &subject_session_re,
+                &import_subject_re,
+                &asl_run_re,
+            ) else {
+                continue;
+            };
 
-        let subject_session_val = match subject_session {
-            Some(s) => s,
-            None => continue,
-        };
-
-        let run = if module == "asl" {
-            asl_run_re
-                .captures(&file_name)
-                .and_then(|caps| caps.get(1))
-                .map(|m| m.as_str().to_string())
-        } else {
-            None
-        };
-
-        let has_error = check_log_for_error(&entry.path());
-
-        results.push(LogFileInfo {
-            filename: file_name,
-            module: module.to_string(),
-            subject_session: subject_session_val,
-            run,
-            has_error,
-        });
+            seen_filenames.insert(file_name);
+            results.push(info);
+        }
     }
 
     trace.success(&results);
@@ -411,12 +463,9 @@ pub fn read_module_logs(
     trace.arg("module", &module);
 
     let project_root = PathBuf::from(&project_root);
-    let log_dir = project_root
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("log");
+    let log_dirs = exploreasl_log_dirs(&project_root);
 
-    if !log_dir.exists() {
+    if log_dirs.is_empty() {
         trace.success(&std::collections::HashMap::<String, String>::new());
         return Ok(std::collections::HashMap::new());
     }
@@ -424,6 +473,7 @@ pub fn read_module_logs(
     let module_prefix = match module.as_str() {
         "structural" => "xASL_module_Structural",
         "asl" => "xASL_module_ASL",
+        "import" => "xASL_module_Import",
         _ => return Err(format!("Unknown module: {}", module)),
     };
 
@@ -431,32 +481,34 @@ pub fn read_module_logs(
 
     let mut results = std::collections::HashMap::new();
 
-    let entries = fs::read_dir(&log_dir).map_err(|e| {
-        format!("Failed to read log dir {}: {}", log_dir.display(), e)
-    })?;
+    for log_dir in log_dirs {
+        let entries = fs::read_dir(&log_dir).map_err(|e| {
+            format!("Failed to read log dir {}: {}", log_dir.display(), e)
+        })?;
 
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
-        let file_name = entry.file_name().to_string_lossy().to_string();
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+            let file_name = entry.file_name().to_string_lossy().to_string();
 
-        if !file_name.starts_with(&search_prefix) {
-            continue;
-        }
-
-        let content = match fs::read_to_string(entry.path()) {
-            Ok(c) => c,
-            Err(_) => {
-                let bytes = match fs::read(&entry.path()) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        return Err(format!("Failed to read log file {}: {}", file_name, e));
-                    }
-                };
-                String::from_utf8_lossy(&bytes).to_string()
+            if !file_name.starts_with(&search_prefix) || results.contains_key(&file_name) {
+                continue;
             }
-        };
 
-        results.insert(file_name, content);
+            let content = match fs::read_to_string(entry.path()) {
+                Ok(c) => c,
+                Err(_) => {
+                    let bytes = match fs::read(&entry.path()) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            return Err(format!("Failed to read log file {}: {}", file_name, e));
+                        }
+                    };
+                    String::from_utf8_lossy(&bytes).to_string()
+                }
+            };
+
+            results.insert(file_name, content);
+        }
     }
 
     trace.success(&results);

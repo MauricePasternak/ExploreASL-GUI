@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { LogFileInfoSchema, LogContentSchema } from "./logViewer";
+import {
+  LogFileInfoSchema,
+  LogContentSchema,
+  importLogSubjectFromSession,
+  importLogSubjectKey,
+} from "./logViewer";
 
 describe("LogFileInfoSchema", () => {
   it("parses a structural log entry", () => {
@@ -48,5 +53,17 @@ describe("LogContentSchema", () => {
     };
     const result = LogContentSchema.parse(input);
     expect(result["xASL_module_Structural_sub-001_01.log"]).toBe("Some log content");
+  });
+});
+
+describe("import log subject helpers", () => {
+  it("adds sub- prefix for GUI subject names", () => {
+    expect(importLogSubjectKey("C9ORF007Philips")).toBe("sub-C9ORF007Philips");
+    expect(importLogSubjectKey("sub-C9ORF007Philips")).toBe("sub-C9ORF007Philips");
+  });
+
+  it("strips sub- prefix from log subject sessions", () => {
+    expect(importLogSubjectFromSession("sub-C9ORF007Philips")).toBe("C9ORF007Philips");
+    expect(importLogSubjectFromSession("C9ORF007Philips")).toBe("C9ORF007Philips");
   });
 });
