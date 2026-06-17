@@ -662,10 +662,35 @@ describe("SourcestructureJsonSchema", () => {
       folderHierarchy: ["^(.*)$", "^(.*)$", "^(.*)$", "^(.*)$"],
       tokenOrdering: [1, 2, 3, 4],
       tokenSessionAliases: ["^01$", "ASL_1"],
+      tokenVisitAliases: ["01", "01", "02", "02"],
       tokenScanAliases: ["^T1w$", "T1w", "^ASL4D$", "ASL4D"],
       bMatchDirectories: true,
     };
     expect(SourcestructureJsonSchema.parse(data)).toMatchObject(data);
+  });
+
+  it("accepts sourcestructure without tokenVisitAliases (optional)", () => {
+    const data = {
+      folderHierarchy: ["^(.*)$", "^(.*)$", "^(.*)$", "^(.*)$"],
+      tokenOrdering: [1, 2, 3, 4],
+      tokenSessionAliases: ["^01$", "ASL_1"],
+      tokenScanAliases: ["^T1w$", "T1w"],
+      bMatchDirectories: true,
+    };
+    const parsed = SourcestructureJsonSchema.parse(data);
+    expect(parsed.tokenVisitAliases).toBeUndefined();
+  });
+
+  it("accepts sourcestructure with empty tokenVisitAliases", () => {
+    const data = {
+      folderHierarchy: ["^(.*)$", "^(.*)$", "^(.*)$", "^(.*)$"],
+      tokenOrdering: [1, 2, 3, 4],
+      tokenSessionAliases: ["^01$", "ASL_1"],
+      tokenVisitAliases: [],
+      tokenScanAliases: [],
+      bMatchDirectories: true,
+    };
+    expect(SourcestructureJsonSchema.parse(data).tokenVisitAliases).toEqual([]);
   });
 
   it("rejects folderHierarchy with wrong length", () => {

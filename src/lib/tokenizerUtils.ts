@@ -308,7 +308,7 @@ function extractValue(segments: string[], assignment: TokenAssignment, tokenSubD
  * are injected to maintain the fixed 4-level structure.
  */
 export function assembleSourcestructure(
-  _sessionAliases: SessionAlias[],
+  sessionAliases: SessionAlias[],
   runAliases: SessionAlias[],
   modalityAliases: ModalityAlias[],
   bMatchDirectories: boolean,
@@ -336,6 +336,16 @@ export function assembleSourcestructure(
     tokenSessionAliases.push(regex, alias.alias);
   }
 
+  // Build visit aliases as flat alternating [folderName, folderName] pairs
+  // Simple 1-to-1 mapping (no regex anchors) for ExploreASL v1.11.0 compat
+  const tokenVisitAliases: string[] = [];
+  const seenVisits = new Set<string>();
+  for (const alias of sessionAliases) {
+    if (seenVisits.has(alias.captured)) continue;
+    seenVisits.add(alias.captured);
+    tokenVisitAliases.push(alias.captured, alias.captured);
+  }
+
   // Build scan (modality) aliases as flat alternating [regex, alias] pairs
   const tokenScanAliases: string[] = [];
   const seenModalities = new Set<string>();
@@ -350,6 +360,7 @@ export function assembleSourcestructure(
     folderHierarchy,
     tokenOrdering,
     tokenSessionAliases,
+    tokenVisitAliases,
     tokenScanAliases,
     bMatchDirectories,
   };
