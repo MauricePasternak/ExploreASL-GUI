@@ -4,6 +4,8 @@
 
 The system SHALL provide a single Rust command `run_import_pipeline(staging_root, staging_entries, sourcestructure_json, studypar_json, matlab_path, exploreasl_path, subject_list)` that atomically performs: (1) delete `.easl_staging/` if it exists, (2) create the standardized 4-level symlink tree at `.easl_staging/sourcedata/` from `staging_entries`, (3) write clean ExploreASL `sourcestructure.json` and `studyPar.json` configs to `.easl_staging/`, (4) spawn MATLAB as `matlab -batch "addpath('exploreasl_path'); ExploreASL('staging_root', [1,1,0], 0, 0)"`, (5) return the process PID on success or an error string on failure. The `staging_entries` parameter contains the GUI staging mappings with subject, session, run, modality, and source path. The `subject_list` parameter provides known subject names for stdout pattern matching. The command SHALL emit a `ImportPrepareComplete` event after steps 1-3 succeed and before MATLAB is spawned.
 
+Prior to spawning MATLAB, lock files for selected subjects SHALL be deleted and lock files for unselected fresh subjects SHALL be preserved via `copyLockFilesForRetry`.
+
 #### Scenario: Successful pipeline start
 - **WHEN** `run_import_pipeline` is called with valid paths and configured MATLAB
 - **THEN** the staging directory is created, configs are written, MATLAB is spawned, and the PID is returned
@@ -136,18 +138,42 @@ A global setting "Preserve staging directory" SHALL be added to `globalStore.set
 - **WHEN** all subjects succeed and "Preserve staging directory" is disabled
 - **THEN** `.easl_staging/` is deleted entirely
 
-### Requirement: MATLAB installation selection
+### Requirement: MATLAB executable selection for import
 
-The step 5 execution SHALL use the preferred MATLAB installation from `globalStore.settings.matlabInstallations`. The first installation in the list SHALL be the default preferred installation. In future, this will be expanded to support other execution backends (Docker, etc.).
+The import step 5 execution view SHALL provide a MATLAB version select dropdown (matching the Processing module's `PipelineConfig` pattern). The dropdown SHALL list all configured MATLAB installations from `globalStore.settings.matlabInstallations`, displaying each installation's label, version (if available), and path. The selection SHALL default to the first installation. The selected `matlabPath` SHALL be used when calling `runImportPipeline`.
 
-#### Scenario: Single MATLAB installation configured
+If no MATLAB installations are configured, the "Start Import" button SHALL be disabled and an alert message SHALL be shown.
+
+#### Scenario: Single MATLAB installation
 - **WHEN** `matlabInstallations` has one entry
-- **THEN** step 5 uses that installation's path as `matlab_path` in `run_import_pipeline`
+- **THEN** the dropdown shows that entry as the only option and it is pre-selected
 
-#### Scenario: Multiple MATLAB installations configured
+#### Scenario: Multiple MATLAB installations
 - **WHEN** `matlabInstallations` has multiple entries
-- **THEN** step 5 uses the first entry as the preferred installation
+- **THEN** the dropdown lists all entries and the user can select which to use for import
 
 #### Scenario: No MATLAB installation configured
 - **WHEN** `matlabInstallations` is empty or `exploreAslPath` is empty
-- **THEN** the "Run Import" button is disabled and a yellow alert is shown
+- **THEN** the "Start Import" button is disabled and an alert is shown
+
+#### Scenario: Selected MATLAB path used for import
+- **WHEN** the user selects "MATLAB R2024b" from the dropdown and clicks "Start Import"
+- **THEN** `runImportPipeline` is called with `matlabPath` set to the path of that installation
+
+### Requirement: ImportProgress table population
+
+The progress table SHALL be populated from two sources: (1) `read_import_status` lock file scan results when entering step 5, and (2) real-time events during import execution. On entering step 5, the system SHALL call `read_import_status` to reconstruct per-subject progress, then SHALL compute staleness by diffing current config against `mostRecentConfig`.
+
+During import execution, the table SHALL update in real-time as structured events arrive. All subjects start with `status: "pending"` when `startImport()` is called.
+
+#### Scenario: Table shows reconstructed status on re-visit
+- **WHEN** the user navigates to step 5 after a successful import
+- **THEN** the progress table lists all subjects with status "completed" (reconstructed from lock files), not "pending"
+
+#### Scenario: Table shows reconstructed failed status on re-visit
+- **WHEN** the user navigates to step 5 after a partially failed import
+- **THEN** failed subjects show status "failed" and completed subjects show status "completed", all reconstructed from lock files
+
+#### Scenario: Table updates during active import
+- **WHEN** a `subject_start` event arrives for subject "GOOD" during an active import
+- **THEN** `importProgress["GOOD"].status` transitions from "pending" to "running"

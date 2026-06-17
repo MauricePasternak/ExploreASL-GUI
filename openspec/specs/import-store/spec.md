@@ -2,7 +2,7 @@
 
 ### Requirement: ImportProgress state shape
 
-The `ImportProgress` type in the import store SHALL be extended to include: `errorStep?: "DCM2NII" | "NII2BIDS"` (which step failed), `warnings?: string[]` (collected warning messages from stdout), and `duration?: number` (processing duration in seconds, parsed from `Job-iteration N stopped at ... and took S seconds`). The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`.
+The `ImportProgress` type in the import store SHALL be extended to include: `errorStep?: "DCM2NII" | "NII2BIDS"` (which step failed), `warnings?: string[]` (collected warning messages from stdout), `duration?: number` (processing duration in seconds), and `stale?: boolean` (whether the config has changed since this subject was imported). The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`.
 
 #### Scenario: Subject fails at NII2BIDS step
 - **WHEN** an `import_failed` event is parsed for subject BADDIE with step NII2BIDS
@@ -16,24 +16,54 @@ The `ImportProgress` type in the import store SHALL be extended to include: `err
 - **WHEN** user clicks "Stop" while subject INPROGRESS is in `"running"` state
 - **THEN** `importProgress["INPROGRESS"].status` is set to `"cancelled"`
 
+#### Scenario: Stale subject on re-visit
+- **WHEN** the user navigates to step 5 after changing a metadata group parameter and `read_import_status` returns a completed subject whose group has changed
+- **THEN** `importProgress["sub-001"].stale` is set to `true`
+
+#### Scenario: Fresh subject on re-visit
+- **WHEN** the user navigates to step 5 after a successful import with no config changes
+- **THEN** `importProgress["sub-001"].stale` is `false` (or absent, which is falsy)
+
 ### Requirement: Import store additions
 
-The import store SHALL add: `importCompleted: boolean` (defaults to `false`, set to `true` when all subjects complete successfully), `importLog: string[]` (accumulated raw stdout lines from `ImportRawEvent`), and `importPhase: "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled"` (defaults to `"idle"`). The `importCompleted` flag SHALL be persisted in the project file under `uiState.importCompleted`.
+The import store SHALL add: `importCompleted: boolean` (defaults to `false`, set to `true` when all subjects complete successfully), `importLog: string[]` (accumulated raw stdout lines from `ImportRawEvent`), `importPhase: "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled"` (defaults to `"idle"`), and `mostRecentConfig: ImportSnapshot | null` (defaults to `null`, set at `startImport()` time from current import configuration).
 
-#### Scenario: Import starts
-- **WHEN** user clicks "Run Import"
-- **THEN** `importPhase` transitions from `"idle"` to `"preparing"`, `importLog` is cleared
+The `ImportSnapshot` type SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, `subjectRows`.
+
+The `importCompleted` flag and `mostRecentConfig` SHALL be persisted in the project file under `uiState.import.completed` and `uiState.import.mostRecentConfig` respectively.
+
+The `startImport()` action SHALL capture the current import configuration as an `ImportSnapshot` and store it in `mostRecentConfig` before transitioning to `"preparing"` phase.
+
+The store SHALL provide a `reconstructProgressFromLockFiles(progress: Record<string, ImportProgress>)` action that replaces `importProgress` with lock file scan results and preserves real-time events if an import is currently running.
+
+The store SHALL provide a `computeStaleness(currentConfig: ImportState, snapshot: ImportSnapshot | null): Record<string, boolean>` function that returns per-subject staleness. This function SHALL be called on entering step 5 and the results stored in each subject's `stale` field in `importProgress`.
+
+#### Scenario: Import starts with snapshot capture
+- **WHEN** user clicks "Start Import"
+- **THEN** `importPhase` transitions from `"idle"` to `"preparing"`, `importLog` is cleared, `mostRecentConfig` is set to current import configuration snapshot
 
 #### Scenario: Import completes successfully
 - **WHEN** all subjects succeed and post-processing finishes
-- **THEN** `importPhase` is `"completed"`, `importCompleted` is `true`, both are persisted to project file
+- **THEN** `importPhase` is `"completed"`, `importCompleted` is `true`, both are persisted to project file under `uiState.import.completed`
+
+#### Scenario: Progress reconstruction on re-visit
+- **WHEN** the user navigates to step 5 and `read_import_status` returns lock file data
+- **THEN** `reconstructProgressFromLockFiles` is called with the scan results, replacing the ephemeral progress with reconstructed per-subject status
+
+#### Scenario: Staleness computation on re-visit
+- **WHEN** the user navigates to step 5 after changing a metadata group parameter
+- **THEN** `computeStaleness` identifies that `metadataGroups` differ, determines which groups changed, and marks subjects in those groups as stale
+
+#### Scenario: Structural staleness on re-visit
+- **WHEN** the user navigates to step 5 after changing a tokenizer assignment
+- **THEN** `computeStaleness` identifies that `tokenizerConfigs` differ and marks ALL subjects as stale
 
 #### Scenario: Page reload after successful import
-- **WHEN** user reopens a project where `importCompleted` was `true`
-- **THEN** step 5 shows the completed summary without re-running import
+- **WHEN** user reopens a project where `uiState.import.completed` was `true`
+- **THEN** step 5 shows the reconstructed progress from lock files with appropriate staleness indicators
 
 #### Scenario: Stale running state on reload (V0)
-- **WHEN** user reopens a project where `importPhase` was `"running"` (frontend reload during import)
+- **WHEN** user reopens a project where `uiState.import.currentPhase` was `"running"` (frontend reload during import)
 - **THEN** a warning is shown: "Previous import may be running. Check status or retry."
 
 ### Requirement: Subject error detail matching
