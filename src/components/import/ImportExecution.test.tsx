@@ -291,7 +291,7 @@ describe("ImportExecution", () => {
         (call) => call[0] === "run_import_pipeline",
       );
       expect(runCall).toBeDefined();
-      expect(runCall![1]!.subjectsToPreserve).toEqual(["SUB01"]);
+      expect((runCall![1] as Record<string, unknown>).subjectsToPreserve).toEqual(["SUB01"]);
     });
   });
 

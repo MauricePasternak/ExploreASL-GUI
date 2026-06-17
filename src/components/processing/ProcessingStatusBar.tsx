@@ -1,5 +1,4 @@
 import { Badge, Group, Text } from "@mantine/core";
-import { IconPlayerPlay } from "@tabler/icons-react";
 import { useNavigate, useParams } from "react-router";
 
 import { useProcessingStore } from "../../stores/processingStore";
@@ -92,7 +91,6 @@ export default function ProcessingStatusBar() {
       style={{ cursor: "pointer" }}
       data-testid="processing-status-bar"
     >
-      <IconPlayerPlay size={14} />
       <Badge size="sm" variant="light" color={color}>
         {label}
       </Badge>
