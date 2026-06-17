@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProcessConfig, SubjectInfo, SubjectModuleStatus } from "../schemas/processingSchemas";
 import {
@@ -32,8 +32,11 @@ vi.mock("./projectStore", () => ({
 	},
 }));
 
+
+
 afterEach(() => {
 	useProcessingStore.getState().resetProcessing();
+	vi.clearAllMocks();
 });
 
 // ---------------------------------------------------------------------------
@@ -41,12 +44,12 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 const STRUCTURAL_ASL_CONFIG: ProcessConfig = {
-	subjects: ["sub-001", "sub-002"],
+	subjects: ["sub-001_01", "sub-002_02"],
 	modules: ["structural", "asl"],
 	matlabPath: "/usr/local/bin/matlab",
 	exploreAslPath: "/opt/ExploreASL",
 	workers: 4,
-	subjectRegexp: "^(sub-001|sub-002)$",
+	subjectRegexp: "^(sub-001_01|sub-002_02)$",
 };
 
 const POPULATION_CONFIG: ProcessConfig = {
@@ -189,6 +192,12 @@ it("does not force workers when population not in modules", () => {
 // ---------------------------------------------------------------------------
 
 describe("processingStore phase transitions", () => {
+	beforeEach(() => {
+		useProcessingStore.getState().setAvailableSubjects([
+			{ subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
+			{ subjectSession: "sub-002_02", subject: "002", session: "02", hasStructural: true, hasASL: true },
+		]);
+	});
 	it("startProcessing sets phase to running", async () => {
 		useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
 		await useProcessingStore.getState().startProcessing();
@@ -310,6 +319,12 @@ describe("processingStore updateSubjectStatus", () => {
 // ---------------------------------------------------------------------------
 
 describe("processingStore Tauri integration: startProcessing", () => {
+	beforeEach(() => {
+		useProcessingStore.getState().setAvailableSubjects([
+			{ subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
+			{ subjectSession: "sub-002_02", subject: "002", session: "02", hasStructural: true, hasASL: true },
+		]);
+	});
 it("calls runProcessingPipeline with config and dataParJson", async () => {
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
     await useProcessingStore.getState().startProcessing();
@@ -371,6 +386,57 @@ it("calls runProcessingPipeline with config and dataParJson", async () => {
 			"No project loaded",
 		);
 	});
+
+	it("includes ForceInclusionList in dataParJson when subjects are configured", async () => {
+		useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+		await useProcessingStore.getState().startProcessing();
+		expect(runProcessingPipeline).toHaveBeenCalled();
+		const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
+		expect(lastCall?.[0]).toEqual(STRUCTURAL_ASL_CONFIG);
+		expect(lastCall?.[1].x.dataset).toEqual({
+			subjectRegexp: STRUCTURAL_ASL_CONFIG.subjectRegexp,
+			ForceInclusionList: STRUCTURAL_ASL_CONFIG.subjects,
+		});
+	});
+
+	it("omits ForceInclusionList from dataParJson when no subjects are configured", async () => {
+		useProcessingStore.getState().setConfig(POPULATION_CONFIG);
+		await useProcessingStore.getState().startProcessing();
+		expect(runProcessingPipeline).toHaveBeenCalled();
+		const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
+		const expectedConfig = { ...POPULATION_CONFIG, workers: 1 };
+		expect(lastCall?.[0]).toEqual(expectedConfig);
+		expect(lastCall?.[1].x.dataset).toEqual({
+			subjectRegexp: POPULATION_CONFIG.subjectRegexp,
+		});
+		expect(lastCall?.[1].x.dataset.ForceInclusionList).toBeUndefined();
+	});
+
+	it("throws an error when configured subjects are not present in scanned availableSubjects", async () => {
+		// Clear availableSubjects
+		useProcessingStore.getState().setAvailableSubjects([]);
+
+		useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+		await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
+			'Selected subject session "sub-001_01" is not present in the rawdata folder'
+		);
+	});
+
+	it("throws an error when configured subjects do not match BIDS syntax", async () => {
+		const invalidConfig: ProcessConfig = {
+			...STRUCTURAL_ASL_CONFIG,
+			subjects: ["sub-001"], // missing session part
+		};
+		// Set availableSubjects to contain "sub-001" to bypass presence check
+		useProcessingStore.getState().setAvailableSubjects([
+			{ subjectSession: "sub-001", subject: "001", session: "", hasStructural: true, hasASL: true }
+		]);
+
+		useProcessingStore.getState().setConfig(invalidConfig);
+		await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
+			'Subject session "sub-001" does not match BIDS syntax (sub-<subject>_<session>)'
+		);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -378,6 +444,12 @@ it("calls runProcessingPipeline with config and dataParJson", async () => {
 // ---------------------------------------------------------------------------
 
 describe("processingStore Tauri integration: killProcessing", () => {
+	beforeEach(() => {
+		useProcessingStore.getState().setAvailableSubjects([
+			{ subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
+			{ subjectSession: "sub-002_02", subject: "002", session: "02", hasStructural: true, hasASL: true },
+		]);
+	});
 	it("calls stopProcessingPipeline", async () => {
 		useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
 		await useProcessingStore.getState().startProcessing();
@@ -459,6 +531,12 @@ describe("processingStore Tauri integration: loadLockFileStatus", () => {
 // ---------------------------------------------------------------------------
 
 describe("processingStore Tauri integration: event listener cleanup", () => {
+	beforeEach(() => {
+		useProcessingStore.getState().setAvailableSubjects([
+			{ subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
+			{ subjectSession: "sub-002_02", subject: "002", session: "02", hasStructural: true, hasASL: true },
+		]);
+	});
 	it("resetProcessing calls cleanup function from setupProcessingListeners", async () => {
 		const cleanupFn = vi.fn();
 		(setupProcessingListeners as ReturnType<typeof vi.fn>).mockResolvedValueOnce(cleanupFn);

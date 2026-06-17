@@ -12,6 +12,7 @@ export interface DataParJson {
     external?: Record<string, unknown>;
     dataset?: {
       subjectRegexp?: string;
+      ForceInclusionList?: string[];
     };
     bAutomaticallyDetectFSL?: boolean;
     bAutomaticallyDetectVABY?: boolean;

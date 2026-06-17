@@ -86,6 +86,16 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     const config = useProcessingStore.getState().config;
     if (!config) throw new Error("No config set");
 
+    const available = useProcessingStore.getState().availableSubjects;
+    for (const subj of config.subjects) {
+      if (!/^sub-[^_\s]+_[^_\s]+$/.test(subj)) {
+        throw new Error(`Subject session "${subj}" does not match BIDS syntax (sub-<subject>_<session>)`);
+      }
+      if (!available.some((a) => a.subjectSession === subj)) {
+        throw new Error(`Selected subject session "${subj}" is not present in the rawdata folder`);
+      }
+    }
+
     set({ processingPhase: "preparing" });
 
     const { watchLockDir, setupProcessingListeners, runProcessingPipeline } =
@@ -103,6 +113,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     const dataParJson = assembleDataPar(dataPar);
     dataParJson.x.dataset = {
       subjectRegexp: config.subjectRegexp,
+      ...(config.subjects.length > 0 && { ForceInclusionList: config.subjects }),
     };
 
     try {
