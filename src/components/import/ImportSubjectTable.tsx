@@ -256,7 +256,7 @@ export default function ImportSubjectTable({
           if (!files || files.length === 0) {
             return <Text size="xs" c="dimmed" data-testid={`no-import-logs-${row.subject}`}>No Logs</Text>;
           }
-          const hasError = files.some((f) => f.hasError);
+          const hasError = row.status === "failed";
           return (
             <Badge
               size="sm"
@@ -286,12 +286,15 @@ export default function ImportSubjectTable({
   const modalRunErrorMap = useMemo(() => {
     const files = importLogInfo.get(importLogSubjectFromSession(modalSubjectSession));
     if (!files) return {};
+    const subject = importLogSubjectFromSession(modalSubjectSession);
+    const row = rows.find((r) => r.subject === subject);
+    const subjectFailed = row?.status === "failed";
     const map: Record<string, boolean> = {};
     for (const f of files) {
-      map[f.filename] = f.hasError;
+      map[f.filename] = f.hasError || subjectFailed;
     }
     return map;
-  }, [modalSubjectSession, importLogInfo]);
+  }, [modalSubjectSession, importLogInfo, rows]);
 
   if (rows.length === 0) {
     return (
