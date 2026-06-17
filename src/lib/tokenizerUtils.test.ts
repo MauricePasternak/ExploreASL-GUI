@@ -486,6 +486,33 @@ describe("assembleSourcestructure", () => {
     expect(result.tokenSessionAliases).toContain("ASL_2");
   });
 
+  it("produces empty tokenVisitAliases when no session aliases provided", () => {
+    const result = assembleSourcestructure([], [], [], true);
+    expect(result.tokenVisitAliases).toEqual([]);
+  });
+
+  it("produces tokenVisitAliases as 1-to-1 mapping from session aliases", () => {
+    const sessionAliases: SessionAlias[] = [
+      { captured: "01", alias: "01", index: 1 },
+      { captured: "02", alias: "02", index: 2 },
+      { captured: "11", alias: "11", index: 3 },
+    ];
+
+    const result = assembleSourcestructure(sessionAliases, [], [], true);
+    expect(result.tokenVisitAliases).toEqual(["01", "01", "02", "02", "11", "11"]);
+  });
+
+  it("deduplicates visit aliases by captured value", () => {
+    const sessionAliases: SessionAlias[] = [
+      { captured: "01", alias: "01", index: 1 },
+      { captured: "01", alias: "01", index: 2 },
+      { captured: "02", alias: "02", index: 3 },
+    ];
+
+    const result = assembleSourcestructure(sessionAliases, [], [], true);
+    expect(result.tokenVisitAliases).toEqual(["01", "01", "02", "02"]);
+  });
+
   it("builds scan aliases from modality mappings", () => {
     const modalityAliases: ModalityAlias[] = [
       { captured: "t1_mpr", mapped: "T1w" },

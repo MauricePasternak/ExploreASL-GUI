@@ -492,11 +492,15 @@ export type StudyParJson = z.infer<typeof StudyParJsonSchema>;
  * tokenOrdering maps to ExploreASL's [Subject, Visit, Session, Scan].
  * tokenSessionAliases and tokenScanAliases are flat arrays of alternating
  * [regex, alias] pairs.
+ * tokenVisitAliases is a flat array of alternating [folderName, folderName]
+ * pairs (simple 1-to-1 mapping, no regex anchors) for backwards compatibility
+ * with ExploreASL v1.11.0.
  */
 export const SourcestructureJsonSchema = z.object({
 	folderHierarchy: z.array(z.string()).length(4),
 	tokenOrdering: z.tuple([z.number(), z.number(), z.number(), z.number()]),
 	tokenSessionAliases: z.array(z.string()),
+	tokenVisitAliases: z.array(z.string()).optional(),
 	tokenScanAliases: z.array(z.string()),
 	bMatchDirectories: z.boolean(),
 	dcm2nii_version: z.string().optional(),

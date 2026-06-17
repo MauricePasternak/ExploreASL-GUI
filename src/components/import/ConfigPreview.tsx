@@ -14,6 +14,8 @@ const FIELD_ANNOTATIONS: Record<string, string> = {
     "Maps capture groups to ExploreASL's [Subject, Visit, Session, Scan] ordering. Values are 0-based indices into folderHierarchy capture groups; -1 means the token is not extracted from the path (default used instead).",
   tokenSessionAliases:
     "Maps session folder names in the staging tree to ExploreASL visit names. E.g., ^01$ → ASL_1.",
+  tokenVisitAliases:
+    "Simple 1-to-1 mapping of visit-level folder names (no regex anchors). Required for backwards compatibility with ExploreASL v1.11.0.",
   tokenScanAliases:
     "Maps modality folder names in the staging tree to ExploreASL scan types. E.g., ^ASL4D$ → ASL4D.",
   bMatchDirectories:
