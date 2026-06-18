@@ -22,13 +22,15 @@ describe("ProjectFileSchema", () => {
         currentPhase: "import",
       },
       uiState: {
-        dataParametersAdvancedVisibility: {
-          showAdvancedSections: false,
-          showAdvancedM0Params: false,
-          showAdvancedQuantification: false,
-          showAdvancedGeneralSettings: false,
-          showAdvancedASLProcessing: false,
-          showAdvancedAtlases: false,
+        datapar: {
+          advancedVisibility: {
+            showAdvancedSections: false,
+            showAdvancedM0Params: false,
+            showAdvancedQuantification: false,
+            showAdvancedGeneralSettings: false,
+            showAdvancedASLProcessing: false,
+            showAdvancedAtlases: false,
+          },
         },
       },
       mappingState: {},
@@ -77,17 +79,19 @@ describe("ProjectFileSchema", () => {
     const parsed = ProjectFileSchema.parse({
       ...DEFAULT_PROJECT_FILE("project-pc", "PC Project", "/tmp/pc"),
       uiState: {
-        processingConfig: {
-          subjects: ["sub-01", "sub-02"],
-          modules: ["asl"],
-          matlabPath: "/usr/local/bin/matlab",
-          exploreAslPath: "/opt/ExploreASL",
-          workers: 4,
-          subjectRegexp: ".*",
+        processing: {
+          config: {
+            subjects: ["sub-01", "sub-02"],
+            modules: ["asl"],
+            matlabPath: "/usr/local/bin/matlab",
+            exploreAslPath: "/opt/ExploreASL",
+            workers: 4,
+            subjectRegexp: ".*",
+          },
         },
       },
     });
-    expect(parsed.uiState.processingConfig).toMatchObject({
+    expect(parsed.uiState.processing?.config).toMatchObject({
       subjects: ["sub-01", "sub-02"],
       modules: ["asl"],
       workers: 4,
@@ -98,10 +102,12 @@ describe("ProjectFileSchema", () => {
     const parsed = ProjectFileSchema.parse({
       ...DEFAULT_PROJECT_FILE("project-pp", "PP Project", "/tmp/pp"),
       uiState: {
-        processingPhase: "running",
+        processing: {
+          currentPhase: "running",
+        },
       },
     });
-    expect(parsed.uiState.processingPhase).toBe("running");
+    expect(parsed.uiState.processing?.currentPhase).toBe("running");
   });
 
   it("rejects invalid processingPhase values", () => {
@@ -109,7 +115,9 @@ describe("ProjectFileSchema", () => {
       ProjectFileSchema.parse({
         ...DEFAULT_PROJECT_FILE("project-pp2", "PP2", "/tmp/pp2"),
         uiState: {
-          processingPhase: "done",
+          processing: {
+            currentPhase: "done",
+          },
         },
       }),
     ).toThrow();
@@ -119,8 +127,8 @@ describe("ProjectFileSchema", () => {
     const parsed = ProjectFileSchema.parse(
       DEFAULT_PROJECT_FILE("project-no-pc", "NoPC", "/tmp/nopc"),
     );
-    expect(parsed.uiState.processingConfig).toBeUndefined();
-    expect(parsed.uiState.processingPhase).toBeUndefined();
+    expect(parsed.uiState.processing?.config).toBeUndefined();
+    expect(parsed.uiState.processing?.currentPhase).toBeUndefined();
   });
 
   it("rejects invalid import execution phases", () => {
@@ -144,24 +152,26 @@ describe("ProjectFileSchema", () => {
     const parsed = ProjectFileSchema.parse(
       DEFAULT_PROJECT_FILE("project-adv", "Adv Project", "/tmp/adv"),
     );
-    expect(parsed.uiState.dataParametersAdvancedVisibility?.showAdvancedSections).toBe(false);
+    expect(parsed.uiState.datapar?.advancedVisibility?.showAdvancedSections).toBe(false);
   });
 
   it("parses showAdvancedSections true in uiState", () => {
     const parsed = ProjectFileSchema.parse({
       ...DEFAULT_PROJECT_FILE("project-adv2", "Adv2", "/tmp/adv2"),
       uiState: {
-        dataParametersAdvancedVisibility: {
-          showAdvancedSections: true,
-          showAdvancedM0Params: false,
-          showAdvancedQuantification: false,
-          showAdvancedGeneralSettings: false,
-          showAdvancedASLProcessing: false,
-          showAdvancedAtlases: false,
+        datapar: {
+          advancedVisibility: {
+            showAdvancedSections: true,
+            showAdvancedM0Params: false,
+            showAdvancedQuantification: false,
+            showAdvancedGeneralSettings: false,
+            showAdvancedASLProcessing: false,
+            showAdvancedAtlases: false,
+          },
         },
       },
     });
-    expect(parsed.uiState.dataParametersAdvancedVisibility?.showAdvancedSections).toBe(true);
+    expect(parsed.uiState.datapar?.advancedVisibility?.showAdvancedSections).toBe(true);
   });
 
   it("accepts empty dataPar object (backward compat)", () => {

@@ -138,6 +138,21 @@ describe("ExecutionDashboard component", () => {
     expect(screen.getAllByText("Done").length).toBeGreaterThan(0);
   });
 
+  it("shows Done badge and no Running badge when status is complete but locked is true", () => {
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["060_Segment_T1w", "070_SkullStrip_T1w"],
+        locked: true,
+      },
+    ];
+    renderDashboard();
+    expect(screen.getAllByText("Done").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
+  });
+
   it("renders population section as single row when population module enabled", () => {
     mockConfig = {
       subjects: ["sub-001_01"],
@@ -171,6 +186,35 @@ describe("ExecutionDashboard component", () => {
 
 
 
+  it("renders subjects in alphanumeric order", () => {
+    mockAvailableSubjects = [
+      { subjectSession: "sub-C9ORF007Philips_11", subject: "C9ORF007Philips", session: "11", hasStructural: true, hasASL: true },
+      { subjectSession: "sub-C9ORF007Philips_01", subject: "C9ORF007Philips", session: "01", hasStructural: true, hasASL: true },
+      { subjectSession: "sub-C9ORF007Philips_02", subject: "C9ORF007Philips", session: "02", hasStructural: true, hasASL: true },
+      { subjectSession: "sub-C9ORF059Siemens_01", subject: "C9ORF059Siemens", session: "01", hasStructural: true, hasASL: true },
+    ];
+    mockConfig = {
+      subjects: [
+        "sub-C9ORF007Philips_11",
+        "sub-C9ORF007Philips_01",
+        "sub-C9ORF007Philips_02",
+        "sub-C9ORF059Siemens_01",
+      ],
+      modules: ["structural"],
+    };
+    renderDashboard();
+    const section = screen.getByTestId("structural-section");
+    const rows = within(section).getAllByTestId("subject-row");
+    expect(rows).toHaveLength(4);
+    const labels = rows.map((r) => within(r).getByText(/sub-/).textContent);
+    expect(labels).toEqual([
+      "sub-C9ORF007Philips_01",
+      "sub-C9ORF007Philips_02",
+      "sub-C9ORF007Philips_11",
+      "sub-C9ORF059Siemens_01",
+    ]);
+  });
+
   it("renders module header with progress badge", () => {
     mockSubjectStatuses = [
       {
@@ -186,5 +230,27 @@ describe("ExecutionDashboard component", () => {
     expect(headers.length).toBeGreaterThan(0);
     // Badge should show 1/2 (one of two subjects complete)
     expect(within(headers[0]).getByText("1/2")).toBeInTheDocument();
+  });
+
+  it("shows no Done or Running badges when subjectStatuses is empty (stale cleared)", () => {
+    mockSubjectStatuses = [];
+    renderDashboard();
+    expect(screen.queryByText("Done")).not.toBeInTheDocument();
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
+    // Steps should be empty — "No steps recorded"
+    expect(screen.getAllByText("No steps recorded").length).toBeGreaterThan(0);
+  });
+
+  it("shows no stale step timeline when statuses were cleared before re-processing", () => {
+    // Simulates: subject completed previously, statuses cleared on startProcessing,
+    // dashboard should show empty steps, not old completed steps
+    mockSubjectStatuses = [];
+    renderDashboard();
+    const section = screen.getByTestId("structural-section");
+    const rows = within(section).getAllByTestId("subject-row");
+    expect(rows).toHaveLength(2);
+    // No step timelines should be rendered (all show "No steps recorded")
+    const noSteps = within(section).getAllByText("No steps recorded");
+    expect(noSteps).toHaveLength(2);
   });
 });

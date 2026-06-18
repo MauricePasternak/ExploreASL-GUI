@@ -198,7 +198,7 @@ describe("dataParStore saveToProject", () => {
     expect(useProjectStore.getState().isDirty).toBe(true);
   });
 
-  it("syncs advancedVisibility into project uiState.dataParametersAdvancedVisibility", async () => {
+  it("syncs advancedVisibility into project uiState.datapar.advancedVisibility", async () => {
     await useProjectStore.getState().createProject("/tmp/test2", "Test2");
     useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
 
@@ -206,13 +206,15 @@ describe("dataParStore saveToProject", () => {
 
     const project = useProjectStore.getState().project;
     expect(project?.uiState).toMatchObject({
-      dataParametersAdvancedVisibility: {
-        showAdvancedSections: true,
-        showAdvancedM0Params: false,
-        showAdvancedQuantification: false,
-        showAdvancedGeneralSettings: false,
-        showAdvancedASLProcessing: false,
-        showAdvancedAtlases: false,
+      datapar: {
+        advancedVisibility: {
+          showAdvancedSections: true,
+          showAdvancedM0Params: false,
+          showAdvancedQuantification: false,
+          showAdvancedGeneralSettings: false,
+          showAdvancedASLProcessing: false,
+          showAdvancedAtlases: false,
+        },
       },
     });
   });

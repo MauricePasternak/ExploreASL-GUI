@@ -20,13 +20,13 @@ export function useProcessingSync() {
     const project = useProjectStore.getState().project;
     if (!project) return;
 
-    const { processingConfig, processingPhase } = project.uiState;
+    const processing = project.uiState.processing;
 
-    if (processingConfig) {
-      useProcessingStore.getState().setConfig(processingConfig);
+    if (processing?.config) {
+      useProcessingStore.getState().setConfig(processing.config);
     }
-    if (processingPhase !== undefined) {
-      useProcessingStore.getState().setPhase(processingPhase);
+    if (processing?.currentPhase !== undefined) {
+      useProcessingStore.getState().setPhase(processing.currentPhase);
     }
 
     // Scan subjects and load lock file statuses

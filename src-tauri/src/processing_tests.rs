@@ -2,7 +2,7 @@
 mod tests {
     use crate::processing::*;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_temp_path(name: &str) -> PathBuf {
@@ -36,6 +36,163 @@ mod tests {
     #[should_panic(expected = "Invalid module index")]
     fn module_index_to_name_panics_on_invalid_index() {
         module_index_to_name(3);
+    }
+
+    // -------------------------------------------------------------------------
+    // is_mutex_related_line / check_log_for_error
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn is_mutex_related_line_detects_mutex_message() {
+        assert!(is_mutex_related_line("ERROR: mutex is locked for subject sub-001"));
+        assert!(is_mutex_related_line("  mutex is locked"));
+        assert!(is_mutex_related_line("Mutex is locked"));
+    }
+
+    #[test]
+    fn is_mutex_related_line_rejects_normal_errors() {
+        assert!(!is_mutex_related_line("ERROR: file not found"));
+        assert!(!is_mutex_related_line("Error processing subject"));
+        assert!(!is_mutex_related_line("some normal log line"));
+    }
+
+    #[test]
+    fn check_log_for_error_returns_false_for_mutex_only_errors() {
+        let dir = unique_temp_path("mutex-only");
+        fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("test.log");
+        fs::write(&log, "INFO: starting\nERROR: mutex is locked for subject sub-001\nINFO: retrying\n").unwrap();
+        assert!(!check_log_for_error(&log));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn check_log_for_error_returns_true_for_real_errors() {
+        let dir = unique_temp_path("real-error");
+        fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("test.log");
+        fs::write(&log, "INFO: starting\nERROR: file not found /data/sub-001.nii\n").unwrap();
+        assert!(check_log_for_error(&log));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn check_log_for_error_returns_true_when_mixed_mutex_and_real_errors() {
+        let dir = unique_temp_path("mixed-errors");
+        fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("test.log");
+        fs::write(&log, "ERROR: mutex is locked\nERROR: file not found\n").unwrap();
+        assert!(check_log_for_error(&log));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn check_log_for_error_returns_false_for_empty_log() {
+        let dir = unique_temp_path("empty-log");
+        fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("test.log");
+        fs::write(&log, "").unwrap();
+        assert!(!check_log_for_error(&log));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // -------------------------------------------------------------------------
+    // Error determination: 999_ready.status + mutex interaction
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn error_detection_ready_status_no_mutex_not_errored() {
+        let dir = unique_temp_path("ready-no-mutex");
+        let lock_dir = dir.join("lock");
+        fs::create_dir_all(&lock_dir).unwrap();
+        fs::write(lock_dir.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(lock_dir.join("999_ready.status"), "").unwrap();
+
+        let log = dir.join("log");
+        fs::write(&log, "INFO: starting\nINFO: completed successfully\n").unwrap();
+
+        let (status, _, _) = determine_status(&lock_dir);
+        let has_error = check_log_for_error(&log);
+        assert_eq!(status, "complete");
+        assert!(!has_error);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn error_detection_ready_status_with_mutex_not_errored() {
+        let dir = unique_temp_path("ready-mutex");
+        let lock_dir = dir.join("lock");
+        fs::create_dir_all(&lock_dir).unwrap();
+        fs::write(lock_dir.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(lock_dir.join("999_ready.status"), "").unwrap();
+
+        let log = dir.join("log");
+        fs::write(
+            &log,
+            "INFO: starting\nERROR: mutex is locked for subject sub-001\nINFO: completed\n",
+        )
+        .unwrap();
+
+        let (status, _, _) = determine_status(&lock_dir);
+        let has_error = check_log_for_error(&log);
+        assert_eq!(status, "complete");
+        assert!(!has_error);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn error_detection_no_ready_status_with_mutex_is_errored() {
+        let dir = unique_temp_path("no-ready-mutex");
+        let lock_dir = dir.join("lock");
+        fs::create_dir_all(&lock_dir).unwrap();
+        fs::write(lock_dir.join("060_Segment_T1w.status"), "").unwrap();
+
+        let log = dir.join("log");
+        fs::write(
+            &log,
+            "INFO: starting\nERROR: mutex is locked for subject sub-001\n",
+        )
+        .unwrap();
+
+        let (status, _, _) = determine_status(&lock_dir);
+        let has_error = check_log_for_error(&log);
+        assert_eq!(status, "incomplete");
+        assert!(!has_error);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn error_detection_no_ready_status_no_mutex_is_errored() {
+        let dir = unique_temp_path("no-ready-no-mutex");
+        let lock_dir = dir.join("lock");
+        fs::create_dir_all(&lock_dir).unwrap();
+        fs::write(lock_dir.join("060_Segment_T1w.status"), "").unwrap();
+
+        let log = dir.join("log");
+        fs::write(&log, "INFO: starting\nINFO: processing...\n").unwrap();
+
+        let (status, _, _) = determine_status(&lock_dir);
+        let has_error = check_log_for_error(&log);
+        assert_eq!(status, "incomplete");
+        assert!(!has_error);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn error_detection_never_run_not_errored() {
+        let dir = unique_temp_path("never-run");
+        let lock_dir = dir.join("lock");
+        fs::create_dir_all(&lock_dir).unwrap();
+
+        let (status, steps, _) = determine_status(&lock_dir);
+        assert_eq!(status, "pending");
+        assert!(steps.is_empty());
+
+        let _ = fs::remove_dir_all(dir);
     }
 
     // -------------------------------------------------------------------------
@@ -175,11 +332,27 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn determine_status_complete_overrides_locked() {
+        let dir = unique_temp_path("det-complete-locked");
+        fs::create_dir_all(dir.join("locked")).unwrap();
+        fs::write(dir.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(dir.join("999_ready.status"), "").unwrap();
+
+        let (status, steps, locked) = determine_status(&dir);
+        assert_eq!(status, "complete");
+        assert!(!locked);
+        assert!(steps.contains(&"060_Segment_T1w".to_string()));
+        assert!(!steps.contains(&"999_ready".to_string()));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // -------------------------------------------------------------------------
     // read_lock_status
     // -------------------------------------------------------------------------
 
-    fn create_lock_tree(root: &PathBuf) {
+    fn create_lock_tree(root: &Path) {
         let lock = root.join("derivatives").join("ExploreASL").join("lock");
 
         // Structural: sub-001_01 complete

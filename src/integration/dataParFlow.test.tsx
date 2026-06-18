@@ -69,13 +69,15 @@ describe("dataPar flow: store ↔ project sync", () => {
           currentPhase: "parameters",
         },
         uiState: {
-          dataParametersAdvancedVisibility: {
-            showAdvancedSections: false,
-            showAdvancedM0Params: false,
-            showAdvancedQuantification: false,
-            showAdvancedGeneralSettings: false,
-            showAdvancedASLProcessing: false,
-            showAdvancedAtlases: false,
+          datapar: {
+            advancedVisibility: {
+              showAdvancedSections: false,
+              showAdvancedM0Params: false,
+              showAdvancedQuantification: false,
+              showAdvancedGeneralSettings: false,
+              showAdvancedASLProcessing: false,
+              showAdvancedAtlases: false,
+            },
           },
         },
         mappingState: {},
@@ -110,13 +112,15 @@ describe("dataPar flow: store ↔ project sync", () => {
           currentPhase: "parameters",
         },
         uiState: {
-          dataParametersAdvancedVisibility: {
-            showAdvancedSections: false,
-            showAdvancedM0Params: false,
-            showAdvancedQuantification: false,
-            showAdvancedGeneralSettings: false,
-            showAdvancedASLProcessing: false,
-            showAdvancedAtlases: false,
+          datapar: {
+            advancedVisibility: {
+              showAdvancedSections: false,
+              showAdvancedM0Params: false,
+              showAdvancedQuantification: false,
+              showAdvancedGeneralSettings: false,
+              showAdvancedASLProcessing: false,
+              showAdvancedAtlases: false,
+            },
           },
         },
         mappingState: {},
@@ -157,13 +161,15 @@ describe("dataPar flow: store ↔ project sync", () => {
           currentPhase: "parameters",
         },
         uiState: {
-          dataParametersAdvancedVisibility: {
-            showAdvancedSections: false,
-            showAdvancedM0Params: false,
-            showAdvancedQuantification: false,
-            showAdvancedGeneralSettings: false,
-            showAdvancedASLProcessing: false,
-            showAdvancedAtlases: false,
+          datapar: {
+            advancedVisibility: {
+              showAdvancedSections: false,
+              showAdvancedM0Params: false,
+              showAdvancedQuantification: false,
+              showAdvancedGeneralSettings: false,
+              showAdvancedASLProcessing: false,
+              showAdvancedAtlases: false,
+            },
           },
         },
         mappingState: {},
@@ -176,7 +182,7 @@ describe("dataPar flow: store ↔ project sync", () => {
     useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
     useDataParStore.getState().saveToProject();
 
-    expect(useProjectStore.getState().project!.uiState.dataParametersAdvancedVisibility!.showAdvancedSections).toBe(true);
+    expect(useProjectStore.getState().project!.uiState.datapar!.advancedVisibility!.showAdvancedSections).toBe(true);
   });
 });
 

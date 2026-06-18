@@ -200,8 +200,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (!state.project) return state;
 
       if (
-        JSON.stringify(state.project.uiState.processingConfig) === JSON.stringify(config) &&
-        state.project.uiState.processingPhase === processingPhase
+        JSON.stringify(state.project.uiState.processing?.config) === JSON.stringify(config) &&
+        state.project.uiState.processing?.currentPhase === processingPhase
       ) {
         return state;
       }
@@ -211,8 +211,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           ...state.project,
           uiState: {
             ...state.project.uiState,
-            processingConfig: config ?? undefined,
-            processingPhase,
+            processing: {
+              config: config ?? undefined,
+              currentPhase: processingPhase,
+            },
           },
         },
         isDirty: true,

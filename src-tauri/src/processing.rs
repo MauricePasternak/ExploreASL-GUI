@@ -3,7 +3,7 @@ use crate::tracing::CommandTrace;
 use notify::{EventKind, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -65,40 +65,45 @@ pub struct SubjectModuleStatus {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogFileInfo {
-    pub filename: String,
-    pub module: String,
-    pub subject_session: String,
-    pub run: Option<String>,
-    pub has_error: bool,
+  pub filename: String,
+  pub module: String,
+  pub subject_session: String,
+  pub run: Option<String>,
+  pub has_error: bool,
 }
 
-fn check_log_for_error(path: &std::path::Path) -> bool {
-    let file_size = match fs::metadata(path) {
-        Ok(m) => m.len(),
-        Err(_) => return false,
-    };
+pub(crate) fn is_mutex_related_line(line: &str) -> bool {
+  let lower = line.to_lowercase();
+  lower.contains("mutex is locked")
+}
 
-    let offset = if file_size > 2048 { file_size - 2048 } else { 0 };
-    let mut file = match fs::File::open(path) {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
+pub(crate) fn check_log_for_error(path: &std::path::Path) -> bool {
+  let file_size = match fs::metadata(path) {
+    Ok(m) => m.len(),
+    Err(_) => return false,
+  };
 
-    use std::io::{Read, Seek, SeekFrom};
-    if offset > 0 {
-        if file.seek(SeekFrom::Start(offset)).is_err() {
-            return false;
-        }
-    }
+  let offset = file_size.saturating_sub(2048);
+  let mut file = match fs::File::open(path) {
+    Ok(f) => f,
+    Err(_) => return false,
+  };
 
-    let mut buf = vec![0u8; 2048];
-    let bytes_read = match file.read(&mut buf) {
-        Ok(n) => n,
-        Err(_) => return false,
-    };
+  use std::io::{Read, Seek, SeekFrom};
+  if offset > 0 && file.seek(SeekFrom::Start(offset)).is_err() {
+    return false;
+  }
 
-    let content = String::from_utf8_lossy(&buf[..bytes_read]);
-    content.to_lowercase().contains("error")
+  let mut buf = vec![0u8; 2048];
+  let bytes_read = match file.read(&mut buf) {
+    Ok(n) => n,
+    Err(_) => return false,
+  };
+
+  let content = String::from_utf8_lossy(&buf[..bytes_read]);
+  content
+    .lines()
+    .any(|line| line.to_lowercase().contains("error") && !is_mutex_related_line(line))
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -218,6 +223,10 @@ pub(crate) fn determine_status(dir: &std::path::Path) -> (String, Vec<String>, b
     }
   }
 
+  if has_ready {
+    locked = false;
+  }
+
   let status = if has_ready {
     "complete".to_string()
   } else if has_status {
@@ -328,191 +337,188 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
 
 /// ExploreASL log directories, project root first so persisted logs win over staging copies.
 fn exploreasl_log_dirs(project_root: &std::path::Path) -> Vec<std::path::PathBuf> {
-    let mut dirs = Vec::new();
-    let project_log = project_root
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("log");
-    if project_log.is_dir() {
-        dirs.push(project_log);
-    }
-    let staging_log = project_root
-        .join(".easl_staging")
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("log");
-    if staging_log.is_dir() {
-        dirs.push(staging_log);
-    }
-    dirs
+  let mut dirs = Vec::new();
+  let project_log = project_root
+    .join("derivatives")
+    .join("ExploreASL")
+    .join("log");
+  if project_log.is_dir() {
+    dirs.push(project_log);
+  }
+  let staging_log = project_root
+    .join(".easl_staging")
+    .join("derivatives")
+    .join("ExploreASL")
+    .join("log");
+  if staging_log.is_dir() {
+    dirs.push(staging_log);
+  }
+  dirs
 }
 
 fn parse_module_log_file(
-    file_name: &str,
-    path: &std::path::Path,
-    subject_session_re: &regex::Regex,
-    import_subject_re: &regex::Regex,
-    asl_run_re: &regex::Regex,
+  file_name: &str,
+  path: &std::path::Path,
+  subject_session_re: &regex::Regex,
+  import_subject_re: &regex::Regex,
+  asl_run_re: &regex::Regex,
 ) -> Option<LogFileInfo> {
-    let module = if file_name.starts_with("xASL_module_Structural") {
-        "structural"
-    } else if file_name.starts_with("xASL_module_ASL") {
-        "asl"
-    } else if file_name.starts_with("xASL_module_Import") {
-        "import"
-    } else {
-        return None;
-    };
+  let module = if file_name.starts_with("xASL_module_Structural") {
+    "structural"
+  } else if file_name.starts_with("xASL_module_ASL") {
+    "asl"
+  } else if file_name.starts_with("xASL_module_Import") {
+    "import"
+  } else {
+    return None;
+  };
 
-    let subject_identifier = if module == "import" {
-        import_subject_re
-            .find(file_name)
-            .map(|m| m.as_str().to_string())
-    } else {
-        subject_session_re
-            .find(file_name)
-            .map(|m| m.as_str().to_string())
-    };
+  let subject_identifier = if module == "import" {
+    import_subject_re
+      .find(file_name)
+      .map(|m| m.as_str().to_string())
+  } else {
+    subject_session_re
+      .find(file_name)
+      .map(|m| m.as_str().to_string())
+  };
 
-    let subject_identifier_val = subject_identifier?;
+  let subject_identifier_val = subject_identifier?;
 
-    let run = if module == "asl" {
-        asl_run_re
-            .captures(file_name)
-            .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string())
-    } else {
-        None
-    };
+  let run = if module == "asl" {
+    asl_run_re
+      .captures(file_name)
+      .and_then(|caps| caps.get(1))
+      .map(|m| m.as_str().to_string())
+  } else {
+    None
+  };
 
-    Some(LogFileInfo {
-        filename: file_name.to_string(),
-        module: module.to_string(),
-        subject_session: subject_identifier_val,
-        run,
-        has_error: check_log_for_error(path),
-    })
+  Some(LogFileInfo {
+    filename: file_name.to_string(),
+    module: module.to_string(),
+    subject_session: subject_identifier_val,
+    run,
+    has_error: check_log_for_error(path),
+  })
 }
 
 #[tauri::command]
 pub fn list_module_logs(project_root: String) -> Result<Vec<LogFileInfo>, String> {
-    let trace = CommandTrace::new("list_module_logs");
-    trace.arg("project_root", &project_root);
+  let trace = CommandTrace::new("list_module_logs");
+  trace.arg("project_root", &project_root);
 
-    let project_root = PathBuf::from(project_root);
-    let log_dirs = exploreasl_log_dirs(&project_root);
+  let project_root = PathBuf::from(project_root);
+  let log_dirs = exploreasl_log_dirs(&project_root);
 
-    if log_dirs.is_empty() {
-        trace.success(&Vec::<LogFileInfo>::new());
-        return Ok(Vec::new());
+  if log_dirs.is_empty() {
+    trace.success(&Vec::<LogFileInfo>::new());
+    return Ok(Vec::new());
+  }
+
+  let subject_session_re =
+    regex::Regex::new(r"sub-[^_]+_\d+").expect("subject_session pattern should compile");
+
+  let import_subject_re =
+    regex::Regex::new(r"sub-[^_\s.]+").expect("import subject pattern should compile");
+
+  let asl_run_re = regex::Regex::new(r"_ASL_(\d+)\.").expect("ASL run pattern should compile");
+
+  let mut results = Vec::new();
+  let mut seen_filenames = std::collections::HashSet::new();
+
+  for log_dir in log_dirs {
+    let entries = fs::read_dir(&log_dir)
+      .map_err(|e| format!("Failed to read log dir {}: {}", log_dir.display(), e))?;
+
+    for entry in entries {
+      let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+      let file_name = entry.file_name().to_string_lossy().to_string();
+
+      if seen_filenames.contains(&file_name) {
+        continue;
+      }
+
+      let Some(info) = parse_module_log_file(
+        &file_name,
+        &entry.path(),
+        &subject_session_re,
+        &import_subject_re,
+        &asl_run_re,
+      ) else {
+        continue;
+      };
+
+      seen_filenames.insert(file_name);
+      results.push(info);
     }
+  }
 
-    let subject_session_re =
-        regex::Regex::new(r"sub-[^_]+_\d+").expect("subject_session pattern should compile");
-
-    let import_subject_re =
-        regex::Regex::new(r"sub-[^_\s.]+").expect("import subject pattern should compile");
-
-    let asl_run_re =
-        regex::Regex::new(r"_ASL_(\d+)\.").expect("ASL run pattern should compile");
-
-    let mut results = Vec::new();
-    let mut seen_filenames = std::collections::HashSet::new();
-
-    for log_dir in log_dirs {
-        let entries = fs::read_dir(&log_dir).map_err(|e| {
-            format!("Failed to read log dir {}: {}", log_dir.display(), e)
-        })?;
-
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
-            let file_name = entry.file_name().to_string_lossy().to_string();
-
-            if seen_filenames.contains(&file_name) {
-                continue;
-            }
-
-            let Some(info) = parse_module_log_file(
-                &file_name,
-                &entry.path(),
-                &subject_session_re,
-                &import_subject_re,
-                &asl_run_re,
-            ) else {
-                continue;
-            };
-
-            seen_filenames.insert(file_name);
-            results.push(info);
-        }
-    }
-
-    trace.success(&results);
-    Ok(results)
+  trace.success(&results);
+  Ok(results)
 }
 
 #[tauri::command]
 pub fn read_module_logs(
-    project_root: String,
-    subject_session: String,
-    module: String,
+  project_root: String,
+  subject_session: String,
+  module: String,
 ) -> Result<std::collections::HashMap<String, String>, String> {
-    let trace = CommandTrace::new("read_module_logs");
-    trace.arg("project_root", &project_root);
-    trace.arg("subject_session", &subject_session);
-    trace.arg("module", &module);
+  let trace = CommandTrace::new("read_module_logs");
+  trace.arg("project_root", &project_root);
+  trace.arg("subject_session", &subject_session);
+  trace.arg("module", &module);
 
-    let project_root = PathBuf::from(&project_root);
-    let log_dirs = exploreasl_log_dirs(&project_root);
+  let project_root = PathBuf::from(&project_root);
+  let log_dirs = exploreasl_log_dirs(&project_root);
 
-    if log_dirs.is_empty() {
-        trace.success(&std::collections::HashMap::<String, String>::new());
-        return Ok(std::collections::HashMap::new());
-    }
+  if log_dirs.is_empty() {
+    trace.success(&std::collections::HashMap::<String, String>::new());
+    return Ok(std::collections::HashMap::new());
+  }
 
-    let module_prefix = match module.as_str() {
-        "structural" => "xASL_module_Structural",
-        "asl" => "xASL_module_ASL",
-        "import" => "xASL_module_Import",
-        _ => return Err(format!("Unknown module: {}", module)),
-    };
+  let module_prefix = match module.as_str() {
+    "structural" => "xASL_module_Structural",
+    "asl" => "xASL_module_ASL",
+    "import" => "xASL_module_Import",
+    _ => return Err(format!("Unknown module: {}", module)),
+  };
 
-    let search_prefix = format!("{}_{}", module_prefix, subject_session);
+  let search_prefix = format!("{}_{}", module_prefix, subject_session);
 
-    let mut results = std::collections::HashMap::new();
+  let mut results = std::collections::HashMap::new();
 
-    for log_dir in log_dirs {
-        let entries = fs::read_dir(&log_dir).map_err(|e| {
-            format!("Failed to read log dir {}: {}", log_dir.display(), e)
-        })?;
+  for log_dir in log_dirs {
+    let entries = fs::read_dir(&log_dir)
+      .map_err(|e| format!("Failed to read log dir {}: {}", log_dir.display(), e))?;
 
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
-            let file_name = entry.file_name().to_string_lossy().to_string();
+    for entry in entries {
+      let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+      let file_name = entry.file_name().to_string_lossy().to_string();
 
-            if !file_name.starts_with(&search_prefix) || results.contains_key(&file_name) {
-                continue;
+      if !file_name.starts_with(&search_prefix) || results.contains_key(&file_name) {
+        continue;
+      }
+
+      let content = match fs::read_to_string(entry.path()) {
+        Ok(c) => c,
+        Err(_) => {
+          let bytes = match fs::read(entry.path()) {
+            Ok(b) => b,
+            Err(e) => {
+              return Err(format!("Failed to read log file {}: {}", file_name, e));
             }
-
-            let content = match fs::read_to_string(entry.path()) {
-                Ok(c) => c,
-                Err(_) => {
-                    let bytes = match fs::read(&entry.path()) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            return Err(format!("Failed to read log file {}: {}", file_name, e));
-                        }
-                    };
-                    String::from_utf8_lossy(&bytes).to_string()
-                }
-            };
-
-            results.insert(file_name, content);
+          };
+          String::from_utf8_lossy(&bytes).to_string()
         }
-    }
+      };
 
-    trace.success(&results);
-    Ok(results)
+      results.insert(file_name, content);
+    }
+  }
+
+  trace.success(&results);
+  Ok(results)
 }
 
 fn escape_matlab_string(value: &str) -> String {
@@ -524,8 +530,9 @@ fn spawn_matlab_processing_process(matlab_path: &str, batch: &str) -> std::io::R
   command
     .arg("-batch")
     .arg(batch)
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null());
 
   #[cfg(windows)]
   {
@@ -655,7 +662,7 @@ pub fn detect_exploreasl_version(explore_asl_path: String) -> Option<String> {
   version
 }
 
-fn write_data_par_json(project_root: &PathBuf, data_par_json: &str) -> Result<(), String> {
+fn write_data_par_json(project_root: &Path, data_par_json: &str) -> Result<(), String> {
   let data_par_dir = project_root.join("derivatives").join("ExploreASL");
   fs::create_dir_all(&data_par_dir).map_err(|e| {
     format!(
@@ -669,7 +676,7 @@ fn write_data_par_json(project_root: &PathBuf, data_par_json: &str) -> Result<()
     .map_err(|e| format!("Failed to write {}: {}", data_par_path.display(), e))
 }
 
-fn ensure_lock_dir(project_root: &PathBuf) -> Result<PathBuf, String> {
+fn ensure_lock_dir(project_root: &Path) -> Result<PathBuf, String> {
   let lock_dir = project_root
     .join("derivatives")
     .join("ExploreASL")
@@ -684,7 +691,7 @@ fn ensure_lock_dir(project_root: &PathBuf) -> Result<PathBuf, String> {
   Ok(lock_dir)
 }
 
-pub(crate) fn clear_stale_lock_dirs(lock_root: &PathBuf, b_process: &[bool]) -> Result<(), String> {
+pub(crate) fn clear_stale_lock_dirs(lock_root: &Path, b_process: &[bool]) -> Result<(), String> {
   for (i, &enabled) in b_process.iter().enumerate() {
     if !enabled {
       continue;
@@ -694,7 +701,7 @@ pub(crate) fn clear_stale_lock_dirs(lock_root: &PathBuf, b_process: &[bool]) -> 
   Ok(())
 }
 
-fn clear_module_locked_dirs(lock_root: &PathBuf, module_name: &str) -> Result<(), String> {
+fn clear_module_locked_dirs(lock_root: &Path, module_name: &str) -> Result<(), String> {
   let module_lock = lock_root.join(module_name);
   if !module_lock.exists() {
     return Ok(());
@@ -707,10 +714,10 @@ fn clear_module_locked_dirs(lock_root: &PathBuf, module_name: &str) -> Result<()
     if entry.file_type().is_dir() {
       let path = entry.path();
       if path
-          .file_name()
-          .and_then(|n| n.to_str())
-          .map(|n| n == "locked")
-          .unwrap_or(false)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n == "locked")
+        .unwrap_or(false)
       {
         if let Err(e) = fs::remove_dir_all(path) {
           if e.kind() != std::io::ErrorKind::NotFound {
@@ -736,14 +743,18 @@ pub fn clear_stale_locks(project_root: String) -> Result<(), String> {
   if !lock_root.exists() {
     return Ok(());
   }
-  for module_name in &["xASL_module_Structural", "xASL_module_ASL", "xASL_module_Population"] {
+  for module_name in &[
+    "xASL_module_Structural",
+    "xASL_module_ASL",
+    "xASL_module_Population",
+  ] {
     clear_module_locked_dirs(&lock_root, module_name)?;
   }
   Ok(())
 }
 
 pub(crate) fn delete_status_files_for_modules(
-  project_root: &PathBuf,
+  project_root: &Path,
   b_process: &[bool],
   subject_regexp: &str,
 ) -> Result<(), String> {
@@ -794,9 +805,9 @@ pub(crate) fn delete_status_files_for_modules(
       }
 
       if module_name == "xASL_module_ASL" {
-        for run_entry in fs::read_dir(entry.path()).map_err(|e| {
-          format!("Failed to read ASL subject lock dir: {}", e)
-        })? {
+        for run_entry in fs::read_dir(entry.path())
+          .map_err(|e| format!("Failed to read ASL subject lock dir: {}", e))?
+        {
           let run_entry = run_entry.map_err(|e| format!("Failed to read run entry: {}", e))?;
           if !run_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
             continue;
@@ -844,7 +855,7 @@ fn delete_status_files_in_dir(dir: &PathBuf) -> Result<(), String> {
 }
 
 pub(crate) fn delete_module_log_files(
-  project_root: &PathBuf,
+  project_root: &Path,
   b_process: &[bool],
   subject_regexp: &str,
 ) -> Result<(), String> {
@@ -875,9 +886,9 @@ pub(crate) fn delete_module_log_files(
     let module_name = module_index_to_name(i);
     let prefix = module_name.to_string();
 
-    for entry in fs::read_dir(&log_dir).map_err(|e| {
-      format!("Failed to read log dir {}: {}", log_dir.display(), e)
-    })? {
+    for entry in fs::read_dir(&log_dir)
+      .map_err(|e| format!("Failed to read log dir {}: {}", log_dir.display(), e))?
+    {
       let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
       let file_name = entry.file_name().to_string_lossy().to_string();
 
@@ -959,7 +970,7 @@ pub fn run_pipeline(
   trace.arg("project_root", &project_root);
   trace.arg("matlab_path", &matlab_path);
   trace.arg("explore_asl_path", &explore_asl_path);
-  trace.arg("workers", &workers.to_string());
+  trace.arg("workers", workers.to_string());
   trace.arg("subject_regexp", &subject_regexp);
 
   if workers == 0 {
@@ -1148,7 +1159,12 @@ fn parse_lock_path(
       let subject_session = Some(parts[1].to_string());
       let run_dir = parts[2].to_string();
       let run = if run_dir.starts_with("xASL_module_ASL_ASL_") {
-        Some(run_dir.strip_prefix("xASL_module_ASL_ASL_").unwrap().to_string())
+        Some(
+          run_dir
+            .strip_prefix("xASL_module_ASL_ASL_")
+            .unwrap()
+            .to_string(),
+        )
       } else {
         None
       };
@@ -1203,7 +1219,12 @@ fn parse_lock_dir_path(lock_root: &std::path::Path, path: &std::path::Path) -> O
       let subject_session = Some(parts[1].to_string());
       let run_dir = parts[2].to_string();
       let run = if run_dir.starts_with("xASL_module_ASL_ASL_") {
-        Some(run_dir.strip_prefix("xASL_module_ASL_ASL_").unwrap().to_string())
+        Some(
+          run_dir
+            .strip_prefix("xASL_module_ASL_ASL_")
+            .unwrap()
+            .to_string(),
+        )
       } else {
         None
       };
@@ -1297,12 +1318,23 @@ pub fn watch_lock_dir(
                   };
                   if last == "locked" {
                     if let Some(lock_event) = parse_lock_dir_path(&lock_root_clone, path) {
-                      log::info!("[WATCHER] LockCreated: module={} subject={:?} run={:?}", lock_event.module, lock_event.subject_session, lock_event.run);
+                      log::info!(
+                        "[WATCHER] LockCreated: module={} subject={:?} run={:?}",
+                        lock_event.module,
+                        lock_event.subject_session,
+                        lock_event.run
+                      );
                       let _ = app_clone.emit("LockCreated", lock_event);
                     }
                   }
                 } else if let Some(status_event) = parse_lock_path(&lock_root_clone, path) {
-                  log::info!("[WATCHER] StatusFileCreated: module={} subject={:?} step={} run={:?}", status_event.module, status_event.subject_session, status_event.step_code, status_event.run);
+                  log::info!(
+                    "[WATCHER] StatusFileCreated: module={} subject={:?} step={} run={:?}",
+                    status_event.module,
+                    status_event.subject_session,
+                    status_event.step_code,
+                    status_event.run
+                  );
                   let _ = app_clone.emit("StatusFileCreated", status_event);
                 }
               }
@@ -1311,7 +1343,13 @@ pub fn watch_lock_dir(
               for path in &event.paths {
                 if !path.is_dir() {
                   if let Some(status_event) = parse_lock_path(&lock_root_clone, path) {
-                    log::info!("[WATCHER] StatusFileModified: module={} subject={:?} step={} run={:?}", status_event.module, status_event.subject_session, status_event.step_code, status_event.run);
+                    log::info!(
+                      "[WATCHER] StatusFileModified: module={} subject={:?} step={} run={:?}",
+                      status_event.module,
+                      status_event.subject_session,
+                      status_event.step_code,
+                      status_event.run
+                    );
                     let _ = app_clone.emit("StatusFileCreated", status_event);
                   }
                 }
@@ -1330,7 +1368,12 @@ pub fn watch_lock_dir(
                   };
                   if last == "locked" {
                     if let Some(lock_event) = parse_lock_dir_path(&lock_root_clone, path) {
-                      log::info!("[WATCHER] LockRemoved: module={} subject={:?} run={:?}", lock_event.module, lock_event.subject_session, lock_event.run);
+                      log::info!(
+                        "[WATCHER] LockRemoved: module={} subject={:?} run={:?}",
+                        lock_event.module,
+                        lock_event.subject_session,
+                        lock_event.run
+                      );
                       let _ = app_clone.emit("LockRemoved", lock_event);
                     }
                   }
@@ -1340,14 +1383,12 @@ pub fn watch_lock_dir(
             _ => {}
           }
         }
-        Err(mpsc::RecvTimeoutError::Timeout) => {
-          match stop_rx.try_recv() {
-            Ok(()) | Err(mpsc::TryRecvError::Disconnected) => {
-              break;
-            }
-            Err(mpsc::TryRecvError::Empty) => {}
+        Err(mpsc::RecvTimeoutError::Timeout) => match stop_rx.try_recv() {
+          Ok(()) | Err(mpsc::TryRecvError::Disconnected) => {
+            break;
           }
-        }
+          Err(mpsc::TryRecvError::Empty) => {}
+        },
         Err(mpsc::RecvTimeoutError::Disconnected) => {
           log::warn!("[WATCHER] Event channel disconnected");
           break;
@@ -1393,8 +1434,6 @@ pub fn stop_watch_lock_dir(state: State<'_, AppState>) -> Result<(), String> {
 
   Ok(())
 }
-
-
 
 #[path = "processing_tests.rs"]
 mod processing_tests;

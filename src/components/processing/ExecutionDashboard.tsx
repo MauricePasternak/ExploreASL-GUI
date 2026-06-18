@@ -115,6 +115,7 @@ function SubjectRow({
   processingPhase,
 }: SubjectRowProps) {
   const isRunning =
+    status !== "complete" &&
     (locked || status === "incomplete") &&
     processingPhase !== "failed" &&
     processingPhase !== "cancelled";
@@ -128,7 +129,7 @@ function SubjectRow({
       data-testid="subject-row"
     >
       <Group gap="md" align="center" style={{ flex: 1, minWidth: 0 }}>
-        <Text size="sm" ff="monospace" style={{ flexShrink: 0 }} w={140} truncate>
+        <Text size="sm" ff="monospace" style={{ flexShrink: 0 }} w={240} truncate>
           {subjectSession}
         </Text>
         <StepTimeline steps={steps} />
@@ -168,6 +169,7 @@ function RunSubRow({
   processingPhase: ProcessingPhase;
 }) {
   const isRunning =
+    status !== "complete" &&
     (locked || status === "incomplete") &&
     processingPhase !== "failed" &&
     processingPhase !== "cancelled";
@@ -182,7 +184,7 @@ function RunSubRow({
       data-testid="run-sub-row"
     >
       <Group gap="md" align="center" style={{ flex: 1, minWidth: 0 }}>
-        <Text size="xs" c="dimmed" style={{ flexShrink: 0 }} w={140}>
+        <Text size="xs" c="dimmed" style={{ flexShrink: 0 }} w={240}>
           Run {run}
         </Text>
         <StepTimeline steps={steps} />
@@ -225,7 +227,7 @@ export function getStepsForSubject(
     name,
     status: "complete" as const,
   }));
-  if (entry.locked) {
+  if (entry.locked && entry.status !== "complete") {
     steps.push({ name: "Processing...", status: "running" });
   }
   return steps;
@@ -302,7 +304,11 @@ export default function ExecutionDashboard() {
   const selectedSubjects = useMemo(() => {
     if (!config) return [];
     const set = new Set(config.subjects);
-    return availableSubjects.filter((s) => set.has(s.subjectSession));
+    return availableSubjects
+      .filter((s) => set.has(s.subjectSession))
+      .sort((a, b) =>
+        a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
+      );
   }, [config, availableSubjects]);
 
   const enabledModules = useMemo(() => {
@@ -499,7 +505,7 @@ function PopulationSection({
     name,
     status: "complete" as const,
   })) ?? []);
-  if (entry?.locked) {
+  if (entry?.locked && entry?.status !== "complete") {
     steps.push({ name: "Processing...", status: "running" });
   }
 

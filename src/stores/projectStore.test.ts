@@ -118,7 +118,7 @@ describe("useProjectStore", () => {
   });
 
   describe("syncProcessingState", () => {
-    it("syncs config to uiState.processingConfig", async () => {
+    it("syncs config to uiState.processing.config", async () => {
       await useProjectStore.getState().createProject("/tmp/proc-project", "Proc Project");
 
       const config = {
@@ -133,12 +133,12 @@ describe("useProjectStore", () => {
       });
 
       const project = useProjectStore.getState().project;
-      expect(project?.uiState.processingConfig).toEqual(config);
-      expect(project?.uiState.processingPhase).toBe("idle");
+      expect(project?.uiState.processing?.config).toEqual(config);
+      expect(project?.uiState.processing?.currentPhase).toBe("idle");
       expect(useProjectStore.getState().isDirty).toBe(true);
     });
 
-    it("syncs processingPhase to uiState.processingPhase", async () => {
+    it("syncs processingPhase to uiState.processing.currentPhase", async () => {
       await useProjectStore.getState().createProject("/tmp/phase-project", "Phase Project");
 
       useProjectStore.getState().syncProcessingState({
@@ -147,8 +147,8 @@ describe("useProjectStore", () => {
       });
 
       const project = useProjectStore.getState().project;
-      expect(project?.uiState.processingPhase).toBe("running");
-      expect(project?.uiState.processingConfig).toBeUndefined();
+      expect(project?.uiState.processing?.currentPhase).toBe("running");
+      expect(project?.uiState.processing?.config).toBeUndefined();
     });
 
     it("handles null config without throwing", async () => {
@@ -160,7 +160,7 @@ describe("useProjectStore", () => {
       });
 
       const project = useProjectStore.getState().project;
-      expect(project?.uiState.processingConfig).toBeUndefined();
+      expect(project?.uiState.processing?.config).toBeUndefined();
     });
 
     it("skips update when values are equal (equality no-op guard)", async () => {

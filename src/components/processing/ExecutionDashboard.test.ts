@@ -60,4 +60,15 @@ describe("getStepsForSubject", () => {
     expect(steps).toHaveLength(3);
     expect(steps[2]).toEqual({ name: "Processing...", status: "running" });
   });
+
+  it("does not append running step when locked but status is complete", () => {
+    const statuses: SubjectModuleStatus[] = [
+      { ...baseEntry, status: "complete", locked: true },
+    ];
+    const steps = getStepsForSubject("sub-001_01", "structural", statuses);
+    expect(steps).toEqual([
+      { name: "060_Segment_T1w", status: "complete" },
+      { name: "070_SkullStrip_T1w", status: "complete" },
+    ]);
+  });
 });
