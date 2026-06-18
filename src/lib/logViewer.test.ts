@@ -34,10 +34,23 @@ describe("LogFileInfoSchema", () => {
     expect(result.hasError).toBe(true);
   });
 
-  it("rejects invalid module", () => {
+  it("parses a population log entry", () => {
     const input = {
       filename: "xASL_module_Population.log",
       module: "population",
+      subjectSession: "",
+      run: null,
+      hasError: false,
+    };
+    const result = LogFileInfoSchema.parse(input);
+    expect(result.module).toBe("population");
+    expect(result.subjectSession).toBe("");
+  });
+
+  it("rejects invalid module", () => {
+    const input = {
+      filename: "xASL_module_Unknown.log",
+      module: "unknown",
       subjectSession: "",
       run: null,
       hasError: false,

@@ -130,6 +130,16 @@ describe("ProcessingPage", () => {
     expect(screen.queryByTestId("module-checkbox-population")).not.toBeInTheDocument();
   });
 
+  it("renders PopulationSection between PipelineConfig and PreflightCheck", () => {
+    renderPage();
+    const pipeline = screen.getByTestId("pipeline-config");
+    const population = screen.getByTestId("population-section");
+    const preflight = screen.getByTestId("preflight-check");
+    // Verify DOM order
+    expect(pipeline.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(preflight.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
   it("shows validation errors when config has issues", () => {
     renderPage();
     // Mock config has all fields so validation may or may not show
@@ -154,6 +164,6 @@ describe("ProcessingPage", () => {
 
   it("renders LogViewerModal as part of log column integration", () => {
     renderPage();
-    expect(screen.getByTestId("log-viewer-modal")).toBeInTheDocument();
+    expect(screen.getAllByTestId("log-viewer-modal")[0]).toBeInTheDocument();
   });
 });

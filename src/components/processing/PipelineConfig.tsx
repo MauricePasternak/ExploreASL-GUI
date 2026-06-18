@@ -7,7 +7,7 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { IconAlertTriangle, IconInfoCircle } from "@tabler/icons-react";
+import { IconAlertTriangle } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
