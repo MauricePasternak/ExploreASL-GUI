@@ -1,5 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
+// Note: MantineProvider import may be from @mantine/core, let's keep other imports unchanged.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockStartProcessing = vi.fn();
@@ -114,19 +115,19 @@ describe("ProcessingPage", () => {
     expect(screen.getByText("Select Subject/Session Entries")).toBeInTheDocument();
   });
 
+  it("does not render population status column in SubjectSelection", () => {
+    renderPage();
+    const subjectSelection = screen.getByTestId("subject-selection");
+    expect(within(subjectSelection).queryByText(/Population/i)).not.toBeInTheDocument();
+  });
+
   it("renders PipelineConfig with module checkboxes", () => {
     renderPage();
     const config = screen.getByTestId("pipeline-config");
     expect(config).toBeInTheDocument();
     expect(screen.getByTestId("module-checkbox-structural")).toBeInTheDocument();
     expect(screen.getByTestId("module-checkbox-asl")).toBeInTheDocument();
-    expect(screen.getByTestId("module-checkbox-population")).toBeInTheDocument();
-  });
-
-  it("shows Population warning when population module checked", async () => {
-    // The mock has population not in modules, so toggle it
-    renderPage();
-    expect(screen.queryByTestId("population-warning")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("module-checkbox-population")).not.toBeInTheDocument();
   });
 
   it("shows validation errors when config has issues", () => {
