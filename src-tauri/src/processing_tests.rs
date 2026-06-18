@@ -348,6 +348,32 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn determine_status_returns_steps_in_sorted_order() {
+        let dir = unique_temp_path("det-sorted");
+        fs::create_dir_all(&dir).unwrap();
+        // Write in reverse order to ensure sort is doing the work
+        fs::write(dir.join("100_VisualQC_Structural.status"), "").unwrap();
+        fs::write(dir.join("010_LinearReg_T1w2MNI.status"), "").unwrap();
+        fs::write(dir.join("060_Segment_T1w.status"), "").unwrap();
+        fs::write(dir.join("030_FLAIR_BiasfieldCorrection.status"), "").unwrap();
+        fs::write(dir.join("999_ready.status"), "").unwrap();
+
+        let (status, steps, _) = determine_status(&dir);
+        assert_eq!(status, "complete");
+        assert_eq!(
+            steps,
+            vec![
+                "010_LinearReg_T1w2MNI",
+                "030_FLAIR_BiasfieldCorrection",
+                "060_Segment_T1w",
+                "100_VisualQC_Structural",
+            ]
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
     // -------------------------------------------------------------------------
     // read_lock_status
     // -------------------------------------------------------------------------
