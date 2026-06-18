@@ -371,6 +371,8 @@ fn parse_module_log_file(
     "asl"
   } else if file_name.starts_with("xASL_module_Import") {
     "import"
+  } else if file_name.starts_with("xASL_module_Population") {
+    "population"
   } else {
     return None;
   };
@@ -379,6 +381,8 @@ fn parse_module_log_file(
     import_subject_re
       .find(file_name)
       .map(|m| m.as_str().to_string())
+  } else if module == "population" {
+    Some(String::new())
   } else {
     subject_session_re
       .find(file_name)
@@ -483,10 +487,15 @@ pub fn read_module_logs(
     "structural" => "xASL_module_Structural",
     "asl" => "xASL_module_ASL",
     "import" => "xASL_module_Import",
+    "population" => "xASL_module_Population",
     _ => return Err(format!("Unknown module: {}", module)),
   };
 
-  let search_prefix = format!("{}_{}", module_prefix, subject_session);
+  let search_prefix = if module == "population" {
+    module_prefix.to_string()
+  } else {
+    format!("{}_{}", module_prefix, subject_session)
+  };
 
   let mut results = std::collections::HashMap::new();
 

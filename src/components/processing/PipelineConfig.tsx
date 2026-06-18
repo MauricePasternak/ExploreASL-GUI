@@ -7,7 +7,7 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { IconAlertTriangle, IconInfoCircle } from "@tabler/icons-react";
+import { IconAlertTriangle } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
@@ -89,14 +89,15 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
 
   const noMatlab = settings.matlabInstallations.length === 0;
   const noExploreAsl = !settings.exploreAslPath?.trim();
-  const populationSelected = config?.modules.includes("population") ?? false;
 
   // Validation
   const validationErrors = useMemo(() => {
     const errors: string[] = [];
     if (noMatlab) errors.push("No MATLAB installation configured. Add one in Settings.");
     if (noExploreAsl) errors.push("No ExploreASL path configured. Set it in Settings.");
-    if (!config?.subjects.length) errors.push("No subjects selected.");
+    const populationOnly =
+      config?.modules.length === 1 && config?.modules[0] === "population";
+    if (!config?.subjects.length && !populationOnly) errors.push("No subjects selected.");
     if (!config?.modules.length) errors.push("At least one module must be selected.");
     return errors;
   }, [noMatlab, noExploreAsl, config?.subjects, config?.modules]);
@@ -172,7 +173,7 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
           Modules
         </Text>
         <Stack gap="xs">
-          {PROCESSING_MODULES.map((module) => (
+          {PROCESSING_MODULES.filter((m) => m !== "population").map((module) => (
             <Checkbox
               key={module}
               label={module.charAt(0).toUpperCase() + module.slice(1)}
@@ -184,35 +185,18 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
         </Stack>
       </div>
 
-      {/* Population warning */}
-      {populationSelected && (
-        <Alert
-          color="yellow"
-          icon={<IconInfoCircle size={16} />}
-          data-testid="population-warning"
-        >
-          <Text size="sm">
-            Population module selected — worker count forced to 1 (single-threaded
-            required for atlas/group statistics).
-          </Text>
-        </Alert>
-      )}
-
       {/* Worker count */}
       <NumberInput
         label="Workers"
         description={
-          populationSelected
-            ? "Locked to 1 for population module"
-            : config.subjects.length > 0 && config.workers > config.subjects.length
+          config.subjects.length > 0 && config.workers > config.subjects.length
             ? `Default: ${defaultWorkers} | Max: ${systemCores} cores (capped to ${config.subjects.length} active worker${config.subjects.length > 1 ? "s" : ""} for selected subject${config.subjects.length > 1 ? "s" : ""})`
             : `Default: ${defaultWorkers} | Max: ${systemCores} cores`
         }
-        value={populationSelected ? 1 : config.workers}
+        value={config.workers}
         onChange={handleWorkersChange}
         min={1}
         max={systemCores}
-        disabled={populationSelected}
         clampBehavior="strict"
         data-testid="worker-count-input"
       />

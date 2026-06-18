@@ -5,6 +5,7 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 import ControlButtons from "../components/processing/ControlButtons";
 import ExecutionDashboard from "../components/processing/ExecutionDashboard";
 import PipelineConfig from "../components/processing/PipelineConfig";
+import PopulationSection from "../components/processing/PopulationSection";
 import PreflightCheck from "../components/processing/PreflightCheck";
 import SubjectSelection from "../components/processing/SubjectSelection";
 import { useProcessingSync } from "../hooks/useProcessingSync";
@@ -19,11 +20,12 @@ export default function ProcessingPage() {
   const isRunning = processingPhase === "running" || processingPhase === "preparing";
   const showConfig = processingPhase === "idle" || processingPhase === "completed" || processingPhase === "failed" || processingPhase === "cancelled";
 
-  // Orphaned lock entries: subjects in rawdata but not in availableSubjects
+  // Orphaned lock entries: subjects in rawdata but not in availableSubjects.
+  // Population is group-level (subjectSession is empty) — exclude from orphan check.
   const orphanedSubjects = useMemo(() => {
     const subjectSet = new Set(availableSubjects.map((s) => s.subjectSession));
     return subjectStatuses
-      .filter((s) => !subjectSet.has(s.subjectSession))
+      .filter((s) => s.module !== "population" && !subjectSet.has(s.subjectSession))
       .map((s) => s.subjectSession)
       .filter((v, i, a) => a.indexOf(v) === i);
   }, [availableSubjects, subjectStatuses]);
@@ -57,6 +59,7 @@ export default function ProcessingPage() {
         <>
           <SubjectSelection />
           <PipelineConfig />
+          <PopulationSection />
           <PreflightCheck />
         </>
       )}
