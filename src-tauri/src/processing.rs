@@ -227,6 +227,8 @@ pub(crate) fn determine_status(dir: &std::path::Path) -> (String, Vec<String>, b
     locked = false;
   }
 
+  completed_steps.sort();
+
   let status = if has_ready {
     "complete".to_string()
   } else if has_status {
