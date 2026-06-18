@@ -11,7 +11,7 @@ The processing route SHALL be `/project/:id/processing`. It SHALL be inaccessibl
 - **THEN** the app SHALL redirect to `/project/:id/import`
 
 ### Requirement: Subject Selection DataTable
-The processing page SHALL display a Mantine DataTable with checkboxes for subject/session selection. Columns SHALL include: checkbox, subject, session, Structural status icon, Structural Logs/Errors, ASL status icon, ASL Logs/Errors, Population status icon. Above the table, filter chips SHALL allow filtering by status: All, Pending, Incomplete, Complete. "Select all" and "Deselect all" buttons SHALL be provided.
+The processing page SHALL display a Mantine DataTable with checkboxes for subject/session selection. Columns SHALL include: checkbox, subject, session, Structural status icon, Structural Logs/Errors, ASL status icon, ASL Logs/Errors. Above the table, filter chips SHALL allow filtering by status: All, Pending, Incomplete, Complete. "Select all" and "Deselect all" buttons SHALL be provided.
 
 The two new columns SHALL render as follows:
 - **Has log, no error**: teal `Badge` with text "View Logs", clickable to open LogViewerModal
@@ -47,16 +47,24 @@ The two new columns SHALL render as follows:
 - **WHEN** a subject session has `hasStructural: false`
 - **THEN** the Structural Logs/Errors column for that row SHALL show an empty cell
 
-### Requirement: Pipeline Configuration Panel
-The pipeline configuration panel SHALL include: MATLAB version dropdown (populated from global settings `matlabInstallations`), module checkboxes (Structural, ASL, Population — at least one required), and worker count number input with default `Math.min(ceil(availableMemory / 4GB), cpuCores, 4)` and hard cap at `cpuCores`. When Population is selected, worker count SHALL be forced to 1 with a visible warning.
+#### Scenario: Population column removed
+- **WHEN** the Subject Selection DataTable renders
+- **THEN** no Population status column SHALL appear in the table
 
-#### Scenario: Population module selected
-- **WHEN** the user checks the Population checkbox
-- **THEN** the worker count SHALL be set to 1, the input SHALL be disabled, and a warning SHALL read "Population module cannot be parallelized. Worker count set to 1."
+### Requirement: Pipeline Configuration Panel
+The pipeline configuration panel SHALL include: MATLAB version dropdown (populated from global settings `matlabInstallations`), module checkboxes (Structural, ASL — at least one required unless Population is selected), and worker count number input with default `Math.min(ceil(availableMemory / 4GB), cpuCores, 4)` and hard cap at `cpuCores`.
+
+#### Scenario: Population module not shown
+- **WHEN** the Pipeline Configuration Panel renders
+- **THEN** no Population checkbox SHALL appear
 
 #### Scenario: No MATLAB path configured
 - **WHEN** global settings has no MATLAB installations
 - **THEN** the MATLAB version dropdown SHALL show an error state and the Start button SHALL be disabled
+
+#### Scenario: Worker count not forced by Population
+- **WHEN** Population is selected in the Population Analysis section
+- **THEN** the worker count input in PipelineConfig SHALL NOT be affected (Population's worker=1 constraint is handled elsewhere)
 
 ### Requirement: Pre-flight Validation
 Before transitioning from `idle` to `preparing`, the store SHALL validate the following. Rules are categorized as hard blocks (prevent Start), soft warnings (allow Start with caution), or informational (auto-applied).

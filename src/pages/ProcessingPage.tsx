@@ -5,6 +5,7 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 import ControlButtons from "../components/processing/ControlButtons";
 import ExecutionDashboard from "../components/processing/ExecutionDashboard";
 import PipelineConfig from "../components/processing/PipelineConfig";
+import PopulationSection from "../components/processing/PopulationSection";
 import PreflightCheck from "../components/processing/PreflightCheck";
 import SubjectSelection from "../components/processing/SubjectSelection";
 import { useProcessingSync } from "../hooks/useProcessingSync";
@@ -57,6 +58,7 @@ export default function ProcessingPage() {
         <>
           <SubjectSelection />
           <PipelineConfig />
+          <PopulationSection />
           <PreflightCheck />
         </>
       )}

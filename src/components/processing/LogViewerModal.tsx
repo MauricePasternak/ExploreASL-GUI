@@ -32,7 +32,7 @@ interface LogViewerModalProps {
   opened: boolean;
   onClose: () => void;
   logContent: LogContent | null;
-  module: "structural" | "asl" | "import";
+  module: "structural" | "asl" | "import" | "population";
   subjectSession: string;
   loading?: boolean;
   error?: string | null;
@@ -57,8 +57,13 @@ export default function LogViewerModal({
   }, [logContent]);
 
   const runOptions: RunOption[] = useMemo(() => {
-    if (module === "structural" || module === "import") {
-      const label = module === "structural" ? "Structural Log" : "Import Log";
+    if (module === "structural" || module === "import" || module === "population") {
+      const label =
+        module === "structural"
+          ? "Structural Log"
+          : module === "import"
+          ? "Import Log"
+          : "Population Log";
       return entries.map(([filename]) => ({
         value: filename,
         label,
@@ -104,15 +109,31 @@ export default function LogViewerModal({
   }, [selectedFile, currentHasError]);
 
   const modalTitle = useMemo(() => {
-    const moduleLabel = module === "structural" ? "Structural" : module === "asl" ? "ASL" : "Import";
-    const [sub, ses] = subjectSession.split("_");
-    const subLabel = sub ?? subjectSession;
-    const sesLabel = ses ? ` / ses-${ses}` : "";
+    const moduleLabel =
+      module === "structural"
+        ? "Structural"
+        : module === "asl"
+        ? "ASL"
+        : module === "import"
+        ? "Import"
+        : "Population";
     const errBadge = currentHasError ? (
       <Badge color="red" ml="sm" size="sm" data-testid="log-error-badge">
         ERRORS DETECTED
       </Badge>
     ) : null;
+
+    if (module === "population") {
+      return (
+        <span>
+          Population Log {errBadge}
+        </span>
+      );
+    }
+
+    const [sub, ses] = subjectSession ? subjectSession.split("_") : ["", ""];
+    const subLabel = sub || subjectSession;
+    const sesLabel = ses ? ` / ses-${ses}` : "";
     return (
       <span>
         {moduleLabel} Log — {subLabel}{sesLabel} {errBadge}
