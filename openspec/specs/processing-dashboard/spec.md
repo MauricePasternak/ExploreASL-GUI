@@ -70,7 +70,7 @@ The pipeline configuration panel SHALL include: MATLAB version dropdown (populat
 Before transitioning from `idle` to `preparing`, the store SHALL validate the following. Rules are categorized as hard blocks (prevent Start), soft warnings (allow Start with caution), or informational (auto-applied).
 
 **Hard blocks (cannot proceed):**
-1. At least one SubjectSession selected
+1. At least one SubjectSession selected (relaxed when the only selected module is Population — group-level module)
 2. At least one module selected
 3. MATLAB path configured and executable exists
 4. ExploreASL path exists and contains `ExploreASL.m`
@@ -88,8 +88,12 @@ Before transitioning from `idle` to `preparing`, the store SHALL validate the fo
 - **THEN** a hard block error SHALL be displayed: "ExploreASL not found at [path]. Check Settings."
 
 #### Scenario: Zero subjects selected
-- **WHEN** no subjects are checked in the DataTable
+- **WHEN** no subjects are checked in the DataTable AND modules contain Structural or ASL
 - **THEN** the Start button SHALL be disabled with message "Select at least one subject"
+
+#### Scenario: Population-only run with no subjects selected
+- **WHEN** modules is exactly `["population"]` AND no subjects are checked
+- **THEN** the Start button SHALL remain enabled (Population is group-level and does not require per-subject selection)
 
 #### Scenario: Soft warning about dataPar.json
 - **WHEN** `derivatives/ExploreASL/dataPar.json` doesn't exist

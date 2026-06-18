@@ -95,7 +95,9 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
     const errors: string[] = [];
     if (noMatlab) errors.push("No MATLAB installation configured. Add one in Settings.");
     if (noExploreAsl) errors.push("No ExploreASL path configured. Set it in Settings.");
-    if (!config?.subjects.length) errors.push("No subjects selected.");
+    const populationOnly =
+      config?.modules.length === 1 && config?.modules[0] === "population";
+    if (!config?.subjects.length && !populationOnly) errors.push("No subjects selected.");
     if (!config?.modules.length) errors.push("At least one module must be selected.");
     return errors;
   }, [noMatlab, noExploreAsl, config?.subjects, config?.modules]);

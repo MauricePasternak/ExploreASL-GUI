@@ -23,6 +23,11 @@ vi.mock("../../stores/projectStore", () => ({
     }),
 }));
 
+vi.mock("../../lib/logViewer", () => ({
+  fetchModuleLogs: vi.fn().mockResolvedValue([]),
+  fetchLogContent: vi.fn().mockResolvedValue({ lines: [], totalLines: 0, truncated: false }),
+}));
+
 function renderSection() {
   return render(
     <MantineProvider>
@@ -129,7 +134,7 @@ describe("PopulationSection", () => {
     expect(checkbox).toBeDisabled();
   });
 
-  it("renders atlas recap from dataPar", () => {
+  it("renders atlas badges with display names", () => {
     useDataParStore.setState({
       dataPar: {
         Atlases: ["Total", "DeepWM"],
@@ -137,11 +142,74 @@ describe("PopulationSection", () => {
     });
 
     renderSection();
-    expect(screen.getByTestId("population-atlas-recap")).toHaveTextContent("Total, DeepWM");
+    const badges = screen.getAllByTestId("population-atlas-badge");
+    expect(badges).toHaveLength(2);
+    expect(badges[0]).toHaveTextContent("Whole Brain Grey and White Matter");
+    expect(badges[1]).toHaveTextContent("Deep White Matter");
   });
 
-  it("disables log button when no log file exists", () => {
+  it("shows 'No atlases configured' when atlases empty", () => {
+    useDataParStore.setState({
+      dataPar: { Atlases: [] },
+    });
+
     renderSection();
-    expect(screen.getByTestId("population-log-btn")).toBeDisabled();
+    expect(screen.getByTestId("population-atlas-recap")).toHaveTextContent("No atlases configured");
+  });
+
+  it("falls back to raw name for unknown atlas codes", () => {
+    useDataParStore.setState({
+      dataPar: {
+        Atlases: ["UnknownAtlas"],
+      },
+    });
+
+    renderSection();
+    const badges = screen.getAllByTestId("population-atlas-badge");
+    expect(badges).toHaveLength(1);
+    expect(badges[0]).toHaveTextContent("UnknownAtlas");
+  });
+
+  it("shows 'No Logs' text when no log files exist", () => {
+    renderSection();
+    expect(screen.getByTestId("population-no-logs")).toHaveTextContent("No Logs");
+  });
+
+  it("shows pending status icon when no population status exists", () => {
+    useProcessingStore.setState({ subjectStatuses: [] });
+    renderSection();
+    expect(screen.getByTestId("population-status-pending")).toBeInTheDocument();
+  });
+
+  it("shows complete status icon when population is complete", () => {
+    useProcessingStore.setState({
+      subjectStatuses: [
+        { subjectSession: "", module: "population", status: "complete", completedSteps: [], locked: false },
+      ],
+    });
+    renderSection();
+    expect(screen.getByTestId("population-status-complete")).toBeInTheDocument();
+  });
+
+  it("shows in-progress status icon when population is incomplete", () => {
+    useProcessingStore.setState({
+      processingPhase: "running",
+      subjectStatuses: [
+        { subjectSession: "", module: "population", status: "incomplete", completedSteps: [], locked: true },
+      ],
+    });
+    renderSection();
+    expect(screen.getByTestId("population-status-incomplete")).toBeInTheDocument();
+  });
+
+  it("shows stalled status icon when population is incomplete and phase is failed", () => {
+    useProcessingStore.setState({
+      processingPhase: "failed",
+      subjectStatuses: [
+        { subjectSession: "", module: "population", status: "incomplete", completedSteps: [], locked: true },
+      ],
+    });
+    renderSection();
+    expect(screen.getByTestId("population-status-incomplete-stalled")).toBeInTheDocument();
   });
 });
