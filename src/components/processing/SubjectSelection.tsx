@@ -42,6 +42,18 @@ interface SubjectRow extends SubjectInfo {
 
 type ModuleDisplayStatus = "complete" | "incomplete" | "pending" | "skipped";
 
+export type LogBadgeVariant = "errors" | "logs" | "no-logs";
+
+export function resolveLogBadge(
+  moduleStatus: ModuleDisplayStatus,
+  logFiles: LogFileInfo[] | undefined,
+): LogBadgeVariant {
+  if (!logFiles || logFiles.length === 0) {
+    return moduleStatus === "incomplete" ? "errors" : "no-logs";
+  }
+  return moduleStatus === "incomplete" ? "errors" : "logs";
+}
+
 // ---------------------------------------------------------------------------
 // Status icon
 // ---------------------------------------------------------------------------
@@ -192,20 +204,21 @@ function buildColumns(
       render: (row) => {
         if (row._structuralStatus === "skipped") return null;
         const files = structuralLogInfo.get(row.subjectSession);
-        if (!files || files.length === 0) {
+        const badge = resolveLogBadge(row._structuralStatus, files);
+        if (badge === "no-logs") {
           return <Text size="xs" c="dimmed" data-testid="no-structural-logs">No Logs</Text>;
         }
-        const hasError = files.some((f) => f.hasError);
+        const isError = badge === "errors";
         return (
           <Badge
             size="sm"
-            color={hasError ? "red" : "teal"}
+            color={isError ? "red" : "teal"}
             variant="outline"
-            style={{ cursor: "pointer" }}
-            onClick={() => onViewLog(row.subjectSession, "structural")}
-            data-testid={hasError ? "view-structural-errors" : "view-structural-logs"}
+            style={isError ? undefined : { cursor: "pointer" }}
+            onClick={isError ? undefined : () => onViewLog(row.subjectSession, "structural")}
+            data-testid={isError ? "view-structural-errors" : "view-structural-logs"}
           >
-            {hasError ? "View Errors" : "View Logs"}
+            {isError ? "View Errors" : "View Logs"}
           </Badge>
         );
       },
@@ -223,20 +236,21 @@ function buildColumns(
       render: (row) => {
         if (row._aslStatus === "skipped") return null;
         const files = aslLogInfo.get(row.subjectSession);
-        if (!files || files.length === 0) {
+        const badge = resolveLogBadge(row._aslStatus, files);
+        if (badge === "no-logs") {
           return <Text size="xs" c="dimmed" data-testid="no-asl-logs">No Logs</Text>;
         }
-        const hasError = files.some((f) => f.hasError);
+        const isError = badge === "errors";
         return (
           <Badge
             size="sm"
-            color={hasError ? "red" : "teal"}
+            color={isError ? "red" : "teal"}
             variant="outline"
-            style={{ cursor: "pointer" }}
-            onClick={() => onViewLog(row.subjectSession, "asl")}
-            data-testid={hasError ? "view-asl-errors" : "view-asl-logs"}
+            style={isError ? undefined : { cursor: "pointer" }}
+            onClick={isError ? undefined : () => onViewLog(row.subjectSession, "asl")}
+            data-testid={isError ? "view-asl-errors" : "view-asl-logs"}
           >
-            {hasError ? "View Errors" : "View Logs"}
+            {isError ? "View Errors" : "View Logs"}
           </Badge>
         );
       },
@@ -416,13 +430,17 @@ export default function SubjectSelection() {
     const files = modalModule === "structural"
       ? structuralLogInfo.get(modalSubjectSession)
       : aslLogInfo.get(modalSubjectSession);
+    const row = rows.find((r) => r.subjectSession === modalSubjectSession);
+    const moduleIncomplete = modalModule === "structural"
+      ? row?._structuralStatus === "incomplete"
+      : row?._aslStatus === "incomplete";
     if (!files) return {};
     const map: Record<string, boolean> = {};
     for (const f of files) {
-      map[f.filename] = f.hasError;
+      map[f.filename] = f.hasError || !!moduleIncomplete;
     }
     return map;
-  }, [modalModule, modalSubjectSession, structuralLogInfo, aslLogInfo]);
+  }, [modalModule, modalSubjectSession, structuralLogInfo, aslLogInfo, rows]);
 
   const statusCounts = useMemo(() => {
     const counts = { all: rows.length, pending: 0, incomplete: 0, complete: 0 };

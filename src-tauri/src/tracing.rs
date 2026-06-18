@@ -21,12 +21,24 @@ impl<'a> CommandTrace<'a> {
     }
 
     pub fn success<T: fmt::Debug>(&self, result: &T) {
-        log::info!(
-            "[COMMAND] {} — completed in {:?} with result: {:?}",
-            self.name,
-            self.start.elapsed(),
-            result
-        );
+        let full = format!("{:?}", result);
+        const MAX_LEN: usize = 200;
+        if full.len() > MAX_LEN {
+            log::info!(
+                "[COMMAND] {} — completed in {:?} with result ({} chars): {}…",
+                self.name,
+                self.start.elapsed(),
+                full.len(),
+                &full[..MAX_LEN]
+            );
+        } else {
+            log::info!(
+                "[COMMAND] {} — completed in {:?} with result: {}",
+                self.name,
+                self.start.elapsed(),
+                full
+            );
+        }
     }
 
     pub fn error<T: fmt::Debug>(&self, err: &T) {

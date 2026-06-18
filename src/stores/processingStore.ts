@@ -96,7 +96,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       }
     }
 
-    set({ processingPhase: "preparing" });
+    set({ processingPhase: "preparing", subjectStatuses: [] });
 
     const { watchLockDir, setupProcessingListeners, runProcessingPipeline } =
       await import("../lib/processingEvents");

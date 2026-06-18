@@ -47,8 +47,8 @@ describe("processing config round-trip persistence", () => {
     const savedJson = calls[calls.length - 1][1] as string;
     const saved = JSON.parse(savedJson);
 
-    expect(saved.uiState.processingConfig).toEqual(config);
-    expect(saved.uiState.processingPhase).toBe("idle");
+    expect(saved.uiState.processing?.config).toEqual(config);
+    expect(saved.uiState.processing?.currentPhase).toBe("idle");
 
     // Simulate reload: load the saved JSON
     vi.mocked(readTextFile).mockResolvedValue(savedJson);
@@ -59,8 +59,8 @@ describe("processing config round-trip persistence", () => {
       .loadProject("/tmp/roundtrip-project/project.easl");
 
     const restored = useProjectStore.getState().project;
-    expect(restored?.uiState.processingConfig).toEqual(config);
-    expect(restored?.uiState.processingPhase).toBe("idle");
+    expect(restored?.uiState.processing?.config).toEqual(config);
+    expect(restored?.uiState.processing?.currentPhase).toBe("idle");
   });
 
   it("persists processingPhase transitions across save/reload", async () => {
@@ -78,7 +78,7 @@ describe("processing config round-trip persistence", () => {
     const calls = vi.mocked(writeTextFile).mock.calls;
     const reloadJson = calls[calls.length - 1][1] as string;
     const saved = JSON.parse(reloadJson);
-    expect(saved.uiState.processingPhase).toBe("running");
+    expect(saved.uiState.processing?.currentPhase).toBe("running");
 
     // Reload
     vi.mocked(readTextFile).mockResolvedValue(reloadJson);
@@ -87,7 +87,7 @@ describe("processing config round-trip persistence", () => {
       .getState()
       .loadProject("/tmp/phase-roundtrip/project.easl");
 
-    expect(useProjectStore.getState().project?.uiState.processingPhase).toBe(
+    expect(useProjectStore.getState().project?.uiState.processing?.currentPhase).toBe(
       "running",
     );
   });
@@ -104,6 +104,6 @@ describe("processing config round-trip persistence", () => {
     const saved = JSON.parse(savedJson);
 
     // processingConfig should not be present or be undefined
-    expect(saved.uiState.processingConfig).toBeUndefined();
+    expect(saved.uiState.processing?.config).toBeUndefined();
   });
 });

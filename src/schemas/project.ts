@@ -36,24 +36,32 @@ export const ProjectFileSchema = z.object({
     .object({
       import: ImportUiStateSchema.optional(),
       navbarCollapsed: z.boolean().optional(),
-      processingConfig: ProcessConfigSchema.optional(),
-      processingPhase: ProcessingPhaseSchema.optional(),
-      dataParametersAdvancedVisibility: z
+      processing: z
         .object({
-          showAdvancedSections: z.boolean().default(false),
-          showAdvancedM0Params: z.boolean().default(false),
-          showAdvancedQuantification: z.boolean().default(false),
-          showAdvancedGeneralSettings: z.boolean().default(false),
-          showAdvancedASLProcessing: z.boolean().default(false),
-          showAdvancedAtlases: z.boolean().default(false),
+          config: ProcessConfigSchema.optional(),
+          currentPhase: ProcessingPhaseSchema.optional(),
         })
-        .default({
-          showAdvancedSections: false,
-          showAdvancedM0Params: false,
-          showAdvancedQuantification: false,
-          showAdvancedGeneralSettings: false,
-          showAdvancedASLProcessing: false,
-          showAdvancedAtlases: false,
+        .optional(),
+      datapar: z
+        .object({
+          advancedVisibility: z
+            .object({
+              showAdvancedSections: z.boolean().default(false),
+              showAdvancedM0Params: z.boolean().default(false),
+              showAdvancedQuantification: z.boolean().default(false),
+              showAdvancedGeneralSettings: z.boolean().default(false),
+              showAdvancedASLProcessing: z.boolean().default(false),
+              showAdvancedAtlases: z.boolean().default(false),
+            })
+            .default({
+              showAdvancedSections: false,
+              showAdvancedM0Params: false,
+              showAdvancedQuantification: false,
+              showAdvancedGeneralSettings: false,
+              showAdvancedASLProcessing: false,
+              showAdvancedAtlases: false,
+            })
+            .optional(),
         })
         .optional(),
     })
@@ -94,13 +102,15 @@ export const DEFAULT_PROJECT_FILE = (
   },
   uiState: {
     navbarCollapsed: true,
-    dataParametersAdvancedVisibility: {
-      showAdvancedSections: false,
-      showAdvancedM0Params: false,
-      showAdvancedQuantification: false,
-      showAdvancedGeneralSettings: false,
-      showAdvancedASLProcessing: false,
-      showAdvancedAtlases: false,
+    datapar: {
+      advancedVisibility: {
+        showAdvancedSections: false,
+        showAdvancedM0Params: false,
+        showAdvancedQuantification: false,
+        showAdvancedGeneralSettings: false,
+        showAdvancedASLProcessing: false,
+        showAdvancedAtlases: false,
+      },
     },
   },
   mappingState: {},

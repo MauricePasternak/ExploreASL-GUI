@@ -315,6 +315,90 @@ describe("processingStore updateSubjectStatus", () => {
 });
 
 // ---------------------------------------------------------------------------
+// startProcessing clears stale subjectStatuses
+// ---------------------------------------------------------------------------
+
+describe("processingStore startProcessing clears stale statuses", () => {
+	beforeEach(() => {
+		useProcessingStore.getState().setAvailableSubjects([
+			{ subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
+			{ subjectSession: "sub-002_02", subject: "002", session: "02", hasStructural: true, hasASL: true },
+		]);
+	});
+
+	it("clears subjectStatuses when startProcessing is called", async () => {
+		// Seed stale statuses (simulates previous completed run)
+		useProcessingStore.getState().updateSubjectStatus({
+			subjectSession: "sub-001_01",
+			module: "structural",
+			status: "complete",
+			completedSteps: [
+				"010_LinearReg_T1w2MNI",
+				"020_LinearReg_FLAIR2T1w",
+				"030_FLAIR_BiasfieldCorrection",
+				"040_LST_Segment_FLAIR_WMH",
+				"050_LST_T1w_LesionFilling_WMH",
+				"060_Segment_T1w",
+				"070_CleanUpWMH_SEGM",
+				"080_Resample2StandardSpace",
+				"090_GetVolumetrics",
+				"100_VisualQC_Structural",
+			],
+			locked: false,
+		});
+		useProcessingStore.getState().updateSubjectStatus({
+			subjectSession: "sub-001_01",
+			module: "structural",
+			status: "complete",
+			completedSteps: ["999_ready"],
+			locked: false,
+		});
+
+		expect(useProcessingStore.getState().subjectStatuses).toHaveLength(1);
+
+		useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+		await useProcessingStore.getState().startProcessing();
+
+		// After startProcessing, statuses should be cleared
+		expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
+	});
+
+	it("clears subjectStatuses even when no stale statuses exist", async () => {
+		expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
+
+		useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+		await useProcessingStore.getState().startProcessing();
+
+		expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
+	});
+
+	it("clears subjectStatuses for all modules, not just enabled ones", async () => {
+		// Seed statuses for structural, asl, and population
+		useProcessingStore.getState().updateSubjectStatus({
+			subjectSession: "sub-001_01",
+			module: "structural",
+			status: "complete",
+			completedSteps: ["060_Segment_T1w"],
+			locked: false,
+		});
+		useProcessingStore.getState().updateSubjectStatus({
+			subjectSession: "sub-001_01",
+			module: "asl",
+			status: "complete",
+			completedSteps: ["ASL"],
+			locked: false,
+		});
+
+		expect(useProcessingStore.getState().subjectStatuses).toHaveLength(2);
+
+		useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+		await useProcessingStore.getState().startProcessing();
+
+		expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Tauri Integration — startProcessing
 // ---------------------------------------------------------------------------
 

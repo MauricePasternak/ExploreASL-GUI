@@ -152,7 +152,10 @@ export const useDataParStore = create<DataParSlice>((set, get) => ({
           },
           uiState: {
             ...prev.project.uiState,
-            dataParametersAdvancedVisibility: advancedVisibility,
+            datapar: {
+              ...prev.project.uiState.datapar,
+              advancedVisibility,
+            },
           },
         },
         isDirty: true,

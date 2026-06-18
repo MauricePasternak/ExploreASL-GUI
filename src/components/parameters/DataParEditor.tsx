@@ -29,8 +29,8 @@ export default function DataParEditor() {
 		if (project?.exploreAslConfig?.dataPar) {
 			loadDataPar(project.exploreAslConfig.dataPar as DataParState);
 		}
-		if (project?.uiState?.dataParametersAdvancedVisibility) {
-			setAdvancedVisibility(project.uiState.dataParametersAdvancedVisibility);
+		if (project?.uiState?.datapar?.advancedVisibility) {
+			setAdvancedVisibility(project.uiState.datapar.advancedVisibility);
 		}
 	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -204,6 +204,8 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
         description={
           populationSelected
             ? "Locked to 1 for population module"
+            : config.subjects.length > 0 && config.workers > config.subjects.length
+            ? `Default: ${defaultWorkers} | Max: ${systemCores} cores (capped to ${config.subjects.length} active worker${config.subjects.length > 1 ? "s" : ""} for selected subject${config.subjects.length > 1 ? "s" : ""})`
             : `Default: ${defaultWorkers} | Max: ${systemCores} cores`
         }
         value={populationSelected ? 1 : config.workers}

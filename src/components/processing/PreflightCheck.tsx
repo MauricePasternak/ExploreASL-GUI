@@ -162,6 +162,13 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
       );
     }
 
+    // Soft warning: worker count exceeds selected subjects
+    if (config?.subjects.length && workers > config.subjects.length) {
+      warnings.push(
+        `Spawning fewer workers (${config.subjects.length}) than configured (${workers}) because only ${config.subjects.length} subject${config.subjects.length > 1 ? "s are" : " is"} selected.`,
+      );
+    }
+
     // Soft warning: dataPar.json directory
     if (dataParDirExists === false) {
       warnings.push(
@@ -202,13 +209,19 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
           icon={<IconAlertTriangle size={16} />}
           data-testid="preflight-errors"
         >
-          <List size="sm" spacing={4}>
-            {result.errors.map((err) => (
-              <List.Item key={err} data-testid="preflight-error-item">
-                {err}
-              </List.Item>
-            ))}
-          </List>
+          {result.errors.length === 1 ? (
+            <Text size="sm" data-testid="preflight-error-item">
+              {result.errors[0]}
+            </Text>
+          ) : (
+            <List size="sm" spacing={4}>
+              {result.errors.map((err) => (
+                <List.Item key={err} data-testid="preflight-error-item">
+                  {err}
+                </List.Item>
+              ))}
+            </List>
+          )}
         </Alert>
       )}
 
@@ -219,13 +232,19 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
           icon={<IconInfoCircle size={16} />}
           data-testid="preflight-warnings"
         >
-          <List size="sm" spacing={4}>
-            {result.warnings.map((warn) => (
-              <List.Item key={warn} data-testid="preflight-warning-item">
-                {warn}
-              </List.Item>
-            ))}
-          </List>
+          {result.warnings.length === 1 ? (
+            <Text size="sm" data-testid="preflight-warning-item">
+              {result.warnings[0]}
+            </Text>
+          ) : (
+            <List size="sm" spacing={4}>
+              {result.warnings.map((warn) => (
+                <List.Item key={warn} data-testid="preflight-warning-item">
+                  {warn}
+                </List.Item>
+              ))}
+            </List>
+          )}
         </Alert>
       )}
 

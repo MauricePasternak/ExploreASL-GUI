@@ -31,6 +31,7 @@ GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agen
 
 ## Rules
 
+- Use `pnpm` to run commands, not `npm` or `yarn`.
 - All components should have a `data-testid` attribute for testing and easier referencing for agents.
 - Git commits cannot be made without explicit user confirmation and must follow conventional commit message format.
 

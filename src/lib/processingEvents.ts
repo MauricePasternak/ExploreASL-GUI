@@ -235,13 +235,17 @@ export async function runProcessingPipeline(
 
   const bProcess = modulesToBProcess(config.modules);
 
+  const workers = config.subjects.length > 0
+    ? Math.min(config.workers, config.subjects.length)
+    : config.workers;
+
   const pids = await invoke<number[]>("run_pipeline", {
     projectRoot,
     matlabPath: config.matlabPath,
     exploreAslPath: config.exploreAslPath,
     dataParJson: JSON.stringify(dataPar),
     bProcess,
-    workers: config.workers,
+    workers,
     subjectRegexp: config.subjectRegexp,
   });
 
