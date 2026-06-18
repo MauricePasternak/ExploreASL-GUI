@@ -32,7 +32,6 @@ interface SubjectRow extends SubjectInfo {
   /** per-module status */
   _structuralStatus: ModuleDisplayStatus;
   _aslStatus: ModuleDisplayStatus;
-  _populationStatus: ModuleDisplayStatus;
   /** derived overall status for filtering */
   _overallStatus: FilterValue;
   /** log file info for columns */
@@ -140,9 +139,8 @@ function resolveModuleDisplay(
 function deriveOverallStatus(
   structural: ModuleDisplayStatus,
   asl: ModuleDisplayStatus,
-  population: ModuleDisplayStatus,
 ): FilterValue {
-  const statuses = [structural, asl, population].filter((s) => s !== "skipped");
+  const statuses = [structural, asl].filter((s) => s !== "skipped");
   if (statuses.length === 0) return "pending";
   if (statuses.every((s) => s === "complete")) return "complete";
   if (statuses.some((s) => s === "incomplete")) return "incomplete";
@@ -364,14 +362,12 @@ export default function SubjectSelection() {
     return sorted.map((info) => {
       const structural = resolveModuleDisplay(info, "structural", subjectStatuses);
       const asl = resolveModuleDisplay(info, "asl", subjectStatuses);
-      const population = resolveModuleDisplay(info, "population", subjectStatuses);
       return {
         ...info,
         _selected: selectedSet.has(info.subjectSession),
         _structuralStatus: structural,
         _aslStatus: asl,
-        _populationStatus: population,
-        _overallStatus: deriveOverallStatus(structural, asl, population),
+        _overallStatus: deriveOverallStatus(structural, asl),
         _structuralLogInfo: structuralLogInfo.get(info.subjectSession),
         _aslLogInfo: aslLogInfo.get(info.subjectSession),
       };
