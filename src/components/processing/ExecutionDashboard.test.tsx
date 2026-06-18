@@ -249,8 +249,69 @@ describe("ExecutionDashboard component", () => {
     const section = screen.getByTestId("structural-section");
     const rows = within(section).getAllByTestId("subject-row");
     expect(rows).toHaveLength(2);
-    // No step timelines should be rendered (all show "No steps recorded")
     const noSteps = within(section).getAllByText("No steps recorded");
     expect(noSteps).toHaveLength(2);
+  });
+
+  it("renders collapsible nested rows for ASL subjects with multiple runs", async () => {
+    mockAvailableSubjects = [
+      {
+        subjectSession: "sub-001_01",
+        subject: "001",
+        session: "01",
+        hasStructural: false,
+        hasASL: true,
+        aslRuns: ["1", "2"],
+      },
+    ];
+    mockConfig = {
+      subjects: ["sub-001_01"],
+      modules: ["asl"],
+    };
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "asl",
+        run: "1",
+        status: "complete",
+        completedSteps: [],
+        locked: false,
+      },
+      {
+        subjectSession: "sub-001_01",
+        module: "asl",
+        run: "2",
+        status: "incomplete",
+        completedSteps: [],
+        locked: true,
+      },
+    ];
+
+    renderDashboard();
+
+    const aslSection = screen.getByTestId("asl-section");
+    
+    // Parent row should be rendered
+    const parentRows = within(aslSection).getAllByTestId("subject-row");
+    expect(parentRows).toHaveLength(1);
+
+    // Verify parent row displays "2 runs" badge and "1 of 2 runs complete" text
+    expect(within(parentRows[0]).getByTestId("runs-count-badge").textContent).toBe("2 runs");
+    expect(within(parentRows[0]).getByTestId("runs-summary-text").textContent).toBe("1 of 2 runs complete");
+
+    // Click the parent row to toggle expand
+    const user = userEvent.setup();
+    await user.click(parentRows[0]);
+
+    // Sub-rows should now be rendered (e.g. Run 1 and Run 2)
+    const runRows = within(aslSection).getAllByTestId("run-sub-row");
+    expect(runRows).toHaveLength(2);
+    expect(within(runRows[0]).getByText("Run 1")).toBeInTheDocument();
+    expect(within(runRows[1]).getByText("Run 2")).toBeInTheDocument();
+
+    // The header progress badge should count complete subjects (0/1 complete)
+    // because sub-001_01 is not fully complete (run 2 is incomplete)
+    const headers = screen.getAllByTestId("module-header");
+    expect(within(headers[0]).getByText("0/1")).toBeInTheDocument();
   });
 });

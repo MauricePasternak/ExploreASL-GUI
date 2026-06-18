@@ -180,9 +180,15 @@ describe("SubjectInfoSchema", () => {
     hasASL: true,
   };
 
-  it("accepts valid subject info", () => {
+  it("accepts valid subject info and applies default for aslRuns", () => {
     const result = SubjectInfoSchema.parse(validInfo);
-    expect(result).toEqual(validInfo);
+    expect(result).toEqual({ ...validInfo, aslRuns: [] });
+  });
+
+  it("accepts subject with custom aslRuns", () => {
+    const data = { ...validInfo, aslRuns: ["1", "2"] };
+    const result = SubjectInfoSchema.parse(data);
+    expect(result.aslRuns).toEqual(["1", "2"]);
   });
 
   it("accepts subject with no structural or ASL", () => {

@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Accordion,
   Badge,
+  Collapse,
   Divider,
   Group,
   Progress,
@@ -11,6 +12,8 @@ import {
 } from "@mantine/core";
 import {
   IconCheck,
+  IconChevronDown,
+  IconChevronRight,
   IconLoader,
   IconMinus,
 } from "@tabler/icons-react";
@@ -105,6 +108,11 @@ interface SubjectRowProps {
   status: SubjectModuleStatus["status"];
   locked: boolean;
   processingPhase: ProcessingPhase;
+  run?: string;
+  runsCount?: number;
+  completedRunsCount?: number;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 function SubjectRow({
@@ -113,12 +121,19 @@ function SubjectRow({
   status,
   locked,
   processingPhase,
+  run,
+  runsCount,
+  completedRunsCount,
+  expanded,
+  onToggleExpand,
 }: SubjectRowProps) {
   const isRunning =
     status !== "complete" &&
     (locked || status === "incomplete") &&
     processingPhase !== "failed" &&
     processingPhase !== "cancelled";
+
+  const isCollapsible = runsCount !== undefined && runsCount > 1;
 
   return (
     <Group
@@ -127,12 +142,37 @@ function SubjectRow({
       px="md"
       py={6}
       data-testid="subject-row"
+      onClick={isCollapsible ? onToggleExpand : undefined}
+      style={{ cursor: isCollapsible ? "pointer" : "default" }}
     >
       <Group gap="md" align="center" style={{ flex: 1, minWidth: 0 }}>
-        <Text size="sm" ff="monospace" style={{ flexShrink: 0 }} w={240} truncate>
-          {subjectSession}
-        </Text>
-        <StepTimeline steps={steps} />
+        {isCollapsible && (
+          <div style={{ display: "flex", alignItems: "center" }} data-testid="expand-toggle">
+            {expanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+          </div>
+        )}
+        <Group gap="xs" style={{ flexShrink: 0 }} w={240}>
+          <Text size="sm" ff="monospace" truncate style={{ flex: 1 }}>
+            {subjectSession}
+          </Text>
+          {run && (
+            <Badge size="xs" variant="outline" color="gray" data-testid="run-badge">
+              Run {run}
+            </Badge>
+          )}
+          {isCollapsible && (
+            <Badge size="xs" variant="outline" color="blue" data-testid="runs-count-badge">
+              {runsCount} runs
+            </Badge>
+          )}
+        </Group>
+        {isCollapsible ? (
+          <Text size="xs" c="dimmed" data-testid="runs-summary-text">
+            {completedRunsCount} of {runsCount} runs complete
+          </Text>
+        ) : (
+          <StepTimeline steps={steps} />
+        )}
       </Group>
 
       <Group gap="xs" align="center" style={{ flexShrink: 0 }}>
@@ -178,7 +218,7 @@ function RunSubRow({
     <Group
       justify="space-between"
       align="center"
-      pl="xl"
+      pl={40}
       pr="md"
       py={4}
       data-testid="run-sub-row"
@@ -247,24 +287,52 @@ function getStatusForSubject(
   );
 }
 
-function getRunsForSubject(
+export function getRunsForSubjectInfo(
+  subject: SubjectInfo,
+  statuses: SubjectModuleStatus[],
+): string[] {
+  const fromSubject = subject.aslRuns ?? [];
+  const fromLock = statuses
+    .filter((s) => s.subjectSession === subject.subjectSession && s.module === "asl" && s.run !== undefined)
+    .map((s) => s.run!);
+  const union = Array.from(new Set([...fromSubject, ...fromLock]));
+  if (union.length === 0) {
+    return ["1"];
+  }
+  return union.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+export function getSubjectOverallStatus(
   subjectSession: string,
   module: ModuleName,
   statuses: SubjectModuleStatus[],
-): string[] {
-  return statuses
-    .filter(
-      (s) =>
-        s.subjectSession === subjectSession &&
-        s.module === module &&
-        s.run !== undefined,
-    )
-    .map((s) => s.run!)
-    .filter((r, i, arr) => arr.indexOf(r) === i)
-    .sort();
+): {
+  status: SubjectModuleStatus["status"];
+  locked: boolean;
+  completedRunsCount: number;
+} {
+  const subjectStatuses = statuses.filter(
+    (s) => s.subjectSession === subjectSession && s.module === module,
+  );
+
+  if (subjectStatuses.length === 0) {
+    return { status: "pending", locked: false, completedRunsCount: 0 };
+  }
+
+  const locked = subjectStatuses.some((s) => s.locked);
+  const completedRunsCount = subjectStatuses.filter((s) => s.status === "complete").length;
+
+  let status: SubjectModuleStatus["status"] = "pending";
+  if (subjectStatuses.every((s) => s.status === "complete")) {
+    status = "complete";
+  } else if (subjectStatuses.some((s) => s.status === "complete" || s.status === "incomplete")) {
+    status = "incomplete";
+  }
+
+  return { status, locked, completedRunsCount };
 }
 
-function calcModuleProgress(
+export function calcModuleProgress(
   subjects: SubjectInfo[],
   module: ModuleName,
   statuses: SubjectModuleStatus[],
@@ -274,10 +342,12 @@ function calcModuleProgress(
     if (module === "asl") return s.hasASL;
     return true;
   });
+
   const complete = eligible.filter((s) => {
-    const entry = getStatusForSubject(s.subjectSession, module, statuses);
-    return entry?.status === "complete";
+    const { status } = getSubjectOverallStatus(s.subjectSession, module, statuses);
+    return status === "complete";
   }).length;
+
   return { complete, total: eligible.length };
 }
 
@@ -422,6 +492,15 @@ function SubjectModuleSection({
     [subjects, module],
   );
 
+  const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (subjSession: string) => {
+    setExpandedSubjects((prev) => ({
+      ...prev,
+      [subjSession]: !prev[subjSession],
+    }));
+  };
+
   if (eligible.length === 0) {
     return (
       <Text size="xs" c="dimmed" data-testid="no-subjects-msg">
@@ -433,54 +512,69 @@ function SubjectModuleSection({
   return (
     <Stack gap={0} data-testid={`${module}-section`}>
       {eligible.map((subject) => {
-        const entry = getStatusForSubject(
-          subject.subjectSession,
-          module,
-          statuses,
-        );
+        const runs = module === "asl" ? getRunsForSubjectInfo(subject, statuses) : [];
+        const hasMultipleRuns = module === "asl" && runs.length > 1;
+
+        const {
+          status: overallStatus,
+          locked: overallLocked,
+          completedRunsCount,
+        } = getSubjectOverallStatus(subject.subjectSession, module, statuses);
+
+        const singleRun = module === "asl" && runs.length === 1 ? runs[0] : undefined;
         const steps = getStepsForSubject(
           subject.subjectSession,
           module,
           statuses,
+          singleRun,
         );
-        const runs = getRunsForSubject(subject.subjectSession, module, statuses);
 
-        const showRuns = module === "asl" && runs.length > 1;
+        const isExpanded = !!expandedSubjects[subject.subjectSession];
 
         return (
           <div key={subject.subjectSession}>
             <SubjectRow
               subjectSession={subject.subjectSession}
-              steps={steps}
-              status={entry?.status ?? "pending"}
-              locked={entry?.locked ?? false}
+              steps={hasMultipleRuns ? [] : steps}
+              status={overallStatus}
+              locked={overallLocked}
               processingPhase={processingPhase}
+              run={hasMultipleRuns ? undefined : singleRun}
+              runsCount={hasMultipleRuns ? runs.length : undefined}
+              completedRunsCount={hasMultipleRuns ? completedRunsCount : undefined}
+              expanded={hasMultipleRuns ? isExpanded : undefined}
+              onToggleExpand={hasMultipleRuns ? () => toggleExpand(subject.subjectSession) : undefined}
             />
-            {showRuns &&
-              runs.map((run) => {
-                const runEntry = getStatusForSubject(
-                  subject.subjectSession,
-                  module,
-                  statuses,
-                  run,
-                );
-                const runSteps = getStepsForSubject(
-                  subject.subjectSession,
-                  module,
-                  statuses,
-                  run,
-                );
-                return (
-                  <RunSubRow
-                    key={`${subject.subjectSession}-${run}`}
-                    run={run}
-                    steps={runSteps}
-                    locked={runEntry?.locked ?? false}
-                    status={runEntry?.status ?? "pending"}
-                    processingPhase={processingPhase}
-                  />
-                );
-              })}
+            {hasMultipleRuns && (
+              <Collapse in={isExpanded}>
+                <Stack gap={0} pb="xs">
+                  {runs.map((run) => {
+                    const runEntry = getStatusForSubject(
+                      subject.subjectSession,
+                      "asl",
+                      statuses,
+                      run,
+                    );
+                    const runSteps = getStepsForSubject(
+                      subject.subjectSession,
+                      "asl",
+                      statuses,
+                      run,
+                    );
+                    return (
+                      <RunSubRow
+                        key={`${subject.subjectSession}-${run}`}
+                        run={run}
+                        steps={runSteps}
+                        locked={runEntry?.locked ?? false}
+                        status={runEntry?.status ?? "pending"}
+                        processingPhase={processingPhase}
+                      />
+                    );
+                  })}
+                </Stack>
+              </Collapse>
+            )}
             <Divider />
           </div>
         );

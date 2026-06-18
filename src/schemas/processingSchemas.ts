@@ -45,6 +45,7 @@ export const SubjectInfoSchema = z.object({
   session: z.string(),
   hasStructural: z.boolean(),
   hasASL: z.boolean(),
+  aslRuns: z.array(z.string()).optional().default([]),
 });
 
 export const LockFileEventSchema = z.discriminatedUnion("type", [
