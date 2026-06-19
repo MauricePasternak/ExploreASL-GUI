@@ -109,8 +109,10 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    // Hard block: subjects selected
-    if (!config?.subjects.length) {
+    // Hard block: subjects selected (not required for population-only runs)
+    const populationOnly =
+      config?.modules.length === 1 && config?.modules[0] === "population";
+    if (!config?.subjects.length && !populationOnly) {
       errors.push("No subjects selected. Select at least one subject.");
     }
 

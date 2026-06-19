@@ -75,9 +75,24 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
   ...INITIAL_STATE,
 
   setConfig: (config) => {
-    const patched = config.modules.includes("population")
-      ? { ...config, workers: 1 }
-      : config;
+    const prevModules = useProcessingStore.getState().config?.modules ?? [];
+    let modules = [...config.modules];
+
+    const hasPop = modules.includes("population");
+    const hasSubject = modules.includes("structural") || modules.includes("asl");
+
+    if (hasPop && hasSubject) {
+      const prevHasPop = prevModules.includes("population");
+      if (prevHasPop) {
+        modules = modules.filter((m) => m !== "population");
+      } else {
+        modules = ["population"];
+      }
+    }
+
+    const patched = modules.includes("population")
+      ? { ...config, modules, workers: 1 }
+      : { ...config, modules };
     const subjectRegexp = generateSubjectRegexp(patched.subjects);
     set({ config: { ...patched, subjectRegexp } });
   },

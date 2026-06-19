@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export const LogFileInfoSchema = z.object({
   filename: z.string(),
-  module: z.enum(["structural", "asl", "import"]),
+  module: z.enum(["structural", "asl", "import", "population"]),
   subjectSession: z.string(),
   run: z.string().nullable().optional().transform(v => v ?? undefined),
   hasError: z.boolean(),
@@ -34,7 +34,7 @@ export async function fetchModuleLogs(projectRoot: string): Promise<LogFileInfo[
 export async function fetchLogContent(
   projectRoot: string,
   subjectSession: string,
-  module: "structural" | "asl" | "import",
+  module: "structural" | "asl" | "import" | "population",
 ): Promise<LogContent> {
   const raw = await invoke<Record<string, string>>("read_module_logs", {
     projectRoot,

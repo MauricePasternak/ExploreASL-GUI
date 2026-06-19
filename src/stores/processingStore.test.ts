@@ -54,7 +54,7 @@ const STRUCTURAL_ASL_CONFIG: ProcessConfig = {
 
 const POPULATION_CONFIG: ProcessConfig = {
 	subjects: [],
-	modules: ["structural", "asl", "population"],
+	modules: ["population"],
 	matlabPath: "/usr/local/bin/matlab",
 	exploreAslPath: "/opt/ExploreASL",
 	workers: 8,
@@ -185,6 +185,69 @@ it("does not force workers when population not in modules", () => {
     useProcessingStore.getState().setConfig(config);
     expect(useProcessingStore.getState().config?.subjectRegexp).toBe("^(sub-001\\.5|sub\\+002)$");
   });
+
+	it("removes structural and asl when population is added", () => {
+		const { setConfig } = useProcessingStore.getState();
+		setConfig({
+			subjects: [],
+			modules: ["structural", "asl"],
+			matlabPath: "",
+			exploreAslPath: "",
+			workers: 4,
+			subjectRegexp: "",
+		});
+		setConfig({
+			subjects: [],
+			modules: ["structural", "asl", "population"],
+			matlabPath: "",
+			exploreAslPath: "",
+			workers: 4,
+			subjectRegexp: "",
+		});
+		expect(useProcessingStore.getState().config?.modules).toEqual(["population"]);
+	});
+
+	it("removes population when structural is added", () => {
+		const { setConfig } = useProcessingStore.getState();
+		setConfig({
+			subjects: [],
+			modules: ["population"],
+			matlabPath: "",
+			exploreAslPath: "",
+			workers: 1,
+			subjectRegexp: "",
+		});
+		setConfig({
+			subjects: [],
+			modules: ["population", "structural"],
+			matlabPath: "",
+			exploreAslPath: "",
+			workers: 1,
+			subjectRegexp: "",
+		});
+		expect(useProcessingStore.getState().config?.modules).toEqual(["structural"]);
+	});
+
+	it("removes population when asl is added", () => {
+		const { setConfig } = useProcessingStore.getState();
+		setConfig({
+			subjects: [],
+			modules: ["population"],
+			matlabPath: "",
+			exploreAslPath: "",
+			workers: 1,
+			subjectRegexp: "",
+		});
+		setConfig({
+			subjects: [],
+			modules: ["population", "asl"],
+			matlabPath: "",
+			exploreAslPath: "",
+			workers: 1,
+			subjectRegexp: "",
+		});
+		expect(useProcessingStore.getState().config?.modules).toEqual(["asl"]);
+	});
 });
 
 // ---------------------------------------------------------------------------

@@ -168,7 +168,7 @@ describe("ExecutionDashboard component", () => {
       },
     ];
     renderDashboard();
-    expect(screen.getByTestId("population-section")).toBeInTheDocument();
+    expect(screen.getByTestId("population-status-section")).toBeInTheDocument();
     expect(screen.getByText("Population (group)")).toBeInTheDocument();
   });
 

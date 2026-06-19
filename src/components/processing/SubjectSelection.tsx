@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Box, Button, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import {
+  IconBook,
   IconCheck,
   IconMinus,
   IconBan,
@@ -32,7 +33,6 @@ interface SubjectRow extends SubjectInfo {
   /** per-module status */
   _structuralStatus: ModuleDisplayStatus;
   _aslStatus: ModuleDisplayStatus;
-  _populationStatus: ModuleDisplayStatus;
   /** derived overall status for filtering */
   _overallStatus: FilterValue;
   /** log file info for columns */
@@ -140,9 +140,8 @@ function resolveModuleDisplay(
 function deriveOverallStatus(
   structural: ModuleDisplayStatus,
   asl: ModuleDisplayStatus,
-  population: ModuleDisplayStatus,
 ): FilterValue {
-  const statuses = [structural, asl, population].filter((s) => s !== "skipped");
+  const statuses = [structural, asl].filter((s) => s !== "skipped");
   if (statuses.length === 0) return "pending";
   if (statuses.every((s) => s === "complete")) return "complete";
   if (statuses.some((s) => s === "incomplete")) return "incomplete";
@@ -214,6 +213,7 @@ function buildColumns(
             size="sm"
             color={isError ? "red" : "teal"}
             variant="outline"
+            leftSection={<IconBook size={12} />}
             style={isError ? undefined : { cursor: "pointer" }}
             onClick={isError ? undefined : () => onViewLog(row.subjectSession, "structural")}
             data-testid={isError ? "view-structural-errors" : "view-structural-logs"}
@@ -246,6 +246,7 @@ function buildColumns(
             size="sm"
             color={isError ? "red" : "teal"}
             variant="outline"
+            leftSection={<IconBook size={12} />}
             style={isError ? undefined : { cursor: "pointer" }}
             onClick={isError ? undefined : () => onViewLog(row.subjectSession, "asl")}
             data-testid={isError ? "view-asl-errors" : "view-asl-logs"}
@@ -364,14 +365,12 @@ export default function SubjectSelection() {
     return sorted.map((info) => {
       const structural = resolveModuleDisplay(info, "structural", subjectStatuses);
       const asl = resolveModuleDisplay(info, "asl", subjectStatuses);
-      const population = resolveModuleDisplay(info, "population", subjectStatuses);
       return {
         ...info,
         _selected: selectedSet.has(info.subjectSession),
         _structuralStatus: structural,
         _aslStatus: asl,
-        _populationStatus: population,
-        _overallStatus: deriveOverallStatus(structural, asl, population),
+        _overallStatus: deriveOverallStatus(structural, asl),
         _structuralLogInfo: structuralLogInfo.get(info.subjectSession),
         _aslLogInfo: aslLogInfo.get(info.subjectSession),
       };

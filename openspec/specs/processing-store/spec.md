@@ -29,9 +29,23 @@ The processing store SHALL manage a phase state machine with exactly six states:
 ### Requirement: Process Configuration
 The store SHALL hold a `ProcessConfig` object containing: `subjects` (array of selected SubjectSession strings), `modules` (array of `structural`, `asl`, `population` — at least one required), `matlabPath` (string), `exploreAslPath` (string), `workers` (integer, 1–available cores), and `subjectRegexp` (string generated from subject selection). If Population is selected, `workers` SHALL be forced to 1. The frontend SHALL translate `modules` string array to `bProcess` boolean vector (`[true, false, false]` → Structural only, `[true, true, false]` → Structural+ASL, etc.) before passing to `run_pipeline`.
 
+`setConfig` SHALL enforce mutual exclusivity between Population and Structural/ASL. If `modules` contains `"population"`, it SHALL NOT contain `"structural"` or `"asl"`. If `modules` contains `"structural"` or `"asl"`, it SHALL NOT contain `"population"`. When a conflicting module is added, the opposite module(s) SHALL be removed automatically.
+
 #### Scenario: Population module forces single worker
-- **WHEN** the user selects the Population module checkbox
+- **WHEN** the user selects the Population module
 - **THEN** the worker count SHALL be forced to 1 and the UI SHALL display a warning that Population cannot be parallelized
+
+#### Scenario: Population auto-deselects Structural and ASL
+- **WHEN** `setConfig` is called with `modules: ["population", "structural"]` (where population was added)
+- **THEN** the store SHALL normalize to `modules: ["population"]` (removing structural and asl)
+
+#### Scenario: Structural auto-deselects Population
+- **WHEN** `setConfig` is called with `modules: ["population", "structural"]` (where structural was added)
+- **THEN** the store SHALL normalize to `modules: ["structural"]` (removing population)
+
+#### Scenario: ASL auto-deselects Population
+- **WHEN** `setConfig` is called with `modules: ["asl", "population"]` (where asl was added)
+- **THEN** the store SHALL normalize to `modules: ["asl"]` (removing population)
 
 #### Scenario: SubjectRegexp generation for all subjects
 - **WHEN** all subjects are selected
