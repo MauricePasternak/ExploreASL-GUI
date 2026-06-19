@@ -35,7 +35,7 @@ const DEFAULT_ADVANCED_VISIBILITY: DataParametersAdvancedVisibility = {
 function alignAtlasesFields(
   atlases?: string[],
   tissueMasking?: string[],
-  tissueThreshold?: number[]
+  tissueThreshold?: number[],
 ) {
   const finalAtlases = atlases ?? ["Total", "DeepWM"];
   const finalMasking = [...(tissueMasking ?? [])];
@@ -82,7 +82,7 @@ export const useDataParStore = create<DataParSlice>((set, get) => ({
         const aligned = alignAtlasesFields(
           nextDataPar.Atlases,
           nextDataPar.TissueMasking as string[],
-          nextDataPar.TissueThreshold as number[]
+          nextDataPar.TissueThreshold as number[],
         );
         Object.assign(nextDataPar, aligned);
       }
@@ -97,7 +97,7 @@ export const useDataParStore = create<DataParSlice>((set, get) => ({
         const aligned = alignAtlasesFields(
           nextDataPar.Atlases,
           nextDataPar.TissueMasking as string[],
-          nextDataPar.TissueThreshold as number[]
+          nextDataPar.TissueThreshold as number[],
         );
         Object.assign(nextDataPar, aligned);
       }
@@ -112,11 +112,7 @@ export const useDataParStore = create<DataParSlice>((set, get) => ({
   },
 
   loadDataPar: (state) => {
-    const aligned = alignAtlasesFields(
-      state.Atlases,
-      state.TissueMasking,
-      state.TissueThreshold
-    );
+    const aligned = alignAtlasesFields(state.Atlases, state.TissueMasking, state.TissueThreshold);
     set({
       dataPar: {
         ...state,

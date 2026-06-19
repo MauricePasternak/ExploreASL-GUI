@@ -10,22 +10,23 @@
   <br />
 
   <!-- Badges -->
-  [![GitHub release (latest by date)](https://img.shields.io/github/v/release/MauricePasternak/ExploreASL-GUI-v2?style=for-the-badge&label=Release&color=2d6a9f)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/releases)
-  [![CI](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI-v2/ci.yml?style=for-the-badge&label=CI&logo=github-actions&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/actions)
-  [![Tests](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI-v2/test.yml?style=for-the-badge&label=Tests&logo=vitest&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/actions)
-  [![Issues](https://img.shields.io/github/issues/MauricePasternak/ExploreASL-GUI-v2?style=for-the-badge&logo=github&color=e05d44)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-  [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8D8?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
-  [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-  [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-  <br /><br />
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/MauricePasternak/ExploreASL-GUI-v2?style=for-the-badge&label=Release&color=2d6a9f)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI-v2/ci.yml?style=for-the-badge&label=CI&logo=github-actions&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/actions)
+[![Tests](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI-v2/test.yml?style=for-the-badge&label=Tests&logo=vitest&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/actions)
+[![Issues](https://img.shields.io/github/issues/MauricePasternak/ExploreASL-GUI-v2?style=for-the-badge&logo=github&color=e05d44)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8D8?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-  <a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues/new?labels=bug&template=bug_report.md">🐛 Report Bug</a>
-  ·
-  <a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues/new?labels=enhancement&template=feature_request.md">✨ Request Feature</a>
-  ·
-  <a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/releases">📦 Download</a>
+<br /><br />
+
+<a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues/new?labels=bug&template=bug_report.md">🐛 Report Bug</a>
+·
+<a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues/new?labels=enhancement&template=feature_request.md">✨ Request Feature</a>
+·
+<a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/releases">📦 Download</a>
 
 </div>
 
@@ -61,30 +62,30 @@
 
 ### Key Capabilities
 
-| Feature | Description |
-|---|---|
-| 📂 **Dataset Import** | Organize raw DICOM/NIfTI data into [BIDS](https://bids.neuroimaging.io/) format using a flexible source-data staging tree |
-| 🔍 **BIDS Verification** | Inspect and correct ASL sidecar JSON fields at the individual scan level |
-| ⚙️ **Parameter Configuration** | Define and reuse ExploreASL processing parameters (`dataPar.json`) across studies |
-| ▶️ **Pipeline Execution** | Launch Structural, ASL, and Population modules in parallel with real-time progress tracking |
-| 📊 **Results Visualization** | Explore CBF (cerebral blood flow) maps and QC plots interactively |
-| 🔄 **Re-run & Clean** | Selectively re-process subjects or fully clean corrupted outputs without touching the rest of the study |
+| Feature                        | Description                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| 📂 **Dataset Import**          | Organize raw DICOM/NIfTI data into [BIDS](https://bids.neuroimaging.io/) format using a flexible source-data staging tree |
+| 🔍 **BIDS Verification**       | Inspect and correct ASL sidecar JSON fields at the individual scan level                                                  |
+| ⚙️ **Parameter Configuration** | Define and reuse ExploreASL processing parameters (`dataPar.json`) across studies                                         |
+| ▶️ **Pipeline Execution**      | Launch Structural, ASL, and Population modules in parallel with real-time progress tracking                               |
+| 📊 **Results Visualization**   | Explore CBF (cerebral blood flow) maps and QC plots interactively                                                         |
+| 🔄 **Re-run & Clean**          | Selectively re-process subjects or fully clean corrupted outputs without touching the rest of the study                   |
 
 ---
 
 ## 🛠 Built With
 
-| Layer | Technology |
-|---|---|
-| **Desktop shell** | [Tauri v2](https://v2.tauri.app/) (Rust backend, WebView2 / WebKit frontend) |
-| **UI Framework** | [React 19](https://react.dev/) + [TypeScript 6](https://www.typescriptlang.org/) |
-| **Component Library** | [Mantine 9](https://mantine.dev/) |
-| **State Management** | [Zustand 5](https://zustand-demo.pmnd.rs/) |
-| **Schema Validation** | [Zod 4](https://zod.dev/) |
-| **Routing** | [React Router 7](https://reactrouter.com/) |
-| **Forms** | [React Hook Form 7](https://react-hook-form.com/) |
-| **Build Tool** | [Vite 8](https://vitejs.dev/) |
-| **Testing** | [Vitest 4](https://vitest.dev/) + [Testing Library](https://testing-library.com/) |
+| Layer                 | Technology                                                                        |
+| --------------------- | --------------------------------------------------------------------------------- |
+| **Desktop shell**     | [Tauri v2](https://v2.tauri.app/) (Rust backend, WebView2 / WebKit frontend)      |
+| **UI Framework**      | [React 19](https://react.dev/) + [TypeScript 6](https://www.typescriptlang.org/)  |
+| **Component Library** | [Mantine 9](https://mantine.dev/)                                                 |
+| **State Management**  | [Zustand 5](https://zustand-demo.pmnd.rs/)                                        |
+| **Schema Validation** | [Zod 4](https://zod.dev/)                                                         |
+| **Routing**           | [React Router 7](https://reactrouter.com/)                                        |
+| **Forms**             | [React Hook Form 7](https://react-hook-form.com/)                                 |
+| **Build Tool**        | [Vite 8](https://vitejs.dev/)                                                     |
+| **Testing**           | [Vitest 4](https://vitest.dev/) + [Testing Library](https://testing-library.com/) |
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -103,11 +104,11 @@ Choose **one** of the following:
 
 ### Platform Dependencies (for running from source only)
 
-| Dependency | Notes |
-|---|---|
-| [Rust toolchain](https://rustup.rs/) | Stable channel, ≥ 1.77 |
-| [Node.js](https://nodejs.org/) | ≥ 20 LTS |
-| [pnpm](https://pnpm.io/) | ≥ 9 |
+| Dependency                                                        | Notes                                                          |
+| ----------------------------------------------------------------- | -------------------------------------------------------------- |
+| [Rust toolchain](https://rustup.rs/)                              | Stable channel, ≥ 1.77                                         |
+| [Node.js](https://nodejs.org/)                                    | ≥ 20 LTS                                                       |
+| [pnpm](https://pnpm.io/)                                          | ≥ 9                                                            |
 | [Tauri v2 system deps](https://v2.tauri.app/start/prerequisites/) | Platform-specific (WebView2 on Windows, WebKit on Linux/macOS) |
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -317,7 +318,7 @@ Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information
 
 This GUI is built around [ExploreASL](https://exploreasl.github.io/Documentation/latest/), an open-source MATLAB/SPM-based pipeline for ASL MRI data analysis, developed and maintained by the ExploreASL community. Please cite the ExploreASL paper if you use this software in your research:
 
-> Mutsaerts, H.J.M.M., et al. (2021). *ExploreASL: An image processing pipeline for multi-center ASL perfusion MRI studies.* NeuroImage, 225, 117549. https://doi.org/10.1016/j.neuroimage.2020.117549
+> Mutsaerts, H.J.M.M., et al. (2021). _ExploreASL: An image processing pipeline for multi-center ASL perfusion MRI studies._ NeuroImage, 225, 117549. https://doi.org/10.1016/j.neuroimage.2020.117549
 
 ### Previous Version
 

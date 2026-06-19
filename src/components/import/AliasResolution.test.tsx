@@ -122,9 +122,7 @@ describe("AliasResolution", () => {
   });
 
   it("blocks metadata until ASL4D or T1w is mapped", () => {
-    useImportStore.getState().setModalityAliases([
-      { captured: "scout", mapped: null },
-    ]);
+    useImportStore.getState().setModalityAliases([{ captured: "scout", mapped: null }]);
     renderWithProviders();
 
     expect(screen.getByTestId("alias-next-btn")).toBeDisabled();
@@ -132,9 +130,7 @@ describe("AliasResolution", () => {
   });
 
   it("allows metadata when ASL4D or T1w is mapped", () => {
-    useImportStore.getState().setModalityAliases([
-      { captured: "t1", mapped: "T1w" },
-    ]);
+    useImportStore.getState().setModalityAliases([{ captured: "t1", mapped: "T1w" }]);
     renderWithProviders();
 
     expect(screen.getByTestId("alias-next-btn")).not.toBeDisabled();

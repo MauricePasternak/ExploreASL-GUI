@@ -93,9 +93,7 @@ describe("buildAllStagingMappings", () => {
 
     const threeDash = results[0];
     expect(threeDash.entries.length).toBeGreaterThan(0);
-    const aslEntry = threeDash.entries.find(
-      (e) => e.sourcePath.includes("C9ORF007-01-MR00/ASL"),
-    );
+    const aslEntry = threeDash.entries.find((e) => e.sourcePath.includes("C9ORF007-01-MR00/ASL"));
     expect(aslEntry).toMatchObject({
       subject: "C9ORF007",
       session: "01",
@@ -117,9 +115,7 @@ describe("buildAllStagingMappings", () => {
     );
 
     const twoDash = results[0];
-    const aslEntry = twoDash.entries.find(
-      (e) => e.sourcePath.includes("C9ORF007-11/ASL"),
-    );
+    const aslEntry = twoDash.entries.find((e) => e.sourcePath.includes("C9ORF007-11/ASL"));
     expect(aslEntry).toMatchObject({
       subject: "C9ORF007",
       session: "11",

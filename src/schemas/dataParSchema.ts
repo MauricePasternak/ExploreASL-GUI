@@ -5,15 +5,9 @@ export const M0Schema = z.union([
   z.number(),
 ]);
 
-export const ApplyQuantificationSchema = z
-  .array(z.number().min(0).max(1))
-  .length(6);
+export const ApplyQuantificationSchema = z.array(z.number().min(0).max(1)).length(6);
 
-export const PVCNativeSpaceKernelSchema = z.tuple([
-  z.number(),
-  z.number(),
-  z.number(),
-]);
+export const PVCNativeSpaceKernelSchema = z.tuple([z.number(), z.number(), z.number()]);
 
 export const M0SectionSchema = z.object({
   M0: M0Schema.optional(),
@@ -37,9 +31,7 @@ export const QuantificationSectionSchema = z.object({
   T2tissueMultiTE: z.number().optional(),
   bUseExternalQuantification: z.boolean().optional(),
   ExternalQuantificationType: z.string().optional(),
-  ExternalQuantificationSmoothGaussianMM: z
-    .tuple([z.number(), z.number(), z.number()])
-    .optional(),
+  ExternalQuantificationSmoothGaussianMM: z.tuple([z.number(), z.number(), z.number()]).optional(),
   bMaskingExternal: z.boolean().optional(),
   bSpatialBASIL: z.boolean().optional(),
   bInferT1BASIL: z.boolean().optional(),

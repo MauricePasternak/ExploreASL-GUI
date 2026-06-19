@@ -239,7 +239,13 @@ describe("External quantification subtree conditions", () => {
 
 describe("tier assignments", () => {
   const BASIC_KEYS: Record<SectionId, string[]> = {
-    m0: ["M0", "BackgroundSuppressionNumberPulses", "BackgroundSuppressionPulseTime", "M0_GMScaleFactor", "bRegisterM02ASL"],
+    m0: [
+      "M0",
+      "BackgroundSuppressionNumberPulses",
+      "BackgroundSuppressionPulseTime",
+      "M0_GMScaleFactor",
+      "bRegisterM02ASL",
+    ],
     quantification: ["nCompartments"],
     generalSettings: ["Quality"],
     aslProcessing: ["motionCorrection", "bTopUp", "bPVCNativeSpace", "SaveCBF4D"],
@@ -263,7 +269,14 @@ describe("tier assignments", () => {
   });
 
   it("structural keys are all tier=advanced", () => {
-    for (const key of ["bRunLongReg", "bRunDARTEL", "WMHsegmAlg", "bSegmentSPM12", "bHammersCAT12", "bFixResolution"]) {
+    for (const key of [
+      "bRunLongReg",
+      "bRunDARTEL",
+      "WMHsegmAlg",
+      "bSegmentSPM12",
+      "bHammersCAT12",
+      "bFixResolution",
+    ]) {
       expect(FIELD_METADATA[key].tier, key).toBe("advanced");
     }
   });

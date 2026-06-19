@@ -1,10 +1,4 @@
-import {
-  Card,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { Card, Stack, Table, Text, TextInput } from "@mantine/core";
 
 import { useImportStore } from "../../stores/importStore";
 
@@ -20,8 +14,8 @@ export default function SubjectRenameTable() {
     return (
       <Card withBorder p="md" data-testid="subject-rename-empty">
         <Text c="dimmed" size="sm">
-          No subjects detected. Complete the Path Tokenizer step first and
-          assign a &quot;Subject&quot; tag.
+          No subjects detected. Complete the Path Tokenizer step first and assign a
+          &quot;Subject&quot; tag.
         </Text>
       </Card>
     );
@@ -30,8 +24,7 @@ export default function SubjectRenameTable() {
   return (
     <Stack gap="sm">
       <Text size="sm" c="dimmed">
-        Rename subjects to BIDS-compliant names. Leave unchanged to keep
-        the original names.
+        Rename subjects to BIDS-compliant names. Leave unchanged to keep the original names.
       </Text>
       <Table striped highlightOnHover data-testid="subject-rename-table">
         <Table.Thead>
@@ -51,12 +44,7 @@ export default function SubjectRenameTable() {
               <Table.Td>
                 <TextInput
                   value={rename.target}
-                  onChange={(e) =>
-                    updateSubjectRename(
-                      rename.original,
-                      e.currentTarget.value,
-                    )
-                  }
+                  onChange={(e) => updateSubjectRename(rename.original, e.currentTarget.value)}
                   size="xs"
                   w={200}
                   data-testid={`subject-rename-input-${rename.original.replace(/[^a-z0-9]/gi, "-")}`}

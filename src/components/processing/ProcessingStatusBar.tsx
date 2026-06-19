@@ -30,7 +30,9 @@ const MODULE_LABELS: Record<string, string> = {
  * Compute per-module completion: for each module present in the statuses,
  * count distinct subject-sessions and how many of those are "complete".
  */
-function computeModuleStats(statuses: { subjectSession?: string; module: string; status: string }[]) {
+function computeModuleStats(
+  statuses: { subjectSession?: string; module: string; status: string }[],
+) {
   // module → Set of all sessions, Set of complete sessions
   const moduleMap = new Map<string, { total: Set<string>; complete: Set<string> }>();
 
@@ -49,8 +51,9 @@ function computeModuleStats(statuses: { subjectSession?: string; module: string;
   // Return in a stable order: structural → asl → population → anything else
   const ORDER = ["structural", "asl", "population"];
   const sorted = [...moduleMap.entries()].sort(
-    (a, b) => (ORDER.indexOf(a[0]) === -1 ? 99 : ORDER.indexOf(a[0])) -
-              (ORDER.indexOf(b[0]) === -1 ? 99 : ORDER.indexOf(b[0])),
+    (a, b) =>
+      (ORDER.indexOf(a[0]) === -1 ? 99 : ORDER.indexOf(a[0])) -
+      (ORDER.indexOf(b[0]) === -1 ? 99 : ORDER.indexOf(b[0])),
   );
 
   return sorted.map(([mod, { total, complete }]) => ({
@@ -96,12 +99,9 @@ export default function ProcessingStatusBar() {
       </Badge>
       {moduleStats.length > 0 && (
         <Text size="xs" c="dimmed" data-testid="processing-status-bar-progress">
-          {moduleStats
-            .map((m) => `${m.label} ${m.completeCount}/${m.totalCount}`)
-            .join(" · ")}
+          {moduleStats.map((m) => `${m.label} ${m.completeCount}/${m.totalCount}`).join(" · ")}
         </Text>
       )}
     </Group>
   );
 }
-

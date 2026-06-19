@@ -4,8 +4,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockPhase = "running";
 const mockSubjectStatuses = [
-  { subjectSession: "sub-001_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-  { subjectSession: "sub-002_01", module: "structural", status: "pending", completedSteps: [], locked: false },
+  {
+    subjectSession: "sub-001_01",
+    module: "structural",
+    status: "complete",
+    completedSteps: [],
+    locked: false,
+  },
+  {
+    subjectSession: "sub-002_01",
+    module: "structural",
+    status: "pending",
+    completedSteps: [],
+    locked: false,
+  },
 ];
 
 const mockState = () => ({
@@ -14,8 +26,7 @@ const mockState = () => ({
 });
 
 vi.mock("../../stores/processingStore", () => {
-  const storeFn = (selector: (state: Record<string, unknown>) => unknown) =>
-    selector(mockState());
+  const storeFn = (selector: (state: Record<string, unknown>) => unknown) => selector(mockState());
   storeFn.getState = () => mockState();
   return { useProcessingStore: storeFn };
 });
@@ -93,10 +104,34 @@ describe("ProcessingStatusBar", () => {
   it("shows per-module breakdown for multi-module statuses (regression: 8/16 bug)", () => {
     // 2 sessions × 2 modules = 4 entries; structural all complete, ASL all incomplete
     const multiModuleStatuses = [
-      { subjectSession: "sub-001_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-      { subjectSession: "sub-001_01", module: "asl", status: "incomplete", completedSteps: [], locked: false },
-      { subjectSession: "sub-002_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-      { subjectSession: "sub-002_01", module: "asl", status: "incomplete", completedSteps: [], locked: false },
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: [],
+        locked: false,
+      },
+      {
+        subjectSession: "sub-001_01",
+        module: "asl",
+        status: "incomplete",
+        completedSteps: [],
+        locked: false,
+      },
+      {
+        subjectSession: "sub-002_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: [],
+        locked: false,
+      },
+      {
+        subjectSession: "sub-002_01",
+        module: "asl",
+        status: "incomplete",
+        completedSteps: [],
+        locked: false,
+      },
     ];
     mockSubjectStatuses.splice(0, mockSubjectStatuses.length, ...multiModuleStatuses);
     mockPhase = "failed";
@@ -108,8 +143,20 @@ describe("ProcessingStatusBar", () => {
     mockSubjectStatuses.splice(
       0,
       mockSubjectStatuses.length,
-      { subjectSession: "sub-001_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-      { subjectSession: "sub-002_01", module: "structural", status: "pending", completedSteps: [], locked: false },
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: [],
+        locked: false,
+      },
+      {
+        subjectSession: "sub-002_01",
+        module: "structural",
+        status: "pending",
+        completedSteps: [],
+        locked: false,
+      },
     );
   });
 });

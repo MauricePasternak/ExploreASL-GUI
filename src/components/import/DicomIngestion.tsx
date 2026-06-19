@@ -1,22 +1,6 @@
 import { useState } from "react";
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Code,
-  Group,
-  Stack,
-  Switch,
-  Text,
-  Title,
-} from "@mantine/core";
-import {
-  IconAlertCircle,
-  IconFolderSearch,
-  IconCheck,
-  IconArrowRight,
-} from "@tabler/icons-react";
+import { Alert, Badge, Button, Card, Code, Group, Stack, Switch, Text, Title } from "@mantine/core";
+import { IconAlertCircle, IconFolderSearch, IconCheck, IconArrowRight } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -92,11 +76,13 @@ export default function DicomIngestion() {
       const patterns = discoverPathPatterns(fullPaths, sourceDataPath, tokenSubDelimiters);
 
       setIngestionResults(fullPaths, patterns);
-      logAction("dicom_scan_success", { path: sourceDataPath, pathCount: paths.length, patternCount: patterns.length });
+      logAction("dicom_scan_success", {
+        path: sourceDataPath,
+        pathCount: paths.length,
+        patternCount: patterns.length,
+      });
     } catch (err) {
-      setError(
-        `Failed to scan directory: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      setError(`Failed to scan directory: ${err instanceof Error ? err.message : String(err)}`);
       setIngestionResults([], []);
       logAction("dicom_scan_error", { path: sourceDataPath, error: String(err) });
     } finally {
@@ -115,8 +101,8 @@ export default function DicomIngestion() {
     <Stack gap="md" data-testid="dicom-ingestion">
       <Title order={3}>DICOM Ingestion</Title>
       <Text c="dimmed" size="sm">
-        Choose the folder that contains this study&apos;s scan files, then scan it
-        so the app can learn how the folders are organized.
+        Choose the folder that contains this study&apos;s scan files, then scan it so the app can
+        learn how the folders are organized.
       </Text>
 
       {/* Folder selection */}
@@ -125,16 +111,20 @@ export default function DicomIngestion() {
           <Group justify="space-between">
             <div>
               <Group gap="xs">
-                <Text fw={500} size="sm">Folder containing your scan files</Text>
+                <Text fw={500} size="sm">
+                  Folder containing your scan files
+                </Text>
                 <HelpTooltip
                   label="What folder should I choose?"
-                  tooltip="Choose the main folder that contains this project&apos;s DICOM scan files. The app will scan this folder and everything inside it to identify the folder structure."
+                  tooltip="Choose the main folder that contains this project's DICOM scan files. The app will scan this folder and everything inside it to identify the folder structure."
                 />
               </Group>
               {sourceDataPath ? (
                 <Code>{sourceDataPath}</Code>
               ) : (
-                <Text c="dimmed" size="sm">No folder selected yet</Text>
+                <Text c="dimmed" size="sm">
+                  No folder selected yet
+                </Text>
               )}
             </div>
             <Button
@@ -149,7 +139,9 @@ export default function DicomIngestion() {
 
           <div>
             <Group gap="xs" mb={4}>
-              <Text fw={500} size="sm">Are your scan files inside many subfolders?</Text>
+              <Text fw={500} size="sm">
+                Are your scan files inside many subfolders?
+              </Text>
               <HelpTooltip
                 label="When should I turn this on?"
                 tooltip="Turn this on when each scan series is stored in its own folder, which is common in exported DICOM data. Turn it off when the DICOM files are mostly all in one folder level."
@@ -196,14 +188,19 @@ export default function DicomIngestion() {
             <Group>
               <IconCheck size={20} color="var(--mantine-color-green-6)" />
               <Text fw={500}>
-                Found {totalPaths} DICOM location{totalPaths !== 1 ? "s" : ""}{" "}
-                across {pathPatterns.length} unique path pattern
+                Found {totalPaths} DICOM location{totalPaths !== 1 ? "s" : ""} across{" "}
+                {pathPatterns.length} unique path pattern
                 {pathPatterns.length !== 1 ? "s" : ""}
               </Text>
             </Group>
 
             {pathPatterns.map((pattern) => (
-              <Card key={pattern.signature} withBorder p="sm" data-testid={`pattern-result-card-${pattern.signature}`}>
+              <Card
+                key={pattern.signature}
+                withBorder
+                p="sm"
+                data-testid={`pattern-result-card-${pattern.signature}`}
+              >
                 <Group gap="xs" mb="xs">
                   <Badge variant="light" size="sm">
                     {pattern.count} path{pattern.count !== 1 ? "s" : ""}

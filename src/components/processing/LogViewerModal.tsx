@@ -62,8 +62,8 @@ export default function LogViewerModal({
         module === "structural"
           ? "Structural Log"
           : module === "import"
-          ? "Import Log"
-          : "Population Log";
+            ? "Import Log"
+            : "Population Log";
       return entries.map(([filename]) => ({
         value: filename,
         label,
@@ -92,7 +92,7 @@ export default function LogViewerModal({
     }
   }, [entries, runOptions]);
 
-  const currentContent = selectedFile && logContent ? logContent[selectedFile] ?? "" : "";
+  const currentContent = selectedFile && logContent ? (logContent[selectedFile] ?? "") : "";
 
   const lines = useMemo(() => splitLogLines(currentContent), [currentContent]);
 
@@ -113,10 +113,10 @@ export default function LogViewerModal({
       module === "structural"
         ? "Structural"
         : module === "asl"
-        ? "ASL"
-        : module === "import"
-        ? "Import"
-        : "Population";
+          ? "ASL"
+          : module === "import"
+            ? "Import"
+            : "Population";
     const errBadge = currentHasError ? (
       <Badge color="red" ml="sm" size="sm" data-testid="log-error-badge">
         ERRORS DETECTED
@@ -124,11 +124,7 @@ export default function LogViewerModal({
     ) : null;
 
     if (module === "population") {
-      return (
-        <span>
-          Population Log {errBadge}
-        </span>
-      );
+      return <span>Population Log {errBadge}</span>;
     }
 
     const [sub, ses] = subjectSession ? subjectSession.split("_") : ["", ""];
@@ -136,7 +132,8 @@ export default function LogViewerModal({
     const sesLabel = ses ? ` / ses-${ses}` : "";
     return (
       <span>
-        {moduleLabel} Log — {subLabel}{sesLabel} {errBadge}
+        {moduleLabel} Log — {subLabel}
+        {sesLabel} {errBadge}
       </span>
     );
   }, [module, subjectSession, currentHasError]);
@@ -158,7 +155,10 @@ export default function LogViewerModal({
           </Alert>
         )}
         {loading && !logContent ? (
-          <Box style={{ display: "flex", justifyContent: "center", padding: 40 }} data-testid="log-loading">
+          <Box
+            style={{ display: "flex", justifyContent: "center", padding: 40 }}
+            data-testid="log-loading"
+          >
             <Loader />
           </Box>
         ) : (
@@ -237,4 +237,3 @@ export default function LogViewerModal({
     </Modal>
   );
 }
-

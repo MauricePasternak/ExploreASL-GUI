@@ -12,15 +12,15 @@ rules:
   proposal:
     - "Ensure all proposals explicitly contrast the new changes against existing capabilities."
     - "Always flag breaking changes clearly in the What Changes section."
-  
+
   specs:
     - "Every scenario MUST use exactly 4 hashtags (#### Scenario: ) as per schema layout."
     - "All specifications must use strict normative language (SHALL/MUST)."
-  
+
   design:
     - "Include at least two alternative architectures considered for major decisions."
     - "Ensure a clear mitigation is written for every identified risk."
-  
+
   tasks:
     - "Break down items so no individual task takes more than 2 hours to complete."
     - "Ensure tasks strictly map to the requirements defined in the specs phase."

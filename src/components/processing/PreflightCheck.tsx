@@ -65,10 +65,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
       setExploreAslHasM(false);
       return;
     }
-    Promise.all([
-      exists(path),
-      exists(`${path}/ExploreASL.m`),
-    ])
+    Promise.all([exists(path), exists(`${path}/ExploreASL.m`)])
       .then(([dirExists, mExists]) => {
         setExploreAslExists(dirExists);
         setExploreAslHasM(mExists);
@@ -110,8 +107,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
     const warnings: string[] = [];
 
     // Hard block: subjects selected (not required for population-only runs)
-    const populationOnly =
-      config?.modules.length === 1 && config?.modules[0] === "population";
+    const populationOnly = config?.modules.length === 1 && config?.modules[0] === "population";
     if (!config?.subjects.length && !populationOnly) {
       errors.push("No subjects selected. Select at least one subject.");
     }
@@ -125,9 +121,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
     if (!config?.matlabPath?.trim()) {
       errors.push("No MATLAB installation configured. Add one in Settings.");
     } else if (matlabExists === false) {
-      errors.push(
-        `MATLAB executable not found at "${config.matlabPath}". Check Settings.`,
-      );
+      errors.push(`MATLAB executable not found at "${config.matlabPath}". Check Settings.`);
     }
 
     // Hard block: ExploreASL path
@@ -136,9 +130,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
       errors.push("No ExploreASL path configured. Set it in Settings.");
     } else {
       if (exploreAslExists === false) {
-        errors.push(
-          `ExploreASL directory not found at "${explorePath}". Check Settings.`,
-        );
+        errors.push(`ExploreASL directory not found at "${explorePath}". Check Settings.`);
       } else if (exploreAslHasM === false) {
         errors.push(
           `ExploreASL.m not found in "${explorePath}". Verify the ExploreASL installation.`,
@@ -152,9 +144,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
       errors.push("Worker count must be at least 1.");
     }
     if (systemCores > 0 && workers > systemCores) {
-      errors.push(
-        `Worker count (${workers}) exceeds available CPU cores (${systemCores}).`,
-      );
+      errors.push(`Worker count (${workers}) exceeds available CPU cores (${systemCores}).`);
     }
 
     // Hard block: population + workers > 1
@@ -206,11 +196,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
     <Stack gap="xs" data-testid="preflight-check">
       {/* Hard block errors */}
       {result.errors.length > 0 && (
-        <Alert
-          color="red"
-          icon={<IconAlertTriangle size={16} />}
-          data-testid="preflight-errors"
-        >
+        <Alert color="red" icon={<IconAlertTriangle size={16} />} data-testid="preflight-errors">
           {result.errors.length === 1 ? (
             <Text size="sm" data-testid="preflight-error-item">
               {result.errors[0]}
@@ -229,11 +215,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
 
       {/* Soft warnings */}
       {result.warnings.length > 0 && (
-        <Alert
-          color="yellow"
-          icon={<IconInfoCircle size={16} />}
-          data-testid="preflight-warnings"
-        >
+        <Alert color="yellow" icon={<IconInfoCircle size={16} />} data-testid="preflight-warnings">
           {result.warnings.length === 1 ? (
             <Text size="sm" data-testid="preflight-warning-item">
               {result.warnings[0]}
@@ -252,11 +234,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
 
       {/* All clear */}
       {result.ready && result.warnings.length === 0 && (
-        <Text
-          size="sm"
-          c="teal"
-          data-testid="preflight-ready"
-        >
+        <Text size="sm" c="teal" data-testid="preflight-ready">
           All checks passed. Ready to process.
         </Text>
       )}

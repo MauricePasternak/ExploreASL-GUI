@@ -5,20 +5,23 @@
 The system SHALL capture an `ImportSnapshot` at `startImport()` time and persist it in the project file at `uiState.import.mostRecentConfig`. The snapshot SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, and `subjectRows` (including `groupId` assignments). The snapshot SHALL be `null` before the first import run.
 
 #### Scenario: First import creates snapshot
+
 - **WHEN** the user clicks "Start Import" for the first time
 - **THEN** the current import configuration is captured as an `ImportSnapshot` and stored in `uiState.import.mostRecentConfig`
 
 #### Scenario: Re-run overwrites snapshot
+
 - **WHEN** the user starts a re-run (with selected subjects)
 - **THEN** the current import configuration replaces the previous snapshot in `uiState.import.mostRecentConfig`
 
 #### Scenario: Snapshot persists across sessions
+
 - **WHEN** the user closes and reopens the project
 - **THEN** the `mostRecentConfig` snapshot is restored from the `.easl` project file
 
 ### Requirement: Two-tier staleness detection
 
-On entering import step 5, the system SHALL compare the current import configuration against `uiState.import.mostRecentConfig` to determine per-subject staleness. 
+On entering import step 5, the system SHALL compare the current import configuration against `uiState.import.mostRecentConfig` to determine per-subject staleness.
 
 **Structural staleness**: If any of the following fields differ between current config and snapshot, ALL subjects SHALL be marked stale: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`.
 
@@ -27,28 +30,34 @@ On entering import step 5, the system SHALL compare the current import configura
 **No staleness**: If the snapshot matches the current configuration exactly, no subjects SHALL be marked stale.
 
 #### Scenario: Structural change stales all subjects
+
 - **WHEN** the user changes a tokenizer assignment after import completion and navigates to step 5
 - **THEN** all subjects are marked stale regardless of their metadata group assignment
 
 #### Scenario: Metadata change stales only affected subjects
+
 - **WHEN** the user changes `PostLabelingDelay` in metadata group "Group A" after import completion and navigates to step 5
 - **THEN** only subjects assigned to "Group A" are marked stale; subjects in other groups remain fresh
 
 #### Scenario: Subject moved between groups
+
 - **WHEN** the user reassigns a subject from "Group A" to "Group B" after import completion and navigates to step 5
 - **THEN** the moved subject is marked stale (its group assignment changed), even if both groups' params are unchanged
 
 #### Scenario: No config changes
+
 - **WHEN** the user navigates to step 5 without changing any import configuration since the last run
 - **THEN** no subjects are marked stale
 
 #### Scenario: No prior snapshot
+
 - **WHEN** the user navigates to step 5 and `mostRecentConfig` is `null`
 - **THEN** no staleness comparison is performed; all subjects show their reconstructed status without stale overlay
 
 ### Requirement: Import progress reconstruction from lock files
 
 The system SHALL provide a Rust command `read_import_status(project_root: string)` that scans `<project_root>/derivatives/ExploreASL/lock/xASL_module_Import/` and returns per-subject status. For each subject directory found:
+
 - If `999_ready.status` exists → status `"completed"`, step `null`
 - If any other `.status` file exists but no `999_ready.status` → status `"failed"`, step `null`
 - If the subject directory does not exist in lock path → the subject is not included in results
@@ -56,18 +65,22 @@ The system SHALL provide a Rust command `read_import_status(project_root: string
 The system SHALL call `read_import_status` on entering import step 5 and populate `importProgress` from the results. Subjects not found in lock files SHALL be set to status `"pending"` (never attempted) if no prior `mostRecentConfig` exists, or status `"stale-not-found"` if a snapshot exists (indicating the subject's output was moved but config has since changed).
 
 #### Scenario: Completed subject reconstructed from lock files
+
 - **WHEN** the user navigates to step 5 after a successful import of subject "sub-001"
 - **THEN** `read_import_status` returns `{ subject: "sub-001", status: "completed" }` and the progress table shows subject "sub-001" as completed
 
 #### Scenario: Failed subject reconstructed from lock files
+
 - **WHEN** subject "sub-BADDIE" failed during import with `010_DCM2NII.status` present but no `999_ready.status`
 - **THEN** `read_import_status` returns `{ subject: "sub-BADDIE", status: "failed" }`
 
 #### Scenario: Subject not in lock files with no snapshot
+
 - **WHEN** the user opens step 5 for the first time and subject "sub-NEW" has no lock directory
 - **THEN** subject "sub-NEW" shows status "pending" (never attempted)
 
 #### Scenario: Subject not in lock files but snapshot exists
+
 - **WHEN** a subject was completed in a prior run (lock files exist in project derivatives), config changed structurally, and now the subject name has changed due to a rename
 - **THEN** the renamed subject has no matching lock directory and shows status "pending"; the old-name lock directory still exists but no longer corresponds to a current subject
 
@@ -86,26 +99,32 @@ The import step 5 execution view SHALL replace the current `ImportProgressTable`
 5. **Import Logs/Errors column** shows clickable badge: "View Errors" (red outline) if error logs exist, "View Logs" (teal outline) if only non-error logs exist, "No Logs" (dimmed text) if no logs. Clicking opens `LogViewerModal` (reusing Processing module's modal) with import module logs for that subject.
 
 #### Scenario: First visit before import
+
 - **WHEN** the user reaches step 5 for a project that has never been imported
 - **THEN** all subjects are shown with "pending" status, no stale indicators, and all checkboxes are selected
 
 #### Scenario: Re-visit after successful import, no config changes
+
 - **WHEN** the user navigates to step 5 after a successful import with no configuration changes
 - **THEN** all subjects show "completed" status with no stale overlay, no checkboxes are pre-selected
 
 #### Scenario: Re-visit with stale subjects
+
 - **WHEN** the user changed a metadata group parameter and navigates to step 5
 - **THEN** subjects in the changed group show "completed" status with amber stale overlay, those subjects are pre-selected in checkboxes
 
 #### Scenario: Re-visit with structural changes
+
 - **WHEN** the user changed a tokenizer assignment and navigates to step 5
 - **THEN** all subjects show stale overlay, all subjects are pre-selected
 
 #### Scenario: Clicking View Logs opens modal
+
 - **WHEN** the user clicks "View Logs" on a subject row
 - **THEN** the LogViewerModal opens showing import log files from `derivatives/ExploreASL/log/` for that subject, with the module parameter set to "import"
 
 #### Scenario: Clicking View Errors opens modal
+
 - **WHEN** the user clicks "View Errors" on a subject row
 - **THEN** the LogViewerModal opens showing import log files with error highlighting, module "import"
 
@@ -120,22 +139,27 @@ The system SHALL provide "Start Import" and "Stop" controls on step 5. When the 
 5. The staging tree SHALL be rebuilt from current configuration.
 
 #### Scenario: Re-import with only stale subjects
+
 - **WHEN** the user selects only stale subjects and clicks "Start Import"
 - **THEN** import starts without confirmation, lock files for selected subjects are deleted, lock files for unselected fresh subjects are preserved
 
 #### Scenario: Re-import with freshly completed subjects
+
 - **WHEN** the user selects a freshly completed subject (not stale) and clicks "Start Import"
 - **THEN** a confirmation dialog appears with the subject name listed
 
 #### Scenario: Confirmation cancelled
+
 - **WHEN** the user clicks "Cancel" on the confirmation dialog
 - **THEN** the import does not start and the subject selection is preserved
 
 #### Scenario: Confirmation accepted
+
 - **WHEN** the user clicks "Re-import anyway" on the confirmation dialog
 - **THEN** import proceeds, lock files for all selected subjects (including the freshly completed ones) are deleted
 
 #### Scenario: No subjects selected
+
 - **WHEN** no subjects are selected in the checkbox table
 - **THEN** the "Start Import" button is disabled
 
@@ -151,10 +175,12 @@ The project file schema SHALL restructure import-related UI state under `uiState
 The old flat keys SHALL be removed from the schema entirely. No backward compatibility migration is needed (v0.1, not yet distributed).
 
 #### Scenario: New project
+
 - **WHEN** a new project is created
 - **THEN** the project file uses `uiState.import.activeStep`, `uiState.import.completed`, `uiState.import.currentPhase` from the start
 
 #### Scenario: Existing project with old flat keys
+
 - **WHEN** a `.easl` file with old flat keys (`importActiveStep`, `importCompleted`, `importPhase`) is loaded
 - **THEN** those keys are ignored and defaults are used for the nested format (no migration — v0.1)
 
@@ -163,9 +189,11 @@ The old flat keys SHALL be removed from the schema entirely. No backward compati
 Each stale status icon overlay SHALL display a tooltip on hover with text: "Configuration has changed since last import. Re-import recommended." Completed-but-not-stale icons SHALL display tooltip: "Import completed successfully."
 
 #### Scenario: Hovering stale completed subject
+
 - **WHEN** the user hovers over the amber triangle overlay on a completed-but-stale subject
 - **THEN** a tooltip reads "Configuration has changed since last import. Re-import recommended."
 
 #### Scenario: Hovering fresh completed subject
+
 - **WHEN** the user hovers over the green check icon on a completed-not-stale subject
 - **THEN** a tooltip reads "Import completed successfully."

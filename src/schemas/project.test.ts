@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  DEFAULT_PROJECT_FILE,
-  PROJECT_FILE_NAME,
-  ProjectFileSchema,
-} from "./project";
+import { DEFAULT_PROJECT_FILE, PROJECT_FILE_NAME, ProjectFileSchema } from "./project";
 
 describe("ProjectFileSchema", () => {
   it("creates a default project file rooted in the import phase", () => {
@@ -178,8 +174,11 @@ describe("ProjectFileSchema", () => {
     const parsed = ProjectFileSchema.parse({
       version: "0.1.0",
       projectMeta: {
-        id: "bc-1", name: "BC", rootPath: "/tmp/bc",
-        createdAt: "2026-01-01", lastOpened: "2026-01-01",
+        id: "bc-1",
+        name: "BC",
+        rootPath: "/tmp/bc",
+        createdAt: "2026-01-01",
+        lastOpened: "2026-01-01",
         currentPhase: "import",
       },
       exploreAslConfig: { dataPar: {} },
@@ -191,8 +190,11 @@ describe("ProjectFileSchema", () => {
     const parsed = ProjectFileSchema.parse({
       version: "0.1.0",
       projectMeta: {
-        id: "bc-2", name: "BC2", rootPath: "/tmp/bc2",
-        createdAt: "2026-01-01", lastOpened: "2026-01-01",
+        id: "bc-2",
+        name: "BC2",
+        rootPath: "/tmp/bc2",
+        createdAt: "2026-01-01",
+        lastOpened: "2026-01-01",
         currentPhase: "import",
       },
       exploreAslConfig: {
@@ -212,8 +214,11 @@ describe("ProjectFileSchema", () => {
     const parsed = ProjectFileSchema.parse({
       version: "0.1.0",
       projectMeta: {
-        id: "bc-3", name: "BC3", rootPath: "/tmp/bc3",
-        createdAt: "2026-01-01", lastOpened: "2026-01-01",
+        id: "bc-3",
+        name: "BC3",
+        rootPath: "/tmp/bc3",
+        createdAt: "2026-01-01",
+        lastOpened: "2026-01-01",
         currentPhase: "import",
       },
       exploreAslConfig: {
@@ -228,8 +233,11 @@ describe("ProjectFileSchema", () => {
       ProjectFileSchema.parse({
         version: "0.1.0",
         projectMeta: {
-          id: "bc-4", name: "BC4", rootPath: "/tmp/bc4",
-          createdAt: "2026-01-01", lastOpened: "2026-01-01",
+          id: "bc-4",
+          name: "BC4",
+          rootPath: "/tmp/bc4",
+          createdAt: "2026-01-01",
+          lastOpened: "2026-01-01",
           currentPhase: "import",
         },
         exploreAslConfig: {

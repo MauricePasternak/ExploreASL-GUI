@@ -1,4 +1,9 @@
-import { canAccessPhase, PROJECT_PHASES, type ProjectPhase, type ProjectFile } from "../schemas/project";
+import {
+  canAccessPhase,
+  PROJECT_PHASES,
+  type ProjectPhase,
+  type ProjectFile,
+} from "../schemas/project";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
 import { clearSessionCheckpoint, readSessionCheckpoint } from "./sessionCheckpoint";

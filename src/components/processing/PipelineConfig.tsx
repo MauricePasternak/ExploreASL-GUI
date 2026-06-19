@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Checkbox,
-  NumberInput,
-  Select,
-  Stack,
-  Text,
-} from "@mantine/core";
+import { Alert, Checkbox, NumberInput, Select, Stack, Text } from "@mantine/core";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -48,10 +41,7 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
   const [defaultWorkers, setDefaultWorkers] = useState(4);
 
   useEffect(() => {
-    Promise.all([
-      invoke<number>("get_cpu_cores"),
-      invoke<number>("get_available_memory_mb"),
-    ])
+    Promise.all([invoke<number>("get_cpu_cores"), invoke<number>("get_available_memory_mb")])
       .then(([cores, memMb]) => {
         setSystemCores(cores);
         setDefaultWorkers(calcDefaultWorkers(cores, memMb));
@@ -95,8 +85,7 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
     const errors: string[] = [];
     if (noMatlab) errors.push("No MATLAB installation configured. Add one in Settings.");
     if (noExploreAsl) errors.push("No ExploreASL path configured. Set it in Settings.");
-    const populationOnly =
-      config?.modules.length === 1 && config?.modules[0] === "population";
+    const populationOnly = config?.modules.length === 1 && config?.modules[0] === "population";
     if (!config?.subjects.length && !populationOnly) errors.push("No subjects selected.");
     if (!config?.modules.length) errors.push("At least one module must be selected.");
     return errors;
@@ -155,7 +144,9 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
         >
           <Stack gap={2}>
             {validationErrors.map((err) => (
-              <Text key={err} size="sm">{err}</Text>
+              <Text key={err} size="sm">
+                {err}
+              </Text>
             ))}
           </Stack>
         </Alert>
@@ -180,7 +171,8 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
         </Text>
         <Stack gap="xs">
           {PROCESSING_MODULES.filter((m) => m !== "population").map((module) => {
-            const label = module === "asl" ? "ASL" : module.charAt(0).toUpperCase() + module.slice(1);
+            const label =
+              module === "asl" ? "ASL" : module.charAt(0).toUpperCase() + module.slice(1);
             return (
               <Checkbox
                 key={module}

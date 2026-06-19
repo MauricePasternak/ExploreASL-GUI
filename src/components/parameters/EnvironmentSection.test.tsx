@@ -36,41 +36,29 @@ const emptyState: DataParState = {};
 
 describe("EnvironmentSection", () => {
   it("renders bAutomaticallyDetectFSL toggle", () => {
-    renderWithMantine(
-      <EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/auto-detect fsl/i).length).toBeGreaterThan(0);
   });
 
   it("renders bAutomaticallyDetectVABY toggle", () => {
-    renderWithMantine(
-      <EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/auto-detect vaby/i).length).toBeGreaterThan(0);
   });
 
   it("does not render AdvancedDivider", () => {
-    renderWithMantine(
-      <EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.queryByText(/show advanced/i)).toBeNull();
   });
 
   it("treats undefined bAutomaticallyDetectFSL as true", () => {
-    renderWithMantine(
-      <EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
-    const fslInput = document.querySelector(
-      'input[role="switch"]',
-    );
+    renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />);
+    const fslInput = document.querySelector('input[role="switch"]');
     expect(fslInput?.getAttribute("data-checked")).toBe("true");
   });
 
   it("calls onFieldChange when bAutomaticallyDetectFSL toggled", () => {
     const onFieldChange = vi.fn();
-    renderWithMantine(
-      <EnvironmentSection dataPar={emptyState} onFieldChange={onFieldChange} />,
-    );
+    renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={onFieldChange} />);
     clickSwitch(/auto-detect fsl/i);
     expect(onFieldChange).toHaveBeenCalledWith("bAutomaticallyDetectFSL", expect.any(Boolean));
   });

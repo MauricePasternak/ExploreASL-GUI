@@ -13,11 +13,22 @@ interface QuantificationSectionProps {
 }
 
 const NUMBER_FIELDS = [
-  "Lambda", "T2art", "T1blood", "T1GM", "T1WM", "T2GM", "T2WM", "T2tissueMultiTE",
+  "Lambda",
+  "T2art",
+  "T1blood",
+  "T1GM",
+  "T1WM",
+  "T2GM",
+  "T2WM",
+  "T2tissueMultiTE",
 ] as const;
 
 const EXTERNAL_TOGGLE_FIELDS = [
-  "bMaskingExternal", "bSpatialBASIL", "bInferT1BASIL", "bInferATTBASIL", "bCleanUpExternal",
+  "bMaskingExternal",
+  "bSpatialBASIL",
+  "bInferT1BASIL",
+  "bInferATTBASIL",
+  "bCleanUpExternal",
 ] as const;
 
 export function QuantificationSection({
@@ -26,7 +37,6 @@ export function QuantificationSection({
   showAdvanced,
   onToggleAdvanced,
 }: QuantificationSectionProps) {
-
   const externalEnabled = dataPar.bUseExternalQuantification === true;
 
   return (
@@ -62,12 +72,13 @@ export function QuantificationSection({
             <Switch
               id="switch-bUseExternalQuantification"
               checked={externalEnabled}
-              onChange={(e) =>
-                onFieldChange("bUseExternalQuantification", e.currentTarget.checked)
-              }
+              onChange={(e) => onFieldChange("bUseExternalQuantification", e.currentTarget.checked)}
               data-testid="field-bUseExternalQuantification"
             />
-            <DataParFieldLabel fieldKey="bUseExternalQuantification" htmlFor="switch-bUseExternalQuantification" />
+            <DataParFieldLabel
+              fieldKey="bUseExternalQuantification"
+              htmlFor="switch-bUseExternalQuantification"
+            />
           </Group>
 
           {externalEnabled && (

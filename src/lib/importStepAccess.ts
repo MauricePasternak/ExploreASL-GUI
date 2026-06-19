@@ -1,10 +1,7 @@
 import type { ImportState } from "../stores/importStore";
 import type { GlobalSettings } from "../schemas/globalSettings";
 import type { TokenAssignment, TokenTag } from "../schemas/importSchemas";
-import {
-  SourcestructureJsonSchema,
-  StudyParJsonSchema,
-} from "../schemas/importSchemas";
+import { SourcestructureJsonSchema, StudyParJsonSchema } from "../schemas/importSchemas";
 import { assembleSourcestructure, assembleStudyPar } from "./tokenizerUtils";
 
 export const TOTAL_IMPORT_STEPS = 6;
@@ -22,10 +19,7 @@ type Step5State = StepPrerequisiteState &
     >
   >;
 
-type ImportExecutionSettings = Pick<
-  GlobalSettings,
-  "matlabInstallations" | "exploreAslPath"
->;
+type ImportExecutionSettings = Pick<GlobalSettings, "matlabInstallations" | "exploreAslPath">;
 
 /** Step 0 complete: scan finished with at least one path pattern. */
 export function isIngestionComplete(
@@ -60,12 +54,8 @@ export function hasTokenizerTag(
 }
 
 /** Step 2 complete: at least one core pipeline modality is mapped. */
-export function isAliasResolutionComplete(
-  state: Pick<ImportState, "modalityAliases">,
-): boolean {
-  return state.modalityAliases.some(
-    (alias) => alias.mapped === "ASL4D" || alias.mapped === "T1w",
-  );
+export function isAliasResolutionComplete(state: Pick<ImportState, "modalityAliases">): boolean {
+  return state.modalityAliases.some((alias) => alias.mapped === "ASL4D" || alias.mapped === "T1w");
 }
 
 /**
@@ -123,10 +113,7 @@ export function canSelectImportStep(
   return stepIndex >= 0 && stepIndex <= getMaxUnlockedImportStep(state, settings);
 }
 
-export function canEnterStep5(
-  state: Step5State,
-  settings: ImportExecutionSettings,
-): boolean {
+export function canEnterStep5(state: Step5State, settings: ImportExecutionSettings): boolean {
   if (
     !isIngestionComplete(state) ||
     !isTokenizerComplete(state) ||

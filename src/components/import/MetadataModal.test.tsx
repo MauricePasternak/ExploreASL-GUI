@@ -89,15 +89,12 @@ describe("MetadataModal", () => {
 
     for (let i = 1; i < sections.length; i++) {
       expect(
-        sections[i - 1].compareDocumentPosition(sections[i]) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        sections[i - 1].compareDocumentPosition(sections[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
 
     expect(within(sections[1]).getByText("ASL / M0 Context")).toBeInTheDocument();
-    expect(
-      within(sections[2]).getByText("Vendor & Sequence Related"),
-    ).toBeInTheDocument();
+    expect(within(sections[2]).getByText("Vendor & Sequence Related")).toBeInTheDocument();
     expect(within(sections[3]).getByText("Core ASL Parameters")).toBeInTheDocument();
   });
 
@@ -217,7 +214,11 @@ describe("MetadataModal", () => {
     const { onSubmit } = renderModal({
       initialValues: {
         label: "Test",
-        bidsParams: { ...validBidsParams, BackgroundSuppression: true, BackgroundSuppressionNumberPulses: 4 },
+        bidsParams: {
+          ...validBidsParams,
+          BackgroundSuppression: true,
+          BackgroundSuppressionNumberPulses: 4,
+        },
       },
     });
 
@@ -270,19 +271,25 @@ describe("MetadataModal", () => {
     expect(infoIcon).toBeInTheDocument();
 
     // The tooltip text should not be in the document initially
-    expect(screen.queryByText(/Comma-separated sequence describing each volume/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Comma-separated sequence describing each volume/i),
+    ).not.toBeInTheDocument();
 
     // Hover over the info icon
     await user.hover(infoIcon);
 
     // Now the tooltip text should be visible
-    expect(screen.getByText(/Comma-separated sequence describing each volume/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Comma-separated sequence describing each volume/i),
+    ).toBeInTheDocument();
 
     // Unhover the info icon
     await user.unhover(infoIcon);
 
     // The tooltip should disappear
-    expect(screen.queryByText(/Comma-separated sequence describing each volume/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Comma-separated sequence describing each volume/i),
+    ).not.toBeInTheDocument();
   });
 
   it("displays validation error for invalid comma number inputs", async () => {

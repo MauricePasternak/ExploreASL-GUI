@@ -5,7 +5,11 @@ export const LogFileInfoSchema = z.object({
   filename: z.string(),
   module: z.enum(["structural", "asl", "import", "population"]),
   subjectSession: z.string(),
-  run: z.string().nullable().optional().transform(v => v ?? undefined),
+  run: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((v) => v ?? undefined),
   hasError: z.boolean(),
 });
 

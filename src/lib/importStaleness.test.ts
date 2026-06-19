@@ -95,9 +95,7 @@ describe("computeStaleness", () => {
   });
 
   it("returns all subjects as not stale when no changes", () => {
-    const rows = [
-      { id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" },
-    ];
+    const rows = [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" }];
     const state = makeState({
       sourceDataPath: "/data",
       subjectRows: rows,
@@ -128,9 +126,7 @@ describe("computeStaleness", () => {
   it("marks all subjects stale on tokenizer change", () => {
     const state = makeState({
       tokenizerConfigs: { sig: [{ blockIndex: 0, subBlockIndex: null, tag: "Subject" }] },
-      subjectRows: [
-        { id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" },
-      ],
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" }],
     });
     const snapshot: ImportSnapshot = {
       ...BASE_SNAPSHOT,
@@ -143,9 +139,7 @@ describe("computeStaleness", () => {
   it("marks all subjects stale on bMatchDirectories change", () => {
     const state = makeState({
       bMatchDirectories: false,
-      subjectRows: [
-        { id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" },
-      ],
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" }],
     });
     const snapshot: ImportSnapshot = {
       ...BASE_SNAPSHOT,
@@ -184,15 +178,11 @@ describe("computeStaleness", () => {
   it("marks subject stale when moved between groups", () => {
     const state = makeState({
       sourceDataPath: "/data",
-      subjectRows: [
-        { id: "BAR/01", subject: "BAR", session: "01", groupId: "g2" },
-      ],
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "g2" }],
     });
     const snapshot: ImportSnapshot = {
       ...BASE_SNAPSHOT,
-      subjectRows: [
-        { id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" },
-      ],
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" }],
     };
     const result = computeStaleness(state, snapshot);
     expect(result).toEqual({ BAR: true });
@@ -202,9 +192,7 @@ describe("computeStaleness", () => {
     const state = makeState({
       sourceDataPath: "/data",
       modalityAliases: [{ captured: "asl", mapped: "ASL4D" }],
-      subjectRows: [
-        { id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" },
-      ],
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" }],
     });
     const snapshot: ImportSnapshot = {
       ...BASE_SNAPSHOT,
@@ -247,18 +235,14 @@ describe("computeStaleness", () => {
         { id: "g1", label: "G1", bidsParams: { ArterialSpinLabelingType: "PCASL" } },
         { id: "g3", label: "G3", bidsParams: { ArterialSpinLabelingType: "PCASL" } },
       ],
-      subjectRows: [
-        { id: "BAR/01", subject: "BAR", session: "01", groupId: "g3" },
-      ],
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "g3" }],
     });
     const snapshot: ImportSnapshot = {
       ...BASE_SNAPSHOT,
       metadataGroups: [
         { id: "g1", label: "G1", bidsParams: { ArterialSpinLabelingType: "PCASL" } },
       ],
-      subjectRows: [
-        { id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" },
-      ],
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" }],
     };
     const result = computeStaleness(state, snapshot);
     expect(result).toEqual({ BAR: true });

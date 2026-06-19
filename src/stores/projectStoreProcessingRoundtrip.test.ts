@@ -20,9 +20,7 @@ describe("processing config round-trip persistence", () => {
 
   it("saves processing config to .easl and restores it on reload", async () => {
     // Create project
-    await useProjectStore
-      .getState()
-      .createProject("/tmp/roundtrip-project", "Roundtrip");
+    await useProjectStore.getState().createProject("/tmp/roundtrip-project", "Roundtrip");
 
     // Sync processing config into project
     const config = {
@@ -54,9 +52,7 @@ describe("processing config round-trip persistence", () => {
     vi.mocked(readTextFile).mockResolvedValue(savedJson);
 
     useProjectStore.setState({ project: null, loaded: false, isDirty: false });
-    await useProjectStore
-      .getState()
-      .loadProject("/tmp/roundtrip-project/project.easl");
+    await useProjectStore.getState().loadProject("/tmp/roundtrip-project/project.easl");
 
     const restored = useProjectStore.getState().project;
     expect(restored?.uiState.processing?.config).toEqual(config);
@@ -64,9 +60,7 @@ describe("processing config round-trip persistence", () => {
   });
 
   it("persists processingPhase transitions across save/reload", async () => {
-    await useProjectStore
-      .getState()
-      .createProject("/tmp/phase-roundtrip", "Phase Roundtrip");
+    await useProjectStore.getState().createProject("/tmp/phase-roundtrip", "Phase Roundtrip");
 
     useProjectStore.getState().syncProcessingState({
       config: null,
@@ -83,19 +77,13 @@ describe("processing config round-trip persistence", () => {
     // Reload
     vi.mocked(readTextFile).mockResolvedValue(reloadJson);
     useProjectStore.setState({ project: null, loaded: false, isDirty: false });
-    await useProjectStore
-      .getState()
-      .loadProject("/tmp/phase-roundtrip/project.easl");
+    await useProjectStore.getState().loadProject("/tmp/phase-roundtrip/project.easl");
 
-    expect(useProjectStore.getState().project?.uiState.processing?.currentPhase).toBe(
-      "running",
-    );
+    expect(useProjectStore.getState().project?.uiState.processing?.currentPhase).toBe("running");
   });
 
   it("does not persist null config as null in JSON (omits field)", async () => {
-    await useProjectStore
-      .getState()
-      .createProject("/tmp/null-roundtrip", "Null Roundtrip");
+    await useProjectStore.getState().createProject("/tmp/null-roundtrip", "Null Roundtrip");
 
     // Don't sync any processing state — processingConfig should be undefined
     await useProjectStore.getState().saveProject();

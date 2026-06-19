@@ -27,7 +27,9 @@ describe("useProjectStore", () => {
       expect.stringContaining('"name": "Demo Project"'),
     );
     expect(useProjectStore.getState().project?.projectMeta.currentPhase).toBe("import");
-    expect(readSessionCheckpoint()?.projectId).toBe(useProjectStore.getState().project?.projectMeta.id);
+    expect(readSessionCheckpoint()?.projectId).toBe(
+      useProjectStore.getState().project?.projectMeta.id,
+    );
   });
 
   it("loads a valid project file and clears the dirty flag", async () => {
@@ -72,9 +74,9 @@ describe("useProjectStore", () => {
   });
 
   it("rejects project files that are not named project.easl", async () => {
-    await expect(useProjectStore.getState().loadProject("/tmp/loaded/custom-name.easl")).rejects.toThrow(
-      /project\.easl/i,
-    );
+    await expect(
+      useProjectStore.getState().loadProject("/tmp/loaded/custom-name.easl"),
+    ).rejects.toThrow(/project\.easl/i);
   });
 
   it("marks the project dirty when switching to an accessible phase and persists on save", async () => {

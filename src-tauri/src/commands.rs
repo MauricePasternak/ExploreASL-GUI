@@ -125,8 +125,7 @@ fn find_matlab_standard_dirs(paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBu
 fn matlab_executable_candidates(bin_dir: &Path) -> Vec<PathBuf> {
     #[cfg(windows)]
     {
-        let pathext =
-            env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+        let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
         let mut candidates: Vec<PathBuf> = pathext
             .split(';')
             .filter(|ext| !ext.is_empty())
@@ -208,7 +207,11 @@ fn run_matlab_release(binary: &Path) -> Option<String> {
     {
         Ok(o) => o,
         Err(e) => {
-            log::warn!("[COMMAND] which_matlab — failed to spawn {:?}: {}", binary, e);
+            log::warn!(
+                "[COMMAND] which_matlab — failed to spawn {:?}: {}",
+                binary,
+                e
+            );
             return None;
         }
     };
@@ -226,14 +229,13 @@ fn run_matlab_release(binary: &Path) -> Option<String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let release = stdout.trim();
 
-    log::info!(
-        "[COMMAND] which_matlab — {:?} stdout: {:?}",
-        binary,
-        stdout
-    );
+    log::info!("[COMMAND] which_matlab — {:?} stdout: {:?}", binary, stdout);
 
     if release.is_empty() {
-        log::warn!("[COMMAND] which_matlab — {:?} produced empty output", binary);
+        log::warn!(
+            "[COMMAND] which_matlab — {:?} produced empty output",
+            binary
+        );
         return None;
     }
 
@@ -274,11 +276,7 @@ fn available_memory_mb_impl() -> u64 {
         .and_then(|contents| {
             for line in contents.lines() {
                 if line.starts_with("MemAvailable:") {
-                    let kb: u64 = line
-                        .split_whitespace()
-                        .nth(1)?
-                        .parse()
-                        .ok()?;
+                    let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
                     return Some(kb / 1024);
                 }
             }

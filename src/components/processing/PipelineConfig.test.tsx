@@ -128,7 +128,7 @@ describe("PipelineConfig", () => {
       renderConfig();
       const structuralCheckbox = screen.getByLabelText("Structural");
       fireEvent.click(structuralCheckbox);
-      
+
       expect(mockSetConfig).toHaveBeenCalled();
       const calledConfig = mockSetConfig.mock.calls[0][0];
       expect(calledConfig.modules).toContain("structural");
@@ -139,7 +139,7 @@ describe("PipelineConfig", () => {
       renderConfig();
       const aslCheckbox = screen.getByLabelText("ASL");
       fireEvent.click(aslCheckbox);
-      
+
       expect(mockSetConfig).toHaveBeenCalled();
       const calledConfig = mockSetConfig.mock.calls[0][0];
       expect(calledConfig.modules).toContain("asl");

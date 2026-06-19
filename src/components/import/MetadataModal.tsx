@@ -13,10 +13,7 @@ import {
   MetadataHintLegend,
   MetadataSectionCard,
 } from "./metadataModalFields";
-import {
-  MetadataGroupFormSchema,
-  type MetadataGroupFormValues,
-} from "./metadataModalTypes";
+import { MetadataGroupFormSchema, type MetadataGroupFormValues } from "./metadataModalTypes";
 
 interface MetadataModalProps {
   opened: boolean;
@@ -74,10 +71,7 @@ export default function MetadataModal({
         <Stack gap="md">
           <MetadataHintLegend />
 
-          <MetadataSectionCard
-            title="Group Label"
-            testId="metadata-section-group-label"
-          >
+          <MetadataSectionCard title="Group Label" testId="metadata-section-group-label">
             <TextInput
               label="Group Label"
               placeholder="Global Defaults"
@@ -87,10 +81,7 @@ export default function MetadataModal({
             />
           </MetadataSectionCard>
 
-          <MetadataSectionCard
-            title="ASL / M0 Context"
-            testId="metadata-section-asl-m0-context"
-          >
+          <MetadataSectionCard title="ASL / M0 Context" testId="metadata-section-asl-m0-context">
             <BidsTextField
               control={control}
               name="bidsParams.ASLContext"
@@ -210,10 +201,7 @@ export default function MetadataModal({
             />
           </MetadataSectionCard>
 
-          <MetadataSectionCard
-            title="Core ASL Parameters"
-            testId="metadata-section-core-asl"
-          >
+          <MetadataSectionCard title="Core ASL Parameters" testId="metadata-section-core-asl">
             <BidsSelectField
               control={control}
               name="bidsParams.ArterialSpinLabelingType"

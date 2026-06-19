@@ -161,21 +161,15 @@ describe("DataParSchema", () => {
   });
 
   it("rejects ApplyQuantification with wrong length", () => {
-    expect(() =>
-      DataParSchema.parse({ ApplyQuantification: [1, 0, 1] }),
-    ).toThrow();
+    expect(() => DataParSchema.parse({ ApplyQuantification: [1, 0, 1] })).toThrow();
   });
 
   it("rejects ApplyQuantification with values outside 0-1", () => {
-    expect(() =>
-      DataParSchema.parse({ ApplyQuantification: [1, 0, 2, 0, 1, 0] }),
-    ).toThrow();
+    expect(() => DataParSchema.parse({ ApplyQuantification: [1, 0, 2, 0, 1, 0] })).toThrow();
   });
 
   it("rejects PVCNativeSpaceKernel with wrong tuple length", () => {
-    expect(() =>
-      DataParSchema.parse({ PVCNativeSpaceKernel: [5, 5] }),
-    ).toThrow();
+    expect(() => DataParSchema.parse({ PVCNativeSpaceKernel: [5, 5] })).toThrow();
   });
 });
 
@@ -203,15 +197,11 @@ describe("M0Schema", () => {
 
 describe("ApplyQuantificationSchema", () => {
   it("accepts array of 6 zeros", () => {
-    expect(ApplyQuantificationSchema.parse([0, 0, 0, 0, 0, 0])).toEqual([
-      0, 0, 0, 0, 0, 0,
-    ]);
+    expect(ApplyQuantificationSchema.parse([0, 0, 0, 0, 0, 0])).toEqual([0, 0, 0, 0, 0, 0]);
   });
 
   it("accepts array of 6 ones", () => {
-    expect(ApplyQuantificationSchema.parse([1, 1, 1, 1, 1, 1])).toEqual([
-      1, 1, 1, 1, 1, 1,
-    ]);
+    expect(ApplyQuantificationSchema.parse([1, 1, 1, 1, 1, 1])).toEqual([1, 1, 1, 1, 1, 1]);
   });
 
   it("rejects array with fewer than 6 elements", () => {
@@ -219,21 +209,15 @@ describe("ApplyQuantificationSchema", () => {
   });
 
   it("rejects array with more than 6 elements", () => {
-    expect(() =>
-      ApplyQuantificationSchema.parse([1, 0, 1, 0, 1, 0, 1]),
-    ).toThrow();
+    expect(() => ApplyQuantificationSchema.parse([1, 0, 1, 0, 1, 0, 1])).toThrow();
   });
 
   it("rejects values > 1", () => {
-    expect(() =>
-      ApplyQuantificationSchema.parse([1, 0, 1.5, 0, 1, 0]),
-    ).toThrow();
+    expect(() => ApplyQuantificationSchema.parse([1, 0, 1.5, 0, 1, 0])).toThrow();
   });
 
   it("rejects values < 0", () => {
-    expect(() =>
-      ApplyQuantificationSchema.parse([1, 0, -1, 0, 1, 0]),
-    ).toThrow();
+    expect(() => ApplyQuantificationSchema.parse([1, 0, -1, 0, 1, 0])).toThrow();
   });
 });
 

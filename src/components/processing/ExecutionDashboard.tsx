@@ -18,10 +18,7 @@ import {
   IconMinus,
 } from "@tabler/icons-react";
 
-import type {
-  SubjectInfo,
-  SubjectModuleStatus,
-} from "../../schemas/processingSchemas";
+import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
 import type { ProcessingPhase } from "../../schemas/processingSchemas";
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";
@@ -44,7 +41,9 @@ interface StepStatus {
 function StepIcon({ status }: { status: StepStatus["status"] }) {
   switch (status) {
     case "complete":
-      return <IconCheck size={14} color="var(--mantine-color-teal-6)" data-testid="step-complete" />;
+      return (
+        <IconCheck size={14} color="var(--mantine-color-teal-6)" data-testid="step-complete" />
+      );
     case "running":
       return (
         <IconLoader
@@ -215,14 +214,7 @@ function RunSubRow({
     processingPhase !== "cancelled";
 
   return (
-    <Group
-      justify="space-between"
-      align="center"
-      pl={40}
-      pr="md"
-      py={4}
-      data-testid="run-sub-row"
-    >
+    <Group justify="space-between" align="center" pl={40} pr="md" py={4} data-testid="run-sub-row">
       <Group gap="md" align="center" style={{ flex: 1, minWidth: 0 }}>
         <Text size="xs" c="dimmed" style={{ flexShrink: 0 }} w={240}>
           Run {run}
@@ -293,7 +285,10 @@ export function getRunsForSubjectInfo(
 ): string[] {
   const fromSubject = subject.aslRuns ?? [];
   const fromLock = statuses
-    .filter((s) => s.subjectSession === subject.subjectSession && s.module === "asl" && s.run !== undefined)
+    .filter(
+      (s) =>
+        s.subjectSession === subject.subjectSession && s.module === "asl" && s.run !== undefined,
+    )
     .map((s) => s.run!);
   const union = Array.from(new Set([...fromSubject, ...fromLock]));
   if (union.length === 0) {
@@ -397,11 +392,7 @@ export default function ExecutionDashboard() {
     <Stack gap="sm" data-testid="execution-dashboard">
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .spin { animation: spin 1s linear infinite; }`}</style>
 
-      <Accordion
-        multiple
-        defaultValue={enabledModules}
-        variant="separated"
-      >
+      <Accordion multiple defaultValue={enabledModules} variant="separated">
         {enabledModules.map((module) => (
           <Accordion.Item key={module} value={module}>
             <Accordion.Control>
@@ -413,10 +404,7 @@ export default function ExecutionDashboard() {
             </Accordion.Control>
             <Accordion.Panel>
               {module === "population" ? (
-                <PopulationSection
-                  statuses={subjectStatuses}
-                  processingPhase={processingPhase}
-                />
+                <PopulationSection statuses={subjectStatuses} processingPhase={processingPhase} />
               ) : (
                 <SubjectModuleSection
                   module={module}
@@ -485,10 +473,7 @@ function SubjectModuleSection({
   processingPhase: ProcessingPhase;
 }) {
   const eligible = useMemo(
-    () =>
-      subjects.filter((s) =>
-        module === "structural" ? s.hasStructural : s.hasASL,
-      ),
+    () => subjects.filter((s) => (module === "structural" ? s.hasStructural : s.hasASL)),
     [subjects, module],
   );
 
@@ -522,12 +507,7 @@ function SubjectModuleSection({
         } = getSubjectOverallStatus(subject.subjectSession, module, statuses);
 
         const singleRun = module === "asl" && runs.length === 1 ? runs[0] : undefined;
-        const steps = getStepsForSubject(
-          subject.subjectSession,
-          module,
-          statuses,
-          singleRun,
-        );
+        const steps = getStepsForSubject(subject.subjectSession, module, statuses, singleRun);
 
         const isExpanded = !!expandedSubjects[subject.subjectSession];
 
@@ -543,7 +523,9 @@ function SubjectModuleSection({
               runsCount={hasMultipleRuns ? runs.length : undefined}
               completedRunsCount={hasMultipleRuns ? completedRunsCount : undefined}
               expanded={hasMultipleRuns ? isExpanded : undefined}
-              onToggleExpand={hasMultipleRuns ? () => toggleExpand(subject.subjectSession) : undefined}
+              onToggleExpand={
+                hasMultipleRuns ? () => toggleExpand(subject.subjectSession) : undefined
+              }
             />
             {hasMultipleRuns && (
               <Collapse in={isExpanded}>
@@ -595,10 +577,11 @@ function PopulationSection({
   processingPhase: ProcessingPhase;
 }) {
   const entry = statuses.find((s) => s.module === "population");
-  const steps: StepStatus[] = (entry?.completedSteps.map((name) => ({
-    name,
-    status: "complete" as const,
-  })) ?? []);
+  const steps: StepStatus[] =
+    entry?.completedSteps.map((name) => ({
+      name,
+      status: "complete" as const,
+    })) ?? [];
   if (entry?.locked && entry?.status !== "complete") {
     steps.push({ name: "Processing...", status: "running" });
   }

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  DEFAULT_SETTINGS,
-  GlobalSettingsSchema,
-} from "./globalSettings";
+import { DEFAULT_SETTINGS, GlobalSettingsSchema } from "./globalSettings";
 
 describe("GlobalSettingsSchema", () => {
   it("provides defaults for an empty settings object", () => {
@@ -57,6 +54,4 @@ describe("GlobalSettingsSchema", () => {
       }),
     ).toThrow(/required/i);
   });
-
 });
-

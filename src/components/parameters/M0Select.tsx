@@ -13,7 +13,7 @@ export function M0Select({ value, onChange, "data-testid": dataTestId }: M0Selec
   const isNumber = typeof value === "number";
   const isCustom = value === "__custom__" || (isNumber && !namedValues.includes(String(value)));
 
-  const selectValue = isCustom ? "__custom__" : (value as string) ?? null;
+  const selectValue = isCustom ? "__custom__" : ((value as string) ?? null);
 
   return (
     <Stack gap="xs">

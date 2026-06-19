@@ -186,9 +186,7 @@ describe("ImportPage metadata step", () => {
         name: /arterial spin labeling type/i,
       })[0],
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /save metadata group/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save metadata group/i })).toBeInTheDocument();
   });
 
   it("preserves assigned override groups when derived rows are recomputed", () => {

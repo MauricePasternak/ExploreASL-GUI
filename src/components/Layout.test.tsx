@@ -81,15 +81,21 @@ describe("Layout", () => {
 
     renderLayout("/project/project-1/import");
 
-      expect(screen.getAllByText("Brain Study").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Brain Study").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /import/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /parameters/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /processing/i }).length).toBeGreaterThan(0);
-      expect(screen.getAllByRole("button", { name: /return to home/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /return to home/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/subjects: 0/i).length).toBeGreaterThan(0);
     expect(screen.queryByTestId("processing-status-bar")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /parameters/i })[0]).not.toHaveAttribute("data-disabled", "true");
-    expect(screen.getAllByRole("button", { name: /processing/i })[0]).toHaveAttribute("data-disabled", "true");
+    expect(screen.getAllByRole("button", { name: /parameters/i })[0]).not.toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+    expect(screen.getAllByRole("button", { name: /processing/i })[0]).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
   });
 
   it("returns to the landing page immediately when leaving a clean project", async () => {
@@ -235,7 +241,9 @@ describe("Layout", () => {
     fireEvent.click(getLastButton(/return to home/i));
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /leave without saving/i }).length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByRole("button", { name: /leave without saving/i }).length,
+      ).toBeGreaterThan(0);
     });
 
     fireEvent.click(getLastButton(/leave without saving/i));

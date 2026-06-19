@@ -20,13 +20,7 @@ import type {
 // State Interface
 // =============================================================================
 
-export type ImportPhase =
-  | "idle"
-  | "preparing"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type ImportPhase = "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled";
 
 export interface ImportState {
   // Step tracking
@@ -89,15 +83,9 @@ export interface ImportState {
     blockIndex: number,
     subBlockIndex: number | null,
   ) => void;
-  setTokenizerConfig: (
-    patternSignature: string,
-    assignments: TokenAssignment[],
-  ) => void;
+  setTokenizerConfig: (patternSignature: string, assignments: TokenAssignment[]) => void;
   setModalityAliases: (aliases: ModalityAlias[]) => void;
-  updateModalityAlias: (
-    captured: string,
-    mapped: ModalityAlias["mapped"],
-  ) => void;
+  updateModalityAlias: (captured: string, mapped: ModalityAlias["mapped"]) => void;
   setSessionAliases: (aliases: SessionAlias[]) => void;
   setRunAliases: (aliases: SessionAlias[]) => void;
   setSubjectRenames: (renames: SubjectRename[]) => void;
@@ -113,11 +101,7 @@ export interface ImportState {
   addLogLines: (lines: string[]) => void;
   markSubjectRunning: (subject: string, step?: "DCM2NII" | "NII2BIDS") => void;
   markSubjectCompleted: (subject: string, duration: number) => void;
-  markSubjectFailed: (
-    subject: string,
-    step: "DCM2NII" | "NII2BIDS",
-    message: string,
-  ) => void;
+  markSubjectFailed: (subject: string, step: "DCM2NII" | "NII2BIDS", message: string) => void;
   markSubjectCancelled: (subject: string) => void;
   completeImport: () => void;
   failImport: () => void;
@@ -128,7 +112,11 @@ export interface ImportState {
   setImportSummary: (summary: ImportState["importSummary"]) => void;
   setMostRecentConfig: (snapshot: ImportSnapshot) => void;
   applyStaleness: (staleness: Record<string, boolean>) => void;
-  reconstructProgressFromLockFiles: (statuses: ImportSubjectStatus[], subjects: string[], staleness: Record<string, boolean>) => void;
+  reconstructProgressFromLockFiles: (
+    statuses: ImportSubjectStatus[],
+    subjects: string[],
+    staleness: Record<string, boolean>,
+  ) => void;
   loadPersistedState: (persisted: Record<string, unknown>) => void;
   resetImport: () => void;
 }
@@ -162,15 +150,14 @@ const INITIAL_STATE = {
   selectedMatlabPath: "",
 };
 
-function subjectProgress(
-  subject: string,
-  existing?: ImportProgress,
-): ImportProgress {
-  return existing ?? {
-    subject,
-    session: "",
-    status: "pending",
-  };
+function subjectProgress(subject: string, existing?: ImportProgress): ImportProgress {
+  return (
+    existing ?? {
+      subject,
+      session: "",
+      status: "pending",
+    }
+  );
 }
 
 function normalizePersistedImportPhase(phase: unknown): ImportPhase {
@@ -178,12 +165,7 @@ function normalizePersistedImportPhase(phase: unknown): ImportPhase {
     return "failed";
   }
 
-  if (
-    phase === "idle" ||
-    phase === "completed" ||
-    phase === "failed" ||
-    phase === "cancelled"
-  ) {
+  if (phase === "idle" || phase === "completed" || phase === "failed" || phase === "cancelled") {
     return phase;
   }
 
@@ -223,15 +205,11 @@ export const useImportStore = create<ImportState>((set) => ({
 
       // Remove any existing assignment at this exact position
       const filtered = existing.filter(
-        (a) =>
-          !(a.blockIndex === blockIndex && a.subBlockIndex === subBlockIndex),
+        (a) => !(a.blockIndex === blockIndex && a.subBlockIndex === subBlockIndex),
       );
 
       // Add the new assignment
-      const updated = [
-        ...filtered,
-        { blockIndex, subBlockIndex, tag },
-      ];
+      const updated = [...filtered, { blockIndex, subBlockIndex, tag }];
 
       return {
         tokenizerConfigs: {
@@ -246,8 +224,7 @@ export const useImportStore = create<ImportState>((set) => ({
     set((state) => {
       const existing = state.tokenizerConfigs[patternSignature] ?? [];
       const filtered = existing.filter(
-        (a) =>
-          !(a.blockIndex === blockIndex && a.subBlockIndex === subBlockIndex),
+        (a) => !(a.blockIndex === blockIndex && a.subBlockIndex === subBlockIndex),
       );
 
       return {
@@ -310,16 +287,14 @@ export const useImportStore = create<ImportState>((set) => ({
     set((state) => ({
       metadataGroups: state.metadataGroups.filter((g) => g.id !== id),
       subjectRows: state.subjectRows.map((row) =>
-        row.groupId === id ? { ...row, groupId: "global-defaults" } : row
+        row.groupId === id ? { ...row, groupId: "global-defaults" } : row,
       ),
     }));
   },
 
   updateMetadataGroup: (id, updates) => {
     set((state) => ({
-      metadataGroups: state.metadataGroups.map((g) =>
-        g.id === id ? { ...g, ...updates } : g,
-      ),
+      metadataGroups: state.metadataGroups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
     }));
   },
 
@@ -365,9 +340,7 @@ export const useImportStore = create<ImportState>((set) => ({
               ? ("completed" as const)
               : ("pending" as const);
           const duration =
-            existing && existing.status === "completed"
-              ? existing.duration
-              : undefined;
+            existing && existing.status === "completed" ? existing.duration : undefined;
           return [
             row.subject,
             {
@@ -652,14 +625,18 @@ export const useImportStore = create<ImportState>((set) => ({
       pathPatterns: safe("pathPatterns", INITIAL_STATE.pathPatterns) as PathPattern[],
       bMatchDirectories: safe("bMatchDirectories", INITIAL_STATE.bMatchDirectories) as boolean,
       ingestionComplete: safe("ingestionComplete", INITIAL_STATE.ingestionComplete) as boolean,
-      tokenizerConfigs: safe("tokenizerConfigs", INITIAL_STATE.tokenizerConfigs) as Record<string, TokenAssignment[]>,
+      tokenizerConfigs: safe("tokenizerConfigs", INITIAL_STATE.tokenizerConfigs) as Record<
+        string,
+        TokenAssignment[]
+      >,
       modalityAliases: safe("modalityAliases", INITIAL_STATE.modalityAliases) as ModalityAlias[],
       sessionAliases: safe("sessionAliases", INITIAL_STATE.sessionAliases) as SessionAlias[],
       runAliases: safe("runAliases", INITIAL_STATE.runAliases) as SessionAlias[],
       subjectRenames: safe("subjectRenames", INITIAL_STATE.subjectRenames) as SubjectRename[],
       metadataGroups: safe("metadataGroups", INITIAL_STATE.metadataGroups) as MetadataGroup[],
       subjectRows: safe("subjectRows", INITIAL_STATE.subjectRows) as SubjectRow[],
-      mostRecentConfig: (safe("mostRecentConfig", INITIAL_STATE.mostRecentConfig) ?? null) as ImportSnapshot | null,
+      mostRecentConfig: (safe("mostRecentConfig", INITIAL_STATE.mostRecentConfig) ??
+        null) as ImportSnapshot | null,
       importPhase,
       importCompleted,
       importRunning: false,

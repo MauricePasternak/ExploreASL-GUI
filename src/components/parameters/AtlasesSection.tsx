@@ -49,7 +49,6 @@ export function AtlasesSection({
   showAdvanced,
   onToggleAdvanced,
 }: AtlasesSectionProps) {
-
   const atlases = dataPar.Atlases ?? [];
   const tissueMasking = dataPar.TissueMasking ?? [];
   const tissueThreshold = dataPar.TissueThreshold ?? [];

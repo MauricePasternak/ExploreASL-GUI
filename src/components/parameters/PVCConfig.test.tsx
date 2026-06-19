@@ -55,9 +55,7 @@ describe("PVCConfig", () => {
     );
 
     const labels = container.querySelectorAll("span");
-    const kernelEl = Array.from(labels).find((el) =>
-      el.textContent?.match(/kernel size/i),
-    );
+    const kernelEl = Array.from(labels).find((el) => el.textContent?.match(/kernel size/i));
     expect(kernelEl).toBeUndefined();
   });
 
@@ -75,9 +73,7 @@ describe("PVCConfig", () => {
     );
 
     const labels = container.querySelectorAll("span");
-    const kernelEl = Array.from(labels).find((el) =>
-      el.textContent?.match(/kernel size/i),
-    );
+    const kernelEl = Array.from(labels).find((el) => el.textContent?.match(/kernel size/i));
     expect(kernelEl).toBeUndefined();
   });
 

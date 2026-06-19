@@ -10,7 +10,11 @@ interface StructuralSectionProps {
 }
 
 const TOGGLE_FIELDS = [
-  "bRunLongReg", "bRunDARTEL", "bSegmentSPM12", "bHammersCAT12", "bFixResolution",
+  "bRunLongReg",
+  "bRunDARTEL",
+  "bSegmentSPM12",
+  "bHammersCAT12",
+  "bFixResolution",
 ] as const;
 
 export function StructuralSection({ dataPar, onFieldChange }: StructuralSectionProps) {

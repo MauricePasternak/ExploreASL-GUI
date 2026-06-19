@@ -20,10 +20,8 @@ export function M0Section({
   showAdvanced,
   onToggleAdvanced,
 }: M0SectionProps) {
-
   const bgPulses = dataPar.BackgroundSuppressionNumberPulses ?? 0;
-  const showPulseTime =
-    dataPar.M0 === "UseControlAsM0" && bgPulses > 0;
+  const showPulseTime = dataPar.M0 === "UseControlAsM0" && bgPulses > 0;
 
   return (
     <Stack gap="md">
@@ -54,9 +52,7 @@ export function M0Section({
           label={<DataParFieldLabel fieldKey="BackgroundSuppressionPulseTime" />}
           placeholder={FIELD_METADATA.BackgroundSuppressionPulseTime.defaultHint}
           value={dataPar.BackgroundSuppressionPulseTime}
-          onChange={(v) =>
-            onFieldChange("BackgroundSuppressionPulseTime", v)
-          }
+          onChange={(v) => onFieldChange("BackgroundSuppressionPulseTime", v)}
           testId="field-BackgroundSuppressionPulseTime"
         />
       )}
@@ -65,9 +61,7 @@ export function M0Section({
         label={<DataParFieldLabel fieldKey="M0_GMScaleFactor" />}
         placeholder={FIELD_METADATA.M0_GMScaleFactor.defaultHint}
         value={dataPar.M0_GMScaleFactor}
-        onChange={(v) =>
-          onFieldChange("M0_GMScaleFactor", v === "" ? undefined : v)
-        }
+        onChange={(v) => onFieldChange("M0_GMScaleFactor", v === "" ? undefined : v)}
         data-testid="field-M0_GMScaleFactor"
       />
 
@@ -89,21 +83,20 @@ export function M0Section({
             <Switch
               id="switch-M0_conventionalProcessing"
               checked={dataPar.M0_conventionalProcessing ?? false}
-              onChange={(e) =>
-                onFieldChange("M0_conventionalProcessing", e.currentTarget.checked)
-              }
+              onChange={(e) => onFieldChange("M0_conventionalProcessing", e.currentTarget.checked)}
               data-testid="field-M0_conventionalProcessing"
             />
-            <DataParFieldLabel fieldKey="M0_conventionalProcessing" htmlFor="switch-M0_conventionalProcessing" />
+            <DataParFieldLabel
+              fieldKey="M0_conventionalProcessing"
+              htmlFor="switch-M0_conventionalProcessing"
+            />
           </Group>
 
           <CommaNumberInput
             label={<DataParFieldLabel fieldKey="RepetitionTimePreparationM0" />}
             placeholder={FIELD_METADATA.RepetitionTimePreparationM0.defaultHint}
             value={dataPar.RepetitionTimePreparationM0}
-            onChange={(v) =>
-              onFieldChange("RepetitionTimePreparationM0", v)
-            }
+            onChange={(v) => onFieldChange("RepetitionTimePreparationM0", v)}
             testId="field-RepetitionTimePreparationM0"
           />
         </>

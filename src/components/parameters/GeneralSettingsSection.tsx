@@ -13,7 +13,12 @@ interface GeneralSettingsSectionProps {
 }
 
 const ADVANCED_TOGGLE_FIELDS = [
-  "DELETETEMP", "SkipIfNoFlair", "SkipIfNoASL", "SkipIfNoM0", "bLesionFilling", "bAutoACPC",
+  "DELETETEMP",
+  "SkipIfNoFlair",
+  "SkipIfNoASL",
+  "SkipIfNoM0",
+  "bLesionFilling",
+  "bAutoACPC",
 ] as const;
 
 export function GeneralSettingsSection({
@@ -22,7 +27,6 @@ export function GeneralSettingsSection({
   showAdvanced,
   onToggleAdvanced,
 }: GeneralSettingsSectionProps) {
-
   return (
     <Stack gap="md">
       <Select

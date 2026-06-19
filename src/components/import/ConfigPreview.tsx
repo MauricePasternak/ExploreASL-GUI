@@ -27,9 +27,8 @@ export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPrevi
     <Stack gap="md" data-testid="config-preview">
       <Title order={4}>ExploreASL Configuration</Title>
       <Text c="dimmed" size="sm">
-        These config files describe the normalized staging tree. Raw DICOM paths
-        are first organized into Subject/Session/Run/Modality, then ExploreASL
-        reads them using these regex rules.
+        These config files describe the normalized staging tree. Raw DICOM paths are first organized
+        into Subject/Session/Run/Modality, then ExploreASL reads them using these regex rules.
       </Text>
 
       <Accordion variant="separated">

@@ -191,7 +191,7 @@ describe("generateTokenOrdering", () => {
     const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 1, subBlockIndex: null, tag: "Session" }, // GUI Session = ExploreASL Visit
-      { blockIndex: 2, subBlockIndex: null, tag: "Run" },      // GUI Run = ExploreASL Session
+      { blockIndex: 2, subBlockIndex: null, tag: "Run" }, // GUI Run = ExploreASL Session
       { blockIndex: 3, subBlockIndex: null, tag: "Modality" }, // GUI Modality = ExploreASL Scan
     ];
     const hierarchy = ["^(.*)$", "^(.*)$", "^(.*)$", "^(.*)$"];
@@ -240,13 +240,7 @@ describe("extractUniqueValues", () => {
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
     ];
 
-    const result = extractUniqueValues(
-      BAR_PATHS,
-      ROOT,
-      assignments,
-      "Subject",
-      BAR_PATTERN,
-    );
+    const result = extractUniqueValues(BAR_PATHS, ROOT, assignments, "Subject", BAR_PATTERN);
     expect(result).toEqual(["BAR"]);
   });
 
@@ -256,51 +250,28 @@ describe("extractUniqueValues", () => {
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
     ];
 
-    const result = extractUniqueValues(
-      BAR_PATHS,
-      ROOT,
-      assignments,
-      "Modality",
-      BAR_PATTERN,
-    );
+    const result = extractUniqueValues(BAR_PATHS, ROOT, assignments, "Modality", BAR_PATTERN);
     expect(result).toHaveLength(3);
     expect(result).toContain("sernum-0001_ser-AAHead_Scout");
     expect(result).toContain("sernum-0018_ser-pcasl_3d_multiTI");
   });
 
   it("returns empty for unassigned tag", () => {
-    const assignments: TokenAssignment[] = [
-      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-    ];
+    const assignments: TokenAssignment[] = [{ blockIndex: 0, subBlockIndex: null, tag: "Subject" }];
 
-    const result = extractUniqueValues(
-      BAR_PATHS,
-      ROOT,
-      assignments,
-      "Session",
-      BAR_PATTERN,
-    );
+    const result = extractUniqueValues(BAR_PATHS, ROOT, assignments, "Session", BAR_PATTERN);
     expect(result).toEqual([]);
   });
 
   it("skips paths that don't match pattern depth", () => {
-    const mixedPaths = [
-      ...BAR_PATHS,
-      `${ROOT}/FOO/05022026_01/DICOM/sernum-0001_ser-AAHead_Scout`,
-    ];
+    const mixedPaths = [...BAR_PATHS, `${ROOT}/FOO/05022026_01/DICOM/sernum-0001_ser-AAHead_Scout`];
 
     const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
     ];
 
-    const result = extractUniqueValues(
-      mixedPaths,
-      ROOT,
-      assignments,
-      "Subject",
-      BAR_PATTERN,
-    );
+    const result = extractUniqueValues(mixedPaths, ROOT, assignments, "Subject", BAR_PATTERN);
     // Should only extract from depth-3 paths
     expect(result).toEqual(["BAR"]);
   });
@@ -415,10 +386,7 @@ describe("buildStagingMapping", () => {
       depth: 3,
     };
 
-    const paths = [
-      "/data/C9ORF007/C9ORF007-01-MR00/ASL",
-      "/data/C9ORF059/C9ORF059-11/T1",
-    ];
+    const paths = ["/data/C9ORF007/C9ORF007-01-MR00/ASL", "/data/C9ORF059/C9ORF059-11/T1"];
 
     const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
@@ -450,12 +418,7 @@ describe("assembleSourcestructure", () => {
   it("always produces 4-level hierarchy", () => {
     const result = assembleSourcestructure([], [], [], true);
     expect(result.folderHierarchy).toHaveLength(4);
-    expect(result.folderHierarchy).toEqual([
-      "^(.*)$",
-      "^(.*)$",
-      "^(.*)$",
-      "^(.*)$",
-    ]);
+    expect(result.folderHierarchy).toEqual(["^(.*)$", "^(.*)$", "^(.*)$", "^(.*)$"]);
   });
 
   it("always produces tokenOrdering [1, 2, 3, 4]", () => {
@@ -638,9 +601,7 @@ describe("assembleStudyPar", () => {
         bidsParams: { ArterialSpinLabelingType: "PASL" },
       },
     ];
-    const rows: SubjectRow[] = [
-      { id: "FOO/01", subject: "FOO", session: "01", groupId: "global" },
-    ];
+    const rows: SubjectRow[] = [{ id: "FOO/01", subject: "FOO", session: "01", groupId: "global" }];
 
     const result = assembleStudyPar(groups, rows);
     expect(result.StudyPars).toHaveLength(1);
@@ -811,18 +772,14 @@ describe("deriveVendor", () => {
 describe("decodePatternSignature", () => {
   it("translates a whole-level assignment", () => {
     const signature = "<TOKEN>/DICOM";
-    const assignments: TokenAssignment[] = [
-      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-    ];
+    const assignments: TokenAssignment[] = [{ blockIndex: 0, subBlockIndex: null, tag: "Subject" }];
     const result = decodePatternSignature(signature, assignments);
     expect(result).toBe("<SUBJECT>/DICOM");
   });
 
   it("translates sub-block assignments in a multi-token level", () => {
     const signature = "<TOKEN>-<TOKEN>-<TOKEN>";
-    const assignments: TokenAssignment[] = [
-      { blockIndex: 0, subBlockIndex: 1, tag: "Session" },
-    ];
+    const assignments: TokenAssignment[] = [{ blockIndex: 0, subBlockIndex: 1, tag: "Session" }];
     const result = decodePatternSignature(signature, assignments);
     expect(result).toBe("<TOKEN>-<SESSION>-<TOKEN>");
   });
@@ -857,12 +814,9 @@ describe("decodePatternSignature", () => {
 
   it("supports custom sub-block delimiters", () => {
     const signature = "<TOKEN>_<TOKEN>#<TOKEN>";
-    const assignments: TokenAssignment[] = [
-      { blockIndex: 0, subBlockIndex: 1, tag: "Run" },
-    ];
+    const assignments: TokenAssignment[] = [{ blockIndex: 0, subBlockIndex: 1, tag: "Run" }];
     // Custom subDelimiters including "_" and "#"
     const result = decodePatternSignature(signature, assignments, ["_", "#"]);
     expect(result).toBe("<TOKEN>_<RUN>#<TOKEN>");
   });
 });
-

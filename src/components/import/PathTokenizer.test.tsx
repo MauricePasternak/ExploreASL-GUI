@@ -14,10 +14,7 @@ const SAMPLE_PATTERNS: PathPattern[] = [
     uniqueNames: {
       0: ["BAR", "FOO"],
       1: ["05022026_01"],
-      2: [
-        "sernum-0001_ser-AAHead_Scout",
-        "sernum-0018_ser-pcasl_3d_multiTI",
-      ],
+      2: ["sernum-0001_ser-AAHead_Scout", "sernum-0018_ser-pcasl_3d_multiTI"],
     },
     count: 4,
     depth: 3,
@@ -46,9 +43,7 @@ describe("PathTokenizer", () => {
     useImportStore.getState().setIngestionResults([], SAMPLE_PATTERNS);
     renderWithProviders();
 
-    const cards = screen.queryAllByTestId(
-      "pattern-card-VARYING/VARYING/VARYING",
-    );
+    const cards = screen.queryAllByTestId("pattern-card-VARYING/VARYING/VARYING");
     expect(cards.length).toBeGreaterThan(0);
   });
 
@@ -92,16 +87,11 @@ describe("PathTokenizer", () => {
   });
 
   it("enables next button when Subject and Modality are assigned", () => {
-    useImportStore.getState().setIngestionResults(
-      ["/data/BAR/05022026_01/sernum-0001_ser-AAHead_Scout"],
-      SAMPLE_PATTERNS,
-    );
     useImportStore
       .getState()
-      .setTokenAssignment("VARYING/VARYING/VARYING", 0, null, "Subject");
-    useImportStore
-      .getState()
-      .setTokenAssignment("VARYING/VARYING/VARYING", 2, null, "Modality");
+      .setIngestionResults(["/data/BAR/05022026_01/sernum-0001_ser-AAHead_Scout"], SAMPLE_PATTERNS);
+    useImportStore.getState().setTokenAssignment("VARYING/VARYING/VARYING", 0, null, "Subject");
+    useImportStore.getState().setTokenAssignment("VARYING/VARYING/VARYING", 2, null, "Modality");
     renderWithProviders();
 
     const nextButtons = screen.queryAllByText(/Next: Resolve Aliases/);

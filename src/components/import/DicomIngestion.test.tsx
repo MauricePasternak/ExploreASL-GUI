@@ -50,9 +50,15 @@ describe("DicomIngestion", () => {
     renderWithProviders();
 
     expect(screen.getAllByText("Folder containing your scan files").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /what folder should i choose/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Are your scan files inside many subfolders?").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /when should i turn this on/i }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /what folder should i choose/i }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Are your scan files inside many subfolders?").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /when should i turn this on/i }).length,
+    ).toBeGreaterThan(0);
   });
 
   it("opens the folder picker in the project root", async () => {
@@ -148,9 +154,7 @@ describe("DicomIngestion", () => {
   it("shows next button after successful scan", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "walk_directory") {
-        return Promise.resolve([
-          "BAR/05022026_01/scan1",
-        ]);
+        return Promise.resolve(["BAR/05022026_01/scan1"]);
       }
       return Promise.resolve(null);
     });
@@ -169,9 +173,7 @@ describe("DicomIngestion", () => {
   it("does not use hardcoded dark surfaces for pattern previews", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "walk_directory") {
-        return Promise.resolve([
-          "BAR/05022026_01/scan1",
-        ]);
+        return Promise.resolve(["BAR/05022026_01/scan1"]);
       }
       return Promise.resolve(null);
     });

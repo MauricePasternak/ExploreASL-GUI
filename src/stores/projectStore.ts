@@ -27,7 +27,9 @@ interface ProjectState {
   setPhase: (phase: ProjectMeta["currentPhase"]) => void;
   toggleNavbar: () => void;
   syncImportState: (importState: ImportState) => void;
-  syncProcessingState: (processingState: Pick<ProcessingState, "config" | "processingPhase">) => void;
+  syncProcessingState: (
+    processingState: Pick<ProcessingState, "config" | "processingPhase">,
+  ) => void;
   closeProject: () => void;
 }
 
@@ -186,7 +188,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
               activeStep,
               currentPhase: importPhase,
               completed: importCompleted,
-              mostRecentConfig: mostRecentConfig ?? state.project.uiState.import?.mostRecentConfig ?? null,
+              mostRecentConfig:
+                mostRecentConfig ?? state.project.uiState.import?.mostRecentConfig ?? null,
             },
           },
         },

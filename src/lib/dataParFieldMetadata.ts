@@ -39,8 +39,7 @@ export interface FieldMeta {
 const isUseControlAsM0WithPulses = (s: Record<string, unknown>): boolean =>
   s.M0 === "UseControlAsM0" && ((s.BackgroundSuppressionNumberPulses as number) ?? 0) > 0;
 
-const isPVCEnabled = (s: Record<string, unknown>): boolean =>
-  s.bPVCNativeSpace === true;
+const isPVCEnabled = (s: Record<string, unknown>): boolean => s.bPVCNativeSpace === true;
 
 const isExternalQuant = (s: Record<string, unknown>): boolean =>
   s.bUseExternalQuantification === true;
@@ -137,8 +136,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   },
   T2art: {
     label: "T2 of arterial blood",
-    description:
-      "The transverse relaxation time (T2) of arterial blood in milliseconds.",
+    description: "The transverse relaxation time (T2) of arterial blood in milliseconds.",
     defaultHint: "50",
     section: "quantification",
     tier: "advanced",
@@ -372,7 +370,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   },
   bAutoACPC: {
     label: "Auto AC-PC alignment",
-    description: "Automatically orient and align anatomical images along the Anterior Commissure - Posterior Commissure (AC-PC) line.",
+    description:
+      "Automatically orient and align anatomical images along the Anterior Commissure - Posterior Commissure (AC-PC) line.",
     defaultHint: "false",
     section: "generalSettings",
     tier: "advanced",
@@ -382,8 +381,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   // === aslProcessing ===
   motionCorrection: {
     label: "Motion correction",
-    description:
-      "Enable head motion correction for the ASL timeseries using SPM realignment.",
+    description: "Enable head motion correction for the ASL timeseries using SPM realignment.",
     defaultHint: "true",
     section: "aslProcessing",
     tier: "basic",
@@ -668,12 +666,7 @@ export const ATLAS_OPTIONS = {
     "Schaefer_100Parcels_17Networks",
     "Desikan_Killiany_MNI_SPM12",
   ],
-  commercial: [
-    "HOcort_CONN",
-    "HOsub_CONN",
-    "Thalamus",
-    "Hammers",
-  ],
+  commercial: ["HOcort_CONN", "HOsub_CONN", "Thalamus", "Hammers"],
 };
 
 export const ATLAS_DISPLAY_LABELS: Record<string, string> = {

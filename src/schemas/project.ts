@@ -23,10 +23,10 @@ export const ProjectMetaSchema = z.object({
 });
 
 export const ImportUiStateSchema = z.object({
-	activeStep: z.number().int().min(0).optional(),
-	completed: z.boolean().optional(),
-	currentPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
-	mostRecentConfig: ImportSnapshotSchema.nullable().optional(),
+  activeStep: z.number().int().min(0).optional(),
+  completed: z.boolean().optional(),
+  currentPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
+  mostRecentConfig: ImportSnapshotSchema.nullable().optional(),
 });
 
 export const ProjectFileSchema = z.object({
@@ -86,11 +86,7 @@ export type ProjectMeta = z.infer<typeof ProjectMetaSchema>;
 export type ProjectFile = z.infer<typeof ProjectFileSchema>;
 export type ProjectPhase = (typeof PROJECT_PHASES)[number];
 
-export const DEFAULT_PROJECT_FILE = (
-  id: string,
-  name: string,
-  rootPath: string,
-): ProjectFile => ({
+export const DEFAULT_PROJECT_FILE = (id: string, name: string, rootPath: string): ProjectFile => ({
   version: "0.1.0",
   projectMeta: {
     id,

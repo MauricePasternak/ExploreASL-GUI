@@ -59,23 +59,17 @@ function AtlasesSectionWrapper({
 
 describe("AtlasesSection", () => {
   it("renders AtlasSelect component with atlas multiselect", () => {
-    renderWithMantine(
-      <AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
   });
 
   it("renders Show advanced toggle", () => {
-    renderWithMantine(
-      <AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
   });
 
   it("shows advanced fields when toggled on", () => {
-    renderWithMantine(
-      <AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/minimal roi volume/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/white-matter hyperintensity/i).length).toBeGreaterThan(0);
@@ -83,9 +77,7 @@ describe("AtlasesSection", () => {
   });
 
   it("renders bMasking checkboxes when advanced is on", () => {
-    renderWithMantine(
-      <AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/roi masking/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/susceptibility mask/i).length).toBeGreaterThan(0);
@@ -105,9 +97,7 @@ describe("AtlasesSection", () => {
 
   it("calls onFieldChange when bWMH toggled", () => {
     const onFieldChange = vi.fn();
-    renderWithMantine(
-      <AtlasesSectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />,
-    );
+    renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />);
     clickSwitch(/show advanced/i);
     clickSwitch(/white-matter hyperintensity/i);
     expect(onFieldChange).toHaveBeenCalledWith("bWMH", expect.any(Boolean));

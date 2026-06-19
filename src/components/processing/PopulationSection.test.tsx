@@ -64,25 +64,91 @@ describe("PopulationSection", () => {
   it("renders eligibility summary", () => {
     useProcessingStore.setState({
       availableSubjects: [
-        { subjectSession: "sub-01_01", subject: "sub-01", session: "01", hasStructural: true, hasASL: true },
-        { subjectSession: "sub-02_01", subject: "sub-02", session: "01", hasStructural: true, hasASL: true },
-        { subjectSession: "sub-03_01", subject: "sub-03", session: "01", hasStructural: true, hasASL: true },
-        { subjectSession: "sub-04_01", subject: "sub-04", session: "01", hasStructural: true, hasASL: true },
-        { subjectSession: "sub-05_01", subject: "sub-05", session: "01", hasStructural: true, hasASL: true },
+        {
+          subjectSession: "sub-01_01",
+          subject: "sub-01",
+          session: "01",
+          hasStructural: true,
+          hasASL: true,
+        },
+        {
+          subjectSession: "sub-02_01",
+          subject: "sub-02",
+          session: "01",
+          hasStructural: true,
+          hasASL: true,
+        },
+        {
+          subjectSession: "sub-03_01",
+          subject: "sub-03",
+          session: "01",
+          hasStructural: true,
+          hasASL: true,
+        },
+        {
+          subjectSession: "sub-04_01",
+          subject: "sub-04",
+          session: "01",
+          hasStructural: true,
+          hasASL: true,
+        },
+        {
+          subjectSession: "sub-05_01",
+          subject: "sub-05",
+          session: "01",
+          hasStructural: true,
+          hasASL: true,
+        },
       ],
       subjectStatuses: [
-        { subjectSession: "sub-01_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-        { subjectSession: "sub-01_01", module: "asl", status: "complete", completedSteps: [], locked: false },
-        { subjectSession: "sub-02_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-        { subjectSession: "sub-02_01", module: "asl", status: "complete", completedSteps: [], locked: false },
-        { subjectSession: "sub-03_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-        { subjectSession: "sub-03_01", module: "asl", status: "incomplete", completedSteps: [], locked: false },
+        {
+          subjectSession: "sub-01_01",
+          module: "structural",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-01_01",
+          module: "asl",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-02_01",
+          module: "structural",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-02_01",
+          module: "asl",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-03_01",
+          module: "structural",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-03_01",
+          module: "asl",
+          status: "incomplete",
+          completedSteps: [],
+          locked: false,
+        },
       ],
     });
 
     renderSection();
     expect(screen.getByTestId("population-eligibility")).toHaveTextContent(
-      "2/5 subjects eligible (structural + ASL complete)"
+      "2/5 subjects eligible (structural + ASL complete)",
     );
   });
 
@@ -97,11 +163,29 @@ describe("PopulationSection", () => {
         subjectRegexp: "",
       },
       availableSubjects: [
-        { subjectSession: "sub-01_01", subject: "sub-01", session: "01", hasStructural: true, hasASL: true },
+        {
+          subjectSession: "sub-01_01",
+          subject: "sub-01",
+          session: "01",
+          hasStructural: true,
+          hasASL: true,
+        },
       ],
       subjectStatuses: [
-        { subjectSession: "sub-01_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-        { subjectSession: "sub-01_01", module: "asl", status: "complete", completedSteps: [], locked: false },
+        {
+          subjectSession: "sub-01_01",
+          module: "structural",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-01_01",
+          module: "asl",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
       ],
     });
 
@@ -121,11 +205,29 @@ describe("PopulationSection", () => {
         subjectRegexp: "",
       },
       availableSubjects: [
-        { subjectSession: "sub-01_01", subject: "sub-01", session: "01", hasStructural: true, hasASL: true },
+        {
+          subjectSession: "sub-01_01",
+          subject: "sub-01",
+          session: "01",
+          hasStructural: true,
+          hasASL: true,
+        },
       ],
       subjectStatuses: [
-        { subjectSession: "sub-01_01", module: "structural", status: "complete", completedSteps: [], locked: false },
-        { subjectSession: "sub-01_01", module: "asl", status: "incomplete", completedSteps: [], locked: false },
+        {
+          subjectSession: "sub-01_01",
+          module: "structural",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-01_01",
+          module: "asl",
+          status: "incomplete",
+          completedSteps: [],
+          locked: false,
+        },
       ],
     });
 
@@ -184,7 +286,13 @@ describe("PopulationSection", () => {
   it("shows complete status icon when population is complete", () => {
     useProcessingStore.setState({
       subjectStatuses: [
-        { subjectSession: "", module: "population", status: "complete", completedSteps: [], locked: false },
+        {
+          subjectSession: "",
+          module: "population",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
       ],
     });
     renderSection();
@@ -195,7 +303,13 @@ describe("PopulationSection", () => {
     useProcessingStore.setState({
       processingPhase: "running",
       subjectStatuses: [
-        { subjectSession: "", module: "population", status: "incomplete", completedSteps: [], locked: true },
+        {
+          subjectSession: "",
+          module: "population",
+          status: "incomplete",
+          completedSteps: [],
+          locked: true,
+        },
       ],
     });
     renderSection();
@@ -206,7 +320,13 @@ describe("PopulationSection", () => {
     useProcessingStore.setState({
       processingPhase: "failed",
       subjectStatuses: [
-        { subjectSession: "", module: "population", status: "incomplete", completedSteps: [], locked: true },
+        {
+          subjectSession: "",
+          module: "population",
+          status: "incomplete",
+          completedSteps: [],
+          locked: true,
+        },
       ],
     });
     renderSection();

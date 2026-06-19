@@ -138,12 +138,16 @@ export default function ProjectPage() {
     }
 
     if (!isProjectPhase(params.phase)) {
-      navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`, { replace: true });
+      navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`, {
+        replace: true,
+      });
       return;
     }
 
     if (!canAccessPhase(project, params.phase)) {
-      navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`, { replace: true });
+      navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`, {
+        replace: true,
+      });
       return;
     }
 

@@ -18,7 +18,10 @@ export function EnvironmentSection({ dataPar, onFieldChange }: EnvironmentSectio
           onChange={(e) => onFieldChange("bAutomaticallyDetectFSL", e.currentTarget.checked)}
           data-testid="field-bAutomaticallyDetectFSL"
         />
-        <DataParFieldLabel fieldKey="bAutomaticallyDetectFSL" htmlFor="switch-bAutomaticallyDetectFSL" />
+        <DataParFieldLabel
+          fieldKey="bAutomaticallyDetectFSL"
+          htmlFor="switch-bAutomaticallyDetectFSL"
+        />
       </Group>
 
       <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
@@ -28,7 +31,10 @@ export function EnvironmentSection({ dataPar, onFieldChange }: EnvironmentSectio
           onChange={(e) => onFieldChange("bAutomaticallyDetectVABY", e.currentTarget.checked)}
           data-testid="field-bAutomaticallyDetectVABY"
         />
-        <DataParFieldLabel fieldKey="bAutomaticallyDetectVABY" htmlFor="switch-bAutomaticallyDetectVABY" />
+        <DataParFieldLabel
+          fieldKey="bAutomaticallyDetectVABY"
+          htmlFor="switch-bAutomaticallyDetectVABY"
+        />
       </Group>
     </Stack>
   );

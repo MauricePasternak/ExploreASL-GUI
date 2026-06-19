@@ -10,7 +10,11 @@ import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
 import type { ImportProgress } from "../../schemas/importSchemas";
 
-function renderWithProviders(rows: ImportProgress[], selectedSubjects: string[] = [], onSelectedSubjectsChange = vi.fn()) {
+function renderWithProviders(
+  rows: ImportProgress[],
+  selectedSubjects: string[] = [],
+  onSelectedSubjectsChange = vi.fn(),
+) {
   return render(
     <MantineProvider>
       <MemoryRouter>
@@ -54,10 +58,7 @@ afterEach(() => {
 
 describe("ImportSubjectTable", () => {
   it("renders rows with checkboxes", () => {
-    const rows = [
-      makeProgress("SUB01", "pending"),
-      makeProgress("SUB02", "completed"),
-    ];
+    const rows = [makeProgress("SUB01", "pending"), makeProgress("SUB02", "completed")];
     renderWithProviders(rows);
 
     expect(screen.getByTestId("import-subject-table")).toBeInTheDocument();
@@ -161,9 +162,7 @@ describe("ImportSubjectTable", () => {
       return Promise.resolve([]);
     });
 
-    const rows = [
-      makeProgress("SUB01", "completed"),
-    ];
+    const rows = [makeProgress("SUB01", "completed")];
     renderWithProviders(rows);
 
     const viewLogsBtn = await screen.findByTestId("view-import-logs-SUB01");
@@ -175,9 +174,7 @@ describe("ImportSubjectTable", () => {
   });
 
   it("renders no log badge when no logs exist", () => {
-    const rows = [
-      makeProgress("SUB01", "completed"),
-    ];
+    const rows = [makeProgress("SUB01", "completed")];
     renderWithProviders(rows);
 
     const noLogs = screen.getByTestId("no-import-logs-SUB01");

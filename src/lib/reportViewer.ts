@@ -4,7 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 export const ReportFileInfoSchema = z.object({
   module: z.enum(["structural", "asl", "m0"]),
   subjectSession: z.string(),
-  run: z.string().nullable().optional().transform(v => v ?? undefined),
+  run: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((v) => v ?? undefined),
 });
 
 export type ReportFileInfo = z.infer<typeof ReportFileInfoSchema>;

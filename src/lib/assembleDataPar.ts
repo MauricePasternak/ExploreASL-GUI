@@ -24,10 +24,7 @@ function isEmpty(obj: Record<string, unknown> | undefined): boolean {
   return Object.keys(obj).length === 0;
 }
 
-function buildSection(
-  state: DataParState,
-  keys: string[],
-): Record<string, unknown> | undefined {
+function buildSection(state: DataParState, keys: string[]): Record<string, unknown> | undefined {
   const result: Record<string, unknown> = {};
   let hasValues = false;
 

@@ -32,7 +32,7 @@ describe("ReportViewerModal", () => {
     return render(
       <MantineProvider>
         <ReportViewerModal {...props} />
-      </MantineProvider>
+      </MantineProvider>,
     );
   };
 
@@ -49,7 +49,9 @@ describe("ReportViewerModal", () => {
   });
 
   it("renders structural report correctly", async () => {
-    const fetchSpy = vi.spyOn(reportViewer, "fetchReportImage").mockResolvedValue(new Uint8Array([1, 2, 3]));
+    const fetchSpy = vi
+      .spyOn(reportViewer, "fetchReportImage")
+      .mockResolvedValue(new Uint8Array([1, 2, 3]));
 
     renderModal({
       opened: true,
@@ -70,12 +72,12 @@ describe("ReportViewerModal", () => {
 
     // Verify title and heading text
     expect(screen.getByTestId("report-heading")).toHaveTextContent(
-      "Registration to standard space and white matter segmentation for Subject C9ORF007Philips Session 01"
+      "Registration to standard space and white matter segmentation for Subject C9ORF007Philips Session 01",
     );
 
     // Verify descriptions
     expect(screen.getByTestId("report-description")).toHaveTextContent(
-      "This report displays the registration of the structural T1w image to standard space"
+      "This report displays the registration of the structural T1w image to standard space",
     );
 
     // Verify images rendered
@@ -84,14 +86,28 @@ describe("ReportViewerModal", () => {
 
     // Verify correct files fetched from Rust backend (viewType axial and coronal, run is undefined)
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(fetchSpy).toHaveBeenCalledWith("/mock-project", "sub-C9ORF007Philips_01", "structural", undefined, "axial");
-    expect(fetchSpy).toHaveBeenCalledWith("/mock-project", "sub-C9ORF007Philips_01", "structural", undefined, "coronal");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/mock-project",
+      "sub-C9ORF007Philips_01",
+      "structural",
+      undefined,
+      "axial",
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/mock-project",
+      "sub-C9ORF007Philips_01",
+      "structural",
+      undefined,
+      "coronal",
+    );
 
     expect(mockCreateObjectURL).toHaveBeenCalledTimes(2);
   });
 
   it("renders ASL report with run selector when multi-run, including M0-ASL section", async () => {
-    const fetchSpy = vi.spyOn(reportViewer, "fetchReportImage").mockResolvedValue(new Uint8Array([4, 5, 6]));
+    const fetchSpy = vi
+      .spyOn(reportViewer, "fetchReportImage")
+      .mockResolvedValue(new Uint8Array([4, 5, 6]));
 
     renderModal({
       opened: true,
@@ -112,10 +128,10 @@ describe("ReportViewerModal", () => {
 
     // Verify headings
     expect(screen.getByTestId("asl-struct-heading")).toHaveTextContent(
-      "ASL-Structural Registration for Subject C9ORF007Philips Session 01 [Run 1]"
+      "ASL-Structural Registration for Subject C9ORF007Philips Session 01 [Run 1]",
     );
     expect(screen.getByTestId("m0-asl-heading")).toHaveTextContent(
-      "M0-ASL Registration for Subject C9ORF007Philips Session 01 [Run 1]"
+      "M0-ASL Registration for Subject C9ORF007Philips Session 01 [Run 1]",
     );
 
     // Verify all 4 images are displayed
@@ -129,10 +145,34 @@ describe("ReportViewerModal", () => {
     expect(select).toBeInTheDocument();
 
     // Expect initial fetches for Run 1
-    expect(fetchSpy).toHaveBeenCalledWith("/mock-project", "sub-C9ORF007Philips_01", "asl", "1", "axial");
-    expect(fetchSpy).toHaveBeenCalledWith("/mock-project", "sub-C9ORF007Philips_01", "asl", "1", "coronal");
-    expect(fetchSpy).toHaveBeenCalledWith("/mock-project", "sub-C9ORF007Philips_01", "m0", "1", "axial");
-    expect(fetchSpy).toHaveBeenCalledWith("/mock-project", "sub-C9ORF007Philips_01", "m0", "1", "coronal");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/mock-project",
+      "sub-C9ORF007Philips_01",
+      "asl",
+      "1",
+      "axial",
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/mock-project",
+      "sub-C9ORF007Philips_01",
+      "asl",
+      "1",
+      "coronal",
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/mock-project",
+      "sub-C9ORF007Philips_01",
+      "m0",
+      "1",
+      "axial",
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/mock-project",
+      "sub-C9ORF007Philips_01",
+      "m0",
+      "1",
+      "coronal",
+    );
 
     // Click on the select input to open the dropdown
     fireEvent.click(select);
@@ -144,7 +184,13 @@ describe("ReportViewerModal", () => {
     // Expect cleanup of previous blob URLs and new fetches for Run 2
     await waitFor(() => {
       expect(mockRevokeObjectURL).toHaveBeenCalled();
-      expect(fetchSpy).toHaveBeenCalledWith("/mock-project", "sub-C9ORF007Philips_01", "asl", "2", "axial");
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/mock-project",
+        "sub-C9ORF007Philips_01",
+        "asl",
+        "2",
+        "axial",
+      );
     });
   });
 
@@ -156,7 +202,7 @@ describe("ReportViewerModal", () => {
           throw new Error("M0 image missing");
         }
         return new Uint8Array([7, 8, 9]);
-      }
+      },
     );
 
     renderModal({
@@ -183,8 +229,12 @@ describe("ReportViewerModal", () => {
     // M0 images should not be rendered, instead showing error states
     expect(screen.queryByTestId("m0-axial-image")).not.toBeInTheDocument();
     expect(screen.queryByTestId("m0-coronal-image")).not.toBeInTheDocument();
-    expect(screen.getByTestId("m0-axial-error")).toHaveTextContent("M0-ASL axial registration image not found.");
-    expect(screen.getByTestId("m0-coronal-error")).toHaveTextContent("M0-ASL coronal registration image not found.");
+    expect(screen.getByTestId("m0-axial-error")).toHaveTextContent(
+      "M0-ASL axial registration image not found.",
+    );
+    expect(screen.getByTestId("m0-coronal-error")).toHaveTextContent(
+      "M0-ASL coronal registration image not found.",
+    );
   });
 
   it("handles corrupted images / browser decode failures gracefully", async () => {
@@ -210,7 +260,9 @@ describe("ReportViewerModal", () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId("axial-image")).not.toBeInTheDocument();
-      expect(screen.getByTestId("axial-error")).toHaveTextContent("Structural axial registration image not found.");
+      expect(screen.getByTestId("axial-error")).toHaveTextContent(
+        "Structural axial registration image not found.",
+      );
     });
   });
 });

@@ -10,18 +10,14 @@ function renderWithMantine(ui: React.ReactNode) {
 
 describe("ApplyQuantificationGroup", () => {
   it("renders all 6 checkboxes", () => {
-    renderWithMantine(
-      <ApplyQuantificationGroup value={undefined} onChange={() => {}} />,
-    );
+    renderWithMantine(<ApplyQuantificationGroup value={undefined} onChange={() => {}} />);
 
     const checkboxes = screen.getAllByRole("checkbox");
     expect(checkboxes.length).toBeGreaterThanOrEqual(6);
   });
 
   it("defaults all checkboxes to checked when value is undefined", () => {
-    renderWithMantine(
-      <ApplyQuantificationGroup value={undefined} onChange={() => {}} />,
-    );
+    renderWithMantine(<ApplyQuantificationGroup value={undefined} onChange={() => {}} />);
 
     const checkboxes = screen.getAllByRole("checkbox");
     const checked = checkboxes.filter((cb) => (cb as HTMLInputElement).checked);
@@ -63,9 +59,7 @@ describe("ApplyQuantificationGroup", () => {
   });
 
   it("renders correct labels", () => {
-    renderWithMantine(
-      <ApplyQuantificationGroup value={[1, 1, 1, 1, 1, 1]} onChange={() => {}} />,
-    );
+    renderWithMantine(<ApplyQuantificationGroup value={[1, 1, 1, 1, 1, 1]} onChange={() => {}} />);
 
     expect(screen.getAllByText("Apply ScaleSlopes ASL4D").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Perform division by M0").length).toBeGreaterThan(0);

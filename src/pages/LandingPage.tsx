@@ -49,7 +49,10 @@ export default function LandingPage() {
       const projectPath = `${selected}/${PROJECT_FILE_NAME}`;
       const writable = (await invoke("is_writable", { path: selected })) as boolean;
       if (!writable) {
-        showError("Directory not writable", `Cannot create project in ${selected}. Check permissions.`);
+        showError(
+          "Directory not writable",
+          `Cannot create project in ${selected}. Check permissions.`,
+        );
         logAction("landing_new_project_error", { reason: "not_writable", path: selected });
         return;
       }
@@ -262,9 +265,16 @@ export default function LandingPage() {
             </Button>
           </Group>
 
-          <Divider label="Recent Projects" labelPosition="center" data-testid="landing-recent-projects-divider" />
+          <Divider
+            label="Recent Projects"
+            labelPosition="center"
+            data-testid="landing-recent-projects-divider"
+          />
 
-          <RecentProjectsList onOpen={handleOpenRecent} data-testid="landing-recent-projects-list" />
+          <RecentProjectsList
+            onOpen={handleOpenRecent}
+            data-testid="landing-recent-projects-list"
+          />
         </Stack>
       </div>
     </div>
