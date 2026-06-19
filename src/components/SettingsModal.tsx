@@ -141,7 +141,8 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
       notifications.show({
         color: "yellow",
         title: "MATLAB not configured",
-        message: "No MATLAB installations detected. Processing will not be available until configured.",
+        message:
+          "No MATLAB installations detected. Processing will not be available until configured.",
       });
     }
 
@@ -163,9 +164,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
         return;
       }
 
-      const existingMap = new Map(
-        settings.matlabInstallations.map((inst) => [inst.path, inst]),
-      );
+      const existingMap = new Map(settings.matlabInstallations.map((inst) => [inst.path, inst]));
       const merged = [...settings.matlabInstallations];
 
       for (const inst of found) {
@@ -216,10 +215,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
 
   function addDelimiter() {
     const trimmedDelimiter = newDelimiter.trim();
-    if (
-      trimmedDelimiter.length !== 1 ||
-      settings.tokenSubDelimiters.includes(trimmedDelimiter)
-    ) {
+    if (trimmedDelimiter.length !== 1 || settings.tokenSubDelimiters.includes(trimmedDelimiter)) {
       return;
     }
 
@@ -232,13 +228,17 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
       return;
     }
 
-    setTokenSubDelimiters(
-      settings.tokenSubDelimiters.filter((value) => value !== delimiter),
-    );
+    setTokenSubDelimiters(settings.tokenSubDelimiters.filter((value) => value !== delimiter));
   }
 
   return (
-    <Modal opened={opened} onClose={handleClose} title="Settings" size="lg" data-testid="settings-modal">
+    <Modal
+      opened={opened}
+      onClose={handleClose}
+      title="Settings"
+      size="lg"
+      data-testid="settings-modal"
+    >
       <Stack gap="md">
         <div>
           <Text fw={600} mb="xs">
@@ -251,7 +251,9 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 <TextInput
                   placeholder="Label (e.g. MATLAB R2025a)"
                   value={installation.label}
-                  onChange={(event) => updateMatlab(installation.id, { label: event.currentTarget.value })}
+                  onChange={(event) =>
+                    updateMatlab(installation.id, { label: event.currentTarget.value })
+                  }
                   style={{ flex: 1 }}
                 />
                 <TextInput
@@ -269,7 +271,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   style={{ flex: 2 }}
                   data-testid={`matlab-path-${installation.id}`}
                 />
-                 <Text
+                <Text
                   size="sm"
                   c={installation.version ? "teal" : "dimmed"}
                   style={{ flex: 0.8, alignSelf: "center", whiteSpace: "nowrap" }}
@@ -303,7 +305,11 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
             >
               {detectingVersions ? "Detecting..." : "Auto-Detect"}
             </Button>
-            <Button variant="subtle" onClick={addManualMatlab} data-testid="settings-add-manual-matlab-btn">
+            <Button
+              variant="subtle"
+              onClick={addManualMatlab}
+              data-testid="settings-add-manual-matlab-btn"
+            >
               Add Manually
             </Button>
           </Group>
@@ -393,12 +399,16 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
               onChange={(event) => setNewDelimiter(event.currentTarget.value)}
               data-testid="settings-add-delimiter-input"
             />
-            <Button onClick={addDelimiter} data-testid="settings-add-delimiter-btn">Add Delimiter</Button>
+            <Button onClick={addDelimiter} data-testid="settings-add-delimiter-btn">
+              Add Delimiter
+            </Button>
           </Group>
         </div>
 
         <Group justify="flex-end">
-          <Button onClick={handleClose} data-testid="settings-save-close-btn">Save & Close</Button>
+          <Button onClick={handleClose} data-testid="settings-save-close-btn">
+            Save & Close
+          </Button>
         </Group>
       </Stack>
     </Modal>

@@ -26,9 +26,7 @@ describe("DataParFieldLabel", () => {
     const icons = screen.getAllByRole("img", { name: /info for M0 source/i });
     await userEvent.hover(icons[0]);
 
-    expect(
-      screen.getByText(/equilibrium magnetization/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/equilibrium magnetization/i)).toBeInTheDocument();
   });
 
   it("renders label for a different field key", () => {

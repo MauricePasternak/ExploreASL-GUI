@@ -41,11 +41,18 @@ function StatusIcon({ status, stale }: { status: ImportProgress["status"]; stale
   const icon = (() => {
     switch (status) {
       case "completed":
-        return <IconCheck size={18} color="var(--mantine-color-teal-6)" data-testid="status-completed" />;
+        return (
+          <IconCheck size={18} color="var(--mantine-color-teal-6)" data-testid="status-completed" />
+        );
       case "running":
         return (
           <Tooltip label="Running">
-            <IconLoader size={18} color="var(--mantine-color-orange-6)" className="animate-spin" data-testid="status-running" />
+            <IconLoader
+              size={18}
+              color="var(--mantine-color-orange-6)"
+              className="animate-spin"
+              data-testid="status-running"
+            />
           </Tooltip>
         );
       case "pending":
@@ -57,26 +64,40 @@ function StatusIcon({ status, stale }: { status: ImportProgress["status"]; stale
       case "failed":
         return (
           <Tooltip label="Failed">
-            <IconAlertCircle size={18} color="var(--mantine-color-red-6)" data-testid="status-failed" />
+            <IconAlertCircle
+              size={18}
+              color="var(--mantine-color-red-6)"
+              data-testid="status-failed"
+            />
           </Tooltip>
         );
       case "cancelled":
         return (
           <Tooltip label="Cancelled">
-            <IconBan size={18} color="var(--mantine-color-gray-4)" style={{ opacity: 0.5 }} data-testid="status-cancelled" />
+            <IconBan
+              size={18}
+              color="var(--mantine-color-gray-4)"
+              style={{ opacity: 0.5 }}
+              data-testid="status-cancelled"
+            />
           </Tooltip>
         );
     }
   })();
 
   if (!stale) {
-    return status === "completed"
-      ? <Tooltip label="Import completed successfully.">{icon}</Tooltip>
-      : icon;
+    return status === "completed" ? (
+      <Tooltip label="Import completed successfully.">{icon}</Tooltip>
+    ) : (
+      icon
+    );
   }
 
   return (
-    <Box style={{ position: "relative", display: "inline-flex" }} data-testid="status-stale-wrapper">
+    <Box
+      style={{ position: "relative", display: "inline-flex" }}
+      data-testid="status-stale-wrapper"
+    >
       <Tooltip label="Configuration has changed since last import. Re-import recommended.">
         <Box style={{ position: "relative" }}>
           {icon}
@@ -130,23 +151,27 @@ export default function ImportSubjectTable({
   const [page, setPage] = useState(1);
   const [recordsPerPage, setRecordsPerPage] = useState(10);
 
-  useEffect(() => { setPage(1); }, [filter, recordsPerPage]);
+  useEffect(() => {
+    setPage(1);
+  }, [filter, recordsPerPage]);
 
   useEffect(() => {
     if (!projectRoot) return;
-    fetchModuleLogs(projectRoot).then((files) => {
-      const map = new Map<string, LogFileInfo[]>();
-      for (const f of files) {
-        if (f.module !== "import") continue;
-        const key = importLogSubjectFromSession(f.subjectSession);
-        const existing = map.get(key) ?? [];
-        existing.push(f);
-        map.set(key, existing);
-      }
-      setLogFiles(map);
-    }).catch(() => {
-      setLogFiles(new Map());
-    });
+    fetchModuleLogs(projectRoot)
+      .then((files) => {
+        const map = new Map<string, LogFileInfo[]>();
+        for (const f of files) {
+          if (f.module !== "import") continue;
+          const key = importLogSubjectFromSession(f.subjectSession);
+          const existing = map.get(key) ?? [];
+          existing.push(f);
+          map.set(key, existing);
+        }
+        setLogFiles(map);
+      })
+      .catch(() => {
+        setLogFiles(new Map());
+      });
   }, [projectRoot, importPhase]);
 
   const handleViewLog = useCallback(
@@ -186,7 +211,9 @@ export default function ImportSubjectTable({
   }, [logFiles]);
 
   const enrichRows: ImportRow[] = useMemo(() => {
-    const sorted = [...rows].sort((a, b) => a.subject.localeCompare(b.subject, undefined, { numeric: true }));
+    const sorted = [...rows].sort((a, b) =>
+      a.subject.localeCompare(b.subject, undefined, { numeric: true }),
+    );
     return sorted.map((row) => ({
       ...row,
       _selected: selectedSubjects.includes(row.subject),
@@ -205,10 +232,7 @@ export default function ImportSubjectTable({
     return filteredRows.slice(from, from + recordsPerPage);
   }, [filteredRows, page, recordsPerPage]);
 
-  const selectedRecords = useMemo(
-    () => paginatedRows.filter((r) => r._selected),
-    [paginatedRows],
-  );
+  const selectedRecords = useMemo(() => paginatedRows.filter((r) => r._selected), [paginatedRows]);
 
   const handleSelectedRecordsChange = useCallback(
     (selected: ImportRow[]) => {
@@ -254,7 +278,11 @@ export default function ImportSubjectTable({
         render: (row) => {
           const files = row._importLogInfo;
           if (!files || files.length === 0) {
-            return <Text size="xs" c="dimmed" data-testid={`no-import-logs-${row.subject}`}>No Logs</Text>;
+            return (
+              <Text size="xs" c="dimmed" data-testid={`no-import-logs-${row.subject}`}>
+                No Logs
+              </Text>
+            );
           }
           const hasError = row.status === "failed";
           return (
@@ -264,7 +292,9 @@ export default function ImportSubjectTable({
               variant="outline"
               style={{ cursor: "pointer" }}
               onClick={() => handleViewLog(row.subject)}
-              data-testid={hasError ? `view-import-errors-${row.subject}` : `view-import-logs-${row.subject}`}
+              data-testid={
+                hasError ? `view-import-errors-${row.subject}` : `view-import-logs-${row.subject}`
+              }
             >
               {hasError ? "View Errors" : "View Logs"}
             </Badge>
@@ -276,7 +306,13 @@ export default function ImportSubjectTable({
   );
 
   const statusCounts = useMemo(() => {
-    const counts: Record<FilterValue, number> = { all: enrichRows.length, pending: 0, completed: 0, failed: 0, stale: 0 };
+    const counts: Record<FilterValue, number> = {
+      all: enrichRows.length,
+      pending: 0,
+      completed: 0,
+      failed: 0,
+      stale: 0,
+    };
     for (const row of enrichRows) {
       counts[row._filterStatus]++;
     }
@@ -329,10 +365,7 @@ export default function ImportSubjectTable({
         />
       </Group>
 
-      <Box
-        style={{ flexShrink: 0, isolation: "isolate" }}
-        data-testid="import-table-container"
-      >
+      <Box style={{ flexShrink: 0, isolation: "isolate" }} data-testid="import-table-container">
         <DataTable
           records={paginatedRows}
           columns={columns}

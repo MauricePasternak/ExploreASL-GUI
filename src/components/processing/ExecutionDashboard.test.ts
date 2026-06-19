@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { SubjectModuleStatus, SubjectInfo } from "../../schemas/processingSchemas";
-import { getStepsForSubject, getRunsForSubjectInfo, getSubjectOverallStatus, calcModuleProgress } from "./ExecutionDashboard";
+import {
+  getStepsForSubject,
+  getRunsForSubjectInfo,
+  getSubjectOverallStatus,
+  calcModuleProgress,
+} from "./ExecutionDashboard";
 
 describe("getStepsForSubject", () => {
   const baseEntry: SubjectModuleStatus = {
@@ -44,9 +49,7 @@ describe("getStepsForSubject", () => {
   });
 
   it("returns only running step when locked with no completed steps", () => {
-    const statuses: SubjectModuleStatus[] = [
-      { ...baseEntry, completedSteps: [], locked: true },
-    ];
+    const statuses: SubjectModuleStatus[] = [{ ...baseEntry, completedSteps: [], locked: true }];
     const steps = getStepsForSubject("sub-001_01", "structural", statuses);
     expect(steps).toEqual([{ name: "Processing...", status: "running" }]);
   });
@@ -62,9 +65,7 @@ describe("getStepsForSubject", () => {
   });
 
   it("does not append running step when locked but status is complete", () => {
-    const statuses: SubjectModuleStatus[] = [
-      { ...baseEntry, status: "complete", locked: true },
-    ];
+    const statuses: SubjectModuleStatus[] = [{ ...baseEntry, status: "complete", locked: true }];
     const steps = getStepsForSubject("sub-001_01", "structural", statuses);
     expect(steps).toEqual([
       { name: "060_Segment_T1w", status: "complete" },

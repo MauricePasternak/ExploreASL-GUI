@@ -101,7 +101,8 @@ export function CommaArrayInput({
   useEffect(() => {
     const currentTextFormatted = typeof value === "string" ? value : formatNumberArray(value);
     const parsedLocal = parseCommaSeparatedNumbers(localText);
-    const parsedValue = typeof value === "string" ? parseCommaSeparatedNumbers(value) : { ok: true, value };
+    const parsedValue =
+      typeof value === "string" ? parseCommaSeparatedNumbers(value) : { ok: true, value };
 
     const localValStr = parsedLocal.ok ? JSON.stringify(parsedLocal.value) : null;
     const valueValStr = parsedValue.ok ? JSON.stringify(parsedValue.value) : null;

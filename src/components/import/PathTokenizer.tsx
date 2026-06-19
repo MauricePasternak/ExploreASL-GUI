@@ -1,26 +1,10 @@
-import {
-  Badge,
-  Button,
-  Card,
-  Code,
-  Group,
-  Select,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
-import {
-  IconArrowLeft,
-  IconArrowRight,
-} from "@tabler/icons-react";
+import { Badge, Button, Card, Code, Group, Select, Stack, Text, Title } from "@mantine/core";
+import { IconArrowLeft, IconArrowRight } from "@tabler/icons-react";
 
 import { isTokenizerComplete } from "../../lib/importStepAccess";
 import { useImportStore } from "../../stores/importStore";
 import { splitBySubDelimiters } from "../../lib/pathUtils";
-import {
-  generateFolderHierarchy,
-  generateTokenOrdering,
-} from "../../lib/tokenizerUtils";
+import { generateFolderHierarchy, generateTokenOrdering } from "../../lib/tokenizerUtils";
 import type { TokenTag, PathPattern, TokenAssignment } from "../../schemas/importSchemas";
 import { TOKEN_TAGS } from "../../schemas/importSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
@@ -33,12 +17,10 @@ const TAG_COLORS: Record<TokenTag, string> = {
   Ignore: "gray",
 };
 
-const TAG_OPTIONS = TOKEN_TAGS
-  .filter((tag) => tag !== "Ignore")
-  .map((tag) => ({
-    value: tag,
-    label: tag,
-  }));
+const TAG_OPTIONS = TOKEN_TAGS.filter((tag) => tag !== "Ignore").map((tag) => ({
+  value: tag,
+  label: tag,
+}));
 
 const IGNORE_OPTION = { value: "—", label: "Ignore" };
 
@@ -76,9 +58,8 @@ export default function PathTokenizer() {
     <Stack gap="md" data-testid="path-tokenizer">
       <Title order={3}>Path Tokenizer</Title>
       <Text c="dimmed" size="sm">
-        Assign semantic tags to each folder level. Click a block to expand
-        sub-blocks if the folder contains multiple tokens separated by the
-        configured tokenizer delimiters.
+        Assign semantic tags to each folder level. Click a block to expand sub-blocks if the folder
+        contains multiple tokens separated by the configured tokenizer delimiters.
       </Text>
 
       {pathPatterns.map((pattern) => (
@@ -184,10 +165,7 @@ function BlockAssigner({
   const hasSubBlockAssignments = blockAssignments.some((a) => a.subBlockIndex !== null);
 
   // Check if there are sub-blocks (delimiters in the name)
-  const { subBlocks, delimiters } = splitBySubDelimiters(
-    blockName,
-    tokenSubDelimiters,
-  );
+  const { subBlocks, delimiters } = splitBySubDelimiters(blockName, tokenSubDelimiters);
   const hasSubBlocks = subBlocks.length > 1;
 
   // Get the whole-level assignment (if any)
@@ -197,12 +175,7 @@ function BlockAssigner({
     if (value === null || value === "—") {
       removeTokenAssignment(pattern.signature, blockIndex, null);
     } else {
-      setTokenAssignment(
-        pattern.signature,
-        blockIndex,
-        null,
-        value as TokenTag,
-      );
+      setTokenAssignment(pattern.signature, blockIndex, null, value as TokenTag);
     }
   }
 
@@ -210,19 +183,16 @@ function BlockAssigner({
     if (value === null || value === "—") {
       removeTokenAssignment(pattern.signature, blockIndex, subBlockIndex);
     } else {
-      setTokenAssignment(
-        pattern.signature,
-        blockIndex,
-        subBlockIndex,
-        value as TokenTag,
-      );
+      setTokenAssignment(pattern.signature, blockIndex, subBlockIndex, value as TokenTag);
     }
   }
 
   const wholeAssignmentValue =
-    wholeAssignment?.tag === "Ignore" ? "—" : wholeAssignment?.tag ?? "—";
+    wholeAssignment?.tag === "Ignore" ? "—" : (wholeAssignment?.tag ?? "—");
   const tagColor =
-    wholeAssignment && wholeAssignment.tag !== "Ignore" ? TAG_COLORS[wholeAssignment.tag] : undefined;
+    wholeAssignment && wholeAssignment.tag !== "Ignore"
+      ? TAG_COLORS[wholeAssignment.tag]
+      : undefined;
 
   if (!hasSubBlocks || (wholeAssignment && !hasSubBlockAssignments)) {
     // Simple: one select for the whole level
@@ -270,15 +240,13 @@ function BlockAssigner({
       )}
       <Group gap={2} wrap="nowrap">
         {subBlocks.map((subBlock, subIndex) => {
-          const subAssignment = blockAssignments.find(
-            (a) => a.subBlockIndex === subIndex,
-          );
+          const subAssignment = blockAssignments.find((a) => a.subBlockIndex === subIndex);
           const subColor =
             subAssignment && subAssignment.tag !== "Ignore"
               ? TAG_COLORS[subAssignment.tag]
               : undefined;
           const subAssignmentValue =
-            subAssignment?.tag === "Ignore" ? "—" : subAssignment?.tag ?? "—";
+            subAssignment?.tag === "Ignore" ? "—" : (subAssignment?.tag ?? "—");
 
           return (
             <Group key={`${blockIndex}-${subIndex}`} gap={2}>
@@ -322,12 +290,7 @@ function RegexPreview({
   hierarchy: string[];
   ordering: [number, number, number, number];
 }) {
-  const orderingLabels = [
-    "Subject",
-    "Session (Visit)",
-    "Run (Session)",
-    "Modality (Scan)",
-  ];
+  const orderingLabels = ["Subject", "Session (Visit)", "Run (Session)", "Modality (Scan)"];
 
   return (
     <Card withBorder p="xs" data-testid="tokenizer-regex-preview">
@@ -341,7 +304,8 @@ function RegexPreview({
         {JSON.stringify(hierarchy, null, 2)}
       </Code>
       <Text size="xs" c="dimmed" mt={8} mb={2}>
-        tokenOrdering: [{orderingLabels.map((label, i) => (
+        tokenOrdering: [
+        {orderingLabels.map((label, i) => (
           <span key={label}>
             {i > 0 && ", "}
             <Text
@@ -353,7 +317,8 @@ function RegexPreview({
               {label}={ordering[i]}
             </Text>
           </span>
-        ))}]
+        ))}
+        ]
       </Text>
     </Card>
   );

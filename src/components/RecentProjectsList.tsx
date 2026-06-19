@@ -27,7 +27,10 @@ function getProjectLabel(path: string) {
   return fileName.replace(".easl", "");
 }
 
-export default function RecentProjectsList({ onOpen, "data-testid": dataTestId }: RecentProjectsListProps) {
+export default function RecentProjectsList({
+  onOpen,
+  "data-testid": dataTestId,
+}: RecentProjectsListProps) {
   const recentProjects = useGlobalStore((state) => state.settings.recentProjects);
   const removeRecentProject = useGlobalStore((state) => state.removeRecentProject);
   const [entries, setEntries] = useState<RecentEntry[]>([]);
@@ -105,21 +108,35 @@ export default function RecentProjectsList({ onOpen, "data-testid": dataTestId }
               <Table.Td data-testid={`recent-project-name-cell-${rowId}`}>
                 <Group gap="xs" data-testid={`recent-project-name-group-${rowId}`}>
                   <IconFolder size={16} data-testid={`recent-project-folder-icon-${rowId}`} />
-                  <Text data-testid={`recent-project-name-text-${rowId}`}>{getProjectLabel(entry.path)}</Text>
+                  <Text data-testid={`recent-project-name-text-${rowId}`}>
+                    {getProjectLabel(entry.path)}
+                  </Text>
                 </Group>
               </Table.Td>
               <Table.Td data-testid={`recent-project-status-cell-${rowId}`}>
                 {entry.stale ? (
-                  <Alert color="red" variant="light" title="Moved or deleted" data-testid={`recent-project-alert-stale-${rowId}`}>
+                  <Alert
+                    color="red"
+                    variant="light"
+                    title="Moved or deleted"
+                    data-testid={`recent-project-alert-stale-${rowId}`}
+                  >
                     This project file is no longer available.
                   </Alert>
                 ) : (
-                  <Text c="green" data-testid={`recent-project-status-available-${rowId}`}>Available</Text>
+                  <Text c="green" data-testid={`recent-project-status-available-${rowId}`}>
+                    Available
+                  </Text>
                 )}
               </Table.Td>
               <Table.Td data-testid={`recent-project-actions-cell-${rowId}`}>
                 <Group gap="xs" data-testid={`recent-project-actions-group-${rowId}`}>
-                  <Button size="xs" variant="light" onClick={() => handleOpen(entry)} data-testid={`recent-open-btn-${rowId}`}>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    onClick={() => handleOpen(entry)}
+                    data-testid={`recent-open-btn-${rowId}`}
+                  >
                     Open
                   </Button>
                   <Button
@@ -127,7 +144,10 @@ export default function RecentProjectsList({ onOpen, "data-testid": dataTestId }
                     variant="subtle"
                     color="red"
                     leftSection={<IconTrash size={14} />}
-                    onClick={() => { logAction("recent_remove", { path: entry.path }); removeRecentProject(entry.path); }}
+                    onClick={() => {
+                      logAction("recent_remove", { path: entry.path });
+                      removeRecentProject(entry.path);
+                    }}
                     data-testid={`recent-remove-btn-${rowId}`}
                   >
                     Remove

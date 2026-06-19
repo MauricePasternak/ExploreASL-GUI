@@ -39,15 +39,15 @@ describe("commaNumbers", () => {
 
     it("parses comma-separated values", () => {
       expect(parseCommaSeparatedNumbers("1.5, 2, 3")).toEqual({
-          ok: true,
-          value: [1.5, 2, 3],
+        ok: true,
+        value: [1.5, 2, 3],
       });
     });
 
     it("rejects invalid tokens", () => {
       expect(parseCommaSeparatedNumbers("1, bad, 3")).toEqual({
-          ok: false,
-          error: 'Invalid number: "bad"',
+        ok: false,
+        error: 'Invalid number: "bad"',
       });
     });
   });
@@ -63,8 +63,8 @@ describe("commaNumbers", () => {
 
     it("parses comma-separated values as array", () => {
       expect(parseNumberOrArray("1.8, 2.0")).toEqual({
-          ok: true,
-          value: [1.8, 2],
+        ok: true,
+        value: [1.8, 2],
       });
     });
 

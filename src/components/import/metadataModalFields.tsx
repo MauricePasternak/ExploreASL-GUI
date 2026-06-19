@@ -13,18 +13,12 @@ import {
 import { Controller, type Control, type FieldPath } from "react-hook-form";
 import { FieldInfoIcon } from "../FieldInfoIcon";
 
-import {
-  BIDS_FIELD_HINTS,
-  type MetadataFieldHint,
-} from "./metadataFieldHints";
+import { BIDS_FIELD_HINTS, type MetadataFieldHint } from "./metadataFieldHints";
 import type { MetadataGroupFormValues } from "./metadataModalTypes";
 import { CommaNumberInput, CommaArrayInput } from "../CommaNumberInput";
 import { BIDS_FIELD_DESCRIPTIONS } from "./metadataFieldDescriptions";
 
-function resolveFieldDescription(
-  _hint?: MetadataFieldHint,
-  extra?: string,
-): string | undefined {
+function resolveFieldDescription(_hint?: MetadataFieldHint, extra?: string): string | undefined {
   return extra;
 }
 
@@ -181,9 +175,7 @@ export function BidsNumberField({
           label={<BidsFieldLabel label={label} fieldName={name} />}
           description={resolveFieldDescription(hint)}
           value={typeof field.value === "number" ? field.value : ""}
-          onChange={(value) =>
-            field.onChange(typeof value === "number" ? value : undefined)
-          }
+          onChange={(value) => field.onChange(typeof value === "number" ? value : undefined)}
           decimalScale={decimalScale}
           min={min}
           error={fieldState.error?.message}
@@ -202,13 +194,7 @@ interface BidsCheckboxFieldProps {
   testId?: string;
 }
 
-export function BidsCheckboxField({
-  control,
-  name,
-  label,
-  hint,
-  testId,
-}: BidsCheckboxFieldProps) {
+export function BidsCheckboxField({ control, name, label, hint, testId }: BidsCheckboxFieldProps) {
   return (
     <Controller
       control={control}
@@ -326,10 +312,7 @@ export function BidsCommaArrayField({
       render={({ field, fieldState }) => (
         <CommaArrayInput
           label={<BidsFieldLabel label={label} fieldName={name} />}
-          description={resolveFieldDescription(
-            hint,
-            description ?? "Comma-separated numbers",
-          )}
+          description={resolveFieldDescription(hint, description ?? "Comma-separated numbers")}
           value={field.value as number[] | undefined}
           onChange={field.onChange}
           error={fieldState.error?.message}

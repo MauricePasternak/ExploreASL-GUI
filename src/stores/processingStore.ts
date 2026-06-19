@@ -104,7 +104,9 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     const available = useProcessingStore.getState().availableSubjects;
     for (const subj of config.subjects) {
       if (!/^sub-[^_\s]+_[^_\s]+$/.test(subj)) {
-        throw new Error(`Subject session "${subj}" does not match BIDS syntax (sub-<subject>_<session>)`);
+        throw new Error(
+          `Subject session "${subj}" does not match BIDS syntax (sub-<subject>_<session>)`,
+        );
       }
       if (!available.some((a) => a.subjectSession === subj)) {
         throw new Error(`Selected subject session "${subj}" is not present in the rawdata folder`);

@@ -17,15 +17,15 @@
 
 ## DataPar Section Layout
 
-| Accordion | Basic fields | Advanced sub-fields |
-|---|---|---|
-| M0 Configuration | M0, BGSUPNumberPulses, BGSUPPulseTime (conditional), M0_GMScaleFactor, bRegisterM02ASL | M0_conventionalProcessing, RepetitionTimePreparationM0 |
-| Quantification | nCompartments | Lambda, T2art, T1blood, T1GM, T1WM, T2GM, T2WM, T2tissueMultiTE + External quantification subtree |
-| General Settings | Quality | DELETETEMP, SkipIfNoFlair, SkipIfNoASL, SkipIfNoM0, stopAfterErrors |
-| ASL Processing | motionCorrection, bTopUp, bPVCNativeSpace+conditionals, SaveCBF4D | SpikeRemoval*, bRegistrationContrast, bAffineRegistration, bDCTRegistration, bUseMNIasDummyStructural, bHct2BloodT1, ApplyQuantification |
-| Atlases | Atlas multi-select + paired TissueMasking/Threshold | bMasking, MinimalROIVolume, bWMH, DataTypes |
-| Structural | *(none — all advanced)* | bSegmentSPM12, bHammersCAT12, bFixResolution, bRunLongReg, bRunDARTEL, WMHsegmAlg, bLesionFilling, bAutoACPC |
-| Environment | *(none — all advanced)* | bAutomaticallyDetectFSL, bAutomaticallyDetectVABY |
+| Accordion        | Basic fields                                                                           | Advanced sub-fields                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 Configuration | M0, BGSUPNumberPulses, BGSUPPulseTime (conditional), M0_GMScaleFactor, bRegisterM02ASL | M0_conventionalProcessing, RepetitionTimePreparationM0                                                                                    |
+| Quantification   | nCompartments                                                                          | Lambda, T2art, T1blood, T1GM, T1WM, T2GM, T2WM, T2tissueMultiTE + External quantification subtree                                         |
+| General Settings | Quality                                                                                | DELETETEMP, SkipIfNoFlair, SkipIfNoASL, SkipIfNoM0, stopAfterErrors                                                                       |
+| ASL Processing   | motionCorrection, bTopUp, bPVCNativeSpace+conditionals, SaveCBF4D                      | SpikeRemoval\*, bRegistrationContrast, bAffineRegistration, bDCTRegistration, bUseMNIasDummyStructural, bHct2BloodT1, ApplyQuantification |
+| Atlases          | Atlas multi-select + paired TissueMasking/Threshold                                    | bMasking, MinimalROIVolume, bWMH, DataTypes                                                                                               |
+| Structural       | _(none — all advanced)_                                                                | bSegmentSPM12, bHammersCAT12, bFixResolution, bRunLongReg, bRunDARTEL, WMHsegmAlg, bLesionFilling, bAutoACPC                              |
+| Environment      | _(none — all advanced)_                                                                | bAutomaticallyDetectFSL, bAutomaticallyDetectVABY                                                                                         |
 
 ## Processing Module
 

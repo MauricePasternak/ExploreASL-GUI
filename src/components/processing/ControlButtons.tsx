@@ -76,9 +76,7 @@ export default function ControlButtons() {
         returnFocus={false}
       >
         <Stack gap="md">
-          <Text size="sm">
-            Stop all running processing jobs? This cannot be undone.
-          </Text>
+          <Text size="sm">Stop all running processing jobs? This cannot be undone.</Text>
           <Group justify="flex-end" gap="sm">
             <Button
               variant="default"

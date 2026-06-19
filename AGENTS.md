@@ -3,10 +3,11 @@
 Tauri v2 desktop GUI wrapping ExploreASL (MATLAB ASL MRI pipeline).
 
 **Stack:** Tauri v2 + React 19 + TS 6 + Mantine 9 + Zustand 5 + Zod 4 + React Router 7
-**Dev:** `pnpm tauri dev` → `http://localhost:1420`
+**Dev (Frontend):** `pnpm dev` → `http://localhost:1420`
 **Specs:** `openspec/specs/` (authoritative), `openspec/changes/` (in-progress)
 
 **Architecture:**
+
 - Rust thin. Prefer Tauri plugins (dialog, fs) over custom commands. Custom: subprocess, file watcher, debug logs.
 - Project state: `.easl` JSON in `<root>/project.easl`. Global settings: `@tauri-apps/plugin-store` (`settings.json` in app data dir).
 - Import: MATLAB stdout parsing. Processing: lock file watcher (`.status` files).
@@ -16,10 +17,10 @@ Tauri v2 desktop GUI wrapping ExploreASL (MATLAB ASL MRI pipeline).
 **Terminology (GUI ↔ ExploreASL):**
 | GUI/BIDS | ExploreASL | `tokenOrdering` |
 | -------- | ---------- | --------------- |
-| Subject  | Subject    | 1               |
-| Session  | Visit      | 2               |
-| Run      | Session    | 3               |
-| Modality | Scan       | 4               |
+| Subject | Subject | 1 |
+| Session | Visit | 2 |
+| Run | Session | 3 |
+| Modality | Scan | 4 |
 
 GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agents MUST translate.
 
@@ -34,33 +35,38 @@ GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agen
 - Use `pnpm` to run commands, not `npm` or `yarn`.
 - All components should have a `data-testid` attribute for testing and easier referencing for agents.
 - Git commits cannot be made without explicit user confirmation and must follow conventional commit message format.
+- Always format the code after making changes. Run `pnpm format` for frontend files (TS, TSX, CSS, JSON, Markdown) and `pnpm lint:rust` to lint and format backend Rust files.
 
 ---
 
 ## Debug
 
+Refer to [DEBUGGING.md](file:///mnt/Samsung_NVME_4TB/ExploreASL_GUI/notes/DEBUGGING.md) for full flow and tools.
+
 **Frontend (`src/lib/debug.ts`):**
+
 - Console bridge → Tauri log plugin
 - Action replay log (500 entries)
-- `Ctrl+Shift+D` → copies store snapshot JSON
 - `window.__DEBUG__` → stores, log, route, `snapshot()`
 
 **Rust (`src-tauri/src/tracing.rs`):**
+
 - `CommandTrace` wraps every command: name, args, result/error, duration
 
 **Logs:**
-| Mode    | Location                                    |
+| Mode | Location |
 | ------- | ------------------------------------------- |
-| Dev     | `/tmp/opencode/exploreasl-gui-logs/dev.log` |
-| Release | OS app data dir                             |
+| Dev | `/tmp/opencode/exploreasl-gui-logs/dev.log` |
+| Release | OS app data dir |
 
 **Error Boundary:** Catches React errors. "Copy error report" → clipboard JSON.
 
 ---
 
 ## Agent Can / Cannot
-x
+
 **Can:**
+
 1. Read dev logs (predictable path)
 2. Run `pnpm test`
 3. `cargo check`
@@ -68,6 +74,7 @@ x
 5. Read/write source files
 
 **Cannot:**
+
 1. Start `pnpm tauri dev` (needs desktop window)
 2. Screenshot real Tauri window chrome
 3. Trigger OS ops (fs writes, MATLAB subprocess)
@@ -77,15 +84,3 @@ x
 **Puppeteer:** Landing page CSS + `window.__DEBUG__` reading only. Full app needs Tauri APIs.
 
 **E2E (WebdriverIO + tauri-driver):** `e2e-tests/` directory. Uses `tauri-driver` → `WebKitWebDriver` to automate the native Tauri window. Can click buttons, read native elements, interact with native dialogs. Run: `cd e2e-tests && pnpm test` (or `pnpm test:e2e` from root). Requires a debug build at `src-tauri/target/debug/exploreasl_gui`.
-
----
-
-## Debugging Flow
-
-| Issue         | User action                                          | Agent action                                     |
-| ------------- | ---------------------------------------------------- | ------------------------------------------------ |
-| Crash         | Click "Copy error report" → paste JSON               | Read error + component stack                     |
-| UI wrong      | Screenshot Tauri window → describe                   | Read component code                              |
-| Rust cmd fail | Paste relevant `[COMMAND]` lines, or agent reads log | Read `/tmp/opencode/exploreasl-gui-logs/dev.log` |
-| State bug     | `Ctrl+Shift+D` → paste JSON snapshot                 | Reconstruct from stores + action log             |
-| Visual verify | User confirms in real app                            | Fix → `pnpm test` → optional Puppeteer           |

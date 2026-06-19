@@ -17,10 +17,7 @@ export const config = {
     {
       maxInstances: 1,
       "tauri:options": {
-        application: path.resolve(
-          __dirname,
-          "../src-tauri/target/debug/exploreasl_gui",
-        ),
+        application: path.resolve(__dirname, "../src-tauri/target/debug/exploreasl_gui"),
       },
     },
   ],
@@ -40,11 +37,9 @@ export const config = {
   },
 
   beforeSession: () => {
-    tauriDriver = spawn(
-      path.resolve(os.homedir(), ".cargo", "bin", "tauri-driver"),
-      [],
-      { stdio: [null, process.stdout, process.stderr] },
-    );
+    tauriDriver = spawn(path.resolve(os.homedir(), ".cargo", "bin", "tauri-driver"), [], {
+      stdio: [null, process.stdout, process.stderr],
+    });
 
     tauriDriver.on("error", (error) => {
       console.error("tauri-driver error:", error);

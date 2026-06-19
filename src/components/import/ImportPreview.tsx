@@ -44,7 +44,16 @@ export default function ImportPreview() {
         modalityAliases,
         tokenSubDelimiters,
       ),
-    [rawPaths, sourceDataPath, pathPatterns, tokenizerConfigs, subjectRenamesMap, sessionAliases, modalityAliases, tokenSubDelimiters],
+    [
+      rawPaths,
+      sourceDataPath,
+      pathPatterns,
+      tokenizerConfigs,
+      subjectRenamesMap,
+      sessionAliases,
+      modalityAliases,
+      tokenSubDelimiters,
+    ],
   );
 
   const sourcestructure = useMemo(
@@ -58,9 +67,7 @@ export default function ImportPreview() {
   );
 
   const totalEntries = mappings.reduce((sum, m) => sum + m.entries.length, 0);
-  const totalSubjects = new Set(
-    mappings.flatMap((m) => m.entries.map((e) => e.subject)),
-  ).size;
+  const totalSubjects = new Set(mappings.flatMap((m) => m.entries.map((e) => e.subject))).size;
   const canProceedToStep5 = canEnterStep5(
     {
       ingestionComplete,
@@ -80,8 +87,8 @@ export default function ImportPreview() {
     <Stack gap="md" data-testid="import-preview">
       <Title order={3}>Preview Import</Title>
       <Text c="dimmed" size="sm">
-        Review how your DICOM data will be organized before running the import.
-        Raw paths are symlinked into a normalized{" "}
+        Review how your DICOM data will be organized before running the import. Raw paths are
+        symlinked into a normalized{" "}
         <Text fw={600} component="span">
           Subject/Session/Run/Modality
         </Text>{" "}
@@ -90,16 +97,29 @@ export default function ImportPreview() {
 
       <Stack gap="xs">
         <Text size="sm">
-          <Text fw={600} component="span">{totalSubjects}</Text> subject
+          <Text fw={600} component="span">
+            {totalSubjects}
+          </Text>{" "}
+          subject
           {totalSubjects !== 1 ? "s" : ""} across{" "}
-          <Text fw={600} component="span">{pathPatterns.length}</Text> pattern
+          <Text fw={600} component="span">
+            {pathPatterns.length}
+          </Text>{" "}
+          pattern
           {pathPatterns.length !== 1 ? "s" : ""} ·{" "}
-          <Text fw={600} component="span">{totalEntries}</Text> DICOM location
+          <Text fw={600} component="span">
+            {totalEntries}
+          </Text>{" "}
+          DICOM location
           {totalEntries !== 1 ? "s" : ""}
         </Text>
       </Stack>
 
-      <StagingMappingTable mappings={mappings} subjectRows={subjectRows} metadataGroups={metadataGroups} />
+      <StagingMappingTable
+        mappings={mappings}
+        subjectRows={subjectRows}
+        metadataGroups={metadataGroups}
+      />
       <ConfigPreview sourcestructure={sourcestructure} studyPar={studyPar} />
       <Group justify="space-between">
         <Button

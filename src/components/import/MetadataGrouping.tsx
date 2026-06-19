@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Badge,
-  Button,
-  Card,
-  Checkbox,
-  Group,
-  Stack,
-  Table,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Badge, Button, Card, Checkbox, Group, Stack, Table, Text, Title } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconPlus } from "@tabler/icons-react";
 
 import { notifications } from "@mantine/notifications";
@@ -28,7 +18,10 @@ import MetadataModal from "./MetadataModal";
 
 const DEFAULT_GROUP_ID = "global-defaults";
 
-function pathMatchesPattern(segments: string[], pattern: ReturnType<typeof useImportStore.getState>["pathPatterns"][number]): boolean {
+function pathMatchesPattern(
+  segments: string[],
+  pattern: ReturnType<typeof useImportStore.getState>["pathPatterns"][number],
+): boolean {
   if (segments.length !== pattern.depth) {
     return false;
   }
@@ -93,11 +86,7 @@ function deriveSubjectRows({
         continue;
       }
 
-      const rawSubject = extractAssignmentValue(
-        segments,
-        subjectAssignment,
-        tokenSubDelimiters,
-      );
+      const rawSubject = extractAssignmentValue(segments, subjectAssignment, tokenSubDelimiters);
       if (!rawSubject) {
         continue;
       }
@@ -154,14 +143,7 @@ export default function MetadataGrouping() {
         subjectRenames,
         tokenSubDelimiters,
       }),
-    [
-      rawPaths,
-      sourceDataPath,
-      pathPatterns,
-      tokenizerConfigs,
-      subjectRenames,
-      tokenSubDelimiters,
-    ],
+    [rawPaths, sourceDataPath, pathPatterns, tokenizerConfigs, subjectRenames, tokenSubDelimiters],
   );
 
   useEffect(() => {
@@ -178,8 +160,7 @@ export default function MetadataGrouping() {
     if (
       subjectRows.length !== nextRows.length ||
       subjectRows.some(
-        (row, index) =>
-          row.id !== nextRows[index]?.id || row.groupId !== nextRows[index]?.groupId,
+        (row, index) => row.id !== nextRows[index]?.id || row.groupId !== nextRows[index]?.groupId,
       )
     ) {
       setSubjectRows(nextRows);
@@ -203,8 +184,7 @@ export default function MetadataGrouping() {
     [metadataGroups],
   );
 
-  const defaultGroup =
-    metadataGroups.find((group) => group.id === DEFAULT_GROUP_ID) ?? null;
+  const defaultGroup = metadataGroups.find((group) => group.id === DEFAULT_GROUP_ID) ?? null;
 
   function handleBack() {
     setActiveStep(2);
@@ -240,10 +220,7 @@ export default function MetadataGrouping() {
     removeMetadataGroup(groupId);
   }
 
-  function handleModalSubmit(values: {
-    label: string;
-    bidsParams: BidsAslMetadata;
-  }) {
+  function handleModalSubmit(values: { label: string; bidsParams: BidsAslMetadata }) {
     if (modalMode === "edit" && editingGroupId) {
       updateMetadataGroup(editingGroupId, {
         label: values.label,
@@ -272,8 +249,8 @@ export default function MetadataGrouping() {
     <Stack gap="md" data-testid="metadata-grouping">
       <Title order={3}>Metadata Grouping</Title>
       <Text c="dimmed" size="sm">
-        Assign subject and session combinations to metadata groups that
-        will become `studyPar.json` entries.
+        Assign subject and session combinations to metadata groups that will become `studyPar.json`
+        entries.
       </Text>
 
       <Card withBorder p="md" data-testid="metadata-groups-list">
@@ -312,8 +289,8 @@ export default function MetadataGrouping() {
                       }
                       return (
                         <Text size="xs">
-                          Assigned to {uniqueSubjects} subject{uniqueSubjects !== 1 ? "s" : ""}{" "}
-                          ({uniqueSessions} session{uniqueSessions !== 1 ? "s" : ""})
+                          Assigned to {uniqueSubjects} subject{uniqueSubjects !== 1 ? "s" : ""} (
+                          {uniqueSessions} session{uniqueSessions !== 1 ? "s" : ""})
                         </Text>
                       );
                     })()}
@@ -393,9 +370,7 @@ export default function MetadataGrouping() {
                   <Table.Td>
                     <Checkbox
                       checked={selectedRowIds.includes(row.id)}
-                      onChange={(event) =>
-                        toggleRowSelection(row.id, event.currentTarget.checked)
-                      }
+                      onChange={(event) => toggleRowSelection(row.id, event.currentTarget.checked)}
                       aria-label={`Select ${row.id}`}
                       data-testid={`metadata-row-checkbox-${row.id.replace(/[^a-z0-9]/gi, "-")}`}
                     />
@@ -435,9 +410,7 @@ export default function MetadataGrouping() {
       <MetadataModal
         opened={modalMode !== null && defaultGroup !== null}
         title={
-          modalMode === "override"
-            ? "Apply Override Metadata"
-            : "Configure Default BIDS Metadata"
+          modalMode === "override" ? "Apply Override Metadata" : "Configure Default BIDS Metadata"
         }
         initialValues={(() => {
           if (modalMode === "edit" && editingGroupId) {

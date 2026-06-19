@@ -22,14 +22,7 @@ interface ImageCardProps {
   testIdPrefix: string;
 }
 
-function ImageCard({
-  title,
-  url,
-  loading,
-  error,
-  errorLabel,
-  testIdPrefix,
-}: ImageCardProps) {
+function ImageCard({ title, url, loading, error, errorLabel, testIdPrefix }: ImageCardProps) {
   const [decodeError, setDecodeError] = useState(false);
 
   useEffect(() => {
@@ -47,15 +40,29 @@ function ImageCard({
       }}
       data-testid={`${testIdPrefix}-container`}
     >
-      <Text size="sm" fw={600} p="xs" bg="var(--mantine-color-gray-1)" style={{ borderBottom: "1px solid var(--mantine-color-gray-3)" }}>
+      <Text
+        size="sm"
+        fw={600}
+        p="xs"
+        bg="var(--mantine-color-gray-1)"
+        style={{ borderBottom: "1px solid var(--mantine-color-gray-3)" }}
+      >
         {title}
       </Text>
       {loading ? (
-        <Box style={{ display: "flex", justifyContent: "center", padding: 30 }} data-testid={`${testIdPrefix}-loading`}>
+        <Box
+          style={{ display: "flex", justifyContent: "center", padding: 30 }}
+          data-testid={`${testIdPrefix}-loading`}
+        >
           <Loader size="sm" />
         </Box>
       ) : hasError ? (
-        <Alert color="orange" m="xs" icon={<IconAlertCircle size={16} />} data-testid={`${testIdPrefix}-error`}>
+        <Alert
+          color="orange"
+          m="xs"
+          icon={<IconAlertCircle size={16} />}
+          data-testid={`${testIdPrefix}-error`}
+        >
           {errorLabel}
         </Alert>
       ) : url ? (
@@ -137,7 +144,7 @@ export default function ReportViewerModal({
     setLoad: (l: boolean) => void,
     setErr: (e: boolean) => void,
     urlRef: React.MutableRefObject<string | null>,
-    active: { current: boolean }
+    active: { current: boolean },
   ) => {
     if (!projectRoot || !subjectSession) return;
     setLoad(true);
@@ -179,13 +186,67 @@ export default function ReportViewerModal({
     const runParam = module === "asl" ? selectedRun : undefined;
 
     if (module === "structural") {
-      loadImage("structural", "axial", undefined, setAxialUrl, setAxialLoading, setAxialErr, axialUrlRef, active);
-      loadImage("structural", "coronal", undefined, setCoronalUrl, setCoronalLoading, setCoronalErr, coronalUrlRef, active);
+      loadImage(
+        "structural",
+        "axial",
+        undefined,
+        setAxialUrl,
+        setAxialLoading,
+        setAxialErr,
+        axialUrlRef,
+        active,
+      );
+      loadImage(
+        "structural",
+        "coronal",
+        undefined,
+        setCoronalUrl,
+        setCoronalLoading,
+        setCoronalErr,
+        coronalUrlRef,
+        active,
+      );
     } else {
-      loadImage("asl", "axial", runParam, setAxialUrl, setAxialLoading, setAxialErr, axialUrlRef, active);
-      loadImage("asl", "coronal", runParam, setCoronalUrl, setCoronalLoading, setCoronalErr, coronalUrlRef, active);
-      loadImage("m0", "axial", runParam, setM0AxialUrl, setM0AxialLoading, setM0AxialErr, m0AxialUrlRef, active);
-      loadImage("m0", "coronal", runParam, setM0CoronalUrl, setM0CoronalLoading, setM0CoronalErr, m0CoronalUrlRef, active);
+      loadImage(
+        "asl",
+        "axial",
+        runParam,
+        setAxialUrl,
+        setAxialLoading,
+        setAxialErr,
+        axialUrlRef,
+        active,
+      );
+      loadImage(
+        "asl",
+        "coronal",
+        runParam,
+        setCoronalUrl,
+        setCoronalLoading,
+        setCoronalErr,
+        coronalUrlRef,
+        active,
+      );
+      loadImage(
+        "m0",
+        "axial",
+        runParam,
+        setM0AxialUrl,
+        setM0AxialLoading,
+        setM0AxialErr,
+        m0AxialUrlRef,
+        active,
+      );
+      loadImage(
+        "m0",
+        "coronal",
+        runParam,
+        setM0CoronalUrl,
+        setM0CoronalLoading,
+        setM0CoronalErr,
+        m0CoronalUrlRef,
+        active,
+      );
     }
 
     return () => {
@@ -214,7 +275,9 @@ export default function ReportViewerModal({
       <Stack gap="lg">
         {showRunSelect && (
           <Group justify="flex-start" align="center">
-            <Text size="sm" fw={500}>Select Run:</Text>
+            <Text size="sm" fw={500}>
+              Select Run:
+            </Text>
             <Select
               data={runs.map((r) => ({ value: r, label: `Run ${r}` }))}
               value={selectedRun}
@@ -232,7 +295,9 @@ export default function ReportViewerModal({
                 {`Registration to standard space and white matter segmentation for Subject ${subjectLabel} Session ${sessionLabel}`}
               </Title>
               <Text size="sm" c="dimmed" data-testid="report-description">
-                This report displays the registration of the structural T1w image to standard space, with the white matter segmentation overlaid in red. Use the axial and coronal mosaics below to visually check for alignment accuracy and segmentation quality.
+                This report displays the registration of the structural T1w image to standard space,
+                with the white matter segmentation overlaid in red. Use the axial and coronal
+                mosaics below to visually check for alignment accuracy and segmentation quality.
               </Text>
             </Stack>
 
@@ -264,7 +329,10 @@ export default function ReportViewerModal({
                   {`ASL-Structural Registration for Subject ${subjectLabel} Session ${sessionLabel} [Run ${selectedRun}]`}
                 </Title>
                 <Text size="sm" c="dimmed" data-testid="asl-struct-description">
-                  This report displays the registration of the ASL qCBF image to the structural/standard space. The structural white matter segmentation contour is overlaid in red on the qCBF map. Use the axial and coronal mosaics below to visually inspect the alignment between the ASL and structural images.
+                  This report displays the registration of the ASL qCBF image to the
+                  structural/standard space. The structural white matter segmentation contour is
+                  overlaid in red on the qCBF map. Use the axial and coronal mosaics below to
+                  visually inspect the alignment between the ASL and structural images.
                 </Text>
               </Stack>
               <Stack gap="md">
@@ -294,7 +362,10 @@ export default function ReportViewerModal({
                   {`M0-ASL Registration for Subject ${subjectLabel} Session ${sessionLabel} [Run ${selectedRun}]`}
                 </Title>
                 <Text size="sm" c="dimmed" data-testid="m0-asl-description">
-                  This report displays the registration of the M0 calibration image to the ASL qCBF space. The grey matter segmentation contour is overlaid in red on the M0 map. Use the axial and coronal mosaics below to visually inspect the alignment between the M0 and qCBF images.
+                  This report displays the registration of the M0 calibration image to the ASL qCBF
+                  space. The grey matter segmentation contour is overlaid in red on the M0 map. Use
+                  the axial and coronal mosaics below to visually inspect the alignment between the
+                  M0 and qCBF images.
                 </Text>
               </Stack>
               <Stack gap="md">

@@ -146,10 +146,15 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     set((state) => ({
       settings: {
         ...state.settings,
-        recentProjects: [path, ...state.settings.recentProjects.filter((item) => item !== path)].slice(0, 20),
+        recentProjects: [
+          path,
+          ...state.settings.recentProjects.filter((item) => item !== path),
+        ].slice(0, 20),
       },
     }));
-    void get().saveSettings().catch(() => undefined);
+    void get()
+      .saveSettings()
+      .catch(() => undefined);
   },
 
   removeRecentProject: (path) => {
@@ -159,6 +164,8 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
         recentProjects: state.settings.recentProjects.filter((item) => item !== path),
       },
     }));
-    void get().saveSettings().catch(() => undefined);
+    void get()
+      .saveSettings()
+      .catch(() => undefined);
   },
 }));

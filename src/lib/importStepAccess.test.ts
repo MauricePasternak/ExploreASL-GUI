@@ -57,9 +57,7 @@ const READY_FOR_PREVIEW_STATE = {
   runAliases: [],
   bMatchDirectories: true,
   metadataGroups: [VALID_METADATA],
-  subjectRows: [
-    { id: "SUB/01", subject: "SUB", session: "01", groupId: "global-defaults" },
-  ],
+  subjectRows: [{ id: "SUB/01", subject: "SUB", session: "01", groupId: "global-defaults" }],
 };
 
 describe("importStepAccess", () => {
@@ -68,9 +66,7 @@ describe("importStepAccess", () => {
   });
 
   it("requires ingestion results before unlocking tokenizer", () => {
-    expect(
-      isIngestionComplete({ ingestionComplete: false, pathPatterns: [] }),
-    ).toBe(false);
+    expect(isIngestionComplete({ ingestionComplete: false, pathPatterns: [] })).toBe(false);
     expect(
       getMaxUnlockedImportStep({
         ingestionComplete: false,

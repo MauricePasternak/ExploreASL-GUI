@@ -120,10 +120,8 @@ async function runPostProcessing(
   allSubjects: string[],
   isExitError = false,
 ): Promise<void> {
-  const { failedSubjects, completeImport, failImport } =
-    useImportStore.getState();
-  const debugMode =
-    useGlobalStore.getState().settings.import.preserveStagingDir;
+  const { failedSubjects, completeImport, failImport } = useImportStore.getState();
+  const debugMode = useGlobalStore.getState().settings.import.preserveStagingDir;
 
   // 1. Clean import status for failed subjects
   if (failedSubjects.length > 0) {
@@ -138,9 +136,7 @@ async function runPostProcessing(
   }
 
   // 2. Determine succeeded vs failed
-  const succeededSubjects = allSubjects.filter(
-    (s) => !failedSubjects.includes(s),
-  );
+  const succeededSubjects = allSubjects.filter((s) => !failedSubjects.includes(s));
 
   // 3. Move output and update store
   if (failedSubjects.length === 0 && !isExitError) {
@@ -225,10 +221,7 @@ export async function setupImportListeners(
 
         case "subject_complete":
           if (payload.subject) {
-            markSubjectCompleted(
-              payload.subject,
-              payload.duration_secs ?? 0,
-            );
+            markSubjectCompleted(payload.subject, payload.duration_secs ?? 0);
           }
           break;
 
@@ -254,40 +247,27 @@ export async function setupImportListeners(
   );
 
   // 2. import-raw-event (batched)
-  const unlistenRaw = await listen<ImportRawEventPayload>(
-    "import-raw-event",
-    (event) => {
-      logBatcher.push(event.payload.line);
-    },
-  );
+  const unlistenRaw = await listen<ImportRawEventPayload>("import-raw-event", (event) => {
+    logBatcher.push(event.payload.line);
+  });
 
   // 3. ImportPrepareComplete
-  const unlistenPrepare = await listen<Record<string, never>>(
-    "ImportPrepareComplete",
-    () => {
-      setImportPhase("running");
-    },
-  );
+  const unlistenPrepare = await listen<Record<string, never>>("ImportPrepareComplete", () => {
+    setImportPhase("running");
+  });
 
   // 4. MatlabExitError
-  const unlistenExitError = await listen<MatlabExitErrorPayload>(
-    "MatlabExitError",
-    (_event) => {
-      // Mark all currently-running or pending subjects as failed
-      const { importProgress } = useImportStore.getState();
-      for (const [subject, progress] of Object.entries(importProgress)) {
-        if (progress.status === "running" || progress.status === "pending") {
-          markSubjectFailed(
-            subject,
-            "DCM2NII",
-            "MATLAB process exited unexpectedly",
-          );
-        }
+  const unlistenExitError = await listen<MatlabExitErrorPayload>("MatlabExitError", (_event) => {
+    // Mark all currently-running or pending subjects as failed
+    const { importProgress } = useImportStore.getState();
+    for (const [subject, progress] of Object.entries(importProgress)) {
+      if (progress.status === "running" || progress.status === "pending") {
+        markSubjectFailed(subject, "DCM2NII", "MATLAB process exited unexpectedly");
       }
+    }
 
-      void runPostProcessing(stagingRoot, projectRoot, allSubjects, true);
-    },
-  );
+    void runPostProcessing(stagingRoot, projectRoot, allSubjects, true);
+  });
 
   // Return cleanup function
   const cleanup = () => {

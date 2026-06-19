@@ -1,11 +1,4 @@
-import {
-  Card,
-  NumberInput,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { Card, NumberInput, Stack, Table, Text, TextInput } from "@mantine/core";
 
 import type { SessionAlias } from "../../schemas/importSchemas";
 

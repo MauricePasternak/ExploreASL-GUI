@@ -20,7 +20,6 @@ export function ASLProcessingSection({
   showAdvanced,
   onToggleAdvanced,
 }: ASLProcessingSectionProps) {
-
   return (
     <Stack gap="md">
       <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
@@ -93,7 +92,9 @@ export function ASLProcessingSection({
               { value: "2", label: "2 — Automatic (PWI-based mixture)" },
               { value: "3", label: "3 — Force CBF to pseudo-CBF" },
             ]}
-            value={dataPar.bRegistrationContrast != null ? String(dataPar.bRegistrationContrast) : null}
+            value={
+              dataPar.bRegistrationContrast != null ? String(dataPar.bRegistrationContrast) : null
+            }
             onChange={(v) => onFieldChange("bRegistrationContrast", v ? Number(v) : undefined)}
             placeholder={FIELD_METADATA.bRegistrationContrast.defaultHint}
             data-testid="field-bRegistrationContrast"
@@ -129,12 +130,13 @@ export function ASLProcessingSection({
             <Switch
               id="switch-bUseMNIasDummyStructural"
               checked={dataPar.bUseMNIasDummyStructural ?? false}
-              onChange={(e) =>
-                onFieldChange("bUseMNIasDummyStructural", e.currentTarget.checked)
-              }
+              onChange={(e) => onFieldChange("bUseMNIasDummyStructural", e.currentTarget.checked)}
               data-testid="field-bUseMNIasDummyStructural"
             />
-            <DataParFieldLabel fieldKey="bUseMNIasDummyStructural" htmlFor="switch-bUseMNIasDummyStructural" />
+            <DataParFieldLabel
+              fieldKey="bUseMNIasDummyStructural"
+              htmlFor="switch-bUseMNIasDummyStructural"
+            />
           </Group>
 
           <Select

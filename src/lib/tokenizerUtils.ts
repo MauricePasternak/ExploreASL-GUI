@@ -208,10 +208,7 @@ export function extractUniqueValues(
         values.add(segments[assignment.blockIndex]);
       } else {
         // Sub-block within folder level
-        const parts = splitFolderByDelimiters(
-          segments[assignment.blockIndex],
-          tokenSubDelimiters,
-        );
+        const parts = splitFolderByDelimiters(segments[assignment.blockIndex], tokenSubDelimiters);
         if (assignment.subBlockIndex < parts.segments.length) {
           values.add(parts.segments[assignment.subBlockIndex]);
         }
@@ -262,9 +259,7 @@ export function buildStagingMapping(
     const rawSession = sessionAssignment
       ? extractValue(segments, sessionAssignment, tokenSubDelimiters)
       : "01";
-    const rawRun = runAssignment
-      ? extractValue(segments, runAssignment, tokenSubDelimiters)
-      : "01";
+    const rawRun = runAssignment ? extractValue(segments, runAssignment, tokenSubDelimiters) : "01";
     const rawModality = extractValue(segments, modalityAssignment, tokenSubDelimiters);
 
     // Apply subject rename
@@ -292,7 +287,11 @@ export function buildStagingMapping(
 /**
  * Extract a value from path segments based on a token assignment.
  */
-function extractValue(segments: string[], assignment: TokenAssignment, tokenSubDelimiters: string[] = ["_"]): string {
+function extractValue(
+  segments: string[],
+  assignment: TokenAssignment,
+  tokenSubDelimiters: string[] = ["_"],
+): string {
   if (assignment.subBlockIndex === null) {
     return segments[assignment.blockIndex] ?? "";
   }
@@ -463,10 +462,7 @@ function splitFolderByDelimiters(
   segments: string[];
   delimiters: string[];
 } {
-  const { subBlocks, delimiters } = splitBySubDelimiters(
-    folderName,
-    delimitersToSplitOn,
-  );
+  const { subBlocks, delimiters } = splitBySubDelimiters(folderName, delimitersToSplitOn);
   return { segments: subBlocks, delimiters };
 }
 
@@ -507,7 +503,9 @@ export function decodePatternSignature(
 
     const wholeAssignment = blockAssignments.find((a) => a.subBlockIndex === null);
     if (wholeAssignment) {
-      return wholeAssignment.tag === "Ignore" ? "<IGNORE>" : `<${wholeAssignment.tag.toUpperCase()}>`;
+      return wholeAssignment.tag === "Ignore"
+        ? "<IGNORE>"
+        : `<${wholeAssignment.tag.toUpperCase()}>`;
     }
 
     const { subBlocks, delimiters } = splitBySubDelimiters(block, subDelimiters);
@@ -527,4 +525,3 @@ export function decodePatternSignature(
 
   return decodedBlocks.join("/");
 }
-

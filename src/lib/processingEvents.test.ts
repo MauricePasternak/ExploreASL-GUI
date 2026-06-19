@@ -78,9 +78,12 @@ describe("runProcessingPipeline worker capping", () => {
 
     await runProcessingPipeline(config);
 
-    expect(invoke).toHaveBeenCalledWith("run_pipeline", expect.objectContaining({
-      workers: 2, // Capped to subjects length
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "run_pipeline",
+      expect.objectContaining({
+        workers: 2, // Capped to subjects length
+      }),
+    );
   });
 
   it("does not cap workers when workers are less than selected subjects", async () => {
@@ -92,9 +95,12 @@ describe("runProcessingPipeline worker capping", () => {
 
     await runProcessingPipeline(config);
 
-    expect(invoke).toHaveBeenCalledWith("run_pipeline", expect.objectContaining({
-      workers: 2, // Keeps configured worker count
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "run_pipeline",
+      expect.objectContaining({
+        workers: 2, // Keeps configured worker count
+      }),
+    );
   });
 
   it("keeps configured workers when subjects list is empty", async () => {
@@ -106,8 +112,11 @@ describe("runProcessingPipeline worker capping", () => {
 
     await runProcessingPipeline(config);
 
-    expect(invoke).toHaveBeenCalledWith("run_pipeline", expect.objectContaining({
-      workers: 4, // Keeps 4
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "run_pipeline",
+      expect.objectContaining({
+        workers: 4, // Keeps 4
+      }),
+    );
   });
 });

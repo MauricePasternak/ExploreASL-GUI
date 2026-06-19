@@ -41,9 +41,7 @@ const ALL_PATHS = [...BAR_PATHS, ...FOO_PATHS];
 // ---------------------------------------------------------------------------
 describe("getRelativePath", () => {
   it("strips root prefix", () => {
-    expect(getRelativePath(`${ROOT}/BAR/05022026_01/scan`, ROOT)).toBe(
-      "BAR/05022026_01/scan",
-    );
+    expect(getRelativePath(`${ROOT}/BAR/05022026_01/scan`, ROOT)).toBe("BAR/05022026_01/scan");
   });
 
   it("handles root with trailing slash", () => {
@@ -266,12 +264,8 @@ describe("discoverPathPatterns", () => {
     const patterns = discoverPathPatterns(paths, genfiRoot, ["_", "-"]);
     expect(patterns).toHaveLength(2);
 
-    const threeSubBlock = patterns.find((p) =>
-      p.signature.includes("<TOKEN>-<TOKEN>-<TOKEN>"),
-    );
-    const twoSubBlock = patterns.find(
-      (p) => !p.signature.includes("<TOKEN>-<TOKEN>-<TOKEN>"),
-    );
+    const threeSubBlock = patterns.find((p) => p.signature.includes("<TOKEN>-<TOKEN>-<TOKEN>"));
+    const twoSubBlock = patterns.find((p) => !p.signature.includes("<TOKEN>-<TOKEN>-<TOKEN>"));
 
     expect(threeSubBlock).toBeDefined();
     expect(twoSubBlock).toBeDefined();
@@ -287,11 +281,7 @@ describe("discoverPathPatterns", () => {
   });
 
   it("merges all paths when no structural differences exist", () => {
-    const paths = [
-      `${ROOT}/A/1/x`,
-      `${ROOT}/B/2/y`,
-      `${ROOT}/C/3/z`,
-    ];
+    const paths = [`${ROOT}/A/1/x`, `${ROOT}/B/2/y`, `${ROOT}/C/3/z`];
     const patterns = discoverPathPatterns(paths, ROOT, ["_", "-"]);
 
     // All varying, same depth, same shape → one pattern
@@ -336,12 +326,7 @@ describe("discoverPathPatterns", () => {
 describe("splitBySubDelimiters", () => {
   it("splits by underscore only", () => {
     const result = splitBySubDelimiters("sernum-0018_ser-pcasl_3d_multiTI");
-    expect(result.subBlocks).toEqual([
-      "sernum-0018",
-      "ser-pcasl",
-      "3d",
-      "multiTI",
-    ]);
+    expect(result.subBlocks).toEqual(["sernum-0018", "ser-pcasl", "3d", "multiTI"]);
     expect(result.delimiters).toEqual(["_", "_", "_"]);
   });
 
@@ -403,10 +388,7 @@ describe("analyzeSubBlocks", () => {
   });
 
   it("returns unique sub-block values for date-like folders", () => {
-    const paths = [
-      "BAR/05022026_01/scan",
-      "FOO/05022026_01/scan",
-    ];
+    const paths = ["BAR/05022026_01/scan", "FOO/05022026_01/scan"];
 
     const result = analyzeSubBlocks(paths, 1);
     expect(result[0]).toEqual(["05022026"]);
@@ -414,10 +396,7 @@ describe("analyzeSubBlocks", () => {
   });
 
   it("uses custom delimiters at the target block depth", () => {
-    const paths = [
-      "study/C9ORF059-12-R1/scan",
-      "study/C9ORF059-13-R2/scan",
-    ];
+    const paths = ["study/C9ORF059-12-R1/scan", "study/C9ORF059-13-R2/scan"];
 
     const result = analyzeSubBlocks(paths, 1, ["_", "-"]);
     expect(result[0]).toEqual(["C9ORF059"]);

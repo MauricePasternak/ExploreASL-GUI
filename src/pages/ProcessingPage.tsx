@@ -18,7 +18,11 @@ export default function ProcessingPage() {
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
   const isRunning = processingPhase === "running" || processingPhase === "preparing";
-  const showConfig = processingPhase === "idle" || processingPhase === "completed" || processingPhase === "failed" || processingPhase === "cancelled";
+  const showConfig =
+    processingPhase === "idle" ||
+    processingPhase === "completed" ||
+    processingPhase === "failed" ||
+    processingPhase === "cancelled";
 
   // Orphaned lock entries: subjects in rawdata but not in availableSubjects.
   // Population is group-level (subjectSession is empty) — exclude from orphan check.
@@ -46,7 +50,8 @@ export default function ProcessingPage() {
           data-testid="orphaned-subjects-warning"
         >
           <Text size="sm">
-            Found {orphanedSubjects.length} orphaned lock file entr{orphanedSubjects.length === 1 ? "y" : "ies"} with no matching rawdata subject:{" "}
+            Found {orphanedSubjects.length} orphaned lock file entr
+            {orphanedSubjects.length === 1 ? "y" : "ies"} with no matching rawdata subject:{" "}
             <Text span ff="monospace" size="sm">
               {orphanedSubjects.slice(0, 5).join(", ")}
               {orphanedSubjects.length > 5 ? ` (+${orphanedSubjects.length - 5} more)` : ""}

@@ -18,8 +18,7 @@ export const METADATA_FIELD_HINT_TEXT: Record<MetadataFieldHint, string> = {
   important: "Important for ExploreASL — set when headers are incomplete",
   dicomLikely: "Usually from DICOM — override only; omitted from studyPar.json if blank",
   optionalOmitted: "Optional — omitted from studyPar.json if blank",
-  conditionalRecommended:
-    "Recommended when applicable — omitted from studyPar.json if blank",
+  conditionalRecommended: "Recommended when applicable — omitted from studyPar.json if blank",
 };
 
 export const METADATA_HINT_LEGEND = [
@@ -29,9 +28,7 @@ export const METADATA_HINT_LEGEND = [
 ] as const;
 
 /** Per-field hint for bidsParams keys shown in the metadata modal. */
-export const BIDS_FIELD_HINTS: Partial<
-  Record<keyof BidsAslMetadata, MetadataFieldHint>
-> = {
+export const BIDS_FIELD_HINTS: Partial<Record<keyof BidsAslMetadata, MetadataFieldHint>> = {
   // ASL / M0 context
   ASLContext: "important",
   M0Type: "important",

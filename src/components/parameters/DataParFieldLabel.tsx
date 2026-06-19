@@ -11,9 +11,13 @@ interface DataParFieldLabelProps {
 
 export function DataParFieldLabel({ fieldKey, label, htmlFor }: DataParFieldLabelProps) {
   const meta = FIELD_METADATA[fieldKey];
-  
+
   if (!meta) {
-    const textNode = <Text size="sm" fw={500} span>{label ?? fieldKey}</Text>;
+    const textNode = (
+      <Text size="sm" fw={500} span>
+        {label ?? fieldKey}
+      </Text>
+    );
     return htmlFor ? (
       <label htmlFor={htmlFor} style={{ cursor: "pointer" }}>
         {textNode}

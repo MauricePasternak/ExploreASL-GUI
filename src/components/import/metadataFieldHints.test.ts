@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  METADATA_FIELD_HINT_TEXT,
-  stripEmptyBidsParams,
-} from "./metadataFieldHints";
+import { METADATA_FIELD_HINT_TEXT, stripEmptyBidsParams } from "./metadataFieldHints";
 
 describe("stripEmptyBidsParams", () => {
   it("removes undefined, empty strings, and empty arrays", () => {

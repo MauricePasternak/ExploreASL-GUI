@@ -8,6 +8,7 @@ import Layout from "./components/Layout";
 import SettingsModal from "./components/SettingsModal";
 import LandingPage from "./pages/LandingPage";
 import ProjectPage from "./pages/ProjectPage";
+import OverviewPage from "./pages/OverviewPage";
 import { useGlobalStore } from "./stores/globalStore";
 
 export default function App() {
@@ -48,6 +49,7 @@ export default function App() {
           <Route element={<Layout onOpenSettings={() => setSettingsOpen(true)} />}>
             <Route path="/" element={<LandingPage />} />
             <Route path="/project/:id/:phase" element={<ProjectPage />} />
+            <Route path="/overview" element={<OverviewPage />} />
           </Route>
         </Routes>
 

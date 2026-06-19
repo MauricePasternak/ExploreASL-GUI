@@ -196,8 +196,16 @@ describe("ImportExecution", () => {
     renderWithProviders();
 
     expect(screen.getByTestId("import-table-container")).toBeInTheDocument();
-    expect(screen.getAllByText((_, node) => node?.textContent?.includes("ExploreASL import started") ?? false).length).toBeGreaterThan(0);
-    expect(screen.getAllByText((_, node) => node?.textContent?.includes("NII2BIDS failed for SUB02_ses-01_run-1") ?? false).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        (_, node) => node?.textContent?.includes("ExploreASL import started") ?? false,
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        (_, node) => node?.textContent?.includes("NII2BIDS failed for SUB02_ses-01_run-1") ?? false,
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("advances the project to parameters after completed import", async () => {
@@ -287,9 +295,9 @@ describe("ImportExecution", () => {
     await userEvent.click(firstButton(/start import/i));
 
     await vi.waitFor(() => {
-      const runCall = vi.mocked(invoke).mock.calls.find(
-        (call) => call[0] === "run_import_pipeline",
-      );
+      const runCall = vi
+        .mocked(invoke)
+        .mock.calls.find((call) => call[0] === "run_import_pipeline");
       expect(runCall).toBeDefined();
       expect((runCall![1] as Record<string, unknown>).subjectsToPreserve).toEqual(["SUB01"]);
     });
@@ -318,7 +326,9 @@ describe("ImportExecution", () => {
 
     await userEvent.click(await screen.findByTestId("confirm-reimport-cancel"));
 
-    expect(vi.mocked(invoke).mock.calls.some((call) => call[0] === "run_import_pipeline")).toBe(false);
+    expect(vi.mocked(invoke).mock.calls.some((call) => call[0] === "run_import_pipeline")).toBe(
+      false,
+    );
     expect(useImportStore.getState().importPhase).toBe("idle");
   });
 

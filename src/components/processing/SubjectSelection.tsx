@@ -104,7 +104,12 @@ function StatusIcon({
     case "skipped":
       return (
         <Tooltip label="No data">
-          <IconBan size={18} color="var(--mantine-color-gray-4)" style={{ opacity: 0.5 }} data-testid="status-skipped" />
+          <IconBan
+            size={18}
+            color="var(--mantine-color-gray-4)"
+            style={{ opacity: 0.5 }}
+            data-testid="status-skipped"
+          />
         </Tooltip>
       );
   }
@@ -119,9 +124,7 @@ function lookupModuleStatus(
   module: (typeof PROCESSING_MODULES)[number],
   statuses: SubjectModuleStatus[],
 ): SubjectModuleStatus | undefined {
-  return statuses.find(
-    (s) => s.subjectSession === subjectSession && s.module === module,
-  );
+  return statuses.find((s) => s.subjectSession === subjectSession && s.module === module);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,20 +162,38 @@ function buildColumns(
     },
     {
       accessor: "_structuralStatus",
-      title: <>Structural<br/>Status</>,
+      title: (
+        <>
+          Structural
+          <br />
+          Status
+        </>
+      ),
       textAlign: "center",
-      render: (row) => <StatusIcon status={row._structuralStatus} processingPhase={processingPhase} />,
+      render: (row) => (
+        <StatusIcon status={row._structuralStatus} processingPhase={processingPhase} />
+      ),
     },
     {
       accessor: "_structuralLogInfo",
-      title: <>Structural<br/>Logs/Errors</>,
+      title: (
+        <>
+          Structural
+          <br />
+          Logs/Errors
+        </>
+      ),
       textAlign: "center",
       render: (row) => {
         if (row._structuralStatus === "skipped") return null;
         const files = structuralLogInfo.get(row.subjectSession);
         const badge = resolveLogBadge(row._structuralStatus, files);
         if (badge === "no-logs") {
-          return <Text size="xs" c="dimmed" data-testid="no-structural-logs">No Logs</Text>;
+          return (
+            <Text size="xs" c="dimmed" data-testid="no-structural-logs">
+              No Logs
+            </Text>
+          );
         }
         const isError = badge === "errors";
         return (
@@ -192,13 +213,23 @@ function buildColumns(
     },
     {
       accessor: "_structuralReport",
-      title: <>Structural<br/>Report</>,
+      title: (
+        <>
+          Structural
+          <br />
+          Report
+        </>
+      ),
       textAlign: "center",
       render: (row) => {
         if (row._structuralStatus === "skipped") return null;
         const hasReport = existingReports.has(`${row.subjectSession}:structural`);
         if (!hasReport) {
-          return <Text size="xs" c="dimmed" data-testid="no-structural-report">No Report</Text>;
+          return (
+            <Text size="xs" c="dimmed" data-testid="no-structural-report">
+              No Report
+            </Text>
+          );
         }
         return (
           <Badge
@@ -216,20 +247,36 @@ function buildColumns(
     },
     {
       accessor: "_aslStatus",
-      title: <>ASL<br/>Status</>,
+      title: (
+        <>
+          ASL
+          <br />
+          Status
+        </>
+      ),
       textAlign: "center",
       render: (row) => <StatusIcon status={row._aslStatus} processingPhase={processingPhase} />,
     },
     {
       accessor: "_aslLogInfo",
-      title: <>ASL<br/>Logs/Errors</>,
+      title: (
+        <>
+          ASL
+          <br />
+          Logs/Errors
+        </>
+      ),
       textAlign: "center",
       render: (row) => {
         if (row._aslStatus === "skipped") return null;
         const files = aslLogInfo.get(row.subjectSession);
         const badge = resolveLogBadge(row._aslStatus, files);
         if (badge === "no-logs") {
-          return <Text size="xs" c="dimmed" data-testid="no-asl-logs">No Logs</Text>;
+          return (
+            <Text size="xs" c="dimmed" data-testid="no-asl-logs">
+              No Logs
+            </Text>
+          );
         }
         const isError = badge === "errors";
         return (
@@ -249,7 +296,13 @@ function buildColumns(
     },
     {
       accessor: "_aslReport",
-      title: <>ASL<br/>Report</>,
+      title: (
+        <>
+          ASL
+          <br />
+          Report
+        </>
+      ),
       textAlign: "center",
       render: (row) => {
         if (row._aslStatus === "skipped") return null;
@@ -257,7 +310,11 @@ function buildColumns(
           existingReports.has(`${row.subjectSession}:asl`) ||
           existingReports.has(`${row.subjectSession}:m0`);
         if (!hasReport) {
-          return <Text size="xs" c="dimmed" data-testid="no-asl-report">No Report</Text>;
+          return (
+            <Text size="xs" c="dimmed" data-testid="no-asl-report">
+              No Report
+            </Text>
+          );
         }
         return (
           <Badge
@@ -337,32 +394,36 @@ export default function SubjectSelection() {
 
   useEffect(() => {
     if (!projectRoot) return;
-    fetchModuleLogs(projectRoot).then((files) => {
-      const map = new Map<string, LogFileInfo[]>();
-      for (const f of files) {
-        const key = `${f.subjectSession}:${f.module}`;
-        const existing = map.get(key) ?? [];
-        existing.push(f);
-        map.set(key, existing);
-      }
-      setLogFiles(map);
-    }).catch(() => {
-      setLogFiles(new Map());
-    });
+    fetchModuleLogs(projectRoot)
+      .then((files) => {
+        const map = new Map<string, LogFileInfo[]>();
+        for (const f of files) {
+          const key = `${f.subjectSession}:${f.module}`;
+          const existing = map.get(key) ?? [];
+          existing.push(f);
+          map.set(key, existing);
+        }
+        setLogFiles(map);
+      })
+      .catch(() => {
+        setLogFiles(new Map());
+      });
   }, [projectRoot, processingPhase]);
 
   useEffect(() => {
     if (!projectRoot) return;
-    fetchSubjectReports(projectRoot).then((reports) => {
-      const set = new Set<string>();
-      for (const r of reports) {
-        set.add(`${r.subjectSession}:${r.module}`);
-      }
-      setExistingReports(set);
-    }).catch((err) => {
-      console.error("Failed to fetch reports list:", err);
-      setExistingReports(new Set());
-    });
+    fetchSubjectReports(projectRoot)
+      .then((reports) => {
+        const set = new Set<string>();
+        for (const r of reports) {
+          set.add(`${r.subjectSession}:${r.module}`);
+        }
+        setExistingReports(set);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch reports list:", err);
+        setExistingReports(new Set());
+      });
   }, [projectRoot, processingPhase]);
 
   const structuralLogInfo = useMemo(() => {
@@ -429,10 +490,7 @@ export default function SubjectSelection() {
     setPage(1);
   }, [filter, recordsPerPage]);
 
-  const selectedSet = useMemo(
-    () => new Set(config?.subjects ?? []),
-    [config?.subjects],
-  );
+  const selectedSet = useMemo(() => new Set(config?.subjects ?? []), [config?.subjects]);
 
   const rows: SubjectRow[] = useMemo(() => {
     const sorted = [...availableSubjects].sort((a, b) =>
@@ -463,10 +521,7 @@ export default function SubjectSelection() {
     return filteredRows.slice(from, from + recordsPerPage);
   }, [filteredRows, page, recordsPerPage]);
 
-  const selectedRecords = useMemo(
-    () => paginatedRows.filter((r) => r._selected),
-    [paginatedRows],
-  );
+  const selectedRecords = useMemo(() => paginatedRows.filter((r) => r._selected), [paginatedRows]);
 
   const updateSubjects = useCallback(
     (next: string[]) => {
@@ -509,18 +564,35 @@ export default function SubjectSelection() {
   );
 
   const columns = useMemo(
-    () => buildColumns(processingPhase, structuralLogInfo, aslLogInfo, existingReports, handleViewLog, handleViewReport),
-    [processingPhase, structuralLogInfo, aslLogInfo, existingReports, handleViewLog, handleViewReport],
+    () =>
+      buildColumns(
+        processingPhase,
+        structuralLogInfo,
+        aslLogInfo,
+        existingReports,
+        handleViewLog,
+        handleViewReport,
+      ),
+    [
+      processingPhase,
+      structuralLogInfo,
+      aslLogInfo,
+      existingReports,
+      handleViewLog,
+      handleViewReport,
+    ],
   );
 
   const modalRunErrorMap = useMemo(() => {
-    const files = modalModule === "structural"
-      ? structuralLogInfo.get(modalSubjectSession)
-      : aslLogInfo.get(modalSubjectSession);
+    const files =
+      modalModule === "structural"
+        ? structuralLogInfo.get(modalSubjectSession)
+        : aslLogInfo.get(modalSubjectSession);
     const row = rows.find((r) => r.subjectSession === modalSubjectSession);
-    const moduleIncomplete = modalModule === "structural"
-      ? row?._structuralStatus === "incomplete"
-      : row?._aslStatus === "incomplete";
+    const moduleIncomplete =
+      modalModule === "structural"
+        ? row?._structuralStatus === "incomplete"
+        : row?._aslStatus === "incomplete";
     if (!files) return {};
     const map: Record<string, boolean> = {};
     for (const f of files) {
@@ -587,10 +659,7 @@ export default function SubjectSelection() {
         />
       </Group>
 
-      <Box
-        style={{ flexShrink: 0, isolation: "isolate" }}
-        data-testid="subject-table-container"
-      >
+      <Box style={{ flexShrink: 0, isolation: "isolate" }} data-testid="subject-table-container">
         <DataTable
           records={paginatedRows}
           columns={columns}

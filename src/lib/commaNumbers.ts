@@ -1,6 +1,4 @@
-export type ParseResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string };
+export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /** Display a number or comma-separated number array in a text input. */
 export function formatNumberOrArray(value: number | number[] | undefined): string {

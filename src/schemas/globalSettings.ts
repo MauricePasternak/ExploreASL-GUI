@@ -44,5 +44,3 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
     preserveStagingDir: false,
   },
 };
-
-

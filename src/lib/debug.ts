@@ -53,7 +53,9 @@ export function initConsoleBridge() {
 
   // Also capture unhandled errors and promise rejections
   window.addEventListener("error", (event) => {
-    void error(`[window.onerror] ${event.message} at ${event.filename}:${event.lineno}`).catch(() => undefined);
+    void error(`[window.onerror] ${event.message} at ${event.filename}:${event.lineno}`).catch(
+      () => undefined,
+    );
   });
 
   window.addEventListener("unhandledrejection", (event) => {

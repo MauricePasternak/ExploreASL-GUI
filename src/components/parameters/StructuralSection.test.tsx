@@ -36,59 +36,43 @@ const emptyState: DataParState = {};
 
 describe("StructuralSection", () => {
   it("renders bRunLongReg toggle", () => {
-    renderWithMantine(
-      <StructuralSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/longitudinal registration/i).length).toBeGreaterThan(0);
   });
 
   it("renders bRunDARTEL toggle", () => {
-    renderWithMantine(
-      <StructuralSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/dartel registration/i).length).toBeGreaterThan(0);
   });
 
   it("renders WMHsegmAlg select", () => {
-    renderWithMantine(
-      <StructuralSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/wmh segmentation/i).length).toBeGreaterThan(0);
   });
 
   it("renders bSegmentSPM12 toggle", () => {
-    renderWithMantine(
-      <StructuralSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/spm12 segmentation/i).length).toBeGreaterThan(0);
   });
 
   it("renders bHammersCAT12 toggle", () => {
-    renderWithMantine(
-      <StructuralSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/hammers atlas/i).length).toBeGreaterThan(0);
   });
 
   it("renders bFixResolution toggle", () => {
-    renderWithMantine(
-      <StructuralSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/fix resolution/i).length).toBeGreaterThan(0);
   });
 
   it("does not render AdvancedDivider", () => {
-    renderWithMantine(
-      <StructuralSection dataPar={emptyState} onFieldChange={() => {}} />,
-    );
+    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.queryByText(/show advanced/i)).toBeNull();
   });
 
   it("calls onFieldChange when bRunLongReg toggled", () => {
     const onFieldChange = vi.fn();
-    renderWithMantine(
-      <StructuralSection dataPar={emptyState} onFieldChange={onFieldChange} />,
-    );
+    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={onFieldChange} />);
     clickSwitch(/longitudinal registration/i);
     expect(onFieldChange).toHaveBeenCalledWith("bRunLongReg", expect.any(Boolean));
   });

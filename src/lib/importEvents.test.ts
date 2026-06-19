@@ -65,10 +65,7 @@ afterEach(() => {
 describe("setupImportListeners", () => {
   it("maps structured events to import store actions", async () => {
     useImportStore.getState().startImport();
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
-      "GOOD",
-      "BADDIE",
-    ]);
+    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "BADDIE"]);
 
     emitStructured({ type: "subject_start", subject: "GOOD" });
     expect(useImportStore.getState().importProgress.GOOD.status).toBe("running");
@@ -112,9 +109,13 @@ describe("setupImportListeners", () => {
   it("flushes section dividers immediately without waiting for rAF", async () => {
     vi.useFakeTimers();
     useImportStore.getState().startImport();
-    const cleanup = await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+    const cleanup = await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
+      "GOOD",
+    ]);
 
-    emitRaw("[ ======================================== ExploreASL Settings ==================================]");
+    emitRaw(
+      "[ ======================================== ExploreASL Settings ==================================]",
+    );
     expect(useImportStore.getState().importLog).toEqual([
       "[ ======================================== ExploreASL Settings ==================================]",
     ]);
@@ -137,7 +138,9 @@ describe("setupImportListeners", () => {
   it("flushes remaining buffered lines on cleanup", async () => {
     vi.useFakeTimers();
     useImportStore.getState().startImport();
-    const cleanup = await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+    const cleanup = await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
+      "GOOD",
+    ]);
 
     emitRaw("buffered line 1");
     emitRaw("buffered line 2");
@@ -155,10 +158,7 @@ describe("setupImportListeners", () => {
     useImportStore.getState().markSubjectCompleted("GOOD", 10);
     useImportStore.getState().markSubjectFailed("BADDIE", "NII2BIDS", "Bad metadata");
 
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
-      "GOOD",
-      "BADDIE",
-    ]);
+    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "BADDIE"]);
 
     emitStructured({ type: "import_complete" });
     await vi.waitFor(() => {
@@ -193,10 +193,7 @@ describe("setupImportListeners", () => {
     useImportStore.getState().markSubjectRunning("GOOD");
     useImportStore.getState().markSubjectCompleted("DONE", 5);
 
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
-      "GOOD",
-      "DONE",
-    ]);
+    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "DONE"]);
 
     emitMatlabExitError(1);
     await vi.waitFor(() => {
@@ -213,7 +210,12 @@ describe("setupImportListeners", () => {
     useImportStore.setState({
       subjectRows: [
         { id: "GOOD/01", subject: "GOOD", session: "01", groupId: "global-defaults" },
-        { id: "PENDING_SUBJ/01", subject: "PENDING_SUBJ", session: "01", groupId: "global-defaults" },
+        {
+          id: "PENDING_SUBJ/01",
+          subject: "PENDING_SUBJ",
+          session: "01",
+          groupId: "global-defaults",
+        },
       ],
     });
     useImportStore.getState().startImport();

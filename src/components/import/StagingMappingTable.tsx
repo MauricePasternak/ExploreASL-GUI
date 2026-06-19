@@ -1,6 +1,10 @@
 import { Card, Stack, Table, Text, Title } from "@mantine/core";
 
-import type { MetadataGroup, StagingMappingByPattern, SubjectRow } from "../../schemas/importSchemas";
+import type {
+  MetadataGroup,
+  StagingMappingByPattern,
+  SubjectRow,
+} from "../../schemas/importSchemas";
 import { decodePatternSignature } from "../../lib/tokenizerUtils";
 import { useGlobalStore } from "../../stores/globalStore";
 
@@ -10,7 +14,11 @@ interface StagingMappingTableProps {
   metadataGroups: MetadataGroup[];
 }
 
-export default function StagingMappingTable({ mappings, subjectRows, metadataGroups }: StagingMappingTableProps) {
+export default function StagingMappingTable({
+  mappings,
+  subjectRows,
+  metadataGroups,
+}: StagingMappingTableProps) {
   const tokenSubDelimiters = useGlobalStore((s) => s.settings.tokenSubDelimiters);
 
   if (mappings.length === 0) {
@@ -39,8 +47,8 @@ export default function StagingMappingTable({ mappings, subjectRows, metadataGro
         <Text fw={600} component="span">
           Subject/Session/Run/Modality
         </Text>{" "}
-        tree before ExploreASL processes them. The table below shows how each
-        path maps to its staging location.
+        tree before ExploreASL processes them. The table below shows how each path maps to its
+        staging location.
       </Text>
 
       {mappings.map((mapping) => {
@@ -51,13 +59,18 @@ export default function StagingMappingTable({ mappings, subjectRows, metadataGro
         );
 
         return (
-          <Card key={mapping.patternSignature} withBorder p="md" data-testid={`staging-mapping-${decodedSignature}`}>
+          <Card
+            key={mapping.patternSignature}
+            withBorder
+            p="md"
+            data-testid={`staging-mapping-${decodedSignature}`}
+          >
             <Text fw={600} size="sm" mb="xs">
               Pattern: {decodedSignature}
             </Text>
             <Text c="dimmed" size="xs" mb="xs">
-              {mapping.entries.length} path{mapping.entries.length !== 1 ? "s" : ""}{" "}
-              · {mapping.pattern.count} total matching
+              {mapping.entries.length} path{mapping.entries.length !== 1 ? "s" : ""} ·{" "}
+              {mapping.pattern.count} total matching
             </Text>
 
             <Table striped highlightOnHover fz="xs">

@@ -7,14 +7,17 @@ The system SHALL provide a single Rust command `run_import_pipeline(staging_root
 Prior to spawning MATLAB, lock files for selected subjects SHALL be deleted and lock files for unselected fresh subjects SHALL be preserved via `copyLockFilesForRetry`.
 
 #### Scenario: Successful pipeline start
+
 - **WHEN** `run_import_pipeline` is called with valid paths and configured MATLAB
 - **THEN** the staging directory is created, configs are written, MATLAB is spawned, and the PID is returned
 
 #### Scenario: Symlink creation failure
+
 - **WHEN** `run_import_pipeline` is called and symlink creation fails (e.g., permission denied)
 - **THEN** the command returns an error string, no MATLAB process is spawned, and the frontend stays in `idle` state
 
 #### Scenario: MATLAB not found
+
 - **WHEN** `run_import_pipeline` is called and the MATLAB executable cannot be found at the specified path
 - **THEN** the command returns an error string describing the missing executable
 
@@ -29,14 +32,17 @@ The system SHALL stream MATLAB subprocess stdout and stderr to the frontend via 
 - `dcm2nii_status`: `status: (\d+)`
 
 #### Scenario: Subject starts processing
+
 - **WHEN** MATLAB outputs `Subject: BADDIE, Module: xASL_module_Import`
 - **THEN** a `subject_start` event is emitted with `subject: "BADDIE"`
 
 #### Scenario: NII2BIDS failure detected
+
 - **WHEN** MATLAB outputs `NII2BIDS failed for perfusion image of BADDIE_ses-01_run-1` followed by `Message: The length of the vector LabelingDuration...`
 - **THEN** a `import_failed` event is emitted with the subject matched against the known subject list and the full message captured
 
 #### Scenario: Import completes
+
 - **WHEN** MATLAB outputs `xASL_module_Import completed 100%`
 - **THEN** an `import_complete` event is emitted
 
@@ -45,10 +51,12 @@ The system SHALL stream MATLAB subprocess stdout and stderr to the frontend via 
 The system SHALL store the MATLAB child process PID in Rust app state. On Tauri app close, the system SHALL send SIGTERM (Unix) or CTRL_BREAK_EVENT (Windows), wait up to 5 seconds, then send SIGKILL (Unix) or TerminateProcess (Windows) if the process is still alive. The app SHALL block exit during this cleanup via `RunEvent::ExitRequested`. The system SHALL also provide a `stop_import(pid)` command that performs the same termination sequence on demand.
 
 #### Scenario: User stops import mid-run
+
 - **WHEN** the user clicks "Stop" during a running import
 - **THEN** SIGTERM is sent to the MATLAB process, 5s grace period, SIGKILL if still alive, all in-progress subjects are marked "cancelled"
 
 #### Scenario: App closes during import
+
 - **WHEN** the user closes the Tauri window while MATLAB is running
 - **THEN** the app blocks exit, sends SIGTERM, waits up to 5s, sends SIGKILL if needed, then allows exit. No orphan process remains.
 
@@ -57,10 +65,12 @@ The system SHALL store the MATLAB child process PID in Rust app state. On Tauri 
 The system SHALL provide a Rust command `clean_import_status(staging_root, subjects: Vec<String>)` that deletes the three lock files (`010_DCM2NII.status`, `020_NII2BIDS.status`, `999_ready.status`) for each specified subject from `<staging_root>/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/xASL_module_Import/`. This command SHALL be called automatically after the MATLAB subprocess exits, using the list of subjects that emitted `import_failed` events. It SHALL NOT delete lock files for subjects that succeeded.
 
 #### Scenario: One subject fails, one succeeds
+
 - **WHEN** GOOD succeeds and BADDIE fails during import
 - **THEN** after MATLAB exits, lock files for BADDIE are deleted, lock files for GOOD are preserved
 
 #### Scenario: All subjects succeed
+
 - **WHEN** all subjects complete without `import_failed` events
 - **THEN** no lock files are deleted
 
@@ -75,18 +85,22 @@ The Rust command `move_import_output(staging_root, project_root, succeeded_subje
 **All-fail scenario**: `move_import_output` is not called at all. `.easl_staging/` remains intact for retry. No data is moved to project root.
 
 #### Scenario: Full success with debug mode off
+
 - **WHEN** all subjects succeed and debug mode is disabled
 - **THEN** `rawdata/` and `derivatives/` are replaced at project root, `.easl_staging/` is deleted, `project.easl` `currentPhase` is set to `"parameters"`
 
 #### Scenario: Full success with debug mode on
+
 - **WHEN** all subjects succeed and debug mode is enabled
 - **THEN** `rawdata/` and `derivatives/` are replaced at project root, `.easl_staging/` is preserved, configs are copied to `derivatives/ExploreASL_GUI/`
 
 #### Scenario: Partial success (GOOD succeeded, BADDIE failed)
+
 - **WHEN** some subjects succeed and some fail
 - **THEN** succeeded subjects' `rawdata/sub-<Subject>/`, lock files, and log files are copied to project root. Failed subjects' data stays in staging. `.easl_staging/` is preserved for retry.
 
 #### Scenario: All subjects fail
+
 - **WHEN** no subjects succeed
 - **THEN** nothing is moved to project root, `.easl_staging/` remains intact for retry
 
@@ -95,10 +109,12 @@ The Rust command `move_import_output(staging_root, project_root, succeeded_subje
 On retry, the system SHALL: (1) delete `.easl_staging/` entirely, (2) rebuild symlink tree and rewrite configs from current GUI state, (3) copy succeeded subjects' lock files from `<project_root>/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/xASL_module_Import/` to `.easl_staging/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/xASL_module_Import/`, (4) spawn MATLAB. Subjects with preserved lock files SHALL be skipped by ExploreASL.
 
 #### Scenario: Retry after partial failure
+
 - **WHEN** user clicks "Retry Import" after BADDIE failed and GOOD succeeded
 - **THEN** staging is rebuilt from scratch, GOOD's lock files are copied back, BADDIE's lock files are NOT copied, MATLAB runs and processes only BADDIE
 
 #### Scenario: Retry after fixing studyPar.json
+
 - **WHEN** user edits metadata in step 4 (fixing LabelingDuration) and clicks "Retry Import"
 - **THEN** staging is rebuilt with updated configs, succeeded subjects' lock files are preserved, failed subjects are re-processed with new parameters
 
@@ -107,10 +123,12 @@ On retry, the system SHALL: (1) delete `.easl_staging/` entirely, (2) rebuild sy
 If the MATLAB process exits with a non-zero exit code, all subjects currently in `"running"` status SHALL be marked as failed. This catches crashes where no per-subject failure pattern was parsed from stdout.
 
 #### Scenario: MATLAB crashes mid-import
+
 - **WHEN** MATLAB exits with code 1 during import (e.g., out of memory)
 - **THEN** any subject with `importProgress` status `"running"` is marked as `"failed"` with error "MATLAB process exited unexpectedly"
 
 #### Scenario: MATLAB exits normally with zero code
+
 - **WHEN** MATLAB exits with code 0 after processing all subjects
 - **THEN** normal completion flow proceeds; failure detection relies on per-subject stdout parsing
 
@@ -119,10 +137,12 @@ If the MATLAB process exits with a non-zero exit code, all subjects currently in
 The Rust backend SHALL register a cleanup handler that prevents orphan MATLAB processes. When the Tauri app receives an exit request, the handler SHALL terminate the running MATLAB process using the platform-appropriate signal sequence before allowing exit.
 
 #### Scenario: MATLAB process running on app exit
+
 - **WHEN** the Tauri window is closed while MATLAB is running
 - **THEN** the MATLAB process receives SIGTERM (or CTRL_BREAK_EVENT on Windows), followed by SIGKILL after 5s if still alive, then the app exits
 
 #### Scenario: No MATLAB process running on app exit
+
 - **WHEN** the Tauri window is closed and no MATLAB process is running
 - **THEN** the app exits immediately without delay
 
@@ -131,10 +151,12 @@ The Rust backend SHALL register a cleanup handler that prevents orphan MATLAB pr
 A global setting "Preserve staging directory" SHALL be added to `globalStore.settings` under the Import module section, defaulting to `false`. When enabled, `.easl_staging/` is preserved after successful import and `sourcestructure.json` + `studyPar.json` are copied to `<project_root>/derivatives/ExploreASL_GUI/`. When disabled (default), `.easl_staging/` is deleted after successful import.
 
 #### Scenario: Debug mode enabled on successful import
+
 - **WHEN** all subjects succeed and "Preserve staging directory" is enabled
 - **THEN** `.easl_staging/` is preserved, configs are copied to `derivatives/ExploreASL_GUI/`
 
 #### Scenario: Debug mode disabled on successful import
+
 - **WHEN** all subjects succeed and "Preserve staging directory" is disabled
 - **THEN** `.easl_staging/` is deleted entirely
 
@@ -145,18 +167,22 @@ The import step 5 execution view SHALL provide a MATLAB version select dropdown 
 If no MATLAB installations are configured, the "Start Import" button SHALL be disabled and an alert message SHALL be shown.
 
 #### Scenario: Single MATLAB installation
+
 - **WHEN** `matlabInstallations` has one entry
 - **THEN** the dropdown shows that entry as the only option and it is pre-selected
 
 #### Scenario: Multiple MATLAB installations
+
 - **WHEN** `matlabInstallations` has multiple entries
 - **THEN** the dropdown lists all entries and the user can select which to use for import
 
 #### Scenario: No MATLAB installation configured
+
 - **WHEN** `matlabInstallations` is empty or `exploreAslPath` is empty
 - **THEN** the "Start Import" button is disabled and an alert is shown
 
 #### Scenario: Selected MATLAB path used for import
+
 - **WHEN** the user selects "MATLAB R2024b" from the dropdown and clicks "Start Import"
 - **THEN** `runImportPipeline` is called with `matlabPath` set to the path of that installation
 
@@ -167,13 +193,16 @@ The progress table SHALL be populated from two sources: (1) `read_import_status`
 During import execution, the table SHALL update in real-time as structured events arrive. All subjects start with `status: "pending"` when `startImport()` is called.
 
 #### Scenario: Table shows reconstructed status on re-visit
+
 - **WHEN** the user navigates to step 5 after a successful import
 - **THEN** the progress table lists all subjects with status "completed" (reconstructed from lock files), not "pending"
 
 #### Scenario: Table shows reconstructed failed status on re-visit
+
 - **WHEN** the user navigates to step 5 after a partially failed import
 - **THEN** failed subjects show status "failed" and completed subjects show status "completed", all reconstructed from lock files
 
 #### Scenario: Table updates during active import
+
 - **WHEN** a `subject_start` event arrives for subject "GOOD" during an active import
 - **THEN** `importProgress["GOOD"].status` transitions from "pending" to "running"

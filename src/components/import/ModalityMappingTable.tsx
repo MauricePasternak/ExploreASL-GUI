@@ -1,10 +1,4 @@
-import {
-  Card,
-  Select,
-  Stack,
-  Table,
-  Text,
-} from "@mantine/core";
+import { Card, Select, Stack, Table, Text } from "@mantine/core";
 
 import { useImportStore } from "../../stores/importStore";
 import { EXPLOREASL_MODALITIES } from "../../schemas/importSchemas";
@@ -26,9 +20,7 @@ export default function ModalityMappingTable() {
 
   function handleChange(captured: string, value: string | null) {
     const mapped =
-      value === "__ignore__" || value === null
-        ? null
-        : (value as ModalityAlias["mapped"]);
+      value === "__ignore__" || value === null ? null : (value as ModalityAlias["mapped"]);
     updateModalityAlias(captured, mapped);
   }
 
@@ -36,8 +28,8 @@ export default function ModalityMappingTable() {
     return (
       <Card withBorder p="md" data-testid="modality-empty">
         <Text c="dimmed" size="sm">
-          No modalities detected. Complete the Path Tokenizer step first and
-          assign a &quot;Modality&quot; tag.
+          No modalities detected. Complete the Path Tokenizer step first and assign a
+          &quot;Modality&quot; tag.
         </Text>
       </Card>
     );
@@ -46,8 +38,8 @@ export default function ModalityMappingTable() {
   return (
     <Stack gap="sm">
       <Text size="sm" c="dimmed">
-        Map each captured scan name to an ExploreASL modality. Ignored
-        modalities will be excluded from the import.
+        Map each captured scan name to an ExploreASL modality. Ignored modalities will be excluded
+        from the import.
       </Text>
       <Table striped highlightOnHover data-testid="modality-table">
         <Table.Thead>

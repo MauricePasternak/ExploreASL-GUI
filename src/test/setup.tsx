@@ -150,7 +150,13 @@ vi.mock("@tauri-apps/plugin-log", () => ({
 }));
 
 vi.mock("react-virtuoso", () => ({
-  Virtuoso: ({ data, itemContent }: { data: string[]; itemContent: (index: number, line: string) => React.ReactNode }) => (
+  Virtuoso: ({
+    data,
+    itemContent,
+  }: {
+    data: string[];
+    itemContent: (index: number, line: string) => React.ReactNode;
+  }) => (
     <div data-testid="virtuoso">
       {data?.map((item: string, index: number) => itemContent(index, item))}
     </div>

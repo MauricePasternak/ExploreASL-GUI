@@ -1,12 +1,5 @@
 import { useEffect, useMemo } from "react";
-import {
-  Button,
-  Group,
-  Stack,
-  Tabs,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Button, Group, Stack, Tabs, Text, Title } from "@mantine/core";
 import {
   IconArrowLeft,
   IconArrowRight,
@@ -16,10 +9,7 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 
-import {
-  hasTokenizerTag,
-  isAliasResolutionComplete,
-} from "../../lib/importStepAccess";
+import { hasTokenizerTag, isAliasResolutionComplete } from "../../lib/importStepAccess";
 import { extractUniqueValues } from "../../lib/tokenizerUtils";
 import { useImportStore } from "../../stores/importStore";
 import { useGlobalStore } from "../../stores/globalStore";
@@ -80,10 +70,7 @@ export default function AliasResolution() {
     () => hasTokenizerTag(tokenizerConfigs, "Session"),
     [tokenizerConfigs],
   );
-  const hasRunToken = useMemo(
-    () => hasTokenizerTag(tokenizerConfigs, "Run"),
-    [tokenizerConfigs],
-  );
+  const hasRunToken = useMemo(() => hasTokenizerTag(tokenizerConfigs, "Run"), [tokenizerConfigs]);
   const canProceed = isAliasResolutionComplete({ modalityAliases });
 
   const derivedAliasState = useMemo(() => {
@@ -145,20 +132,14 @@ export default function AliasResolution() {
       return;
     }
 
-    const modalityMap = new Map(
-      modalityAliases.map((alias) => [alias.captured, alias.mapped]),
-    );
+    const modalityMap = new Map(modalityAliases.map((alias) => [alias.captured, alias.mapped]));
     const nextModalities = derivedAliasState.modalities.map((captured) => ({
       captured,
       mapped: modalityMap.get(captured) ?? null,
     }));
 
     const sessions = hasSessionToken
-      ? buildOrderAliases(
-          derivedAliasState.sessions,
-          sessionAliases,
-          (captured) => captured,
-        )
+      ? buildOrderAliases(derivedAliasState.sessions, sessionAliases, (captured) => captured)
       : [];
 
     const runs = hasRunToken
@@ -171,9 +152,7 @@ export default function AliasResolution() {
 
     const renames = derivedAliasState.subjects.map((original) => ({
       original,
-      target:
-        subjectRenames.find((entry) => entry.original === original)?.target ??
-        original,
+      target: subjectRenames.find((entry) => entry.original === original)?.target ?? original,
     }));
 
     if (JSON.stringify(modalityAliases) !== JSON.stringify(nextModalities)) {

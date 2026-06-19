@@ -16,8 +16,20 @@ let mockSubjectStatuses: Array<{
   locked: boolean;
 }> = [];
 let mockAvailableSubjects = [
-  { subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
-  { subjectSession: "sub-002_01", subject: "002", session: "01", hasStructural: true, hasASL: true },
+  {
+    subjectSession: "sub-001_01",
+    subject: "001",
+    session: "01",
+    hasStructural: true,
+    hasASL: true,
+  },
+  {
+    subjectSession: "sub-002_01",
+    subject: "002",
+    session: "01",
+    hasStructural: true,
+    hasASL: true,
+  },
 ];
 
 vi.mock("../../stores/processingStore", () => ({
@@ -64,8 +76,20 @@ describe("ExecutionDashboard component", () => {
     };
     mockSubjectStatuses = [];
     mockAvailableSubjects = [
-      { subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
-      { subjectSession: "sub-002_01", subject: "002", session: "01", hasStructural: true, hasASL: true },
+      {
+        subjectSession: "sub-001_01",
+        subject: "001",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+      },
+      {
+        subjectSession: "sub-002_01",
+        subject: "002",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+      },
     ];
   });
 
@@ -174,7 +198,13 @@ describe("ExecutionDashboard component", () => {
 
   it("shows no-subjects message when no eligible subjects for module", () => {
     mockAvailableSubjects = [
-      { subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: false, hasASL: true },
+      {
+        subjectSession: "sub-001_01",
+        subject: "001",
+        session: "01",
+        hasStructural: false,
+        hasASL: true,
+      },
     ];
     mockConfig = {
       subjects: ["sub-001_01"],
@@ -184,14 +214,36 @@ describe("ExecutionDashboard component", () => {
     expect(screen.getByTestId("no-subjects-msg")).toBeInTheDocument();
   });
 
-
-
   it("renders subjects in alphanumeric order", () => {
     mockAvailableSubjects = [
-      { subjectSession: "sub-C9ORF007Philips_11", subject: "C9ORF007Philips", session: "11", hasStructural: true, hasASL: true },
-      { subjectSession: "sub-C9ORF007Philips_01", subject: "C9ORF007Philips", session: "01", hasStructural: true, hasASL: true },
-      { subjectSession: "sub-C9ORF007Philips_02", subject: "C9ORF007Philips", session: "02", hasStructural: true, hasASL: true },
-      { subjectSession: "sub-C9ORF059Siemens_01", subject: "C9ORF059Siemens", session: "01", hasStructural: true, hasASL: true },
+      {
+        subjectSession: "sub-C9ORF007Philips_11",
+        subject: "C9ORF007Philips",
+        session: "11",
+        hasStructural: true,
+        hasASL: true,
+      },
+      {
+        subjectSession: "sub-C9ORF007Philips_01",
+        subject: "C9ORF007Philips",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+      },
+      {
+        subjectSession: "sub-C9ORF007Philips_02",
+        subject: "C9ORF007Philips",
+        session: "02",
+        hasStructural: true,
+        hasASL: true,
+      },
+      {
+        subjectSession: "sub-C9ORF059Siemens_01",
+        subject: "C9ORF059Siemens",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+      },
     ];
     mockConfig = {
       subjects: [
@@ -290,14 +342,16 @@ describe("ExecutionDashboard component", () => {
     renderDashboard();
 
     const aslSection = screen.getByTestId("asl-section");
-    
+
     // Parent row should be rendered
     const parentRows = within(aslSection).getAllByTestId("subject-row");
     expect(parentRows).toHaveLength(1);
 
     // Verify parent row displays "2 runs" badge and "1 of 2 runs complete" text
     expect(within(parentRows[0]).getByTestId("runs-count-badge").textContent).toBe("2 runs");
-    expect(within(parentRows[0]).getByTestId("runs-summary-text").textContent).toBe("1 of 2 runs complete");
+    expect(within(parentRows[0]).getByTestId("runs-summary-text").textContent).toBe(
+      "1 of 2 runs complete",
+    );
 
     // Click the parent row to toggle expand
     const user = userEvent.setup();

@@ -36,27 +36,19 @@ describe("ProcessConfigSchema", () => {
   });
 
   it("rejects empty modules array", () => {
-    expect(() =>
-      ProcessConfigSchema.parse({ ...validConfig, modules: [] }),
-    ).toThrow();
+    expect(() => ProcessConfigSchema.parse({ ...validConfig, modules: [] })).toThrow();
   });
 
   it("rejects invalid module name", () => {
-    expect(() =>
-      ProcessConfigSchema.parse({ ...validConfig, modules: ["invalid"] }),
-    ).toThrow();
+    expect(() => ProcessConfigSchema.parse({ ...validConfig, modules: ["invalid"] })).toThrow();
   });
 
   it("rejects workers < 1", () => {
-    expect(() =>
-      ProcessConfigSchema.parse({ ...validConfig, workers: 0 }),
-    ).toThrow();
+    expect(() => ProcessConfigSchema.parse({ ...validConfig, workers: 0 })).toThrow();
   });
 
   it("rejects non-integer workers", () => {
-    expect(() =>
-      ProcessConfigSchema.parse({ ...validConfig, workers: 1.5 }),
-    ).toThrow();
+    expect(() => ProcessConfigSchema.parse({ ...validConfig, workers: 1.5 })).toThrow();
   });
 
   it("accepts empty subjects array", () => {
@@ -106,15 +98,11 @@ describe("SubjectModuleStatusSchema", () => {
   });
 
   it("rejects invalid status", () => {
-    expect(() =>
-      SubjectModuleStatusSchema.parse({ ...validStatus, status: "invalid" }),
-    ).toThrow();
+    expect(() => SubjectModuleStatusSchema.parse({ ...validStatus, status: "invalid" })).toThrow();
   });
 
   it("rejects invalid module", () => {
-    expect(() =>
-      SubjectModuleStatusSchema.parse({ ...validStatus, module: "invalid" }),
-    ).toThrow();
+    expect(() => SubjectModuleStatusSchema.parse({ ...validStatus, module: "invalid" })).toThrow();
   });
 
   it("accepts empty subjectSession for population module", () => {
@@ -277,9 +265,7 @@ describe("LockFileEventSchema", () => {
   });
 
   it("rejects missing required fields", () => {
-    expect(() =>
-      LockFileEventSchema.parse({ type: "LockCreated" }),
-    ).toThrow();
+    expect(() => LockFileEventSchema.parse({ type: "LockCreated" })).toThrow();
   });
 });
 
@@ -304,9 +290,7 @@ describe("modulesToBProcess", () => {
   });
 
   it("maps all three modules", () => {
-    expect(modulesToBProcess(["structural", "asl", "population"])).toEqual([
-      true, true, true,
-    ]);
+    expect(modulesToBProcess(["structural", "asl", "population"])).toEqual([true, true, true]);
   });
 
   it("returns all false for empty array", () => {

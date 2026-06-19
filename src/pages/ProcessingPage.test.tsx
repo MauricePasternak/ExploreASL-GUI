@@ -50,8 +50,20 @@ const DEFAULT_CONFIG = {
 };
 
 const DEFAULT_SUBJECTS = [
-  { subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
-  { subjectSession: "sub-002_01", subject: "002", session: "01", hasStructural: false, hasASL: true },
+  {
+    subjectSession: "sub-001_01",
+    subject: "001",
+    session: "01",
+    hasStructural: true,
+    hasASL: true,
+  },
+  {
+    subjectSession: "sub-002_01",
+    subject: "002",
+    session: "01",
+    hasStructural: false,
+    hasASL: true,
+  },
 ];
 
 function renderPage() {
@@ -109,8 +121,12 @@ describe("ProcessingPage", () => {
     const population = screen.getByTestId("population-section");
     const preflight = screen.getByTestId("preflight-check");
     // Verify DOM order
-    expect(pipeline.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(preflight.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(
+      pipeline.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      preflight.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
   });
 
   it("shows validation errors when config has issues", () => {
@@ -141,7 +157,13 @@ describe("ProcessingPage", () => {
   it("does not show orphaned subjects warning for population module status", () => {
     useProcessingStore.setState({
       subjectStatuses: [
-        { subjectSession: "", module: "population", status: "incomplete", completedSteps: [], locked: true },
+        {
+          subjectSession: "",
+          module: "population",
+          status: "incomplete",
+          completedSteps: [],
+          locked: true,
+        },
       ],
     });
     renderPage();
@@ -151,12 +173,20 @@ describe("ProcessingPage", () => {
   it("shows orphaned subjects warning for non-population module with unknown subject", () => {
     useProcessingStore.setState({
       subjectStatuses: [
-        { subjectSession: "sub-999_01", module: "structural", status: "incomplete", completedSteps: [], locked: false },
+        {
+          subjectSession: "sub-999_01",
+          module: "structural",
+          status: "incomplete",
+          completedSteps: [],
+          locked: false,
+        },
       ],
     });
     renderPage();
     expect(screen.getByTestId("orphaned-subjects-warning")).toBeInTheDocument();
-    expect(screen.getByText(/orphaned lock file entr/i)).toHaveTextContent("1 orphaned lock file entry");
+    expect(screen.getByText(/orphaned lock file entr/i)).toHaveTextContent(
+      "1 orphaned lock file entry",
+    );
   });
 
   it("renders ReportViewerModal in the layout", () => {

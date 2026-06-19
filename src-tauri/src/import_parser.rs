@@ -457,17 +457,16 @@ impl ImportOutputParser {
 
             // ── New: ERROR: Import module terminated ─────────────────────────
             if let Some(captures) = module_terminated_re().captures(line) {
-                let captured_name = captures
-                    .get(1)
-                    .map(|m| m.as_str())
-                    .unwrap_or_default();
+                let captured_name = captures.get(1).map(|m| m.as_str()).unwrap_or_default();
 
                 // Match against subject list using the same substring strategy as
                 // the NII2BIDS/DCM2NII failure handlers.
                 let matched_subjects: Vec<String> = self
                     .subject_list
                     .iter()
-                    .filter(|s| captured_name.contains(s.as_str()) || s.as_str().contains(captured_name))
+                    .filter(|s| {
+                        captured_name.contains(s.as_str()) || s.as_str().contains(captured_name)
+                    })
                     .cloned()
                     .collect();
 
@@ -518,10 +517,7 @@ fn build_module_terminated_message(lines: &[String]) -> String {
         return "Import module terminated unexpectedly".to_string();
     }
 
-    let mut result: Vec<String> = lines
-        .iter()
-        .map(|line| line.trim().to_string())
-        .collect();
+    let mut result: Vec<String> = lines.iter().map(|line| line.trim().to_string()).collect();
 
     // Strip the leading ' from the first content line.
     if let Some(first) = result.first_mut() {
@@ -730,8 +726,12 @@ mod tests {
             &["BADDIE".to_string()],
         );
 
-        assert!(events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed { .. })));
-        assert!(!events.iter().any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, ImportStructuredEvent::ImportFailed { .. })));
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })));
     }
 
     #[test]
@@ -760,7 +760,9 @@ mod tests {
             ref step,
             ref message,
         } if subject == "C9ORF059Siemens" && step == "NII2BIDS" && message.contains("Unknown value in BIDS fields M0Type"))));
-        assert!(!events.iter().any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })));
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })));
     }
 
     #[test]
@@ -899,7 +901,9 @@ mod tests {
 
         // Subject must be marked failed with step = NII2BIDS (current step when ERROR fires)
         assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
                 ref subject,
                 ref step,
                 ref message,
@@ -911,7 +915,9 @@ mod tests {
 
         // Must NOT also emit SubjectComplete for the failed subject
         assert!(
-            !events.iter().any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
+            !events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
                 ref subject, ..
             } if subject == "C9ORF007Philips")),
             "SubjectComplete must not fire for a module-terminated subject"
@@ -919,7 +925,9 @@ mod tests {
 
         // Overall completion marker must still fire
         assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportComplete)),
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportComplete)),
             "ImportComplete must still be emitted"
         );
     }
@@ -960,24 +968,30 @@ mod tests {
         );
 
         assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
                 ref subject, ..
             } if subject == "C9ORF007Philips")),
             "C9ORF007Philips must be marked failed"
         );
         assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
                 ref subject, ..
             } if subject == "C9ORF059Siemens")),
             "C9ORF059Siemens must be marked failed"
         );
         assert!(
-            !events.iter().any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })),
+            !events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })),
             "No SubjectComplete must be emitted"
         );
-        assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportComplete))
-        );
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, ImportStructuredEvent::ImportComplete)));
     }
 
     /// First subject fails via module terminated, second succeeds normally.
@@ -1008,19 +1022,23 @@ mod tests {
             &["C9ORF007Philips".to_string(), "C9ORF059Siemens".to_string()],
         );
 
-        assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
                 ref subject, ..
-            } if subject == "C9ORF007Philips"))
-        );
+            } if subject == "C9ORF007Philips")));
         assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
                 ref subject, ..
             } if subject == "C9ORF059Siemens")),
             "C9ORF059Siemens must still complete successfully"
         );
         assert!(
-            !events.iter().any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
+            !events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
                 ref subject, ..
             } if subject == "C9ORF007Philips")),
             "C9ORF007Philips must not produce SubjectComplete"
@@ -1050,7 +1068,9 @@ mod tests {
         );
 
         assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
                 ref subject,
                 ref step,
                 ..
@@ -1077,7 +1097,9 @@ mod tests {
         );
 
         assert!(
-            events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
                 ref subject,
                 ref message,
                 ..

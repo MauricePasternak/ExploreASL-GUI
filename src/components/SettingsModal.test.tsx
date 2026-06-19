@@ -23,7 +23,12 @@ describe("SettingsModal", () => {
     vi.mocked(invoke).mockImplementation(async (cmd: string, _args?: unknown) => {
       if (cmd === "which_matlab") {
         return [
-          { id: "matlab-1", label: "MATLAB (/usr/local/bin/matlab)", path: "/usr/local/bin/matlab", version: "R2022b" },
+          {
+            id: "matlab-1",
+            label: "MATLAB (/usr/local/bin/matlab)",
+            path: "/usr/local/bin/matlab",
+            version: "R2022b",
+          },
         ];
       }
       return null;
@@ -174,9 +179,7 @@ describe("SettingsModal", () => {
 
     vi.mocked(invoke).mockImplementation(async (cmd: string, args?: any) => {
       if (cmd === "which_matlab" && args?.customPaths?.includes("/usr/bin/matlab")) {
-        return [
-          { id: "matlab-0", label: "MATLAB", path: "/usr/bin/matlab", version: "R2023a" },
-        ];
+        return [{ id: "matlab-0", label: "MATLAB", path: "/usr/bin/matlab", version: "R2023a" }];
       }
       return [];
     });
@@ -272,4 +275,3 @@ describe("SettingsModal", () => {
     });
   });
 });
-

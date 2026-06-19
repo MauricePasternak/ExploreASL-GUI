@@ -5,8 +5,6 @@ export interface ImportSubjectStatus {
   status: "completed" | "failed";
 }
 
-export async function readImportStatus(
-  projectRoot: string,
-): Promise<ImportSubjectStatus[]> {
+export async function readImportStatus(projectRoot: string): Promise<ImportSubjectStatus[]> {
   return invoke<ImportSubjectStatus[]>("read_import_status", { projectRoot });
 }

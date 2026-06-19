@@ -233,17 +233,16 @@ describe("BidsAslMetadataSchema", () => {
 
   it("rejects invalid BolusCutOffTechnique", () => {
     expect(() =>
-      BidsAslMetadataSchema.parse({ ...validBase, BolusCutOffTechnique: "InvalidTechnique" as any }),
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        BolusCutOffTechnique: "InvalidTechnique" as any,
+      }),
     ).toThrow();
   });
 
   it("rejects invalid M0_GMScaleFactor <= 0", () => {
-    expect(() =>
-      BidsAslMetadataSchema.parse({ ...validBase, M0_GMScaleFactor: 0 }),
-    ).toThrow();
-    expect(() =>
-      BidsAslMetadataSchema.parse({ ...validBase, M0_GMScaleFactor: -0.5 }),
-    ).toThrow();
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, M0_GMScaleFactor: 0 })).toThrow();
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, M0_GMScaleFactor: -0.5 })).toThrow();
   });
 
   it("accepts string representation of number or array of numbers and parses it", () => {
@@ -256,7 +255,9 @@ describe("BidsAslMetadataSchema", () => {
       PostLabelingDelay: 3.14,
     });
     // Comma-separated floats & ints
-    expect(BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "1.8, 2, 2.2" })).toMatchObject({
+    expect(
+      BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: "1.8, 2, 2.2" }),
+    ).toMatchObject({
       PostLabelingDelay: [1.8, 2, 2.2],
     });
   });
@@ -274,7 +275,7 @@ describe("BidsAslMetadataSchema", () => {
         ...validBase,
         PostLabelingDelay: 1.8,
         BolusCutOffDelayTime: 0.8,
-      })
+      }),
     ).toMatchObject({
       PostLabelingDelay: 1.8,
       BolusCutOffDelayTime: 0.8,
@@ -286,7 +287,7 @@ describe("BidsAslMetadataSchema", () => {
         ...validBase,
         PostLabelingDelay: [1.8, 2.0],
         BolusCutOffDelayTime: [0.8, 0.9],
-      })
+      }),
     ).toMatchObject({
       PostLabelingDelay: [1.8, 2.0],
       BolusCutOffDelayTime: [0.8, 0.9],
@@ -298,7 +299,7 @@ describe("BidsAslMetadataSchema", () => {
         ...validBase,
         PostLabelingDelay: [1.8, 2.0],
         BolusCutOffDelayTime: 0.8,
-      })
+      }),
     ).toThrow();
 
     // Invalid: differing array lengths
@@ -307,7 +308,7 @@ describe("BidsAslMetadataSchema", () => {
         ...validBase,
         PostLabelingDelay: [1.8, 2.0],
         BolusCutOffDelayTime: [0.8, 0.9, 1.0],
-      })
+      }),
     ).toThrow();
   });
 
@@ -318,7 +319,7 @@ describe("BidsAslMetadataSchema", () => {
         ...validBase,
         PostLabelingDelay: [1.8, 0, 2.0],
         BolusCutOffDelayTime: [0.8, 0, 0.9],
-      })
+      }),
     ).toMatchObject({
       PostLabelingDelay: [1.8, 0, 2.0],
       BolusCutOffDelayTime: [0.8, 0, 0.9],
@@ -330,28 +331,33 @@ describe("BidsAslMetadataSchema", () => {
         ...validBase,
         PostLabelingDelay: [1.8, 0, 2.0],
         BolusCutOffDelayTime: [0.8, 0.9, 0],
-      })
+      }),
     ).toThrow();
   });
 
   it("accepts ASLContext with comma-separated control,label,m0scan,deltam tokens", () => {
     expect(
-      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "m0scan,deltam" })
+      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "m0scan,deltam" }),
     ).toMatchObject({ ASLContext: "m0scan,deltam" });
     expect(
-      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "control,label", M0Type: "Separate" })
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        ASLContext: "control,label",
+        M0Type: "Separate",
+      }),
     ).toMatchObject({ ASLContext: "control,label", M0Type: "Separate" });
     expect(
-      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "m0scan, label, control, label, control" })
+      BidsAslMetadataSchema.parse({
+        ...validBase,
+        ASLContext: "m0scan, label, control, label, control",
+      }),
     ).toMatchObject({ ASLContext: "m0scan, label, control, label, control" });
   });
 
   it("rejects ASLContext with invalid tokens", () => {
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "cbf" })).toThrow();
     expect(() =>
-      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "cbf" })
-    ).toThrow();
-    expect(() =>
-      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "control,label,invalid" })
+      BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "control,label,invalid" }),
     ).toThrow();
   });
 
@@ -361,7 +367,7 @@ describe("BidsAslMetadataSchema", () => {
         ...validBase,
         ASLContext: "control,label",
         M0Type: "Integrated",
-      })
+      }),
     ).toThrow();
   });
 
@@ -371,19 +377,15 @@ describe("BidsAslMetadataSchema", () => {
         ...validBase,
         ASLContext: "control,label",
         M0Type: "Separate",
-      })
+      }),
     ).toMatchObject({ M0Type: "Separate" });
   });
 
   it("rejects PostLabelingDelay, BolusCutOffDelayTime, and LabelingDuration values outside [0.01, 10] range (excluding 0)", () => {
     // PostLabelingDelay too high (e.g. milliseconds)
-    expect(() =>
-      BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: 1800 })
-    ).toThrow();
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: 1800 })).toThrow();
     // PostLabelingDelay too low (excluding 0)
-    expect(() =>
-      BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: 0.005 })
-    ).toThrow();
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, PostLabelingDelay: 0.005 })).toThrow();
     // BolusCutOffDelayTime too high
     expect(() =>
       BidsAslMetadataSchema.parse({
@@ -392,18 +394,16 @@ describe("BidsAslMetadataSchema", () => {
         BolusCutOffFlag: true,
         BolusCutOffDelayTime: 1200,
         BolusCutOffTechnique: "Q2TIPS",
-      })
+      }),
     ).toThrow();
     // LabelingDuration too high
-    expect(() =>
-      BidsAslMetadataSchema.parse({ ...validBase, LabelingDuration: 1500 })
-    ).toThrow();
+    expect(() => BidsAslMetadataSchema.parse({ ...validBase, LabelingDuration: 1500 })).toThrow();
     // Accepts 0 as a valid special value
     expect(
       BidsAslMetadataSchema.parse({
         ...validBase,
         PostLabelingDelay: [1.8, 0, 2.0],
-      })
+      }),
     ).toMatchObject({ PostLabelingDelay: [1.8, 0, 2.0] });
   });
 });
@@ -448,7 +448,9 @@ describe("validateBidsMetadataGroup", () => {
       ASLContext: "control,label",
       M0Type: "Integrated",
     });
-    expect(errors).toContain("M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.");
+    expect(errors).toContain(
+      "M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.",
+    );
   });
 
   it("auto-accepts M0Type 'integrated' when m0scan is in ASLContext", () => {
@@ -457,7 +459,9 @@ describe("validateBidsMetadataGroup", () => {
       M0Type: "Integrated",
       ASLContext: "m0scan,deltam",
     });
-    expect(errors).not.toContain("M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.");
+    expect(errors).not.toContain(
+      "M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.",
+    );
   });
 
   it("does not require M0Type when m0scan is in ASLContext", () => {
@@ -484,8 +488,12 @@ describe("validateBidsMetadataGroup", () => {
       BolusCutOffTechnique: undefined,
     };
     const errors = validateBidsMetadataGroup(data);
-    expect(errors).toContain("Bolus Cut Off Delay Time is required when Bolus Cut Off Flag is enabled.");
-    expect(errors).toContain("Bolus Cut Off Technique is required when Bolus Cut Off Flag is enabled.");
+    expect(errors).toContain(
+      "Bolus Cut Off Delay Time is required when Bolus Cut Off Flag is enabled.",
+    );
+    expect(errors).toContain(
+      "Bolus Cut Off Technique is required when Bolus Cut Off Flag is enabled.",
+    );
   });
 
   it("flags missing BackgroundSuppressionNumberPulses when background suppression is enabled", () => {
@@ -496,8 +504,12 @@ describe("validateBidsMetadataGroup", () => {
       BackgroundSuppressionPulseTime: undefined,
     };
     const errors = validateBidsMetadataGroup(data);
-    expect(errors).toContain("Background Suppression Number Pulses is required when Background Suppression is enabled.");
-    expect(errors).not.toContain("Background Suppression Pulse Time is required when Background Suppression is enabled.");
+    expect(errors).toContain(
+      "Background Suppression Number Pulses is required when Background Suppression is enabled.",
+    );
+    expect(errors).not.toContain(
+      "Background Suppression Pulse Time is required when Background Suppression is enabled.",
+    );
   });
 
   it("flags missing SliceTiming when MR Acquisition Type is 2D", () => {
@@ -517,7 +529,9 @@ describe("validateBidsMetadataGroup", () => {
       BolusCutOffDelayTime: [0.8],
     };
     const errors = validateBidsMetadataGroup(data);
-    expect(errors).toContain("Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements.");
+    expect(errors).toContain(
+      "Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements.",
+    );
   });
 
   it("flags mismatch in zero positions for PostLabelingDelay and BolusCutOffDelayTime", () => {
@@ -527,7 +541,9 @@ describe("validateBidsMetadataGroup", () => {
       BolusCutOffDelayTime: [0.8, 0.9, 0],
     };
     const errors = validateBidsMetadataGroup(data);
-    expect(errors).toContain("Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions.");
+    expect(errors).toContain(
+      "Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions.",
+    );
   });
 
   it("flags values outside [0.01, 10] range (excluding 0) for ASL parameters", () => {
@@ -569,15 +585,27 @@ describe("validateBidsMetadataGroup", () => {
 
   it("accepts supported PulseSequenceType + MRAcquisitionType combinations", () => {
     expect(
-      validateBidsMetadataGroup({ ...validData, PulseSequenceType: "EPI", MRAcquisitionType: "2D" }),
+      validateBidsMetadataGroup({
+        ...validData,
+        PulseSequenceType: "EPI",
+        MRAcquisitionType: "2D",
+      }),
     ).not.toContain(expect.stringContaining("not supported by ExploreASL"));
 
     expect(
-      validateBidsMetadataGroup({ ...validData, PulseSequenceType: "GRASE", MRAcquisitionType: "3D" }),
+      validateBidsMetadataGroup({
+        ...validData,
+        PulseSequenceType: "GRASE",
+        MRAcquisitionType: "3D",
+      }),
     ).not.toContain(expect.stringContaining("not supported by ExploreASL"));
 
     expect(
-      validateBidsMetadataGroup({ ...validData, PulseSequenceType: "spiral", MRAcquisitionType: "3D" }),
+      validateBidsMetadataGroup({
+        ...validData,
+        PulseSequenceType: "spiral",
+        MRAcquisitionType: "3D",
+      }),
     ).not.toContain(expect.stringContaining("not supported by ExploreASL"));
   });
 });

@@ -1,13 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Badge,
-  Card,
-  Checkbox,
-  Group,
-  Stack,
-  Text,
-  Tooltip,
-} from "@mantine/core";
+import { Badge, Card, Checkbox, Group, Stack, Text, Tooltip } from "@mantine/core";
 import {
   IconBook,
   IconCheck,
@@ -32,10 +24,14 @@ function countEligibleSubjects(
   const eligible = new Set<string>();
   for (const subj of availableSubjects) {
     const hasStructural = subjectStatuses.some(
-      (s) => s.subjectSession === subj.subjectSession && s.module === "structural" && s.status === "complete",
+      (s) =>
+        s.subjectSession === subj.subjectSession &&
+        s.module === "structural" &&
+        s.status === "complete",
     );
     const hasAsl = subjectStatuses.some(
-      (s) => s.subjectSession === subj.subjectSession && s.module === "asl" && s.status === "complete",
+      (s) =>
+        s.subjectSession === subj.subjectSession && s.module === "asl" && s.status === "complete",
     );
     if (hasStructural && hasAsl) {
       eligible.add(subj.subjectSession);
@@ -57,7 +53,11 @@ function PopulationStatusIcon({
     case "complete":
       return (
         <Tooltip label="Complete">
-          <IconCheck size={18} color="var(--mantine-color-teal-6)" data-testid="population-status-complete" />
+          <IconCheck
+            size={18}
+            color="var(--mantine-color-teal-6)"
+            data-testid="population-status-complete"
+          />
         </Tooltip>
       );
     case "incomplete":
@@ -84,7 +84,11 @@ function PopulationStatusIcon({
     case "pending":
       return (
         <Tooltip label="Pending">
-          <IconMinus size={18} color="var(--mantine-color-gray-5)" data-testid="population-status-pending" />
+          <IconMinus
+            size={18}
+            color="var(--mantine-color-gray-5)"
+            data-testid="population-status-pending"
+          />
         </Tooltip>
       );
   }
@@ -125,7 +129,9 @@ export default function PopulationSection() {
   const tooltipLabel = useMemo(() => {
     const parts: string[] = [];
     if (subjectModuleSelected) {
-      parts.push("Population must run independently. Deselect Structural and ASL modules to enable.");
+      parts.push(
+        "Population must run independently. Deselect Structural and ASL modules to enable.",
+      );
     }
     if (!hasEligible) {
       parts.push("At least one subject/session must have both Structural and ASL complete.");
@@ -217,7 +223,8 @@ export default function PopulationSection() {
         </Text>
 
         <Text size="xs" c="dimmed">
-          Population analysis requires at least one subject/session with both Structural and ASL modules complete. Population runs independently and cannot be combined with other modules.
+          Population analysis requires at least one subject/session with both Structural and ASL
+          modules complete. Population runs independently and cannot be combined with other modules.
         </Text>
 
         <Tooltip label={tooltipLabel} disabled={!tooltipLabel} withinPortal>
@@ -233,7 +240,9 @@ export default function PopulationSection() {
         </Tooltip>
 
         <Group gap="xs" align="center">
-          <Text size="xs" c="dimmed">Atlases:</Text>
+          <Text size="xs" c="dimmed">
+            Atlases:
+          </Text>
           {atlases && atlases.length > 0 ? (
             atlases.map((atlas) => (
               <Badge
@@ -258,7 +267,9 @@ export default function PopulationSection() {
 
         <Group>
           {!hasLog ? (
-            <Text size="xs" c="dimmed" data-testid="population-no-logs">No Logs</Text>
+            <Text size="xs" c="dimmed" data-testid="population-no-logs">
+              No Logs
+            </Text>
           ) : (
             <Badge
               size="sm"

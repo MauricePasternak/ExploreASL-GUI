@@ -117,7 +117,9 @@ describe("dataParStore setAdvancedVisibility", () => {
   });
 
   it("updates individual section advanced visibilities", () => {
-    useDataParStore.getState().setAdvancedVisibility({ showAdvancedM0Params: true, showAdvancedQuantification: true });
+    useDataParStore
+      .getState()
+      .setAdvancedVisibility({ showAdvancedM0Params: true, showAdvancedQuantification: true });
     expect(useDataParStore.getState().advancedVisibility).toMatchObject({
       showAdvancedM0Params: true,
       showAdvancedQuantification: true,

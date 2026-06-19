@@ -19,6 +19,7 @@ import {
   IconAdjustments,
   IconChevronLeft,
   IconChevronRight,
+  IconHelp,
   IconHome,
   IconPlayerPlay,
   IconSettings,
@@ -127,7 +128,15 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="sm">
-            {project ? <Burger opened={opened} onClick={toggle} size="sm" hiddenFrom="sm" data-testid="layout-mobile-nav-toggle" /> : null}
+            {project ? (
+              <Burger
+                opened={opened}
+                onClick={toggle}
+                size="sm"
+                hiddenFrom="sm"
+                data-testid="layout-mobile-nav-toggle"
+              />
+            ) : null}
             <Image src={appLogo} alt="ExploreASL GUI" h={32} w={32} style={{ flexShrink: 0 }} />
             {project ? <Text c="dimmed">{project.projectMeta.name}</Text> : null}
           </Group>
@@ -138,10 +147,21 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                 {project.projectMeta.currentPhase}
               </Badge>
             ) : null}
+            <Tooltip label="Help & Overview" position="bottom" withArrow>
+              <ActionIcon
+                aria-label="Open overview"
+                variant="subtle"
+                color="teal"
+                onClick={() => navigate("/overview")}
+                data-testid="layout-open-overview-btn"
+              >
+                <IconHelp size={18} />
+              </ActionIcon>
+            </Tooltip>
             <ActionIcon
               aria-label="Open settings"
               variant="subtle"
-              color="red"
+              color="blue"
               onClick={onOpenSettings}
               data-testid="layout-open-settings-btn"
             >
@@ -154,7 +174,11 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       {project ? (
         <AppShell.Navbar p="xs" data-testid="layout-navbar">
           <Stack gap="xs" h="100%" align={navbarCollapsed ? "center" : "stretch"}>
-            <Tooltip label={navbarCollapsed ? "Expand navigation" : "Collapse navigation"} position="right" withArrow>
+            <Tooltip
+              label={navbarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              position="right"
+              withArrow
+            >
               <ActionIcon
                 variant="subtle"
                 color="gray"
@@ -187,7 +211,9 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                   <Tooltip key={phase} label={label} position="right" withArrow>
                     {iconElement}
                   </Tooltip>
-                ) : iconElement;
+                ) : (
+                  iconElement
+                );
               })}
             </div>
 
@@ -236,13 +262,27 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           <Stack gap="md">
             <Text>Save your changes before leaving this project?</Text>
             <Group justify="flex-end">
-              <Button variant="default" onClick={() => setLeaveModalOpen(false)} data-testid="layout-leave-modal-cancel-btn">
+              <Button
+                variant="default"
+                onClick={() => setLeaveModalOpen(false)}
+                data-testid="layout-leave-modal-cancel-btn"
+              >
                 Cancel
               </Button>
-              <Button variant="light" color="red" onClick={() => void leaveProject({ saveChanges: false })} data-testid="layout-leave-modal-leave-without-saving-btn">
+              <Button
+                variant="light"
+                color="red"
+                onClick={() => void leaveProject({ saveChanges: false })}
+                data-testid="layout-leave-modal-leave-without-saving-btn"
+              >
                 Leave without saving
               </Button>
-              <Button onClick={() => void leaveProject({ saveChanges: true })} data-testid="layout-leave-modal-save-and-leave-btn">Save and leave</Button>
+              <Button
+                onClick={() => void leaveProject({ saveChanges: true })}
+                data-testid="layout-leave-modal-save-and-leave-btn"
+              >
+                Save and leave
+              </Button>
             </Group>
           </Stack>
         </Modal>

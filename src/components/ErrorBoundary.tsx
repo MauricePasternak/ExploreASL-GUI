@@ -66,7 +66,12 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   public render() {
     if (this.state.hasError) {
       return (
-        <Stack gap="md" p="xl" style={{ maxWidth: 800, margin: "0 auto" }} data-testid="error-boundary">
+        <Stack
+          gap="md"
+          p="xl"
+          style={{ maxWidth: 800, margin: "0 auto" }}
+          data-testid="error-boundary"
+        >
           <Alert color="red" title="Something went wrong">
             An unexpected error occurred while rendering the application.
           </Alert>
@@ -87,7 +92,12 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
           )}
 
           <Group>
-            <Button onClick={this.handleCopyReport} variant="light" color="red" data-testid="error-copy-report-btn">
+            <Button
+              onClick={this.handleCopyReport}
+              variant="light"
+              color="red"
+              data-testid="error-copy-report-btn"
+            >
               {this.state.copied ? "Copied!" : "Copy error report"}
             </Button>
             <Button onClick={this.handleReload} variant="default" data-testid="error-reload-btn">

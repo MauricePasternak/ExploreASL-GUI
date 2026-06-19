@@ -12,13 +12,7 @@ afterEach(() => cleanup());
 
 describe("CommaNumberInput", () => {
   it("renders with correct label and initial value", () => {
-    renderWithMantine(
-      <CommaNumberInput
-        label="Test Label"
-        value={1.5}
-        onChange={() => {}}
-      />,
-    );
+    renderWithMantine(<CommaNumberInput label="Test Label" value={1.5} onChange={() => {}} />);
 
     expect(screen.getByText("Test Label")).toBeDefined();
     expect(screen.getByDisplayValue("1.5")).toBeDefined();
@@ -26,13 +20,7 @@ describe("CommaNumberInput", () => {
 
   it("calls onChange with parsed number on numeric input change", () => {
     const handleChange = vi.fn();
-    renderWithMantine(
-      <CommaNumberInput
-        label="Test Label"
-        value={1.5}
-        onChange={handleChange}
-      />,
-    );
+    renderWithMantine(<CommaNumberInput label="Test Label" value={1.5} onChange={handleChange} />);
 
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "2.5" } });
@@ -41,13 +29,7 @@ describe("CommaNumberInput", () => {
 
   it("calls onChange with array on comma separated numbers", () => {
     const handleChange = vi.fn();
-    renderWithMantine(
-      <CommaNumberInput
-        label="Test Label"
-        value={1.5}
-        onChange={handleChange}
-      />,
-    );
+    renderWithMantine(<CommaNumberInput label="Test Label" value={1.5} onChange={handleChange} />);
 
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "1.5, 2.0, 3" } });
@@ -56,13 +38,7 @@ describe("CommaNumberInput", () => {
 
   it("calls onChange with undefined on empty input", () => {
     const handleChange = vi.fn();
-    renderWithMantine(
-      <CommaNumberInput
-        label="Test Label"
-        value={1.5}
-        onChange={handleChange}
-      />,
-    );
+    renderWithMantine(<CommaNumberInput label="Test Label" value={1.5} onChange={handleChange} />);
 
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "" } });
@@ -72,13 +48,7 @@ describe("CommaNumberInput", () => {
 
 describe("CommaArrayInput", () => {
   it("renders with correct array value formatted as comma-separated list", () => {
-    renderWithMantine(
-      <CommaArrayInput
-        label="Test Label"
-        value={[1, 2, 3]}
-        onChange={() => {}}
-      />,
-    );
+    renderWithMantine(<CommaArrayInput label="Test Label" value={[1, 2, 3]} onChange={() => {}} />);
 
     expect(screen.getByDisplayValue("1, 2, 3")).toBeDefined();
   });
@@ -86,11 +56,7 @@ describe("CommaArrayInput", () => {
   it("calls onChange with parsed array on input change", () => {
     const handleChange = vi.fn();
     renderWithMantine(
-      <CommaArrayInput
-        label="Test Label"
-        value={[1, 2]}
-        onChange={handleChange}
-      />,
+      <CommaArrayInput label="Test Label" value={[1, 2]} onChange={handleChange} />,
     );
 
     const input = screen.getByRole("textbox");
