@@ -48,6 +48,7 @@ pub struct SubjectInfo {
   pub has_structural: bool,
   #[serde(rename = "hasASL")]
   pub has_asl: bool,
+  pub asl_runs: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -177,8 +178,30 @@ pub fn list_subjects(project_root: String) -> Result<Vec<SubjectInfo>, String> {
       let session = ses_name.strip_prefix("ses-").unwrap().to_string();
       let session_path = ses_entry.path();
 
+      let perf_path = session_path.join("perf");
+      let has_asl = perf_path.exists();
+      let mut asl_runs = Vec::new();
+      if has_asl {
+        let mut count = 0;
+        if let Ok(entries) = std::fs::read_dir(&perf_path) {
+          for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+              if file_type.is_file() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.ends_with("_asl.nii") || name.ends_with("_asl.nii.gz") {
+                  count += 1;
+                }
+              }
+            }
+          }
+        }
+        let run_count = if count > 0 { count } else { 1 };
+        for r in 1..=run_count {
+          asl_runs.push(r.to_string());
+        }
+      }
+
       let has_structural = session_path.join("anat").exists();
-      let has_asl = session_path.join("perf").exists();
       let subject_session = format!("sub-{}_{}", subject, session);
 
       subjects.push(SubjectInfo {
@@ -187,6 +210,7 @@ pub fn list_subjects(project_root: String) -> Result<Vec<SubjectInfo>, String> {
         session,
         has_structural,
         has_asl,
+        asl_runs,
       });
     }
   }

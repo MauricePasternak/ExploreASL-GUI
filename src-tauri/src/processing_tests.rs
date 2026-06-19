@@ -264,11 +264,13 @@ mod tests {
             session: "01".to_string(),
             has_structural: true,
             has_asl: true,
+            asl_runs: vec!["1".to_string(), "2".to_string()],
         };
         let json = serde_json::to_string(&info).unwrap();
         assert!(json.contains(r#""hasASL":true"#));
         assert!(!json.contains(r#""hasAsl""#));
         assert!(json.contains(r#""subjectSession":"sub-001_01""#));
+        assert!(json.contains(r#""aslRuns":["1","2"]"#));
     }
 
     // -------------------------------------------------------------------------

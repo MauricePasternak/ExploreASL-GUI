@@ -118,9 +118,15 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
   const handleModuleToggle = useCallback(
     (module: (typeof PROCESSING_MODULES)[number]) => {
       if (!config) return;
-      const modules = config.modules.includes(module)
+      let modules = config.modules.includes(module)
         ? config.modules.filter((m) => m !== module)
         : [...config.modules, module];
+
+      // If checking structural or asl, uncheck population
+      if (modules.includes(module) && (module === "structural" || module === "asl")) {
+        modules = modules.filter((m) => m !== "population");
+      }
+
       setConfig({ ...config, modules });
     },
     [config, setConfig],
@@ -173,15 +179,18 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
           Modules
         </Text>
         <Stack gap="xs">
-          {PROCESSING_MODULES.filter((m) => m !== "population").map((module) => (
-            <Checkbox
-              key={module}
-              label={module.charAt(0).toUpperCase() + module.slice(1)}
-              checked={config.modules.includes(module)}
-              onChange={() => handleModuleToggle(module)}
-              data-testid={`module-checkbox-${module}`}
-            />
-          ))}
+          {PROCESSING_MODULES.filter((m) => m !== "population").map((module) => {
+            const label = module === "asl" ? "ASL" : module.charAt(0).toUpperCase() + module.slice(1);
+            return (
+              <Checkbox
+                key={module}
+                label={label}
+                checked={config.modules.includes(module)}
+                onChange={() => handleModuleToggle(module)}
+                data-testid={`module-checkbox-${module}`}
+              />
+            );
+          })}
         </Stack>
       </div>
 

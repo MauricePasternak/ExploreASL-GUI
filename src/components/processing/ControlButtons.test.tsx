@@ -34,8 +34,8 @@ describe("ControlButtons kill confirmation", () => {
     const user = userEvent.setup();
     renderButtons();
 
-    const killBtns = screen.getAllByTestId("kill-btn");
-    await user.click(killBtns[0]);
+    const stopBtns = screen.getAllByTestId("stop-btn");
+    await user.click(stopBtns[0]);
 
     expect(mockKillProcessing).not.toHaveBeenCalled();
   });
@@ -44,10 +44,10 @@ describe("ControlButtons kill confirmation", () => {
     const user = userEvent.setup();
     renderButtons();
 
-    const killBtns = screen.getAllByTestId("kill-btn");
-    await user.click(killBtns[0]);
+    const stopBtns = screen.getAllByTestId("stop-btn");
+    await user.click(stopBtns[0]);
 
-    expect(screen.getByText("Kill Processing")).toBeInTheDocument();
+    expect(screen.getByText("Stop Processing")).toBeInTheDocument();
     expect(screen.getByText(/stop all running processing jobs/i)).toBeInTheDocument();
   });
 
@@ -55,9 +55,9 @@ describe("ControlButtons kill confirmation", () => {
     const user = userEvent.setup();
     renderButtons();
 
-    const killBtns = screen.getAllByTestId("kill-btn");
-    await user.click(killBtns[0]);
-    await user.click(screen.getByTestId("kill-confirm-btn"));
+    const stopBtns = screen.getAllByTestId("stop-btn");
+    await user.click(stopBtns[0]);
+    await user.click(screen.getByTestId("stop-confirm-btn"));
 
     expect(mockKillProcessing).toHaveBeenCalled();
   });
@@ -66,9 +66,9 @@ describe("ControlButtons kill confirmation", () => {
     const user = userEvent.setup();
     renderButtons();
 
-    const killBtns = screen.getAllByTestId("kill-btn");
-    await user.click(killBtns[0]);
-    await user.click(screen.getByTestId("kill-cancel-btn"));
+    const stopBtns = screen.getAllByTestId("stop-btn");
+    await user.click(stopBtns[0]);
+    await user.click(screen.getByTestId("stop-cancel-btn"));
 
     expect(mockKillProcessing).not.toHaveBeenCalled();
   });

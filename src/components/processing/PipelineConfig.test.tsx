@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,11 +11,13 @@ let mockConfig: Record<string, unknown> | null = {
   subjectRegexp: "",
 };
 
+const mockSetConfig = vi.fn();
+
 vi.mock("../../stores/processingStore", () => ({
   useProcessingStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       config: mockConfig,
-      setConfig: vi.fn(),
+      setConfig: mockSetConfig,
     }),
 }));
 
@@ -87,6 +89,61 @@ describe("PipelineConfig", () => {
     it("shows subjects error when structural selected without subjects", () => {
       renderConfig();
       expect(screen.getByText(/No subjects selected/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("module selection labels", () => {
+    beforeEach(() => {
+      mockConfig = {
+        subjects: [],
+        modules: ["structural", "asl"],
+        matlabPath: "/usr/bin/matlab",
+        exploreAslPath: "/opt/ExploreASL",
+        workers: 4,
+        subjectRegexp: "",
+      };
+    });
+
+    it("renders ASL checkbox with label 'ASL' in uppercase", () => {
+      renderConfig();
+      expect(screen.getByLabelText("ASL")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Asl")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("module toggle interactions", () => {
+    beforeEach(() => {
+      mockConfig = {
+        subjects: [],
+        modules: ["population"],
+        matlabPath: "/usr/bin/matlab",
+        exploreAslPath: "/opt/ExploreASL",
+        workers: 1,
+        subjectRegexp: "",
+      };
+      mockSetConfig.mockClear();
+    });
+
+    it("unchecks population when structural checkbox is clicked", () => {
+      renderConfig();
+      const structuralCheckbox = screen.getByLabelText("Structural");
+      fireEvent.click(structuralCheckbox);
+      
+      expect(mockSetConfig).toHaveBeenCalled();
+      const calledConfig = mockSetConfig.mock.calls[0][0];
+      expect(calledConfig.modules).toContain("structural");
+      expect(calledConfig.modules).not.toContain("population");
+    });
+
+    it("unchecks population when ASL checkbox is clicked", () => {
+      renderConfig();
+      const aslCheckbox = screen.getByLabelText("ASL");
+      fireEvent.click(aslCheckbox);
+      
+      expect(mockSetConfig).toHaveBeenCalled();
+      const calledConfig = mockSetConfig.mock.calls[0][0];
+      expect(calledConfig.modules).toContain("asl");
+      expect(calledConfig.modules).not.toContain("population");
     });
   });
 });

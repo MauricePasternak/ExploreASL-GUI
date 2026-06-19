@@ -12,9 +12,9 @@ import { useProcessingStore } from "../../stores/processingStore";
 function getButtonProps(phase: ProcessingPhase) {
   switch (phase) {
     case "running":
-      return { label: "Kill", color: "red", icon: IconPlayerStop, action: "kill" as const };
+      return { label: "Stop", color: "red", icon: IconPlayerStop, action: "kill" as const };
     case "preparing":
-      return { label: "Kill", color: "red", icon: IconPlayerStop, action: "kill" as const };
+      return { label: "Stop", color: "red", icon: IconPlayerStop, action: "kill" as const };
     case "idle":
     case "completed":
     case "failed":
@@ -61,7 +61,7 @@ export default function ControlButtons() {
           color={color}
           onClick={handleClick}
           disabled={phase === "preparing"}
-          data-testid={action === "kill" ? "kill-btn" : "start-btn"}
+          data-testid={action === "kill" ? "stop-btn" : "start-btn"}
         >
           {label}
         </Button>
@@ -70,9 +70,9 @@ export default function ControlButtons() {
       <Modal
         opened={confirmOpen}
         onClose={handleCancelKill}
-        title="Kill Processing"
+        title="Stop Processing"
         size="sm"
-        data-testid="kill-confirm-modal"
+        data-testid="stop-confirm-modal"
         returnFocus={false}
       >
         <Stack gap="md">
@@ -84,7 +84,7 @@ export default function ControlButtons() {
               variant="default"
               size="xs"
               onClick={handleCancelKill}
-              data-testid="kill-cancel-btn"
+              data-testid="stop-cancel-btn"
             >
               Cancel
             </Button>
@@ -92,9 +92,9 @@ export default function ControlButtons() {
               color="red"
               size="xs"
               onClick={handleConfirmKill}
-              data-testid="kill-confirm-btn"
+              data-testid="stop-confirm-btn"
             >
-              Kill
+              Stop
             </Button>
           </Group>
         </Stack>
