@@ -16,8 +16,8 @@ describe("ReportViewerModal", () => {
 
   beforeAll(() => {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
-    global.URL.createObjectURL = mockCreateObjectURL as any;
-    global.URL.revokeObjectURL = mockRevokeObjectURL;
+    window.URL.createObjectURL = mockCreateObjectURL as any;
+    window.URL.revokeObjectURL = mockRevokeObjectURL;
   });
 
   beforeEach(() => {

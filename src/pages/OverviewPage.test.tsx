@@ -68,4 +68,22 @@ describe("OverviewPage", () => {
     fireEvent.click(backBtn);
     expect(mockNavigate).toHaveBeenCalledWith("/");
   });
+
+  it("handles navigation back to previous project page when state.from is present", () => {
+    render(
+      <MantineProvider>
+        <MemoryRouter
+          initialEntries={[{ pathname: "/overview", state: { from: "/project/proj1/import" } }]}
+        >
+          <OverviewPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    const backBtn = screen.getByTestId("overview-back-btn");
+    expect(backBtn).toBeInTheDocument();
+    expect(backBtn).toHaveTextContent("Back to Project");
+    fireEvent.click(backBtn);
+    expect(mockNavigate).toHaveBeenCalledWith("/project/proj1/import");
+  });
 });

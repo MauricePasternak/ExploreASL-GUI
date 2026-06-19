@@ -528,7 +528,7 @@ function SubjectModuleSection({
               }
             />
             {hasMultipleRuns && (
-              <Collapse in={isExpanded}>
+              <Collapse expanded={isExpanded}>
                 <Stack gap={0} pb="xs">
                   {runs.map((run) => {
                     const runEntry = getStatusForSubject(

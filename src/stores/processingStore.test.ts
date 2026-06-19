@@ -261,6 +261,7 @@ describe("processingStore phase transitions", () => {
         session: "01",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
       {
         subjectSession: "sub-002_02",
@@ -268,6 +269,7 @@ describe("processingStore phase transitions", () => {
         session: "02",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
     ]);
   });
@@ -400,6 +402,7 @@ describe("processingStore startProcessing clears stale statuses", () => {
         session: "01",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
       {
         subjectSession: "sub-002_02",
@@ -407,6 +410,7 @@ describe("processingStore startProcessing clears stale statuses", () => {
         session: "02",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
     ]);
   });
@@ -496,6 +500,7 @@ describe("processingStore Tauri integration: startProcessing", () => {
         session: "01",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
       {
         subjectSession: "sub-002_02",
@@ -503,6 +508,7 @@ describe("processingStore Tauri integration: startProcessing", () => {
         session: "02",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
     ]);
   });
@@ -614,6 +620,7 @@ describe("processingStore Tauri integration: startProcessing", () => {
         session: "",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
     ]);
 
@@ -637,6 +644,7 @@ describe("processingStore Tauri integration: killProcessing", () => {
         session: "01",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
       {
         subjectSession: "sub-002_02",
@@ -644,6 +652,7 @@ describe("processingStore Tauri integration: killProcessing", () => {
         session: "02",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
     ]);
   });
@@ -673,6 +682,7 @@ const SUBJECT_INFOS: SubjectInfo[] = [
     session: "01",
     hasStructural: true,
     hasASL: true,
+    aslRuns: [],
   },
   {
     subjectSession: "sub-002_01",
@@ -680,6 +690,7 @@ const SUBJECT_INFOS: SubjectInfo[] = [
     session: "01",
     hasStructural: false,
     hasASL: true,
+    aslRuns: [],
   },
 ];
 
@@ -748,6 +759,7 @@ describe("processingStore Tauri integration: event listener cleanup", () => {
         session: "01",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
       {
         subjectSession: "sub-002_02",
@@ -755,6 +767,7 @@ describe("processingStore Tauri integration: event listener cleanup", () => {
         session: "02",
         hasStructural: true,
         hasASL: true,
+        aslRuns: [],
       },
     ]);
   });
