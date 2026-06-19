@@ -75,6 +75,8 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "copy_lock_files":
       case "detect_exploreasl_version":
       case "read_import_status":
+      case "list_subject_reports":
+      case "read_report_image":
         return Promise.resolve([]);
       default:
         return Promise.resolve(null);

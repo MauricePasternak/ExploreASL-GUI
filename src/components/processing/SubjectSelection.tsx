@@ -20,6 +20,8 @@ import { useProjectStore } from "../../stores/projectStore";
 import type { LogFileInfo, LogContent } from "../../lib/logViewer";
 import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
 import LogViewerModal from "./LogViewerModal";
+import { fetchSubjectReports } from "../../lib/reportViewer";
+import ReportViewerModal from "./ReportViewerModal";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -122,43 +124,6 @@ function lookupModuleStatus(
   );
 }
 
-function resolveModuleDisplay(
-  subjectInfo: SubjectInfo,
-  module: (typeof PROCESSING_MODULES)[number],
-  statuses: SubjectModuleStatus[],
-): ModuleDisplayStatus {
-  if (module === "structural" && !subjectInfo.hasStructural) return "skipped";
-  if (module === "asl" && !subjectInfo.hasASL) return "skipped";
-
-  const entry = lookupModuleStatus(subjectInfo.subjectSession, module, statuses);
-  if (!entry) return "pending";
-  if (entry.status === "complete") return "complete";
-  if (entry.status === "incomplete") return "incomplete";
-  return "pending";
-}
-
-function deriveOverallStatus(
-  structural: ModuleDisplayStatus,
-  asl: ModuleDisplayStatus,
-): FilterValue {
-  const statuses = [structural, asl].filter((s) => s !== "skipped");
-  if (statuses.length === 0) return "pending";
-  if (statuses.every((s) => s === "complete")) return "complete";
-  if (statuses.some((s) => s === "incomplete")) return "incomplete";
-  return "pending";
-}
-
-// ---------------------------------------------------------------------------
-// Filter options
-// ---------------------------------------------------------------------------
-
-const FILTER_OPTIONS = [
-  { label: "All", value: "all" as const },
-  { label: "Pending", value: "pending" as const },
-  { label: "Incomplete", value: "incomplete" as const },
-  { label: "Complete", value: "complete" as const },
-];
-
 // ---------------------------------------------------------------------------
 // Columns
 // ---------------------------------------------------------------------------
@@ -167,7 +132,9 @@ function buildColumns(
   processingPhase: string,
   structuralLogInfo: Map<string, LogFileInfo[]>,
   aslLogInfo: Map<string, LogFileInfo[]>,
+  existingReports: Set<string>,
   onViewLog: (subjectSession: string, module: "structural" | "asl") => void,
+  onViewReport: (subjectSession: string, module: "structural" | "asl") => void,
 ): DataTableColumn<SubjectRow>[] {
   return [
     {
@@ -224,6 +191,30 @@ function buildColumns(
       },
     },
     {
+      accessor: "_structuralReport",
+      title: <>Structural<br/>Report</>,
+      textAlign: "center",
+      render: (row) => {
+        if (row._structuralStatus === "skipped") return null;
+        const hasReport = existingReports.has(`${row.subjectSession}:structural`);
+        if (!hasReport) {
+          return <Text size="xs" c="dimmed" data-testid="no-structural-report">No Report</Text>;
+        }
+        return (
+          <Badge
+            size="sm"
+            color="blue"
+            variant="outline"
+            style={{ cursor: "pointer" }}
+            onClick={() => onViewReport(row.subjectSession, "structural")}
+            data-testid="view-structural-report"
+          >
+            View Report
+          </Badge>
+        );
+      },
+    },
+    {
       accessor: "_aslStatus",
       title: <>ASL<br/>Status</>,
       textAlign: "center",
@@ -256,8 +247,67 @@ function buildColumns(
         );
       },
     },
+    {
+      accessor: "_aslReport",
+      title: <>ASL<br/>Report</>,
+      textAlign: "center",
+      render: (row) => {
+        if (row._aslStatus === "skipped") return null;
+        const hasReport =
+          existingReports.has(`${row.subjectSession}:asl`) ||
+          existingReports.has(`${row.subjectSession}:m0`);
+        if (!hasReport) {
+          return <Text size="xs" c="dimmed" data-testid="no-asl-report">No Report</Text>;
+        }
+        return (
+          <Badge
+            size="sm"
+            color="blue"
+            variant="outline"
+            style={{ cursor: "pointer" }}
+            onClick={() => onViewReport(row.subjectSession, "asl")}
+            data-testid="view-asl-report"
+          >
+            View Report
+          </Badge>
+        );
+      },
+    },
   ];
 }
+
+function resolveModuleDisplay(
+  subjectInfo: SubjectInfo,
+  module: (typeof PROCESSING_MODULES)[number],
+  statuses: SubjectModuleStatus[],
+): ModuleDisplayStatus {
+  if (module === "structural" && !subjectInfo.hasStructural) return "skipped";
+  if (module === "asl" && !subjectInfo.hasASL) return "skipped";
+
+  const entry = lookupModuleStatus(subjectInfo.subjectSession, module, statuses);
+  if (!entry) return "pending";
+  if (entry.status === "complete") return "complete";
+  if (entry.status === "incomplete") return "incomplete";
+  return "pending";
+}
+
+function deriveOverallStatus(
+  structural: ModuleDisplayStatus,
+  asl: ModuleDisplayStatus,
+): FilterValue {
+  const statuses = [structural, asl].filter((s) => s !== "skipped");
+  if (statuses.length === 0) return "pending";
+  if (statuses.every((s) => s === "complete")) return "complete";
+  if (statuses.some((s) => s === "incomplete")) return "incomplete";
+  return "pending";
+}
+
+const FILTER_OPTIONS = [
+  { label: "All", value: "all" as const },
+  { label: "Pending", value: "pending" as const },
+  { label: "Incomplete", value: "incomplete" as const },
+  { label: "Complete", value: "complete" as const },
+];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -279,6 +329,12 @@ export default function SubjectSelection() {
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  const [existingReports, setExistingReports] = useState<Set<string>>(new Set());
+  const [reportModalOpened, setReportModalOpened] = useState(false);
+  const [reportModalModule, setReportModalModule] = useState<"structural" | "asl">("structural");
+  const [reportModalSubjectSession, setReportModalSubjectSession] = useState("");
+  const [reportModalRuns, setReportModalRuns] = useState<string[]>([]);
+
   useEffect(() => {
     if (!projectRoot) return;
     fetchModuleLogs(projectRoot).then((files) => {
@@ -293,7 +349,21 @@ export default function SubjectSelection() {
     }).catch(() => {
       setLogFiles(new Map());
     });
-  }, [projectRoot]);
+  }, [projectRoot, processingPhase]);
+
+  useEffect(() => {
+    if (!projectRoot) return;
+    fetchSubjectReports(projectRoot).then((reports) => {
+      const set = new Set<string>();
+      for (const r of reports) {
+        set.add(`${r.subjectSession}:${r.module}`);
+      }
+      setExistingReports(set);
+    }).catch((err) => {
+      console.error("Failed to fetch reports list:", err);
+      setExistingReports(new Set());
+    });
+  }, [projectRoot, processingPhase]);
 
   const structuralLogInfo = useMemo(() => {
     const map = new Map<string, LogFileInfo[]>();
@@ -343,6 +413,12 @@ export default function SubjectSelection() {
     setModalContent(null);
     setModalLoading(false);
     setModalError(null);
+  }, []);
+
+  const handleCloseReportModal = useCallback(() => {
+    setReportModalOpened(false);
+    setReportModalSubjectSession("");
+    setReportModalRuns([]);
   }, []);
 
   const [filter, setFilter] = useState<FilterValue>("all");
@@ -420,9 +496,21 @@ export default function SubjectSelection() {
     updateSubjects([]);
   }, [updateSubjects]);
 
+  const handleViewReport = useCallback(
+    (subjectSession: string, module: "structural" | "asl") => {
+      const row = rows.find((r) => r.subjectSession === subjectSession);
+      const runs = row?.aslRuns || [];
+      setReportModalSubjectSession(subjectSession);
+      setReportModalModule(module);
+      setReportModalRuns(runs);
+      setReportModalOpened(true);
+    },
+    [rows],
+  );
+
   const columns = useMemo(
-    () => buildColumns(processingPhase, structuralLogInfo, aslLogInfo, handleViewLog),
-    [processingPhase, structuralLogInfo, aslLogInfo, handleViewLog],
+    () => buildColumns(processingPhase, structuralLogInfo, aslLogInfo, existingReports, handleViewLog, handleViewReport),
+    [processingPhase, structuralLogInfo, aslLogInfo, existingReports, handleViewLog, handleViewReport],
   );
 
   const modalRunErrorMap = useMemo(() => {
@@ -532,6 +620,14 @@ export default function SubjectSelection() {
         loading={modalLoading}
         error={modalError}
         runErrorMap={modalRunErrorMap}
+      />
+      <ReportViewerModal
+        opened={reportModalOpened}
+        onClose={handleCloseReportModal}
+        projectRoot={projectRoot}
+        subjectSession={reportModalSubjectSession}
+        module={reportModalModule}
+        runs={reportModalRuns}
       />
     </Stack>
   );
