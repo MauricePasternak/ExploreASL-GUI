@@ -510,7 +510,7 @@ function PopulationSection({
   }
 
   return (
-    <Stack gap={0} data-testid="population-section">
+    <Stack gap={0} data-testid="population-status-section">
       <SubjectRow
         subjectSession="Population (group)"
         steps={steps}

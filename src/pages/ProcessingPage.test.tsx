@@ -1,47 +1,8 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-// Note: MantineProvider import may be from @mantine/core, let's keep other imports unchanged.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockStartProcessing = vi.fn();
-const mockKillProcessing = vi.fn();
-const mockSetConfig = vi.fn();
-
-let mockProcessingPhase = "idle";
-let mockSubjectStatuses: Array<{
-  subjectSession: string;
-  module: string;
-  status: string;
-  completedSteps: string[];
-  locked: boolean;
-}> = [];
-let mockConfig: Record<string, unknown> | null = {
-  subjects: ["sub-001_01", "sub-002_01"],
-  modules: ["structural", "asl"],
-  matlabPath: "/usr/bin/matlab",
-  exploreAslPath: "/opt/ExploreASL",
-  workers: 2,
-  subjectRegexp: "^(sub-001_01|sub-002_01)$",
-};
-
-vi.mock("../../stores/processingStore", () => ({
-  useProcessingStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({
-      processingPhase: mockProcessingPhase,
-      availableSubjects: [
-        { subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
-        { subjectSession: "sub-002_01", subject: "002", session: "01", hasStructural: false, hasASL: true },
-      ],
-      subjectStatuses: mockSubjectStatuses,
-      config: mockConfig,
-      setConfig: mockSetConfig,
-      startProcessing: mockStartProcessing,
-      killProcessing: mockKillProcessing,
-      scanAvailableSubjects: vi.fn().mockResolvedValue(undefined),
-      loadLockFileStatus: vi.fn().mockResolvedValue(undefined),
-      resetProcessing: vi.fn(),
-    }),
-}));
+import { useProcessingStore } from "../stores/processingStore";
 
 vi.mock("../../stores/projectStore", () => ({
   useProjectStore: (selector: (state: Record<string, unknown>) => unknown) =>
@@ -73,7 +34,25 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  exists: vi.fn().mockResolvedValue(true),
+}));
+
 const { default: ProcessingPage } = await import("./ProcessingPage");
+
+const DEFAULT_CONFIG = {
+  subjects: ["sub-001_01", "sub-002_01"],
+  modules: ["structural", "asl"] as ("structural" | "asl" | "population")[],
+  matlabPath: "/usr/bin/matlab",
+  exploreAslPath: "/opt/ExploreASL",
+  workers: 2,
+  subjectRegexp: "^(sub-001_01|sub-002_01)$",
+};
+
+const DEFAULT_SUBJECTS = [
+  { subjectSession: "sub-001_01", subject: "001", session: "01", hasStructural: true, hasASL: true },
+  { subjectSession: "sub-002_01", subject: "002", session: "01", hasStructural: false, hasASL: true },
+];
 
 function renderPage() {
   return render(
@@ -89,19 +68,13 @@ describe("ProcessingPage", () => {
   });
 
   beforeEach(() => {
-    mockStartProcessing.mockClear();
-    mockKillProcessing.mockClear();
-    mockSetConfig.mockClear();
-    mockProcessingPhase = "idle";
-    mockSubjectStatuses = [];
-    mockConfig = {
-      subjects: ["sub-001_01", "sub-002_01"],
-      modules: ["structural", "asl"],
-      matlabPath: "/usr/bin/matlab",
-      exploreAslPath: "/opt/ExploreASL",
-      workers: 2,
-      subjectRegexp: "^(sub-001_01|sub-002_01)$",
-    };
+    useProcessingStore.setState({
+      processingPhase: "idle",
+      availableSubjects: DEFAULT_SUBJECTS,
+      subjectStatuses: [],
+      config: DEFAULT_CONFIG,
+      workerPids: [],
+    });
   });
 
   it("renders the processing page container", () => {
@@ -142,8 +115,6 @@ describe("ProcessingPage", () => {
 
   it("shows validation errors when config has issues", () => {
     renderPage();
-    // Mock config has all fields so validation may or may not show
-    // depending on globalStore mock state; just verify the element renders
     expect(screen.getByTestId("pipeline-config")).toBeInTheDocument();
   });
 
@@ -165,5 +136,26 @@ describe("ProcessingPage", () => {
   it("renders LogViewerModal as part of log column integration", () => {
     renderPage();
     expect(screen.getAllByTestId("log-viewer-modal")[0]).toBeInTheDocument();
+  });
+
+  it("does not show orphaned subjects warning for population module status", () => {
+    useProcessingStore.setState({
+      subjectStatuses: [
+        { subjectSession: "", module: "population", status: "incomplete", completedSteps: [], locked: true },
+      ],
+    });
+    renderPage();
+    expect(screen.queryByTestId("orphaned-subjects-warning")).not.toBeInTheDocument();
+  });
+
+  it("shows orphaned subjects warning for non-population module with unknown subject", () => {
+    useProcessingStore.setState({
+      subjectStatuses: [
+        { subjectSession: "sub-999_01", module: "structural", status: "incomplete", completedSteps: [], locked: false },
+      ],
+    });
+    renderPage();
+    expect(screen.getByTestId("orphaned-subjects-warning")).toBeInTheDocument();
+    expect(screen.getByText(/orphaned lock file entr/i)).toHaveTextContent("1 orphaned lock file entry");
   });
 });

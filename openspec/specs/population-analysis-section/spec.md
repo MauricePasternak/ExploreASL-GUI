@@ -17,7 +17,7 @@ A dedicated Population Analysis section SHALL be rendered on the Processing page
 - **THEN** the Population Analysis section SHALL NOT be visible
 
 ### Requirement: Population Module Checkbox
-The Population Analysis section SHALL contain a checkbox labeled "Enable population analysis". The checkbox SHALL be disabled when either Structural or ASL is selected in the Pipeline Configuration Panel. When disabled, a tooltip SHALL explain: "Population must run independently. Deselect Structural and ASL modules to enable. At least one subject/session must have both Structural and ASL complete."
+The Population Analysis section SHALL contain a checkbox labeled "Enable population analysis". The checkbox SHALL be disabled when either Structural or ASL is selected in the Pipeline Configuration Panel, or when no subject/session has both Structural and ASL status `complete`. When disabled, a tooltip SHALL explain the unmet constraint(s). If Structural or ASL is selected, the tooltip SHALL read: "Population must run independently. Deselect Structural and ASL modules to enable." If no subjects are eligible, the tooltip SHALL read: "At least one subject/session must have both Structural and ASL complete." If both constraints are unmet, both messages SHALL be joined.
 
 #### Scenario: Checkbox enabled when prerequisites met
 - **WHEN** no modules are selected in PipelineConfig AND at least one subject/session has both Structural and ASL status `complete`

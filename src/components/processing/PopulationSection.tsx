@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Button,
+  Badge,
   Card,
   Checkbox,
   Group,
@@ -8,7 +8,13 @@ import {
   Text,
   Tooltip,
 } from "@mantine/core";
-import { IconBook } from "@tabler/icons-react";
+import {
+  IconBook,
+  IconCheck,
+  IconExclamationMark,
+  IconLoader,
+  IconMinus,
+} from "@tabler/icons-react";
 
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -16,6 +22,7 @@ import { useDataParStore } from "../../stores/dataParStore";
 import type { SubjectModuleStatus } from "../../schemas/processingSchemas";
 import type { LogFileInfo, LogContent } from "../../lib/logViewer";
 import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
+import { ATLAS_DISPLAY_LABELS } from "../../lib/dataParFieldMetadata";
 import LogViewerModal from "./LogViewerModal";
 
 function countEligibleSubjects(
@@ -35,6 +42,52 @@ function countEligibleSubjects(
     }
   }
   return eligible.size;
+}
+
+type PopulationDisplayStatus = "complete" | "incomplete" | "pending";
+
+function PopulationStatusIcon({
+  status,
+  processingPhase,
+}: {
+  status: PopulationDisplayStatus;
+  processingPhase: string;
+}) {
+  switch (status) {
+    case "complete":
+      return (
+        <Tooltip label="Complete">
+          <IconCheck size={18} color="var(--mantine-color-teal-6)" data-testid="population-status-complete" />
+        </Tooltip>
+      );
+    case "incomplete":
+      if (processingPhase === "failed" || processingPhase === "cancelled") {
+        return (
+          <Tooltip label="Incomplete">
+            <IconExclamationMark
+              size={18}
+              color="var(--mantine-color-red-6)"
+              data-testid="population-status-incomplete-stalled"
+            />
+          </Tooltip>
+        );
+      }
+      return (
+        <Tooltip label="In progress">
+          <IconLoader
+            size={18}
+            color="var(--mantine-color-orange-6)"
+            data-testid="population-status-incomplete"
+          />
+        </Tooltip>
+      );
+    case "pending":
+      return (
+        <Tooltip label="Pending">
+          <IconMinus size={18} color="var(--mantine-color-gray-5)" data-testid="population-status-pending" />
+        </Tooltip>
+      );
+  }
 }
 
 export default function PopulationSection() {
@@ -60,6 +113,14 @@ export default function PopulationSection() {
   const hasEligible = eligibleCount > 0;
 
   const checkboxDisabled = subjectModuleSelected || !hasEligible;
+
+  const popDisplayStatus: PopulationDisplayStatus = useMemo(() => {
+    const entry = subjectStatuses.find((s) => s.module === "population");
+    if (!entry) return "pending";
+    if (entry.status === "complete") return "complete";
+    if (entry.status === "incomplete") return "incomplete";
+    return "pending";
+  }, [subjectStatuses]);
 
   const tooltipLabel = useMemo(() => {
     const parts: string[] = [];
@@ -146,6 +207,11 @@ export default function PopulationSection() {
           Population Analysis
         </Text>
 
+        <Group gap="xs" align="center" data-testid="population-status-row">
+          <Text size="sm">Population Module Status:</Text>
+          <PopulationStatusIcon status={popDisplayStatus} processingPhase={processingPhase} />
+        </Group>
+
         <Text size="sm" data-testid="population-eligibility">
           {eligibleCount}/{totalCount} subjects eligible (structural + ASL complete)
         </Text>
@@ -167,26 +233,45 @@ export default function PopulationSection() {
         </Tooltip>
 
         <Group gap="xs" align="center">
-          <Text size="xs" c="dimmed" data-testid="population-atlas-recap">
-            Atlases: {atlases && atlases.length > 0 ? atlases.join(", ") : "No atlases configured"}
-          </Text>
+          <Text size="xs" c="dimmed">Atlases:</Text>
+          {atlases && atlases.length > 0 ? (
+            atlases.map((atlas) => (
+              <Badge
+                key={atlas}
+                size="xs"
+                variant="light"
+                color="blue"
+                data-testid="population-atlas-badge"
+              >
+                {ATLAS_DISPLAY_LABELS[atlas] ?? atlas}
+              </Badge>
+            ))
+          ) : (
+            <Text size="xs" c="dimmed" data-testid="population-atlas-recap">
+              No atlases configured
+            </Text>
+          )}
           <Text size="xs" c="dimmed">
             — Configured in Parameters
           </Text>
         </Group>
 
         <Group>
-          <Button
-            size="xs"
-            variant="outline"
-            color={hasError ? "red" : "gray"}
-            disabled={!hasLog}
-            leftSection={<IconBook size={14} />}
-            onClick={handleViewLog}
-            data-testid="population-log-btn"
-          >
-            {hasError ? "View Errors" : "View Logs"}
-          </Button>
+          {!hasLog ? (
+            <Text size="xs" c="dimmed" data-testid="population-no-logs">No Logs</Text>
+          ) : (
+            <Badge
+              size="sm"
+              color={hasError ? "red" : "teal"}
+              variant="outline"
+              leftSection={<IconBook size={12} />}
+              style={hasError ? undefined : { cursor: "pointer" }}
+              onClick={hasError ? undefined : handleViewLog}
+              data-testid={hasError ? "population-error-btn" : "population-log-btn"}
+            >
+              {hasError ? "View Errors" : "View Logs"}
+            </Badge>
+          )}
         </Group>
       </Stack>
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Box, Button, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import {
+  IconBook,
   IconCheck,
   IconMinus,
   IconBan,
@@ -212,6 +213,7 @@ function buildColumns(
             size="sm"
             color={isError ? "red" : "teal"}
             variant="outline"
+            leftSection={<IconBook size={12} />}
             style={isError ? undefined : { cursor: "pointer" }}
             onClick={isError ? undefined : () => onViewLog(row.subjectSession, "structural")}
             data-testid={isError ? "view-structural-errors" : "view-structural-logs"}
@@ -244,6 +246,7 @@ function buildColumns(
             size="sm"
             color={isError ? "red" : "teal"}
             variant="outline"
+            leftSection={<IconBook size={12} />}
             style={isError ? undefined : { cursor: "pointer" }}
             onClick={isError ? undefined : () => onViewLog(row.subjectSession, "asl")}
             data-testid={isError ? "view-asl-errors" : "view-asl-logs"}
