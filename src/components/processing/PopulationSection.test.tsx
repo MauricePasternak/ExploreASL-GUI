@@ -70,6 +70,7 @@ describe("PopulationSection", () => {
           session: "01",
           hasStructural: true,
           hasASL: true,
+          aslRuns: [],
         },
         {
           subjectSession: "sub-02_01",
@@ -77,6 +78,7 @@ describe("PopulationSection", () => {
           session: "01",
           hasStructural: true,
           hasASL: true,
+          aslRuns: [],
         },
         {
           subjectSession: "sub-03_01",
@@ -84,6 +86,7 @@ describe("PopulationSection", () => {
           session: "01",
           hasStructural: true,
           hasASL: true,
+          aslRuns: [],
         },
         {
           subjectSession: "sub-04_01",
@@ -91,6 +94,7 @@ describe("PopulationSection", () => {
           session: "01",
           hasStructural: true,
           hasASL: true,
+          aslRuns: [],
         },
         {
           subjectSession: "sub-05_01",
@@ -98,6 +102,7 @@ describe("PopulationSection", () => {
           session: "01",
           hasStructural: true,
           hasASL: true,
+          aslRuns: [],
         },
       ],
       subjectStatuses: [
@@ -169,6 +174,7 @@ describe("PopulationSection", () => {
           session: "01",
           hasStructural: true,
           hasASL: true,
+          aslRuns: [],
         },
       ],
       subjectStatuses: [
@@ -211,6 +217,7 @@ describe("PopulationSection", () => {
           session: "01",
           hasStructural: true,
           hasASL: true,
+          aslRuns: [],
         },
       ],
       subjectStatuses: [

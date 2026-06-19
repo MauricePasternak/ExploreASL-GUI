@@ -26,13 +26,14 @@ import {
   IconUpload,
 } from "@tabler/icons-react";
 import { useState } from "react";
-import { Outlet, useNavigate } from "react-router";
+import { Outlet, useLocation, useNavigate } from "react-router";
 
 import { canAccessPhase, type ProjectPhase } from "../schemas/project";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { logAction } from "../lib/debug";
 import ProcessingStatusBar from "./processing/ProcessingStatusBar";
+import PageHelpButton from "./PageHelpButton";
 
 const PHASE_NAV = [
   { phase: "import", label: "Import", icon: IconUpload },
@@ -53,6 +54,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const saveProject = useProjectStore((state) => state.saveProject);
   const closeProject = useProjectStore((state) => state.closeProject);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const subjectCount = useProcessingStore((s) => {
     const subjects = new Set(s.availableSubjects.map((info) => info.subject));
@@ -152,7 +154,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                 aria-label="Open overview"
                 variant="subtle"
                 color="teal"
-                onClick={() => navigate("/overview")}
+                onClick={() => navigate("/overview", { state: { from: location.pathname } })}
                 data-testid="layout-open-overview-btn"
               >
                 <IconHelp size={18} />
@@ -287,6 +289,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           </Stack>
         </Modal>
         <Outlet />
+        <PageHelpButton />
       </AppShell.Main>
     </AppShell>
   );

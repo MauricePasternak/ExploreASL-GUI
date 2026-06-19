@@ -153,7 +153,7 @@ export default function ReportViewerModal({
     try {
       const bytes = await fetchReportImage(projectRoot, subjectSession, mod, runVal, view);
       if (!active.current) return;
-      const blob = new Blob([bytes], { type: "image/jpeg" });
+      const blob = new Blob([bytes as any], { type: "image/jpeg" });
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
       setUrl(url);

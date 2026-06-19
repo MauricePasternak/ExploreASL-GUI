@@ -29,7 +29,7 @@ import {
   IconRoute,
   IconTags,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 interface TreeRowProps {
   level: number;
@@ -75,6 +75,8 @@ function TreeRow({ level, label, badge, badgeColor = "blue", isFolder = false }:
 
 export default function OverviewPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromPath = location.state?.from;
 
   return (
     <Stack
@@ -100,10 +102,10 @@ export default function OverviewPage() {
         <Button
           leftSection={<IconArrowLeft size={16} />}
           variant="light"
-          onClick={() => navigate("/")}
+          onClick={() => navigate(fromPath || "/")}
           data-testid="overview-back-btn"
         >
-          Back to Home
+          {fromPath ? "Back to Project" : "Back to Home"}
         </Button>
       </Group>
 
@@ -119,7 +121,7 @@ export default function OverviewPage() {
           nomenclature. In the GUI, we stick strictly to BIDS terminology, but if you look at the
           raw MATLAB configuration or older files, you might encounter these legacy equivalents:
         </Text>
-        <Grid mt="sm" gutter="xs">
+        <Grid mt="sm" gap="xs">
           <Grid.Col span={{ base: 6, sm: 3 }}>
             <Card p="xs" withBorder>
               <Text fw={700} size="xs">
@@ -337,7 +339,7 @@ export default function OverviewPage() {
         <Title order={3} mb="md" data-testid="workflow-map-title">
           Interactive Workflow Map
         </Title>
-        <Grid gutter="md" align="stretch">
+        <Grid gap="md" align="stretch">
           <Grid.Col span={{ base: 12, md: 3 }}>
             <Card
               p="sm"

@@ -56,6 +56,7 @@ const DEFAULT_SUBJECTS = [
     session: "01",
     hasStructural: true,
     hasASL: true,
+    aslRuns: [],
   },
   {
     subjectSession: "sub-002_01",
@@ -63,6 +64,7 @@ const DEFAULT_SUBJECTS = [
     session: "01",
     hasStructural: false,
     hasASL: true,
+    aslRuns: [],
   },
 ];
 
