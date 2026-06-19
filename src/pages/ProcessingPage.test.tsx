@@ -158,4 +158,9 @@ describe("ProcessingPage", () => {
     expect(screen.getByTestId("orphaned-subjects-warning")).toBeInTheDocument();
     expect(screen.getByText(/orphaned lock file entr/i)).toHaveTextContent("1 orphaned lock file entry");
   });
+
+  it("renders ReportViewerModal in the layout", () => {
+    renderPage();
+    expect(screen.getByTestId("report-viewer-modal")).toBeInTheDocument();
+  });
 });
