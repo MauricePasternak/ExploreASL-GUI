@@ -14,6 +14,7 @@ import {
   projectEaslPath,
   syncSessionCheckpointFromProject,
 } from "../lib/sessionCheckpoint";
+import { isBidsProject, ensureBidsIgnore } from "../lib/bidsUtils";
 import type { ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
 
@@ -63,6 +64,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     await writeTextFile(easlPath, JSON.stringify(hydratedProject, null, 2));
 
+    const rootPath = hydratedProject.projectMeta.rootPath;
+    try {
+      if (await isBidsProject(rootPath)) {
+        await ensureBidsIgnore(rootPath);
+      }
+    } catch (e) {
+      console.warn("Failed to check BIDS project status or write .bidsignore:", e);
+    }
+
     set({
       project: hydratedProject,
       isDirty: false,
@@ -75,6 +85,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const project = DEFAULT_PROJECT_FILE(crypto.randomUUID(), name, rootPath);
 
     await writeTextFile(getProjectFilePath(rootPath), JSON.stringify(project, null, 2));
+
+    try {
+      if (await isBidsProject(rootPath)) {
+        await ensureBidsIgnore(rootPath);
+      }
+    } catch (e) {
+      console.warn("Failed to check BIDS project status or write .bidsignore:", e);
+    }
 
     set({
       project,
