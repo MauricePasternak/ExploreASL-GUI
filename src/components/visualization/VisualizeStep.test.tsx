@@ -73,17 +73,17 @@ describe("VisualizeStep", () => {
 
   it("renders the visualize step container", () => {
     renderComponent();
-    expect(screen.getByTestId("visualize-step")).toBeInTheDocument();
+    expect(screen.getByTestId("dataviz-visualize-step")).toBeInTheDocument();
   });
 
   it("renders both panels", () => {
     renderComponent();
-    const panels = screen.getAllByTestId("panel");
-    expect(panels).toHaveLength(2);
+    expect(screen.getByTestId("dataviz-chart-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("dataviz-viewer-panel")).toBeInTheDocument();
   });
 
   it("renders the panel group", () => {
     renderComponent();
-    expect(screen.getByTestId("panel-group")).toBeInTheDocument();
+    expect(screen.getByTestId("dataviz-panel-group")).toBeInTheDocument();
   });
 });

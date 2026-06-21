@@ -24,31 +24,31 @@ export default function VisualizeStep() {
 
   return (
     <Stack
-      data-testid="visualize-step"
+      data-testid="dataviz-visualize-step"
       flex={1}
-      h="100%"
+      h={isStacked ? "auto" : "100%"}
       gap="xs"
-      style={{ minHeight: 0, width: "100%" }}
+      style={{ minHeight: isStacked ? "auto" : 0, width: "100%" }}
     >
       <AxisAssignment />
       <FilterPanel />
       <Box
-        data-testid="panel-group"
+        data-testid="dataviz-panel-group"
         style={{
           flex: 1,
-          minHeight: 420,
+          minHeight: isStacked ? "auto" : 420,
           width: "100%",
           display: "grid",
           gridTemplateColumns: isStacked ? "1fr" : "3fr 2fr",
-          gridTemplateRows: isStacked ? "1fr 1fr" : "1fr",
+          gridTemplateRows: isStacked ? "minmax(320px, 1fr) minmax(320px, 1fr)" : "1fr",
           gap: "var(--mantine-spacing-md)",
           overflow: "visible",
         }}
       >
-        <Box id="chart-panel" data-testid="panel" style={panelStyle}>
+        <Box id="chart-panel" data-testid="dataviz-chart-panel" style={panelStyle}>
           <ChartPanel />
         </Box>
-        <Box id="viewer-panel" data-testid="panel" style={panelStyle}>
+        <Box id="viewer-panel" data-testid="dataviz-viewer-panel" style={panelStyle}>
           <NiftiViewer />
         </Box>
       </Box>

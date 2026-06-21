@@ -58,7 +58,7 @@ describe("NiftiViewer", () => {
     }) as typeof originalGetContext;
     renderComponent();
     expect(screen.getByTestId("nifti-viewer")).toHaveTextContent(
-      "Click a datapoint to load its qCBF image.",
+      "Click on a datapoint to load in its respective qCBF image.",
     );
   });
 

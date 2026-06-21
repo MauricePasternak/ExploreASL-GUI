@@ -1,18 +1,19 @@
-import { useEffect, useState } from "react";
-import { Alert, Button, Group, Stack, Stepper, Text } from "@mantine/core";
+import { Alert, Button, Group, Stack, Stepper, Text, useMantineColorScheme } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 
-import { useVisualizationStore } from "../stores/visualizationStore";
-import { useVisualizationSync } from "../hooks/useVisualizationSync";
-import { useProjectStore } from "../stores/projectStore";
-import FileSelection from "../components/visualization/FileSelection";
 import ColumnTypes from "../components/visualization/ColumnTypes";
+import FileSelection from "../components/visualization/FileSelection";
 import LevelOrdering from "../components/visualization/LevelOrdering";
 import VisualizeStep from "../components/visualization/VisualizeStep";
+import { useVisualizationSync } from "../hooks/useVisualizationSync";
+import { useProjectStore } from "../stores/projectStore";
+import { useVisualizationStore } from "../stores/visualizationStore";
 
 export default function VisualizationPage() {
   useVisualizationSync();
+  const { colorScheme } = useMantineColorScheme();
 
   const stage = useVisualizationStore((s) => s.stage);
   const setStage = useVisualizationStore((s) => s.setStage);
@@ -150,7 +151,7 @@ export default function VisualizationPage() {
       data-testid="visualization-page"
       p="md"
       h="calc(100vh - 128px)"
-      style={{ overflow: stage === "visualize" ? "visible" : "hidden" }}
+      style={{ overflow: "hidden" }}
     >
       {invalidationBanner && (
         <Alert icon={<IconAlertCircle size={16} />} color="red" data-testid="invalidation-banner">
@@ -163,12 +164,24 @@ export default function VisualizationPage() {
         data-testid="visualization-stepper"
         styles={{
           root: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 },
+          steps: {
+            paddingBottom: "var(--mantine-spacing-md)",
+            borderBottom: colorScheme === "dark" ? "1px solid #373a40" : "1px solid #e9ecef",
+            boxShadow:
+              colorScheme === "dark"
+                ? "0 4px 6px -1px rgba(0, 0, 0, 0.3)"
+                : "0 4px 6px -1px rgba(0, 0, 0, 0.03)",
+            zIndex: 10,
+          },
           content: {
             flex: 1,
             minHeight: 0,
             display: "flex",
             flexDirection: "column",
-            overflow: stage === "visualize" ? "visible" : "auto",
+            overflow: "auto",
+            paddingRight: "16px",
+            paddingLeft: "4px",
+            paddingTop: "var(--mantine-spacing-md)",
           },
         }}
       >
@@ -188,7 +201,20 @@ export default function VisualizationPage() {
         </Stepper.Step>
       </Stepper>
 
-      <Group justify="space-between" mt="md">
+      <Group
+        justify="space-between"
+        mt="md"
+        data-testid="dataviz-stepper-buttons-group"
+        style={{
+          borderTop: colorScheme === "dark" ? "1px solid #373a40" : "1px solid #e9ecef",
+          boxShadow:
+            colorScheme === "dark"
+              ? "0 -4px 6px -1px rgba(0, 0, 0, 0.3)"
+              : "0 -4px 6px -1px rgba(0, 0, 0, 0.03)",
+          paddingTop: "var(--mantine-spacing-md)",
+          zIndex: 10,
+        }}
+      >
         {activeStep > 0 && (
           <Button variant="default" onClick={handleBack} data-testid="stepper-back-btn">
             Back
