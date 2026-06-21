@@ -1043,6 +1043,14 @@ pub(crate) fn delete_status_files_for_modules(
             continue;
         }
 
+        if module_name == "xASL_module_Population" {
+            let pop_dir = module_lock_dir.join(module_name);
+            if pop_dir.exists() {
+                delete_status_files_in_dir(&pop_dir)?;
+            }
+            continue;
+        }
+
         for entry in fs::read_dir(&module_lock_dir).map_err(|e| {
             format!(
                 "Failed to read lock dir {}: {}",

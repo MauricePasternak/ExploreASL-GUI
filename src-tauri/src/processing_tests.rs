@@ -732,6 +732,29 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn delete_status_files_removes_population_status_files() {
+        let root = unique_temp_path("del-pop-status");
+        let lock = root.join("derivatives").join("ExploreASL").join("lock");
+        let pop_dir = lock
+            .join("xASL_module_Population")
+            .join("xASL_module_Population");
+        fs::create_dir_all(&pop_dir).unwrap();
+        fs::write(pop_dir.join("010_CreatePopulationTemplates.status"), "").unwrap();
+        fs::write(pop_dir.join("999_ready.status"), "").unwrap();
+        fs::write(pop_dir.join("keep.txt"), "data").unwrap();
+
+        delete_status_files_for_modules(&root, &[false, false, true], "^sub-.*$").unwrap();
+
+        assert!(!pop_dir
+            .join("010_CreatePopulationTemplates.status")
+            .exists());
+        assert!(!pop_dir.join("999_ready.status").exists());
+        assert!(pop_dir.join("keep.txt").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
     // -------------------------------------------------------------------------
     // delete_module_log_files
     // -------------------------------------------------------------------------
