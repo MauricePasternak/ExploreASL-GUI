@@ -36,6 +36,7 @@ vi.mock("@niivue/niivue", () => ({
     volumes: [],
     opts: { multiplanarShowRender: 2 },
     sliceTypeMultiplanar: 4,
+    cleanup: vi.fn(),
   })),
   MULTIPLANAR_TYPE: { GRID: 2 },
   SHOW_RENDER: { ALWAYS: 1 },

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -194,5 +194,55 @@ describe("ProcessingPage", () => {
   it("renders ReportViewerModal in the layout", () => {
     renderPage();
     expect(screen.getByTestId("report-viewer-modal")).toBeInTheDocument();
+  });
+
+  describe("Start button gated by PreflightCheck errors", () => {
+    it("disables Start button when preflight reports errors (no subjects selected)", async () => {
+      useProcessingStore.setState({
+        config: {
+          ...DEFAULT_CONFIG,
+          subjects: [],
+          modules: ["structural", "asl"],
+          subjectRegexp: "^sub-.*$",
+        },
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("preflight-errors")).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId("start-btn")).toBeDisabled();
+    });
+
+    it("disables Start button when no modules selected", async () => {
+      useProcessingStore.setState({
+        config: {
+          ...DEFAULT_CONFIG,
+          modules: [],
+          subjectRegexp: "^sub-.*$",
+        },
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("preflight-errors")).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId("start-btn")).toBeDisabled();
+    });
+
+    it("enables Start button when preflight passes", async () => {
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("start-btn")).toBeEnabled();
+      });
+    });
+
+    it("disables Start button until preflight reports", () => {
+      renderPage();
+      expect(screen.getByTestId("start-btn")).toBeDisabled();
+    });
   });
 });

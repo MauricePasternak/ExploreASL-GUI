@@ -469,6 +469,78 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn read_lock_status_detects_outdated_status() {
+        let root = unique_temp_path("outdated-status");
+        let lock = root.join("derivatives").join("ExploreASL").join("lock");
+
+        let struct_sub = lock
+            .join("xASL_module_Structural")
+            .join("sub-001_01")
+            .join("xASL_module_Structural");
+        fs::create_dir_all(&struct_sub).unwrap();
+        let struct_ready = struct_sub.join("999_ready.status");
+
+        let asl_run = lock
+            .join("xASL_module_ASL")
+            .join("sub-001_01")
+            .join("xASL_module_ASL_ASL_01");
+        fs::create_dir_all(&asl_run).unwrap();
+        let asl_ready = asl_run.join("999_ready.status");
+
+        // Write ASL first
+        fs::write(&asl_ready, "").unwrap();
+        // Sleep a bit so structural has a strictly newer modification time
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        fs::write(&struct_ready, "").unwrap();
+
+        let statuses =
+            read_lock_status(root.to_string_lossy().to_string()).expect("should succeed");
+
+        let asl = statuses
+            .iter()
+            .find(|s| s.module_name == "xASL_module_ASL" && s.subject_session == "sub-001_01")
+            .expect("asl status should exist");
+        assert_eq!(asl.status, "outdated");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_lock_status_detects_outdated_status_from_logs_only() {
+        let root = unique_temp_path("outdated-status-logs");
+        let lock = root.join("derivatives").join("ExploreASL").join("lock");
+        let log_dir = root.join("derivatives").join("ExploreASL").join("log");
+
+        let struct_sub = lock
+            .join("xASL_module_Structural")
+            .join("sub-001_01")
+            .join("xASL_module_Structural");
+        fs::create_dir_all(&struct_sub).unwrap();
+        let struct_ready = struct_sub.join("999_ready.status");
+
+        // No ASL lock directory exists, but an ASL log exists
+        fs::create_dir_all(&log_dir).unwrap();
+        let asl_log = log_dir.join("xASL_module_ASL_sub-001_01_ASL_1.log");
+        fs::write(&asl_log, "success log with no issues").unwrap();
+
+        // Sleep a bit so structural has a newer timestamp
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        fs::write(&struct_ready, "").unwrap();
+
+        let statuses =
+            read_lock_status(root.to_string_lossy().to_string()).expect("should succeed");
+
+        let asl = statuses
+            .iter()
+            .find(|s| s.module_name == "xASL_module_ASL" && s.subject_session == "sub-001_01")
+            .expect("asl status should exist");
+        assert_eq!(asl.status, "outdated");
+        assert_eq!(asl.run, Some("1".to_string()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
     // -------------------------------------------------------------------------
     // clear_stale_lock_dirs
     // -------------------------------------------------------------------------

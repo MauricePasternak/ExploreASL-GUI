@@ -6,6 +6,7 @@ import {
   IconExclamationMark,
   IconLoader,
   IconMinus,
+  IconAlertCircle,
 } from "@tabler/icons-react";
 
 import { useProcessingStore } from "../../stores/processingStore";
@@ -31,7 +32,9 @@ function countEligibleSubjects(
     );
     const hasAsl = subjectStatuses.some(
       (s) =>
-        s.subjectSession === subj.subjectSession && s.module === "asl" && s.status === "complete",
+        s.subjectSession === subj.subjectSession &&
+        s.module === "asl" &&
+        (s.status === "complete" || s.status === "outdated"),
     );
     if (hasStructural && hasAsl) {
       eligible.add(subj.subjectSession);
@@ -40,7 +43,7 @@ function countEligibleSubjects(
   return eligible.size;
 }
 
-type PopulationDisplayStatus = "complete" | "incomplete" | "pending";
+type PopulationDisplayStatus = "complete" | "incomplete" | "pending" | "outdated";
 
 function PopulationStatusIcon({
   status,
@@ -91,6 +94,16 @@ function PopulationStatusIcon({
           />
         </Tooltip>
       );
+    case "outdated":
+      return (
+        <Tooltip label="Outdated (subject data completed more recently)">
+          <IconAlertCircle
+            size={18}
+            color="var(--mantine-color-orange-6)"
+            data-testid="population-status-outdated"
+          />
+        </Tooltip>
+      );
   }
 }
 
@@ -123,6 +136,7 @@ export default function PopulationSection() {
     if (!entry) return "pending";
     if (entry.status === "complete") return "complete";
     if (entry.status === "incomplete") return "incomplete";
+    if (entry.status === "outdated") return "outdated";
     return "pending";
   }, [subjectStatuses]);
 

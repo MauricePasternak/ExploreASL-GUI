@@ -28,13 +28,18 @@ function getButtonProps(phase: ProcessingPhase) {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function ControlButtons() {
+interface ControlButtonsProps {
+  startDisabled?: boolean;
+}
+
+export default function ControlButtons({ startDisabled = false }: ControlButtonsProps = {}) {
   const phase = useProcessingStore((s) => s.processingPhase);
   const startProcessing = useProcessingStore((s) => s.startProcessing);
   const killProcessing = useProcessingStore((s) => s.killProcessing);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { label, color, icon: Icon, action } = getButtonProps(phase);
+  const isStartAction = action === "start";
 
   const handleClick = useCallback(() => {
     if (action === "kill") {
@@ -60,8 +65,8 @@ export default function ControlButtons() {
           leftSection={<Icon size={16} />}
           color={color}
           onClick={handleClick}
-          disabled={phase === "preparing"}
-          data-testid={action === "kill" ? "stop-btn" : "start-btn"}
+          disabled={phase === "preparing" || (isStartAction && startDisabled)}
+          data-testid={isStartAction ? "start-btn" : "stop-btn"}
         >
           {label}
         </Button>

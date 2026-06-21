@@ -13,7 +13,7 @@ export const PROCESSING_PHASES = [
   "failed",
   "cancelled",
 ] as const;
-export const SUBJECT_MODULE_STATUSES = ["pending", "incomplete", "complete"] as const;
+export const SUBJECT_MODULE_STATUSES = ["pending", "incomplete", "complete", "outdated"] as const;
 
 // ---------------------------------------------------------------------------
 // Schemas

@@ -25,6 +25,7 @@ vi.mock("@niivue/niivue", () => {
     volumes: unknown[] = [];
     opts = { backColor: [0, 0, 0, 1], multiplanarShowRender: 2 };
     sliceTypeMultiplanar = 4;
+    cleanup = vi.fn();
     constructor() {}
   }
   return { Niivue: MockNiivue, MULTIPLANAR_TYPE: { GRID: 2 }, SHOW_RENDER: { ALWAYS: 1 } };

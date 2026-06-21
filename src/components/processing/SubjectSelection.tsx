@@ -11,6 +11,7 @@ import {
   IconSelector,
   IconSquareCheck,
   IconSquareX,
+  IconAlertCircle,
 } from "@tabler/icons-react";
 
 import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
@@ -42,7 +43,7 @@ interface SubjectRow extends SubjectInfo {
   _aslLogInfo?: LogFileInfo[];
 }
 
-type ModuleDisplayStatus = "complete" | "incomplete" | "pending" | "skipped";
+type ModuleDisplayStatus = "complete" | "incomplete" | "pending" | "skipped" | "outdated";
 
 export type LogBadgeVariant = "errors" | "logs" | "no-logs";
 
@@ -99,6 +100,16 @@ function StatusIcon({
       return (
         <Tooltip label="Pending">
           <IconMinus size={18} color="var(--mantine-color-gray-5)" data-testid="status-pending" />
+        </Tooltip>
+      );
+    case "outdated":
+      return (
+        <Tooltip label="Outdated (upstream module completed more recently)">
+          <IconAlertCircle
+            size={18}
+            color="var(--mantine-color-orange-6)"
+            data-testid="status-outdated"
+          />
         </Tooltip>
       );
     case "skipped":
@@ -316,16 +327,17 @@ function buildColumns(
             </Text>
           );
         }
+        const isOutdated = row._aslStatus === "outdated";
         return (
           <Badge
             size="sm"
-            color="blue"
+            color={isOutdated ? "orange" : "blue"}
             variant="outline"
             style={{ cursor: "pointer" }}
             onClick={() => onViewReport(row.subjectSession, "asl")}
             data-testid="view-asl-report"
           >
-            View Report
+            {isOutdated ? "View Outdated Report" : "View Report"}
           </Badge>
         );
       },
@@ -345,6 +357,7 @@ function resolveModuleDisplay(
   if (!entry) return "pending";
   if (entry.status === "complete") return "complete";
   if (entry.status === "incomplete") return "incomplete";
+  if (entry.status === "outdated") return "outdated";
   return "pending";
 }
 

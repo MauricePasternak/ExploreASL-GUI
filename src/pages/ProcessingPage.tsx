@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Alert, Group, Stack, Text } from "@mantine/core";
 import { IconAlertTriangle } from "@tabler/icons-react";
 
@@ -7,6 +7,7 @@ import ExecutionDashboard from "../components/processing/ExecutionDashboard";
 import PipelineConfig from "../components/processing/PipelineConfig";
 import PopulationSection from "../components/processing/PopulationSection";
 import PreflightCheck from "../components/processing/PreflightCheck";
+import type { PreflightResult } from "../components/processing/PreflightCheck";
 import SubjectSelection from "../components/processing/SubjectSelection";
 import { useProcessingSync } from "../hooks/useProcessingSync";
 import { useProcessingStore } from "../stores/processingStore";
@@ -24,6 +25,9 @@ export default function ProcessingPage() {
     processingPhase === "failed" ||
     processingPhase === "cancelled";
 
+  const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
+  const startDisabled = preflightResult?.ready !== true;
+
   // Orphaned lock entries: subjects in rawdata but not in availableSubjects.
   // Population is group-level (subjectSession is empty) — exclude from orphan check.
   const orphanedSubjects = useMemo(() => {
@@ -40,7 +44,7 @@ export default function ProcessingPage() {
         <Text fw={700} size="xl">
           Processing
         </Text>
-        <ControlButtons />
+        <ControlButtons startDisabled={startDisabled} />
       </Group>
 
       {orphanedSubjects.length > 0 && (
@@ -65,7 +69,7 @@ export default function ProcessingPage() {
           <SubjectSelection />
           <PipelineConfig />
           <PopulationSection />
-          <PreflightCheck />
+          <PreflightCheck onResult={setPreflightResult} />
         </>
       )}
 

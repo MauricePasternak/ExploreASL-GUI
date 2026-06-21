@@ -43,4 +43,12 @@ describe("resolveLogBadge", () => {
   it("skipped + no logs = no-logs", () => {
     expect(resolveLogBadge("skipped", undefined)).toBe("no-logs");
   });
+
+  it("outdated + logs = logs", () => {
+    expect(resolveLogBadge("outdated", [makeLog()])).toBe("logs");
+  });
+
+  it("outdated + no logs = no-logs", () => {
+    expect(resolveLogBadge("outdated", undefined)).toBe("no-logs");
+  });
 });
