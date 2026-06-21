@@ -266,6 +266,99 @@ pub(crate) fn determine_status(dir: &std::path::Path) -> (String, Vec<String>, b
     (status, completed_steps, locked)
 }
 
+fn get_structural_completion_time(
+    project_root: &Path,
+    subject_session: &str,
+) -> Option<std::time::SystemTime> {
+    let ready_file = project_root
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("lock")
+        .join("xASL_module_Structural")
+        .join(subject_session)
+        .join("xASL_module_Structural")
+        .join("999_ready.status");
+    if let Ok(metadata) = std::fs::metadata(&ready_file) {
+        if let Ok(mtime) = metadata.modified() {
+            return Some(mtime);
+        }
+    }
+    let log_dirs = exploreasl_log_dirs(project_root);
+    for log_dir in log_dirs {
+        let log_file = log_dir.join(format!("xASL_module_Structural_{}.log", subject_session));
+        if log_file.is_file() && !check_log_for_error(&log_file) {
+            if let Ok(metadata) = std::fs::metadata(&log_file) {
+                if let Ok(mtime) = metadata.modified() {
+                    return Some(mtime);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn get_asl_completion_time(
+    project_root: &Path,
+    subject_session: &str,
+    run: &str,
+) -> Option<std::time::SystemTime> {
+    let ready_file = project_root
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("lock")
+        .join("xASL_module_ASL")
+        .join(subject_session)
+        .join(format!("xASL_module_ASL_ASL_{}", run))
+        .join("999_ready.status");
+    if let Ok(metadata) = std::fs::metadata(&ready_file) {
+        if let Ok(mtime) = metadata.modified() {
+            return Some(mtime);
+        }
+    }
+    let log_dirs = exploreasl_log_dirs(project_root);
+    for log_dir in log_dirs {
+        let log_file = log_dir.join(format!(
+            "xASL_module_ASL_{}_ASL_{}.log",
+            subject_session, run
+        ));
+        if log_file.is_file() && !check_log_for_error(&log_file) {
+            if let Ok(metadata) = std::fs::metadata(&log_file) {
+                if let Ok(mtime) = metadata.modified() {
+                    return Some(mtime);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn find_asl_runs_from_logs(project_root: &Path, subject_session: &str) -> Vec<String> {
+    let mut runs = Vec::new();
+    let log_dirs = exploreasl_log_dirs(project_root);
+    let pattern = format!("xASL_module_ASL_{}_ASL_", subject_session);
+    for log_dir in log_dirs {
+        if let Ok(entries) = std::fs::read_dir(log_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if name.starts_with(&pattern) && name.ends_with(".log") {
+                            if let Some(run_part) = name.strip_prefix(&pattern) {
+                                if let Some(run_str) = run_part.strip_suffix(".log") {
+                                    if !runs.contains(&run_str.to_string()) {
+                                        runs.push(run_str.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    runs
+}
+
 #[tauri::command]
 pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>, String> {
     let trace = CommandTrace::new("read_lock_status");
@@ -279,6 +372,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
     }
 
     let mut statuses = Vec::new();
+    let mut subject_sessions = std::collections::HashSet::new();
 
     // Structural module
     let structural_lock = lock_root.join("xASL_module_Structural");
@@ -291,6 +385,8 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
                 continue;
             }
             let subject_session = entry.file_name().to_string_lossy().to_string();
+            subject_sessions.insert(subject_session.clone());
+
             let module_lock = entry.path().join("xASL_module_Structural");
             if module_lock.exists() {
                 let (status, completed_steps, locked) = determine_status(&module_lock);
@@ -317,28 +413,74 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
                 continue;
             }
             let subject_session = entry.file_name().to_string_lossy().to_string();
-            for run_entry in std::fs::read_dir(entry.path())
-                .map_err(|e| format!("Failed to read ASL subject session lock: {}", e))?
-            {
-                let run_entry =
-                    run_entry.map_err(|e| format!("Failed to read run entry: {}", e))?;
-                if !run_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                    continue;
+            subject_sessions.insert(subject_session);
+        }
+    }
+
+    // Check ASL status for all subject sessions
+    for subject_session in &subject_sessions {
+        let structural_time = get_structural_completion_time(&root, subject_session);
+        let asl_subject_dir = lock_root.join("xASL_module_ASL").join(subject_session);
+
+        let mut processed_runs = std::collections::HashSet::new();
+
+        if asl_subject_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&asl_subject_dir) {
+                for run_entry in entries.flatten() {
+                    if run_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                        let run_name = run_entry.file_name().to_string_lossy().to_string();
+                        if run_name.starts_with("xASL_module_ASL_ASL_") {
+                            let (mut status, completed_steps, locked) =
+                                determine_status(&run_entry.path());
+                            let run = run_name
+                                .strip_prefix("xASL_module_ASL_ASL_")
+                                .map(|s| s.to_string());
+
+                            if let Some(ref r) = run {
+                                processed_runs.insert(r.clone());
+                                if let Some(st) = structural_time {
+                                    if let Some(at) =
+                                        get_asl_completion_time(&root, subject_session, r)
+                                    {
+                                        if st > at {
+                                            status = "outdated".to_string();
+                                        }
+                                    }
+                                }
+                            }
+
+                            statuses.push(SubjectModuleStatus {
+                                subject_session: subject_session.clone(),
+                                module_name: "xASL_module_ASL".to_string(),
+                                run,
+                                status,
+                                completed_steps,
+                                locked,
+                            });
+                        }
+                    }
                 }
-                let run_name = run_entry.file_name().to_string_lossy().to_string();
-                if run_name.starts_with("xASL_module_ASL_ASL_") {
-                    let (status, completed_steps, locked) = determine_status(&run_entry.path());
-                    let run = run_name
-                        .strip_prefix("xASL_module_ASL_ASL_")
-                        .map(|s| s.to_string());
-                    statuses.push(SubjectModuleStatus {
-                        subject_session: subject_session.clone(),
-                        module_name: "xASL_module_ASL".to_string(),
-                        run,
-                        status,
-                        completed_steps,
-                        locked,
-                    });
+            }
+        }
+
+        // Discover runs from logs that might have been cleared
+        let runs_from_logs = find_asl_runs_from_logs(&root, subject_session);
+        for run in runs_from_logs {
+            if processed_runs.contains(&run) {
+                continue;
+            }
+            if let Some(st) = structural_time {
+                if let Some(at) = get_asl_completion_time(&root, subject_session, &run) {
+                    if st > at {
+                        statuses.push(SubjectModuleStatus {
+                            subject_session: subject_session.clone(),
+                            module_name: "xASL_module_ASL".to_string(),
+                            run: Some(run),
+                            status: "outdated".to_string(),
+                            completed_steps: Vec::new(),
+                            locked: false,
+                        });
+                    }
                 }
             }
         }
@@ -346,19 +488,96 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
 
     // Population module
     let population_lock = lock_root.join("xASL_module_Population");
+    let mut pop_status = "pending".to_string();
+    let mut pop_completed_steps = Vec::new();
+    let mut pop_locked = false;
+
     if population_lock.exists() {
         let module_lock = population_lock.join("xASL_module_Population");
         if module_lock.exists() {
             let (status, completed_steps, locked) = determine_status(&module_lock);
-            statuses.push(SubjectModuleStatus {
-                subject_session: String::new(),
-                module_name: "xASL_module_Population".to_string(),
-                run: None,
-                status,
-                completed_steps,
-                locked,
-            });
+            pop_status = status;
+            pop_completed_steps = completed_steps;
+            pop_locked = locked;
         }
+    }
+
+    // Check if Population is outdated
+    let mut pop_time = None;
+    let pop_ready_file = lock_root
+        .join("xASL_module_Population")
+        .join("xASL_module_Population")
+        .join("999_ready.status");
+    if let Ok(metadata) = std::fs::metadata(&pop_ready_file) {
+        if let Ok(mtime) = metadata.modified() {
+            pop_time = Some(mtime);
+        }
+    }
+    if pop_time.is_none() {
+        let log_dirs = exploreasl_log_dirs(&root);
+        for log_dir in log_dirs {
+            let log_file = log_dir.join("xASL_module_Population.log");
+            if log_file.is_file() && !check_log_for_error(&log_file) {
+                if let Ok(metadata) = std::fs::metadata(&log_file) {
+                    if let Ok(mtime) = metadata.modified() {
+                        pop_time = Some(mtime);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(pt) = pop_time {
+        let mut is_outdated = false;
+        for ss in &subject_sessions {
+            if let Some(st) = get_structural_completion_time(&root, ss) {
+                if st > pt {
+                    is_outdated = true;
+                    break;
+                }
+            }
+            let runs = find_asl_runs_from_logs(&root, ss);
+            let mut all_runs = runs;
+            let asl_subject_dir = lock_root.join("xASL_module_ASL").join(ss);
+            if let Ok(entries) = std::fs::read_dir(&asl_subject_dir) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with("xASL_module_ASL_ASL_") {
+                        if let Some(run_str) = name.strip_prefix("xASL_module_ASL_ASL_") {
+                            if !all_runs.contains(&run_str.to_string()) {
+                                all_runs.push(run_str.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            for run in all_runs {
+                if let Some(at) = get_asl_completion_time(&root, ss, &run) {
+                    if at > pt {
+                        is_outdated = true;
+                        break;
+                    }
+                }
+            }
+            if is_outdated {
+                break;
+            }
+        }
+        if is_outdated {
+            pop_status = "outdated".to_string();
+        }
+    }
+
+    if population_lock.exists() || pop_status == "outdated" {
+        statuses.push(SubjectModuleStatus {
+            subject_session: String::new(),
+            module_name: "xASL_module_Population".to_string(),
+            run: None,
+            status: pop_status,
+            completed_steps: pop_completed_steps,
+            locked: pop_locked,
+        });
     }
 
     trace.success(&statuses);

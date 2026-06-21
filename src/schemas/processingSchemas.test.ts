@@ -97,6 +97,13 @@ describe("SubjectModuleStatusSchema", () => {
     expect(result.locked).toBe(true);
   });
 
+  it("accepts outdated status", () => {
+    const data = { ...validStatus, status: "outdated" as const, locked: false };
+    const result = SubjectModuleStatusSchema.parse(data);
+    expect(result.status).toBe("outdated");
+    expect(result.locked).toBe(false);
+  });
+
   it("rejects invalid status", () => {
     expect(() => SubjectModuleStatusSchema.parse({ ...validStatus, status: "invalid" })).toThrow();
   });

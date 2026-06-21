@@ -320,7 +320,11 @@ export function getSubjectOverallStatus(
   let status: SubjectModuleStatus["status"] = "pending";
   if (subjectStatuses.every((s) => s.status === "complete")) {
     status = "complete";
-  } else if (subjectStatuses.some((s) => s.status === "complete" || s.status === "incomplete")) {
+  } else if (
+    subjectStatuses.some(
+      (s) => s.status === "complete" || s.status === "incomplete" || s.status === "outdated",
+    )
+  ) {
     status = "incomplete";
   }
 
