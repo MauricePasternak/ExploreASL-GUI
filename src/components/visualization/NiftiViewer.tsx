@@ -51,9 +51,11 @@ export default function NiftiViewer() {
 
     const nv = new Niivue({
       dragAndDropEnabled: false,
-      backColor: colorScheme === "dark" ? [0, 0, 0, 1] : [1, 1, 1, 1],
+      backColor: [0, 0, 0, 1],
+      fontColor: [1, 1, 1, 1],
       show3Dcrosshair: true,
       loadingText: "",
+      isColorbar: true,
     });
 
     nv.attachToCanvas(canvasRef.current);
@@ -76,6 +78,9 @@ export default function NiftiViewer() {
 
     return () => {
       canvas.removeEventListener("webglcontextlost", handleContextLost);
+      // Disconnect NiiVue's internal ResizeObserver and event listeners
+      // to prevent post-unmount drawScene calls with zero-sized canvas
+      nv.cleanup();
       nvRef.current = null;
       setNvReady(false);
     };
@@ -146,14 +151,6 @@ export default function NiftiViewer() {
     }
     loadVolume();
   }, [selectedPointId, point, nvReady, setViewerState]);
-
-  // Update background on theme change
-  useEffect(() => {
-    const nv = nvRef.current;
-    if (!nv) return;
-    nv.opts.backColor = colorScheme === "dark" ? [0, 0, 0, 1] : [1, 1, 1, 1];
-    nv.drawScene();
-  }, [colorScheme]);
 
   if (!webglAvailable) {
     return (
@@ -268,6 +265,7 @@ export default function NiftiViewer() {
             height: "100%",
             display: "block",
             visibility: !selectedPointId ? "hidden" : "visible",
+            backgroundColor: "#000",
           }}
           data-testid="niivue-canvas"
         />
