@@ -28,6 +28,7 @@ vi.mock("./projectStore", () => ({
       project: {
         projectMeta: { rootPath: "/test/project" },
       },
+      setPopulationCompleted: vi.fn(),
     })),
   },
 }));

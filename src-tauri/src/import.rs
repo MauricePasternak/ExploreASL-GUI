@@ -53,10 +53,20 @@ impl Default for ImportState {
     }
 }
 
-#[derive(Default)]
 pub struct AppState {
     pub import_state: Mutex<ImportState>,
     pub processing_state: Mutex<ProcessState>,
+    pub active_project_root: Mutex<Option<PathBuf>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            import_state: Mutex::new(ImportState::default()),
+            processing_state: Mutex::new(ProcessState::default()),
+            active_project_root: Mutex::new(None),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

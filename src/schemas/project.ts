@@ -3,7 +3,7 @@ import { DataParSchema } from "./dataParSchema";
 import { ImportSnapshotSchema } from "./importSchemas";
 import { ProcessConfigSchema, ProcessingPhaseSchema } from "./processingSchemas";
 
-export const PROJECT_PHASES = ["import", "parameters", "processing"] as const;
+export const PROJECT_PHASES = ["import", "parameters", "processing", "visualization"] as const;
 export const IMPORT_EXECUTION_PHASES = [
   "idle",
   "preparing",
@@ -63,6 +63,48 @@ export const ProjectFileSchema = z.object({
             })
             .optional(),
         })
+        .optional(),
+      population: z.object({ completed: z.boolean().optional() }).optional(),
+      dataVis: z
+        .object({
+          contractSources: z
+            .array(
+              z.object({
+                relativePath: z.string(),
+                fileHash: z.string(),
+              }),
+            )
+            .optional(),
+          columnTypes: z.record(z.string(), z.string()).optional(),
+          identifiers: z
+            .object({
+              subject: z.string(),
+              session: z.string(),
+              run: z.string(),
+            })
+            .nullable()
+            .optional(),
+          levelOrderings: z.record(z.string(), z.array(z.string())).optional(),
+          axisAssignment: z
+            .object({
+              x: z.string().nullable().optional(),
+              y: z.string().nullable().optional(),
+              colorBy: z.string().nullable().optional(),
+            })
+            .optional(),
+          domainFilters: z
+            .object({
+              xMin: z.number().nullable().optional(),
+              xMax: z.number().nullable().optional(),
+              yMin: z.number().nullable().optional(),
+              yMax: z.number().nullable().optional(),
+            })
+            .optional(),
+          stage: z.string().optional(),
+          splitRatio: z.number().optional(),
+          filtersExpanded: z.boolean().optional(),
+        })
+        .passthrough()
         .optional(),
     })
     .passthrough()
@@ -129,6 +171,9 @@ export function canAccessPhase(project: ProjectFile, targetPhase: ProjectPhase) 
   }
   if (targetPhase === "processing") {
     return project.uiState?.import?.completed === true;
+  }
+  if (targetPhase === "visualization") {
+    return project.uiState?.population?.completed === true;
   }
   return false;
 }

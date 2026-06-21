@@ -35,4 +35,6 @@ windows-sys = { version = "0.61.2", features = ["Win32_System_Threading", "Win32
 tauri-plugin-clipboard-manager = "2.3.2"
 notify = "8.2.0"
 num_cpus = "1"
+sha2 = "0.10"
+tempfile = "3"
 

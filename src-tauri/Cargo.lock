@@ -1106,6 +1106,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -1115,6 +1116,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-os",
  "tauri-plugin-store",
+ "tempfile",
  "walkdir",
  "windows-sys 0.61.2",
 ]

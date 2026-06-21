@@ -28,6 +28,8 @@ GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agen
 **Testing:** `pnpm test` (Vitest + jsdom). Mock Tauri APIs in `src/test/setup.tsx`. UNIT TEST schemas, stores, utilities. Component tests for critical paths.
 **Known test artefact:** React 19 + jsdom teardown race causes `ReferenceError: window is not defined` in 0–7 unhandled exceptions per run. These are NOT test failures — they fire when React's scheduler accesses `window` after jsdom teardown between parallel test files. Ignore.
 
+**Test isolation (critical as app grows):** This codebase has no global `afterEach(cleanup)` and no `globals: true` in vitest config — React components are NOT auto-unmounted between tests. As more components subscribe to shared Zustand stores, stale mounted instances can mutate store state and trigger infinite render loops in subsequent tests (see [LESSONS_LEARNED.md](file:///mnt/Samsung_NVME_4TB/ExploreASL_GUI/notes/LESSONS_LEARNED.md)). When adding component tests that render store-backed components, add `afterEach(cleanup)` locally in that test file. Diagnose suspected cross-test pollution by: (1) running tests individually vs. together, (2) instrumenting effects to log to a file (console output is swallowed during hangs), (3) stashing changes to check if the issue pre-exists.
+
 ---
 
 ## Rules

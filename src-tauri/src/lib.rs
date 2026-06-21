@@ -1,8 +1,11 @@
 mod commands;
 pub mod import;
 pub mod import_parser;
+mod niivue_protocol;
 pub mod processing;
 mod tracing;
+pub mod visualization;
+mod visualization_tests;
 
 use commands::{
     create_symlink_tree, get_available_memory_mb, get_cpu_cores, is_writable, walk_directory,
@@ -18,6 +21,9 @@ use processing::{
     run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir,
 };
 use tauri::{LogicalSize, Manager, Size};
+use visualization::{
+    clear_active_project, inspect_tsv, list_stats_files, read_tsv_columns, set_active_project,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -72,7 +78,13 @@ pub fn run() {
             read_module_logs,
             list_subject_reports,
             read_report_image,
+            list_stats_files,
+            inspect_tsv,
+            read_tsv_columns,
+            set_active_project,
+            clear_active_project,
         ])
+        .register_uri_scheme_protocol("niivue", niivue_protocol::handle_niivue_protocol)
         .setup(|app| {
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
             if let Some(window) = app.get_webview_window("main") {

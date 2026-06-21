@@ -1,8 +1,10 @@
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import {
   canAccessPhase,
   PROJECT_PHASES,
   type ProjectPhase,
   type ProjectFile,
+  ProjectFileSchema,
 } from "../schemas/project";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -32,16 +34,15 @@ export async function tryRestoreProjectSession(routeProjectId: string): Promise<
 
   async function tryLoadFromPath(easlPath: string): Promise<boolean> {
     try {
-      await loadProject(easlPath);
-      const loaded = useProjectStore.getState().project;
-      if (loaded?.projectMeta.id === routeProjectId) {
+      const raw = await readTextFile(easlPath);
+      const parsed = ProjectFileSchema.parse(JSON.parse(raw));
+      if (parsed.projectMeta.id === routeProjectId) {
+        await loadProject(easlPath);
         return true;
       }
     } catch {
-      // fall through to reset store
+      // ignore errors reading/parsing
     }
-
-    closeProject();
     return false;
   }
 
@@ -61,6 +62,7 @@ export async function tryRestoreProjectSession(routeProjectId: string): Promise<
     }
   }
 
+  closeProject();
   clearSessionCheckpoint();
   return false;
 }

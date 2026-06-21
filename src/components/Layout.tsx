@@ -17,6 +17,7 @@ import { notifications } from "@mantine/notifications";
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconAdjustments,
+  IconChartScatter,
   IconChevronLeft,
   IconChevronRight,
   IconHelp,
@@ -39,6 +40,7 @@ const PHASE_NAV = [
   { phase: "import", label: "Import", icon: IconUpload },
   { phase: "parameters", label: "Parameters", icon: IconAdjustments },
   { phase: "processing", label: "Processing", icon: IconPlayerPlay },
+  { phase: "visualization", label: "Visualization", icon: IconChartScatter },
 ] as const;
 
 interface LayoutProps {
@@ -122,7 +124,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       footer={project ? { height: 40 } : undefined}
       navbar={{
         width: navbarCollapsed ? 60 : 240,
-        breakpoint: "sm",
+        breakpoint: "xs",
         collapsed: { desktop: !project, mobile: !opened },
       }}
       padding="md"
@@ -135,7 +137,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                 opened={opened}
                 onClick={toggle}
                 size="sm"
-                hiddenFrom="sm"
+                hiddenFrom="xs"
                 data-testid="layout-mobile-nav-toggle"
               />
             ) : null}

@@ -113,6 +113,11 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       }
     }
 
+    // Clear population completion flag when re-running Population
+    if (config.modules.includes("population")) {
+      useProjectStore.getState().setPopulationCompleted(false);
+    }
+
     set({ processingPhase: "preparing", subjectStatuses: [] });
 
     const { watchLockDir, setupProcessingListeners, runProcessingPipeline } =

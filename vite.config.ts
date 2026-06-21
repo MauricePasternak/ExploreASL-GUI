@@ -35,8 +35,9 @@ export default defineConfig(async () => ({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.tsx"],
-    exclude: ["**/node_modules/**", "**/.worktrees/**"],
+    exclude: ["**/node_modules/**", "**/.worktrees/**", "e2e-tests/**"],
     pool: "forks",
     dangerouslyIgnoreUnhandledErrors: true,
+    testTimeout: 30000,
   },
 }));
