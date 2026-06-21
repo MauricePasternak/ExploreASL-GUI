@@ -31,6 +31,7 @@ interface ProjectState {
   syncProcessingState: (
     processingState: Pick<ProcessingState, "config" | "processingPhase">,
   ) => void;
+  setPopulationCompleted: (value: boolean) => void;
   closeProject: () => void;
 }
 
@@ -167,6 +168,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       isDirty: false,
       loaded: false,
     });
+  },
+
+  setPopulationCompleted: (value) => {
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            uiState: {
+              ...state.project.uiState,
+              population: { completed: value },
+            },
+          }
+        : null,
+      isDirty: true,
+    }));
   },
 
   syncImportState: (importState) => {

@@ -1,0 +1,188 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { MantineProvider } from "@mantine/core";
+
+afterEach(cleanup);
+
+function renderWithMantine(ui: React.ReactNode) {
+  return render(<MantineProvider>{ui}</MantineProvider>);
+}
+
+// Mock Tauri APIs
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}));
+
+// Mock nivo (canvas not available in jsdom)
+vi.mock("@nivo/scatterplot", () => ({
+  ResponsiveScatterPlotCanvas: () => <div data-testid="scatter-canvas" />,
+}));
+vi.mock("@nivo/swarmplot", () => ({
+  ResponsiveSwarmPlotCanvas: () => <div data-testid="swarm-canvas" />,
+}));
+
+// Mock NiiVue
+vi.mock("@niivue/niivue", () => ({
+  Niivue: vi.fn().mockImplementation(() => ({
+    attachToCanvas: vi.fn(),
+    setRadiologicalConvention: vi.fn(),
+    setSliceType: vi.fn(),
+    setMultiplanarLayout: vi.fn(),
+    setColormap: vi.fn(),
+    loadVolumes: vi.fn().mockResolvedValue(undefined),
+    updateGLVolume: vi.fn(),
+    removeVolumeByIndex: vi.fn(),
+    drawScene: vi.fn(),
+    volumes: [],
+    opts: { multiplanarShowRender: 2 },
+    sliceTypeMultiplanar: 4,
+  })),
+  MULTIPLANAR_TYPE: { GRID: 2 },
+  SHOW_RENDER: { ALWAYS: 1 },
+}));
+
+import { invoke } from "@tauri-apps/api/core";
+import { useVisualizationStore } from "../stores/visualizationStore";
+import { useProjectStore } from "../stores/projectStore";
+import VisualizationPage from "../pages/VisualizationPage";
+
+const mockInvoke = vi.mocked(invoke);
+
+const mockFiles = [
+  {
+    fileName: "mean_qCBF_GM_PV0.7_StandardSpace_Total_n=8_18-Jun-2026_PVC0.tsv",
+    relativePath: "mean_qCBF_GM_PV0.7_StandardSpace_Total_n=8_18-Jun-2026_PVC0.tsv",
+    size: 1024,
+    modified: "123456",
+  },
+];
+
+const mockInspection = {
+  columns: [
+    {
+      name: "participant_id",
+      units: "",
+      inferredType: "nominal",
+      levels: ["sub-X_01"],
+      isIdentifier: true,
+    },
+    { name: "subject", units: "", inferredType: "nominal", levels: ["sub-X"], isIdentifier: true },
+    { name: "session", units: "", inferredType: "nominal", levels: ["01"], isIdentifier: true },
+    { name: "run", units: "", inferredType: "nominal", levels: ["ASL_1"], isIdentifier: true },
+    { name: "GM_vol", units: "Liter", inferredType: "continuous", levels: [], isIdentifier: false },
+    { name: "Site", units: "", inferredType: "nominal", levels: ["1", "2"], isIdentifier: false },
+  ],
+  rowCount: 10,
+  fileHash: "abc123",
+};
+
+const mockRows = [
+  {
+    participant_id: "sub-X_01",
+    subject: "sub-X",
+    session: "01",
+    run: "ASL_1",
+    GM_vol: "0.64",
+    Site: "1",
+  },
+];
+
+describe("Visualization setup flow integration", () => {
+  beforeEach(() => {
+    // Reset stores
+    useVisualizationStore.setState({
+      contractSources: [],
+      columnTypes: {},
+      identifiers: null,
+      levelOrderings: {},
+      axisAssignment: { x: null, y: null, colorBy: null },
+      domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
+      stage: "selectFile",
+      splitRatio: 0.6,
+      filtersExpanded: false,
+      availableFiles: [],
+      inspection: null,
+      chartData: [],
+      selectedPointId: null,
+      viewerState: { status: "idle" },
+      viewerError: null,
+      webglAvailable: false,
+      exclusionCount: { plotted: 0, excluded: 0 },
+    });
+
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0",
+        projectMeta: {
+          id: "test-id",
+          name: "Test Project",
+          rootPath: "/tmp/test",
+          createdAt: new Date().toISOString(),
+          lastOpened: new Date().toISOString(),
+          currentPhase: "visualization",
+        },
+        uiState: { population: { completed: true } },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    // Default mock: list_stats_files returns files
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_stats_files") return Promise.resolve(mockFiles);
+      if (cmd === "inspect_tsv") return Promise.resolve(mockInspection);
+      if (cmd === "read_tsv_columns") return Promise.resolve(mockRows);
+      if (cmd === "set_active_project") return Promise.resolve(undefined);
+      return Promise.resolve([]);
+    });
+  });
+
+  it("renders the visualization page with stepper", async () => {
+    renderWithMantine(<VisualizationPage />);
+    expect(await screen.findByTestId("visualization-page")).toBeInTheDocument();
+    expect(await screen.findByTestId("visualization-stepper")).toBeInTheDocument();
+  });
+
+  it("shows file dropdown in step 1", async () => {
+    renderWithMantine(<VisualizationPage />);
+    const dropdown = await screen.findByTestId("file-selection-dropdown");
+    expect(dropdown).toBeInTheDocument();
+  });
+
+  it("shows invalidation banner on hash mismatch", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_stats_files") return Promise.resolve(mockFiles);
+      if (cmd === "inspect_tsv")
+        return Promise.resolve({ ...mockInspection, fileHash: "different_hash" });
+      return Promise.resolve([]);
+    });
+
+    // Set a contract with a hash that won't match
+    useVisualizationStore.setState({
+      contractSources: [{ relativePath: "test.tsv", fileHash: "abc123" }],
+      stage: "visualize",
+    });
+
+    renderWithMantine(<VisualizationPage />);
+    const banner = await screen.findByTestId("invalidation-banner");
+    expect(banner).toBeInTheDocument();
+  });
+
+  it("re-populates inspection and enables next button when loaded with valid contract", async () => {
+    useVisualizationStore.setState({
+      contractSources: [{ relativePath: "test.tsv", fileHash: "abc123" }],
+      stage: "selectFile",
+    });
+
+    renderWithMantine(<VisualizationPage />);
+
+    // Wait for validateContract to run and check that Next button is enabled
+    const nextBtn = await screen.findByTestId("stepper-next-btn");
+    expect(nextBtn).not.toBeDisabled();
+
+    // Check that inspection is populated in store
+    expect(useVisualizationStore.getState().inspection).toEqual(mockInspection);
+  });
+});

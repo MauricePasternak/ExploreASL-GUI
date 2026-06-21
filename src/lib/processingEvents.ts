@@ -191,6 +191,13 @@ export async function setupProcessingListeners(): Promise<() => void> {
       const allComplete =
         finalStatuses.length > 0 && finalStatuses.every((s) => s.status === "complete");
       setPhase(allComplete ? "completed" : "failed");
+
+      if (allComplete) {
+        const config = useProcessingStore.getState().config;
+        if (config?.modules.includes("population")) {
+          useProjectStore.getState().setPopulationCompleted(true);
+        }
+      }
     } catch {
       setPhase("failed");
     } finally {

@@ -22,6 +22,13 @@ import { useProjectStore } from "./stores/projectStore";
 
 const theme = createTheme({
   primaryColor: "teal",
+  breakpoints: {
+    xs: "30em",
+    sm: "48em",
+    md: "62em",
+    lg: "75em",
+    xl: "88em",
+  },
   colors: {
     teal: [
       "#e3fafc",

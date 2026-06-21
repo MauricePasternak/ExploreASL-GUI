@@ -85,6 +85,7 @@ describe("Layout", () => {
     expect(screen.getAllByRole("button", { name: /import/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /parameters/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /processing/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /visualization/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /return to home/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/subjects: 0/i).length).toBeGreaterThan(0);
     expect(screen.queryByTestId("processing-status-bar")).not.toBeInTheDocument();
@@ -372,6 +373,7 @@ describe("Layout", () => {
       expect(screen.getAllByText("Import").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Parameters").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Processing").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Visualization").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Return to home").length).toBeGreaterThan(0);
     });
   });

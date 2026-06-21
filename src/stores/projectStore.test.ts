@@ -322,4 +322,64 @@ describe("useProjectStore", () => {
       expect(useProjectStore.getState().loaded).toBe(true);
     });
   });
+
+  describe("setPopulationCompleted", () => {
+    it("sets the flag", () => {
+      useProjectStore.setState({
+        project: {
+          version: "0.1.0",
+          projectMeta: {
+            id: "test",
+            name: "Test",
+            rootPath: "/tmp",
+            createdAt: new Date().toISOString(),
+            lastOpened: new Date().toISOString(),
+            currentPhase: "processing",
+          },
+          uiState: {},
+          mappingState: {},
+          exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+        },
+        isDirty: false,
+        loaded: true,
+      });
+
+      const { setPopulationCompleted } = useProjectStore.getState();
+      setPopulationCompleted(true);
+      expect(useProjectStore.getState().project?.uiState.population?.completed).toBe(true);
+      expect(useProjectStore.getState().isDirty).toBe(true);
+    });
+
+    it("clears the flag", () => {
+      useProjectStore.setState({
+        project: {
+          version: "0.1.0",
+          projectMeta: {
+            id: "test",
+            name: "Test",
+            rootPath: "/tmp",
+            createdAt: new Date().toISOString(),
+            lastOpened: new Date().toISOString(),
+            currentPhase: "processing",
+          },
+          uiState: { population: { completed: true } },
+          mappingState: {},
+          exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+        },
+        isDirty: false,
+        loaded: true,
+      });
+
+      const { setPopulationCompleted } = useProjectStore.getState();
+      setPopulationCompleted(false);
+      expect(useProjectStore.getState().project?.uiState.population?.completed).toBe(false);
+    });
+
+    it("is a no-op when project is null", () => {
+      useProjectStore.setState({ project: null });
+      const { setPopulationCompleted } = useProjectStore.getState();
+      setPopulationCompleted(true);
+      expect(useProjectStore.getState().project).toBeNull();
+    });
+  });
 });

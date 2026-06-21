@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Center, Loader, Stack, Text } from "@mantine/core";
+import { invoke } from "@tauri-apps/api/core";
 import { useNavigate, useParams } from "react-router";
 
 import { resolveRestoredPhase, tryRestoreProjectSession } from "../lib/restoreProjectSession";
@@ -9,6 +10,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { useImportStore } from "../stores/importStore";
 import ImportPage from "./ImportPage";
 import ProcessingPage from "./ProcessingPage";
+import VisualizationPage from "./VisualizationPage";
 import DataParEditor from "../components/parameters/DataParEditor";
 
 function isProjectPhase(value: string | undefined): value is ProjectPhase {
@@ -69,7 +71,6 @@ export default function ProjectPage() {
     }
 
     if (!params.id) {
-      navigate("/", { replace: true });
       return;
     }
 
@@ -157,6 +158,15 @@ export default function ProjectPage() {
     }
   }, [navigate, params.phase, project, saveProject, setPhase]);
 
+  // Register active project root for niivue:// protocol
+  useEffect(() => {
+    if (!project) return;
+    invoke("set_active_project", { rootPath: project.projectMeta.rootPath }).catch(console.error);
+    return () => {
+      invoke("clear_active_project").catch(console.error);
+    };
+  }, [project?.projectMeta.rootPath]);
+
   if (!project) {
     if (restoring) {
       return (
@@ -180,6 +190,8 @@ export default function ProjectPage() {
       return <DataParEditor />;
     case "processing":
       return <ProcessingPage />;
+    case "visualization":
+      return <VisualizationPage />;
     default:
       return <Text>Current phase: {project.projectMeta.currentPhase}</Text>;
   }
