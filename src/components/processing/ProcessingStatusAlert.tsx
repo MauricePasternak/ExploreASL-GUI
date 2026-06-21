@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, List, Stack, Text } from "@mantine/core";
-import { IconAlertTriangle, IconInfoCircle } from "@tabler/icons-react";
+import { Alert, List, Text } from "@mantine/core";
+import {
+  IconAlertTriangle,
+  IconCircleCheck,
+  IconInfoCircle,
+  IconLoader,
+  IconCircleMinus,
+} from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 import { exists } from "@tauri-apps/plugin-fs";
 
@@ -18,7 +24,9 @@ export interface PreflightResult {
   ready: boolean;
 }
 
-interface PreflightCheckProps {
+type AlertState = "idle" | "checking" | "error" | "warning" | "ready";
+
+interface ProcessingStatusAlertProps {
   onResult?: (result: PreflightResult) => void;
 }
 
@@ -26,17 +34,18 @@ interface PreflightCheckProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function PreflightCheck({ onResult }: PreflightCheckProps) {
+export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAlertProps) {
   const config = useProcessingStore((s) => s.config);
   const settings = useGlobalStore((s) => s.settings);
   const project = useProjectStore((s) => s.project);
+  const availableSubjects = useProcessingStore((s) => s.availableSubjects);
+  const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
 
   const [systemCores, setSystemCores] = useState(0);
   const [matlabExists, setMatlabExists] = useState<boolean | null>(null);
   const [exploreAslExists, setExploreAslExists] = useState<boolean | null>(null);
   const [exploreAslHasM, setExploreAslHasM] = useState<boolean | null>(null);
   const [dataParDirExists, setDataParDirExists] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
 
   // Query system cores once
   useEffect(() => {
@@ -52,6 +61,7 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
       setMatlabExists(false);
       return;
     }
+    setMatlabExists(null);
     exists(path)
       .then(setMatlabExists)
       .catch(() => setMatlabExists(false));
@@ -65,6 +75,8 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
       setExploreAslHasM(false);
       return;
     }
+    setExploreAslExists(null);
+    setExploreAslHasM(null);
     Promise.all([exists(path), exists(`${path}/ExploreASL.m`)])
       .then(([dirExists, mExists]) => {
         setExploreAslExists(dirExists);
@@ -83,31 +95,31 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
       setDataParDirExists(false);
       return;
     }
+    setDataParDirExists(null);
     const dataParDir = `${rootPath}/derivatives/ExploreASL`;
     exists(dataParDir)
       .then(setDataParDirExists)
       .catch(() => setDataParDirExists(false));
   }, [project?.projectMeta.rootPath]);
 
-  // Track loading state: wait for all async checks to resolve
-  useEffect(() => {
-    if (
-      matlabExists !== null &&
-      exploreAslExists !== null &&
-      exploreAslHasM !== null &&
-      dataParDirExists !== null
-    ) {
-      setLoading(false);
-    }
-  }, [matlabExists, exploreAslExists, exploreAslHasM, dataParDirExists]);
+  // Orphaned lock entries: subjects in subjectStatuses but not in availableSubjects.
+  // Population is group-level (subjectSession is empty) — exclude from orphan check.
+  const orphanedSubjects = useMemo(() => {
+    const subjectSet = new Set(availableSubjects.map((s) => s.subjectSession));
+    return subjectStatuses
+      .filter((s) => s.module !== "population" && !subjectSet.has(s.subjectSession))
+      .map((s) => s.subjectSession)
+      .filter((v, i, a) => a.indexOf(v) === i);
+  }, [availableSubjects, subjectStatuses]);
 
   // Compute validation result
   const result = useMemo((): PreflightResult => {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    // Hard block: subjects selected (not required for population-only runs)
     const populationOnly = config?.modules.length === 1 && config?.modules[0] === "population";
+
+    // Hard block: subjects selected (not required for population-only runs)
     if (!config?.subjects.length && !populationOnly) {
       errors.push("No subjects selected. Select at least one subject.");
     }
@@ -168,6 +180,13 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
       );
     }
 
+    // Soft warning: orphaned lock entries
+    if (orphanedSubjects.length > 0) {
+      warnings.push(
+        `Found ${orphanedSubjects.length} orphaned lock file entr${orphanedSubjects.length === 1 ? "y" : "ies"} with no matching rawdata subject: ${orphanedSubjects.slice(0, 5).join(", ")}${orphanedSubjects.length > 5 ? ` (+${orphanedSubjects.length - 5} more)` : ""}`,
+      );
+    }
+
     return { errors, warnings, ready: errors.length === 0 };
   }, [
     config?.subjects,
@@ -181,63 +200,98 @@ export default function PreflightCheck({ onResult }: PreflightCheckProps) {
     exploreAslExists,
     exploreAslHasM,
     dataParDirExists,
+    orphanedSubjects,
   ]);
 
-  // Report result to parent (only after loading completes)
+  // Determine state: idle < checking < error < warning < ready
+  const state: AlertState = useMemo(() => {
+    const hasSelection = (config?.modules.length ?? 0) > 0 || (config?.subjects.length ?? 0) > 0;
+    if (!hasSelection) return "idle";
+    const fsPending =
+      matlabExists === null ||
+      exploreAslExists === null ||
+      exploreAslHasM === null ||
+      dataParDirExists === null;
+    if (fsPending) return "checking";
+    if (result.errors.length > 0) return "error";
+    if (result.warnings.length > 0) return "warning";
+    return "ready";
+  }, [
+    config?.modules.length,
+    config?.subjects.length,
+    matlabExists,
+    exploreAslExists,
+    exploreAslHasM,
+    dataParDirExists,
+    result.errors.length,
+    result.warnings.length,
+  ]);
+
+  // Report result to parent whenever state is stable (not checking)
   useEffect(() => {
-    if (!loading) {
-      onResult?.(result);
-    }
-  }, [result, onResult, loading]);
+    if (state === "checking") return;
+    onResult?.(result);
+  }, [state, result, onResult]);
 
   if (!config) return null;
 
+  const color =
+    state === "error"
+      ? "red"
+      : state === "warning"
+        ? "yellow"
+        : state === "ready"
+          ? "teal"
+          : "gray";
+  const icon = renderIcon(state);
+
   return (
-    <Stack gap="xs" data-testid="preflight-check">
-      {/* Hard block errors */}
-      {result.errors.length > 0 && (
-        <Alert color="red" icon={<IconAlertTriangle size={16} />} data-testid="preflight-errors">
-          {result.errors.length === 1 ? (
-            <Text size="sm" data-testid="preflight-error-item">
-              {result.errors[0]}
-            </Text>
-          ) : (
-            <List size="sm" spacing={4}>
-              {result.errors.map((err) => (
-                <List.Item key={err} data-testid="preflight-error-item">
-                  {err}
-                </List.Item>
-              ))}
-            </List>
-          )}
-        </Alert>
-      )}
+    <Alert
+      color={color}
+      icon={icon}
+      variant="light"
+      data-testid="processing-status-alert"
+      data-state={state}
+    >
+      {state === "idle" && <Text size="sm">Select the Modules and Subject/Sessions to run</Text>}
+      {state === "checking" && <Text size="sm">Checking environment...</Text>}
+      {state === "error" && renderMessageList(result.errors)}
+      {state === "warning" && renderMessageList(result.warnings)}
+      {state === "ready" && <Text size="sm">All checks passed. Ready to process.</Text>}
+    </Alert>
+  );
+}
 
-      {/* Soft warnings */}
-      {result.warnings.length > 0 && (
-        <Alert color="yellow" icon={<IconInfoCircle size={16} />} data-testid="preflight-warnings">
-          {result.warnings.length === 1 ? (
-            <Text size="sm" data-testid="preflight-warning-item">
-              {result.warnings[0]}
-            </Text>
-          ) : (
-            <List size="sm" spacing={4}>
-              {result.warnings.map((warn) => (
-                <List.Item key={warn} data-testid="preflight-warning-item">
-                  {warn}
-                </List.Item>
-              ))}
-            </List>
-          )}
-        </Alert>
-      )}
+function renderIcon(state: AlertState) {
+  switch (state) {
+    case "idle":
+      return <IconCircleMinus size={16} />;
+    case "checking":
+      return <IconLoader size={16} />;
+    case "error":
+      return <IconAlertTriangle size={16} />;
+    case "warning":
+      return <IconInfoCircle size={16} />;
+    case "ready":
+      return <IconCircleCheck size={16} />;
+  }
+}
 
-      {/* All clear */}
-      {result.ready && result.warnings.length === 0 && (
-        <Text size="sm" c="teal" data-testid="preflight-ready">
-          All checks passed. Ready to process.
-        </Text>
-      )}
-    </Stack>
+function renderMessageList(messages: string[]) {
+  if (messages.length === 1) {
+    return (
+      <Text size="sm" data-testid="processing-status-item">
+        {messages[0]}
+      </Text>
+    );
+  }
+  return (
+    <List size="sm" spacing={4}>
+      {messages.map((msg) => (
+        <List.Item key={msg} data-testid="processing-status-item">
+          {msg}
+        </List.Item>
+      ))}
+    </List>
   );
 }

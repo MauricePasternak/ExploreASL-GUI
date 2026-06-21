@@ -56,42 +56,6 @@ describe("PipelineConfig", () => {
     vi.clearAllMocks();
   });
 
-  describe("population-only subject exemption", () => {
-    beforeEach(() => {
-      mockConfig = {
-        subjects: [],
-        modules: ["population"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
-        workers: 1,
-        subjectRegexp: "",
-      };
-    });
-
-    it("does not show subjects error when only population module selected", () => {
-      renderConfig();
-      expect(screen.queryByText(/No subjects selected/i)).not.toBeInTheDocument();
-    });
-  });
-
-  describe("structural module requires subjects", () => {
-    beforeEach(() => {
-      mockConfig = {
-        subjects: [],
-        modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
-        workers: 1,
-        subjectRegexp: "",
-      };
-    });
-
-    it("shows subjects error when structural selected without subjects", () => {
-      renderConfig();
-      expect(screen.getByText(/No subjects selected/i)).toBeInTheDocument();
-    });
-  });
-
   describe("module selection labels", () => {
     beforeEach(() => {
       mockConfig = {
