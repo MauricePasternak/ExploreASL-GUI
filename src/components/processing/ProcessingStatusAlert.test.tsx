@@ -6,6 +6,10 @@ import type { PreflightResult } from "./ProcessingStatusAlert";
 let mockConfig: Record<string, unknown> | null = null;
 let mockAvailableSubjects: { subjectSession: string; module: string }[] = [];
 let mockSubjectStatuses: { subjectSession: string; module: string }[] = [];
+let mockMatlabInstallations: { label: string; path: string; version: string }[] = [
+  { label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" },
+];
+let mockExploreAslPath = "/opt/ExploreASL";
 
 vi.mock("../../stores/processingStore", () => ({
   useProcessingStore: (selector: (state: Record<string, unknown>) => unknown) =>
@@ -20,8 +24,8 @@ vi.mock("../../stores/globalStore", () => ({
   useGlobalStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       settings: {
-        matlabInstallations: [{ label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" }],
-        exploreAslPath: "/opt/ExploreASL",
+        matlabInstallations: mockMatlabInstallations,
+        exploreAslPath: mockExploreAslPath,
       },
     }),
 }));
@@ -67,6 +71,8 @@ describe("ProcessingStatusAlert", () => {
     mockConfig = null;
     mockAvailableSubjects = [];
     mockSubjectStatuses = [];
+    mockMatlabInstallations = [{ label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" }];
+    mockExploreAslPath = "/opt/ExploreASL";
   });
 
   describe("idle state", () => {
@@ -400,6 +406,30 @@ describe("ProcessingStatusAlert", () => {
       await waitFor(() => {
         expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ ready: false }));
       });
+    });
+  });
+
+  describe("global store matlabInstallations empty edge case", () => {
+    it("shows error when global store has no installations but config.matlabPath is set and exists on disk", async () => {
+      mockMatlabInstallations = [];
+      mockConfig = {
+        subjects: ["sub-001_01"],
+        modules: ["structural"],
+        matlabPath: "/bin/matlab",
+        exploreAslPath: "/opt/ExploreASL",
+        workers: 1,
+        subjectRegexp: "",
+      };
+      // exists() returns true for all paths (matlab exists on disk)
+      const onResult = vi.fn();
+      renderAlert(onResult);
+      await waitFor(() => {
+        expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
+          "error",
+        );
+      });
+      expect(screen.getByText(/No MATLAB installation configured/i)).toBeInTheDocument();
+      expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ ready: false }));
     });
   });
 

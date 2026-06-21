@@ -130,7 +130,13 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     }
 
     // Hard block: MATLAB path
-    if (!config?.matlabPath?.trim()) {
+    // Global store check takes precedence: if no MATLAB installations are
+    // registered in settings, the project config's matlabPath may be stale
+    // (e.g. from a different machine or before settings were reset). Reject
+    // regardless of whether the path exists on disk.
+    if (!settings.matlabInstallations.length) {
+      errors.push("No MATLAB installation configured. Add one in Settings.");
+    } else if (!config?.matlabPath?.trim()) {
       errors.push("No MATLAB installation configured. Add one in Settings.");
     } else if (matlabExists === false) {
       errors.push(`MATLAB executable not found at "${config.matlabPath}". Check Settings.`);
@@ -195,6 +201,7 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     config?.exploreAslPath,
     config?.workers,
     settings.exploreAslPath,
+    settings.matlabInstallations,
     systemCores,
     matlabExists,
     exploreAslExists,
@@ -206,13 +213,13 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   // Determine state: idle < checking < error < warning < ready
   const state: AlertState = useMemo(() => {
     const hasSelection = (config?.modules.length ?? 0) > 0 || (config?.subjects.length ?? 0) > 0;
-    if (!hasSelection) return "idle";
     const fsPending =
       matlabExists === null ||
       exploreAslExists === null ||
       exploreAslHasM === null ||
       dataParDirExists === null;
-    if (fsPending) return "checking";
+    if (fsPending && hasSelection) return "checking";
+    if (!hasSelection) return "idle";
     if (result.errors.length > 0) return "error";
     if (result.warnings.length > 0) return "warning";
     return "ready";
