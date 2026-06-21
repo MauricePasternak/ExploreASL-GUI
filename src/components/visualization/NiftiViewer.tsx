@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader, Stack, Text, Overlay } from "@mantine/core";
-import { useMantineColorScheme } from "@mantine/core";
+import { Loader, Overlay, Skeleton, Stack, Text, useMantineColorScheme } from "@mantine/core";
 import { MULTIPLANAR_TYPE, Niivue, SHOW_RENDER } from "@niivue/niivue";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
 
@@ -54,6 +53,7 @@ export default function NiftiViewer() {
       dragAndDropEnabled: false,
       backColor: colorScheme === "dark" ? [0, 0, 0, 1] : [1, 1, 1, 1],
       show3Dcrosshair: true,
+      loadingText: "",
     });
 
     nv.attachToCanvas(canvasRef.current);
@@ -95,9 +95,7 @@ export default function NiftiViewer() {
       if (!selectedPointId) {
         console.log("[NiftiViewer] No selectedPointId, clearing viewer");
         loadedPointIdRef.current = null;
-        if (viewerState.status === "loading") {
-          setViewerState({ status: "idle" });
-        }
+        setViewerState({ status: "idle" });
         return;
       }
 
@@ -177,7 +175,7 @@ export default function NiftiViewer() {
 
   return (
     <Stack data-testid="nifti-viewer" h="100%" gap={0}>
-      {selectedPointId && point && (
+      {selectedPointId && point ? (
         <div
           data-testid="nifti-viewer-header"
           style={{
@@ -191,23 +189,59 @@ export default function NiftiViewer() {
             Run: {point.run || "01"}
           </Text>
         </div>
+      ) : (
+        <div
+          data-testid="nifti-viewer-header-placeholder"
+          style={{
+            padding: "8px 12px",
+            borderBottom: "1px solid rgba(128,128,128,0.2)",
+            background: colorScheme === "dark" ? "#1a1a1a" : "#f8f9fa",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <Skeleton height={22} width={280} radius="xs" />
+        </div>
       )}
 
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, width: "100%", position: "relative" }}>
-        {!selectedPointId && viewerState.status === "idle" && (
-          <Stack
-            align="center"
-            justify="center"
-            h="100%"
-            style={{ position: "absolute", zIndex: 1, width: "100%" }}
-          >
-            <Text c="dimmed">Click a datapoint to load its qCBF image.</Text>
-          </Stack>
+        {!selectedPointId && (
+          <>
+            <Skeleton
+              height="100%"
+              width="100%"
+              data-testid="nifti-viewer-image-skeleton"
+              style={{ position: "absolute", top: 0, left: 0, zIndex: 0 }}
+            />
+            <Stack
+              align="center"
+              justify="center"
+              h="100%"
+              style={{ position: "absolute", zIndex: 1, width: "100%", top: 0, left: 0 }}
+            >
+              <Text
+                c="dimmed"
+                size="sm"
+                fw={500}
+                ta="center"
+                px="md"
+                data-testid="nifti-viewer-overlay-text"
+              >
+                Click on a datapoint to load in its respective qCBF image.
+              </Text>
+            </Stack>
+          </>
         )}
 
         {viewerState.status === "loading" && (
-          <Overlay center fixed={false} zIndex={2}>
-            <Loader size="sm" />
+          <Overlay
+            center
+            fixed={false}
+            zIndex={2}
+            color={colorScheme === "dark" ? "#000" : "#fff"}
+            backgroundOpacity={0.85}
+          >
+            <Loader size="xl" />
           </Overlay>
         )}
 
@@ -229,7 +263,12 @@ export default function NiftiViewer() {
 
         <canvas
           ref={canvasRef}
-          style={{ width: "100%", height: "100%", display: "block" }}
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "block",
+            visibility: !selectedPointId ? "hidden" : "visible",
+          }}
           data-testid="niivue-canvas"
         />
       </div>
