@@ -23,11 +23,9 @@ export async function isBidsProject(rootPath: string): Promise<boolean> {
 export async function ensureBidsIgnore(rootPath: string): Promise<void> {
   const bidsIgnorePath = `${rootPath}/.bidsignore`;
   let existingContent = "";
-  let existsIgnore = false;
 
   try {
-    existsIgnore = await exists(bidsIgnorePath);
-    if (existsIgnore) {
+    if (await exists(bidsIgnorePath)) {
       existingContent = await readTextFile(bidsIgnorePath);
     }
   } catch {
