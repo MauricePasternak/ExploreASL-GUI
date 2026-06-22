@@ -4,24 +4,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProcessingStore } from "../stores/processingStore";
 
-vi.mock("../../stores/projectStore", () => ({
-  useProjectStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({
-      project: { projectMeta: { rootPath: "/test/project" } },
-    }),
+const { mockProject, mockSettings } = vi.hoisted(() => ({
+  mockProject: { project: { projectMeta: { rootPath: "/test/project" } } },
+  mockSettings: {
+    matlabInstallations: [{ label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" }],
+    exploreAslPath: "/opt/ExploreASL",
+  },
 }));
 
-vi.mock("../../stores/globalStore", () => ({
+vi.mock("../stores/projectStore", () => ({
+  useProjectStore: (selector: (state: Record<string, unknown>) => unknown) => selector(mockProject),
+}));
+
+vi.mock("../stores/globalStore", () => ({
   useGlobalStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({
-      settings: {
-        matlabInstallations: [{ label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" }],
-        exploreAslPath: "/opt/ExploreASL",
-      },
-    }),
+    selector({ settings: mockSettings }),
 }));
 
-vi.mock("../../hooks/useProcessingSync", () => ({
+vi.mock("../hooks/useProcessingSync", () => ({
   useProcessingSync: vi.fn(),
 }));
 
