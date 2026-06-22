@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Button,
+  Divider,
   Group,
   Loader,
   Modal,
@@ -12,8 +13,9 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState, useEffect } from "react";
-import { IconSearch, IconTrash } from "@tabler/icons-react";
+import { IconFolderSearch, IconSearch, IconTrash } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
 
 import type { MatlabInstallation } from "../schemas/globalSettings";
@@ -231,6 +233,17 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
     setTokenSubDelimiters(settings.tokenSubDelimiters.filter((value) => value !== delimiter));
   }
 
+  async function handleBrowseExploreAsl() {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Select ExploreASL directory",
+    });
+    if (selected) {
+      setExploreAslPath(selected as string);
+    }
+  }
+
   return (
     <Modal
       opened={opened}
@@ -240,8 +253,36 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
       data-testid="settings-modal"
     >
       <Stack gap="md">
+        {/* UI Section */}
         <div>
           <Text fw={600} mb="xs">
+            User Interface
+          </Text>
+          <Select
+            label="Theme"
+            data={[
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
+            ]}
+            value={settings.theme}
+            onChange={(value) => {
+              if (value === "light" || value === "dark") {
+                setTheme(value);
+              }
+            }}
+            data-testid="settings-theme-select"
+          />
+        </div>
+
+        <Divider />
+
+        {/* Execution Section */}
+        <div>
+          <Text fw={600} mb="xs">
+            Execution
+          </Text>
+
+          <Text size="sm" fw={500} mb={4}>
             MATLAB Installations
           </Text>
 
@@ -313,42 +354,44 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
               Add Manually
             </Button>
           </Group>
+
+          <Text size="sm" fw={500} mt="md" mb={4}>
+            ExploreASL Path
+          </Text>
+          <Group gap="xs" wrap="nowrap">
+            <TextInput
+              placeholder="/path/to/ExploreASL"
+              value={settings.exploreAslPath}
+              onChange={(event) => setExploreAslPath(event.currentTarget.value)}
+              style={{ flex: 1 }}
+              data-testid="settings-exploreasl-path"
+            />
+            <Button
+              variant="light"
+              leftSection={<IconFolderSearch size={16} />}
+              onClick={handleBrowseExploreAsl}
+              data-testid="settings-exploreasl-browse-btn"
+            >
+              Browse
+            </Button>
+          </Group>
+          {settings.exploreAslPath.trim().length > 0 && (
+            <Text
+              size="sm"
+              c={settings.exploreAslVersion ? "teal" : "orange"}
+              mt={4}
+              data-testid="settings-exploreasl-version"
+            >
+              {settings.exploreAslVersion
+                ? `ExploreASL v${settings.exploreAslVersion} detected`
+                : "ExploreASL version not detected"}
+            </Text>
+          )}
         </div>
 
-        <TextInput
-          label="ExploreASL Path"
-          placeholder="/path/to/ExploreASL"
-          value={settings.exploreAslPath}
-          onChange={(event) => setExploreAslPath(event.currentTarget.value)}
-          data-testid="settings-exploreasl-path"
-        />
-        {settings.exploreAslPath.trim().length > 0 && (
-          <Text
-            size="sm"
-            c={settings.exploreAslVersion ? "teal" : "orange"}
-            data-testid="settings-exploreasl-version"
-          >
-            {settings.exploreAslVersion
-              ? `ExploreASL v${settings.exploreAslVersion} detected`
-              : "ExploreASL version not detected"}
-          </Text>
-        )}
+        <Divider />
 
-        <Select
-          label="Theme"
-          data={[
-            { value: "light", label: "Light" },
-            { value: "dark", label: "Dark" },
-          ]}
-          value={settings.theme}
-          onChange={(value) => {
-            if (value === "light" || value === "dark") {
-              setTheme(value);
-            }
-          }}
-          data-testid="settings-theme-select"
-        />
-
+        {/* Import Section */}
         <div>
           <Text fw={600} mb="xs">
             Import
@@ -360,10 +403,8 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
             onChange={(event) => setPreserveStagingDir(event.currentTarget.checked)}
             data-testid="settings-preserve-staging-dir"
           />
-        </div>
 
-        <div>
-          <Text fw={600} mb="xs">
+          <Text size="sm" fw={500} mt="md" mb="xs">
             Tokenizer Delimiters
           </Text>
           <Text size="sm" c="dimmed" mb="xs">
@@ -404,6 +445,8 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
             </Button>
           </Group>
         </div>
+
+        <Divider />
 
         <Group justify="flex-end">
           <Button onClick={handleClose} data-testid="settings-save-close-btn">

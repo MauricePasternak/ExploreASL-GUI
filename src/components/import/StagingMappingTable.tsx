@@ -1,4 +1,5 @@
 import { Card, Stack, Table, Text, Title } from "@mantine/core";
+import { TableVirtuoso } from "react-virtuoso";
 
 import type {
   MetadataGroup,
@@ -7,6 +8,15 @@ import type {
 } from "../../schemas/importSchemas";
 import { decodePatternSignature } from "../../lib/tokenizerUtils";
 import { useGlobalStore } from "../../stores/globalStore";
+
+const TABLE_HEIGHT = 400;
+const ROW_HEIGHT = 28;
+const TH_STYLE: React.CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+  background: "var(--mantine-color-body)",
+};
 
 interface StagingMappingTableProps {
   mappings: StagingMappingByPattern[];
@@ -58,6 +68,8 @@ export default function StagingMappingTable({
           tokenSubDelimiters,
         );
 
+        const height = Math.min(mapping.entries.length * ROW_HEIGHT, TABLE_HEIGHT);
+
         return (
           <Card
             key={mapping.patternSignature}
@@ -73,37 +85,36 @@ export default function StagingMappingTable({
               {mapping.pattern.count} total matching
             </Text>
 
-            <Table striped highlightOnHover fz="xs">
-              <Table.Thead>
+            <TableVirtuoso
+              style={{ height }}
+              data={mapping.entries}
+              components={{
+                Table: (props) => <Table striped highlightOnHover fz="xs" {...props} />,
+                TableHead: (props) => <Table.Thead {...props} />,
+                TableBody: (props) => <Table.Tbody {...props} />,
+                TableRow: (props) => <Table.Tr {...props} />,
+              }}
+              fixedHeaderContent={() => (
                 <Table.Tr>
-                  <Table.Th>Source (relative)</Table.Th>
-                  <Table.Th>→</Table.Th>
-                  <Table.Th>Staging Path</Table.Th>
-                  <Table.Th>Metadata Group</Table.Th>
+                  <Table.Th style={TH_STYLE}>Source (relative)</Table.Th>
+                  <Table.Th style={TH_STYLE}>→</Table.Th>
+                  <Table.Th style={TH_STYLE}>Staging Path</Table.Th>
+                  <Table.Th style={TH_STYLE}>Metadata Group</Table.Th>
                 </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {mapping.entries.slice(0, 50).map((entry, idx) => {
-                  const relative = entry.sourcePath.split("/sourcedata/").pop() ?? entry.sourcePath;
-                  const stagingPath = `${entry.subject}/${entry.session}/${entry.run}/${entry.modality}`;
-                  return (
-                    <Table.Tr key={idx}>
-                      <Table.Td>{relative}</Table.Td>
-                      <Table.Td>→</Table.Td>
-                      <Table.Td>{stagingPath}</Table.Td>
-                      <Table.Td>{getGroupLabel(entry.subject, entry.session)}</Table.Td>
-                    </Table.Tr>
-                  );
-                })}
-                {mapping.entries.length > 50 && (
-                  <Table.Tr>
-                    <Table.Td colSpan={4} ta="center" c="dimmed">
-                      …and {mapping.entries.length - 50} more
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-              </Table.Tbody>
-            </Table>
+              )}
+              itemContent={(_idx, entry) => {
+                const relative = entry.sourcePath.split("/sourcedata/").pop() ?? entry.sourcePath;
+                const stagingPath = `${entry.subject}/${entry.session}/${entry.run}/${entry.modality}`;
+                return (
+                  <>
+                    <Table.Td>{relative}</Table.Td>
+                    <Table.Td>→</Table.Td>
+                    <Table.Td>{stagingPath}</Table.Td>
+                    <Table.Td>{getGroupLabel(entry.subject, entry.session)}</Table.Td>
+                  </>
+                );
+              }}
+            />
           </Card>
         );
       })}

@@ -161,4 +161,32 @@ vi.mock("react-virtuoso", () => ({
       {data?.map((item: string, index: number) => itemContent(index, item))}
     </div>
   ),
+  TableVirtuoso: ({
+    data,
+    itemContent,
+    fixedHeaderContent,
+    components,
+  }: {
+    data: unknown[];
+    itemContent: (index: number, item: unknown) => React.ReactNode;
+    fixedHeaderContent?: () => React.ReactNode;
+    components?: Record<string, React.ComponentType<Record<string, unknown>>>;
+  }) => {
+    const TableComp = components?.Table ?? "table";
+    const HeadComp = components?.TableHead ?? "thead";
+    const BodyComp = components?.TableBody ?? "tbody";
+    const RowComp = components?.TableRow ?? "tr";
+    return (
+      <TableComp data-testid="table-virtuoso">
+        <HeadComp>{fixedHeaderContent?.()}</HeadComp>
+        <BodyComp>
+          {data?.map((item: unknown, index: number) => (
+            <RowComp key={index} index={index}>
+              {itemContent(index, item)}
+            </RowComp>
+          ))}
+        </BodyComp>
+      </TableComp>
+    );
+  },
 }));

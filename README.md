@@ -11,10 +11,10 @@
 
   <!-- Badges -->
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/MauricePasternak/ExploreASL-GUI-v2?style=for-the-badge&label=Release&color=2d6a9f)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI-v2/ci.yml?style=for-the-badge&label=CI&logo=github-actions&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/actions)
-[![Tests](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI-v2/test.yml?style=for-the-badge&label=Tests&logo=vitest&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/actions)
-[![Issues](https://img.shields.io/github/issues/MauricePasternak/ExploreASL-GUI-v2?style=for-the-badge&logo=github&color=e05d44)](https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/MauricePasternak/ExploreASL-GUI?style=for-the-badge&label=Release&color=2d6a9f)](https://github.com/MauricePasternak/ExploreASL-GUI/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI/ci.yml?style=for-the-badge&label=CI&logo=github-actions&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI/actions)
+[![Tests](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI/test.yml?style=for-the-badge&label=Tests&logo=vitest&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI/actions)
+[![Issues](https://img.shields.io/github/issues/MauricePasternak/ExploreASL-GUI?style=for-the-badge&logo=github&color=e05d44)](https://github.com/MauricePasternak/ExploreASL-GUI/issues)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8D8?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
@@ -22,18 +22,18 @@
 
 <br /><br />
 
-<a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues/new?labels=bug&template=bug_report.md">🐛 Report Bug</a>
+<a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?labels=bug&template=bug_report.md">🐛 Report Bug</a>
 ·
-<a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues/new?labels=enhancement&template=feature_request.md">✨ Request Feature</a>
+<a href="https://github.com/MauricePasternak/ExploreASL-GUI/issues/new?labels=enhancement&template=feature_request.md">✨ Request Feature</a>
 ·
-<a href="https://github.com/MauricePasternak/ExploreASL-GUI-v2/releases">📦 Download</a>
+<a href="https://github.com/MauricePasternak/ExploreASL-GUI/releases">📦 Download</a>
 
 </div>
 
 ---
 
 > [!NOTE]
-> This is a **complete rewrite** of the original [ExploreASL GUI (Electron)](https://github.com/MauricePasternak/ExploreASL-GUI), rebuilt from the ground up using **Tauri v2**. It is lighter, faster, more secure, and ships native OS binaries instead of Electron's bundled Chromium runtime.
+> This is a **complete rewrite** of the original [ExploreASL GUI (Electron)](https://github.com/MauricePasternak/ExploreASL-GUI/tree/electron-v1), rebuilt from the ground up using **Tauri v2**. It is lighter, faster, more secure, and ships native OS binaries instead of Electron's bundled Chromium runtime.
 
 ---
 
@@ -65,11 +65,11 @@
 | Feature                        | Description                                                                                                               |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | 📂 **Dataset Import**          | Organize raw DICOM/NIfTI data into [BIDS](https://bids.neuroimaging.io/) format using a flexible source-data staging tree |
-| 🔍 **BIDS Verification**       | Inspect and correct ASL sidecar JSON fields at the individual scan level                                                  |
-| ⚙️ **Parameter Configuration** | Define and reuse ExploreASL processing parameters (`dataPar.json`) across studies                                         |
-| ▶️ **Pipeline Execution**      | Launch Structural, ASL, and Population modules in parallel with real-time progress tracking                               |
-| 📊 **Results Visualization**   | Explore CBF (cerebral blood flow) maps and QC plots interactively                                                         |
-| 🔄 **Re-run & Clean**          | Selectively re-process subjects or fully clean corrupted outputs without touching the rest of the study                   |
+| 🔍 **Metadata Configuration**  | Define ASL sidecar JSON fields (labelling type, PLD, etc.) with per-scan override groups during import                    |
+| ⚙️ **Parameter Configuration** | Configure ExploreASL processing parameters (`dataPar.json`) through structured forms with basic/advanced field toggles    |
+| ▶️ **Pipeline Execution**      | Select subjects and modules (Structural / ASL / Population) with real-time progress tracking via `.status` lock files     |
+| 📊 **Results Visualization**   | Explore population statistics via scatter/swarm plots and inspect subject-level qCBF NIfTI volumes interactively          |
+| 🔄 **Selective Re-run**        | Re-process specific subjects or modules; stale locks, status files, and logs are cleaned automatically before each run    |
 
 ---
 
@@ -119,7 +119,7 @@ Choose **one** of the following:
 
 ### Download a Pre-built Release _(recommended for end users)_
 
-Head to the [**Releases**](https://github.com/MauricePasternak/ExploreASL-GUI-v2/releases) page and download the installer for your operating system.
+Head to the [**Releases**](https://github.com/MauricePasternak/ExploreASL-GUI/releases) page and download the installer for your operating system.
 
 #### 🪟 Windows
 
@@ -146,56 +146,58 @@ Open the `.dmg` and drag the application bundle to your Applications folder.
 
 ## 🔄 Workflow
 
-ExploreASL GUI follows a five-step analysis pipeline:
+ExploreASL GUI follows a three-phase analysis pipeline:
 
 ```
 Raw DICOM / NIfTI
         │
         ▼
-┌─────────────────┐
-│  1. Import      │  Stage source data → BIDS
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  2. Verify BIDS │  Inspect & correct ASL sidecar JSON fields
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  3. Parameters  │  Configure ExploreASL processing settings (dataPar.json)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  4. Run         │  Launch pipeline modules; monitor real-time progress
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  5. Visualize   │  Explore CBF maps and QC plots interactively
-└─────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Phase 1: Import                                         │
+│  Ingest → Tokenize → Resolve Aliases → Metadata → Run   │
+│  Stage source data into BIDS with configured sidecars    │
+└───────────────────────┬─────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│  Phase 2: Parameters                                     │
+│  Configure dataPar.json (Structural, ASL, Population)    │
+└───────────────────────┬─────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│  Phase 3: Processing                                     │
+│  Select subjects → Run modules → Monitor progress        │
+└───────────────────────┬─────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│  Visualization                                           │
+│  Scatter/swarm plots of ROI stats + NIfTI volume viewer  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 1) Import Your Dataset
+### Phase 1) Import Your Dataset
 
-Drag-and-drop source files into the staging tree, define the `[Subject / Session / Run / Modality]` folder token ordering, and let the GUI produce a BIDS-compliant `sourcedata/` directory along with an `studyPar.json` sidecar for sequence parameters.
+The import module walks you through five sub-steps:
 
-### 2) Verify BIDS
+1. **Ingest DICOMs** — Select your source directory and scan for DICOM files, with optional subfolder grouping
+2. **Tokenize Paths** — Map folder hierarchy levels to BIDS identifiers (Subject / Session / Run / Modality)
+3. **Resolve Aliases** — Rename subjects, order sessions/runs, and map raw scan labels to BIDS modality types
+4. **Acquisition Metadata** — Configure ASL-specific parameters (labelling type, PLD, labelling duration) with per-scan overrides
+5. **Preview & Run** — Review the staging layout and `dataPar.json`, then execute the import via dcm2niix
 
-Review the generated ASL JSON sidecars at the scan level. Fields that are missing, incorrect, or need per-scan overrides can be edited directly within the interface.
+### Phase 2) Define Processing Parameters
 
-### 3) Define Processing Parameters
+Configure the ExploreASL `dataPar.json` through structured forms covering Structural, ASL, Population, and Atlas settings. Basic fields are shown by default; advanced fields are revealed per section.
 
-Configure the ExploreASL `dataPar.json` through a structured form covering M0, quantification, ASL processing, atlases, and more. Basic fields are shown by default; advanced fields are revealed per section. Settings are saved in the project file (`.easl`) and merged at processing time.
+### Phase 3) Run ExploreASL
 
-### 4) Run ExploreASL
+Select the subjects and pipeline modules (Structural / ASL / Population) you want to process. The GUI spawns MATLAB worker processes and tracks progress via ExploreASL's `.status` lock files, showing per-subject step completion in real time.
 
-Select the subjects and pipeline modules (Structural / ASL / Population) you want to process. The GUI spawns parallel worker processes and tracks progress via ExploreASL's `.status` lock files, showing per-subject step completion in real time.
+### Visualize Results
 
-### 5) Visualize Results
-
-Load the processed dataset and explore cerebral blood flow (CBF) maps alongside population-level statistics and QC plots.
+Load population-level statistics TSV files and explore data via scatter and swarm plots. Click any data point to load the corresponding subject's qCBF NIfTI volume in an interactive 3D viewer.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -205,8 +207,8 @@ Load the processed dataset and explore cerebral blood flow (CBF) maps alongside 
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/MauricePasternak/ExploreASL-GUI-v2.git
-cd ExploreASL-GUI-v2
+git clone https://github.com/MauricePasternak/ExploreASL-GUI.git
+cd ExploreASL-GUI
 
 # 2. Install JavaScript dependencies
 pnpm install
@@ -274,15 +276,14 @@ Unit tests cover schemas, Zustand stores, and utility functions. Component tests
 
 - [x] Core project scaffolding (Tauri v2 + React + Mantine)
 - [x] Dataset import with BIDS staging tree
-- [x] BIDS sidecar verification
+- [x] ASL metadata configuration with per-scan overrides
 - [x] Processing parameter configuration (`dataPar.json`)
 - [x] Pipeline execution with real-time progress tracking
-- [ ] Results visualization (CBF maps & QC plots)
-- [ ] Signed macOS & Windows releases
+- [x] Results visualization (population stats + NIfTI viewer)
 - [ ] Auto-update support
 - [ ] Documentation site
 
-See [open issues](https://github.com/MauricePasternak/ExploreASL-GUI-v2/issues) for a full list of planned features and known bugs.
+See [open issues](https://github.com/MauricePasternak/ExploreASL-GUI/issues) for a full list of planned features and known bugs.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -322,7 +323,7 @@ This GUI is built around [ExploreASL](https://exploreasl.github.io/Documentation
 
 ### Previous Version
 
-The original Electron-based ExploreASL GUI can be found at [MauricePasternak/ExploreASL-GUI](https://github.com/MauricePasternak/ExploreASL-GUI). This Tauri v2 rewrite supersedes it with a significantly smaller binary footprint, improved security, and a modernized tech stack.
+The original Electron-based ExploreASL GUI is preserved at [MauricePasternak/ExploreASL-GUI (electron-v1 branch)](https://github.com/MauricePasternak/ExploreASL-GUI/tree/electron-v1). This Tauri v2 rewrite supersedes it with a significantly smaller binary footprint, improved security, and a modernized tech stack.
 
 ### Built With Open Source
 

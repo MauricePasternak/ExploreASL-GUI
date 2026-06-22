@@ -124,5 +124,5 @@ The `ProjectFileSchema` in `src/schemas/project.ts` SHALL replace the current `e
 
 #### Scenario: Toggle state persists across sessions
 
-- **WHEN** user enables "Show advanced parameters" and closes the app
+- **WHEN** user enables "Show advanced parameter sections" and closes the app
 - **THEN** on next load, `uiState.showAdvancedParameters` is `true` and Structural and Environment sections are visible

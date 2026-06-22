@@ -53,12 +53,10 @@ describe("DicomIngestion", () => {
     expect(
       screen.getAllByRole("button", { name: /what folder should i choose/i }).length,
     ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText("Are your scan files inside many subfolders?").length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByRole("button", { name: /when should i turn this on/i }).length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("How are your DICOM files organised?").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /what does this mean/i }).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("opens the folder picker in the project root", async () => {

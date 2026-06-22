@@ -32,13 +32,14 @@ const HELP_DATA: Record<string, HelpContent> = {
     goal: "Scan a local raw data directory to recursively find and catalogue MRI image files (DICOMs) for your subjects.",
     steps: [
       "Click 'Select Source Directory' to browse and select the folder containing your raw scanner files.",
-      "The system will scan the folder structure and display a list of all detected sub-directories and file counts.",
+      "Set 'How are your DICOM files organised?' — leave ON (default) if each scan series is in its own subfolder (typical for scanner exports). Turn it OFF if all DICOMs are in one flat directory.",
+      "Click 'Scan for DICOMs'. The system will walk the folder structure and display all detected DICOM locations.",
       "Confirm that your raw directories and files are detected correctly in the table.",
       "Click 'Next' at the bottom of the screen to proceed to Tokenization.",
     ],
-    tipTitle: "DICOM Structure",
+    tipTitle: "Subfolder grouping",
     tipContent:
-      "ExploreASL expects a study folder containing your raw data. Having well-organized source directories makes the next step (Tokenizing) much easier!",
+      "Most DICOM exports organise each scan series into its own subfolder (one folder per series). Leave this ON for that layout. Only turn it OFF when all your DICOM files are dumped into a single flat directory with no series subfolders.",
   },
   "import-1": {
     title: "Tokenize Paths",
