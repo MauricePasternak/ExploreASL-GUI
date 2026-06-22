@@ -117,17 +117,13 @@ describe("ProcessingPage", () => {
     expect(screen.queryByTestId("module-checkbox-population")).not.toBeInTheDocument();
   });
 
-  it("renders PopulationSection between PipelineConfig and PreflightCheck", () => {
+  it("renders PopulationSection after PipelineConfig", () => {
     renderPage();
     const pipeline = screen.getByTestId("pipeline-config");
     const population = screen.getByTestId("population-section");
-    const preflight = screen.getByTestId("preflight-check");
-    // Verify DOM order
+    // Verify DOM order: pipeline precedes population
     expect(
       pipeline.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      preflight.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();
   });
 
@@ -169,10 +165,11 @@ describe("ProcessingPage", () => {
       ],
     });
     renderPage();
-    expect(screen.queryByTestId("orphaned-subjects-warning")).not.toBeInTheDocument();
+    const alert = screen.getByTestId("processing-status-alert");
+    expect(alert).not.toHaveTextContent(/orphaned lock file entr/i);
   });
 
-  it("shows orphaned subjects warning for non-population module with unknown subject", () => {
+  it("shows orphaned subjects warning for non-population module with unknown subject", async () => {
     useProcessingStore.setState({
       subjectStatuses: [
         {
@@ -185,10 +182,11 @@ describe("ProcessingPage", () => {
       ],
     });
     renderPage();
-    expect(screen.getByTestId("orphaned-subjects-warning")).toBeInTheDocument();
-    expect(screen.getByText(/orphaned lock file entr/i)).toHaveTextContent(
-      "1 orphaned lock file entry",
-    );
+    await waitFor(() => {
+      const alert = screen.getByTestId("processing-status-alert");
+      expect(alert).toHaveTextContent(/orphaned lock file entr/i);
+      expect(alert).toHaveTextContent("1 orphaned lock file entry");
+    });
   });
 
   it("renders ReportViewerModal in the layout", () => {
@@ -196,7 +194,7 @@ describe("ProcessingPage", () => {
     expect(screen.getByTestId("report-viewer-modal")).toBeInTheDocument();
   });
 
-  describe("Start button gated by PreflightCheck errors", () => {
+  describe("Start button gated by ProcessingStatusAlert errors", () => {
     it("disables Start button when preflight reports errors (no subjects selected)", async () => {
       useProcessingStore.setState({
         config: {
@@ -209,7 +207,9 @@ describe("ProcessingPage", () => {
       renderPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("preflight-errors")).toBeInTheDocument();
+        expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
+          "error",
+        );
       });
 
       expect(screen.getByTestId("start-btn")).toBeDisabled();
@@ -226,7 +226,9 @@ describe("ProcessingPage", () => {
       renderPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("preflight-errors")).toBeInTheDocument();
+        expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
+          "error",
+        );
       });
 
       expect(screen.getByTestId("start-btn")).toBeDisabled();

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Checkbox, NumberInput, Select, Stack, Text } from "@mantine/core";
-import { IconAlertTriangle } from "@tabler/icons-react";
+import { Checkbox, NumberInput, Select, Stack, Text } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
 
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
@@ -10,10 +9,6 @@ import { useProcessingStore } from "../../stores/processingStore";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface PipelineConfigProps {
-  onValidationChange?: (valid: boolean) => void;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,7 +27,7 @@ function calcDefaultWorkers(cores: number, memMb: number): number {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function PipelineConfig({ onValidationChange }: PipelineConfigProps) {
+export default function PipelineConfig() {
   const settings = useGlobalStore((s) => s.settings);
   const config = useProcessingStore((s) => s.config);
   const setConfig = useProcessingStore((s) => s.setConfig);
@@ -78,22 +73,6 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
   );
 
   const noMatlab = settings.matlabInstallations.length === 0;
-  const noExploreAsl = !settings.exploreAslPath?.trim();
-
-  // Validation
-  const validationErrors = useMemo(() => {
-    const errors: string[] = [];
-    if (noMatlab) errors.push("No MATLAB installation configured. Add one in Settings.");
-    if (noExploreAsl) errors.push("No ExploreASL path configured. Set it in Settings.");
-    const populationOnly = config?.modules.length === 1 && config?.modules[0] === "population";
-    if (!config?.subjects.length && !populationOnly) errors.push("No subjects selected.");
-    if (!config?.modules.length) errors.push("At least one module must be selected.");
-    return errors;
-  }, [noMatlab, noExploreAsl, config?.subjects, config?.modules]);
-
-  useEffect(() => {
-    onValidationChange?.(validationErrors.length === 0);
-  }, [validationErrors, onValidationChange]);
 
   // Handlers
   const handleMatlabChange = useCallback(
@@ -135,23 +114,6 @@ export default function PipelineConfig({ onValidationChange }: PipelineConfigPro
 
   return (
     <Stack gap="md" data-testid="pipeline-config">
-      {/* Validation errors */}
-      {validationErrors.length > 0 && (
-        <Alert
-          color="red"
-          icon={<IconAlertTriangle size={16} />}
-          data-testid="pipeline-validation-errors"
-        >
-          <Stack gap={2}>
-            {validationErrors.map((err) => (
-              <Text key={err} size="sm">
-                {err}
-              </Text>
-            ))}
-          </Stack>
-        </Alert>
-      )}
-
       {/* MATLAB version */}
       <Select
         label="MATLAB Version"

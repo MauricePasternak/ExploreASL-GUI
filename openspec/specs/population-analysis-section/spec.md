@@ -8,12 +8,12 @@ Define requirements and scenarios for the dedicated Population Analysis layout s
 
 ### Requirement: Population Analysis Section Layout
 
-A dedicated Population Analysis section SHALL be rendered on the Processing page between the Pipeline Configuration Panel and Pre-flight Validation sections. The section SHALL be a Card with a title "Population Analysis". It SHALL only be visible when the processing phase is `idle`, `completed`, `failed`, or `cancelled` (same visibility as the config view).
+A dedicated Population Analysis section SHALL be rendered on the Processing page after the Pipeline Configuration Panel. The section SHALL be a Card with a title "Population Analysis". It SHALL only be visible when the processing phase is `idle`, `completed`, `failed`, or `cancelled` (same visibility as the config view).
 
 #### Scenario: Section appears in correct position
 
 - **WHEN** the user views the Processing page in idle state
-- **THEN** the Population Analysis section SHALL appear between PipelineConfig and PreflightCheck
+- **THEN** the Population Analysis section SHALL appear after PipelineConfig in the config view layout
 
 #### Scenario: Section hidden during execution
 
