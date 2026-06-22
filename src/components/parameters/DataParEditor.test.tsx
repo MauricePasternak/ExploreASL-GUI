@@ -56,7 +56,7 @@ describe("DataParEditor", () => {
   it("shows Structural and Environment when advanced toggle is on", () => {
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
-    const label = w.getAllByText("Show advanced parameters")[0];
+    const label = w.getAllByText("Show advanced parameter sections")[0];
     const switchBody = label
       .closest("[data-label-position]")
       ?.querySelector(".mantine-Switch-body");
@@ -68,7 +68,7 @@ describe("DataParEditor", () => {
   it("renders advanced toggle switch", () => {
     const { container } = renderWithMantine(<DataParEditor />);
     expect(
-      within(container).getAllByText("Show advanced parameters").length,
+      within(container).getAllByText("Show advanced parameter sections").length,
     ).toBeGreaterThanOrEqual(1);
   });
 });

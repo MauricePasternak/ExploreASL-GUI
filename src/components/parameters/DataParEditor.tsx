@@ -73,7 +73,7 @@ export default function DataParEditor() {
           ExploreASL Processing Parameters
         </Text>
         <Switch
-          label="Show advanced parameters"
+          label="Show advanced parameter sections"
           checked={advancedVisibility.showAdvancedSections}
           onChange={handleAdvancedToggle}
           data-testid="advanced-toggle"

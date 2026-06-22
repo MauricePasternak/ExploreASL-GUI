@@ -96,16 +96,16 @@ When `bPVCNativeSpace` is toggled on, the UI SHALL reveal `bPVCGaussianMM` (togg
 
 ### Requirement: Basic/advanced toggle
 
-Each accordion section SHALL contain a "Show advanced" sub-divider. Basic-tier fields are visible by default. Toggling "Show advanced" within a section reveals advanced-tier fields. The Structural and Environment sections SHALL NOT appear at all unless a global "Show advanced parameters" toggle (persisted in `uiState.showAdvancedParameters`) is enabled. The toggle state SHALL persist across page navigation and app restarts via the `.easl` project file.
+Each accordion section SHALL contain a "Show advanced" sub-divider. Basic-tier fields are visible by default. Toggling "Show advanced" within a section reveals advanced-tier fields. The Structural and Environment sections SHALL NOT appear at all unless a global "Show advanced parameter sections" toggle (persisted in `uiState.showAdvancedParameters`) is enabled. The toggle state SHALL persist across page navigation and app restarts via the `.easl` project file.
 
 #### Scenario: User enables global advanced toggle
 
-- **WHEN** user clicks "Show advanced parameters"
+- **WHEN** user clicks "Show advanced parameter sections"
 - **THEN** Structural and Environment accordion panels appear, and each panel's advanced sub-fields become expandable
 
 #### Scenario: User disables global advanced toggle
 
-- **WHEN** user disables "Show advanced parameters"
+- **WHEN** user disables "Show advanced parameter sections"
 - **THEN** Structural and Environment panels disappear, advanced sub-fields in remaining panels are hidden, but any previously-set advanced field values are preserved
 
 ### Requirement: Ghost placeholder defaults

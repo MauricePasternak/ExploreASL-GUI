@@ -140,16 +140,16 @@ export default function DicomIngestion() {
           <div>
             <Group gap="xs" mb={4}>
               <Text fw={500} size="sm">
-                Are your scan files inside many subfolders?
+                How are your DICOM files organised?
               </Text>
               <HelpTooltip
-                label="When should I turn this on?"
-                tooltip="Turn this on when each scan series is stored in its own folder, which is common in exported DICOM data. Turn it off when the DICOM files are mostly all in one folder level."
+                label="What does this mean?"
+                tooltip="ON = each scan series lives in its own subfolder (the typical layout from scanner exports or PACS downloads). The scanner groups one folder per series. OFF = all DICOM files sit together in one or a few flat directories, with no per-series subfolders. When ON, the scanner returns unique folder paths; when OFF, it returns individual file paths."
               />
             </Group>
             <Switch
-              label="Yes, scan through the subfolders"
-              description="Use this when each scan series is saved in its own folder."
+              label="Group by subfolder (one folder per scan series)"
+              description="Each DICOM series is stored in its own subfolder. Disable if all DICOMs are in a single flat directory."
               checked={bMatchDirectories}
               onChange={(e) => setBMatchDirectories(e.currentTarget.checked)}
               data-testid="dicom-match-directories"

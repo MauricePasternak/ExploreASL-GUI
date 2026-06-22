@@ -1,12 +1,12 @@
-import { render, within, fireEvent, cleanup } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
+import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import DataParEditor from "../components/parameters/DataParEditor";
-import { useDataParStore } from "../stores/dataParStore";
-import { useProjectStore } from "../stores/projectStore";
 import { assembleDataPar } from "../lib/assembleDataPar";
 import type { DataParState } from "../schemas/dataParSchema";
+import { useDataParStore } from "../stores/dataParStore";
+import { useProjectStore } from "../stores/projectStore";
 
 function renderWithMantine(ui: React.ReactNode) {
   return render(<MantineProvider>{ui}</MantineProvider>);
@@ -198,7 +198,7 @@ describe("dataPar flow: advanced toggle shows/hides sections", () => {
 
   it("Structural and Environment visible after toggle", () => {
     const { container } = renderWithMantine(<DataParEditor />);
-    clickSwitchByLabel(container, /show advanced parameters/i);
+    clickSwitchByLabel(container, /Show advanced parameter sections/i);
     const w = within(container);
     expect(w.getAllByText("Structural").length).toBeGreaterThanOrEqual(1);
     expect(w.getAllByText("Environment").length).toBeGreaterThanOrEqual(1);
@@ -206,8 +206,8 @@ describe("dataPar flow: advanced toggle shows/hides sections", () => {
 
   it("Structural and Environment hidden after toggle off", () => {
     const { container } = renderWithMantine(<DataParEditor />);
-    clickSwitchByLabel(container, /show advanced parameters/i);
-    clickSwitchByLabel(container, /show advanced parameters/i);
+    clickSwitchByLabel(container, /Show advanced parameter sections/i);
+    clickSwitchByLabel(container, /Show advanced parameter sections/i);
     const w = within(container);
     expect(w.queryByText("Structural")).toBeNull();
     expect(w.queryByText("Environment")).toBeNull();
@@ -216,7 +216,7 @@ describe("dataPar flow: advanced toggle shows/hides sections", () => {
   it("showAdvancedSections state updates in store on toggle", () => {
     const { container } = renderWithMantine(<DataParEditor />);
     expect(useDataParStore.getState().advancedVisibility.showAdvancedSections).toBe(false);
-    clickSwitchByLabel(container, /show advanced parameters/i);
+    clickSwitchByLabel(container, /Show advanced parameter sections/i);
     expect(useDataParStore.getState().advancedVisibility.showAdvancedSections).toBe(true);
   });
 });
