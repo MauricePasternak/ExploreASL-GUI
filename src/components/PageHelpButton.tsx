@@ -254,7 +254,7 @@ export default function PageHelpButton() {
           onClick={() => setOpened(true)}
           style={{
             position: "fixed",
-            bottom: "60px",
+            bottom: phase === "import" ? "120px" : "60px",
             right: "24px",
             zIndex: 100,
             animation: "help-pulse 2s infinite",
