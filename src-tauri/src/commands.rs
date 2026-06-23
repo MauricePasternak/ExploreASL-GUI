@@ -246,7 +246,7 @@ fn run_matlab_release(binary: &Path) -> Option<String> {
 pub fn is_writable(path: &str) -> bool {
     let trace = CommandTrace::new("is_writable");
     trace.arg("path", path);
-    let test_file = format!("{}/.easl_write_test", path);
+    let test_file = std::path::Path::new(path).join(".easl_write_test");
 
     let result = fs::write(&test_file, b"").is_ok() && fs::remove_file(&test_file).is_ok();
     trace.success(&result);

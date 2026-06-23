@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { Group, Stack, Text } from "@mantine/core";
+import { Stack } from "@mantine/core";
 import { IconBrain } from "@tabler/icons-react";
+import { useState } from "react";
 import HeaderCard from "../components/HeaderCard";
 
 import ControlButtons from "../components/processing/ControlButtons";

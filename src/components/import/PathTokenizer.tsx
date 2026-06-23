@@ -1,14 +1,14 @@
-import { Badge, Button, Card, Code, Group, Select, Stack, Text, Title } from "@mantine/core";
+import { Badge, Button, Card, Code, Group, Select, Stack, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconRoute } from "@tabler/icons-react";
 import HeaderCard from "../HeaderCard";
 
 import { isTokenizerComplete } from "../../lib/importStepAccess";
-import { useImportStore } from "../../stores/importStore";
 import { splitBySubDelimiters } from "../../lib/pathUtils";
 import { generateFolderHierarchy, generateTokenOrdering } from "../../lib/tokenizerUtils";
-import type { TokenTag, PathPattern, TokenAssignment } from "../../schemas/importSchemas";
+import type { PathPattern, TokenAssignment, TokenTag } from "../../schemas/importSchemas";
 import { TOKEN_TAGS } from "../../schemas/importSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
+import { useImportStore } from "../../stores/importStore";
 
 const TAG_COLORS: Record<TokenTag, string> = {
   Subject: "blue",
