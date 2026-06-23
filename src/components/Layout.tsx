@@ -162,15 +162,17 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                 <IconHelp size={18} />
               </ActionIcon>
             </Tooltip>
-            <ActionIcon
-              aria-label="Open settings"
-              variant="subtle"
-              color="blue"
-              onClick={onOpenSettings}
-              data-testid="layout-open-settings-btn"
-            >
-              <IconSettings size={18} />
-            </ActionIcon>
+            <Tooltip label="Global Settings" withArrow>
+              <ActionIcon
+                aria-label="Open settings"
+                variant="subtle"
+                color="blue"
+                onClick={onOpenSettings}
+                data-testid="layout-open-settings-btn"
+              >
+                <IconSettings size={18} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>

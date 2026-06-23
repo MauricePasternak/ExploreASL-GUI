@@ -22,6 +22,7 @@ import {
   IconCopy,
   IconDatabase,
   IconExclamationMark,
+  IconExternalLink,
   IconEye,
   IconFileImport,
   IconFileText,
@@ -31,6 +32,7 @@ import {
   IconPlayerPlay,
   IconPlus,
   IconRoute,
+  IconSettings,
   IconTags,
 } from "@tabler/icons-react";
 import { useState } from "react";
@@ -190,6 +192,258 @@ export default function OverviewPage() {
           </Grid.Col>
         </Grid>
       </Alert>
+
+      {/* Prerequisites & Setup Section */}
+      <Stack gap="md" data-testid="section-prerequisites">
+        <Group gap="xs">
+          <ThemeIcon color="blue" size="lg" radius="xl">
+            <IconSettings size={20} />
+          </ThemeIcon>
+          <Title order={2} component="h1">
+            Prerequisites & Setup
+          </Title>
+          <Badge color="blue" variant="outline">
+            Required
+          </Badge>
+        </Group>
+        <Text size="sm">
+          Before using ExploreASL GUI, you need two pieces of software installed on your machine:{" "}
+          <strong>MATLAB</strong> and <strong>ExploreASL</strong>. Follow the steps below in order.
+        </Text>
+
+        <Alert
+          color="teal"
+          title="Detailed Installation Tutorial"
+          icon={<IconHelpCircle size={18} />}
+          data-testid="install-tutorial-callout"
+        >
+          <Text size="sm">
+            The ExploreASL team maintains a step-by-step installation guide with screenshots:{" "}
+            <Text
+              component="a"
+              href="https://exploreasl.github.io/Documentation/latest/Tutorials-Install/"
+              target="_blank"
+              rel="noopener noreferrer"
+              c="blue"
+              size="sm"
+            >
+              exploreasl.github.io/Documentation/latest/Tutorials-Install
+              <IconExternalLink size={12} style={{ marginLeft: 4, verticalAlign: "middle" }} />
+            </Text>
+          </Text>
+        </Alert>
+
+        <Accordion variant="separated" data-testid="prerequisites-accordion">
+          <Accordion.Item value="matlab">
+            <Accordion.Control
+              icon={<IconSettings size={16} color="var(--mantine-color-blue-filled)" />}
+            >
+              <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                Step 1 — Install MATLAB
+              </Title>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Text size="sm" mb="xs">
+                MATLAB is commercial software from MathWorks. You need{" "}
+                <strong>R2019a or later</strong> (R2023b or newer recommended). No additional
+                toolboxes are required for ExploreASL.
+              </Text>
+              <Text size="sm" component="div" mb="xs">
+                <ol style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>
+                    Go to{" "}
+                    <Text
+                      component="a"
+                      href="https://www.mathworks.com/downloads/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      c="blue"
+                      size="sm"
+                    >
+                      mathworks.com/downloads
+                      <IconExternalLink
+                        size={12}
+                        style={{ marginLeft: 4, verticalAlign: "middle" }}
+                      />
+                    </Text>{" "}
+                    and sign in with your MathWorks account.
+                  </li>
+                  <li>
+                    If you do not have an account, check with your institution — many universities
+                    and hospitals provide campus MATLAB licenses.
+                  </li>
+                  <li>
+                    Download and run the installer for your operating system (Windows, macOS, or
+                    Linux).
+                  </li>
+                  <li>
+                    When prompted, select <strong>R2019a or later</strong>. You do not need any
+                    additional toolboxes.
+                  </li>
+                  <li>
+                    Complete the installation and launch MATLAB once to confirm it opens without
+                    errors.
+                  </li>
+                </ol>
+              </Text>
+              <Alert color="blue" title="Already have MATLAB?" variant="light" mt="xs">
+                <Text size="xs">
+                  You can check your version by opening MATLAB and typing <code>version</code> in
+                  the command window. Any version from R2019a onward will work.
+                </Text>
+              </Alert>
+              <Text size="xs" c="dimmed" mt="xs">
+                MATLAB is only needed to run the processing pipeline. The GUI itself does not
+                require MATLAB to open.
+              </Text>
+            </Accordion.Panel>
+          </Accordion.Item>
+
+          <Accordion.Item value="exploreasl-download">
+            <Accordion.Control
+              icon={<IconFolder size={16} color="var(--mantine-color-blue-filled)" />}
+            >
+              <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                Step 2 — Download ExploreASL
+              </Title>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Text size="sm" mb="xs">
+                ExploreASL is a free, open-source MATLAB toolbox hosted on GitHub. You need version{" "}
+                <strong>v11.1.0 or later</strong> (the <code>develop</code> branch / v2+ is
+                preferred).
+              </Text>
+
+              <Text fw={700} size="sm" mb={4}>
+                Option A — Download ZIP (no Git required):
+              </Text>
+              <Text size="sm" component="div" mb="xs">
+                <ol style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>
+                    Go to{" "}
+                    <Text
+                      component="a"
+                      href="https://github.com/ExploreASL/ExploreASL"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      c="blue"
+                      size="sm"
+                    >
+                      github.com/ExploreASL/ExploreASL
+                      <IconExternalLink
+                        size={12}
+                        style={{ marginLeft: 4, verticalAlign: "middle" }}
+                      />
+                    </Text>
+                    .
+                  </li>
+                  <li>
+                    Near the top of the page, find the dropdown button that says{" "}
+                    <strong>main</strong>. Click it and select <strong>develop</strong> — this is
+                    the recommended version.
+                  </li>
+                  <li>
+                    Click the green <strong>{"<> Code"}</strong> button, then select{" "}
+                    <strong>Download ZIP</strong>.
+                  </li>
+                  <li>
+                    Extract the ZIP file:
+                    <ul style={{ margin: "4px 0 0 0", paddingLeft: 20 }}>
+                      <li>
+                        <strong>Windows:</strong> Right-click the downloaded <code>.zip</code> file
+                        and select <strong>Extract All…</strong>, then click{" "}
+                        <strong>Extract</strong>. Move the extracted folder to a location like{" "}
+                        <code>C:\ExploreASL</code>.
+                      </li>
+                      <li>
+                        <strong>macOS:</strong> Double-click the <code>.zip</code> file (Safari
+                        extracts it automatically). Move the resulting folder to your home folder
+                        (the folder with your username).
+                      </li>
+                      <li>
+                        <strong>Linux:</strong> Right-click and select <strong>Extract Here</strong>
+                        , or run <code>unzip ExploreASL-develop.zip</code> in a terminal.
+                      </li>
+                    </ul>
+                  </li>
+                </ol>
+              </Text>
+
+              <Text fw={700} size="sm" mb={4}>
+                Option B — Clone with Git:
+              </Text>
+              <Text size="sm" component="div" mb="xs">
+                If you are comfortable with the command line:
+                <Card
+                  withBorder
+                  p="xs"
+                  mt={4}
+                  bg="var(--mantine-color-gray-0)"
+                  radius="sm"
+                  style={{ fontFamily: "monospace", fontSize: "0.8rem" }}
+                >
+                  git clone --branch develop https://github.com/ExploreASL/ExploreASL.git
+                </Card>
+              </Text>
+
+              <Alert
+                color="yellow"
+                title="Avoid cloud-synced folders"
+                icon={<IconExclamationMark size={16} />}
+                mt="xs"
+              >
+                <Text size="xs">
+                  Do not place ExploreASL inside a cloud-synced folder (OneDrive, Dropbox, Google
+                  Drive, iCloud). Cloud sync can corrupt files during processing. If your Desktop or
+                  Documents folder is synced to the cloud, choose a different location.
+                </Text>
+              </Alert>
+
+              <Alert color="blue" title="Don't move it later" variant="light" mt="xs">
+                <Text size="xs">
+                  Once you have configured the GUI to use this folder, do not move or rename it. The
+                  GUI remembers the path and will need to be updated if the folder is relocated.
+                </Text>
+              </Alert>
+            </Accordion.Panel>
+          </Accordion.Item>
+
+          <Accordion.Item value="exploreasl-configure">
+            <Accordion.Control
+              icon={<IconRoute size={16} color="var(--mantine-color-blue-filled)" />}
+            >
+              <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                Step 3 — Tell the GUI Where ExploreASL Is
+              </Title>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Text size="sm" mb="xs">
+                When you first launch ExploreASL GUI, it will ask you to locate your ExploreASL
+                installation folder. Navigate to the folder you extracted or cloned in Step 2 — it
+                should be named <code>ExploreASL</code> (or <code>ExploreASL-develop</code>) and
+                contain a file called <code>ExploreASL.m</code> inside it.
+              </Text>
+              <Text size="xs" c="dimmed">
+                You can change this path at any time from the GUI's global settings.
+              </Text>
+              <Alert
+                color="yellow"
+                title="Hospital or institutional users"
+                icon={<IconExclamationMark size={16} />}
+                mt="xs"
+              >
+                <Text size="xs">
+                  Your IT department may restrict running unsigned software or limit MATLAB network
+                  licensing. Contact your IT support if you encounter permission or licensing
+                  errors.
+                </Text>
+              </Alert>
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
+      </Stack>
+
+      <Divider />
 
       {/* Project Management Section */}
       <Stack gap="md" data-testid="section-project-management">

@@ -93,14 +93,15 @@
 
 ## 📋 Prerequisites
 
-Before running ExploreASL GUI you will need:
+Before running ExploreASL GUI you will need two dependencies installed separately:
 
-### ExploreASL (required)
+| Dependency     | Version                                             | Link                                                                         |
+| -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **MATLAB**     | R2019a or later                                     | [mathworks.com/downloads](https://www.mathworks.com/downloads/)              |
+| **ExploreASL** | v11.1.0 or later (v2+ / `develop` branch preferred) | [github.com/ExploreASL/ExploreASL](https://github.com/ExploreASL/ExploreASL) |
 
-Choose **one** of the following:
-
-- **Full MATLAB installation** (R2019a or later) **+** [ExploreASL source code](https://github.com/ExploreASL/ExploreASL) cloned from GitHub — _recommended for most users_
-- **MATLAB Runtime R2019a (9.6)** + a pre-compiled ExploreASL binary — _contact the [ExploreASL team](https://sites.google.com/view/exploreasl/contact) for compiled builds_
+> [!NOTE]
+> Future releases will also support **MATLAB Runtime** with a pre-compiled ExploreASL package and an **ExploreASL Docker image** ([hub.docker.com/r/exploreasl/xasl](https://hub.docker.com/r/exploreasl/xasl)). These are not yet available in the current version.
 
 ### Platform Dependencies (for running from source only)
 
@@ -144,6 +145,66 @@ Open the `.dmg` and drag the application bundle to your Applications folder.
 
 ---
 
+## 🔧 Setting Up MATLAB & ExploreASL
+
+The GUI requires both MATLAB and ExploreASL to be installed on your machine before it can process data. Follow the steps below for your operating system.
+
+> [!TIP]
+> The ExploreASL team maintains a detailed installation tutorial with screenshots: [exploreasl.github.io/Documentation/latest/Tutorials-Install](https://exploreasl.github.io/Documentation/latest/Tutorials-Install/)
+
+### Step 1 — Install MATLAB
+
+1. Go to [mathworks.com/downloads](https://www.mathworks.com/downloads/) and sign in with your MathWorks account. If you do not have one, your institution may provide a campus license — check with your IT or licensing department.
+2. Download the MATLAB installer for your operating system (Windows, macOS, or Linux).
+3. Run the installer. When prompted, select **R2019a or later** (R2023b or newer recommended). You do not need any additional toolboxes for ExploreASL.
+4. Complete the installation and launch MATLAB once to confirm it opens without errors.
+
+> [!TIP]
+> Already have MATLAB installed? You can check your version by opening MATLAB and typing `version` in the command window. Any version from R2019a onward will work.
+
+### Step 2 — Install ExploreASL from GitHub
+
+ExploreASL is a free, open-source MATLAB toolbox. You obtain it by downloading or cloning it from GitHub.
+
+#### Option A — Download the ZIP (no Git required)
+
+1. Go to [github.com/ExploreASL/ExploreASL](https://github.com/ExploreASL/ExploreASL).
+2. Near the top of the page, you will see a dropdown button that says **main**. Click it and select **develop** — this is the recommended version.
+3. Click the green **<> Code** button, then select **Download ZIP**.
+4. Extract the ZIP file:
+   - **Windows:** Right-click the downloaded `.zip` file and select **Extract All…**, then click **Extract**. Move the extracted folder to a location like `C:\ExploreASL`.
+   - **macOS:** Double-click the `.zip` file (Safari extracts it automatically). Move the resulting folder to a location like your home folder (the folder with your username).
+   - **Linux:** Right-click the `.zip` file and select **Extract Here**, or run `unzip ExploreASL-develop.zip` in a terminal. Move the folder to a location like `/home/your-username/ExploreASL`.
+
+> [!WARNING]
+> Do not place ExploreASL inside a cloud-synced folder (OneDrive, Dropbox, Google Drive, iCloud). Cloud sync can corrupt files during processing. If your Desktop or Documents folder is synced to the cloud, choose a different location such as `C:\ExploreASL` on Windows.
+
+> [!IMPORTANT]
+> Once you have configured the GUI to use this folder, do not move or rename it. The GUI remembers the path and will need to be updated if the folder is relocated.
+
+#### Option B — Clone with Git
+
+If you are comfortable with the command line:
+
+```bash
+git clone --branch develop https://github.com/ExploreASL/ExploreASL.git
+```
+
+This clones the latest `develop` branch (v2+), which is the recommended version.
+
+### Step 3 — Tell the GUI Where ExploreASL Is
+
+When you first launch ExploreASL GUI, it will ask you to locate your ExploreASL installation folder. Navigate to the folder you extracted or cloned in Step 2 — it should be named `ExploreASL` (or `ExploreASL-develop`) and contain a file called `ExploreASL.m` inside it.
+
+You can change this path at any time from the GUI's settings.
+
+> [!NOTE]
+> If you are in a hospital or institutional environment, your IT department may restrict running unsigned software or limit MATLAB network licensing. Contact your IT support if you encounter permission or licensing errors.
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+---
+
 ## 🔄 Workflow
 
 ExploreASL GUI follows a three-phase analysis pipeline:
@@ -153,31 +214,31 @@ Raw DICOM / NIfTI
         │
         ▼
 ┌─────────────────────────────────────────────────────────┐
-│  Phase 1: Import                                         │
+│  Import Module                                          │
 │  Ingest → Tokenize → Resolve Aliases → Metadata → Run   │
-│  Stage source data into BIDS with configured sidecars    │
+│  Stage source data into BIDS with configured sidecars   │
 └───────────────────────┬─────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│  Phase 2: Parameters                                     │
-│  Configure dataPar.json (Structural, ASL, Population)    │
+│  Parameters Module                                      │
+│  Configure dataPar.json (Structural, ASL, Population)   │
 └───────────────────────┬─────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│  Phase 3: Processing                                     │
-│  Select subjects → Run modules → Monitor progress        │
+│  Processing Module                                      │
+│  Select subjects → Run modules → Monitor progress       │
 └───────────────────────┬─────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│  Visualization                                           │
-│  Scatter/swarm plots of ROI stats + NIfTI volume viewer  │
+│  Visualization Module                                   │
+│  Scatter/swarm plots of ROI stats + NIfTI volume viewer │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Phase 1) Import Your Dataset
+### Import Dataset
 
 The import module walks you through five sub-steps:
 
@@ -187,11 +248,11 @@ The import module walks you through five sub-steps:
 4. **Acquisition Metadata** — Configure ASL-specific parameters (labelling type, PLD, labelling duration) with per-scan overrides
 5. **Preview & Run** — Review the staging layout and `dataPar.json`, then execute the import via dcm2niix
 
-### Phase 2) Define Processing Parameters
+### Configure Global Project Data Parameters
 
 Configure the ExploreASL `dataPar.json` through structured forms covering Structural, ASL, Population, and Atlas settings. Basic fields are shown by default; advanced fields are revealed per section.
 
-### Phase 3) Run ExploreASL
+### Processing Pipeline Execution
 
 Select the subjects and pipeline modules (Structural / ASL / Population) you want to process. The GUI spawns MATLAB worker processes and tracks progress via ExploreASL's `.status` lock files, showing per-subject step completion in real time.
 
