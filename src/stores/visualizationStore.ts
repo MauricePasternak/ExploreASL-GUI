@@ -27,6 +27,10 @@ interface DomainFilters {
 
 export type StepperStage = "selectFile" | "columnTypes" | "levelOrdering" | "visualize";
 
+export type NvSliceType = "multiplanar" | "axial" | "coronal" | "sagittal" | "render";
+
+export type NvBackColor = "black" | "white" | "gray";
+
 export interface ChartPoint {
   x: number | string;
   y: number;
@@ -68,8 +72,8 @@ interface PersistedState {
   nvCrosshair: boolean;
   nvCornerOrientation: boolean;
   nvColormap: string;
-  nvSliceType: "multiplanar" | "axial" | "coronal" | "sagittal" | "render";
-  nvBackColor: "black" | "white" | "gray";
+  nvSliceType: NvSliceType;
+  nvBackColor: NvBackColor;
 
   // Axis tick options
   xTickSize: number;
@@ -133,8 +137,8 @@ interface VisualizationActions {
   setNvCrosshair: (val: boolean) => void;
   setNvCornerOrientation: (val: boolean) => void;
   setNvColormap: (colormap: string) => void;
-  setNvSliceType: (sliceType: "multiplanar" | "axial" | "coronal" | "sagittal" | "render") => void;
-  setNvBackColor: (color: "black" | "white" | "gray") => void;
+  setNvSliceType: (sliceType: NvSliceType) => void;
+  setNvBackColor: (color: NvBackColor) => void;
 
   setXTickSize: (val: number) => void;
   setXTickPadding: (val: number) => void;

@@ -1,7 +1,26 @@
 /**
  * Build a nivo theme object adapted to the active Mantine color scheme.
  */
-export function buildNivoTheme(colorScheme: string): any {
+
+interface NivoPartialTheme {
+  axis: {
+    ticks: {
+      text: { fill: string };
+      line: { stroke: string };
+    };
+    domain: {
+      line: { stroke: string };
+    };
+  };
+  grid: {
+    line: { stroke: string };
+  };
+  legends: {
+    text: { fill: string };
+  };
+}
+
+export function buildNivoTheme(colorScheme: string): NivoPartialTheme {
   const isDark = colorScheme === "dark";
 
   return {

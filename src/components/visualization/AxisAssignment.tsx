@@ -1,6 +1,18 @@
-import { Badge, Group, Select, Grid, Button } from "@mantine/core";
+import {
+  Badge,
+  Group,
+  Select,
+  Grid,
+  Button,
+  type ComboboxItem,
+  type ComboboxLikeRenderOptionInput,
+} from "@mantine/core";
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react";
 import { useVisualizationStore } from "../../stores/visualizationStore";
+
+interface AxisComboboxItem extends ComboboxItem {
+  type?: string;
+}
 
 export default function AxisAssignment() {
   const inspection = useVisualizationStore((s) => s.inspection);
@@ -38,7 +50,7 @@ export default function AxisAssignment() {
   );
   const colorByData = [{ value: "", label: "None" }, ...buildData(categoricalColumns)];
 
-  function renderOption(item: any) {
+  function renderOption(item: ComboboxLikeRenderOptionInput<AxisComboboxItem>) {
     const option = item.option;
     const color =
       option.type === "continuous" ? "blue" : option.type === "ordinal" ? "orange" : "green";
