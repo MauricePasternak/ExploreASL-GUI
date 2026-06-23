@@ -20,7 +20,9 @@ use processing::{
     list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,
     run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir,
 };
-use tauri::{LogicalSize, Manager, Size};
+use tauri::Manager;
+#[cfg(debug_assertions)]
+use tauri::{LogicalSize, Size};
 use visualization::{
     clear_active_project, inspect_tsv, list_stats_files, read_tsv_columns, set_active_project,
 };
@@ -36,10 +38,11 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin({
+            #[allow(unused_mut)]
             let mut builder = tauri_plugin_log::Builder::default();
             #[cfg(debug_assertions)]
             {
-                let log_dir = std::path::PathBuf::from("/tmp/opencode/exploreasl-gui-logs");
+                let log_dir = std::env::temp_dir().join("opencode").join("exploreasl-gui-logs");
                 let _ = std::fs::create_dir_all(&log_dir);
                 builder =
                     builder

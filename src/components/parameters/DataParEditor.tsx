@@ -1,11 +1,11 @@
-import { Accordion, Alert, Group, Stack, Switch, Text } from "@mantine/core";
-import { IconAlertTriangle, IconAdjustments } from "@tabler/icons-react";
-import HeaderCard from "../HeaderCard";
+import { Accordion, Alert, Stack, Switch, Text } from "@mantine/core";
+import { IconAdjustments, IconAlertTriangle } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef } from "react";
 import type { DataParState } from "../../schemas/dataParSchema";
 import { useDataParStore } from "../../stores/dataParStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
+import HeaderCard from "../HeaderCard";
 import { ASLProcessingSection } from "./ASLProcessingSection";
 import { AtlasesSection } from "./AtlasesSection";
 import { EnvironmentSection } from "./EnvironmentSection";

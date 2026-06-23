@@ -1,21 +1,21 @@
-import { useEffect, useMemo } from "react";
-import { Button, Group, Stack, Tabs, Text, Title } from "@mantine/core";
+import { Button, Group, Stack, Tabs, Text } from "@mantine/core";
 import {
   IconArrowLeft,
   IconArrowRight,
   IconCategory,
   IconListNumbers,
   IconReorder,
-  IconUsers,
   IconTags,
+  IconUsers,
 } from "@tabler/icons-react";
+import { useEffect, useMemo } from "react";
 import HeaderCard from "../HeaderCard";
 
 import { hasTokenizerTag, isAliasResolutionComplete } from "../../lib/importStepAccess";
 import { extractUniqueValues } from "../../lib/tokenizerUtils";
-import { useImportStore } from "../../stores/importStore";
-import { useGlobalStore } from "../../stores/globalStore";
 import type { SessionAlias } from "../../schemas/importSchemas";
+import { useGlobalStore } from "../../stores/globalStore";
+import { useImportStore } from "../../stores/importStore";
 import ModalityMappingTable from "./ModalityMappingTable";
 import OrderAliasTable from "./SessionRunOrder";
 import SubjectRenameTable from "./SubjectRenameTable";

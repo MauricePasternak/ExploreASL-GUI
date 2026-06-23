@@ -1,10 +1,11 @@
+import { Badge, Button, Card, Checkbox, Group, Stack, Table, Text } from "@mantine/core";
+import { IconArrowLeft, IconArrowRight, IconFileImport, IconPlus } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, Checkbox, Group, Stack, Table, Text, Title } from "@mantine/core";
-import { IconArrowLeft, IconArrowRight, IconPlus, IconFileImport } from "@tabler/icons-react";
 import HeaderCard from "../HeaderCard";
 
 import { notifications } from "@mantine/notifications";
 
+import { splitBySubDelimiters } from "../../lib/pathUtils";
 import {
   type BidsAslMetadata,
   type MetadataGroup,
@@ -12,9 +13,8 @@ import {
   type TokenAssignment,
   validateBidsMetadataGroup,
 } from "../../schemas/importSchemas";
-import { splitBySubDelimiters } from "../../lib/pathUtils";
-import { useImportStore } from "../../stores/importStore";
 import { useGlobalStore } from "../../stores/globalStore";
+import { useImportStore } from "../../stores/importStore";
 import MetadataModal from "./MetadataModal";
 
 const DEFAULT_GROUP_ID = "global-defaults";

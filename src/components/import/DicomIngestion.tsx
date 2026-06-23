@@ -1,22 +1,22 @@
-import { useState } from "react";
-import { Alert, Badge, Button, Card, Code, Group, Stack, Switch, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Card, Code, Group, Stack, Switch, Text } from "@mantine/core";
 import {
   IconAlertCircle,
-  IconFolderSearch,
-  IconCheck,
   IconArrowRight,
+  IconCheck,
   IconDatabase,
+  IconFolderSearch,
 } from "@tabler/icons-react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { useState } from "react";
 
-import HelpTooltip from "../HelpTooltip";
-import HeaderCard from "../HeaderCard";
+import { logAction } from "../../lib/debug";
+import { discoverPathPatterns } from "../../lib/pathUtils";
+import { useGlobalStore } from "../../stores/globalStore";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { useGlobalStore } from "../../stores/globalStore";
-import { discoverPathPatterns } from "../../lib/pathUtils";
-import { logAction } from "../../lib/debug";
+import HeaderCard from "../HeaderCard";
+import HelpTooltip from "../HelpTooltip";
 
 /**
  * Step 1: DICOM Ingestion.

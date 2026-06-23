@@ -247,7 +247,7 @@ ExploreASL_GUI/
 
 - **Project file:** `<root>/project.easl` — JSON file storing the current project state
 - **Global settings:** Stored via `@tauri-apps/plugin-store` (`settings.json`) in the OS app data directory
-- **Dev logs:** `/tmp/opencode/exploreasl-gui-logs/dev.log`
+- **Dev logs:** `<OS temp dir>/opencode/exploreasl-gui-logs/dev.log` (uses `std::env::temp_dir()`, e.g. `/tmp` on Linux, `%TEMP%` on Windows)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 

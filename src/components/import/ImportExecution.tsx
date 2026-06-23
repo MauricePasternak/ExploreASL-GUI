@@ -1,15 +1,4 @@
-import {
-  Alert,
-  Badge,
-  Button,
-  Group,
-  Modal,
-  Paper,
-  Select,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Alert, Badge, Button, Group, Modal, Paper, Select, Stack, Text } from "@mantine/core";
 import {
   IconAlertTriangle,
   IconArrowLeft,
@@ -29,8 +18,8 @@ import { assembleSourcestructure, assembleStudyPar } from "../../lib/tokenizerUt
 import { useGlobalStore } from "../../stores/globalStore";
 import { type ImportPhase, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import ImportSubjectTable from "./ImportSubjectTable";
 import HeaderCard from "../HeaderCard";
+import ImportSubjectTable from "./ImportSubjectTable";
 
 const PHASE_META: Record<
   ImportPhase,
