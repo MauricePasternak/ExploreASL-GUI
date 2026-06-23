@@ -1,5 +1,6 @@
 import { Accordion, Alert, Group, Stack, Switch, Text } from "@mantine/core";
-import { IconAlertTriangle } from "@tabler/icons-react";
+import { IconAlertTriangle, IconAdjustments } from "@tabler/icons-react";
+import HeaderCard from "../HeaderCard";
 import { useCallback, useEffect, useRef } from "react";
 import type { DataParState } from "../../schemas/dataParSchema";
 import { useDataParStore } from "../../stores/dataParStore";
@@ -68,17 +69,21 @@ export default function DataParEditor() {
 
   return (
     <Stack p="md" data-testid="data-par-editor">
-      <Group justify="space-between">
-        <Text fw={500} size="xl">
-          ExploreASL Processing Parameters
-        </Text>
-        <Switch
-          label="Show advanced parameter sections"
-          checked={advancedVisibility.showAdvancedSections}
-          onChange={handleAdvancedToggle}
-          data-testid="advanced-toggle"
-        />
-      </Group>
+      <HeaderCard
+        icon={IconAdjustments}
+        title="ExploreASL Processing Parameters"
+        subtitle="Configure processing parameters, ASL/M0 options, and study-level settings."
+        color="grape"
+        dataTestId="data-par-editor-header"
+        rightSection={
+          <Switch
+            label="Show advanced parameter sections"
+            checked={advancedVisibility.showAdvancedSections}
+            onChange={handleAdvancedToggle}
+            data-testid="advanced-toggle"
+          />
+        }
+      />
 
       {(processingPhase === "running" || processingPhase === "preparing") && (
         <Alert

@@ -86,4 +86,20 @@ describe("OverviewPage", () => {
     fireEvent.click(backBtn);
     expect(mockNavigate).toHaveBeenCalledWith("/project/proj1/import");
   });
+
+  it("shows 'Back to Home' when navigating from home page with state.from='/'", () => {
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={[{ pathname: "/overview", state: { from: "/" } }]}>
+          <OverviewPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    const backBtn = screen.getByTestId("overview-back-btn");
+    expect(backBtn).toBeInTheDocument();
+    expect(backBtn).toHaveTextContent("Back to Home");
+    fireEvent.click(backBtn);
+    expect(mockNavigate).toHaveBeenCalledWith("/");
+  });
 });

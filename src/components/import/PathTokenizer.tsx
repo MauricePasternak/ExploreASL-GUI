@@ -1,5 +1,6 @@
 import { Badge, Button, Card, Code, Group, Select, Stack, Text, Title } from "@mantine/core";
-import { IconArrowLeft, IconArrowRight } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconRoute } from "@tabler/icons-react";
+import HeaderCard from "../HeaderCard";
 
 import { isTokenizerComplete } from "../../lib/importStepAccess";
 import { useImportStore } from "../../stores/importStore";
@@ -56,11 +57,13 @@ export default function PathTokenizer() {
 
   return (
     <Stack gap="md" data-testid="path-tokenizer">
-      <Title order={3}>Path Tokenizer</Title>
-      <Text c="dimmed" size="sm">
-        Assign semantic tags to each folder level. Click a block to expand sub-blocks if the folder
-        contains multiple tokens separated by the configured tokenizer delimiters.
-      </Text>
+      <HeaderCard
+        icon={IconRoute}
+        title="Path Tokenizer"
+        subtitle="Assign semantic tags to each folder level. Click a block to expand sub-blocks if the folder contains multiple tokens separated by the configured tokenizer delimiters."
+        color="blue"
+        dataTestId="path-tokenizer-header"
+      />
 
       {pathPatterns.map((pattern) => (
         <PatternCard key={pattern.signature} pattern={pattern} />
