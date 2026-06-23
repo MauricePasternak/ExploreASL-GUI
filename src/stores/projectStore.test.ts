@@ -132,10 +132,13 @@ describe("useProjectStore", () => {
       await useProjectStore.getState().createProject("/tmp/proc-project", "Proc Project");
 
       const config = {
-        modules: { structural: true, asl: false, population: false },
-        iterations: 1,
-        skipIfDone: true,
-      } as any;
+        subjects: ["sub-01_01"],
+        modules: ["structural"],
+        matlabPath: "/usr/local/MATLAB",
+        exploreAslPath: "/opt/ExploreASL",
+        workers: 1,
+        subjectRegexp: "^sub-.*$",
+      };
 
       useProjectStore.getState().syncProcessingState({
         config,
@@ -166,6 +169,27 @@ describe("useProjectStore", () => {
 
       useProjectStore.getState().syncProcessingState({
         config: null as any,
+        processingPhase: "idle",
+      });
+
+      const project = useProjectStore.getState().project;
+      expect(project?.uiState.processing?.config).toBeUndefined();
+    });
+
+    it("drops config when modules is empty", async () => {
+      await useProjectStore.getState().createProject("/tmp/empty-mods", "Empty Mods");
+
+      const config = {
+        subjects: [] as string[],
+        modules: [] as string[],
+        matlabPath: "",
+        exploreAslPath: "",
+        workers: 1,
+        subjectRegexp: "^sub-.*$",
+      };
+
+      useProjectStore.getState().syncProcessingState({
+        config,
         processingPhase: "idle",
       });
 

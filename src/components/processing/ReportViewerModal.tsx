@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef } from "react";
-import { Alert, Box, Group, Loader, Modal, Select, Stack, Text, Title, Image } from "@mantine/core";
+import { Alert, Box, Group, Image, Loader, Modal, Select, Stack, Text, Title } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
+import { useEffect, useRef, useState } from "react";
 
 import { fetchReportImage } from "../../lib/reportViewer";
 

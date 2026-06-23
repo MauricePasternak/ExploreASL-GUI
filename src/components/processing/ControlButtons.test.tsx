@@ -3,18 +3,45 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SubjectModuleStatus } from "../../schemas/processingSchemas";
+import { findCompletedSubjects } from "./ControlButton.helpers";
+
 const mockKillProcessing = vi.fn();
 const mockStartProcessing = vi.fn();
 
 let mockPhase: "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled" = "running";
 
+let mockConfig: {
+  subjects: string[];
+  modules: string[];
+  matlabPath: string;
+  exploreAslPath: string;
+  workers: number;
+  subjectRegexp: string;
+} | null = null;
+
+let mockSubjectStatuses: SubjectModuleStatus[] = [];
+
 vi.mock("../../stores/processingStore", () => ({
-  useProcessingStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({
-      processingPhase: mockPhase,
-      startProcessing: mockStartProcessing,
-      killProcessing: mockKillProcessing,
-    }),
+  useProcessingStore: Object.assign(
+    (selector: (state: Record<string, unknown>) => unknown) =>
+      selector({
+        processingPhase: mockPhase,
+        startProcessing: mockStartProcessing,
+        killProcessing: mockKillProcessing,
+        config: mockConfig,
+        subjectStatuses: mockSubjectStatuses,
+      }),
+    {
+      getState: () => ({
+        processingPhase: mockPhase,
+        startProcessing: mockStartProcessing,
+        killProcessing: mockKillProcessing,
+        config: mockConfig,
+        subjectStatuses: mockSubjectStatuses,
+      }),
+    },
+  ),
 }));
 
 const { default: ControlButtons } = await import("./ControlButtons");
@@ -115,6 +142,15 @@ describe("ControlButtons Start button disabled state", () => {
 
   it("calls startProcessing when Start clicked while enabled", async () => {
     const user = userEvent.setup();
+    mockConfig = {
+      subjects: ["sub-001_01"],
+      modules: ["structural"],
+      matlabPath: "/usr/bin/matlab",
+      exploreAslPath: "/opt/easl",
+      workers: 1,
+      subjectRegexp: "^sub-.*$",
+    };
+    mockSubjectStatuses = [];
     renderButtons({ startDisabled: false });
 
     await user.click(screen.getByTestId("start-btn"));
@@ -132,5 +168,293 @@ describe("ControlButtons Start button disabled state", () => {
     mockPhase = "preparing";
     renderButtons({ startDisabled: true });
     expect(screen.getByTestId("stop-btn")).toBeDisabled();
+  });
+});
+
+describe("ControlButtons re-process confirmation", () => {
+  afterEach(() => {
+    cleanup();
+    mockPhase = "idle";
+    mockConfig = null;
+    mockSubjectStatuses = [];
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPhase = "idle";
+    mockConfig = {
+      subjects: ["sub-001_01", "sub-002_01"],
+      modules: ["structural", "asl"],
+      matlabPath: "/usr/bin/matlab",
+      exploreAslPath: "/opt/easl",
+      workers: 1,
+      subjectRegexp: "^(sub-001_01|sub-002_01)$",
+    };
+    mockSubjectStatuses = [];
+  });
+
+  it("shows confirmation dialog when completed subjects are selected for re-processing", async () => {
+    const user = userEvent.setup();
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    renderButtons();
+
+    await user.click(screen.getByTestId("start-btn"));
+
+    expect(
+      await screen.findByText(/re-processing will overwrite their existing output/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("sub-001_01")).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-reprocess-cancel")).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-reprocess-confirm")).toBeInTheDocument();
+  });
+
+  it("does not show confirmation when only pending subjects are selected", async () => {
+    const user = userEvent.setup();
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "pending",
+        completedSteps: [],
+        locked: false,
+      },
+    ];
+    renderButtons();
+
+    await user.click(screen.getByTestId("start-btn"));
+
+    expect(
+      screen.queryByText(/re-processing will overwrite their existing output/i),
+    ).not.toBeInTheDocument();
+    expect(mockStartProcessing).toHaveBeenCalled();
+  });
+
+  it("does not show confirmation when subjects have outdated status", async () => {
+    const user = userEvent.setup();
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "asl",
+        status: "outdated",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    renderButtons();
+
+    await user.click(screen.getByTestId("start-btn"));
+
+    expect(
+      screen.queryByText(/re-processing will overwrite their existing output/i),
+    ).not.toBeInTheDocument();
+    expect(mockStartProcessing).toHaveBeenCalled();
+  });
+
+  it("cancel prevents processing start when confirmation dialog is dismissed", async () => {
+    const user = userEvent.setup();
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    renderButtons();
+
+    await user.click(screen.getByTestId("start-btn"));
+    await user.click(await screen.findByTestId("confirm-reprocess-cancel"));
+
+    expect(mockStartProcessing).not.toHaveBeenCalled();
+  });
+
+  it("confirm proceeds with processing", async () => {
+    const user = userEvent.setup();
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    renderButtons();
+
+    await user.click(screen.getByTestId("start-btn"));
+    await user.click(await screen.findByTestId("confirm-reprocess-confirm"));
+
+    expect(mockStartProcessing).toHaveBeenCalled();
+  });
+
+  it("shows correct module names in dialog for both modules", async () => {
+    const user = userEvent.setup();
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+      {
+        subjectSession: "sub-001_01",
+        module: "asl",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    renderButtons();
+
+    await user.click(screen.getByTestId("start-btn"));
+
+    expect(await screen.findByText(/Structural, ASL/)).toBeInTheDocument();
+  });
+
+  it("does not show confirmation for population-only module selection", async () => {
+    const user = userEvent.setup();
+    mockConfig = {
+      subjects: ["sub-001_01"],
+      modules: ["population"],
+      matlabPath: "/usr/bin/matlab",
+      exploreAslPath: "/opt/easl",
+      workers: 1,
+      subjectRegexp: "^sub-.*$",
+    };
+    mockSubjectStatuses = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    renderButtons();
+
+    await user.click(screen.getByTestId("start-btn"));
+
+    expect(
+      screen.queryByText(/re-processing will overwrite their existing output/i),
+    ).not.toBeInTheDocument();
+    expect(mockStartProcessing).toHaveBeenCalled();
+  });
+});
+
+describe("findCompletedSubjects", () => {
+  it("returns empty when no modules match structural or asl", () => {
+    const result = findCompletedSubjects(["sub-001_01"], ["population"], []);
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty when no subjects are selected", () => {
+    const result = findCompletedSubjects(
+      [],
+      ["structural"],
+      [
+        {
+          subjectSession: "sub-001_01",
+          module: "structural",
+          status: "complete",
+          completedSteps: ["999_ready"],
+          locked: false,
+        },
+      ],
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("finds subjects complete for structural module", () => {
+    const statuses: SubjectModuleStatus[] = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    const result = findCompletedSubjects(["sub-001_01"], ["structural"], statuses);
+    expect(result).toEqual([{ subjectSession: "sub-001_01", modules: ["structural"] }]);
+  });
+
+  it("finds subjects complete for both modules", () => {
+    const statuses: SubjectModuleStatus[] = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+      {
+        subjectSession: "sub-001_01",
+        module: "asl",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    const result = findCompletedSubjects(["sub-001_01"], ["structural", "asl"], statuses);
+    expect(result).toEqual([{ subjectSession: "sub-001_01", modules: ["structural", "asl"] }]);
+  });
+
+  it("excludes subjects with outdated status", () => {
+    const statuses: SubjectModuleStatus[] = [
+      {
+        subjectSession: "sub-001_01",
+        module: "asl",
+        status: "outdated",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+    ];
+    const result = findCompletedSubjects(["sub-001_01"], ["asl"], statuses);
+    expect(result).toEqual([]);
+  });
+
+  it("excludes subjects with incomplete status", () => {
+    const statuses: SubjectModuleStatus[] = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "incomplete",
+        completedSteps: ["060_Segment_T1w"],
+        locked: false,
+      },
+    ];
+    const result = findCompletedSubjects(["sub-001_01"], ["structural"], statuses);
+    expect(result).toEqual([]);
+  });
+
+  it("returns only subjects that have at least one completed module", () => {
+    const statuses: SubjectModuleStatus[] = [
+      {
+        subjectSession: "sub-001_01",
+        module: "structural",
+        status: "complete",
+        completedSteps: ["999_ready"],
+        locked: false,
+      },
+      {
+        subjectSession: "sub-002_01",
+        module: "structural",
+        status: "pending",
+        completedSteps: [],
+        locked: false,
+      },
+    ];
+    const result = findCompletedSubjects(["sub-001_01", "sub-002_01"], ["structural"], statuses);
+    expect(result).toEqual([{ subjectSession: "sub-001_01", modules: ["structural"] }]);
   });
 });

@@ -562,6 +562,13 @@ describe("processingStore Tauri integration: startProcessing", () => {
     await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow("No config set");
   });
 
+  it("throws when no modules are selected", async () => {
+    useProcessingStore.getState().setConfig({ ...STRUCTURAL_ASL_CONFIG, modules: [] });
+    await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
+      "No modules selected",
+    );
+  });
+
   it("throws when no project is loaded", async () => {
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
     const { useProjectStore } = await import("./projectStore");
