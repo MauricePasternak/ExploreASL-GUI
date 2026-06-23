@@ -23,10 +23,8 @@ import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
 import LogViewerModal from "./LogViewerModal";
 import { fetchSubjectReports } from "../../lib/reportViewer";
 import ReportViewerModal from "./ReportViewerModal";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import type { ModuleDisplayStatus } from "./SubjectSelection.helpers";
+import { resolveLogBadge } from "./SubjectSelection.helpers";
 
 type FilterValue = "all" | "pending" | "incomplete" | "complete";
 
@@ -41,20 +39,6 @@ interface SubjectRow extends SubjectInfo {
   /** log file info for columns */
   _structuralLogInfo?: LogFileInfo[];
   _aslLogInfo?: LogFileInfo[];
-}
-
-type ModuleDisplayStatus = "complete" | "incomplete" | "pending" | "skipped" | "outdated";
-
-export type LogBadgeVariant = "errors" | "logs" | "no-logs";
-
-export function resolveLogBadge(
-  moduleStatus: ModuleDisplayStatus,
-  logFiles: LogFileInfo[] | undefined,
-): LogBadgeVariant {
-  if (!logFiles || logFiles.length === 0) {
-    return moduleStatus === "incomplete" ? "errors" : "no-logs";
-  }
-  return moduleStatus === "incomplete" ? "errors" : "logs";
 }
 
 // ---------------------------------------------------------------------------
@@ -498,10 +482,13 @@ export default function SubjectSelection() {
   const [filter, setFilter] = useState<FilterValue>("all");
   const [page, setPage] = useState(1);
   const [recordsPerPage, setRecordsPerPage] = useState(10);
-
-  useEffect(() => {
+  const [prevFilter, setPrevFilter] = useState(filter);
+  const [prevRecordsPerPage, setPrevRecordsPerPage] = useState(recordsPerPage);
+  if (filter !== prevFilter || recordsPerPage !== prevRecordsPerPage) {
+    setPrevFilter(filter);
+    setPrevRecordsPerPage(recordsPerPage);
     setPage(1);
-  }, [filter, recordsPerPage]);
+  }
 
   const selectedSet = useMemo(() => new Set(config?.subjects ?? []), [config?.subjects]);
 
@@ -522,7 +509,7 @@ export default function SubjectSelection() {
         _aslLogInfo: aslLogInfo.get(info.subjectSession),
       };
     });
-  }, [availableSubjects, subjectStatuses, selectedSet]);
+  }, [availableSubjects, subjectStatuses, selectedSet, structuralLogInfo, aslLogInfo]);
 
   const filteredRows = useMemo(() => {
     if (filter === "all") return rows;

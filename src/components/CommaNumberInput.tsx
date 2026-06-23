@@ -1,5 +1,5 @@
 import { TextInput } from "@mantine/core";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   formatNumberArray,
   formatNumberOrArray,
@@ -30,19 +30,19 @@ export function CommaNumberInput({
     if (typeof value === "string") return value;
     return formatNumberOrArray(value);
   });
+  const [prevValue, setPrevValue] = useState(value);
 
-  useEffect(() => {
+  if (value !== prevValue) {
+    setPrevValue(value);
     const currentTextFormatted = typeof value === "string" ? value : formatNumberOrArray(value);
     const parsedLocal = parseNumberOrArray(localText);
     const parsedValue = typeof value === "string" ? parseNumberOrArray(value) : { ok: true, value };
-
     const localValStr = parsedLocal.ok ? JSON.stringify(parsedLocal.value) : null;
     const valueValStr = parsedValue.ok ? JSON.stringify(parsedValue.value) : null;
-
     if (localValStr !== valueValStr) {
       setLocalText(currentTextFormatted);
     }
-  }, [value]);
+  }
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const text = event.currentTarget.value;
@@ -97,20 +97,20 @@ export function CommaArrayInput({
     if (typeof value === "string") return value;
     return formatNumberArray(value);
   });
+  const [prevValue, setPrevValue] = useState(value);
 
-  useEffect(() => {
+  if (value !== prevValue) {
+    setPrevValue(value);
     const currentTextFormatted = typeof value === "string" ? value : formatNumberArray(value);
     const parsedLocal = parseCommaSeparatedNumbers(localText);
     const parsedValue =
       typeof value === "string" ? parseCommaSeparatedNumbers(value) : { ok: true, value };
-
     const localValStr = parsedLocal.ok ? JSON.stringify(parsedLocal.value) : null;
     const valueValStr = parsedValue.ok ? JSON.stringify(parsedValue.value) : null;
-
     if (localValStr !== valueValStr) {
       setLocalText(currentTextFormatted);
     }
-  }, [value]);
+  }
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const text = event.currentTarget.value;

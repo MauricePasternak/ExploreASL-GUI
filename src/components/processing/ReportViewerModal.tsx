@@ -158,6 +158,7 @@ export default function ReportViewerModal({
       urlRef.current = url;
       setUrl(url);
     } catch (err) {
+      console.error(err);
       if (!active.current) return;
       setErr(true);
     } finally {

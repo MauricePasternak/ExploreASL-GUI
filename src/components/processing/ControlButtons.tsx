@@ -1,6 +1,6 @@
-import { useCallback, useState } from "react";
 import { Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { IconPlayerPlay, IconPlayerStop } from "@tabler/icons-react";
+import { useCallback, useState } from "react";
 
 import type { ProcessingPhase } from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";

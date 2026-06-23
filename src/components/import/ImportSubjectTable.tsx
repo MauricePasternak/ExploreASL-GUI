@@ -150,10 +150,13 @@ export default function ImportSubjectTable({
   const [filter, setFilter] = useState<FilterValue>("all");
   const [page, setPage] = useState(1);
   const [recordsPerPage, setRecordsPerPage] = useState(10);
-
-  useEffect(() => {
+  const [prevFilter, setPrevFilter] = useState(filter);
+  const [prevRecordsPerPage, setPrevRecordsPerPage] = useState(recordsPerPage);
+  if (filter !== prevFilter || recordsPerPage !== prevRecordsPerPage) {
+    setPrevFilter(filter);
+    setPrevRecordsPerPage(recordsPerPage);
     setPage(1);
-  }, [filter, recordsPerPage]);
+  }
 
   useEffect(() => {
     if (!projectRoot) return;

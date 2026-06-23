@@ -156,7 +156,7 @@ export function initDebugKeyboardShortcuts(
       const snapshot = await captureSnapshot(getGlobalStore, getProjectStore, getImportStore);
       await copySnapshotToClipboard(snapshot);
       void info("[DEBUG] Store snapshot copied to clipboard (Ctrl+Shift+D)").catch(() => undefined);
-      // eslint-disable-next-line no-console
+
       console.log("[DEBUG] Store snapshot copied to clipboard");
     }
   });

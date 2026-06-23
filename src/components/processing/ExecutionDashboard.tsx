@@ -1,4 +1,3 @@
-import { useMemo, useState } from "react";
 import {
   Accordion,
   Badge,
@@ -17,22 +16,22 @@ import {
   IconLoader,
   IconMinus,
 } from "@tabler/icons-react";
+import { useMemo, useState } from "react";
 
-import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
-import type { ProcessingPhase } from "../../schemas/processingSchemas";
-import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
+import type {
+  ProcessingPhase,
+  SubjectInfo,
+  SubjectModuleStatus,
+} from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type ModuleName = (typeof PROCESSING_MODULES)[number];
-
-interface StepStatus {
-  name: string;
-  status: "pending" | "running" | "complete";
-}
+import type { ModuleName, StepStatus } from "./ExecutionDashboard.helpers";
+import {
+  calcModuleProgress,
+  getRunsForSubjectInfo,
+  getStatusForSubject,
+  getStepsForSubject,
+  getSubjectOverallStatus,
+} from "./ExecutionDashboard.helpers";
 
 // ---------------------------------------------------------------------------
 // Step icon
@@ -236,118 +235,6 @@ function RunSubRow({
       </Group>
     </Group>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-export function getStepsForSubject(
-  subjectSession: string,
-  module: ModuleName,
-  statuses: SubjectModuleStatus[],
-  run?: string,
-): StepStatus[] {
-  const entry = statuses.find(
-    (s) =>
-      s.subjectSession === subjectSession &&
-      s.module === module &&
-      (run === undefined || s.run === run),
-  );
-  if (!entry) return [];
-  const steps: StepStatus[] = entry.completedSteps.map((name) => ({
-    name,
-    status: "complete" as const,
-  }));
-  if (entry.locked && entry.status !== "complete") {
-    steps.push({ name: "Processing...", status: "running" });
-  }
-  return steps;
-}
-
-function getStatusForSubject(
-  subjectSession: string,
-  module: ModuleName,
-  statuses: SubjectModuleStatus[],
-  run?: string,
-): SubjectModuleStatus | undefined {
-  return statuses.find(
-    (s) =>
-      s.subjectSession === subjectSession &&
-      s.module === module &&
-      (run === undefined || s.run === run),
-  );
-}
-
-export function getRunsForSubjectInfo(
-  subject: SubjectInfo,
-  statuses: SubjectModuleStatus[],
-): string[] {
-  const fromSubject = subject.aslRuns ?? [];
-  const fromLock = statuses
-    .filter(
-      (s) =>
-        s.subjectSession === subject.subjectSession && s.module === "asl" && s.run !== undefined,
-    )
-    .map((s) => s.run!);
-  const union = Array.from(new Set([...fromSubject, ...fromLock]));
-  if (union.length === 0) {
-    return ["1"];
-  }
-  return union.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-}
-
-export function getSubjectOverallStatus(
-  subjectSession: string,
-  module: ModuleName,
-  statuses: SubjectModuleStatus[],
-): {
-  status: SubjectModuleStatus["status"];
-  locked: boolean;
-  completedRunsCount: number;
-} {
-  const subjectStatuses = statuses.filter(
-    (s) => s.subjectSession === subjectSession && s.module === module,
-  );
-
-  if (subjectStatuses.length === 0) {
-    return { status: "pending", locked: false, completedRunsCount: 0 };
-  }
-
-  const locked = subjectStatuses.some((s) => s.locked);
-  const completedRunsCount = subjectStatuses.filter((s) => s.status === "complete").length;
-
-  let status: SubjectModuleStatus["status"] = "pending";
-  if (subjectStatuses.every((s) => s.status === "complete")) {
-    status = "complete";
-  } else if (
-    subjectStatuses.some(
-      (s) => s.status === "complete" || s.status === "incomplete" || s.status === "outdated",
-    )
-  ) {
-    status = "incomplete";
-  }
-
-  return { status, locked, completedRunsCount };
-}
-
-export function calcModuleProgress(
-  subjects: SubjectInfo[],
-  module: ModuleName,
-  statuses: SubjectModuleStatus[],
-): { complete: number; total: number } {
-  const eligible = subjects.filter((s) => {
-    if (module === "structural") return s.hasStructural;
-    if (module === "asl") return s.hasASL;
-    return true;
-  });
-
-  const complete = eligible.filter((s) => {
-    const { status } = getSubjectOverallStatus(s.subjectSession, module, statuses);
-    return status === "complete";
-  }).length;
-
-  return { complete, total: eligible.length };
 }
 
 // ---------------------------------------------------------------------------

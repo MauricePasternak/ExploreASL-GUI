@@ -6,7 +6,7 @@ import {
   getRunsForSubjectInfo,
   getSubjectOverallStatus,
   calcModuleProgress,
-} from "./ExecutionDashboard";
+} from "./ExecutionDashboard.helpers";
 
 describe("getStepsForSubject", () => {
   const baseEntry: SubjectModuleStatus = {
