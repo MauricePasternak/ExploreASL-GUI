@@ -4,11 +4,34 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
 
-function configureViewerLayout(nv: Niivue) {
-  nv.setSliceType(nv.sliceTypeMultiplanar);
-  nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID);
-  nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
-  nv.drawScene();
+const getBackColor = (color: string): [number, number, number, number] => {
+  if (color === "white") return [1, 1, 1, 1];
+  if (color === "gray") return [0.15, 0.15, 0.15, 1];
+  return [0, 0, 0, 1];
+};
+
+const getFontColor = (color: string): [number, number, number, number] => {
+  if (color === "white") return [0, 0, 0, 1];
+  return [1, 1, 1, 1];
+};
+
+function configureViewerLayout(
+  nv: Niivue,
+  sliceType: "multiplanar" | "axial" | "coronal" | "sagittal" | "render",
+) {
+  if (sliceType === "multiplanar") {
+    nv.setSliceType(nv.sliceTypeMultiplanar);
+    nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID);
+    nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
+  } else if (sliceType === "axial") {
+    nv.setSliceType(nv.sliceTypeAxial);
+  } else if (sliceType === "coronal") {
+    nv.setSliceType(nv.sliceTypeCoronal);
+  } else if (sliceType === "sagittal") {
+    nv.setSliceType(nv.sliceTypeSagittal);
+  } else if (sliceType === "render") {
+    nv.setSliceType(nv.sliceTypeRender);
+  }
 }
 
 export default function NiftiViewer() {
@@ -21,6 +44,15 @@ export default function NiftiViewer() {
   const setViewerState = useVisualizationStore((s) => s.setViewerState);
   const setWebglAvailable = useVisualizationStore((s) => s.setWebglAvailable);
   const webglAvailable = useVisualizationStore((s) => s.webglAvailable);
+
+  // New settings
+  const nvRadiological = useVisualizationStore((s) => s.nvRadiological);
+  const nvColorbar = useVisualizationStore((s) => s.nvColorbar);
+  const nvCrosshair = useVisualizationStore((s) => s.nvCrosshair);
+  const nvCornerOrientation = useVisualizationStore((s) => s.nvCornerOrientation);
+  const nvColormap = useVisualizationStore((s) => s.nvColormap);
+  const nvSliceType = useVisualizationStore((s) => s.nvSliceType);
+  const nvBackColor = useVisualizationStore((s) => s.nvBackColor);
 
   const { colorScheme } = useMantineColorScheme();
   const [contextLost, setContextLost] = useState(false);
@@ -51,16 +83,17 @@ export default function NiftiViewer() {
 
     const nv = new Niivue({
       dragAndDropEnabled: false,
-      backColor: [0, 0, 0, 1],
-      fontColor: [1, 1, 1, 1],
-      show3Dcrosshair: true,
+      backColor: getBackColor(nvBackColor),
+      fontColor: getFontColor(nvBackColor),
+      show3Dcrosshair: nvCrosshair,
       loadingText: "",
-      isColorbar: true,
+      isColorbar: nvColorbar,
+      isCornerOrientationText: nvCornerOrientation,
     });
 
     nv.attachToCanvas(canvasRef.current);
-    nv.setRadiologicalConvention(false);
-    configureViewerLayout(nv);
+    nv.setRadiologicalConvention(nvRadiological);
+    configureViewerLayout(nv, nvSliceType);
     nvRef.current = nv;
     setNvReady(true);
 
@@ -85,6 +118,38 @@ export default function NiftiViewer() {
       setNvReady(false);
     };
   }, [webglAvailable, setViewerState]);
+
+  // Reactively apply options when they change in the store
+  useEffect(() => {
+    const nv = nvRef.current;
+    if (!nv || !nvReady) return;
+
+    nv.opts.isColorbar = nvColorbar;
+    nv.opts.show3Dcrosshair = nvCrosshair;
+    nv.opts.isCornerOrientationText = nvCornerOrientation;
+    nv.setRadiologicalConvention(nvRadiological);
+
+    nv.opts.backColor = getBackColor(nvBackColor);
+    nv.opts.fontColor = getFontColor(nvBackColor);
+
+    configureViewerLayout(nv, nvSliceType);
+
+    if (nv.volumes.length > 0) {
+      nv.setColormap(nv.volumes[0].id, nvColormap);
+      nv.updateGLVolume();
+    }
+
+    nv.drawScene();
+  }, [
+    nvColorbar,
+    nvCrosshair,
+    nvCornerOrientation,
+    nvRadiological,
+    nvBackColor,
+    nvSliceType,
+    nvColormap,
+    nvReady,
+  ]);
 
   // Load volume when selectedPointId changes or NiiVue becomes ready
   useEffect(() => {
@@ -135,9 +200,9 @@ export default function NiftiViewer() {
         await nv.loadVolumes([{ url, name: `qCBF_${point.participantId}_${point.run}${ext}` }]);
         console.log("[NiftiViewer] Volume loaded successfully");
         if (nv.volumes.length > 0) {
-          nv.setColormap(nv.volumes[0].id, "gray");
+          nv.setColormap(nv.volumes[0].id, nvColormap);
         }
-        configureViewerLayout(nv);
+        configureViewerLayout(nv, nvSliceType);
         nv.updateGLVolume();
         loadedPointIdRef.current = selectedPointId;
         setViewerState({ status: "loaded" });

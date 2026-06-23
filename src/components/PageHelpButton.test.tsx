@@ -3,6 +3,7 @@ import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { useImportStore } from "../stores/importStore";
+import { useVisualizationStore } from "../stores/visualizationStore";
 import PageHelpButton from "./PageHelpButton";
 
 const mockNavigate = vi.fn();
@@ -141,6 +142,64 @@ describe("PageHelpButton", () => {
     // Modal should close
     await waitFor(() => {
       expect(screen.queryByText("Ingest DICOMs")).not.toBeInTheDocument();
+    });
+  });
+
+  it("renders selectFile help on visualization route", async () => {
+    useVisualizationStore.setState({ stage: "selectFile" });
+    renderComponent("/project/proj1/visualization");
+
+    const helpBtn = screen.getByTestId("page-help-btn");
+    fireEvent.click(helpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Select Stats File")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Choose a TSV statistics file from the Population\/Stats directory/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("renders columnTypes help on visualization route", async () => {
+    useVisualizationStore.setState({ stage: "columnTypes" });
+    renderComponent("/project/proj1/visualization");
+
+    const helpBtn = screen.getByTestId("page-help-btn");
+    fireEvent.click(helpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Assign Column Types")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Review and adjust the automatically inferred type/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("renders levelOrdering help on visualization route", async () => {
+    useVisualizationStore.setState({ stage: "levelOrdering" });
+    renderComponent("/project/proj1/visualization");
+
+    const helpBtn = screen.getByTestId("page-help-btn");
+    fireEvent.click(helpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Order Categorical Levels")).toBeInTheDocument();
+      expect(screen.getByText(/Control the display order of categories/i)).toBeInTheDocument();
+    });
+  });
+
+  it("renders visualize help on visualization route", async () => {
+    useVisualizationStore.setState({ stage: "visualize" });
+    renderComponent("/project/proj1/visualization");
+
+    const helpBtn = screen.getByTestId("page-help-btn");
+    fireEvent.click(helpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Explore Data")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Assign axes, inspect charts, and view qCBF brain images/i),
+      ).toBeInTheDocument();
     });
   });
 });

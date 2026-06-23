@@ -54,6 +54,35 @@ interface PersistedState {
   stage: StepperStage;
   splitRatio: number;
   filtersExpanded: boolean;
+
+  // Nivo Chart settings
+  pointSize: number;
+  swarmSpacing: number;
+  chartOpacity: number;
+  showGridX: boolean;
+  showGridY: boolean;
+
+  // NiiVue Options
+  nvRadiological: boolean;
+  nvColorbar: boolean;
+  nvCrosshair: boolean;
+  nvCornerOrientation: boolean;
+  nvColormap: string;
+  nvSliceType: "multiplanar" | "axial" | "coronal" | "sagittal" | "render";
+  nvBackColor: "black" | "white" | "gray";
+
+  // Axis tick options
+  xTickSize: number;
+  xTickPadding: number;
+  xTickRotation: number;
+  xLegendOverride: string | null;
+  xLegendOffset: number;
+
+  yTickSize: number;
+  yTickPadding: number;
+  yTickRotation: number;
+  yLegendOverride: string | null;
+  yLegendOffset: number;
 }
 
 // Ephemeral fields (not persisted)
@@ -93,6 +122,32 @@ interface VisualizationActions {
   setFiltersExpanded: (expanded: boolean) => void;
   invalidateContract: () => void;
 
+  // New settings actions
+  setPointSize: (size: number) => void;
+  setSwarmSpacing: (spacing: number) => void;
+  setChartOpacity: (opacity: number) => void;
+  setShowGridX: (show: boolean) => void;
+  setShowGridY: (show: boolean) => void;
+  setNvRadiological: (val: boolean) => void;
+  setNvColorbar: (val: boolean) => void;
+  setNvCrosshair: (val: boolean) => void;
+  setNvCornerOrientation: (val: boolean) => void;
+  setNvColormap: (colormap: string) => void;
+  setNvSliceType: (sliceType: "multiplanar" | "axial" | "coronal" | "sagittal" | "render") => void;
+  setNvBackColor: (color: "black" | "white" | "gray") => void;
+
+  setXTickSize: (val: number) => void;
+  setXTickPadding: (val: number) => void;
+  setXTickRotation: (val: number) => void;
+  setXLegendOverride: (val: string | null) => void;
+  setXLegendOffset: (val: number) => void;
+
+  setYTickSize: (val: number) => void;
+  setYTickPadding: (val: number) => void;
+  setYTickRotation: (val: number) => void;
+  setYLegendOverride: (val: string | null) => void;
+  setYLegendOffset: (val: number) => void;
+
   // Ephemeral actions
   setAvailableFiles: (files: EphemeralState["availableFiles"]) => void;
   setInspection: (inspection: EphemeralState["inspection"]) => void;
@@ -117,6 +172,32 @@ const INITIAL_PERSISTED: PersistedState = {
   stage: "selectFile",
   splitRatio: 0.6,
   filtersExpanded: false,
+
+  pointSize: 10,
+  swarmSpacing: 2,
+  chartOpacity: 0.8,
+  showGridX: true,
+  showGridY: true,
+
+  nvRadiological: false,
+  nvColorbar: true,
+  nvCrosshair: true,
+  nvCornerOrientation: false,
+  nvColormap: "gray",
+  nvSliceType: "multiplanar",
+  nvBackColor: "black",
+
+  xTickSize: 5,
+  xTickPadding: 5,
+  xTickRotation: -20,
+  xLegendOverride: null,
+  xLegendOffset: 36,
+
+  yTickSize: 5,
+  yTickPadding: 5,
+  yTickRotation: 0,
+  yLegendOverride: null,
+  yLegendOffset: -40,
 };
 
 const INITIAL_EPHEMERAL: EphemeralState = {
@@ -163,6 +244,32 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
       ...INITIAL_PERSISTED,
       stage: "selectFile",
     }),
+
+  // New settings actions
+  setPointSize: (size) => set({ pointSize: size }),
+  setSwarmSpacing: (spacing) => set({ swarmSpacing: spacing }),
+  setChartOpacity: (opacity) => set({ chartOpacity: opacity }),
+  setShowGridX: (show) => set({ showGridX: show }),
+  setShowGridY: (show) => set({ showGridY: show }),
+  setNvRadiological: (val) => set({ nvRadiological: val }),
+  setNvColorbar: (val) => set({ nvColorbar: val }),
+  setNvCrosshair: (val) => set({ nvCrosshair: val }),
+  setNvCornerOrientation: (val) => set({ nvCornerOrientation: val }),
+  setNvColormap: (colormap) => set({ nvColormap: colormap }),
+  setNvSliceType: (sliceType) => set({ nvSliceType: sliceType }),
+  setNvBackColor: (color) => set({ nvBackColor: color }),
+
+  setXTickSize: (val) => set({ xTickSize: val }),
+  setXTickPadding: (val) => set({ xTickPadding: val }),
+  setXTickRotation: (val) => set({ xTickRotation: val }),
+  setXLegendOverride: (val) => set({ xLegendOverride: val }),
+  setXLegendOffset: (val) => set({ xLegendOffset: val }),
+
+  setYTickSize: (val) => set({ yTickSize: val }),
+  setYTickPadding: (val) => set({ yTickPadding: val }),
+  setYTickRotation: (val) => set({ yTickRotation: val }),
+  setYLegendOverride: (val) => set({ yLegendOverride: val }),
+  setYLegendOffset: (val) => set({ yLegendOffset: val }),
 
   // Ephemeral actions
   setAvailableFiles: (files) => set({ availableFiles: files }),

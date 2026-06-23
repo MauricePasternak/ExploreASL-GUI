@@ -3,7 +3,7 @@ import { useMediaQuery } from "@mantine/hooks";
 
 import AxisAssignment from "./AxisAssignment";
 import ChartPanel from "./ChartPanel";
-import FilterPanel from "./FilterPanel";
+import SettingsDrawer from "./SettingsDrawer";
 import NiftiViewer from "./NiftiViewer";
 
 /** Below this width, stack chart above viewer so the chart gets full width. */
@@ -31,7 +31,7 @@ export default function VisualizeStep() {
       style={{ minHeight: isStacked ? "auto" : 0, width: "100%" }}
     >
       <AxisAssignment />
-      <FilterPanel />
+      <SettingsDrawer />
       <Box
         data-testid="dataviz-panel-group"
         style={{

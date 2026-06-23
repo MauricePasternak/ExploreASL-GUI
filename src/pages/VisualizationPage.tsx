@@ -202,7 +202,7 @@ export default function VisualizationPage() {
       </Stepper>
 
       <Group
-        justify="space-between"
+        justify={activeStep > 0 ? "space-between" : "flex-end"}
         mt="md"
         data-testid="dataviz-stepper-buttons-group"
         style={{

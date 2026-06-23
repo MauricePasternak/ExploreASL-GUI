@@ -217,4 +217,35 @@ describe("ChartPanel", () => {
     expect(yScale.min).toBe(90);
     expect(yScale.max).toBe(210);
   });
+
+  it("does not reset selected point when unrelated visualization store state changes", () => {
+    useVisualizationStore.setState({
+      axisAssignment: { x: "age", y: "score", colorBy: null },
+      columnTypes: { age: "continuous", score: "continuous" },
+      inspection: {
+        columns: [
+          { name: "age", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+          { name: "score", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+        ],
+        rowCount: 5,
+        fileHash: "abc",
+      },
+      chartData: [
+        { x: 25, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
+      ],
+      contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
+      selectedPointId: "1",
+    });
+
+    const selectPointSpy = vi.spyOn(useVisualizationStore.getState(), "selectPoint");
+
+    renderComponent();
+
+    selectPointSpy.mockClear();
+
+    // Simulate opening settings drawer
+    useVisualizationStore.setState({ filtersExpanded: true });
+
+    expect(selectPointSpy).not.toHaveBeenCalledWith(null);
+  });
 });
