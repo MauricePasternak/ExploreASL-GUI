@@ -596,6 +596,7 @@ describe("ImportPage import runner step", () => {
     ASLContext: "control,label",
     M0Type: "Separate" as const,
     LabelingDuration: 1.8,
+    BackgroundSuppression: false,
   };
 
   it("renders preview-only navigation and gates Run Import when settings are missing", () => {

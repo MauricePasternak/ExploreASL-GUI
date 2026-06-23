@@ -54,7 +54,7 @@ export const BIDS_FIELD_HINTS: Partial<Record<keyof BidsAslMetadata, MetadataFie
   BolusCutOffFlag: "conditionalRecommended",
   BolusCutOffDelayTime: "conditionalRecommended",
   BolusCutOffTechnique: "optionalOmitted",
-  BackgroundSuppression: "conditionalRecommended",
+  BackgroundSuppression: "important",
   BackgroundSuppressionNumberPulses: "conditionalRecommended",
   BackgroundSuppressionPulseTime: "conditionalRecommended",
   VascularCrushing: "optionalOmitted",

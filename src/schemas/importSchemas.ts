@@ -231,6 +231,13 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
       path: ["ASLContext"],
     });
   }
+  if (data.BackgroundSuppression === undefined || data.BackgroundSuppression === null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Background Suppression is required",
+      path: ["BackgroundSuppression"],
+    });
+  }
 
   const aslContextTokens = data.ASLContext
     ? data.ASLContext.split(",")
@@ -300,20 +307,6 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
           path: ["BolusCutOffTechnique"],
         });
       }
-    }
-  }
-
-  if (data.BackgroundSuppression) {
-    if (
-      data.BackgroundSuppressionNumberPulses === undefined ||
-      data.BackgroundSuppressionNumberPulses === null
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Background Suppression Number Pulses is required when Background Suppression is enabled",
-        path: ["BackgroundSuppressionNumberPulses"],
-      });
     }
   }
 
@@ -643,6 +636,9 @@ export function validateBidsMetadataGroup(params: BidsAslMetadata): string[] {
   if (!params.ASLContext) {
     errors.push("ASL Context is required.");
   }
+  if (params.BackgroundSuppression === undefined || params.BackgroundSuppression === null) {
+    errors.push("Background Suppression is required.");
+  }
 
   const aslContextTokens = params.ASLContext
     ? params.ASLContext.split(",")
@@ -688,17 +684,6 @@ export function validateBidsMetadataGroup(params: BidsAslMetadata): string[] {
       if (!params.BolusCutOffTechnique) {
         errors.push("Bolus Cut Off Technique is required when Bolus Cut Off Flag is enabled.");
       }
-    }
-  }
-
-  if (params.BackgroundSuppression) {
-    if (
-      params.BackgroundSuppressionNumberPulses === undefined ||
-      params.BackgroundSuppressionNumberPulses === null
-    ) {
-      errors.push(
-        "Background Suppression Number Pulses is required when Background Suppression is enabled.",
-      );
     }
   }
 

@@ -180,6 +180,7 @@ describe("BidsAslMetadataSchema", () => {
     M0Type: "Integrated" as const,
     ASLContext: "m0scan,deltam",
     LabelingDuration: 1.8,
+    BackgroundSuppression: false,
   };
 
   it("accepts full valid metadata", () => {
@@ -423,6 +424,7 @@ describe("validateBidsMetadataGroup", () => {
     M0Type: "Integrated" as const,
     ASLContext: "m0scan,deltam",
     LabelingDuration: 1.8,
+    BackgroundSuppression: false,
   };
 
   it("returns no errors for complete valid metadata", () => {
@@ -496,7 +498,7 @@ describe("validateBidsMetadataGroup", () => {
     );
   });
 
-  it("flags missing BackgroundSuppressionNumberPulses when background suppression is enabled", () => {
+  it("does not flag missing BackgroundSuppressionNumberPulses when background suppression is enabled", () => {
     const data = {
       ...validData,
       BackgroundSuppression: true,
@@ -504,12 +506,16 @@ describe("validateBidsMetadataGroup", () => {
       BackgroundSuppressionPulseTime: undefined,
     };
     const errors = validateBidsMetadataGroup(data);
-    expect(errors).toContain(
-      "Background Suppression Number Pulses is required when Background Suppression is enabled.",
-    );
-    expect(errors).not.toContain(
-      "Background Suppression Pulse Time is required when Background Suppression is enabled.",
-    );
+    expect(errors).toEqual([]);
+  });
+
+  it("flags missing BackgroundSuppression", () => {
+    const data = {
+      ...validData,
+      BackgroundSuppression: undefined,
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain("Background Suppression is required.");
   });
 
   it("flags missing SliceTiming when MR Acquisition Type is 2D", () => {
@@ -626,6 +632,7 @@ describe("StudyParJsonSchema", () => {
           ASLContext: "control,label",
           M0Type: "Separate",
           LabelingDuration: 1.8,
+          BackgroundSuppression: false,
         },
       ],
     };
@@ -644,6 +651,7 @@ describe("StudyParJsonSchema", () => {
           ASLContext: "control,label",
           M0Type: "Separate",
           LabelingDuration: 1.8,
+          BackgroundSuppression: false,
         },
         {
           SubjectRegExp: "^BAR$",
@@ -654,6 +662,7 @@ describe("StudyParJsonSchema", () => {
           Manufacturer: "Philips",
           ASLContext: "control,label",
           M0Type: "Separate",
+          BackgroundSuppression: false,
         },
       ],
     };
@@ -676,6 +685,7 @@ describe("StudyParJsonSchema", () => {
       ASLContext: "control,label",
       M0Type: "Separate",
       LabelingDuration: 1.8,
+      BackgroundSuppression: false,
     };
     expect(StudyParEntrySchema.parse(entry)).toMatchObject(entry);
   });
@@ -826,6 +836,7 @@ describe("MetadataGroupSchema", () => {
         ASLContext: "control,label",
         M0Type: "Separate",
         LabelingDuration: 1.8,
+        BackgroundSuppression: false,
       },
     };
     const result = MetadataGroupSchema.parse(data);
@@ -845,6 +856,7 @@ describe("MetadataGroupSchema", () => {
         Manufacturer: "Philips",
         ASLContext: "control,label",
         M0Type: "Separate",
+        BackgroundSuppression: false,
       },
     };
     expect(MetadataGroupSchema.parse(data)).toMatchObject(data);
