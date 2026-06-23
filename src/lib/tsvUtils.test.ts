@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseStatsFileName, transformToChartData } from "./tsvUtils";
+import { parseStatsFileName, transformToChartData, translateColumnName } from "./tsvUtils";
 
 describe("parseStatsFileName", () => {
   it("parses ROI stats filename", () => {
@@ -121,5 +121,28 @@ describe("transformToChartData", () => {
       Group: "nominal",
     });
     expect(points[0].colorBy).toBe("Unknown");
+  });
+});
+
+describe("translateColumnName", () => {
+  it("translates dictionary exact matches", () => {
+    expect(translateColumnName("WM_vol")).toBe("White Matter volume (L)");
+    expect(translateColumnName("GM_vol")).toBe("Gray Matter volume (L)");
+    expect(translateColumnName("CSF_vol")).toBe("CSF volume (L)");
+  });
+
+  it("handles left, right, and bilateral suffixes", () => {
+    expect(translateColumnName("Hippocampus_L")).toBe("Hippocampus (Left)");
+    expect(translateColumnName("Thalamus_R")).toBe("Thalamus (Right)");
+    expect(translateColumnName("Putamen_B")).toBe("Putamen (Bilateral)");
+  });
+
+  it("handles CBF prefixes", () => {
+    expect(translateColumnName("CBF_Frontal_L")).toBe("CBF Frontal (Left)");
+    expect(translateColumnName("CBF_GM")).toBe("Gray Matter CBF (mL/100g/min)");
+  });
+
+  it("falls back to capitalising/cleaning underscores for unknown columns", () => {
+    expect(translateColumnName("my_custom_column")).toBe("my custom column");
   });
 });

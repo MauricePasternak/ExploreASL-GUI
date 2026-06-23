@@ -186,4 +186,40 @@ describe("Visualization setup flow integration", () => {
     // Check that inspection is populated in store
     expect(useVisualizationStore.getState().inspection).toEqual(mockInspection);
   });
+
+  it("keeps the selected point loaded when opening the settings drawer", async () => {
+    useVisualizationStore.setState({
+      contractSources: [{ relativePath: "test.tsv", fileHash: "abc123" }],
+      stage: "visualize",
+      axisAssignment: { x: "Site", y: "GM_vol", colorBy: null },
+      columnTypes: { Site: "nominal", GM_vol: "continuous" },
+      inspection: mockInspection,
+      chartData: [
+        {
+          id: "sub-X_01",
+          x: "1",
+          y: 0.64,
+          participantId: "sub-X",
+          subject: "sub-X",
+          session: "01",
+          run: "ASL_1",
+        },
+      ],
+      selectedPointId: "sub-X_01",
+    });
+
+    renderWithMantine(<VisualizationPage />);
+
+    // Select point AFTER mount/render
+    useVisualizationStore.getState().selectPoint("sub-X_01");
+
+    // Check that the point is successfully selected
+    expect(useVisualizationStore.getState().selectedPointId).toBe("sub-X_01");
+
+    // Open settings drawer
+    useVisualizationStore.getState().setFiltersExpanded(true);
+
+    // Verify selected point is still selected
+    expect(useVisualizationStore.getState().selectedPointId).toBe("sub-X_01");
+  });
 });

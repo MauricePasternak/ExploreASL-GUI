@@ -45,6 +45,8 @@ describe("useVisualizationSync", () => {
             contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
             columnTypes: { GM_vol: "continuous" },
             stage: "columnTypes",
+            pointSize: 15,
+            nvColormap: "warm",
           },
         },
         mappingState: {},
@@ -60,5 +62,7 @@ describe("useVisualizationSync", () => {
     expect(state.contractSources).toEqual([{ relativePath: "test.tsv", fileHash: "abc" }]);
     expect(state.columnTypes).toEqual({ GM_vol: "continuous" });
     expect(state.stage).toBe("columnTypes");
+    expect(state.pointSize).toBe(15);
+    expect(state.nvColormap).toBe("warm");
   });
 });

@@ -15,6 +15,7 @@ import {
 } from "@mantine/core";
 import { IconHelp, IconBook, IconInfoCircle, IconChevronRight } from "@tabler/icons-react";
 import { useImportStore } from "../stores/importStore";
+import { useVisualizationStore } from "../stores/visualizationStore";
 
 interface HelpContent {
   title: string;
@@ -140,6 +141,62 @@ const HELP_DATA: Record<string, HelpContent> = {
     tipContent:
       "ExploreASL processing is highly CPU-intensive and can take 10-30 minutes per subject. You can monitor progress dynamically on this page.",
   },
+  "viz-selectFile": {
+    title: "Select Stats File",
+    subtitle: "Phase 4: Visualization Module",
+    goal: "Choose a TSV statistics file from the Population/Stats directory to visualize and explore.",
+    steps: [
+      "Use the dropdown to select a TSV file from the Population/Stats folder.",
+      "Each entry shows the filename and parsed metadata (metric, tissue, atlas, PVC) when available.",
+      "After selection, the system inspects the file and infers column types (continuous, ordinal, nominal).",
+      "If no files appear, ensure the Population processing module has completed successfully.",
+    ],
+    tipTitle: "File Change Detection",
+    tipContent:
+      "The system tracks file hashes. If a TSV file is modified externally after selection, you will be prompted to reconfigure on your next visit.",
+  },
+  "viz-columnTypes": {
+    title: "Assign Column Types",
+    subtitle: "Phase 4: Visualization Module",
+    goal: "Review and adjust the automatically inferred type for each column to ensure correct chart rendering.",
+    steps: [
+      "Each column is auto-classified as Continuous (numeric), Ordinal (ordered categories), or Nominal (unordered categories).",
+      "Use the type dropdown to override any incorrect inference (e.g., change a numeric site code from Continuous to Nominal).",
+      "Set a column to Excluded if you do not want it available for plotting.",
+      "Identifier columns (Subject, Session, Run) are locked to categorical types and cannot be changed.",
+    ],
+    tipTitle: "Type Affects Chart Behavior",
+    tipContent:
+      "Only continuous columns can be assigned to the Y-axis. Categorical columns control swarmplot grouping and color-by options.",
+  },
+  "viz-levelOrdering": {
+    title: "Order Categorical Levels",
+    subtitle: "Phase 4: Visualization Module",
+    goal: "Control the display order of categories for ordinal and nominal columns on the X-axis.",
+    steps: [
+      "Each categorical column shows its discovered levels in the current order.",
+      "Use the up/down arrow buttons to reorder levels for each column.",
+      "Ordinal columns default to alphanumeric sorting; nominal columns default to file encounter order.",
+      "This ordering only affects visual tick order on swarmplots — it has no statistical effect.",
+    ],
+    tipTitle: "Visual Only",
+    tipContent:
+      "Reordering levels does not imply any statistical relationship or trend. It purely controls the left-to-right display order on the chart.",
+  },
+  "viz-visualize": {
+    title: "Explore Data",
+    subtitle: "Phase 4: Visualization Module",
+    goal: "Assign axes, inspect charts, and view qCBF brain images for individual data points.",
+    steps: [
+      "Use the X-axis, Y-axis, and Color-by dropdowns to configure the chart. Y-axis must be continuous.",
+      "Continuous × continuous produces a scatterplot; categorical × continuous produces a swarmplot.",
+      "Hover over points to see Subject, Session, Run, and axis values. Click a point to highlight it and load its qCBF image in the NiiVue viewer.",
+      "Use the Filters panel (above the chart) to narrow the visible data range on either axis.",
+    ],
+    tipTitle: "Interactive Viewer",
+    tipContent:
+      "The NiiVue viewer shows tri-planar (axial, sagittal, coronal) views of the clicked subject's qCBF image.",
+  },
 };
 
 const pulseKeyframes = `
@@ -164,6 +221,7 @@ export default function PageHelpButton() {
 
   const phase = params.phase;
   const activeStep = useImportStore((s) => s.activeStep);
+  const vizStage = useVisualizationStore((s) => s.stage);
 
   // Determine help content key
   let contentKey = "";
@@ -173,6 +231,8 @@ export default function PageHelpButton() {
     contentKey = "parameters";
   } else if (phase === "processing") {
     contentKey = "processing";
+  } else if (phase === "visualization") {
+    contentKey = `viz-${vizStage}`;
   }
 
   const helpContent = HELP_DATA[contentKey];

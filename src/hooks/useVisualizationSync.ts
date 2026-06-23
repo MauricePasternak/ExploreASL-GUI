@@ -22,6 +22,28 @@ function extractPersisted(state: ReturnType<typeof useVisualizationStore.getStat
     stage: state.stage,
     splitRatio: state.splitRatio,
     filtersExpanded: state.filtersExpanded,
+    pointSize: state.pointSize,
+    swarmSpacing: state.swarmSpacing,
+    chartOpacity: state.chartOpacity,
+    showGridX: state.showGridX,
+    showGridY: state.showGridY,
+    nvRadiological: state.nvRadiological,
+    nvColorbar: state.nvColorbar,
+    nvCrosshair: state.nvCrosshair,
+    nvCornerOrientation: state.nvCornerOrientation,
+    nvColormap: state.nvColormap,
+    nvSliceType: state.nvSliceType,
+    nvBackColor: state.nvBackColor,
+    xTickSize: state.xTickSize,
+    xTickPadding: state.xTickPadding,
+    xTickRotation: state.xTickRotation,
+    xLegendOverride: state.xLegendOverride,
+    xLegendOffset: state.xLegendOffset,
+    yTickSize: state.yTickSize,
+    yTickPadding: state.yTickPadding,
+    yTickRotation: state.yTickRotation,
+    yLegendOverride: state.yLegendOverride,
+    yLegendOffset: state.yLegendOffset,
   };
 }
 
@@ -49,6 +71,29 @@ export function useVisualizationSync() {
     }
     if (dataVis.splitRatio !== undefined) store.setSplitRatio(dataVis.splitRatio);
     if (dataVis.filtersExpanded !== undefined) store.setFiltersExpanded(dataVis.filtersExpanded);
+    if (dataVis.pointSize !== undefined) store.setPointSize(dataVis.pointSize);
+    if (dataVis.swarmSpacing !== undefined) store.setSwarmSpacing(dataVis.swarmSpacing);
+    if (dataVis.chartOpacity !== undefined) store.setChartOpacity(dataVis.chartOpacity);
+    if (dataVis.showGridX !== undefined) store.setShowGridX(dataVis.showGridX);
+    if (dataVis.showGridY !== undefined) store.setShowGridY(dataVis.showGridY);
+    if (dataVis.nvRadiological !== undefined) store.setNvRadiological(dataVis.nvRadiological);
+    if (dataVis.nvColorbar !== undefined) store.setNvColorbar(dataVis.nvColorbar);
+    if (dataVis.nvCrosshair !== undefined) store.setNvCrosshair(dataVis.nvCrosshair);
+    if (dataVis.nvCornerOrientation !== undefined)
+      store.setNvCornerOrientation(dataVis.nvCornerOrientation);
+    if (dataVis.nvColormap !== undefined) store.setNvColormap(dataVis.nvColormap);
+    if (dataVis.nvSliceType !== undefined) store.setNvSliceType(dataVis.nvSliceType as any);
+    if (dataVis.nvBackColor !== undefined) store.setNvBackColor(dataVis.nvBackColor as any);
+    if (dataVis.xTickSize !== undefined) store.setXTickSize(dataVis.xTickSize);
+    if (dataVis.xTickPadding !== undefined) store.setXTickPadding(dataVis.xTickPadding);
+    if (dataVis.xTickRotation !== undefined) store.setXTickRotation(dataVis.xTickRotation);
+    if (dataVis.xLegendOverride !== undefined) store.setXLegendOverride(dataVis.xLegendOverride);
+    if (dataVis.xLegendOffset !== undefined) store.setXLegendOffset(dataVis.xLegendOffset);
+    if (dataVis.yTickSize !== undefined) store.setYTickSize(dataVis.yTickSize);
+    if (dataVis.yTickPadding !== undefined) store.setYTickPadding(dataVis.yTickPadding);
+    if (dataVis.yTickRotation !== undefined) store.setYTickRotation(dataVis.yTickRotation);
+    if (dataVis.yLegendOverride !== undefined) store.setYLegendOverride(dataVis.yLegendOverride);
+    if (dataVis.yLegendOffset !== undefined) store.setYLegendOffset(dataVis.yLegendOffset);
   }, []);
 
   // Subscribe to persisted field changes → sync to project store with debounced save

@@ -7,7 +7,7 @@ import { ResponsiveSwarmPlotCanvas } from "@nivo/swarmplot";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { transformToChartData } from "../../lib/tsvUtils";
+import { transformToChartData, translateColumnName } from "../../lib/tsvUtils";
 import { OKABE_ITO } from "../../lib/okabeIto";
 import { buildNivoTheme } from "../../lib/nivoTheme";
 import { invoke } from "@tauri-apps/api/core";
@@ -56,9 +56,35 @@ export default function ChartPanel() {
   const domainFilters = useVisualizationStore((s) => s.domainFilters);
   const exclusionCount = useVisualizationStore((s) => s.exclusionCount);
 
+  // New settings
+  const pointSize = useVisualizationStore((s) => s.pointSize);
+  const swarmSpacing = useVisualizationStore((s) => s.swarmSpacing);
+  const chartOpacity = useVisualizationStore((s) => s.chartOpacity);
+  const showGridX = useVisualizationStore((s) => s.showGridX);
+  const showGridY = useVisualizationStore((s) => s.showGridY);
+
+  const xTickSize = useVisualizationStore((s) => s.xTickSize);
+  const xTickPadding = useVisualizationStore((s) => s.xTickPadding);
+  const xTickRotation = useVisualizationStore((s) => s.xTickRotation);
+  const xLegendOverride = useVisualizationStore((s) => s.xLegendOverride);
+  const xLegendOffset = useVisualizationStore((s) => s.xLegendOffset);
+
+  const yTickSize = useVisualizationStore((s) => s.yTickSize);
+  const yTickPadding = useVisualizationStore((s) => s.yTickPadding);
+  const yTickRotation = useVisualizationStore((s) => s.yTickRotation);
+  const yLegendOverride = useVisualizationStore((s) => s.yLegendOverride);
+  const yLegendOffset = useVisualizationStore((s) => s.yLegendOffset);
+
   const project = useProjectStore((s) => s.project);
   const { colorScheme } = useMantineColorScheme();
   const { ref: chartContainerRef, width: chartWidth } = useElementSize();
+
+  const hexToRgba = (hex: string, alpha: number) => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
 
   const xCol = axisAssignment.x;
   const yCol = axisAssignment.y;
@@ -74,16 +100,20 @@ export default function ChartPanel() {
   const isScatter = xType === "continuous" && yType === "continuous";
   const isUnsupported = yType !== "continuous" && yType !== null;
 
+  const projectRoot = project?.projectMeta.rootPath;
+  const fileSourcePath = contractSources[0]?.relativePath;
+  const fileSourceHash = contractSources[0]?.fileHash;
+  const columnTypesSerialized = JSON.stringify(columnTypes);
+
   useEffect(() => {
     async function loadData() {
-      if (!project || !xCol || !yCol || contractSources.length === 0) return;
-      const relativePath = contractSources[0].relativePath;
+      if (!projectRoot || !xCol || !yCol || !fileSourcePath) return;
       const columnsToFetch = [xCol, yCol];
       if (colorByCol && !columnsToFetch.includes(colorByCol)) columnsToFetch.push(colorByCol);
       try {
         const rows = await invoke<Record<string, string>[]>("read_tsv_columns", {
-          projectRoot: project.projectMeta.rootPath,
-          relativePath,
+          projectRoot,
+          relativePath: fileSourcePath,
           columnNames: columnsToFetch,
         });
         const { points, excluded } = transformToChartData(
@@ -100,18 +130,22 @@ export default function ChartPanel() {
       }
     }
     loadData();
-    selectPoint(null);
   }, [
     xCol,
     yCol,
     colorByCol,
-    contractSources,
-    columnTypes,
-    project,
-    selectPoint,
+    fileSourcePath,
+    fileSourceHash,
+    columnTypesSerialized,
+    projectRoot,
     setChartData,
     setExclusionCount,
   ]);
+
+  // Reset selected point only when axes or file sources change
+  useEffect(() => {
+    selectPoint(null);
+  }, [xCol, yCol, colorByCol, fileSourcePath, selectPoint]);
 
   const filteredData = useMemo(() => {
     let data = chartData;
@@ -151,11 +185,36 @@ export default function ChartPanel() {
   );
   const axisBottomConfig = useMemo(
     () => ({
-      legend: xCol ?? "",
-      legendOffset: 36,
-      ...(isCompactChart ? { tickRotation: -45, tickPadding: 4 } : {}),
+      legend:
+        xLegendOverride !== null && xLegendOverride !== ""
+          ? xLegendOverride
+          : xCol
+            ? translateColumnName(xCol)
+            : "",
+      legendOffset: xLegendOffset,
+      legendPosition: "middle" as const,
+      tickSize: xTickSize,
+      tickPadding: xTickPadding,
+      tickRotation: xTickRotation,
     }),
-    [xCol, isCompactChart],
+    [xCol, xLegendOverride, xLegendOffset, xTickSize, xTickPadding, xTickRotation],
+  );
+
+  const axisLeftConfig = useMemo(
+    () => ({
+      legend:
+        yLegendOverride !== null && yLegendOverride !== ""
+          ? yLegendOverride
+          : yCol
+            ? translateColumnName(yCol)
+            : "",
+      legendOffset: yLegendOffset,
+      legendPosition: "middle" as const,
+      tickSize: yTickSize,
+      tickPadding: yTickPadding,
+      tickRotation: yTickRotation,
+    }),
+    [yCol, yLegendOverride, yLegendOffset, yTickSize, yTickPadding, yTickRotation],
   );
 
   const xScaleConfig = useMemo(() => {
@@ -314,16 +373,23 @@ export default function ChartPanel() {
           <ResponsiveScatterPlotCanvas
             data={nivoData}
             theme={nivoTheme}
-            colors={colorByCol ? colorByValues.map((v) => colorMap[v!]) : [OKABE_ITO[0]]}
-            nodeSize={6}
+            colors={
+              colorByCol
+                ? colorByValues.map((v) => hexToRgba(colorMap[v!], chartOpacity))
+                : [hexToRgba(OKABE_ITO[0], chartOpacity)]
+            }
+            nodeSize={pointSize}
             onClick={handleClick}
             axisBottom={axisBottomConfig}
-            axisLeft={{ legend: yCol, legendOffset: -40 }}
+            axisLeft={axisLeftConfig}
+            axisTop={null}
             margin={chartMargin}
             useMesh={true}
             tooltip={renderScatterTooltip}
             xScale={xScaleConfig}
             yScale={yScaleConfig}
+            enableGridX={showGridX}
+            enableGridY={showGridY}
           />
         ) : (
           <ResponsiveSwarmPlotCanvas
@@ -334,16 +400,26 @@ export default function ChartPanel() {
             }))}
             groups={Array.from(new Set(filteredData.map((p) => p.x as string)))}
             theme={nivoTheme}
-            colors={colorByCol ? colorByValues.map((v) => colorMap[v!]) : [OKABE_ITO[0]]}
+            colors={(node: any) => {
+              const colorByVal = node.data?.colorBy;
+              if (colorByCol && colorByVal && colorMap[colorByVal]) {
+                return hexToRgba(colorMap[colorByVal], chartOpacity);
+              }
+              return hexToRgba(OKABE_ITO[0], chartOpacity);
+            }}
             value="value"
             groupBy="group"
-            size={6}
+            size={pointSize}
+            spacing={swarmSpacing}
             onClick={handleClick}
             axisBottom={axisBottomConfig}
-            axisLeft={{ legend: yCol, legendOffset: -40 }}
+            axisLeft={axisLeftConfig}
+            axisTop={null}
             margin={chartMargin}
             tooltip={renderSwarmTooltip}
             valueScale={yScaleConfig}
+            enableGridX={showGridX}
+            enableGridY={showGridY}
           />
         )}
       </div>

@@ -102,3 +102,45 @@ function isMissing(val: string | undefined): boolean {
     v === "" || v.toLowerCase() === "nan" || v.toLowerCase() === "na" || v.toLowerCase() === "n/a"
   );
 }
+
+/**
+ * Translate ExploreASL default/BIDS column names to human readable labels.
+ */
+export function translateColumnName(name: string): string {
+  const dictionary: Record<string, string> = {
+    WM_vol: "White Matter volume (L)",
+    GM_vol: "Gray Matter volume (L)",
+    CSF_vol: "CSF volume (L)",
+    GM_ICVRatio: "GM / ICV Ratio",
+    GMWM_ICVRatio: "GM+WM / ICV Ratio",
+    MeanMotion: "Mean Motion (mm)",
+    SubjectNList: "Subject Number",
+    CBF_GM: "Gray Matter CBF (mL/100g/min)",
+    CBF_WM: "White Matter CBF (mL/100g/min)",
+    CBF_WholeBrain: "Whole Brain CBF (mL/100g/min)",
+  };
+
+  if (dictionary[name]) {
+    return dictionary[name];
+  }
+
+  // Check prefix / suffix
+  let display = name;
+
+  if (name.startsWith("CBF_")) {
+    display = "CBF " + name.slice(4);
+  }
+
+  if (display.endsWith("_L")) {
+    display = display.slice(0, -2) + " (Left)";
+  } else if (display.endsWith("_R")) {
+    display = display.slice(0, -2) + " (Right)";
+  } else if (display.endsWith("_B")) {
+    display = display.slice(0, -2) + " (Bilateral)";
+  }
+
+  // Clean up remaining underscores with spaces, and capitalize cleanly
+  display = display.replace(/_/g, " ").trim();
+
+  return display;
+}
