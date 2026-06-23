@@ -218,19 +218,32 @@ export default function DicomIngestion() {
                 <Code block>{pattern.samplePath}</Code>
               </Card>
             ))}
-
-            <Group justify="flex-end">
-              <Button
-                rightSection={<IconArrowRight size={16} />}
-                onClick={handleNext}
-                data-testid="dicom-next-btn"
-              >
-                Next: Tokenize Paths
-              </Button>
-            </Group>
           </Stack>
         </Card>
       )}
+
+      <Group
+        justify="flex-end"
+        pos="sticky"
+        bottom={40}
+        style={{
+          zIndex: 2,
+          paddingTop: "var(--mantine-spacing-md)",
+          paddingBottom: "var(--mantine-spacing-md)",
+          backgroundColor: "var(--mantine-color-body)",
+          boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.06)",
+        }}
+        data-testid="dicom-nav"
+      >
+        <Button
+          rightSection={<IconArrowRight size={16} />}
+          onClick={handleNext}
+          disabled={!ingestionComplete}
+          data-testid="dicom-next-btn"
+        >
+          Next: Tokenize Paths
+        </Button>
+      </Group>
     </Stack>
   );
 }
