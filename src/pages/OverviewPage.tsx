@@ -11,13 +11,17 @@ import {
   Text,
   ThemeIcon,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import {
   IconAdjustments,
   IconArrowLeft,
   IconBrain,
   IconChartDots,
+  IconCheck,
+  IconCopy,
   IconDatabase,
+  IconExclamationMark,
   IconEye,
   IconFileImport,
   IconFileText,
@@ -29,6 +33,7 @@ import {
   IconRoute,
   IconTags,
 } from "@tabler/icons-react";
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 interface TreeRowProps {
@@ -77,6 +82,27 @@ export default function OverviewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const fromPath = location.state?.from;
+  const isFromProject = fromPath && fromPath !== "/" && fromPath !== "/overview";
+  const [bibtexCopied, setBibtexCopied] = useState(false);
+
+  const bibtexEntry = `@article{mutsaerts2020exploreasl-a04, 
+  year     = {2020}, 
+  keywords = {{ASL}, Processing, Software}, 
+  title    = {{ExploreASL}: An image processing pipeline for multi-center {ASL} perfusion {MRI} studies}, 
+  author   = {Mutsaerts, Henk J.M.M. and Petr, Jan and Groot, Paul and Vandemaele, Pieter and Ingala, Silvia and Robertson, Andrew D. and V\\'a\\clav\\u{}, Lena and Groote, Inge and Kuijf, Hugo and Zelaya, Fernando and O'Daly, Owen and Hilal, Saima and Wink, Alle Meije and Kant, Ilse and Caan, Matthan W.A. and Morgan, Catherine and Bresser, Jeroen de and Lysvik, Elisabeth and Schrantee, Anouk and Bj\\o rnebekk, Astrid and Clement, Patricia and Shirzadi, Zahra and Kuijer, Joost P.A. and Wottschel, Viktor and Anazodo, Udunna C. and Pajkrt, Dasja and Richard, Edo and Bokkers, Reinoud P.H. and Reneman, Liesbeth and Masellis, Mario and G\\u nther, Matthias and {MacIntosh}, Bradley J. and Achten, Eric and Chappell, Michael A. and Osch, Matthias J.P. van and Golay, Xavier and Thomas, David L. and Vita, Enrico De and Bj\\o rnerud, Atle and Nederveen, Aart and Hendrikse, Jeroen and Asllani, Iris and Barkhof, Frederik}, 
+  journal  = {{NeuroImage}}, 
+  issn     = {1053-8119}, 
+  doi      = {10.1016/j.neuroimage.2020.117031}, 
+  pmid     = {32526385}, 
+  pages    = {117031}, 
+  volume   = {219}
+}`;
+
+  const handleCopyBibtex = async () => {
+    await navigator.clipboard.writeText(bibtexEntry);
+    setBibtexCopied(true);
+    setTimeout(() => setBibtexCopied(false), 2000);
+  };
 
   return (
     <Stack
@@ -102,10 +128,10 @@ export default function OverviewPage() {
         <Button
           leftSection={<IconArrowLeft size={16} />}
           variant="light"
-          onClick={() => navigate(fromPath || "/")}
+          onClick={() => navigate(isFromProject ? fromPath : "/")}
           data-testid="overview-back-btn"
         >
-          {fromPath ? "Back to Project" : "Back to Home"}
+          {isFromProject ? "Back to Project" : "Back to Home"}
         </Button>
       </Group>
 
@@ -330,6 +356,60 @@ export default function OverviewPage() {
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>
+
+        <Alert
+          color="grape"
+          title="Citation Required"
+          icon={<IconExclamationMark size={18} />}
+          mt="md"
+          data-testid="exploreasl-citation-callout"
+        >
+          <Text size="sm" mb="xs">
+            If you use ExploreASL in your work, please reference the release paper:
+          </Text>
+          <Text size="xs" mb="xs">
+            Mutsaerts, H. J. M. M. et al. ExploreASL: An image processing pipeline for multi-center
+            ASL perfusion MRI studies. <em>NeuroImage</em> 219, 117031 (2020).
+          </Text>
+          <Group gap="xs">
+            <Text
+              component="a"
+              href="https://pubmed.ncbi.nlm.nih.gov/32526385/"
+              target="_blank"
+              rel="noopener noreferrer"
+              c="blue"
+              size="xs"
+            >
+              PubMed
+            </Text>
+            <Text size="xs" c="dimmed">
+              |
+            </Text>
+            <Text
+              component="a"
+              href="https://doi.org/10.1016/j.neuroimage.2020.117031"
+              target="_blank"
+              rel="noopener noreferrer"
+              c="blue"
+              size="xs"
+            >
+              DOI
+            </Text>
+          </Group>
+          <Tooltip label={bibtexCopied ? "Copied!" : "Copy BibTeX to clipboard"} withArrow>
+            <Button
+              variant="subtle"
+              size="compact-xs"
+              leftSection={bibtexCopied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+              onClick={handleCopyBibtex}
+              mt="xs"
+              color={bibtexCopied ? "teal" : "gray"}
+              data-testid="copy-bibtex-btn"
+            >
+              {bibtexCopied ? "Copied!" : "Copy BibTeX"}
+            </Button>
+          </Tooltip>
+        </Alert>
       </Stack>
 
       <Divider />
@@ -404,7 +484,7 @@ export default function OverviewPage() {
                   <IconPlayerPlay size={14} />
                 </ThemeIcon>
                 <Text fw={700} size="sm">
-                  3. Process & Population
+                  3. Process
                 </Text>
               </Group>
               <Text size="xs" c="dimmed">
@@ -454,9 +534,6 @@ export default function OverviewPage() {
             <Title order={2} component="h1">
               1. Import from DICOM
             </Title>
-            <Badge color="blue" variant="outline">
-              Phase 1
-            </Badge>
           </Group>
           <Text size="sm">
             Translating raw MRI scanner outputs into structured BIDS (Brain Imaging Data Structure)
@@ -474,10 +551,11 @@ export default function OverviewPage() {
               </Accordion.Control>
               <Accordion.Panel>
                 <Text size="sm" mb="xs">
-                  The GUI scans the raw project folders to identify all available DICOM series.
-                  ExploreASL converts raw multi-slice DICOM datasets into single or 4D NIfTI
-                  (Neuroimaging Informatics Technology Initiative) image files (`.nii` or
-                  `.nii.gz`).
+                  The primary purpose of this step is to understand where the DICOM raw data is
+                  located and how it is organized. The GUI scans the raw project folders to identify
+                  all available DICOM series. ExploreASL converts raw multi-slice DICOM datasets
+                  into single or 4D NIfTI (Neuroimaging Informatics Technology Initiative) image
+                  files (`.nii` or `.nii.gz`).
                 </Text>
                 <Text size="xs" c="dimmed">
                   This consolidates thousands of separate medical slices into individual volumes,
@@ -533,18 +611,45 @@ export default function OverviewPage() {
                 icon={<IconFileImport size={16} color="var(--mantine-color-blue-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  1.4 Configure BIDS Metadata (Defacing)
+                  1.4 Metadata (ASL Acquisition Parameters)
                 </Title>
               </Accordion.Control>
               <Accordion.Panel>
                 <Text size="sm" mb="xs">
-                  Specify important acquisition parameters (e.g., Post-Labeling Delay, Labeling
-                  Duration, M0 calibration type) and choose whether to apply structural defacing.
+                  The primary purpose of this step is to specify the acquisition parameters for the
+                  collection of ASL scans that were ingested in the previous step (e.g.,
+                  Post-Labeling Delay, Labeling Duration, M0 calibration type) and choose whether to
+                  apply structural defacing.
                 </Text>
-                <Text size="xs" c="dimmed">
-                  Defacing strips identifiable facial features from structural MRIs to comply with
-                  participant privacy regulations before exporting or publishing.
+                <Text size="sm" mb="xs">
+                  By default, there is assumed to be a single acquisition scheme implemented in the
+                  project (i.e., single site, single scanner, single protocol). However, additional
+                  acquisition scheme overrides can be specified to account for multi-site,
+                  multi-scanner, or multi-protocol combinations, and subjects/sessions can be
+                  assigned to these overrides.
                 </Text>
+                <Alert
+                  color="yellow"
+                  title="Unsure about acquisition parameters?"
+                  icon={<IconHelpCircle size={16} />}
+                  mt="xs"
+                >
+                  <Text size="xs">
+                    If you are unsure about your ASL acquisition parameters, contact your local MR
+                    physicist or technician. If you cannot access one, you can use{" "}
+                    <Text
+                      component="a"
+                      href="https://dicom.offis.de/en/dcmtk/dcmtk-tools/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      c="blue"
+                      size="xs"
+                    >
+                      DCMTK command line tools
+                    </Text>{" "}
+                    to view the DICOM headers and note down the acquisition parameters.
+                  </Text>
+                </Alert>
               </Accordion.Panel>
             </Accordion.Item>
 
@@ -558,13 +663,28 @@ export default function OverviewPage() {
               </Accordion.Control>
               <Accordion.Panel>
                 <Text size="sm" mb="xs">
-                  Review the mapping summary. The screen displays a grid showing each raw file path
-                  and its planned BIDS destination file path.
+                  Review the mapping summary. The GUI uses a pre-planned staging directory layout
+                  which will be temporarily created at{" "}
+                  <code>&lt;project_root&gt;/.easl_staging/</code>. The screen displays a grid
+                  showing each raw file path and its planned staging destination.
                 </Text>
-                <Text size="xs" c="dimmed">
+                <Text size="xs" c="dimmed" mb="xs">
                   This sanity check ensures that you don't accidentally mix up subject IDs or
                   overwrite existing scans before writing files to disk.
                 </Text>
+                <Alert
+                  color="blue"
+                  title="Tip"
+                  variant="light"
+                  icon={<IconHelpCircle size={16} />}
+                  mt="xs"
+                >
+                  <Text size="xs">
+                    While the <code>.easl_staging/</code> directory is usually automatically deleted
+                    after the import, it can be preserved by enabling the{" "}
+                    <strong>"Preserve staging directory"</strong> global setting.
+                  </Text>
+                </Alert>
               </Accordion.Panel>
             </Accordion.Item>
 
@@ -573,19 +693,49 @@ export default function OverviewPage() {
                 icon={<IconPlayerPlay size={16} color="var(--mantine-color-blue-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  1.6 Run Import Module (BIDS to ExploreASL Legacy)
+                  1.6 Run Import Module
                 </Title>
               </Accordion.Control>
               <Accordion.Panel>
                 <Text size="sm" mb="xs">
-                  Execute the import process. ExploreASL runs the mapping scripts, moves files into
-                  the BIDS directory tree, and compiles the project structure.
+                  This executes the ExploreASL import module and provides user feedback based on:
                 </Text>
-                <Text size="xs" c="dimmed">
+                <div style={{ fontSize: "0.875rem" }}>
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    <li>
+                      A table of the subjects being imported, their status (pending, running,
+                      completed, failed), and the ability to view subject-specific logs once the
+                      import is complete.
+                    </li>
+                    <li>
+                      A real-time log of the import process forwarded from the behind-the-scenes
+                      MATLAB process.
+                    </li>
+                  </ul>
+                </div>
+                <Text size="sm" mt="xs" mb="xs">
+                  ExploreASL will create the BIDS structure in the{" "}
+                  <code>&lt;project_root&gt;/rawdata/</code> directory.
+                </Text>
+                <Text size="xs" c="dimmed" mb="xs">
                   During this, raw BIDS structure is matched with the legacy ExploreASL format
                   (`[Subject]/[Visit]/[Session]/[Scan]`) internally to ensure complete compatibility
                   with ExploreASL's MATLAB processing engine.
                 </Text>
+                <Alert
+                  color="blue"
+                  title="Tip"
+                  variant="light"
+                  icon={<IconHelpCircle size={16} />}
+                  mt="xs"
+                >
+                  <Text size="xs">
+                    For debugging purposes, the GUI generates a{" "}
+                    <code>&lt;project_root&gt;/derivatives/ExploreASL_GUI/</code> directory that
+                    contains the <code>sourcestructure.json</code> and <code>studyPar.json</code>{" "}
+                    files used during the import.
+                  </Text>
+                </Alert>
               </Accordion.Panel>
             </Accordion.Item>
           </Accordion>
@@ -602,13 +752,11 @@ export default function OverviewPage() {
             <Title order={2} component="h1">
               2. Define Data Parameters
             </Title>
-            <Badge color="grape" variant="outline">
-              Phase 2
-            </Badge>
           </Group>
           <Text size="sm">
-            ExploreASL relies on a `dataPar.json` parameter configuration file to customize the
-            processing engine to your cohort.
+            This is fundamentally where the global settings are defined regarding how ExploreASL
+            will process this dataset. ExploreASL relies on a `dataPar.json` parameter configuration
+            file to customize the processing engine to your cohort.
           </Text>
 
           <Accordion variant="separated" data-testid="parameters-accordion">
@@ -617,58 +765,52 @@ export default function OverviewPage() {
                 icon={<IconRoute size={16} color="var(--mantine-color-grape-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  2.1 Define Processing Options
+                  2.1 Basic Processing Options
                 </Title>
               </Accordion.Control>
               <Accordion.Panel>
                 <Text size="sm" mb="xs">
-                  Set baseline parameters such as magnetic field strength (e.g., 3.0T), patient age
-                  presets (adult vs. pediatric), and CAT12 structural segmentation parameters.
+                  Configure the fundamental parameters that govern how ExploreASL processes your
+                  dataset. These include settings such as the processing quality level, the fallback
+                  M0 behavior when no dedicated M0 calibration scan is available, and atlas
+                  selection for extracting ROI (Region of Interest) CBF data.
                 </Text>
                 <Text size="xs" c="dimmed">
-                  Selecting correct baseline settings ensures that tissues (Grey Matter, White
-                  Matter, CSF) are segmented with appropriate tissue priors.
+                  Selecting correct baseline settings ensures consistent and appropriate processing
+                  across all subjects in your cohort.
                 </Text>
               </Accordion.Panel>
             </Accordion.Item>
 
-            <Accordion.Item value="quirks">
+            <Accordion.Item value="advanced">
               <Accordion.Control
-                icon={<IconHelpCircle size={16} color="var(--mantine-color-grape-filled)" />}
+                icon={<IconAdjustments size={16} color="var(--mantine-color-grape-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  2.2 Specify ASL / M0 Quirks
+                  2.2 Advanced Settings
                 </Title>
               </Accordion.Control>
               <Accordion.Panel>
                 <Text size="sm" mb="xs">
-                  Configure special options for Arterial Spin Labeling scans, including
-                  quantification scales, slice gradient corrections, and M0 calibration settings.
+                  Fine-tune the ASL processing pipeline with advanced options. These include
+                  controlling the ASL modeling assumptions (see the{" "}
+                  <Text
+                    component="a"
+                    href="https://pubmed.ncbi.nlm.nih.gov/24715426/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    c="blue"
+                    size="sm"
+                  >
+                    ASL consensus paper
+                  </Text>
+                  ), partial volume correction (PVC) methods to account for tissue mixture effects,
+                  and specifics of the registration algorithms employed between structural T1w and
+                  ASL modalities.
                 </Text>
                 <Text size="xs" c="dimmed">
-                  This handles scanner-specific quirks (e.g. whether the M0 calibration is stored in
-                  the same series, scaled differently, or needs separate background suppression
-                  correction).
-                </Text>
-              </Accordion.Panel>
-            </Accordion.Item>
-
-            <Accordion.Item value="presets">
-              <Accordion.Control
-                icon={<IconTags size={16} color="var(--mantine-color-grape-filled)" />}
-              >
-                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  2.3 Cohort Presets
-                </Title>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Text size="sm" mb="xs">
-                  Save your settings configuration as a reusable template or choose from built-in
-                  presets (e.g. Standard 3D PCASL, Siemens Product Sequence, GE 3D Spiral).
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Presets ensure standard parameters are applied identically across multi-center or
-                  long-term studies.
+                  Advanced settings are typically adjusted by experienced users or when processing
+                  data with non-standard acquisition protocols.
                 </Text>
               </Accordion.Panel>
             </Accordion.Item>
@@ -677,7 +819,7 @@ export default function OverviewPage() {
 
         <Divider />
 
-        {/* STEP 3: PROCESS IMAGES & RUN POPULATION */}
+        {/* STEP 3: PROCESS SUBJECTS & RUN POPULATION */}
         <Stack gap="md" data-testid="section-processing">
           <Group gap="xs">
             <ThemeIcon color="teal" size="lg" radius="xl">
@@ -686,14 +828,33 @@ export default function OverviewPage() {
             <Title order={2} component="h1">
               3. Process Images & Population Module
             </Title>
-            <Badge color="teal" variant="outline">
-              Phase 3
-            </Badge>
           </Group>
           <Text size="sm">
             This is the core computational engine. ExploreASL runs three sequentially dependent
             modules to process individual scans and perform group-level statistics.
           </Text>
+
+          <Text size="sm" fw={600} mt="xs">
+            GUI Processing Features:
+          </Text>
+          <div style={{ fontSize: "0.875rem" }}>
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              <li>
+                <strong>Multiprocessing:</strong> Run multiple subjects in parallel to significantly
+                reduce total processing time.
+              </li>
+              <li>
+                <strong>Subject/Session Logs & Errors:</strong> View detailed logs and error
+                messages at the subject and session level for better understanding of what went
+                wrong during processing.
+              </li>
+              <li>
+                <strong>Image Reports:</strong> Access subject and session level image reports
+                showing registration and segmentation outcomes for immediate QC (Quality Control)
+                assessment.
+              </li>
+            </ul>
+          </div>
 
           <Accordion variant="separated" data-testid="processing-accordion">
             <Accordion.Item value="structural">
@@ -832,18 +993,38 @@ export default function OverviewPage() {
               <IconChartDots size={20} />
             </ThemeIcon>
             <Title order={2} component="h1">
-              4. Interactive Dataset Visualization [Future Feature]
+              4. Interactive Dataset Visualization
             </Title>
-            <Badge color="orange" variant="outline">
-              Phase 4
-            </Badge>
           </Group>
           <Text size="sm">
-            Once processing is completed, you will be able to interactively explore your study
-            outcomes within the GUI:
+            Once processing is completed, you can interactively explore your study outcomes within
+            the GUI:
           </Text>
 
           <Accordion variant="separated" data-testid="visualization-accordion">
+            <Accordion.Item value="data-contract">
+              <Accordion.Control
+                icon={<IconFileText size={16} color="var(--mantine-color-orange-filled)" />}
+              >
+                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                  4.0 Data Contract (Column Type Configuration)
+                </Title>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Text size="sm" mb="xs">
+                  Before visualization, the GUI presents a preliminary "data contract" series of
+                  steps to ensure proper data interpretation. This includes specifying whether each
+                  variable is continuous, nominal, or ordinal, and defining the ordering of levels
+                  for categorical variables.
+                </Text>
+                <Text size="xs" c="dimmed">
+                  Correctly classifying variables ensures that charts render appropriately (e.g.,
+                  scatterplots for continuous data, swarmplots for categorical data) and that
+                  statistical comparisons are valid.
+                </Text>
+              </Accordion.Panel>
+            </Accordion.Item>
+
             <Accordion.Item value="charts">
               <Accordion.Control
                 icon={<IconChartDots size={16} color="var(--mantine-color-orange-filled)" />}
@@ -854,13 +1035,28 @@ export default function OverviewPage() {
               </Accordion.Control>
               <Accordion.Panel>
                 <Text size="sm" mb="xs">
-                  Filter and plot ROI CBF results against clinical parameters (e.g., Age, Cognitive
-                  Score) using dynamic, interactive charts.
+                  Filter and plot ROI results against clinical parameters using dynamic, interactive
+                  charts. Categorical variables (e.g., patient group, genotype) render as
+                  Swarmplots, while continuous variables plot as Scatterplots with fit-lines.
                 </Text>
-                <Text size="xs" c="dimmed">
-                  Categorical variables (e.g., patient group, genotype) will render as Swarmplots,
-                  while continuous variables will plot as Scatterplots with fit-lines.
+                <Text size="xs" c="dimmed" mb="xs">
+                  Currently, the available variables are restricted to those provided by ExploreASL:
+                  mean, median, and CoV (Coefficient of Variation) CBF regional measures; structural
+                  wholebrain GM/WM/CSF measures; and subject/session designation.
                 </Text>
+                <Alert
+                  color="orange"
+                  title="Upcoming Feature"
+                  variant="light"
+                  icon={<IconExclamationMark size={16} />}
+                  mt="xs"
+                >
+                  <Text size="xs">
+                    Merging with <code>participants.tsv</code> or external spreadsheets for
+                    additional clinical variables will be an upcoming feature, but is not currently
+                    implemented.
+                  </Text>
+                </Alert>
               </Accordion.Panel>
             </Accordion.Item>
 
@@ -875,7 +1071,7 @@ export default function OverviewPage() {
               <Accordion.Panel>
                 <Text size="sm" mb="xs">
                   Click directly on any subject's data point in the plot to immediately load
-                  three-dimensional WebGL volume renders of their CBF and T1w scans.
+                  three-dimensional WebGL volume renders of their CBF scans.
                 </Text>
                 <Text size="xs" c="dimmed">
                   This lets you inspect outlier subjects visually in real-time, verifying whether

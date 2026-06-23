@@ -1,5 +1,6 @@
 import { Alert, Button, Group, Stack, Stepper, Text, useMantineColorScheme } from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconChartDots } from "@tabler/icons-react";
+import HeaderCard from "../components/HeaderCard";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
@@ -153,6 +154,13 @@ export default function VisualizationPage() {
       h="calc(100vh - 128px)"
       style={{ overflow: "hidden" }}
     >
+      <HeaderCard
+        icon={IconChartDots}
+        title="Visualization"
+        subtitle="Filter and plot ROI results against clinical parameters using dynamic, interactive charts."
+        color="orange"
+        dataTestId="visualization-header"
+      />
       {invalidationBanner && (
         <Alert icon={<IconAlertCircle size={16} />} color="red" data-testid="invalidation-banner">
           {invalidationBanner}

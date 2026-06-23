@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Group, Stack, Text } from "@mantine/core";
+import { IconBrain } from "@tabler/icons-react";
+import HeaderCard from "../components/HeaderCard";
 
 import ControlButtons from "../components/processing/ControlButtons";
 import ExecutionDashboard from "../components/processing/ExecutionDashboard";
@@ -28,12 +30,14 @@ export default function ProcessingPage() {
 
   return (
     <Stack gap="md" data-testid="processing-page">
-      <Group justify="space-between" align="center">
-        <Text fw={700} size="xl">
-          Processing
-        </Text>
-        <ControlButtons startDisabled={startDisabled} />
-      </Group>
+      <HeaderCard
+        icon={IconBrain}
+        title="Processing"
+        subtitle="Execute the processing pipeline and monitor execution progress."
+        color="teal"
+        dataTestId="processing-header"
+        rightSection={<ControlButtons startDisabled={startDisabled} />}
+      />
 
       {showConfig && (
         <>

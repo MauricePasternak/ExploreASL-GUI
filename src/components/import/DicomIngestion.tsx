@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { Alert, Badge, Button, Card, Code, Group, Stack, Switch, Text, Title } from "@mantine/core";
-import { IconAlertCircle, IconFolderSearch, IconCheck, IconArrowRight } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconFolderSearch,
+  IconCheck,
+  IconArrowRight,
+  IconDatabase,
+} from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 
 import HelpTooltip from "../HelpTooltip";
+import HeaderCard from "../HeaderCard";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useGlobalStore } from "../../stores/globalStore";
@@ -99,11 +106,13 @@ export default function DicomIngestion() {
 
   return (
     <Stack gap="md" data-testid="dicom-ingestion">
-      <Title order={3}>DICOM Ingestion</Title>
-      <Text c="dimmed" size="sm">
-        Choose the folder that contains this study&apos;s scan files, then scan it so the app can
-        learn how the folders are organized.
-      </Text>
+      <HeaderCard
+        icon={IconDatabase}
+        title="DICOM Ingestion"
+        subtitle="Choose the folder that contains this study's scan files, then scan it so the app can learn how the folders are organized."
+        color="blue"
+        dataTestId="dicom-ingestion-header"
+      />
 
       {/* Folder selection */}
       <Card withBorder p="md">

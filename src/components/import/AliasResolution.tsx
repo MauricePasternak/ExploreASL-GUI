@@ -7,7 +7,9 @@ import {
   IconListNumbers,
   IconReorder,
   IconUsers,
+  IconTags,
 } from "@tabler/icons-react";
+import HeaderCard from "../HeaderCard";
 
 import { hasTokenizerTag, isAliasResolutionComplete } from "../../lib/importStepAccess";
 import { extractUniqueValues } from "../../lib/tokenizerUtils";
@@ -194,10 +196,13 @@ export default function AliasResolution() {
 
   return (
     <Stack gap="md" data-testid="alias-resolution">
-      <Title order={3}>Alias Resolution</Title>
-      <Text c="dimmed" size="sm">
-        Map raw folder names to standardized BIDS identifiers.
-      </Text>
+      <HeaderCard
+        icon={IconTags}
+        title="Alias Resolution"
+        subtitle="Map raw folder names to standardized BIDS identifiers."
+        color="blue"
+        dataTestId="alias-resolution-header"
+      />
 
       <Tabs defaultValue="subjects">
         <Tabs.List>

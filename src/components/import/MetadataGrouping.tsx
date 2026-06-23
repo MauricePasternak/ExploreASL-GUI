@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Card, Checkbox, Group, Stack, Table, Text, Title } from "@mantine/core";
-import { IconArrowLeft, IconArrowRight, IconPlus } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconPlus, IconFileImport } from "@tabler/icons-react";
+import HeaderCard from "../HeaderCard";
 
 import { notifications } from "@mantine/notifications";
 
@@ -247,11 +248,13 @@ export default function MetadataGrouping() {
 
   return (
     <Stack gap="md" data-testid="metadata-grouping">
-      <Title order={3}>Metadata Grouping</Title>
-      <Text c="dimmed" size="sm">
-        Assign subject and session combinations to metadata groups that will become `studyPar.json`
-        entries.
-      </Text>
+      <HeaderCard
+        icon={IconFileImport}
+        title="Metadata Grouping"
+        subtitle="Assign subject and session combinations to metadata groups that will become studyPar.json entries."
+        color="blue"
+        dataTestId="metadata-grouping-header"
+      />
 
       <Card withBorder p="md" data-testid="metadata-groups-list">
         <Text fw={500} mb="md">

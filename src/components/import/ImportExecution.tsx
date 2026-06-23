@@ -30,6 +30,7 @@ import { useGlobalStore } from "../../stores/globalStore";
 import { type ImportPhase, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
 import ImportSubjectTable from "./ImportSubjectTable";
+import HeaderCard from "../HeaderCard";
 
 const PHASE_META: Record<
   ImportPhase,
@@ -47,26 +48,27 @@ function ImportExecutionHeader({ phase }: { phase: ImportPhase }) {
   const meta = PHASE_META[phase];
 
   return (
-    <Group justify="space-between" align="flex-start" data-testid="import-execution-header">
-      <div>
-        <Title order={3}>Run Import Module</Title>
-        <Text c="dimmed" size="sm">
-          Execute the ExploreASL import module and track per-subject progress.
-        </Text>
-      </div>
-      <Badge
-        color={meta.color}
-        variant={meta.variant ?? "light"}
-        size="lg"
-        style={
-          phase === "running"
-            ? { boxShadow: "0 0 0 3px var(--mantine-color-blue-light)" }
-            : undefined
-        }
-      >
-        {meta.label}
-      </Badge>
-    </Group>
+    <HeaderCard
+      icon={IconPlayerPlay}
+      title="Run Import Module"
+      subtitle="Execute the ExploreASL import module and track per-subject progress."
+      color="blue"
+      dataTestId="import-execution-header"
+      rightSection={
+        <Badge
+          color={meta.color}
+          variant={meta.variant ?? "light"}
+          size="lg"
+          style={
+            phase === "running"
+              ? { boxShadow: "0 0 0 3px var(--mantine-color-blue-light)" }
+              : undefined
+          }
+        >
+          {meta.label}
+        </Badge>
+      }
+    />
   );
 }
 

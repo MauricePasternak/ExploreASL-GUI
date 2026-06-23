@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Button, Group, Stack, Text, Title } from "@mantine/core";
-import { IconArrowLeft, IconArrowRight } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconEye } from "@tabler/icons-react";
+import HeaderCard from "../HeaderCard";
 
 import { buildAllStagingMappings } from "../../lib/importPreviewUtils";
 import { canEnterStep5 } from "../../lib/importStepAccess";
@@ -85,15 +86,22 @@ export default function ImportPreview() {
 
   return (
     <Stack gap="md" data-testid="import-preview">
-      <Title order={3}>Preview Import</Title>
-      <Text c="dimmed" size="sm">
-        Review how your DICOM data will be organized before running the import. Raw paths are
-        symlinked into a normalized{" "}
-        <Text fw={600} component="span">
-          Subject/Session/Run/Modality
-        </Text>{" "}
-        staging tree, then ExploreASL processes that tree.
-      </Text>
+      <HeaderCard
+        icon={IconEye}
+        title="Preview Import"
+        subtitle={
+          <Text c="dimmed" size="sm">
+            Review how your DICOM data will be organized before running the import. Raw paths are
+            symlinked into a normalized{" "}
+            <Text fw={600} component="span">
+              Subject/Session/Run/Modality
+            </Text>{" "}
+            staging tree, then ExploreASL processes that tree.
+          </Text>
+        }
+        color="blue"
+        dataTestId="import-preview-header"
+      />
 
       <Stack gap="xs">
         <Text size="sm">
