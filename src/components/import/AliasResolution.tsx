@@ -270,7 +270,19 @@ export default function AliasResolution() {
         </Text>
       )}
 
-      <Group justify="space-between">
+      <Group
+        justify="space-between"
+        pos="sticky"
+        bottom={40}
+        style={{
+          zIndex: 2,
+          paddingTop: "var(--mantine-spacing-md)",
+          paddingBottom: "var(--mantine-spacing-md)",
+          backgroundColor: "var(--mantine-color-body)",
+          boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.06)",
+        }}
+        data-testid="alias-nav"
+      >
         <Button
           leftSection={<IconArrowLeft size={16} />}
           variant="light"
