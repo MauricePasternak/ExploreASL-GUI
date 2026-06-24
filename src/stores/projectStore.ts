@@ -1,20 +1,20 @@
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { create } from "zustand";
 
-import {
-  canAccessPhase,
-  DEFAULT_PROJECT_FILE,
-  PROJECT_FILE_NAME,
-  type ProjectMeta,
-  ProjectFileSchema,
-  type ProjectFile,
-} from "../schemas/project";
+import { ensureBidsIgnore, isBidsProject } from "../lib/bidsUtils";
 import {
   clearSessionCheckpoint,
   projectEaslPath,
   syncSessionCheckpointFromProject,
 } from "../lib/sessionCheckpoint";
-import { isBidsProject, ensureBidsIgnore } from "../lib/bidsUtils";
+import {
+  canAccessPhase,
+  DEFAULT_PROJECT_FILE,
+  PROJECT_FILE_NAME,
+  ProjectFileSchema,
+  type ProjectFile,
+  type ProjectMeta,
+} from "../schemas/project";
 import type { ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
 
@@ -189,18 +189,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((state) => {
       if (!state.project) return state;
 
-      const {
-        activeStep,
-        importPhase,
-        importCompleted,
-        importLog,
-        failedSubjects,
-        importRunning,
-        importProgress,
-        importSummary,
-        mostRecentConfig,
-        ...payload
-      } = importState;
+      const { activeStep, importPhase, importCompleted, mostRecentConfig, ...payload } =
+        importState;
 
       if (
         JSON.stringify(state.project.mappingState) === JSON.stringify(payload) &&

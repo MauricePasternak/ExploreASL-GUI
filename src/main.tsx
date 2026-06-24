@@ -104,7 +104,7 @@ window.__DEBUG__ = {
       () => useImportStore.getState(),
     );
     await copySnapshotToClipboard(snapshot);
-    // eslint-disable-next-line no-console
+
     console.log("[DEBUG] Snapshot copied to clipboard");
     return snapshot;
   },

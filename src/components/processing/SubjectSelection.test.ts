@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveLogBadge } from "./SubjectSelection";
+import { resolveLogBadge } from "./SubjectSelection.helpers";
 import type { LogFileInfo } from "../../lib/logViewer";
 
 function makeLog(overrides: Partial<LogFileInfo> = {}): LogFileInfo {
