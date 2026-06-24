@@ -8,7 +8,7 @@ TBD - created by archiving change processing-module. Update Purpose after archiv
 
 ### Requirement: Processing Phase State Machine
 
-The processing store SHALL manage a phase state machine with exactly six states: `idle`, `preparing`, `running`, `completed`, `failed`, `cancelled`. The store SHALL persist `processingPhase` and `lastRunConfig` to the `.easl` project file. Per-subject progress SHALL NOT be persisted — it SHALL be reconstructed from lock files on page load or route re-entry.
+The processing store SHALL manage a phase state machine with exactly six states: `idle`, `preparing`, `running`, `completed`, `failed`, `cancelled`. The store SHALL persist `processingPhase` and `lastRunConfig` to the `.easl` project file. Per-subject progress SHALL NOT be persisted — it SHALL be reconstructed from lock files on page load or route re-entry. When `processingPhase` transitions to `"completed"` and the processing config's `modules` includes `"population"`, the store SHALL call `setPopulationCompleted(true)` on the project store. When `startProcessing` is called with `modules` including `"population"`, the store SHALL call `setPopulationCompleted(false)` to clear any prior flag before spawning workers.
 
 #### Scenario: Initial state on page load
 
@@ -23,17 +23,27 @@ The processing store SHALL manage a phase state machine with exactly six states:
 #### Scenario: Phase transition on all workers complete successfully
 
 - **WHEN** all worker processes exit and `read_lock_status` confirms all subjects have `999_ready.status`
-- **THEN** the store SHALL transition to `completed`
+- **THEN** the store SHALL transition to `completed`, and if `config.modules` includes `"population"`, SHALL call `setPopulationCompleted(true)`
 
 #### Scenario: Phase transition on worker failure
 
 - **WHEN** all worker processes exit but some subjects lack `999_ready.status`
-- **THEN** the store SHALL transition to `failed`
+- **THEN** the store SHALL transition to `failed` and SHALL NOT call `setPopulationCompleted(true)`
 
 #### Scenario: Phase transition on user kill
 
 - **WHEN** the user clicks Kill and all worker processes are terminated
 - **THEN** the store SHALL transition to `cancelled`
+
+#### Scenario: Population flag cleared on re-run
+
+- **WHEN** the user starts processing with `config.modules` including `"population"` and `uiState.population.completed` is currently `true`
+- **THEN** the store SHALL call `setPopulationCompleted(false)` before transitioning to `preparing`
+
+#### Scenario: Population flag not cleared on non-Population re-run
+
+- **WHEN** the user starts processing with `config.modules` not including `"population"`
+- **THEN** the store SHALL NOT call `setPopulationCompleted(false)`
 
 ### Requirement: Process Configuration
 

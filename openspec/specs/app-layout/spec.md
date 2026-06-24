@@ -28,3 +28,32 @@ The data parameters route (`/project/:id/parameters`) SHALL display a warning ba
 
 - **WHEN** the user navigates to the parameters page while processing is running
 - **THEN** a warning banner SHALL appear at the top of the page with the text "Processing is running. Changes will take effect on next run."
+
+### Requirement: Visualization Navbar Entry
+
+The navbar SHALL include a "Visualization" entry in `PHASE_NAV` with `IconChartScatter` as its icon. The entry SHALL appear after the "Processing" entry. The entry SHALL be enabled when `canAccessPhase(project, "visualization")` returns true. When disabled, the entry SHALL be greyed out and non-clickable. When the navbar is collapsed, the entry SHALL display the `IconChartScatter` icon with an accessible aria-label of "Visualization". When expanded, the entry SHALL display both the icon and the "Visualization" label.
+
+#### Scenario: Navbar entry enabled after Population completion
+
+- **WHEN** `canAccessPhase(project, "visualization")` returns `true`
+- **THEN** the "Visualization" navbar entry SHALL be enabled and clickable
+
+#### Scenario: Navbar entry disabled before Population completion
+
+- **WHEN** `canAccessPhase(project, "visualization")` returns `false`
+- **THEN** the "Visualization" navbar entry SHALL be disabled (greyed out, non-clickable)
+
+#### Scenario: Collapsed navbar shows icon
+
+- **WHEN** the navbar is collapsed and the "Visualization" entry is enabled
+- **THEN** the `IconChartScatter` icon SHALL be visible with `aria-label="Visualization"`
+
+#### Scenario: Expanded navbar shows icon and label
+
+- **WHEN** the navbar is expanded and the "Visualization" entry is enabled
+- **THEN** both the `IconChartScatter` icon and the text "Visualization" SHALL be visible
+
+#### Scenario: Entry positioned after Processing
+
+- **WHEN** the navbar phases are rendered
+- **THEN** the "Visualization" entry SHALL appear immediately after the "Processing" entry
