@@ -35,8 +35,9 @@ describe("ProcessConfigSchema", () => {
     expect(result.modules).toEqual(["structural", "asl", "population"]);
   });
 
-  it("rejects empty modules array", () => {
-    expect(() => ProcessConfigSchema.parse({ ...validConfig, modules: [] })).toThrow();
+  it("accepts empty modules array", () => {
+    const result = ProcessConfigSchema.parse({ ...validConfig, modules: [] });
+    expect(result.modules).toEqual([]);
   });
 
   it("rejects invalid module name", () => {

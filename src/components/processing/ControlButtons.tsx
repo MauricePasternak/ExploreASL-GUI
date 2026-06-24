@@ -1,27 +1,68 @@
 import { Button, Group, Modal, Stack, Text } from "@mantine/core";
-import { IconPlayerPlay, IconPlayerStop } from "@tabler/icons-react";
 import { useCallback, useState } from "react";
+import { Virtuoso } from "react-virtuoso";
 
-import type { ProcessingPhase } from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";
+import {
+  CompletedSubjectEntry,
+  findCompletedSubjects,
+  getButtonProps,
+} from "./ControlButton.helpers";
 
 // ---------------------------------------------------------------------------
-// Helpers
+// ConfirmReprocessDialog
 // ---------------------------------------------------------------------------
-
-function getButtonProps(phase: ProcessingPhase) {
-  switch (phase) {
-    case "running":
-      return { label: "Stop", color: "red", icon: IconPlayerStop, action: "kill" as const };
-    case "preparing":
-      return { label: "Stop", color: "red", icon: IconPlayerStop, action: "kill" as const };
-    case "idle":
-    case "completed":
-    case "failed":
-    case "cancelled":
-    default:
-      return { label: "Start", color: "teal", icon: IconPlayerPlay, action: "start" as const };
-  }
+function ConfirmReprocessDialog({
+  opened,
+  onClose,
+  onConfirm,
+  entries,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  entries: CompletedSubjectEntry[];
+}) {
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title="Re-process completed subjects?"
+      data-testid="confirm-reprocess-dialog"
+    >
+      <Text size="sm">
+        The following {entries.length} subject(s) have already completed processing for the selected
+        module(s). Re-processing will overwrite their existing output.
+      </Text>
+      <div
+        style={{
+          height: Math.min(entries.length * 28, 300),
+          marginTop: "var(--mantine-spacing-sm)",
+        }}
+      >
+        <Virtuoso
+          data={entries}
+          itemContent={(_index, entry) => (
+            <div style={{ padding: "2px 0" }}>
+              <Text size="sm" component="span" ff="monospace">
+                {entry.subjectSession}
+              </Text>
+              {" — "}
+              {entry.modules.map((m) => (m === "asl" ? "ASL" : "Structural")).join(", ")}
+            </div>
+          )}
+        />
+      </div>
+      <Group justify="flex-end" mt="md">
+        <Button variant="default" onClick={onClose} data-testid="confirm-reprocess-cancel">
+          Cancel
+        </Button>
+        <Button color="orange" onClick={onConfirm} data-testid="confirm-reprocess-confirm">
+          Re-process anyway
+        </Button>
+      </Group>
+    </Modal>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +78,7 @@ export default function ControlButtons({ startDisabled = false }: ControlButtons
   const startProcessing = useProcessingStore((s) => s.startProcessing);
   const killProcessing = useProcessingStore((s) => s.killProcessing);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reprocessEntries, setReprocessEntries] = useState<CompletedSubjectEntry[]>([]);
 
   const { label, color, icon: Icon, action } = getButtonProps(phase);
   const isStartAction = action === "start";
@@ -45,7 +87,16 @@ export default function ControlButtons({ startDisabled = false }: ControlButtons
     if (action === "kill") {
       setConfirmOpen(true);
     } else {
-      startProcessing();
+      const { config, subjectStatuses } = useProcessingStore.getState();
+      if (!config) return;
+
+      const completed = findCompletedSubjects(config.subjects, config.modules, subjectStatuses);
+
+      if (completed.length > 0) {
+        setReprocessEntries(completed);
+      } else {
+        startProcessing();
+      }
     }
   }, [action, startProcessing]);
 
@@ -56,6 +107,15 @@ export default function ControlButtons({ startDisabled = false }: ControlButtons
 
   const handleCancelKill = useCallback(() => {
     setConfirmOpen(false);
+  }, []);
+
+  const handleConfirmReprocess = useCallback(() => {
+    setReprocessEntries([]);
+    startProcessing();
+  }, [startProcessing]);
+
+  const handleCancelReprocess = useCallback(() => {
+    setReprocessEntries([]);
   }, []);
 
   return (
@@ -102,6 +162,13 @@ export default function ControlButtons({ startDisabled = false }: ControlButtons
           </Group>
         </Stack>
       </Modal>
+
+      <ConfirmReprocessDialog
+        opened={reprocessEntries.length > 0}
+        onClose={handleCancelReprocess}
+        onConfirm={handleConfirmReprocess}
+        entries={reprocessEntries}
+      />
     </>
   );
 }

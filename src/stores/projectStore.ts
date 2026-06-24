@@ -226,8 +226,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((state) => {
       if (!state.project) return state;
 
+      const persistedConfig = config && config.modules.length > 0 ? config : undefined;
+
       if (
-        JSON.stringify(state.project.uiState.processing?.config) === JSON.stringify(config) &&
+        JSON.stringify(state.project.uiState.processing?.config) ===
+          JSON.stringify(persistedConfig) &&
         state.project.uiState.processing?.currentPhase === processingPhase
       ) {
         return state;
@@ -239,7 +242,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           uiState: {
             ...state.project.uiState,
             processing: {
-              config: config ?? undefined,
+              config: persistedConfig,
               currentPhase: processingPhase,
             },
           },

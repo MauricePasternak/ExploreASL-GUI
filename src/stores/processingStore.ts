@@ -100,6 +100,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
   startProcessing: async () => {
     const config = useProcessingStore.getState().config;
     if (!config) throw new Error("No config set");
+    if (config.modules.length === 0) throw new Error("No modules selected");
 
     const available = useProcessingStore.getState().availableSubjects;
     for (const subj of config.subjects) {
