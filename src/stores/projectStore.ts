@@ -2,6 +2,7 @@ import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { create } from "zustand";
 
 import { ensureBidsIgnore, isBidsProject } from "../lib/bidsUtils";
+import { compressSnapshot } from "../lib/snapshotCompression";
 import {
   clearSessionCheckpoint,
   projectEaslPath,
@@ -15,6 +16,7 @@ import {
   type ProjectFile,
   type ProjectMeta,
 } from "../schemas/project";
+import type { ImportSnapshot } from "../schemas/importSchemas";
 import type { ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
 
@@ -109,10 +111,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       return;
     }
 
-    await writeTextFile(
-      getProjectFilePath(project.projectMeta.rootPath),
-      JSON.stringify(project, null, 2),
+    const serialized = JSON.stringify(
+      project,
+      (key, value) => {
+        if (
+          key === "mostRecentConfig" &&
+          value &&
+          typeof value === "object" &&
+          "sourceDataPath" in value
+        ) {
+          return compressSnapshot(value as ImportSnapshot);
+        }
+        return value;
+      },
+      2,
     );
+
+    await writeTextFile(getProjectFilePath(project.projectMeta.rootPath), serialized);
 
     set({ isDirty: false });
   },

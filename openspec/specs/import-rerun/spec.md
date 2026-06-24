@@ -4,6 +4,8 @@
 
 The system SHALL capture an `ImportSnapshot` at `startImport()` time and persist it in the project file at `uiState.import.mostRecentConfig`. The snapshot SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, and `subjectRows` (including `groupId` assignments). The snapshot SHALL be `null` before the first import run.
 
+When persisted to `.easl`, the snapshot SHALL be serialized as a gzip-compressed, base64-encoded string (algorithm: gzip, level 9) via `fflate`. The in-memory store and staleness computation SHALL operate on the full `ImportSnapshot` object; compression is applied only at the `saveProject` serialization boundary and reversed at `loadProject` parse time. Corrupted or undecodable persisted strings SHALL fall back to `null` with a warning (staleness treated as no-baseline). Legacy `.easl` files containing a full-object `mostRecentConfig` (pre-compression format) SHALL drop the field on load with a warning; no migration is performed (v0, not yet distributed).
+
 #### Scenario: First import creates snapshot
 
 - **WHEN** the user clicks "Start Import" for the first time
@@ -170,7 +172,7 @@ The project file schema SHALL restructure import-related UI state under `uiState
 - `uiState.importActiveStep` → `uiState.import.activeStep`
 - `uiState.importCompleted` → `uiState.import.completed`
 - `uiState.importPhase` → `uiState.import.currentPhase`
-- NEW: `uiState.import.mostRecentConfig` (ImportSnapshot or null)
+- NEW: `uiState.import.mostRecentConfig` (gzip+base64 string, or null)
 
 The old flat keys SHALL be removed from the schema entirely. No backward compatibility migration is needed (v0.1, not yet distributed).
 

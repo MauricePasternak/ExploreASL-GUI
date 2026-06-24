@@ -16,6 +16,7 @@ import {
   initConsoleBridge,
   initDebugKeyboardShortcuts,
 } from "./lib/debug";
+import { compressSnapshot, decompressSnapshot } from "./lib/snapshotCompression";
 import { useGlobalStore } from "./stores/globalStore";
 import { useImportStore } from "./stores/importStore";
 import { useProjectStore } from "./stores/projectStore";
@@ -82,6 +83,8 @@ initDebugKeyboardShortcuts(
 // Usage: window.__DEBUG__.stores.globalStore → current global store state
 // Usage: window.__DEBUG__.log → recent action log
 // Usage: window.__DEBUG__.route → current hash route
+// Usage: window.__DEBUG__.compressSnapshot(obj) → gzip+base64 string for .easl
+// Usage: window.__DEBUG__.decompressSnapshot(str) → full ImportSnapshot object
 // @ts-expect-error -- intentional global for debugging
 window.__DEBUG__ = {
   get stores() {
@@ -108,6 +111,8 @@ window.__DEBUG__ = {
     console.log("[DEBUG] Snapshot copied to clipboard");
     return snapshot;
   },
+  compressSnapshot,
+  decompressSnapshot,
 };
 
 const router = createHashRouter([{ path: "*", element: <App /> }]);

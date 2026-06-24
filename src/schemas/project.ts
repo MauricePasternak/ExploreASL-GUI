@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DataParSchema } from "./dataParSchema";
-import { ImportSnapshotSchema } from "./importSchemas";
 import { ProcessConfigSchema, ProcessingPhaseSchema } from "./processingSchemas";
+import { decompressSnapshot } from "../lib/snapshotCompression";
 
 export const PROJECT_PHASES = ["import", "parameters", "processing", "visualization"] as const;
 export const IMPORT_EXECUTION_PHASES = [
@@ -26,7 +26,20 @@ export const ImportUiStateSchema = z.object({
   activeStep: z.number().int().min(0).optional(),
   completed: z.boolean().optional(),
   currentPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
-  mostRecentConfig: ImportSnapshotSchema.nullable().optional(),
+  mostRecentConfig: z
+    .preprocess((val) => {
+      if (val === null || val === undefined) return null;
+      if (typeof val === "string") return val;
+      // Legacy form: full object. v0 accepts breaking change — drop + warn.
+      console.warn(
+        "[projectSchema] legacy object-form mostRecentConfig encountered; dropping (v0 breaking change). Re-import to capture a new snapshot.",
+        val,
+      );
+      return null;
+    }, z.string().nullable())
+    .transform((v) => (v === null ? null : decompressSnapshot(v)))
+    .nullable()
+    .optional(),
 });
 
 export const ProjectFileSchema = z.object({
