@@ -33,6 +33,7 @@ const VALID_METADATA = {
     ASLContext: "control,label",
     M0Type: "Separate" as const,
     LabelingDuration: 1.8,
+    BackgroundSuppression: false,
   },
 };
 

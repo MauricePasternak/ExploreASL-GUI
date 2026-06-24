@@ -20,6 +20,7 @@ const validBidsParams = {
   ASLContext: "control,label",
   M0Type: "Separate" as const,
   LabelingDuration: 1.8,
+  BackgroundSuppression: false,
 };
 
 function modalScope() {
@@ -326,6 +327,7 @@ describe("MetadataModal", () => {
           BolusCutOffFlag: true,
           BolusCutOffDelayTime: [0.8, 0],
           BolusCutOffTechnique: "Q2TIPS" as const,
+          BackgroundSuppression: false,
         },
       },
     });

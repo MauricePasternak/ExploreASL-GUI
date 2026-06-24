@@ -42,6 +42,7 @@ const VALID_METADATA_GROUP: MetadataGroup = {
     ASLContext: "control,label",
     M0Type: "Separate",
     LabelingDuration: 1.8,
+    BackgroundSuppression: false,
   },
 };
 
