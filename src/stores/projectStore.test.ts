@@ -133,8 +133,8 @@ describe("useProjectStore", () => {
       await useProjectStore.getState().createProject("/tmp/proc-project", "Proc Project");
 
       const config = {
-        subjects: ["sub-01_01"],
-        modules: ["structural"],
+        subjects: ["sub-01_01"] as string[],
+        modules: ["structural"] as ("structural" | "asl" | "population")[],
         matlabPath: "/usr/local/MATLAB",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
@@ -182,7 +182,7 @@ describe("useProjectStore", () => {
 
       const config = {
         subjects: [] as string[],
-        modules: [] as string[],
+        modules: [] as ("structural" | "asl" | "population")[],
         matlabPath: "",
         exploreAslPath: "",
         workers: 1,

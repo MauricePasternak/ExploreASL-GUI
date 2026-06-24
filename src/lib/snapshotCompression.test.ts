@@ -28,15 +28,23 @@ function makeSyntheticSnapshot(subjectCount: number): ImportSnapshot {
 
 describe("snapshotCompression round-trip", () => {
   it("compress → decompress returns an equivalent object", () => {
-    const snapshot = {
+    const snapshot: ImportSnapshot = {
       ...BASE_SNAPSHOT,
       subjectRows: [
         { id: "BAR/01", subject: "BAR", session: "01", groupId: "g1" },
         { id: "BAZ/01", subject: "BAZ", session: "01", groupId: "g2" },
       ],
       metadataGroups: [
-        { id: "g1", label: "G1", bidsParams: { ArterialSpinLabelingType: "PCASL" } },
-        { id: "g2", label: "G2", bidsParams: { ArterialSpinLabelingType: "CASL" } },
+        {
+          id: "g1",
+          label: "G1",
+          bidsParams: { ArterialSpinLabelingType: "PCASL" },
+        },
+        {
+          id: "g2",
+          label: "G2",
+          bidsParams: { ArterialSpinLabelingType: "CASL" },
+        },
       ],
     };
     const encoded = compressSnapshot(snapshot);
