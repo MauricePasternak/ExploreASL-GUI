@@ -2,6 +2,7 @@ import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PROJECT_FILE_NAME } from "../schemas/project";
+import type { ImportSnapshot } from "../schemas/importSchemas";
 import { readSessionCheckpoint } from "../lib/sessionCheckpoint";
 import { useImportStore } from "./importStore";
 import { useProjectStore } from "./projectStore";
@@ -235,6 +236,116 @@ describe("useProjectStore", () => {
     });
     expect(project?.mappingState).not.toHaveProperty("importPhase");
     expect(project?.mappingState).not.toHaveProperty("importCompleted");
+  });
+
+  describe("mostRecentConfig persistence (gzip+base64)", () => {
+    const SAMPLE_SNAPSHOT: ImportSnapshot = {
+      sourceDataPath: "/scan/data",
+      pathPatterns: [],
+      tokenizerConfigs: {},
+      bMatchDirectories: true,
+      modalityAliases: [],
+      sessionAliases: [],
+      runAliases: [],
+      subjectRenames: [],
+      metadataGroups: [
+        { id: "g1", label: "G1", bidsParams: { ArterialSpinLabelingType: "PCASL" } },
+      ],
+      subjectRows: [{ id: "SUB/01", subject: "SUB", session: "01", groupId: "g1" }],
+    };
+
+    it("save → load round-trip preserves the snapshot via compressed string", async () => {
+      await useProjectStore.getState().createProject("/tmp/snapshot-roundtrip", "Snapshot RT");
+
+      useProjectStore.getState().syncImportState({
+        ...useImportStore.getState(),
+        activeStep: 5,
+        importPhase: "completed",
+        importCompleted: true,
+        mostRecentConfig: SAMPLE_SNAPSHOT,
+      });
+
+      await useProjectStore.getState().saveProject();
+
+      const calls = vi.mocked(writeTextFile).mock.calls;
+      const savedJson = calls[calls.length - 1][1] as string;
+      const saved = JSON.parse(savedJson);
+
+      // Persisted form MUST be a string, not an object
+      expect(typeof saved.uiState.import.mostRecentConfig).toBe("string");
+      expect(saved.uiState.import.mostRecentConfig.length).toBeGreaterThan(0);
+
+      // Simulate reload
+      vi.mocked(readTextFile).mockResolvedValue(savedJson);
+      useProjectStore.setState({ project: null, loaded: false, isDirty: false });
+      await useProjectStore.getState().loadProject("/tmp/snapshot-roundtrip/project.easl");
+
+      const restored = useProjectStore.getState().project?.uiState.import?.mostRecentConfig;
+      expect(restored).toEqual(SAMPLE_SNAPSHOT);
+    });
+
+    it("legacy object-form mostRecentConfig is dropped with a warning on load", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const legacyJson = JSON.stringify({
+        version: "0.1.0",
+        projectMeta: {
+          id: "legacy-snapshot-id",
+          name: "Legacy Snapshot",
+          rootPath: "/tmp/legacy-snapshot",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: {
+          import: {
+            activeStep: 5,
+            completed: true,
+            currentPhase: "completed",
+            mostRecentConfig: SAMPLE_SNAPSHOT, // legacy full-object form
+          },
+        },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      });
+
+      vi.mocked(readTextFile).mockResolvedValue(legacyJson);
+      vi.mocked(isBidsProject).mockResolvedValue(false);
+
+      await useProjectStore.getState().loadProject("/tmp/legacy-snapshot/project.easl");
+
+      const restored = useProjectStore.getState().project?.uiState.import?.mostRecentConfig;
+      expect(restored).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("legacy object-form mostRecentConfig"),
+        expect.any(Object),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("null mostRecentConfig round-trips as null", async () => {
+      await useProjectStore.getState().createProject("/tmp/null-snapshot", "Null Snapshot");
+
+      useProjectStore.getState().syncImportState({
+        ...useImportStore.getState(),
+        activeStep: 0,
+        importPhase: "idle",
+        importCompleted: false,
+        mostRecentConfig: null,
+      });
+
+      await useProjectStore.getState().saveProject();
+
+      const calls = vi.mocked(writeTextFile).mock.calls;
+      const savedJson = calls[calls.length - 1][1] as string;
+      const saved = JSON.parse(savedJson);
+      expect(saved.uiState.import.mostRecentConfig).toBeNull();
+
+      vi.mocked(readTextFile).mockResolvedValue(savedJson);
+      useProjectStore.setState({ project: null, loaded: false, isDirty: false });
+      await useProjectStore.getState().loadProject("/tmp/null-snapshot/project.easl");
+
+      expect(useProjectStore.getState().project?.uiState.import?.mostRecentConfig).toBeNull();
+    });
   });
 
   describe("BIDS project detection", () => {
