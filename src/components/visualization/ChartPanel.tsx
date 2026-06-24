@@ -5,12 +5,17 @@ import { useElementSize } from "@mantine/hooks";
 import { ResponsiveScatterPlotCanvas } from "@nivo/scatterplot";
 import { ResponsiveSwarmPlotCanvas } from "@nivo/swarmplot";
 
-import { useVisualizationStore } from "../../stores/visualizationStore";
+import { useVisualizationStore, type ChartPoint } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { transformToChartData, translateColumnName } from "../../lib/tsvUtils";
 import { OKABE_ITO } from "../../lib/okabeIto";
 import { buildNivoTheme } from "../../lib/nivoTheme";
 import { invoke } from "@tauri-apps/api/core";
+
+interface NivoNode {
+  data?: ChartPoint;
+  id?: string;
+}
 
 function computeLinearScaleBounds(
   values: number[],
@@ -278,7 +283,7 @@ export default function ChartPanel() {
         },
       ];
 
-  function handleClick(node: any) {
+  function handleClick(node: NivoNode) {
     console.log("[ChartPanel] Clicked node:", node);
     const data = node?.data;
     if (!data) {
@@ -295,7 +300,7 @@ export default function ChartPanel() {
     }
   }
 
-  function renderTooltipContent(data: any) {
+  function renderTooltipContent(data: ChartPoint) {
     const subject = data.subject ?? "";
     const session = data.session ?? "";
     const run = data.run ?? "";
@@ -341,12 +346,12 @@ export default function ChartPanel() {
     );
   }
 
-  function renderScatterTooltip({ node }: { node: any }) {
-    return renderTooltipContent(node.data);
+  function renderScatterTooltip({ node }: { node: NivoNode }) {
+    return renderTooltipContent(node.data!);
   }
 
-  function renderSwarmTooltip(props: any) {
-    return renderTooltipContent(props.data);
+  function renderSwarmTooltip(props: NivoNode) {
+    return renderTooltipContent(props.data!);
   }
 
   return (
@@ -400,7 +405,7 @@ export default function ChartPanel() {
             }))}
             groups={Array.from(new Set(filteredData.map((p) => p.x as string)))}
             theme={nivoTheme}
-            colors={(node: any) => {
+            colors={(node: NivoNode) => {
               const colorByVal = node.data?.colorBy;
               if (colorByCol && colorByVal && colorMap[colorByVal]) {
                 return hexToRgba(colorMap[colorByVal], chartOpacity);

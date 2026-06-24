@@ -1,5 +1,10 @@
 import { useEffect, useRef } from "react";
-import { useVisualizationStore, type StepperStage } from "../stores/visualizationStore";
+import {
+  useVisualizationStore,
+  type StepperStage,
+  type NvSliceType,
+  type NvBackColor,
+} from "../stores/visualizationStore";
 import { useProjectStore } from "../stores/projectStore";
 
 const AUTOSAVE_DEBOUNCE_MS = 2000;
@@ -82,8 +87,8 @@ export function useVisualizationSync() {
     if (dataVis.nvCornerOrientation !== undefined)
       store.setNvCornerOrientation(dataVis.nvCornerOrientation);
     if (dataVis.nvColormap !== undefined) store.setNvColormap(dataVis.nvColormap);
-    if (dataVis.nvSliceType !== undefined) store.setNvSliceType(dataVis.nvSliceType as any);
-    if (dataVis.nvBackColor !== undefined) store.setNvBackColor(dataVis.nvBackColor as any);
+    if (dataVis.nvSliceType !== undefined) store.setNvSliceType(dataVis.nvSliceType as NvSliceType);
+    if (dataVis.nvBackColor !== undefined) store.setNvBackColor(dataVis.nvBackColor as NvBackColor);
     if (dataVis.xTickSize !== undefined) store.setXTickSize(dataVis.xTickSize);
     if (dataVis.xTickPadding !== undefined) store.setXTickPadding(dataVis.xTickPadding);
     if (dataVis.xTickRotation !== undefined) store.setXTickRotation(dataVis.xTickRotation);

@@ -13,7 +13,11 @@ import {
   Group,
   TextInput,
 } from "@mantine/core";
-import { useVisualizationStore } from "../../stores/visualizationStore";
+import {
+  useVisualizationStore,
+  type NvSliceType,
+  type NvBackColor,
+} from "../../stores/visualizationStore";
 import { translateColumnName } from "../../lib/tsvUtils";
 
 export default function SettingsDrawer() {
@@ -363,7 +367,7 @@ export default function SettingsDrawer() {
               label="Layout / Orientation"
               data={sliceTypeOptions}
               value={nvSliceType}
-              onChange={(val) => setNvSliceType(val as any)}
+              onChange={(val) => setNvSliceType(val as NvSliceType)}
               size="xs"
               data-testid="setting-nv-slice-type"
             />
@@ -388,7 +392,7 @@ export default function SettingsDrawer() {
                   { label: "White", value: "white" },
                 ]}
                 value={nvBackColor}
-                onChange={(val) => setNvBackColor(val as any)}
+                onChange={(val) => setNvBackColor(val as NvBackColor)}
                 size="xs"
                 fullWidth
                 data-testid="setting-nv-back-color"

@@ -1,6 +1,6 @@
 import { Button, Group, Modal, Stack, TextInput } from "@mantine/core";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 
 import { BIDS_FIELD_HINTS, stripEmptyBidsParams } from "./metadataFieldHints";
 import {
@@ -31,7 +31,7 @@ export default function MetadataModal({
   onSubmit,
 }: MetadataModalProps) {
   const form = useForm<MetadataGroupFormValues>({
-    resolver: zodResolver(MetadataGroupFormSchema) as any,
+    resolver: zodResolver(MetadataGroupFormSchema) as Resolver<MetadataGroupFormValues>,
     defaultValues: initialValues,
     values: initialValues,
   });
