@@ -1,9 +1,23 @@
 import { create } from "zustand";
 
 // Types from the schema
-interface ContractSource {
+interface QcbfSource {
   relativePath: string;
   fileHash: string;
+}
+
+interface ExternalSource {
+  absolutePath: string;
+  fileHash: string;
+  sheetName: string | null;
+}
+
+interface JoinConfig {
+  externalSource: ExternalSource;
+  leftOn: string[];
+  rightOn: string[];
+  dropRightOn: boolean;
+  naTokens: string[];
 }
 
 interface Identifiers {
@@ -49,7 +63,8 @@ interface ViewerState {
 
 // Persisted fields (synced to uiState.dataVis)
 interface PersistedState {
-  contractSources: ContractSource[];
+  qcbfSource: QcbfSource | null;
+  joinConfig: JoinConfig | null;
   columnTypes: Record<string, string>;
   identifiers: Identifiers | null;
   levelOrderings: Record<string, string[]>;
@@ -113,7 +128,8 @@ interface EphemeralState {
 
 interface VisualizationActions {
   // Persisted actions
-  setContractSources: (sources: ContractSource[]) => void;
+  setQcbfSource: (source: QcbfSource | null) => void;
+  setJoinConfig: (config: JoinConfig | null) => void;
   setColumnType: (column: string, type: string) => void;
   setColumnTypes: (types: Record<string, string>) => void;
   setIdentifiers: (ids: Identifiers) => void;
@@ -167,7 +183,8 @@ interface VisualizationActions {
 type VisualizationState = PersistedState & EphemeralState & VisualizationActions;
 
 const INITIAL_PERSISTED: PersistedState = {
-  contractSources: [],
+  qcbfSource: null,
+  joinConfig: null,
   columnTypes: {},
   identifiers: null,
   levelOrderings: {},
@@ -220,7 +237,8 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
   ...INITIAL_EPHEMERAL,
 
   // Persisted actions
-  setContractSources: (sources) => set({ contractSources: sources }),
+  setQcbfSource: (source) => set({ qcbfSource: source }),
+  setJoinConfig: (config) => set({ joinConfig: config }),
   setColumnType: (column, type) =>
     set((state) => ({
       columnTypes: { ...state.columnTypes, [column]: type },

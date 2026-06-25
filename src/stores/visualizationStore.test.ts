@@ -3,47 +3,68 @@ import { useVisualizationStore } from "./visualizationStore";
 
 describe("visualizationStore", () => {
   beforeEach(() => {
-    useVisualizationStore.setState({
-      contractSources: [],
-      columnTypes: {},
-      identifiers: null,
-      levelOrderings: {},
-      axisAssignment: { x: null, y: null, colorBy: null },
-      domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
-      stage: "selectFile",
-      splitRatio: 0.6,
-      filtersExpanded: false,
-      availableFiles: [],
-      inspection: null,
-      chartData: [],
-      selectedPointId: null,
-      viewerState: { status: "idle" },
-      viewerError: null,
-      webglAvailable: false,
-      exclusionCount: { plotted: 0, excluded: 0 },
-      pointSize: 10,
-      swarmSpacing: 2,
-      chartOpacity: 0.8,
-      showGridX: true,
-      showGridY: true,
-      nvRadiological: false,
-      nvColorbar: true,
-      nvCrosshair: true,
-      nvCornerOrientation: false,
-      nvColormap: "gray",
-      nvSliceType: "multiplanar",
-      nvBackColor: "black",
-      xTickSize: 5,
-      xTickPadding: 5,
-      xTickRotation: -20,
-      xLegendOverride: null,
-      xLegendOffset: 36,
-      yTickSize: 5,
-      yTickPadding: 5,
-      yTickRotation: 0,
-      yLegendOverride: null,
-      yLegendOffset: -40,
+    useVisualizationStore.getState().reset();
+  });
+
+  it("has qcbfSource null by default", () => {
+    expect(useVisualizationStore.getState().qcbfSource).toBeNull();
+  });
+
+  it("has joinConfig null by default", () => {
+    expect(useVisualizationStore.getState().joinConfig).toBeNull();
+  });
+
+  it("setQcbfSource updates the source", () => {
+    useVisualizationStore.getState().setQcbfSource({ relativePath: "test.tsv", fileHash: "abc" });
+    expect(useVisualizationStore.getState().qcbfSource).toEqual({
+      relativePath: "test.tsv",
+      fileHash: "abc",
     });
+  });
+
+  it("setQcbfSource accepts null", () => {
+    useVisualizationStore.getState().setQcbfSource({ relativePath: "test.tsv", fileHash: "abc" });
+    useVisualizationStore.getState().setQcbfSource(null);
+    expect(useVisualizationStore.getState().qcbfSource).toBeNull();
+  });
+
+  it("setJoinConfig updates join config", () => {
+    const config = {
+      externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
+      leftOn: ["participant_id"],
+      rightOn: ["SubjectID"],
+      dropRightOn: true,
+      naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
+    };
+    useVisualizationStore.getState().setJoinConfig(config);
+    expect(useVisualizationStore.getState().joinConfig).toEqual(config);
+  });
+
+  it("setJoinConfig accepts null", () => {
+    useVisualizationStore.getState().setJoinConfig({
+      externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
+      leftOn: ["participant_id"],
+      rightOn: ["SubjectID"],
+      dropRightOn: true,
+      naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
+    });
+    useVisualizationStore.getState().setJoinConfig(null);
+    expect(useVisualizationStore.getState().joinConfig).toBeNull();
+  });
+
+  it("invalidateContract resets qcbfSource and joinConfig to null", () => {
+    const store = useVisualizationStore.getState();
+    store.setQcbfSource({ relativePath: "test.tsv", fileHash: "abc" });
+    store.setJoinConfig({
+      externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
+      leftOn: ["participant_id"],
+      rightOn: ["SubjectID"],
+      dropRightOn: true,
+      naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
+    });
+    store.invalidateContract();
+    expect(useVisualizationStore.getState().qcbfSource).toBeNull();
+    expect(useVisualizationStore.getState().joinConfig).toBeNull();
   });
 
   it("setStage updates the stepper stage", () => {
