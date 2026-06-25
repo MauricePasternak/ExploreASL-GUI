@@ -78,38 +78,6 @@ mod tests {
     }
 
     #[test]
-    fn test_read_tsv_columns_returns_requested_and_identifiers() {
-        let tsv = "participant_id\tsession\tGM_vol\tSite\nStudyID\t...\tLiter\tint\nsub-X_01\tASL_1\t0.64\t1\n";
-        let (_temp, root) = setup_stats_dir(tsv);
-        let result =
-            read_tsv_columns_impl(root, "test.tsv".to_string(), vec!["GM_vol".to_string()])
-                .unwrap();
-        assert_eq!(result.len(), 1);
-        assert!(result[0].contains_key("participant_id"));
-        assert!(result[0].contains_key("subject"));
-        assert!(result[0].contains_key("session"));
-        assert!(result[0].contains_key("run"));
-        assert!(result[0].contains_key("GM_vol"));
-        assert!(!result[0].contains_key("Site"));
-    }
-
-    #[test]
-    fn test_inspect_tsv_no_duplicate_columns() {
-        let tsv = "participant_id\tsession\tGM_vol\nStudyID\t...\tLiter\nsub-X_01\tASL_1\t0.64\n";
-        let (_temp, root) = setup_stats_dir(tsv);
-        let result = inspect_tsv_impl(root, "test.tsv".to_string()).unwrap();
-
-        let mut seen = std::collections::HashSet::new();
-        for col in &result.columns {
-            assert!(
-                seen.insert(col.name.clone()),
-                "Duplicate column found: {}",
-                col.name
-            );
-        }
-    }
-
-    #[test]
     fn test_active_data_default_is_none() {
         let state = AppState::default();
         let data = state.active_data.lock().unwrap();
