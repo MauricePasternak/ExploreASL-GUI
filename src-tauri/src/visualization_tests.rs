@@ -190,7 +190,7 @@ mod tests {
         )
         .unwrap();
         let result =
-            inspect_external_data_impl(csv_path.to_string_lossy().to_string(), None).unwrap();
+            inspect_external_data_impl(csv_path.to_string_lossy().to_string(), None, None).unwrap();
         assert_eq!(result.row_count, 2);
         assert!(result
             .columns
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_inspect_external_data_file_not_found() {
-        let result = inspect_external_data_impl("/nonexistent/path.csv".to_string(), None);
+        let result = inspect_external_data_impl("/nonexistent/path.csv".to_string(), None, None);
         assert!(result.is_err());
     }
 
@@ -224,10 +224,38 @@ mod tests {
         )
         .unwrap();
         let result =
-            inspect_external_data_impl(csv_path.to_string_lossy().to_string(), None).unwrap();
+            inspect_external_data_impl(csv_path.to_string_lossy().to_string(), None, None).unwrap();
         assert!(result.columns.iter().any(|c| c.name == "SubjectID"));
         assert!(result.columns.iter().any(|c| c.name == "Diagnosis"));
         assert!(result.columns.iter().any(|c| c.name == "Age"));
+    }
+
+    #[test]
+    fn test_inspect_external_data_csv_delimiter_override() {
+        let temp = tempfile::tempdir().unwrap();
+        let csv_path = temp.path().join("override.csv");
+        // Semicolon file, but we override delimiter to comma -> will parse as single column unless overridden
+        fs::write(&csv_path, "SubjectID;Diagnosis;Age\nsub-X_01;AD;65\n").unwrap();
+
+        // Comma override: single column "SubjectID;Diagnosis;Age" expected
+        let result_comma = inspect_external_data_impl(
+            csv_path.to_string_lossy().to_string(),
+            None,
+            Some(",".to_string()),
+        )
+        .unwrap();
+        assert_eq!(result_comma.columns.len(), 1);
+        assert_eq!(result_comma.columns[0].name, "SubjectID;Diagnosis;Age");
+
+        // Semicolon override: parses correctly
+        let result_semi = inspect_external_data_impl(
+            csv_path.to_string_lossy().to_string(),
+            None,
+            Some(";".to_string()),
+        )
+        .unwrap();
+        assert_eq!(result_semi.columns.len(), 3);
+        assert_eq!(result_semi.columns[0].name, "SubjectID");
     }
 
     fn default_na_tokens() -> Vec<String> {
@@ -263,10 +291,13 @@ mod tests {
             temp.path().to_path_buf(),
             "test.tsv".to_string(),
             ext_path.to_string_lossy().to_string(),
-            vec!["participant_id".to_string()],
-            vec!["SubjectID".to_string()],
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "SubjectID".to_string(),
+            }],
             true,
             default_na_tokens(),
+            None,
             None,
             &state,
         )
@@ -303,10 +334,13 @@ mod tests {
             temp.path().to_path_buf(),
             "test.tsv".to_string(),
             ext_path.to_string_lossy().to_string(),
-            vec!["participant_id".to_string()],
-            vec!["SubjectID".to_string()],
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "SubjectID".to_string(),
+            }],
             true,
             default_na_tokens(),
+            None,
             None,
             &state,
         )
@@ -341,10 +375,13 @@ mod tests {
             temp.path().to_path_buf(),
             "test.tsv".to_string(),
             ext_path.to_string_lossy().to_string(),
-            vec!["participant_id".to_string()],
-            vec!["SubjectID".to_string()],
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "SubjectID".to_string(),
+            }],
             true,
             default_na_tokens(),
+            None,
             None,
             &state,
         )
@@ -384,9 +421,12 @@ mod tests {
             temp.path().to_path_buf(),
             "test.tsv".to_string(),
             ext_path.to_string_lossy().to_string(),
-            vec!["participant_id".to_string()],
-            vec!["SubjectID".to_string()],
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "SubjectID".to_string(),
+            }],
             default_na_tokens(),
+            None,
             None,
             &state,
         )
@@ -418,9 +458,12 @@ mod tests {
             temp.path().to_path_buf(),
             "test.tsv".to_string(),
             ext_path.to_string_lossy().to_string(),
-            vec!["participant_id".to_string()],
-            vec!["SubjectID".to_string()],
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "SubjectID".to_string(),
+            }],
             default_na_tokens(),
+            None,
             None,
             &state,
         )
@@ -450,9 +493,12 @@ mod tests {
             temp.path().to_path_buf(),
             "test.tsv".to_string(),
             ext_path.to_string_lossy().to_string(),
-            vec!["subject".to_string()],
-            vec!["Subject".to_string()],
+            vec![JoinKeyPair {
+                left: "subject".to_string(),
+                right: "Subject".to_string(),
+            }],
             default_na_tokens(),
+            None,
             None,
             &state,
         )
@@ -483,9 +529,12 @@ mod tests {
             temp.path().to_path_buf(),
             "test.tsv".to_string(),
             ext_path.to_string_lossy().to_string(),
-            vec!["participant_id".to_string()],
-            vec!["SubjectID".to_string()],
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "SubjectID".to_string(),
+            }],
             default_na_tokens(),
+            None,
             None,
             &state,
         )
@@ -533,9 +582,12 @@ mod tests {
             temp.path().to_path_buf(),
             "test.tsv".to_string(),
             ext_path.to_string_lossy().to_string(),
-            vec!["participant_id".to_string()],
-            vec!["SubjectID".to_string()],
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "SubjectID".to_string(),
+            }],
             default_na_tokens(),
+            None,
             None,
             &state,
         )

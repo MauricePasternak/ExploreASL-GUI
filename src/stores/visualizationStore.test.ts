@@ -31,10 +31,10 @@ describe("visualizationStore", () => {
   it("setJoinConfig updates join config", () => {
     const config = {
       externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
-      leftOn: ["participant_id"],
-      rightOn: ["SubjectID"],
+      keys: [{ left: "participant_id", right: "SubjectID" }],
       dropRightOn: true,
       naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
+      delimiter: ",",
     };
     useVisualizationStore.getState().setJoinConfig(config);
     expect(useVisualizationStore.getState().joinConfig).toEqual(config);
@@ -43,10 +43,10 @@ describe("visualizationStore", () => {
   it("setJoinConfig accepts null", () => {
     useVisualizationStore.getState().setJoinConfig({
       externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
-      leftOn: ["participant_id"],
-      rightOn: ["SubjectID"],
+      keys: [{ left: "participant_id", right: "SubjectID" }],
       dropRightOn: true,
       naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
+      delimiter: ",",
     });
     useVisualizationStore.getState().setJoinConfig(null);
     expect(useVisualizationStore.getState().joinConfig).toBeNull();
@@ -57,10 +57,10 @@ describe("visualizationStore", () => {
     store.setQcbfSource({ relativePath: "test.tsv", fileHash: "abc" });
     store.setJoinConfig({
       externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
-      leftOn: ["participant_id"],
-      rightOn: ["SubjectID"],
+      keys: [{ left: "participant_id", right: "SubjectID" }],
       dropRightOn: true,
       naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
+      delimiter: ",",
     });
     store.invalidateContract();
     expect(useVisualizationStore.getState().qcbfSource).toBeNull();

@@ -1,9 +1,15 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tauri::State;
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct JoinKeyPair {
+    pub left: String,
+    pub right: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum ColumnSource {
@@ -554,6 +560,7 @@ fn build_external_columns(
 pub fn inspect_external_data_impl(
     absolute_path: String,
     sheet_name: Option<String>,
+    delimiter: Option<String>,
 ) -> Result<ExternalDataInspection, String> {
     let path = PathBuf::from(&absolute_path);
     if !path.exists() {
@@ -572,13 +579,24 @@ pub fn inspect_external_data_impl(
     hasher.update(&contents);
     let file_hash = format!("{:x}", hasher.finalize());
 
+    let parsed_delimiter = match delimiter.as_deref() {
+        Some(",") => Some(','),
+        Some(";") => Some(';'),
+        Some("\t") => Some('\t'),
+        _ => None,
+    };
+
     match extension.as_str() {
         "tsv" => parse_external_delimited(&contents, '\t', file_hash),
         "csv" => {
-            let text = String::from_utf8_lossy(&contents);
-            let first_line = text.lines().next().unwrap_or("");
-            let delimiter = detect_delimiter(first_line);
-            parse_external_delimited(&contents, delimiter, file_hash)
+            let delim_char = if let Some(d) = parsed_delimiter {
+                d
+            } else {
+                let text = String::from_utf8_lossy(&contents);
+                let first_line = text.lines().next().unwrap_or("");
+                detect_delimiter(first_line)
+            };
+            parse_external_delimited(&contents, delim_char, file_hash)
         }
         "xlsx" => parse_external_xlsx(&path, sheet_name, file_hash),
         _ => Err(format!("Unsupported file format: .{}", extension)),
@@ -675,8 +693,9 @@ fn parse_external_xlsx(
 pub async fn inspect_external_data(
     absolute_path: String,
     sheet_name: Option<String>,
+    delimiter: Option<String>,
 ) -> Result<ExternalDataInspection, String> {
-    inspect_external_data_impl(absolute_path, sheet_name)
+    inspect_external_data_impl(absolute_path, sheet_name, delimiter)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -684,13 +703,16 @@ pub fn execute_join_impl(
     project_root: PathBuf,
     qcbf_relative_path: String,
     external_absolute_path: String,
-    left_on: Vec<String>,
-    right_on: Vec<String>,
+    keys: Vec<JoinKeyPair>,
     drop_right_on: bool,
     na_tokens: Vec<String>,
     sheet_name: Option<String>,
+    delimiter: Option<String>,
     state: &crate::import::AppState,
 ) -> Result<DataInspection, String> {
+    let left_on: Vec<String> = keys.iter().map(|k| k.left.clone()).collect();
+    let right_on: Vec<String> = keys.iter().map(|k| k.right.clone()).collect();
+
     let ext_path = PathBuf::from(&external_absolute_path);
     if !ext_path.exists() {
         return Err(format!(
@@ -710,21 +732,36 @@ pub fn execute_join_impl(
             .clone()
     };
 
-    let ext_inspection =
-        inspect_external_data_impl(external_absolute_path.clone(), sheet_name.clone())?;
+    let ext_inspection = inspect_external_data_impl(
+        external_absolute_path.clone(),
+        sheet_name.clone(),
+        delimiter.clone(),
+    )?;
     let external_hash = ext_inspection.file_hash.clone();
 
     let extension = ext_path
         .extension()
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default();
+
+    let parsed_delimiter = match delimiter.as_deref() {
+        Some(",") => Some(','),
+        Some(";") => Some(';'),
+        Some("\t") => Some('\t'),
+        _ => None,
+    };
+
     let ext_rows: Vec<HashMap<String, String>> = match extension.as_str() {
         "tsv" => parse_external_rows(&ext_path, '\t', &na_tokens)?,
         "csv" => {
-            let text = std::fs::read_to_string(&ext_path).map_err(|e| e.to_string())?;
-            let first_line = text.lines().next().unwrap_or("");
-            let delimiter = detect_delimiter(first_line);
-            parse_external_rows(&ext_path, delimiter, &na_tokens)?
+            let delim_char = if let Some(d) = parsed_delimiter {
+                d
+            } else {
+                let text = std::fs::read_to_string(&ext_path).map_err(|e| e.to_string())?;
+                let first_line = text.lines().next().unwrap_or("");
+                detect_delimiter(first_line)
+            };
+            parse_external_rows(&ext_path, delim_char, &na_tokens)?
         }
         "xlsx" => parse_external_xlsx_rows(&ext_path, sheet_name, &na_tokens)?,
         _ => return Err(format!("Unsupported file format: .{}", extension)),
@@ -971,12 +1008,15 @@ pub fn check_join_sanity_impl(
     _project_root: PathBuf,
     _qcbf_relative_path: String,
     external_absolute_path: String,
-    left_on: Vec<String>,
-    right_on: Vec<String>,
+    keys: Vec<JoinKeyPair>,
     na_tokens: Vec<String>,
     sheet_name: Option<String>,
+    delimiter: Option<String>,
     state: &crate::import::AppState,
 ) -> Result<SanityCheckResult, String> {
+    let left_on: Vec<String> = keys.iter().map(|k| k.left.clone()).collect();
+    let right_on: Vec<String> = keys.iter().map(|k| k.right.clone()).collect();
+
     let qcbf_rows: Vec<HashMap<String, String>> = {
         let guard = state.active_data.lock().map_err(|e| e.to_string())?;
         guard
@@ -997,13 +1037,25 @@ pub fn check_join_sanity_impl(
         .extension()
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default();
+
+    let parsed_delimiter = match delimiter.as_deref() {
+        Some(",") => Some(','),
+        Some(";") => Some(';'),
+        Some("\t") => Some('\t'),
+        _ => None,
+    };
+
     let ext_rows: Vec<HashMap<String, String>> = match extension.as_str() {
         "tsv" => parse_external_rows(&ext_path, '\t', &na_tokens)?,
         "csv" => {
-            let text = std::fs::read_to_string(&ext_path).map_err(|e| e.to_string())?;
-            let first_line = text.lines().next().unwrap_or("");
-            let delimiter = detect_delimiter(first_line);
-            parse_external_rows(&ext_path, delimiter, &na_tokens)?
+            let delim_char = if let Some(d) = parsed_delimiter {
+                d
+            } else {
+                let text = std::fs::read_to_string(&ext_path).map_err(|e| e.to_string())?;
+                let first_line = text.lines().next().unwrap_or("");
+                detect_delimiter(first_line)
+            };
+            parse_external_rows(&ext_path, delim_char, &na_tokens)?
         }
         "xlsx" => parse_external_xlsx_rows(&ext_path, sheet_name, &na_tokens)?,
         _ => return Err(format!("Unsupported file format: .{}", extension)),
@@ -1054,20 +1106,20 @@ pub async fn check_join_sanity(
     project_root: String,
     qcbf_relative_path: String,
     external_absolute_path: String,
-    left_on: Vec<String>,
-    right_on: Vec<String>,
+    keys: Vec<JoinKeyPair>,
     na_tokens: Vec<String>,
     sheet_name: Option<String>,
+    delimiter: Option<String>,
     state: State<'_, crate::import::AppState>,
 ) -> Result<SanityCheckResult, String> {
     check_join_sanity_impl(
         PathBuf::from(project_root),
         qcbf_relative_path,
         external_absolute_path,
-        left_on,
-        right_on,
+        keys,
         na_tokens,
         sheet_name,
+        delimiter,
         &state,
     )
 }
@@ -1078,22 +1130,22 @@ pub async fn execute_join(
     project_root: String,
     qcbf_relative_path: String,
     external_absolute_path: String,
-    left_on: Vec<String>,
-    right_on: Vec<String>,
+    keys: Vec<JoinKeyPair>,
     drop_right_on: bool,
     na_tokens: Vec<String>,
     sheet_name: Option<String>,
+    delimiter: Option<String>,
     state: State<'_, crate::import::AppState>,
 ) -> Result<DataInspection, String> {
     execute_join_impl(
         PathBuf::from(project_root),
         qcbf_relative_path,
         external_absolute_path,
-        left_on,
-        right_on,
+        keys,
         drop_right_on,
         na_tokens,
         sheet_name,
+        delimiter,
         &state,
     )
 }

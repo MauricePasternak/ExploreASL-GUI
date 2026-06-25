@@ -5,5 +5,5 @@ minimumReleaseAgeExclude:
   - "@mantine/store@9.2.2"
   - "@mantine/hooks@9.2.2"
   - react-router@7.17.0
-  - '@vitejs/plugin-react@6.0.3'
+  - "@vitejs/plugin-react@6.0.3"
   - vite@8.1.0
