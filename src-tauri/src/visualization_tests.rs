@@ -211,4 +211,54 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No data loaded"));
     }
+
+    #[test]
+    fn test_inspect_external_data_csv() {
+        let temp = tempfile::tempdir().unwrap();
+        let csv_path = temp.path().join("covariates.csv");
+        fs::write(
+            &csv_path,
+            "SubjectID,Diagnosis,Age\nsub-X_01,AD,65\nsub-X_02,Control,70\n",
+        )
+        .unwrap();
+        let result =
+            inspect_external_data_impl(csv_path.to_string_lossy().to_string(), None).unwrap();
+        assert_eq!(result.row_count, 2);
+        assert!(result
+            .columns
+            .iter()
+            .any(|c| c.name == "SubjectID" && !c.is_identifier));
+        assert!(result
+            .columns
+            .iter()
+            .any(|c| c.name == "Age" && c.inferred_type == "continuous"));
+        assert!(result
+            .columns
+            .iter()
+            .any(|c| c.name == "Diagnosis" && c.inferred_type == "nominal"));
+        assert!(result.sheet_name.is_none());
+        assert!(!result.file_hash.is_empty());
+    }
+
+    #[test]
+    fn test_inspect_external_data_file_not_found() {
+        let result = inspect_external_data_impl("/nonexistent/path.csv".to_string(), None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_inspect_external_data_csv_semicolon() {
+        let temp = tempfile::tempdir().unwrap();
+        let csv_path = temp.path().join("euro.csv");
+        fs::write(
+            &csv_path,
+            "SubjectID;Diagnosis;Age\nsub-X_01;AD;65\nsub-X_02;Control;70\n",
+        )
+        .unwrap();
+        let result =
+            inspect_external_data_impl(csv_path.to_string_lossy().to_string(), None).unwrap();
+        assert!(result.columns.iter().any(|c| c.name == "SubjectID"));
+        assert!(result.columns.iter().any(|c| c.name == "Diagnosis"));
+        assert!(result.columns.iter().any(|c| c.name == "Age"));
+    }
 }
