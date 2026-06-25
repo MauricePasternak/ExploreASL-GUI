@@ -5,6 +5,54 @@ use std::io::Read;
 use std::path::PathBuf;
 use tauri::State;
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum ColumnSource {
+    Qcbf,
+    External,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnMetadata {
+    pub name: String,
+    pub original_name: String,
+    pub source: ColumnSource,
+    pub units: String,
+    pub inferred_type: String,
+    pub levels: Vec<String>,
+    pub is_identifier: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveData {
+    pub rows: Vec<HashMap<String, String>>,
+    pub columns: Vec<ColumnMetadata>,
+    pub row_count: usize,
+    pub qcbf_hash: String,
+    pub external_hash: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataInspection {
+    pub columns: Vec<ColumnMetadata>,
+    pub row_count: usize,
+    pub qcbf_hash: String,
+    pub external_hash: Option<String>,
+}
+
+impl ActiveData {
+    pub fn to_inspection(&self) -> DataInspection {
+        DataInspection {
+            columns: self.columns.clone(),
+            row_count: self.row_count,
+            qcbf_hash: self.qcbf_hash.clone(),
+            external_hash: self.external_hash.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsFileInfo {
@@ -432,6 +480,21 @@ pub async fn read_tsv_columns(
     read_tsv_columns_impl(PathBuf::from(project_root), relative_path, column_names)
 }
 
+pub fn set_active_project_impl(
+    root_path: String,
+    state: &crate::import::AppState,
+) -> Result<(), String> {
+    let path =
+        std::fs::canonicalize(&root_path).map_err(|e| format!("Invalid project path: {}", e))?;
+    *state
+        .active_project_root
+        .lock()
+        .map_err(|e| e.to_string())? = Some(path);
+    // Clear active_data on project switch — cache is project-scoped
+    *state.active_data.lock().map_err(|e| e.to_string())? = None;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn set_active_project(
     root_path: String,
@@ -439,15 +502,18 @@ pub fn set_active_project(
 ) -> Result<(), String> {
     let _trace = crate::tracing::CommandTrace::new("set_active_project");
     log::info!("set_active_project: root_path = {}", root_path);
-    let path = std::fs::canonicalize(&root_path).map_err(|e| {
-        log::error!("set_active_project failed canonicalizing: {}", e);
-        format!("Invalid project path: {}", e)
-    })?;
+    set_active_project_impl(root_path, &state)?;
+    log::info!("set_active_project success");
+    Ok(())
+}
+
+pub fn clear_active_project_impl(state: &crate::import::AppState) -> Result<(), String> {
     *state
         .active_project_root
         .lock()
-        .map_err(|e| e.to_string())? = Some(path);
-    log::info!("set_active_project success");
+        .map_err(|e| e.to_string())? = None;
+    // Clear active_data on project switch — cache is project-scoped
+    *state.active_data.lock().map_err(|e| e.to_string())? = None;
     Ok(())
 }
 
@@ -455,10 +521,7 @@ pub fn set_active_project(
 pub fn clear_active_project(state: State<'_, crate::import::AppState>) -> Result<(), String> {
     let _trace = crate::tracing::CommandTrace::new("clear_active_project");
     log::info!("clear_active_project");
-    *state
-        .active_project_root
-        .lock()
-        .map_err(|e| e.to_string())? = None;
+    clear_active_project_impl(&state)?;
     log::info!("clear_active_project success");
     Ok(())
 }
