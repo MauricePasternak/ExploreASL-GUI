@@ -11,7 +11,7 @@ pub enum ColumnSource {
     External,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ColumnMetadata {
     pub name: String,
@@ -484,13 +484,14 @@ pub fn set_active_project_impl(
     root_path: String,
     state: &crate::import::AppState,
 ) -> Result<(), String> {
-    let path =
-        std::fs::canonicalize(&root_path).map_err(|e| format!("Invalid project path: {}", e))?;
+    let path = std::fs::canonicalize(&root_path).map_err(|e| {
+        log::error!("set_active_project failed canonicalizing: {}", e);
+        format!("Invalid project path: {}", e)
+    })?;
     *state
         .active_project_root
         .lock()
         .map_err(|e| e.to_string())? = Some(path);
-    // Clear active_data on project switch — cache is project-scoped
     *state.active_data.lock().map_err(|e| e.to_string())? = None;
     Ok(())
 }
@@ -512,7 +513,6 @@ pub fn clear_active_project_impl(state: &crate::import::AppState) -> Result<(), 
         .active_project_root
         .lock()
         .map_err(|e| e.to_string())? = None;
-    // Clear active_data on project switch — cache is project-scoped
     *state.active_data.lock().map_err(|e| e.to_string())? = None;
     Ok(())
 }
