@@ -261,4 +261,134 @@ mod tests {
         assert!(result.columns.iter().any(|c| c.name == "Diagnosis"));
         assert!(result.columns.iter().any(|c| c.name == "Age"));
     }
+
+    fn default_na_tokens() -> Vec<String> {
+        vec![
+            "".to_string(),
+            "NaN".to_string(),
+            "NA".to_string(),
+            "n/a".to_string(),
+            "<NA>".to_string(),
+        ]
+    }
+
+    #[test]
+    fn test_execute_join_basic() {
+        let temp = tempfile::tempdir().unwrap();
+        let stats_dir = temp.path().join("derivatives/ExploreASL/Population/Stats");
+        fs::create_dir_all(&stats_dir).unwrap();
+        fs::write(
+            stats_dir.join("test.tsv"),
+            "participant_id\tsession\tGM_vol\nsub-X_01\tASL_1\t0.64\nsub-X_02\tASL_1\t0.70\n",
+        )
+        .unwrap();
+
+        let ext_path = temp.path().join("covariates.csv");
+        fs::write(
+            &ext_path,
+            "SubjectID,Diagnosis\nsub-X_01,AD\nsub-X_02,Control\n",
+        )
+        .unwrap();
+
+        let state = AppState::default();
+        let result = execute_join_impl(
+            temp.path().to_path_buf(),
+            "test.tsv".to_string(),
+            ext_path.to_string_lossy().to_string(),
+            vec!["participant_id".to_string()],
+            vec!["SubjectID".to_string()],
+            true,
+            default_na_tokens(),
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(result.row_count, 2);
+        assert!(result.external_hash.is_some());
+        assert!(result
+            .columns
+            .iter()
+            .any(|c| c.name == "Diagnosis" && c.source == ColumnSource::External));
+        assert!(!result.columns.iter().any(|c| c.name == "SubjectID"));
+        let cached = state.active_data.lock().unwrap();
+        assert!(cached.is_some());
+        assert!(cached.as_ref().unwrap().external_hash.is_some());
+    }
+
+    #[test]
+    fn test_execute_join_unmatched_rows() {
+        let temp = tempfile::tempdir().unwrap();
+        let stats_dir = temp.path().join("derivatives/ExploreASL/Population/Stats");
+        fs::create_dir_all(&stats_dir).unwrap();
+        fs::write(
+            stats_dir.join("test.tsv"),
+            "participant_id\tsession\tGM_vol\nsub-X_01\tASL_1\t0.64\nsub-X_02\tASL_1\t0.70\n",
+        )
+        .unwrap();
+
+        let ext_path = temp.path().join("covariates.csv");
+        fs::write(&ext_path, "SubjectID,Diagnosis\nsub-X_01,AD\n").unwrap();
+
+        let state = AppState::default();
+        let result = execute_join_impl(
+            temp.path().to_path_buf(),
+            "test.tsv".to_string(),
+            ext_path.to_string_lossy().to_string(),
+            vec!["participant_id".to_string()],
+            vec!["SubjectID".to_string()],
+            true,
+            default_na_tokens(),
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(result.row_count, 2);
+        let cached = state.active_data.lock().unwrap();
+        let rows = &cached.as_ref().unwrap().rows;
+        let unmatched = rows
+            .iter()
+            .find(|r| r.get("participant_id") == Some(&"sub-X_02".to_string()))
+            .unwrap();
+        assert_eq!(unmatched.get("Diagnosis"), Some(&"".to_string()));
+    }
+
+    #[test]
+    fn test_execute_join_column_collision_suffix() {
+        let temp = tempfile::tempdir().unwrap();
+        let stats_dir = temp.path().join("derivatives/ExploreASL/Population/Stats");
+        fs::create_dir_all(&stats_dir).unwrap();
+        fs::write(
+            stats_dir.join("test.tsv"),
+            "participant_id\tsession\tMeanMotion\nsub-X_01\tASL_1\t0.5\n",
+        )
+        .unwrap();
+
+        let ext_path = temp.path().join("covariates.csv");
+        fs::write(&ext_path, "SubjectID,MeanMotion\nsub-X_01,1.2\n").unwrap();
+
+        let state = AppState::default();
+        let result = execute_join_impl(
+            temp.path().to_path_buf(),
+            "test.tsv".to_string(),
+            ext_path.to_string_lossy().to_string(),
+            vec!["participant_id".to_string()],
+            vec!["SubjectID".to_string()],
+            true,
+            default_na_tokens(),
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert!(result
+            .columns
+            .iter()
+            .any(|c| c.name == "MeanMotion_x" && c.source == ColumnSource::Qcbf));
+        assert!(result
+            .columns
+            .iter()
+            .any(|c| c.name == "MeanMotion_y" && c.source == ColumnSource::External));
+    }
 }

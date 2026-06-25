@@ -1007,3 +1007,307 @@ pub async fn inspect_external_data(
 ) -> Result<ExternalDataInspection, String> {
     inspect_external_data_impl(absolute_path, sheet_name)
 }
+
+#[allow(clippy::too_many_arguments)]
+pub fn execute_join_impl(
+    project_root: PathBuf,
+    qcbf_relative_path: String,
+    external_absolute_path: String,
+    left_on: Vec<String>,
+    right_on: Vec<String>,
+    drop_right_on: bool,
+    na_tokens: Vec<String>,
+    sheet_name: Option<String>,
+    state: &crate::import::AppState,
+) -> Result<DataInspection, String> {
+    let ext_path = PathBuf::from(&external_absolute_path);
+    if !ext_path.exists() {
+        return Err(format!(
+            "External file not found: {}",
+            external_absolute_path
+        ));
+    }
+
+    let qcbf_inspection = load_qcbf_data_impl(project_root, qcbf_relative_path, state)?;
+    let qcbf_hash = qcbf_inspection.qcbf_hash.clone();
+    let qcbf_rows = {
+        let guard = state.active_data.lock().map_err(|e| e.to_string())?;
+        guard
+            .as_ref()
+            .ok_or("qCBF cache missing after load")?
+            .rows
+            .clone()
+    };
+
+    let ext_inspection =
+        inspect_external_data_impl(external_absolute_path.clone(), sheet_name.clone())?;
+    let external_hash = ext_inspection.file_hash.clone();
+
+    let extension = ext_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let ext_rows: Vec<HashMap<String, String>> = match extension.as_str() {
+        "tsv" => parse_external_rows(&ext_path, '\t', &na_tokens)?,
+        "csv" => {
+            let text = std::fs::read_to_string(&ext_path).map_err(|e| e.to_string())?;
+            let first_line = text.lines().next().unwrap_or("");
+            let delimiter = detect_delimiter(first_line);
+            parse_external_rows(&ext_path, delimiter, &na_tokens)?
+        }
+        "xlsx" => parse_external_xlsx_rows(&ext_path, sheet_name, &na_tokens)?,
+        _ => return Err(format!("Unsupported file format: .{}", extension)),
+    };
+
+    let mut ext_index: HashMap<Vec<String>, Vec<&HashMap<String, String>>> = HashMap::new();
+    for row in &ext_rows {
+        let key: Vec<String> = right_on
+            .iter()
+            .filter_map(|col| row.get(col).cloned())
+            .collect();
+        ext_index.entry(key).or_default().push(row);
+    }
+
+    let qcbf_names: Vec<String> = qcbf_inspection
+        .columns
+        .iter()
+        .map(|c| c.name.clone())
+        .collect();
+    let ext_names: Vec<String> = ext_inspection
+        .columns
+        .iter()
+        .map(|c| c.name.clone())
+        .collect();
+    let qcbf_names_set: HashSet<&String> = qcbf_names.iter().collect();
+    let surviving_ext: HashSet<&String> = ext_names
+        .iter()
+        .filter(|n| !(drop_right_on && right_on.contains(n)))
+        .collect();
+
+    let qcbf_rename: HashMap<String, String> = qcbf_inspection
+        .columns
+        .iter()
+        .filter_map(|c| {
+            if surviving_ext.contains(&c.name) && !left_on.contains(&c.name) {
+                Some((c.name.clone(), format!("{}_x", c.name)))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let ext_cols_final: Vec<(String, String)> = ext_inspection
+        .columns
+        .iter()
+        .filter_map(|c| {
+            if drop_right_on && right_on.contains(&c.name) {
+                return None;
+            }
+            let final_name = if qcbf_names_set.contains(&c.name) {
+                format!("{}_y", c.name)
+            } else {
+                c.name.clone()
+            };
+            Some((c.name.clone(), final_name))
+        })
+        .collect();
+
+    let mut merged_rows: Vec<HashMap<String, String>> = Vec::new();
+    for qcbf_row in &qcbf_rows {
+        let key: Vec<String> = left_on
+            .iter()
+            .filter_map(|col| qcbf_row.get(col).cloned())
+            .collect();
+        let matches = ext_index.get(&key);
+        if let Some(matched) = matches {
+            for ext_row in matched {
+                let mut merged = HashMap::new();
+                for (k, v) in qcbf_row.iter() {
+                    let final_name = qcbf_rename.get(k).cloned().unwrap_or_else(|| k.clone());
+                    merged.insert(final_name, v.clone());
+                }
+                for (orig, final_name) in &ext_cols_final {
+                    let val = ext_row.get(orig).cloned().unwrap_or_default();
+                    merged.insert(final_name.clone(), val);
+                }
+                merged_rows.push(merged);
+            }
+        } else {
+            let mut merged = HashMap::new();
+            for (k, v) in qcbf_row.iter() {
+                let final_name = qcbf_rename.get(k).cloned().unwrap_or_else(|| k.clone());
+                merged.insert(final_name, v.clone());
+            }
+            for (_, final_name) in &ext_cols_final {
+                merged.insert(final_name.clone(), String::new());
+            }
+            merged_rows.push(merged);
+        }
+    }
+
+    let mut merged_columns: Vec<ColumnMetadata> = Vec::new();
+    for col in &qcbf_inspection.columns {
+        let final_name = qcbf_rename
+            .get(&col.name)
+            .cloned()
+            .unwrap_or_else(|| col.name.clone());
+        merged_columns.push(ColumnMetadata {
+            name: final_name,
+            original_name: col.original_name.clone(),
+            source: col.source.clone(),
+            units: col.units.clone(),
+            inferred_type: col.inferred_type.clone(),
+            levels: col.levels.clone(),
+            is_identifier: col.is_identifier,
+        });
+    }
+    for col in &ext_inspection.columns {
+        if drop_right_on && right_on.contains(&col.name) {
+            continue;
+        }
+        let final_name = if qcbf_names_set.contains(&col.name) {
+            format!("{}_y", col.name)
+        } else {
+            col.name.clone()
+        };
+        merged_columns.push(ColumnMetadata {
+            name: final_name,
+            original_name: col.name.clone(),
+            source: ColumnSource::External,
+            units: String::new(),
+            inferred_type: col.inferred_type.clone(),
+            levels: col.levels.clone(),
+            is_identifier: false,
+        });
+    }
+
+    let row_count = merged_rows.len();
+    let active = ActiveData {
+        rows: merged_rows,
+        columns: merged_columns.clone(),
+        row_count,
+        qcbf_hash: qcbf_hash.clone(),
+        external_hash: Some(external_hash.clone()),
+    };
+    *state.active_data.lock().map_err(|e| e.to_string())? = Some(active);
+
+    Ok(DataInspection {
+        columns: merged_columns,
+        row_count,
+        qcbf_hash,
+        external_hash: Some(external_hash),
+    })
+}
+
+fn normalize_na(value: &str, na_tokens: &[String]) -> String {
+    let trimmed = value.trim();
+    let na_set: HashSet<&str> = na_tokens.iter().map(|s| s.as_str()).collect();
+    if na_set.contains(trimmed) {
+        return String::new();
+    }
+    trimmed.to_string()
+}
+
+fn parse_external_rows(
+    path: &Path,
+    delimiter: char,
+    na_tokens: &[String],
+) -> Result<Vec<HashMap<String, String>>, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let text = text.trim_start_matches('\u{FEFF}');
+
+    let mut reader = csv::ReaderBuilder::new()
+        .delimiter(delimiter as u8)
+        .has_headers(true)
+        .flexible(true)
+        .from_reader(text.as_bytes());
+
+    let headers: Vec<String> = reader
+        .headers()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .map(|s| s.trim().to_string())
+        .collect();
+
+    let mut rows = Vec::new();
+    for result in reader.records() {
+        let record = result.map_err(|e| e.to_string())?;
+        let mut row = HashMap::new();
+        for (i, field) in record.iter().enumerate() {
+            if i < headers.len() {
+                row.insert(headers[i].clone(), normalize_na(field, na_tokens));
+            }
+        }
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+fn parse_external_xlsx_rows(
+    path: &Path,
+    sheet_name: Option<String>,
+    na_tokens: &[String],
+) -> Result<Vec<HashMap<String, String>>, String> {
+    use calamine::{open_workbook, Reader, Xlsx};
+
+    let mut workbook: Xlsx<_> =
+        open_workbook(path).map_err(|e: calamine::XlsxError| e.to_string())?;
+    let sheet_names = workbook.sheet_names();
+    if sheet_names.is_empty() {
+        return Err("xlsx file has no sheets".to_string());
+    }
+    let target_sheet = sheet_name.unwrap_or_else(|| sheet_names[0].clone());
+    let range = workbook
+        .worksheet_range(&target_sheet)
+        .map_err(|e| e.to_string())?;
+
+    let mut rows_iter = range.rows();
+    let header_row = rows_iter.next().ok_or("xlsx sheet is empty")?;
+    let headers: Vec<String> = header_row.iter().map(|c| c.to_string()).collect();
+
+    let na_set: HashSet<String> = na_tokens.iter().cloned().collect();
+
+    let mut rows = Vec::new();
+    for row in rows_iter {
+        let mut row_map = HashMap::new();
+        for (i, cell) in row.iter().enumerate() {
+            if i < headers.len() {
+                let val = cell.to_string();
+                let normalized = if na_set.contains(&val) {
+                    String::new()
+                } else {
+                    val
+                };
+                row_map.insert(headers[i].clone(), normalized);
+            }
+        }
+        rows.push(row_map);
+    }
+    Ok(rows)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn execute_join(
+    project_root: String,
+    qcbf_relative_path: String,
+    external_absolute_path: String,
+    left_on: Vec<String>,
+    right_on: Vec<String>,
+    drop_right_on: bool,
+    na_tokens: Vec<String>,
+    sheet_name: Option<String>,
+    state: State<'_, crate::import::AppState>,
+) -> Result<DataInspection, String> {
+    execute_join_impl(
+        PathBuf::from(project_root),
+        qcbf_relative_path,
+        external_absolute_path,
+        left_on,
+        right_on,
+        drop_right_on,
+        na_tokens,
+        sheet_name,
+        &state,
+    )
+}
