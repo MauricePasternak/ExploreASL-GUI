@@ -71,6 +71,16 @@ Hardcoded — part of ExploreASL's contract. Rarely changes.
 **Population:**
 010_CreatePopulationTemplates, 020_CreateAnalysisMask, 030_CreateBiasfield, 040_GetDICOMStatistics, 050_GetVolumeStatistics, 060_GetMotionStatistics, 065_GetRegistrationStatistics, 070_GetROIstatistics, 080_SortBySpatialCoV, 090_DeleteTempFiles, 100_GZipAllFiles, 999_ready
 
+## Visualization Module
+
+- **External Data**: Covariate file (CSV/TSV/xlsx) from outside ExploreASL output, joined onto qCBF data. Selected via native file dialog; stored as absolute path in `joinConfig.externalSource` (separate from `qcbfSource`, which holds the single qCBF source).
+- **Join Config**: Persisted configuration of an external data left-join. Shape: `{ externalSource, leftOn, rightOn, dropRightOn, naTokens, sheetName }`. `null` when no external file selected.
+- **Left Join**: The only supported join type. qCBF rows preserved; external covariates appended; unmatched qCBF rows get NaN covariates. Not user-selectable.
+- **Key Pair**: A `(left_on, right_on)` column pairing for join condition. Positional, pandas semantics — `leftOn[i]` joins with `rightOn[i]`. Multi-key joins require equal array lengths.
+- **Select Data**: The first stepper step (renamed from "Select File"). Encompasses qCBF file dropdown + external file selection + join configuration + sanity checks + graphical join diagram. Denser than other steps but comparable complexity.
+- **Merged Inspection**: The `inspection` store field when a join is active. Populated by `execute_join` instead of `inspect_tsv`. Same shape, but columns carry `source` ("qcbf" | "external") and `originalName` (pre-suffix). Identifier columns are qCBF-side only.
+- **NA Tokens**: User-specified missing-value strings for the external file. Defaults: `["", "NaN", "NA", "n/a", "<NA>"]`. Applied during `execute_join`; normalized to empty strings in cached merged data. qCBF side keeps its existing missing-value handling.
+
 ## Import Module
 
 - **Stale import subject**: An import subject whose result may no longer reflect current configuration. Structural config changes (tokenizer, aliases, renames) stale all subjects; metadata group changes stale only subjects in affected groups.

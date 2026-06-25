@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["image-png"] }
+tauri = { version = "2.11.3", features = ["image-png"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -37,4 +37,6 @@ notify = "8.2.0"
 num_cpus = "1"
 sha2 = "0.10"
 tempfile = "3"
+csv = "1.4.0"
+calamine = "0.35.0"
 
