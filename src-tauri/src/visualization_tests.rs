@@ -139,4 +139,33 @@ mod tests {
         set_active_project_impl(temp.path().to_string_lossy().to_string(), &state).unwrap();
         assert!(state.active_data.lock().unwrap().is_none());
     }
+
+    #[test]
+    fn test_to_inspection_strips_rows() {
+        let columns = vec![ColumnMetadata {
+            name: "GM_vol".to_string(),
+            original_name: "GM_vol".to_string(),
+            source: ColumnSource::Qcbf,
+            units: "Liter".to_string(),
+            inferred_type: "continuous".to_string(),
+            levels: vec![],
+            is_identifier: false,
+        }];
+        let rows = vec![
+            std::collections::HashMap::from([("GM_vol".to_string(), "0.64".to_string())]),
+            std::collections::HashMap::from([("GM_vol".to_string(), "0.72".to_string())]),
+        ];
+        let active = ActiveData {
+            rows: rows.clone(),
+            columns: columns.clone(),
+            row_count: rows.len(),
+            qcbf_hash: "abc123".to_string(),
+            external_hash: Some("ext9".to_string()),
+        };
+        let inspection = active.to_inspection();
+        assert_eq!(inspection.columns, columns);
+        assert_eq!(inspection.row_count, 2);
+        assert_eq!(inspection.qcbf_hash, "abc123");
+        assert_eq!(inspection.external_hash, Some("ext9".to_string()));
+    }
 }
