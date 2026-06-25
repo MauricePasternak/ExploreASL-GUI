@@ -324,4 +324,113 @@ describe("Visualization setup flow integration", () => {
 
     expect(useVisualizationStore.getState().inspection).toEqual(mockJoinedInspection);
   });
+
+  it("re-validates external file on window focus", async () => {
+    // Setup state
+    useVisualizationStore.setState({
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
+      joinConfig: {
+        externalSource: { absolutePath: "/tmp/external.csv", fileHash: "ext123", sheetName: null },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+        dropRightOn: true,
+        naTokens: ["", "NaN"],
+        delimiter: ",",
+      },
+      stage: "selectData",
+      inspection: mockInspection,
+      _lastExtMtime: "1000",
+    });
+
+    const mockJoinedInspection = {
+      ...mockInspection,
+      columns: [
+        ...mockInspection.columns,
+        {
+          name: "Diagnosis",
+          originalName: "Diagnosis",
+          source: "external" as const,
+          units: "",
+          inferredType: "nominal",
+          levels: ["HC", "FTD"],
+          isIdentifier: false,
+        },
+      ],
+      qcbfHash: "abc123",
+      externalHash: "ext123", // unchanged content
+    };
+
+    let statMtime = "1000";
+    let statShouldFail = false;
+    let executeJoinHash = "ext123";
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_stats_files") return Promise.resolve(mockFiles);
+      if (cmd === "stat_file") {
+        if (statShouldFail) return Promise.reject("File not found");
+        return Promise.resolve({ mtime: statMtime, size: 123 });
+      }
+      if (cmd === "execute_join") {
+        return Promise.resolve({
+          ...mockJoinedInspection,
+          externalHash: executeJoinHash,
+        });
+      }
+      if (cmd === "load_qcbf_data") {
+        return Promise.resolve(mockInspection);
+      }
+      return Promise.resolve([]);
+    });
+
+    renderWithMantine(<VisualizationPage />);
+
+    // Scenario 1: Focus event when mtime is unchanged (mtime = "1000")
+    window.dispatchEvent(new Event("focus"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(useVisualizationStore.getState().joinConfig).not.toBeNull();
+    expect(screen.queryByTestId("invalidation-banner")).toBeNull();
+
+    // Scenario 2: Focus event when mtime is changed (mtime = "2000"), but hash is identical ("ext123")
+    statMtime = "2000";
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => {
+      expect(useVisualizationStore.getState()._lastExtMtime).toBe("2000");
+    });
+    expect(useVisualizationStore.getState().joinConfig).not.toBeNull();
+    expect(screen.queryByTestId("invalidation-banner")).toBeNull();
+
+    // Scenario 3: Focus event when mtime is changed (mtime = "3000"), and hash changes to "ext456"
+    statMtime = "3000";
+    executeJoinHash = "ext456";
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => {
+      expect(useVisualizationStore.getState().joinConfig).toBeNull();
+    });
+    const banner = await screen.findByTestId("invalidation-banner");
+    expect(banner.textContent).toContain(
+      "External data file has changed. Join configuration has been reset.",
+    );
+
+    // Scenario 4: Focus event when stat_file fails (file deleted)
+    useVisualizationStore.setState({
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
+      joinConfig: {
+        externalSource: { absolutePath: "/tmp/external.csv", fileHash: "ext123", sheetName: null },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+        dropRightOn: true,
+        naTokens: ["", "NaN"],
+        delimiter: ",",
+      },
+      stage: "selectData",
+      inspection: mockInspection,
+      _lastExtMtime: "3000",
+    });
+    statShouldFail = true;
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => {
+      expect(useVisualizationStore.getState().joinConfig).toBeNull();
+    });
+    const errorBanner = await screen.findByTestId("invalidation-banner");
+    expect(errorBanner.textContent).toContain("External file 'external.csv' no longer exists.");
+  });
 });
