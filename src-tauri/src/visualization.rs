@@ -734,6 +734,45 @@ pub async fn read_tsv_columns(
     read_tsv_columns_impl(PathBuf::from(project_root), relative_path, column_names)
 }
 
+pub fn read_data_columns_impl(
+    column_names: Vec<String>,
+    state: &crate::import::AppState,
+) -> Result<Vec<HashMap<String, String>>, String> {
+    let guard = state.active_data.lock().map_err(|e| e.to_string())?;
+    let active = guard
+        .as_ref()
+        .ok_or("No data loaded. Select a file first.")?;
+
+    let id_cols = ["participant_id", "subject", "session", "run"];
+    let mut rows = Vec::with_capacity(active.rows.len());
+    for row in &active.rows {
+        let mut filtered = HashMap::new();
+        for id_col in &id_cols {
+            if let Some(val) = row.get(*id_col) {
+                filtered.insert((*id_col).to_string(), val.clone());
+            }
+        }
+        for name in &column_names {
+            if !id_cols.contains(&name.as_str()) {
+                if let Some(val) = row.get(name) {
+                    filtered.insert(name.clone(), val.clone());
+                }
+            }
+        }
+        rows.push(filtered);
+    }
+    Ok(rows)
+}
+
+#[tauri::command]
+pub async fn read_data_columns(
+    _project_root: String,
+    column_names: Vec<String>,
+    state: State<'_, crate::import::AppState>,
+) -> Result<Vec<HashMap<String, String>>, String> {
+    read_data_columns_impl(column_names, &state)
+}
+
 pub fn set_active_project_impl(
     root_path: String,
     state: &crate::import::AppState,

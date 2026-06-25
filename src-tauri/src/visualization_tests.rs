@@ -187,4 +187,28 @@ mod tests {
         assert_eq!(inspection.qcbf_hash, "abc123");
         assert_eq!(inspection.external_hash, Some("ext9".to_string()));
     }
+
+    #[test]
+    fn test_read_data_columns_from_cache() {
+        let tsv = "participant_id\tsession\tGM_vol\tSite\nStudyID\t...\tLiter\tint\nsub-X_01\tASL_1\t0.64\t1\n";
+        let (_temp, root) = setup_stats_dir(tsv);
+        let state = AppState::default();
+        load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
+        let result = read_data_columns_impl(vec!["GM_vol".to_string()], &state).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(result[0].contains_key("participant_id"));
+        assert!(result[0].contains_key("subject"));
+        assert!(result[0].contains_key("session"));
+        assert!(result[0].contains_key("run"));
+        assert!(result[0].contains_key("GM_vol"));
+        assert!(!result[0].contains_key("Site"));
+    }
+
+    #[test]
+    fn test_read_data_columns_error_when_no_cache() {
+        let state = AppState::default();
+        let result = read_data_columns_impl(vec!["GM_vol".to_string()], &state);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No data loaded"));
+    }
 }
