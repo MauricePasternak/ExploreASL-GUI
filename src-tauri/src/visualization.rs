@@ -1361,11 +1361,11 @@ pub fn check_join_sanity_impl(
 
     let mut overlap_count = 0;
     let mut unmatched_left_count = 0;
-    for left_key in left_key_counts.keys() {
+    for (left_key, count) in &left_key_counts {
         if right_key_counts.contains_key(left_key) {
             overlap_count += 1;
         } else {
-            unmatched_left_count += 1;
+            unmatched_left_count += count;
         }
     }
 

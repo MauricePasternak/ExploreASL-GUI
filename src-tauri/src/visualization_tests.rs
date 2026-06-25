@@ -491,6 +491,41 @@ mod tests {
         .unwrap();
 
         assert!(!result.left_keys_unique);
+        assert_eq!(result.overlap_count, 0);
+        assert_eq!(result.unmatched_left_count, 2);
+    }
+
+    #[test]
+    fn test_check_join_sanity_unmatched_count_is_rows_not_keys() {
+        let temp = tempfile::tempdir().unwrap();
+        let stats_dir = temp.path().join("derivatives/ExploreASL/Population/Stats");
+        fs::create_dir_all(&stats_dir).unwrap();
+        fs::write(
+            stats_dir.join("test.tsv"),
+            "participant_id\tsession\tGM_vol\nsub-X_01\tASL_1\t0.64\nsub-Y_99\tASL_1\t0.70\nsub-Y_99\tASL_2\t0.71\n",
+        )
+        .unwrap();
+
+        let ext_path = temp.path().join("covariates.csv");
+        fs::write(&ext_path, "SubjectID,Diagnosis\nsub-X_01,AD\n").unwrap();
+
+        let state = AppState::default();
+        load_qcbf_data_impl(temp.path().to_path_buf(), "test.tsv".to_string(), &state).unwrap();
+        let result = check_join_sanity_impl(
+            temp.path().to_path_buf(),
+            "test.tsv".to_string(),
+            ext_path.to_string_lossy().to_string(),
+            vec!["participant_id".to_string()],
+            vec!["SubjectID".to_string()],
+            default_na_tokens(),
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(result.overlap_count, 1);
+        assert_eq!(result.unmatched_left_count, 2);
+        assert!(!result.left_keys_unique);
     }
 
     #[test]
