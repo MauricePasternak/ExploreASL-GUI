@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::import::AppState;
     use crate::visualization::*;
     use std::fs;
     use std::path::PathBuf;
@@ -101,5 +102,41 @@ mod tests {
                 col.name
             );
         }
+    }
+
+    #[test]
+    fn test_active_data_default_is_none() {
+        let state = AppState::default();
+        let data = state.active_data.lock().unwrap();
+        assert!(data.is_none());
+    }
+
+    fn populate_active_data(state: &AppState) {
+        *state.active_data.lock().unwrap() = Some(ActiveData {
+            rows: vec![],
+            columns: vec![],
+            row_count: 0,
+            qcbf_hash: "test".to_string(),
+            external_hash: None,
+        });
+    }
+
+    #[test]
+    fn test_clear_active_project_clears_active_data() {
+        let state = AppState::default();
+        populate_active_data(&state);
+        assert!(state.active_data.lock().unwrap().is_some());
+        clear_active_project_impl(&state).unwrap();
+        assert!(state.active_data.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_set_active_project_clears_active_data() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::default();
+        populate_active_data(&state);
+        assert!(state.active_data.lock().unwrap().is_some());
+        set_active_project_impl(temp.path().to_string_lossy().to_string(), &state).unwrap();
+        assert!(state.active_data.lock().unwrap().is_none());
     }
 }
