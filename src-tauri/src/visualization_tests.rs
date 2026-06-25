@@ -37,8 +37,10 @@ mod tests {
     fn test_inspect_tsv_parses_columns_and_skips_units() {
         let tsv = "participant_id\tsession\tGM_vol\nStudyID\t...\tLiter\nsub-X_01\tASL_1\t0.64\n";
         let (_temp, root) = setup_stats_dir(tsv);
-        let result = inspect_tsv_impl(root, "test.tsv".to_string()).unwrap();
+        let state = AppState::default();
+        let result = load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
         assert_eq!(result.row_count, 1);
+        assert!(result.external_hash.is_none());
         assert!(result
             .columns
             .iter()
@@ -58,14 +60,17 @@ mod tests {
         let gm = result.columns.iter().find(|c| c.name == "GM_vol").unwrap();
         assert_eq!(gm.inferred_type, "continuous");
         assert_eq!(gm.units, "Liter");
-        assert!(!result.file_hash.is_empty());
+        assert_eq!(gm.source, ColumnSource::Qcbf);
+        assert_eq!(gm.original_name, "GM_vol");
+        assert!(!result.qcbf_hash.is_empty());
     }
 
     #[test]
     fn test_inspect_tsv_missing_values_treated_as_missing() {
         let tsv = "participant_id\tsession\tGM_vol\tSite\nStudyID\t...\tLiter\tint\nsub-X_01\tASL_1\t\t1\nsub-X_02\tASL_1\tNaN\t\nsub-X_03\tASL_1\t0.64\tNA\n";
         let (_temp, root) = setup_stats_dir(tsv);
-        let result = inspect_tsv_impl(root, "test.tsv".to_string()).unwrap();
+        let state = AppState::default();
+        let result = load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
         let gm = result.columns.iter().find(|c| c.name == "GM_vol").unwrap();
         assert_eq!(gm.inferred_type, "continuous");
         let site = result.columns.iter().find(|c| c.name == "Site").unwrap();
@@ -138,6 +143,20 @@ mod tests {
         assert!(state.active_data.lock().unwrap().is_some());
         set_active_project_impl(temp.path().to_string_lossy().to_string(), &state).unwrap();
         assert!(state.active_data.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_load_qcbf_data_returns_inspection_and_caches() {
+        let tsv = "participant_id\tsession\tGM_vol\nStudyID\t...\tLiter\nsub-X_01\tASL_1\t0.64\n";
+        let (_temp, root) = setup_stats_dir(tsv);
+        let state = AppState::default();
+        let result = load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
+        assert_eq!(result.row_count, 1);
+        assert!(result.external_hash.is_none());
+        assert!(!result.qcbf_hash.is_empty());
+        let cached = state.active_data.lock().unwrap();
+        assert!(cached.is_some());
+        assert_eq!(cached.as_ref().unwrap().row_count, 1);
     }
 
     #[test]
