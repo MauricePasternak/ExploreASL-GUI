@@ -6,19 +6,18 @@ import { useState } from "react";
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { parseStatsFileName } from "../../lib/tsvUtils";
+import JoinConfig from "./JoinConfig";
 
-export default function FileSelection() {
+export default function DataSelection() {
   const availableFiles = useVisualizationStore((s) => s.availableFiles);
   const setInspection = useVisualizationStore((s) => s.setInspection);
-  const contractSources = useVisualizationStore((s) => s.contractSources);
-  const setContractSources = useVisualizationStore((s) => s.setContractSources);
+  const qcbfSource = useVisualizationStore((s) => s.qcbfSource);
+  const setQcbfSource = useVisualizationStore((s) => s.setQcbfSource);
   const setColumnTypes = useVisualizationStore((s) => s.setColumnTypes);
   const setIdentifiers = useVisualizationStore((s) => s.setIdentifiers);
   const invalidateContract = useVisualizationStore((s) => s.invalidateContract);
   const project = useProjectStore((s) => s.project);
   const [error, setError] = useState<string | null>(null);
-
-  const selectedFile = contractSources[0]?.relativePath ?? null;
 
   const data = availableFiles.map((f) => {
     const parsed = parseStatsFileName(f.fileName);
@@ -28,17 +27,17 @@ export default function FileSelection() {
     return { value: f.relativePath, label };
   });
 
-  async function handleSelect(relativePath: string | null) {
+  async function handleSelectQcbf(relativePath: string | null) {
     if (!project) return;
     setError(null);
 
-    if (selectedFile && selectedFile !== relativePath) {
+    if (qcbfSource && qcbfSource.relativePath !== relativePath) {
       invalidateContract();
     }
 
     if (!relativePath) {
       setInspection(null);
-      setContractSources([]);
+      setQcbfSource(null);
       return;
     }
 
@@ -46,20 +45,23 @@ export default function FileSelection() {
       const result = await invoke<{
         columns: Array<{
           name: string;
+          originalName: string;
+          source: "qcbf" | "external";
           units: string;
           inferredType: string;
           levels: string[];
           isIdentifier: boolean;
         }>;
         rowCount: number;
-        fileHash: string;
-      }>("inspect_tsv", {
+        qcbfHash: string;
+        externalHash: string | null;
+      }>("load_qcbf_data", {
         projectRoot: project.projectMeta.rootPath,
         relativePath,
       });
 
       setInspection(result);
-      setContractSources([{ relativePath, fileHash: result.fileHash }]);
+      setQcbfSource({ relativePath, fileHash: result.qcbfHash });
 
       const types: Record<string, string> = {};
       for (const col of result.columns) {
@@ -78,38 +80,39 @@ export default function FileSelection() {
         });
       }
     } catch (err) {
-      console.error("Failed to inspect TSV:", err);
+      console.error("Failed to load qCBF data:", err);
       setError(`Failed to inspect file: ${err instanceof Error ? err.message : "Unknown error"}`);
       setInspection(null);
-      setContractSources([]);
+      setQcbfSource(null);
     }
   }
 
   if (availableFiles.length === 0) {
     return (
-      <Stack data-testid="file-selection">
+      <Stack data-testid="data-selection">
         <Text c="dimmed">No TSV files found in Population/Stats.</Text>
       </Stack>
     );
   }
 
   return (
-    <Stack data-testid="file-selection">
+    <Stack data-testid="data-selection">
       {error && (
-        <Alert icon={<IconAlertCircle size={16} />} color="red" data-testid="file-selection-error">
+        <Alert icon={<IconAlertCircle size={16} />} color="red" data-testid="data-selection-error">
           {error}
         </Alert>
       )}
-      {!selectedFile && !error && <Text c="dimmed">Select a TSV file to begin.</Text>}
+      {!qcbfSource && !error && <Text c="dimmed">Select a TSV file to begin.</Text>}
       <Select
         label="Stats file"
         placeholder="Choose a TSV file"
         data={data}
-        value={selectedFile}
-        onChange={handleSelect}
+        value={qcbfSource?.relativePath ?? null}
+        onChange={handleSelectQcbf}
         searchable
-        data-testid="file-selection-dropdown"
+        data-testid="qcbf-file-dropdown"
       />
+      {qcbfSource && <JoinConfig />}
     </Stack>
   );
 }
