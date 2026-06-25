@@ -24,8 +24,8 @@ use tauri::Manager;
 #[cfg(debug_assertions)]
 use tauri::{LogicalSize, Size};
 use visualization::{
-    check_join_sanity, clear_active_project, inspect_tsv, list_stats_files, read_tsv_columns,
-    set_active_project,
+    check_join_sanity, clear_active_project, execute_join, inspect_external_data, list_stats_files,
+    load_qcbf_data, read_data_columns, set_active_project,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -85,8 +85,10 @@ pub fn run() {
             list_subject_reports,
             read_report_image,
             list_stats_files,
-            inspect_tsv,
-            read_tsv_columns,
+            load_qcbf_data,
+            read_data_columns,
+            inspect_external_data,
+            execute_join,
             set_active_project,
             clear_active_project,
             check_join_sanity,
