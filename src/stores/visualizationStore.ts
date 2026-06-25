@@ -39,7 +39,7 @@ interface DomainFilters {
   yMax: number | null;
 }
 
-export type StepperStage = "selectFile" | "columnTypes" | "levelOrdering" | "visualize";
+export type StepperStage = "selectData" | "columnTypes" | "levelOrdering" | "visualize";
 
 export type NvSliceType = "multiplanar" | "axial" | "coronal" | "sagittal" | "render";
 
@@ -190,7 +190,7 @@ const INITIAL_PERSISTED: PersistedState = {
   levelOrderings: {},
   axisAssignment: { x: null, y: null, colorBy: null },
   domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
-  stage: "selectFile",
+  stage: "selectData",
   splitRatio: 0.6,
   filtersExpanded: false,
 
@@ -264,7 +264,7 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
   invalidateContract: () =>
     set({
       ...INITIAL_PERSISTED,
-      stage: "selectFile",
+      stage: "selectData",
     }),
 
   // New settings actions

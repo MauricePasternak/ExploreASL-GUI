@@ -7,13 +7,14 @@ import { useVisualizationSync } from "./useVisualizationSync";
 describe("useVisualizationSync", () => {
   beforeEach(() => {
     useVisualizationStore.setState({
-      contractSources: [],
+      qcbfSource: null,
+      joinConfig: null,
       columnTypes: {},
       identifiers: null,
       levelOrderings: {},
       axisAssignment: { x: null, y: null, colorBy: null },
       domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
-      stage: "selectFile",
+      stage: "selectData",
       splitRatio: 0.6,
       filtersExpanded: false,
       availableFiles: [],
@@ -42,7 +43,7 @@ describe("useVisualizationSync", () => {
         },
         uiState: {
           dataVis: {
-            contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
+            qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
             columnTypes: { GM_vol: "continuous" },
             stage: "columnTypes",
             pointSize: 15,
@@ -59,7 +60,7 @@ describe("useVisualizationSync", () => {
     renderHook(() => useVisualizationSync());
 
     const state = useVisualizationStore.getState();
-    expect(state.contractSources).toEqual([{ relativePath: "test.tsv", fileHash: "abc" }]);
+    expect(state.qcbfSource).toEqual({ relativePath: "test.tsv", fileHash: "abc" });
     expect(state.columnTypes).toEqual({ GM_vol: "continuous" });
     expect(state.stage).toBe("columnTypes");
     expect(state.pointSize).toBe(15);
