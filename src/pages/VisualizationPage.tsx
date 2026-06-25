@@ -25,6 +25,7 @@ export default function VisualizationPage() {
   const project = useProjectStore((s) => s.project);
   const [invalidationBanner, setInvalidationBanner] = useState<string | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const hasCategorical =
     inspection?.columns.some(
@@ -148,9 +149,64 @@ export default function VisualizationPage() {
     validateContract();
   }, []);
 
-  function handleNext() {
+  async function handleSelectDataNext() {
+    const joinConfig = useVisualizationStore.getState().joinConfig;
+    const qcbfSource = useVisualizationStore.getState().qcbfSource;
+    const project = useProjectStore.getState().project;
+    if (!project || !qcbfSource) return;
+
+    if (
+      joinConfig &&
+      joinConfig.keys.length > 0 &&
+      joinConfig.keys.every((k) => k.left && k.right)
+    ) {
+      // Join active: call execute_join to produce merged schema
+      try {
+        const result = await invoke<{
+          columns: Array<{
+            name: string;
+            originalName: string;
+            source: "qcbf" | "external";
+            units: string;
+            inferredType: string;
+            levels: string[];
+            isIdentifier: boolean;
+          }>;
+          rowCount: number;
+          qcbfHash: string;
+          externalHash: string | null;
+        }>("execute_join", {
+          projectRoot: project.projectMeta.rootPath,
+          qcbfRelativePath: qcbfSource.relativePath,
+          externalAbsolutePath: joinConfig.externalSource.absolutePath,
+          keys: joinConfig.keys,
+          dropRightOn: joinConfig.dropRightOn,
+          naTokens: joinConfig.naTokens,
+          sheetName: joinConfig.externalSource.sheetName,
+          delimiter: joinConfig.delimiter === "auto" ? null : joinConfig.delimiter,
+        });
+        useVisualizationStore.getState().setInspection(result);
+        // Reset column types, level orderings, axis assignment (schema changed)
+        const types: Record<string, string> = {};
+        for (const col of result.columns) {
+          types[col.name] = col.inferredType;
+        }
+        useVisualizationStore.getState().setColumnTypes(types);
+        useVisualizationStore.getState().setLevelOrderings({});
+        useVisualizationStore.getState().setAxisAssignment({ x: null, y: null, colorBy: null });
+        useVisualizationStore.getState().setStage("columnTypes");
+      } catch (err) {
+        setError(`Join failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+    } else {
+      // No join: advance directly, inspection already set by load_qcbf_data
+      useVisualizationStore.getState().setStage("columnTypes");
+    }
+  }
+
+  async function handleNext() {
     if (stage === "selectData") {
-      setStage("columnTypes");
+      await handleSelectDataNext();
     } else if (stage === "columnTypes") {
       if (hasCategorical) {
         setStage("levelOrdering");
@@ -214,6 +270,11 @@ export default function VisualizationPage() {
       {invalidationBanner && (
         <Alert icon={<IconAlertCircle size={16} />} color="red" data-testid="invalidation-banner">
           {invalidationBanner}
+        </Alert>
+      )}
+      {error && (
+        <Alert icon={<IconAlertCircle size={16} />} color="red" data-testid="join-error">
+          {error}
         </Alert>
       )}
 
