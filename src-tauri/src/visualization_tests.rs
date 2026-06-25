@@ -34,7 +34,7 @@ mod tests {
     }
 
     #[test]
-    fn test_inspect_tsv_parses_columns_and_skips_units() {
+    fn test_load_qcbf_data_parses_columns_and_skips_units() {
         let tsv = "participant_id\tsession\tGM_vol\nStudyID\t...\tLiter\nsub-X_01\tASL_1\t0.64\n";
         let (_temp, root) = setup_stats_dir(tsv);
         let state = AppState::default();
@@ -66,7 +66,7 @@ mod tests {
     }
 
     #[test]
-    fn test_inspect_tsv_missing_values_treated_as_missing() {
+    fn test_load_qcbf_data_missing_values_treated_as_missing() {
         let tsv = "participant_id\tsession\tGM_vol\tSite\nStudyID\t...\tLiter\tint\nsub-X_01\tASL_1\t\t1\nsub-X_02\tASL_1\tNaN\t\nsub-X_03\tASL_1\t0.64\tNA\n";
         let (_temp, root) = setup_stats_dir(tsv);
         let state = AppState::default();
