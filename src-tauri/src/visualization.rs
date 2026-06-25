@@ -1286,6 +1286,121 @@ fn parse_external_xlsx_rows(
     Ok(rows)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SanityCheckResult {
+    pub overlap_count: usize,
+    pub unmatched_left_count: usize,
+    pub left_keys_unique: bool,
+    pub right_keys_unique: bool,
+}
+
+#[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
+pub fn check_join_sanity_impl(
+    _project_root: PathBuf,
+    _qcbf_relative_path: String,
+    external_absolute_path: String,
+    left_on: Vec<String>,
+    right_on: Vec<String>,
+    na_tokens: Vec<String>,
+    sheet_name: Option<String>,
+    state: &crate::import::AppState,
+) -> Result<SanityCheckResult, String> {
+    let qcbf_rows: Vec<HashMap<String, String>> = {
+        let guard = state.active_data.lock().map_err(|e| e.to_string())?;
+        guard
+            .as_ref()
+            .ok_or("No qCBF data loaded. Select a file first.")?
+            .rows
+            .clone()
+    };
+
+    let ext_path = PathBuf::from(&external_absolute_path);
+    if !ext_path.exists() {
+        return Err(format!(
+            "External file not found: {}",
+            external_absolute_path
+        ));
+    }
+    let extension = ext_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let ext_rows: Vec<HashMap<String, String>> = match extension.as_str() {
+        "tsv" => parse_external_rows(&ext_path, '\t', &na_tokens)?,
+        "csv" => {
+            let text = std::fs::read_to_string(&ext_path).map_err(|e| e.to_string())?;
+            let first_line = text.lines().next().unwrap_or("");
+            let delimiter = detect_delimiter(first_line);
+            parse_external_rows(&ext_path, delimiter, &na_tokens)?
+        }
+        "xlsx" => parse_external_xlsx_rows(&ext_path, sheet_name, &na_tokens)?,
+        _ => return Err(format!("Unsupported file format: .{}", extension)),
+    };
+
+    let mut right_key_counts: HashMap<Vec<String>, usize> = HashMap::new();
+    for row in &ext_rows {
+        let key: Vec<String> = right_on
+            .iter()
+            .filter_map(|col| row.get(col).cloned())
+            .collect();
+        *right_key_counts.entry(key).or_default() += 1;
+    }
+
+    let mut left_key_counts: HashMap<Vec<String>, usize> = HashMap::new();
+    for row in &qcbf_rows {
+        let key: Vec<String> = left_on
+            .iter()
+            .filter_map(|col| row.get(col).cloned())
+            .collect();
+        *left_key_counts.entry(key).or_default() += 1;
+    }
+
+    let left_keys_unique = left_key_counts.values().all(|&c| c == 1);
+    let right_keys_unique = right_key_counts.values().all(|&c| c == 1);
+
+    let mut overlap_count = 0;
+    let mut unmatched_left_count = 0;
+    for left_key in left_key_counts.keys() {
+        if right_key_counts.contains_key(left_key) {
+            overlap_count += 1;
+        } else {
+            unmatched_left_count += 1;
+        }
+    }
+
+    Ok(SanityCheckResult {
+        overlap_count,
+        unmatched_left_count,
+        left_keys_unique,
+        right_keys_unique,
+    })
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn check_join_sanity(
+    project_root: String,
+    qcbf_relative_path: String,
+    external_absolute_path: String,
+    left_on: Vec<String>,
+    right_on: Vec<String>,
+    na_tokens: Vec<String>,
+    sheet_name: Option<String>,
+    state: State<'_, crate::import::AppState>,
+) -> Result<SanityCheckResult, String> {
+    check_join_sanity_impl(
+        PathBuf::from(project_root),
+        qcbf_relative_path,
+        external_absolute_path,
+        left_on,
+        right_on,
+        na_tokens,
+        sheet_name,
+        &state,
+    )
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn execute_join(
