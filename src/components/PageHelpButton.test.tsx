@@ -145,17 +145,17 @@ describe("PageHelpButton", () => {
     });
   });
 
-  it("renders selectFile help on visualization route", async () => {
-    useVisualizationStore.setState({ stage: "selectFile" });
+  it("renders selectData help on visualization route", async () => {
+    useVisualizationStore.setState({ stage: "selectData" });
     renderComponent("/project/proj1/visualization");
 
     const helpBtn = screen.getByTestId("page-help-btn");
     fireEvent.click(helpBtn);
 
     await waitFor(() => {
-      expect(screen.getByText("Select Stats File")).toBeInTheDocument();
+      expect(screen.getByText("Select Data Source")).toBeInTheDocument();
       expect(
-        screen.getByText(/Choose a TSV statistics file from the Population\/Stats directory/i),
+        screen.getByText(/Choose a qCBF stats file and optionally join external covariates/i),
       ).toBeInTheDocument();
     });
   });

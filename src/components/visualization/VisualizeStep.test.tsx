@@ -61,9 +61,8 @@ describe("VisualizeStep", () => {
       viewerState: { status: "idle" },
       webglAvailable: false,
       axisAssignment: { x: null, y: null, colorBy: null },
-      columnTypes: {},
-      inspection: null,
-      contractSources: [],
+      qcbfSource: null,
+      joinConfig: null,
       domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
     });
   });

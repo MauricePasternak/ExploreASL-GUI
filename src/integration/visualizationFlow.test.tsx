@@ -178,7 +178,7 @@ describe("Visualization setup flow integration", () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "list_stats_files") return Promise.resolve(mockFiles);
       if (cmd === "load_qcbf_data") return Promise.resolve(mockInspection);
-      if (cmd === "read_tsv_columns") return Promise.resolve(mockRows);
+      if (cmd === "read_data_columns") return Promise.resolve(mockRows);
       if (cmd === "set_active_project") return Promise.resolve(undefined);
       return Promise.resolve([]);
     });

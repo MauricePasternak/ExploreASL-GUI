@@ -13,6 +13,7 @@ export default function ColumnTypes() {
   const inspection = useVisualizationStore((s) => s.inspection);
   const columnTypes = useVisualizationStore((s) => s.columnTypes);
   const setColumnType = useVisualizationStore((s) => s.setColumnType);
+  const joinConfig = useVisualizationStore((s) => s.joinConfig);
 
   if (!inspection) {
     return (
@@ -82,6 +83,16 @@ export default function ColumnTypes() {
                     {col.isIdentifier && (
                       <Badge size="xs" color="blue" data-testid={`id-badge-${col.name}`}>
                         ID
+                      </Badge>
+                    )}
+                    {joinConfig && col.source === "external" && (
+                      <Badge size="xs" color="grape" data-testid={`source-badge-${col.name}`}>
+                        external
+                      </Badge>
+                    )}
+                    {joinConfig && col.source === "qcbf" && (
+                      <Badge size="xs" color="blue" data-testid={`source-badge-${col.name}`}>
+                        qCBF
                       </Badge>
                     )}
                   </Group>

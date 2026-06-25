@@ -46,7 +46,8 @@ describe("ChartPanel", () => {
       axisAssignment: { x: null, y: null, colorBy: null },
       columnTypes: {},
       inspection: null,
-      contractSources: [],
+      qcbfSource: null,
+      joinConfig: null,
       chartData: [],
       selectedPointId: null,
       domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
@@ -74,11 +75,28 @@ describe("ChartPanel", () => {
       columnTypes: { age: "continuous", group: "nominal" },
       inspection: {
         columns: [
-          { name: "age", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
-          { name: "group", units: "", inferredType: "nominal", levels: [], isIdentifier: false },
+          {
+            name: "age",
+            originalName: "age",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
+          {
+            name: "group",
+            originalName: "group",
+            source: "qcbf",
+            units: "",
+            inferredType: "nominal",
+            levels: [],
+            isIdentifier: false,
+          },
         ],
         rowCount: 5,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
     });
     renderComponent();
@@ -91,14 +109,32 @@ describe("ChartPanel", () => {
       columnTypes: { age: "continuous", score: "continuous" },
       inspection: {
         columns: [
-          { name: "age", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
-          { name: "score", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+          {
+            name: "age",
+            originalName: "age",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
+          {
+            name: "score",
+            originalName: "score",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
         ],
         rowCount: 5,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       chartData: [],
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
     });
     renderComponent();
     expect(screen.getByTestId("chart-panel")).toHaveTextContent("No plottable data");
@@ -110,17 +146,35 @@ describe("ChartPanel", () => {
       columnTypes: { age: "continuous", score: "continuous" },
       inspection: {
         columns: [
-          { name: "age", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
-          { name: "score", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+          {
+            name: "age",
+            originalName: "age",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
+          {
+            name: "score",
+            originalName: "score",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
         ],
         rowCount: 5,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       chartData: [
         { x: 25, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
         { x: 30, y: 110, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
     });
     renderComponent();
     expect(screen.getByTestId("scatter-canvas")).toBeInTheDocument();
@@ -134,21 +188,33 @@ describe("ChartPanel", () => {
         columns: [
           {
             name: "group",
+            originalName: "group",
+            source: "qcbf",
             units: "",
             inferredType: "nominal",
             levels: ["A", "B"],
             isIdentifier: false,
           },
-          { name: "score", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+          {
+            name: "score",
+            originalName: "score",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
         ],
         rowCount: 5,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       chartData: [
         { x: "A", y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
         { x: "B", y: 110, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
     });
     renderComponent();
     expect(screen.getByTestId("swarm-canvas")).toBeInTheDocument();
@@ -160,17 +226,35 @@ describe("ChartPanel", () => {
       columnTypes: { age: "continuous", score: "continuous" },
       inspection: {
         columns: [
-          { name: "age", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
-          { name: "score", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+          {
+            name: "age",
+            originalName: "age",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
+          {
+            name: "score",
+            originalName: "score",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
         ],
         rowCount: 5,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       chartData: [
         { x: 20, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
         { x: 40, y: 200, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
     });
     renderComponent();
 
@@ -193,17 +277,35 @@ describe("ChartPanel", () => {
       columnTypes: { age: "continuous", score: "continuous" },
       inspection: {
         columns: [
-          { name: "age", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
-          { name: "score", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+          {
+            name: "age",
+            originalName: "age",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
+          {
+            name: "score",
+            originalName: "score",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
         ],
         rowCount: 5,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       chartData: [
         { x: 20, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
         { x: 40, y: 200, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
       domainFilters: { xMin: 15, xMax: 45, yMin: 90, yMax: 210 },
     });
     renderComponent();
@@ -224,16 +326,34 @@ describe("ChartPanel", () => {
       columnTypes: { age: "continuous", score: "continuous" },
       inspection: {
         columns: [
-          { name: "age", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
-          { name: "score", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+          {
+            name: "age",
+            originalName: "age",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
+          {
+            name: "score",
+            originalName: "score",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
         ],
         rowCount: 5,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       chartData: [
         { x: 25, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
       ],
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc" }],
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
       selectedPointId: "1",
     });
 

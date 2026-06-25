@@ -141,19 +141,19 @@ const HELP_DATA: Record<string, HelpContent> = {
     tipContent:
       "ExploreASL processing is highly CPU-intensive and can take 10-30 minutes per subject. You can monitor progress dynamically on this page.",
   },
-  "viz-selectFile": {
-    title: "Select Stats File",
+  "viz-selectData": {
+    title: "Select Data Source",
     subtitle: "Phase 4: Visualization Module",
-    goal: "Choose a TSV statistics file from the Population/Stats directory to visualize and explore.",
+    goal: "Choose a qCBF stats file and optionally join external covariates (CSV/Excel).",
     steps: [
-      "Use the dropdown to select a TSV file from the Population/Stats folder.",
-      "Each entry shows the filename and parsed metadata (metric, tissue, atlas, PVC) when available.",
-      "After selection, the system inspects the file and infers column types (continuous, ordinal, nominal).",
-      "If no files appear, ensure the Population processing module has completed successfully.",
+      "Use the dropdown to select a qCBF file from the Population/Stats folder.",
+      "Optionally enable 'Join external file' and select a CSV, TSV, or Excel file.",
+      "Configure the matching subject/session key pairs to execute a left-join.",
+      "After selection, the system inspects the data and infers column types.",
     ],
-    tipTitle: "File Change Detection",
+    tipTitle: "Data Change Detection",
     tipContent:
-      "The system tracks file hashes. If a TSV file is modified externally after selection, you will be prompted to reconfigure on your next visit.",
+      "The system tracks file hashes. If any file is modified externally after selection, you will be prompted to reconfigure.",
   },
   "viz-columnTypes": {
     title: "Assign Column Types",

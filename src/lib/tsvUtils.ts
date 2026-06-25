@@ -35,7 +35,7 @@ export function parseStatsFileName(fileName: string): ParsedStatsFileName | null
 /**
  * Transform raw TSV rows into nivo-ready ChartPoint objects.
  *
- * @param rows - Raw TSV row objects from read_tsv_columns
+ * @param rows - Row objects from read_data_columns
  * @param xCol - Column name for X axis
  * @param yCol - Column name for Y axis
  * @param colorByCol - Column name for color grouping (null if none)
