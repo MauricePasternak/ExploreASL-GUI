@@ -24,7 +24,8 @@ use tauri::Manager;
 #[cfg(debug_assertions)]
 use tauri::{LogicalSize, Size};
 use visualization::{
-    clear_active_project, inspect_tsv, list_stats_files, read_tsv_columns, set_active_project,
+    check_join_sanity, clear_active_project, inspect_tsv, list_stats_files, read_tsv_columns,
+    set_active_project,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -88,6 +89,7 @@ pub fn run() {
             read_tsv_columns,
             set_active_project,
             clear_active_project,
+            check_join_sanity,
         ])
         .register_uri_scheme_protocol("niivue", niivue_protocol::handle_niivue_protocol)
         .setup(|app| {
