@@ -37,3 +37,29 @@ export async function fetchReportImage(
   });
   return new Uint8Array(bytes);
 }
+
+export const QcMeasureSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  value: z.string(),
+});
+
+export type QcMeasure = z.infer<typeof QcMeasureSchema>;
+
+export async function fetchSubjectQC(
+  projectRoot: string,
+  subjectSession: string,
+  module: "structural" | "asl",
+  run: string | undefined,
+): Promise<QcMeasure[]> {
+  const raw = await invoke<unknown[]>("get_subject_session_qc", {
+    projectRoot,
+    subjectSession,
+    module,
+    run: run ?? null,
+  });
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.map((item) => QcMeasureSchema.parse(item));
+}

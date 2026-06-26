@@ -8,6 +8,7 @@ import * as reportViewer from "../../lib/reportViewer";
 vi.mock("../../lib/reportViewer", () => ({
   fetchReportImage: vi.fn(),
   fetchSubjectReports: vi.fn(),
+  fetchSubjectQC: vi.fn(),
 }));
 
 describe("ReportViewerModal", () => {
@@ -22,6 +23,7 @@ describe("ReportViewerModal", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(reportViewer, "fetchSubjectQC").mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -262,6 +264,68 @@ describe("ReportViewerModal", () => {
       expect(screen.queryByTestId("axial-image")).not.toBeInTheDocument();
       expect(screen.getByTestId("axial-error")).toHaveTextContent(
         "Structural axial registration image not found.",
+      );
+    });
+  });
+
+  it("renders quality control metrics table correctly", async () => {
+    vi.spyOn(reportViewer, "fetchReportImage").mockResolvedValue(new Uint8Array([1, 2, 3]));
+    const qcSpy = vi.spyOn(reportViewer, "fetchSubjectQC").mockResolvedValue([
+      {
+        key: "T1w_GM_ICV_Ratio",
+        label: "Ratio of Gray Matter vs Intra-cortical Volume",
+        value: "0.437",
+      },
+      { key: "T1w_GM_vol_mL", label: "Gray Matter Volume (mL)", value: "640" },
+    ]);
+
+    renderModal({
+      opened: true,
+      onClose: vi.fn(),
+      projectRoot: "/mock-project",
+      subjectSession: "sub-C9ORF007Philips_01",
+      module: "structural",
+    });
+
+    expect(screen.getByTestId("qc-metrics-heading")).toHaveTextContent("Quality Control Metrics");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("qc-metrics-table")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("qc-label-T1w_GM_ICV_Ratio")).toHaveTextContent(
+      "Ratio of Gray Matter vs Intra-cortical Volume",
+    );
+    expect(screen.getByTestId("qc-value-T1w_GM_ICV_Ratio")).toHaveTextContent("0.437");
+
+    expect(screen.getByTestId("qc-label-T1w_GM_vol_mL")).toHaveTextContent(
+      "Gray Matter Volume (mL)",
+    );
+    expect(screen.getByTestId("qc-value-T1w_GM_vol_mL")).toHaveTextContent("640");
+
+    expect(qcSpy).toHaveBeenCalledWith(
+      "/mock-project",
+      "sub-C9ORF007Philips_01",
+      "structural",
+      undefined,
+    );
+  });
+
+  it("handles quality control metrics load error", async () => {
+    vi.spyOn(reportViewer, "fetchReportImage").mockResolvedValue(new Uint8Array([1, 2, 3]));
+    vi.spyOn(reportViewer, "fetchSubjectQC").mockRejectedValue(new Error("QC Load Failed"));
+
+    renderModal({
+      opened: true,
+      onClose: vi.fn(),
+      projectRoot: "/mock-project",
+      subjectSession: "sub-C9ORF007Philips_01",
+      module: "structural",
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("qc-metrics-error")).toHaveTextContent(
+        "Failed to load Quality Control metrics.",
       );
     });
   });

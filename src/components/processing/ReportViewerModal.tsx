@@ -1,8 +1,21 @@
-import { Alert, Box, Group, Image, Loader, Modal, Select, Stack, Text, Title } from "@mantine/core";
+import {
+  Alert,
+  Box,
+  Group,
+  Image,
+  Loader,
+  Modal,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 
-import { fetchReportImage } from "../../lib/reportViewer";
+import { fetchReportImage, fetchSubjectQC, type QcMeasure } from "../../lib/reportViewer";
 
 interface ReportViewerModalProps {
   opened: boolean;
@@ -108,6 +121,46 @@ export default function ReportViewerModal({
   const coronalUrlRef = useRef<string | null>(null);
   const m0AxialUrlRef = useRef<string | null>(null);
   const m0CoronalUrlRef = useRef<string | null>(null);
+
+  const [qcMeasures, setQcMeasures] = useState<QcMeasure[]>([]);
+  const [qcLoading, setQcLoading] = useState(false);
+  const [qcError, setQcError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setQcMeasures([]);
+    setQcLoading(false);
+    setQcError(null);
+
+    if (!opened || !projectRoot || !subjectSession) {
+      return;
+    }
+
+    const runParam = module === "asl" ? selectedRun : undefined;
+
+    const loadQC = async () => {
+      setQcLoading(true);
+      try {
+        const measures = await fetchSubjectQC(projectRoot, subjectSession, module, runParam);
+        if (!active) return;
+        setQcMeasures(measures);
+      } catch (err) {
+        console.error(err);
+        if (!active) return;
+        setQcError("Failed to load Quality Control metrics.");
+      } finally {
+        if (active) {
+          setQcLoading(false);
+        }
+      }
+    };
+
+    void loadQC();
+
+    return () => {
+      active = false;
+    };
+  }, [opened, projectRoot, subjectSession, module, selectedRun]);
 
   useEffect(() => {
     if (runs && runs.length > 0) {
@@ -302,7 +355,7 @@ export default function ReportViewerModal({
               </Text>
             </Stack>
 
-            <Stack gap="md" style={{ marginTop: 10 }}>
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" style={{ marginTop: 10 }}>
               <ImageCard
                 title="Axial View (Transversal)"
                 url={axialUrl}
@@ -319,7 +372,7 @@ export default function ReportViewerModal({
                 errorLabel="Structural coronal registration image not found."
                 testIdPrefix="coronal"
               />
-            </Stack>
+            </SimpleGrid>
           </Stack>
         ) : (
           <Stack gap="xl" data-testid="asl-report-section">
@@ -336,7 +389,7 @@ export default function ReportViewerModal({
                   visually inspect the alignment between the ASL and structural images.
                 </Text>
               </Stack>
-              <Stack gap="md">
+              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
                 <ImageCard
                   title="ASL-Structural Registration (Axial View)"
                   url={axialUrl}
@@ -353,7 +406,7 @@ export default function ReportViewerModal({
                   errorLabel="ASL-Structural coronal registration image not found."
                   testIdPrefix="asl-coronal"
                 />
-              </Stack>
+              </SimpleGrid>
             </Stack>
 
             {/* 2. M0-ASL Registration */}
@@ -369,7 +422,7 @@ export default function ReportViewerModal({
                   M0 and qCBF images.
                 </Text>
               </Stack>
-              <Stack gap="md">
+              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
                 <ImageCard
                   title="M0-ASL Registration (Axial View)"
                   url={m0AxialUrl}
@@ -386,10 +439,76 @@ export default function ReportViewerModal({
                   errorLabel="M0-ASL coronal registration image not found."
                   testIdPrefix="m0-coronal"
                 />
-              </Stack>
+              </SimpleGrid>
             </Stack>
           </Stack>
         )}
+
+        {/* Quality Control Metrics section */}
+        <Stack gap="xs" data-testid="qc-metrics-section" style={{ marginTop: 15 }}>
+          <Title order={4} data-testid="qc-metrics-heading">
+            Quality Control Metrics
+          </Title>
+          {qcLoading ? (
+            <Box
+              style={{ display: "flex", justifyContent: "center", padding: 20 }}
+              data-testid="qc-metrics-loading"
+            >
+              <Loader size="sm" />
+            </Box>
+          ) : qcError ? (
+            <Alert
+              color="orange"
+              icon={<IconAlertCircle size={16} />}
+              data-testid="qc-metrics-error"
+            >
+              {qcError}
+            </Alert>
+          ) : qcMeasures.length > 0 ? (
+            <Box
+              style={{
+                border: "1px solid var(--mantine-color-gray-3)",
+                borderRadius: "var(--mantine-radius-sm)",
+                overflow: "hidden",
+              }}
+              data-testid="qc-metrics-table-container"
+            >
+              <Table striped highlightOnHover data-testid="qc-metrics-table">
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th style={{ width: "50%" }}>Metric</Table.Th>
+                    <Table.Th style={{ width: "50%" }}>Value</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {qcMeasures.map((measure) => (
+                    <Table.Tr key={measure.key} data-testid={`qc-row-${measure.key}`}>
+                      <Table.Td>
+                        <Text size="sm" fw={500} data-testid={`qc-label-${measure.key}`}>
+                          {measure.label}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td style={{ maxWidth: 300 }}>
+                        <Text
+                          size="sm"
+                          truncate="end"
+                          data-testid={`qc-value-${measure.key}`}
+                          title={measure.value}
+                        >
+                          {measure.value}
+                        </Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Box>
+          ) : (
+            <Text size="sm" c="dimmed" data-testid="qc-metrics-empty">
+              No quality control metrics available.
+            </Text>
+          )}
+        </Stack>
       </Stack>
     </Modal>
   );
