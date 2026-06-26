@@ -1,5 +1,11 @@
 import { exists, readTextFile, writeTextFile, mkdir } from "@tauri-apps/plugin-fs";
+import type { MetadataGroup, SubjectRow } from "../schemas/importSchemas";
 import type { ProcessConfig, SubjectInfo } from "../schemas/processingSchemas";
+
+interface MappingState {
+  subjectRows?: SubjectRow[];
+  metadataGroups?: MetadataGroup[];
+}
 
 /**
  * Parses a participant_id (e.g. sub-C9ORF007Philips_01) into subject and session.
@@ -64,7 +70,7 @@ const DEFAULT_PARTICIPANTS_JSON = {
 export async function ensureParticipantsFiles(
   projectRoot: string,
   config: ProcessConfig,
-  mappingState: any,
+  mappingState: MappingState | null | undefined,
   availableSubjects: SubjectInfo[],
   enabled: boolean = false,
 ): Promise<void> {
@@ -167,10 +173,10 @@ export async function ensureParticipantsFiles(
     const { subject, session } = parseParticipantId(subjectSession);
 
     // Determine site mapping
-    const rowMatch = subjectRows.find((r: any) => r.subject === subject && r.session === session);
+    const rowMatch = subjectRows.find((r) => r.subject === subject && r.session === session);
     let siteVal = "";
     if (rowMatch) {
-      const groupMatch = metadataGroups.find((g: any) => g.id === rowMatch.groupId);
+      const groupMatch = metadataGroups.find((g) => g.id === rowMatch.groupId);
       if (groupMatch) {
         siteVal = groupMatch.label.trim().replace(/\s+/g, "_");
       } else if (rowMatch.groupId === "global-defaults") {
@@ -235,7 +241,7 @@ export async function ensureParticipantsFiles(
   await writeTextFile(tsvPath, tsvContent);
 
   // 9. Generate/Update JSON file
-  let jsonContentObj: any = { ...DEFAULT_PARTICIPANTS_JSON };
+  let jsonContentObj: Record<string, unknown> = { ...DEFAULT_PARTICIPANTS_JSON };
   try {
     if (await exists(jsonPath)) {
       const rawJson = await readTextFile(jsonPath);

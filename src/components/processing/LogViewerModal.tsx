@@ -81,16 +81,26 @@ export default function LogViewerModal({
     });
   }, [entries, module, runErrorMap]);
 
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [prevEntries, setPrevEntries] = useState(entries);
+  const [prevRunOptions, setPrevRunOptions] = useState(runOptions);
+  const [selectedFile, setSelectedFile] = useState<string | null>(() => {
+    if (entries.length > 0) {
+      const firstError = runOptions.find((o) => o.hasError);
+      return firstError?.value ?? entries[0]?.[0] ?? null;
+    }
+    return null;
+  });
 
-  useEffect(() => {
+  if (entries !== prevEntries || runOptions !== prevRunOptions) {
+    setPrevEntries(entries);
+    setPrevRunOptions(runOptions);
     if (entries.length > 0) {
       const firstError = runOptions.find((o) => o.hasError);
       setSelectedFile(firstError?.value ?? entries[0]?.[0] ?? null);
     } else {
       setSelectedFile(null);
     }
-  }, [entries, runOptions]);
+  }
 
   const currentContent = selectedFile && logContent ? (logContent[selectedFile] ?? "") : "";
 
