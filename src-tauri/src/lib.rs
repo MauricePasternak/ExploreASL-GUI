@@ -3,6 +3,7 @@ pub mod import;
 pub mod import_parser;
 mod niivue_protocol;
 pub mod processing;
+pub mod qc;
 mod tracing;
 pub mod visualization;
 mod visualization_tests;
@@ -20,6 +21,7 @@ use processing::{
     list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,
     run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir,
 };
+use qc::get_subject_session_qc;
 use tauri::Manager;
 #[cfg(debug_assertions)]
 use tauri::{LogicalSize, Size};
@@ -93,6 +95,7 @@ pub fn run() {
             clear_active_project,
             check_join_sanity,
             stat_file,
+            get_subject_session_qc,
         ])
         .register_uri_scheme_protocol("niivue", niivue_protocol::handle_niivue_protocol)
         .setup(|app| {
