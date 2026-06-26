@@ -427,9 +427,9 @@ describe("ProcessingStatusAlert", () => {
         expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
           "error",
         );
+        expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ ready: false }));
       });
       expect(screen.getByText(/No MATLAB installation configured/i)).toBeInTheDocument();
-      expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ ready: false }));
     });
   });
 

@@ -126,7 +126,7 @@ export default function ProjectPage() {
 
     // Default to the project's currentPhase if no phase parameter is present
     if (!params.phase) {
-      const resolvedPhase = resolveRestoredPhase(project);
+      const resolvedPhase = resolveRestoredPhase(undefined, project);
       navigate(`/project/${project.projectMeta.id}/${resolvedPhase}`, {
         replace: true,
       });

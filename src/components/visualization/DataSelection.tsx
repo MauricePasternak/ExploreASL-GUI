@@ -3,7 +3,7 @@ import { IconAlertCircle } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 
-import { useVisualizationStore } from "../../stores/visualizationStore";
+import { useVisualizationStore, DataInspection } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { parseStatsFileName } from "../../lib/tsvUtils";
 import JoinConfig from "./JoinConfig";
@@ -42,20 +42,7 @@ export default function DataSelection() {
     }
 
     try {
-      const result = await invoke<{
-        columns: Array<{
-          name: string;
-          originalName: string;
-          source: "qcbf" | "external";
-          units: string;
-          inferredType: string;
-          levels: string[];
-          isIdentifier: boolean;
-        }>;
-        rowCount: number;
-        qcbfHash: string;
-        externalHash: string | null;
-      }>("load_qcbf_data", {
+      const result = await invoke<DataInspection>("load_qcbf_data", {
         projectRoot: project.projectMeta.rootPath,
         relativePath,
       });
