@@ -80,6 +80,11 @@ export async function setupProcessingListeners(): Promise<() => void> {
     const module = mapModuleName(event.payload.module);
     if (!module) return;
 
+    // ExploreASL's population QC pass may re-run steps (e.g. 100_VisualQC_Structural)
+    // for subjects that have already completed the module. Ignore non-completion
+    // events that would downgrade a "complete" subject back to "incomplete".
+    const isComplete = stepCode === "999_ready";
+
     const store = useProcessingStore.getState();
 
     const existing = store.subjectStatuses.find(
@@ -89,7 +94,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
         s.run === (run ?? undefined),
     );
 
-    const isComplete = stepCode === "999_ready";
+    if (existing?.status === "complete" && !isComplete) return;
     const completedSteps = existing
       ? isComplete
         ? existing.completedSteps
@@ -126,6 +131,11 @@ export async function setupProcessingListeners(): Promise<() => void> {
         s.module === module &&
         s.run === (run ?? undefined),
     );
+
+    // ExploreASL's population QC pass re-creates lock directories for subjects
+    // that have already completed. Ignore these to prevent a phantom
+    // "processing" icon (LockRemoved events are unreliable on Linux).
+    if (existing?.status === "complete") return;
 
     updateSubjectStatus({
       subjectSession: subjectSession ?? "",
