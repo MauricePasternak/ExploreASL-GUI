@@ -126,12 +126,24 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
 
     const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
     if (!projectRoot) throw new Error("No project loaded");
+
+    // Generate/update participants.tsv (always call to either add or strip the 'site' column)
+    const dataPar = useDataParStore.getState().dataPar;
+    const mappingState = useProjectStore.getState().project?.mappingState;
+    const { ensureParticipantsFiles } = await import("../lib/participantsUtils");
+    await ensureParticipantsFiles(
+      projectRoot,
+      config,
+      mappingState,
+      available,
+      dataPar.enableMetadataGroupingCorrection ?? false,
+    );
+
     await watchLockDir(projectRoot);
 
     const cleanup = await setupProcessingListeners();
     processingCleanup = cleanup;
 
-    const dataPar = useDataParStore.getState().dataPar;
     const { assembleDataPar } = await import("../lib/assembleDataPar");
     const dataParJson = assembleDataPar(dataPar);
     dataParJson.x.dataset = {

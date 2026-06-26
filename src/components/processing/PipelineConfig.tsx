@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Checkbox, NumberInput, Select, Stack, Text } from "@mantine/core";
+import { Checkbox, NumberInput, Select, Stack, Text, SimpleGrid, Group } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
+
+import { FieldInfoIcon } from "../FieldInfoIcon";
 
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
@@ -114,55 +116,103 @@ export default function PipelineConfig() {
 
   return (
     <Stack gap="md" data-testid="pipeline-config">
-      {/* MATLAB version */}
-      <Select
-        label="MATLAB Version"
-        placeholder={noMatlab ? "No MATLAB configured" : "Select MATLAB installation"}
-        data={matlabOptions}
-        value={config.matlabPath || null}
-        onChange={handleMatlabChange}
-        disabled={noMatlab}
-        nothingFoundMessage="No MATLAB installations found"
-        data-testid="matlab-select"
-      />
-
-      {/* Modules */}
-      <div>
-        <Text fw={600} size="sm" mb="xs" data-testid="modules-label">
-          Modules
-        </Text>
-        <Stack gap="xs">
-          {PROCESSING_MODULES.filter((m) => m !== "population").map((module) => {
-            const label =
-              module === "asl" ? "ASL" : module.charAt(0).toUpperCase() + module.slice(1);
-            return (
-              <Checkbox
-                key={module}
-                label={label}
-                checked={config.modules.includes(module)}
-                onChange={() => handleModuleToggle(module)}
-                data-testid={`module-checkbox-${module}`}
+      <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+        {/* MATLAB version */}
+        <Select
+          label={
+            <Group gap="xs" align="center" style={{ display: "inline-flex" }}>
+              <span>MATLAB Version</span>
+              <FieldInfoIcon
+                tooltipLabel="Select the installed MATLAB version to use for executing the processing pipeline."
+                aria-label="Info for MATLAB Version"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
               />
-            );
-          })}
-        </Stack>
-      </div>
+            </Group>
+          }
+          placeholder={noMatlab ? "No MATLAB configured" : "Select MATLAB installation"}
+          data={matlabOptions}
+          value={config.matlabPath || null}
+          onChange={handleMatlabChange}
+          disabled={noMatlab}
+          nothingFoundMessage="No MATLAB installations found"
+          data-testid="matlab-select"
+        />
 
-      {/* Worker count */}
-      <NumberInput
-        label="Workers"
-        description={
-          config.subjects.length > 0 && config.workers > config.subjects.length
-            ? `Default: ${defaultWorkers} | Max: ${systemCores} cores (capped to ${config.subjects.length} active worker${config.subjects.length > 1 ? "s" : ""} for selected subject${config.subjects.length > 1 ? "s" : ""})`
-            : `Default: ${defaultWorkers} | Max: ${systemCores} cores`
-        }
-        value={config.workers}
-        onChange={handleWorkersChange}
-        min={1}
-        max={systemCores}
-        clampBehavior="strict"
-        data-testid="worker-count-input"
-      />
+        {/* Modules */}
+        <div>
+          <Group gap="xs" align="center" mb="xs" style={{ display: "inline-flex" }}>
+            <Text fw={600} size="sm" data-testid="modules-label">
+              Modules
+            </Text>
+            <FieldInfoIcon
+              tooltipLabel="Select which pipeline modules to run. 'Structural' processes anatomical scans, and 'ASL' processes functional perfusion scans."
+              aria-label="Info for Modules"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            />
+          </Group>
+          <Stack gap="xs">
+            {PROCESSING_MODULES.filter((m) => m !== "population").map((module) => {
+              const label =
+                module === "asl" ? "ASL" : module.charAt(0).toUpperCase() + module.slice(1);
+              return (
+                <Checkbox
+                  key={module}
+                  label={label}
+                  checked={config.modules.includes(module)}
+                  onChange={() => handleModuleToggle(module)}
+                  data-testid={`module-checkbox-${module}`}
+                />
+              );
+            })}
+          </Stack>
+        </div>
+
+        {/* Worker count */}
+        <NumberInput
+          label={
+            <Group gap="xs" align="center" style={{ display: "inline-flex" }}>
+              <span>Workers</span>
+              <FieldInfoIcon
+                tooltipLabel="Number of parallel workers. Multiple workers allow processing different subject-session datasets simultaneously."
+                aria-label="Info for Workers"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+              />
+            </Group>
+          }
+          description={
+            config.subjects.length > 0 && config.workers > config.subjects.length
+              ? `Default: ${defaultWorkers} | Max: ${systemCores} cores (capped to ${config.subjects.length} active worker${config.subjects.length > 1 ? "s" : ""} for selected subject${config.subjects.length > 1 ? "s" : ""})`
+              : `Default: ${defaultWorkers} | Max: ${systemCores} cores`
+          }
+          value={config.workers}
+          onChange={handleWorkersChange}
+          min={1}
+          max={systemCores}
+          clampBehavior="strict"
+          data-testid="worker-count-input"
+        />
+      </SimpleGrid>
     </Stack>
   );
 }

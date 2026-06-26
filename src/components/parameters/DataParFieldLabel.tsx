@@ -1,4 +1,4 @@
-import { Text, Box, Tooltip } from "@mantine/core";
+import { Text, Box } from "@mantine/core";
 
 import { FieldInfoIcon } from "../FieldInfoIcon";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
@@ -50,29 +50,19 @@ export function DataParFieldLabel({ fieldKey, label, htmlFor }: DataParFieldLabe
       }}
     >
       {labelNode}
-      <Tooltip
-        label={meta.description}
-        multiline
-        w={320}
-        withArrow
-        withinPortal
-        transitionProps={{ duration: 0 }}
-        openDelay={0}
-        closeDelay={0}
-      >
-        <FieldInfoIcon
-          aria-label={`Info for ${meta.label}`}
-          onClick={(e) => {
-            // Prevent clicking the tooltip info icon from toggling the checkbox/switch or focusing text input
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        />
-      </Tooltip>
+      <FieldInfoIcon
+        tooltipLabel={meta.description}
+        aria-label={`Info for ${meta.label}`}
+        onClick={(e) => {
+          // Prevent clicking the tooltip info icon from toggling the checkbox/switch or focusing text input
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      />
     </Box>
   );
 }

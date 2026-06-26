@@ -108,4 +108,46 @@ describe("GeneralSettingsSection", () => {
     clickSwitch(/show advanced/i);
     expect(onToggle).toHaveBeenCalled();
   });
+
+  describe("enableMetadataGroupingCorrection switch option", () => {
+    it("renders switch and does not render warning when disabled", () => {
+      renderWithMantine(
+        <GeneralSettingsSectionWrapper
+          dataPar={{ enableMetadataGroupingCorrection: false }}
+          onFieldChange={() => {}}
+        />,
+      );
+      expect(screen.getByTestId("field-enableMetadataGroupingCorrection")).toBeInTheDocument();
+      expect(screen.getByTestId("field-enableMetadataGroupingCorrection")).not.toBeChecked();
+      expect(screen.queryByTestId("participants-warning-callout")).not.toBeInTheDocument();
+    });
+
+    it("calls onFieldChange when switch is toggled", () => {
+      const onFieldChange = vi.fn();
+      renderWithMantine(
+        <GeneralSettingsSectionWrapper
+          dataPar={{ enableMetadataGroupingCorrection: false }}
+          onFieldChange={onFieldChange}
+        />,
+      );
+      // Click switch using clickSwitch or directly firing event
+      const input = screen.getByTestId("field-enableMetadataGroupingCorrection");
+      fireEvent.click(input);
+      expect(onFieldChange).toHaveBeenCalledWith("enableMetadataGroupingCorrection", true);
+    });
+
+    it("renders warning callout when enabled", () => {
+      renderWithMantine(
+        <GeneralSettingsSectionWrapper
+          dataPar={{ enableMetadataGroupingCorrection: true }}
+          onFieldChange={() => {}}
+        />,
+      );
+      expect(screen.getByTestId("field-enableMetadataGroupingCorrection")).toBeChecked();
+      expect(screen.getByTestId("participants-warning-callout")).toBeInTheDocument();
+      expect(
+        screen.getByText(/will enact site-scanner correction on that basis/i),
+      ).toBeInTheDocument();
+    });
+  });
 });
