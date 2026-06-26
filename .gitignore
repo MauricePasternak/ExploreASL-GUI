@@ -7,7 +7,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build output
 dist
 dist-ssr
 *.local
@@ -24,7 +27,7 @@ dist-ssr
 *.sw?
 
 # Agent-related
-superpowers/
+openspec/changes/
 .cursor/
 .opencode/
 
@@ -32,9 +35,8 @@ superpowers/
 notes/
 
 # Large test data
-test/test_GENFI/
-test/test_project_root/
-test/test_import_run/
+!test/fixtures/
+test/
 
 # Worktrees
 .worktrees/
