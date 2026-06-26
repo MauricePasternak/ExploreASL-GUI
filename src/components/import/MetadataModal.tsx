@@ -1,6 +1,6 @@
 import { Button, Group, Modal, Stack, TextInput } from "@mantine/core";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, type Resolver } from "react-hook-form";
+import { useForm, useWatch, type Resolver } from "react-hook-form";
 
 import { BIDS_FIELD_HINTS, stripEmptyBidsParams } from "./metadataFieldHints";
 import {
@@ -36,12 +36,15 @@ export default function MetadataModal({
     values: initialValues,
   });
 
-  const { control, watch, register, handleSubmit, formState } = form;
-  const aslType = watch("bidsParams.ArterialSpinLabelingType");
-  const mrAcquisitionType = watch("bidsParams.MRAcquisitionType");
-  const hasBackgroundSuppression = watch("bidsParams.BackgroundSuppression");
-  const bolusCutOffFlag = watch("bidsParams.BolusCutOffFlag");
-  const aslContext = watch("bidsParams.ASLContext") ?? "";
+  const { control, register, handleSubmit, formState } = form;
+  const aslType = useWatch({ control, name: "bidsParams.ArterialSpinLabelingType" });
+  const mrAcquisitionType = useWatch({ control, name: "bidsParams.MRAcquisitionType" });
+  const hasBackgroundSuppression = useWatch({
+    control,
+    name: "bidsParams.BackgroundSuppression",
+  });
+  const bolusCutOffFlag = useWatch({ control, name: "bidsParams.BolusCutOffFlag" });
+  const aslContext = useWatch({ control, name: "bidsParams.ASLContext" }) ?? "";
   const hasM0ScanInContext = aslContext
     .split(",")
     .map((t) => t.trim())

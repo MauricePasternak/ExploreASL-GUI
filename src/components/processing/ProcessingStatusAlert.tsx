@@ -58,10 +58,10 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   useEffect(() => {
     const path = config?.matlabPath;
     if (!path?.trim()) {
-      setMatlabExists(false);
+      Promise.resolve().then(() => setMatlabExists(false));
       return;
     }
-    setMatlabExists(null);
+    Promise.resolve().then(() => setMatlabExists(null));
     exists(path)
       .then(setMatlabExists)
       .catch(() => setMatlabExists(false));
@@ -71,12 +71,16 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   useEffect(() => {
     const path = config?.exploreAslPath ?? settings.exploreAslPath;
     if (!path?.trim()) {
-      setExploreAslExists(false);
-      setExploreAslHasM(false);
+      Promise.resolve().then(() => {
+        setExploreAslExists(false);
+        setExploreAslHasM(false);
+      });
       return;
     }
-    setExploreAslExists(null);
-    setExploreAslHasM(null);
+    Promise.resolve().then(() => {
+      setExploreAslExists(null);
+      setExploreAslHasM(null);
+    });
     Promise.all([exists(path), exists(`${path}/ExploreASL.m`)])
       .then(([dirExists, mExists]) => {
         setExploreAslExists(dirExists);
@@ -92,10 +96,10 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   useEffect(() => {
     const rootPath = project?.projectMeta.rootPath;
     if (!rootPath) {
-      setDataParDirExists(false);
+      Promise.resolve().then(() => setDataParDirExists(false));
       return;
     }
-    setDataParDirExists(null);
+    Promise.resolve().then(() => setDataParDirExists(null));
     const dataParDir = `${rootPath}/derivatives/ExploreASL`;
     exists(dataParDir)
       .then(setDataParDirExists)
@@ -112,20 +116,26 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
       .filter((v, i, a) => a.indexOf(v) === i);
   }, [availableSubjects, subjectStatuses]);
 
+  const configSubjects = config?.subjects;
+  const configModules = config?.modules;
+  const configMatlabPath = config?.matlabPath;
+  const configExploreAslPath = config?.exploreAslPath;
+  const configWorkers = config?.workers;
+
   // Compute validation result
   const result = useMemo((): PreflightResult => {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    const populationOnly = config?.modules.length === 1 && config?.modules[0] === "population";
+    const populationOnly = configModules?.length === 1 && configModules[0] === "population";
 
     // Hard block: subjects selected (not required for population-only runs)
-    if (!config?.subjects.length && !populationOnly) {
+    if (!configSubjects?.length && !populationOnly) {
       errors.push("No subjects selected. Select at least one subject.");
     }
 
     // Hard block: modules selected
-    if (!config?.modules.length) {
+    if (!configModules?.length) {
       errors.push("No processing modules selected. Select Structural, ASL, or Population.");
     }
 
@@ -136,14 +146,14 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     // regardless of whether the path exists on disk.
     if (!settings.matlabInstallations.length) {
       errors.push("No MATLAB installation configured. Add one in Settings.");
-    } else if (!config?.matlabPath?.trim()) {
+    } else if (!configMatlabPath?.trim()) {
       errors.push("No MATLAB installation configured. Add one in Settings.");
     } else if (matlabExists === false) {
-      errors.push(`MATLAB executable not found at "${config.matlabPath}". Check Settings.`);
+      errors.push(`MATLAB executable not found at "${configMatlabPath}". Check Settings.`);
     }
 
     // Hard block: ExploreASL path
-    const explorePath = config?.exploreAslPath ?? settings.exploreAslPath;
+    const explorePath = configExploreAslPath ?? settings.exploreAslPath;
     if (!explorePath?.trim()) {
       errors.push("No ExploreASL path configured. Set it in Settings.");
     } else {
@@ -157,7 +167,7 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     }
 
     // Hard block: worker count
-    const workers = config?.workers ?? 0;
+    const workers = configWorkers ?? 0;
     if (workers < 1) {
       errors.push("Worker count must be at least 1.");
     }
@@ -166,16 +176,16 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     }
 
     // Hard block: population + workers > 1
-    if (config?.modules.includes("population") && workers !== 1) {
+    if (configModules?.includes("population") && workers !== 1) {
       errors.push(
         "Population module requires exactly 1 worker (single-threaded for atlas/group statistics).",
       );
     }
 
     // Soft warning: worker count exceeds selected subjects
-    if (config?.subjects.length && workers > config.subjects.length) {
+    if (configSubjects?.length && workers > configSubjects.length) {
       warnings.push(
-        `Spawning fewer workers (${config.subjects.length}) than configured (${workers}) because only ${config.subjects.length} subject${config.subjects.length > 1 ? "s are" : " is"} selected.`,
+        `Spawning fewer workers (${configSubjects.length}) than configured (${workers}) because only ${configSubjects.length} subject${configSubjects.length > 1 ? "s are" : " is"} selected.`,
       );
     }
 
@@ -195,11 +205,11 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
 
     return { errors, warnings, ready: errors.length === 0 };
   }, [
-    config?.subjects,
-    config?.modules,
-    config?.matlabPath,
-    config?.exploreAslPath,
-    config?.workers,
+    configSubjects,
+    configModules,
+    configMatlabPath,
+    configExploreAslPath,
+    configWorkers,
     settings.exploreAslPath,
     settings.matlabInstallations,
     systemCores,
@@ -212,7 +222,7 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
 
   // Determine state: idle < checking < error < warning < ready
   const state: AlertState = useMemo(() => {
-    const hasSelection = (config?.modules.length ?? 0) > 0 || (config?.subjects.length ?? 0) > 0;
+    const hasSelection = (configModules?.length ?? 0) > 0 || (configSubjects?.length ?? 0) > 0;
     const fsPending =
       matlabExists === null ||
       exploreAslExists === null ||
@@ -224,8 +234,8 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     if (result.warnings.length > 0) return "warning";
     return "ready";
   }, [
-    config?.modules.length,
-    config?.subjects.length,
+    configModules,
+    configSubjects,
     matlabExists,
     exploreAslExists,
     exploreAslHasM,
