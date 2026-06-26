@@ -116,6 +116,7 @@ const mockInspection = {
     },
   ],
   rowCount: 10,
+  qcbfRowCount: 10,
   qcbfHash: "abc123",
   externalHash: null,
 };
@@ -130,6 +131,16 @@ const mockRows = [
     Site: "1",
   },
 ];
+
+const mockExtInspection = {
+  columns: [
+    { name: "SubjectID", inferredType: "nominal", levels: ["sub-X_01"], isIdentifier: true },
+    { name: "Diagnosis", inferredType: "nominal", levels: ["Ctrl", "AD"], isIdentifier: false },
+  ],
+  rowCount: 10,
+  fileHash: "ext123",
+  sheetName: null,
+};
 
 describe("Visualization setup flow integration", () => {
   beforeEach(() => {
@@ -180,6 +191,7 @@ describe("Visualization setup flow integration", () => {
       if (cmd === "load_qcbf_data") return Promise.resolve(mockInspection);
       if (cmd === "read_data_columns") return Promise.resolve(mockRows);
       if (cmd === "set_active_project") return Promise.resolve(undefined);
+      if (cmd === "inspect_external_data") return Promise.resolve(mockExtInspection);
       return Promise.resolve([]);
     });
   });
@@ -294,6 +306,7 @@ describe("Visualization setup flow integration", () => {
         expect(args.externalAbsolutePath).toBe("/tmp/external.csv");
         return Promise.resolve(mockJoinedInspection);
       }
+      if (cmd === "inspect_external_data") return Promise.resolve(mockExtInspection);
       return Promise.resolve([]);
     });
 
@@ -377,6 +390,9 @@ describe("Visualization setup flow integration", () => {
       }
       if (cmd === "load_qcbf_data") {
         return Promise.resolve(mockInspection);
+      }
+      if (cmd === "inspect_external_data") {
+        return Promise.resolve(mockExtInspection);
       }
       return Promise.resolve([]);
     });

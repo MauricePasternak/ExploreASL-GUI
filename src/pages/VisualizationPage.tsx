@@ -194,6 +194,7 @@ export default function VisualizationPage() {
               isIdentifier: boolean;
             }>;
             rowCount: number;
+            qcbfRowCount: number;
             qcbfHash: string;
             externalHash: string | null;
           }>("execute_join", {
@@ -238,6 +239,7 @@ export default function VisualizationPage() {
               isIdentifier: boolean;
             }>;
             rowCount: number;
+            qcbfRowCount: number;
             qcbfHash: string;
             externalHash: string | null;
           }>("load_qcbf_data", {
@@ -284,6 +286,7 @@ export default function VisualizationPage() {
             isIdentifier: boolean;
           }>;
           rowCount: number;
+          qcbfRowCount: number;
           qcbfHash: string;
           externalHash: string | null;
         }>("execute_join", {

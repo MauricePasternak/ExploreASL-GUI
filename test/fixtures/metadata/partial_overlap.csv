@@ -1,0 +1,8 @@
+participant_id,Diagnosis,Age,Site
+sub-001_01,Presymptomatic,58,London
+sub-001_02,Presymptomatic,58,London
+sub-002_01,Symptomatic,62,Milan
+sub-002_02,Symptomatic,62,Milan
+sub-UNKNOWN001_01,Control,45,Berlin
+sub-UNKNOWN002_01,Control,52,Berlin
+sub-UNKNOWN003_01,Control,39,Berlin

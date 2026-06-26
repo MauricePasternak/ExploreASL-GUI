@@ -1,0 +1,9 @@
+participant_id;Diagnosis;Genetic_Mutation;Disease_Duration_Months;Clinical_Site
+sub-001_01;Presymptomatic;C9ORF72;0;London_Atkinson
+sub-001_02;Presymptomatic;C9ORF72;0;London_Atkinson
+sub-001_11;Presymptomatic;C9ORF72;12;London_Atkinson
+sub-002_01;Symptomatic;MAPT;36;Milan_San_Raffaele
+sub-002_02;Symptomatic;MAPT;36;Milan_San_Raffaele
+sub-002_11;Symptomatic;MAPT;48;Milan_San_Raffaele
+sub-002_12;Symptomatic;MAPT;48;Milan_San_Raffaele
+sub-002_13;Symptomatic;MAPT;60;Milan_San_Raffaele

@@ -118,6 +118,7 @@ interface EphemeralState {
       isIdentifier: boolean;
     }>;
     rowCount: number;
+    qcbfRowCount: number;
     qcbfHash: string;
     externalHash: string | null;
   } | null;

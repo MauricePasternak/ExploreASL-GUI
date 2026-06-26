@@ -5,6 +5,16 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
+fn normalize_key_val(val: &str) -> String {
+    let trimmed = val.trim();
+    let lower = trimmed.to_lowercase();
+    if let Some(stripped) = lower.strip_prefix("sub-") {
+        stripped.to_string()
+    } else {
+        lower
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct JoinKeyPair {
     pub left: String,
@@ -12,6 +22,7 @@ pub struct JoinKeyPair {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ColumnSource {
     Qcbf,
     External,
@@ -35,8 +46,10 @@ pub struct ActiveData {
     pub rows: Vec<HashMap<String, String>>,
     pub columns: Vec<ColumnMetadata>,
     pub row_count: usize,
+    pub qcbf_row_count: usize,
     pub qcbf_hash: String,
     pub external_hash: Option<String>,
+    pub qcbf_rows: Vec<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,6 +57,7 @@ pub struct ActiveData {
 pub struct DataInspection {
     pub columns: Vec<ColumnMetadata>,
     pub row_count: usize,
+    pub qcbf_row_count: usize,
     pub qcbf_hash: String,
     pub external_hash: Option<String>,
 }
@@ -53,6 +67,7 @@ impl ActiveData {
         DataInspection {
             columns: self.columns.clone(),
             row_count: self.row_count,
+            qcbf_row_count: self.qcbf_row_count,
             qcbf_hash: self.qcbf_hash.clone(),
             external_hash: self.external_hash.clone(),
         }
@@ -386,17 +401,20 @@ pub fn load_qcbf_data_impl(
     }
 
     let active = ActiveData {
-        rows,
+        rows: rows.clone(),
         columns: columns.clone(),
         row_count,
+        qcbf_row_count: row_count,
         qcbf_hash: qcbf_hash.clone(),
         external_hash: None,
+        qcbf_rows: rows,
     };
     *state.active_data.lock().map_err(|e| e.to_string())? = Some(active);
 
     Ok(DataInspection {
         columns,
         row_count,
+        qcbf_row_count: row_count,
         qcbf_hash,
         external_hash: None,
     })
@@ -771,7 +789,7 @@ pub fn execute_join_impl(
     for row in &ext_rows {
         let key: Vec<String> = right_on
             .iter()
-            .filter_map(|col| row.get(col).cloned())
+            .filter_map(|col| row.get(col).map(|val| normalize_key_val(val)))
             .collect();
         ext_index.entry(key).or_default().push(row);
     }
@@ -824,7 +842,7 @@ pub fn execute_join_impl(
     for qcbf_row in &qcbf_rows {
         let key: Vec<String> = left_on
             .iter()
-            .filter_map(|col| qcbf_row.get(col).cloned())
+            .filter_map(|col| qcbf_row.get(col).map(|val| normalize_key_val(val)))
             .collect();
         let matches = ext_index.get(&key);
         if let Some(matched) = matches {
@@ -894,14 +912,17 @@ pub fn execute_join_impl(
         rows: merged_rows,
         columns: merged_columns.clone(),
         row_count,
+        qcbf_row_count: qcbf_inspection.row_count,
         qcbf_hash: qcbf_hash.clone(),
         external_hash: Some(external_hash.clone()),
+        qcbf_rows,
     };
     *state.active_data.lock().map_err(|e| e.to_string())? = Some(active);
 
     Ok(DataInspection {
         columns: merged_columns,
         row_count,
+        qcbf_row_count: qcbf_inspection.row_count,
         qcbf_hash,
         external_hash: Some(external_hash),
     })
@@ -1022,7 +1043,7 @@ pub fn check_join_sanity_impl(
         guard
             .as_ref()
             .ok_or("No qCBF data loaded. Select a file first.")?
-            .rows
+            .qcbf_rows
             .clone()
     };
 
@@ -1065,7 +1086,7 @@ pub fn check_join_sanity_impl(
     for row in &ext_rows {
         let key: Vec<String> = right_on
             .iter()
-            .filter_map(|col| row.get(col).cloned())
+            .filter_map(|col| row.get(col).map(|val| normalize_key_val(val)))
             .collect();
         *right_key_counts.entry(key).or_default() += 1;
     }
@@ -1074,7 +1095,7 @@ pub fn check_join_sanity_impl(
     for row in &qcbf_rows {
         let key: Vec<String> = left_on
             .iter()
-            .filter_map(|col| row.get(col).cloned())
+            .filter_map(|col| row.get(col).map(|val| normalize_key_val(val)))
             .collect();
         *left_key_counts.entry(key).or_default() += 1;
     }

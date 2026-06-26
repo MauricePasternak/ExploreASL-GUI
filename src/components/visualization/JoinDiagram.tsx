@@ -37,6 +37,7 @@ export default function JoinDiagram({
             <Stack gap={2} p="xs">
               {qcbfColumns.map((col) => (
                 <Text
+                  component="div"
                   key={col.name}
                   size="xs"
                   c={pairedLeft.has(col.name) ? "blue" : "dimmed"}

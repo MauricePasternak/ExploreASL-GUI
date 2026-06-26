@@ -1,0 +1,9 @@
+participant_id,Diagnosis,Age,MeanMotion,Site,Total_GM_B
+sub-001_01,Presymptomatic,58,0.15,London,0.642
+sub-001_02,Presymptomatic,58,0.12,London,0.638
+sub-001_11,Presymptomatic,59,0.21,London,0.635
+sub-002_01,Symptomatic,62,0.33,Milan,0.598
+sub-002_02,Symptomatic,62,0.29,Milan,0.591
+sub-002_11,Symptomatic,63,0.38,Milan,0.584
+sub-002_12,Symptomatic,63,0.35,Milan,0.580
+sub-002_13,Symptomatic,63,0.41,Milan,0.575
