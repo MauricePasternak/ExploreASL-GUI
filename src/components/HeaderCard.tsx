@@ -1,5 +1,6 @@
 import { Card, Group, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import type { ComponentType } from "react";
+import PageHelpButton from "./PageHelpButton";
 
 interface HeaderCardProps {
   icon: ComponentType<{ size?: number; color?: string }>;
@@ -29,6 +30,7 @@ export default function HeaderCard({
             <Title order={3} style={{ margin: 0 }}>
               {title}
             </Title>
+            <PageHelpButton />
           </Group>
           {rightSection}
         </Group>

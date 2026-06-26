@@ -34,7 +34,6 @@ import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { logAction } from "../lib/debug";
 import ProcessingStatusBar from "./processing/ProcessingStatusBar";
-import PageHelpButton from "./PageHelpButton";
 
 const PHASE_NAV = [
   { phase: "import", label: "Import", icon: IconUpload },
@@ -293,7 +292,6 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           </Stack>
         </Modal>
         <Outlet />
-        <PageHelpButton />
       </AppShell.Main>
     </AppShell>
   );
