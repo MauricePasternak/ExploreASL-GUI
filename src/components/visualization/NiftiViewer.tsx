@@ -58,6 +58,35 @@ export default function NiftiViewer() {
   const [contextLost, setContextLost] = useState(false);
   const [nvReady, setNvReady] = useState(false);
 
+  const paramsRef = useRef({
+    nvBackColor,
+    nvCrosshair,
+    nvColorbar,
+    nvCornerOrientation,
+    nvRadiological,
+    nvSliceType,
+    nvColormap,
+  });
+  useEffect(() => {
+    paramsRef.current = {
+      nvBackColor,
+      nvCrosshair,
+      nvColorbar,
+      nvCornerOrientation,
+      nvRadiological,
+      nvSliceType,
+      nvColormap,
+    };
+  }, [
+    nvBackColor,
+    nvCrosshair,
+    nvColorbar,
+    nvCornerOrientation,
+    nvRadiological,
+    nvSliceType,
+    nvColormap,
+  ]);
+
   const point = useMemo(() => {
     return chartData.find((p) => p.id === selectedPointId) || null;
   }, [chartData, selectedPointId]);
@@ -75,7 +104,7 @@ export default function NiftiViewer() {
     } else {
       setWebglAvailable(true);
     }
-  }, []);
+  }, [setViewerState, setWebglAvailable]);
 
   // Initialize NiiVue once WebGL is available
   useEffect(() => {
@@ -83,17 +112,17 @@ export default function NiftiViewer() {
 
     const nv = new Niivue({
       dragAndDropEnabled: false,
-      backColor: getBackColor(nvBackColor),
-      fontColor: getFontColor(nvBackColor),
-      show3Dcrosshair: nvCrosshair,
+      backColor: getBackColor(paramsRef.current.nvBackColor),
+      fontColor: getFontColor(paramsRef.current.nvBackColor),
+      show3Dcrosshair: paramsRef.current.nvCrosshair,
       loadingText: "",
-      isColorbar: nvColorbar,
-      isCornerOrientationText: nvCornerOrientation,
+      isColorbar: paramsRef.current.nvColorbar,
+      isCornerOrientationText: paramsRef.current.nvCornerOrientation,
     });
 
     nv.attachToCanvas(canvasRef.current);
-    nv.setRadiologicalConvention(nvRadiological);
-    configureViewerLayout(nv, nvSliceType);
+    nv.setRadiologicalConvention(paramsRef.current.nvRadiological);
+    configureViewerLayout(nv, paramsRef.current.nvSliceType);
     nvRef.current = nv;
     setNvReady(true);
 
@@ -200,9 +229,9 @@ export default function NiftiViewer() {
         await nv.loadVolumes([{ url, name: `qCBF_${point.participantId}_${point.run}${ext}` }]);
         console.log("[NiftiViewer] Volume loaded successfully");
         if (nv.volumes.length > 0) {
-          nv.setColormap(nv.volumes[0].id, nvColormap);
+          nv.setColormap(nv.volumes[0].id, paramsRef.current.nvColormap);
         }
-        configureViewerLayout(nv, nvSliceType);
+        configureViewerLayout(nv, paramsRef.current.nvSliceType);
         nv.updateGLVolume();
         loadedPointIdRef.current = selectedPointId;
         setViewerState({ status: "loaded" });
