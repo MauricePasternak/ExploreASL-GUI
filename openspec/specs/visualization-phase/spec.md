@@ -1,6 +1,10 @@
 # visualization-phase Specification
 
-## ADDED Requirements
+## Purpose
+
+Orchestrate the user interface and store sync for the population analysis visualization phase of the project.
+
+## Requirements
 
 ### Requirement: Visualization Project Phase
 
@@ -109,12 +113,12 @@ The navbar SHALL include a "Visualization" entry with `IconChartScatter` icon. T
 
 ### Requirement: Visualization Store and Sync Hook
 
-A `visualizationStore` SHALL be created as a Zustand store, mirroring the `processingStore` pattern. A `useVisualizationSync` hook SHALL hydrate the store from `uiState.dataVis` on mount and subscribe to store changes with debounced saves of persisted fields to the project store. Ephemeral fields (chart data, selected point, viewer state) SHALL NOT be persisted.
+A `visualizationStore` SHALL be created as a Zustand store, mirroring the `processingStore` pattern. A `useVisualizationSync` hook SHALL hydrate the store from `uiState.dataVis` on mount and subscribe to store changes with debounced saves of persisted fields to the project store. Ephemeral fields (chart data, selected point, viewer state) SHALL NOT be persisted. The persisted shape SHALL use `qcbfSource` (singular, replaces former `contractSources` array) and `joinConfig` (join configuration or `null`).
 
 #### Scenario: Store hydrates on page mount
 
 - **WHEN** the Visualization page mounts and `uiState.dataVis` exists in the project file
-- **THEN** the `visualizationStore` SHALL be hydrated with persisted values (contract sources, column types, level orderings, axis assignment, domain filters, stage, filters expanded)
+- **THEN** the `visualizationStore` SHALL be hydrated with persisted values (qcbfSource, joinConfig, column types, level orderings, axis assignment, domain filters, stage, filters expanded)
 
 #### Scenario: Persisted fields sync to project store
 
@@ -128,17 +132,17 @@ A `visualizationStore` SHALL be created as a Zustand store, mirroring the `proce
 
 ### Requirement: Setup Stepper Orchestration
 
-The Visualization page SHALL render a Mantine Stepper with fine-grained conditional steps: "Select File", "Column Types", "Level Ordering" (conditional), and "Visualize". The "Level Ordering" step SHALL be skipped when no ordinal or nominal columns exist. The stepper state SHALL persist in `uiState.dataVis.stage`. On re-entry with a valid contract, the stepper SHALL resume at the persisted stage.
+The Visualization page SHALL render a Mantine Stepper with fine-grained conditional steps: "Select Data" (renamed from "Select File"), "Column Types", "Level Ordering" (conditional), and "Visualize". The "Level Ordering" step SHALL be skipped when no ordinal or nominal columns exist. The stepper state SHALL persist in `uiState.dataVis.stage` using the value `"selectData"` (renamed from `"selectFile"`). On re-entry with a valid contract, the stepper SHALL resume at the persisted stage. The mount-time validation SHALL branch on `joinConfig` presence: if `joinConfig` is `null`, `load_qcbf_data` SHALL be called; if `joinConfig` is active, `execute_join` SHALL be called. Both commands populate `AppState.active_data`.
 
 #### Scenario: Full stepper with categorical columns
 
-- **WHEN** the selected TSV contains ordinal or nominal columns
-- **THEN** the stepper SHALL show 4 steps: Select File, Column Types, Level Ordering, Visualize
+- **WHEN** the selected data contains ordinal or nominal columns
+- **THEN** the stepper SHALL show 4 steps: Select Data, Column Types, Level Ordering, Visualize
 
 #### Scenario: Stepper skips Level Ordering when no categorical columns
 
-- **WHEN** all columns in the selected TSV are continuous
-- **THEN** the stepper SHALL show 3 steps: Select File, Column Types, Visualize (Level Ordering skipped)
+- **WHEN** all columns in the selected data are continuous
+- **THEN** the stepper SHALL show 3 steps: Select Data, Column Types, Visualize (Level Ordering skipped)
 
 #### Scenario: Resume at persisted stage on re-entry
 
@@ -148,11 +152,11 @@ The Visualization page SHALL render a Mantine Stepper with fine-grained conditio
 #### Scenario: Resume at setup when contract invalidated
 
 - **WHEN** the user returns to the Visualization page but the contract hash does not match
-- **THEN** the stepper SHALL reset to step 1 ("Select File") with a banner: "Data file has changed. Please reconfigure."
+- **THEN** the stepper SHALL reset to step 1 ("Select Data") with a banner: "Data file has changed. Please reconfigure."
 
 #### Scenario: Next button disabled when no file selected
 
-- **WHEN** the stepper is at "Select File" and no TSV file has been selected
+- **WHEN** the stepper is at "Select Data" and no TSV file has been selected
 - **THEN** the "Next" button SHALL be disabled
 
 #### Scenario: Next button disabled when all columns excluded
@@ -167,10 +171,20 @@ The Visualization page SHALL render a Mantine Stepper with fine-grained conditio
 
 #### Scenario: Changing TSV file via back navigation invalidates contract
 
-- **WHEN** the user goes back to "Select File" and selects a different TSV file
-- **THEN** the existing contract (column types, level orderings, axis assignment, stage) SHALL be invalidated and type inference SHALL re-run for the new file
+- **WHEN** the user goes back to "Select Data" and selects a different TSV file
+- **THEN** the existing contract (column types, level orderings, axis assignment, stage, joinConfig) SHALL be invalidated and type inference SHALL re-run for the new file
 
 #### Scenario: Changing types or levels via back navigation updates contract without invalidation
 
 - **WHEN** the user goes back to "Column Types" or "Level Ordering" and modifies a column type or reorders levels
 - **THEN** the contract SHALL be updated in place without invalidating other contract fields
+
+#### Scenario: Mount-time validation with join active
+
+- **WHEN** the page mounts with `joinConfig` active and both file hashes match
+- **THEN** `execute_join` SHALL be called, `active_data` SHALL be populated with merged data, and the stepper SHALL resume at the persisted stage
+
+#### Scenario: Mount-time validation without join
+
+- **WHEN** the page mounts with `joinConfig` as `null` and the qCBF hash matches
+- **THEN** `load_qcbf_data` SHALL be called, `active_data` SHALL be populated with qCBF-only data, and the stepper SHALL resume at the persisted stage
