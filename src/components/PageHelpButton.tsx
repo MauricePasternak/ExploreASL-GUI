@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, useParams, useNavigate } from "react-router";
+import { useLocation, useParams, useNavigate, useInRouterContext } from "react-router";
 import {
   ActionIcon,
   Modal,
@@ -199,21 +199,17 @@ const HELP_DATA: Record<string, HelpContent> = {
   },
 };
 
-const pulseKeyframes = `
-@keyframes help-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.5);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(20, 184, 166, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0);
-  }
+const inlineButtonStyles = `
+.page-help-btn-inline {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: transform 0.15s ease;
+}
+.page-help-btn-inline:hover {
+  transform: scale(1.08);
 }
 `;
 
-export default function PageHelpButton() {
+function PageHelpButtonInner() {
   const [opened, setOpened] = useState(false);
   const location = useLocation();
   const params = useParams<{ phase?: string }>();
@@ -244,26 +240,19 @@ export default function PageHelpButton() {
 
   return (
     <>
-      <style>{pulseKeyframes}</style>
-      <Tooltip label="Need help with this page?" position="left" withArrow>
+      <style>{inlineButtonStyles}</style>
+      <Tooltip label="Need help with this page?" position="top" withArrow>
         <ActionIcon
-          size={48}
+          size={30}
           radius="xl"
           variant="gradient"
           gradient={{ from: "teal", to: "blue" }}
           onClick={() => setOpened(true)}
-          style={{
-            position: "fixed",
-            bottom: phase === "import" ? "120px" : "60px",
-            right: "24px",
-            zIndex: 100,
-            animation: "help-pulse 2s infinite",
-            border: "1px solid rgba(255, 255, 255, 0.2)",
-          }}
+          className="page-help-btn-inline"
           aria-label="Need help with this page?"
           data-testid="page-help-btn"
         >
-          <IconHelp size={24} />
+          <IconHelp size={16} />
         </ActionIcon>
       </Tooltip>
 
@@ -344,4 +333,12 @@ export default function PageHelpButton() {
       </Modal>
     </>
   );
+}
+
+export default function PageHelpButton() {
+  const inRouter = useInRouterContext();
+  if (!inRouter) {
+    return null;
+  }
+  return <PageHelpButtonInner />;
 }
