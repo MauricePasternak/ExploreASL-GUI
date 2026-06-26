@@ -12,7 +12,7 @@ import {
 import { IconUpload } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useProjectStore } from "../../stores/projectStore";
 import { useVisualizationStore } from "../../stores/visualizationStore";
@@ -36,10 +36,85 @@ export default function JoinConfig() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const lastInspectedRef = useRef<{ path: string; hash: string; delimiter: string } | null>(null);
+
+  useEffect(() => {
+    if (!joinConfig) {
+      lastInspectedRef.current = null;
+      return;
+    }
+
+    const currentPath = joinConfig.externalSource.absolutePath;
+    const currentHash = joinConfig.externalSource.fileHash;
+    const currentDelimiter = joinConfig.delimiter;
+
+    if (
+      extInspection &&
+      lastInspectedRef.current &&
+      lastInspectedRef.current.path === currentPath &&
+      lastInspectedRef.current.hash === currentHash &&
+      lastInspectedRef.current.delimiter === currentDelimiter
+    ) {
+      return;
+    }
+
+    let active = true;
+    async function loadExt() {
+      try {
+        const result = await invoke<{
+          columns: Array<{
+            name: string;
+            inferredType: string;
+            levels: string[];
+            isIdentifier: boolean;
+          }>;
+          rowCount: number;
+          fileHash: string;
+          sheetName: string | null;
+        }>("inspect_external_data", {
+          absolutePath: currentPath,
+          delimiter: currentDelimiter,
+        });
+        if (active) {
+          setExtInspection(result);
+          lastInspectedRef.current = {
+            path: currentPath,
+            hash: currentHash,
+            delimiter: currentDelimiter,
+          };
+        }
+      } catch (err) {
+        if (active) {
+          setError(
+            `Failed to inspect external file: ${err instanceof Error ? err.message : "Unknown error"}`,
+          );
+        }
+      }
+    }
+    loadExt();
+    return () => {
+      active = false;
+    };
+  }, [joinConfig, extInspection]);
+
   async function handleBrowse() {
+    let defaultPath: string | undefined = undefined;
+    if (joinConfig?.externalSource?.absolutePath) {
+      const lastSlash = Math.max(
+        joinConfig.externalSource.absolutePath.lastIndexOf("/"),
+        joinConfig.externalSource.absolutePath.lastIndexOf("\\"),
+      );
+      if (lastSlash !== -1) {
+        defaultPath = joinConfig.externalSource.absolutePath.substring(0, lastSlash);
+      }
+    } else if (project?.projectMeta?.rootPath) {
+      defaultPath = project.projectMeta.rootPath;
+    }
+
     const selected = await open({
       filters: [{ name: "Data files", extensions: ["csv", "tsv", "xlsx"] }],
       multiple: false,
+      defaultPath,
     });
     if (!selected || typeof selected !== "string") return;
     if (!project) return;
@@ -60,9 +135,14 @@ export default function JoinConfig() {
         delimiter: joinConfig?.delimiter ?? "auto",
       });
       setExtInspection(result);
-      // Preserve left fields in keys, naTokens, delimiter, dropRightOn from existing joinConfig; reset right fields
+      lastInspectedRef.current = {
+        path: selected,
+        hash: result.fileHash,
+        delimiter: joinConfig?.delimiter ?? "auto",
+      };
+      // Reset keys to empty array when changing external data
       const existing = joinConfig;
-      const newKeys = (existing?.keys ?? []).map((k) => ({ left: k.left, right: "" }));
+      const newKeys: Array<{ left: string; right: string }> = [];
       setJoinConfig({
         externalSource: {
           absolutePath: selected,
@@ -84,6 +164,7 @@ export default function JoinConfig() {
   function handleRemoveExternal() {
     setJoinConfig(null);
     setExtInspection(null);
+    lastInspectedRef.current = null;
   }
 
   function handleAddKeyPair() {
@@ -141,6 +222,11 @@ export default function JoinConfig() {
         delimiter: newDelimiter,
       });
       setExtInspection(result);
+      lastInspectedRef.current = {
+        path: joinConfig.externalSource.absolutePath,
+        hash: result.fileHash,
+        delimiter: newDelimiter,
+      };
     } catch (err) {
       setError(
         `Failed to inspect external file: ${err instanceof Error ? err.message : "Unknown error"}`,
@@ -172,9 +258,9 @@ export default function JoinConfig() {
     );
   }
 
-  const extColumns = extInspection?.columns.map((c) => ({ value: c.name, label: c.name })) ?? [];
+  const extColumns = extInspection?.columns?.map((c) => ({ value: c.name, label: c.name })) ?? [];
   const leftColumns = IDENTIFIER_COLUMNS.filter((col) =>
-    inspection?.columns.some((c) => c.name === col),
+    inspection?.columns.some((c) => c.originalName === col),
   ).map((c) => ({ value: c, label: c }));
 
   const keyPairs = joinConfig.keys;
@@ -296,14 +382,16 @@ export default function JoinConfig() {
         </Stack>
       </Paper>
 
-      {keyPairs.some((p) => p.left && p.right) && inspection && extInspection && (
+      {keyPairs.some((p) => p.left && p.right) && inspection && extInspection?.columns && (
         <>
           <JoinDiagram
             qcbfFileName={qcbfSource?.relativePath ?? ""}
-            qcbfRowCount={inspection.rowCount}
-            qcbfColumns={inspection.columns}
+            qcbfRowCount={inspection.qcbfRowCount ?? inspection.rowCount}
+            qcbfColumns={inspection.columns
+              .filter((c) => c.source === "qcbf")
+              .map((c) => ({ name: c.originalName, isIdentifier: c.isIdentifier }))}
             extFilePath={joinConfig.externalSource.absolutePath}
-            extRowCount={extInspection.rowCount}
+            extRowCount={extInspection.rowCount ?? 0}
             extColumns={extInspection.columns}
             keyPairs={
               keyPairs.filter((p) => p.left && p.right) as { left: string; right: string }[]
@@ -316,7 +404,7 @@ export default function JoinConfig() {
             naTokens={joinConfig.naTokens}
             sheetName={joinConfig.externalSource.sheetName}
             delimiter={joinConfig.delimiter}
-            qcbfRowCount={inspection.rowCount}
+            qcbfRowCount={inspection.qcbfRowCount ?? inspection.rowCount}
           />
         </>
       )}

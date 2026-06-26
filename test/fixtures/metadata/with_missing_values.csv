@@ -1,0 +1,9 @@
+participant_id,Age,Biomarker_Tau,Biomarker_NfL,Cognitive_Score,Notes
+sub-001_01,58,NaN,12.4,29,
+sub-001_02,58,NA,11.8,28,Patient declined tau sampling
+sub-001_11,59,145.2,13.1,27,
+sub-002_01,62,312.7,45.6,22,
+sub-002_02,62,n/a,48.2,21,
+sub-002_11,63,<NA>,52.1,19,Missed visit
+sub-002_12,63,487.3,NA,18,
+sub-002_13,63,NaN,61.4,16,

@@ -89,8 +89,10 @@ mod tests {
             rows: vec![],
             columns: vec![],
             row_count: 0,
+            qcbf_row_count: 0,
             qcbf_hash: "test".to_string(),
             external_hash: None,
+            qcbf_rows: vec![],
         });
     }
 
@@ -146,12 +148,15 @@ mod tests {
             rows: rows.clone(),
             columns: columns.clone(),
             row_count: rows.len(),
+            qcbf_row_count: rows.len(),
             qcbf_hash: "abc123".to_string(),
             external_hash: Some("ext9".to_string()),
+            qcbf_rows: rows.clone(),
         };
         let inspection = active.to_inspection();
         assert_eq!(inspection.columns, columns);
         assert_eq!(inspection.row_count, 2);
+        assert_eq!(inspection.qcbf_row_count, 2);
         assert_eq!(inspection.qcbf_hash, "abc123");
         assert_eq!(inspection.external_hash, Some("ext9".to_string()));
     }
@@ -439,6 +444,45 @@ mod tests {
     }
 
     #[test]
+    fn test_check_join_sanity_robust_matching() {
+        let temp = tempfile::tempdir().unwrap();
+        let stats_dir = temp.path().join("derivatives/ExploreASL/Population/Stats");
+        fs::create_dir_all(&stats_dir).unwrap();
+        fs::write(
+            stats_dir.join("test.tsv"),
+            "participant_id\tsession\tGM_vol\nsub-C9ORF007Philips_01\tASL_1\t0.64\nsub-C9ORF059Siemens_01\tASL_1\t0.70\n",
+        )
+        .unwrap();
+
+        let ext_path = temp.path().join("covariates.csv");
+        fs::write(
+            &ext_path,
+            "Subject,Diagnosis\nC9ORF007Philips,AD\nc9orf059siemens,Control\n",
+        )
+        .unwrap();
+
+        let state = AppState::default();
+        load_qcbf_data_impl(temp.path().to_path_buf(), "test.tsv".to_string(), &state).unwrap();
+        let result = check_join_sanity_impl(
+            temp.path().to_path_buf(),
+            "test.tsv".to_string(),
+            ext_path.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "subject".to_string(),
+                right: "Subject".to_string(),
+            }],
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(result.overlap_count, 2);
+        assert_eq!(result.unmatched_left_count, 0);
+    }
+
+    #[test]
     fn test_check_join_sanity_zero_overlap() {
         let temp = tempfile::tempdir().unwrap();
         let stats_dir = temp.path().join("derivatives/ExploreASL/Population/Stats");
@@ -611,5 +655,362 @@ mod tests {
             .clone();
         assert_eq!(cached_before, cached_after);
         assert_eq!(cached_ext_before, cached_ext_after);
+    }
+
+    #[test]
+    fn test_integration_clinical_covariates_join() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap();
+        let test_metadata_dir = workspace_dir.join("test/fixtures/metadata");
+        let project_root = workspace_dir.join("test/fixtures");
+        let qcbf_relative_path = "mean_qCBF_mock.tsv".to_string();
+        let ext_path = test_metadata_dir.join("clinical_covariates.csv");
+
+        let state = AppState::default();
+        load_qcbf_data_impl(project_root.clone(), qcbf_relative_path.clone(), &state).unwrap();
+
+        // 1. Sanity check: clean 1:1 join, all rows match, no warnings
+        let sanity = check_join_sanity_impl(
+            project_root.clone(),
+            qcbf_relative_path.clone(),
+            ext_path.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "participant_id".to_string(),
+            }],
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(sanity.overlap_count, 8);
+        assert_eq!(sanity.unmatched_left_count, 0);
+        assert!(sanity.left_keys_unique);
+        assert!(sanity.right_keys_unique);
+
+        // 2. Execute join: should succeed and have exactly 8 rows
+        let joined = execute_join_impl(
+            project_root,
+            qcbf_relative_path,
+            ext_path.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "participant_id".to_string(),
+            }],
+            true, // drop_right_on
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(joined.row_count, 8);
+        assert!(joined.columns.iter().any(|c| c.name == "Diagnosis"));
+        assert!(joined.columns.iter().any(|c| c.name == "Age"));
+    }
+
+    #[test]
+    fn test_integration_demographics_multi_key_join() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap();
+        let test_metadata_dir = workspace_dir.join("test/fixtures/metadata");
+        let project_root = workspace_dir.join("test/fixtures");
+        let qcbf_relative_path = "mean_qCBF_mock.tsv".to_string();
+        let ext_path = test_metadata_dir.join("demographics.tsv");
+
+        let state = AppState::default();
+        load_qcbf_data_impl(project_root.clone(), qcbf_relative_path.clone(), &state).unwrap();
+
+        let sanity = check_join_sanity_impl(
+            project_root.clone(),
+            qcbf_relative_path.clone(),
+            ext_path.to_string_lossy().to_string(),
+            vec![
+                JoinKeyPair {
+                    left: "subject".to_string(),
+                    right: "Subject".to_string(),
+                },
+                JoinKeyPair {
+                    left: "session".to_string(),
+                    right: "Session".to_string(),
+                },
+            ],
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(sanity.overlap_count, 8);
+        assert_eq!(sanity.unmatched_left_count, 0);
+
+        let joined = execute_join_impl(
+            project_root,
+            qcbf_relative_path,
+            ext_path.to_string_lossy().to_string(),
+            vec![
+                JoinKeyPair {
+                    left: "subject".to_string(),
+                    right: "Subject".to_string(),
+                },
+                JoinKeyPair {
+                    left: "session".to_string(),
+                    right: "Session".to_string(),
+                },
+            ],
+            true, // drop_right_on
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(joined.row_count, 8);
+        assert!(joined.columns.iter().any(|c| c.name == "MeanMotion_x"));
+        assert!(joined.columns.iter().any(|c| c.name == "MeanMotion_y"));
+    }
+
+    #[test]
+    fn test_integration_semicolon_delimiter_auto_detection() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap();
+        let test_metadata_dir = workspace_dir.join("test/fixtures/metadata");
+        let project_root = workspace_dir.join("test/fixtures");
+        let qcbf_relative_path = "mean_qCBF_mock.tsv".to_string();
+        let ext_path = test_metadata_dir.join("diagnosis_semicolon.csv");
+
+        let state = AppState::default();
+        load_qcbf_data_impl(project_root.clone(), qcbf_relative_path.clone(), &state).unwrap();
+
+        let sanity = check_join_sanity_impl(
+            project_root.clone(),
+            qcbf_relative_path.clone(),
+            ext_path.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "participant_id".to_string(),
+            }],
+            default_na_tokens(),
+            None,
+            None, // auto-detect
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(sanity.overlap_count, 8);
+        assert_eq!(sanity.unmatched_left_count, 0);
+    }
+
+    #[test]
+    fn test_integration_missing_value_normalization() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap();
+        let test_metadata_dir = workspace_dir.join("test/fixtures/metadata");
+        let project_root = workspace_dir.join("test/fixtures");
+        let qcbf_relative_path = "mean_qCBF_mock.tsv".to_string();
+        let ext_path = test_metadata_dir.join("with_missing_values.csv");
+
+        let state = AppState::default();
+        load_qcbf_data_impl(project_root.clone(), qcbf_relative_path.clone(), &state).unwrap();
+
+        let _joined = execute_join_impl(
+            project_root,
+            qcbf_relative_path,
+            ext_path.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "participant_id".to_string(),
+            }],
+            true,
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        let active_guard = state.active_data.lock().unwrap();
+        let active = active_guard.as_ref().unwrap();
+
+        let row = active
+            .rows
+            .iter()
+            .find(|r| r.get("participant_id") == Some(&"sub-001_02".to_string()))
+            .unwrap();
+        assert_eq!(row.get("Biomarker_Tau"), Some(&"".to_string())); // normalized from NA
+        assert_eq!(row.get("Biomarker_NfL"), Some(&"11.8".to_string()));
+
+        let row2 = active
+            .rows
+            .iter()
+            .find(|r| r.get("participant_id") == Some(&"sub-002_11".to_string()))
+            .unwrap();
+        assert_eq!(row2.get("Biomarker_Tau"), Some(&"".to_string())); // normalized from <NA>
+        assert_eq!(row2.get("Biomarker_NfL"), Some(&"52.1".to_string()));
+    }
+
+    #[test]
+    fn test_integration_partial_overlap() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap();
+        let test_metadata_dir = workspace_dir.join("test/fixtures/metadata");
+        let project_root = workspace_dir.join("test/fixtures");
+        let qcbf_relative_path = "mean_qCBF_mock.tsv".to_string();
+        let ext_path = test_metadata_dir.join("partial_overlap.csv");
+
+        let state = AppState::default();
+        load_qcbf_data_impl(project_root.clone(), qcbf_relative_path.clone(), &state).unwrap();
+
+        let sanity = check_join_sanity_impl(
+            project_root.clone(),
+            qcbf_relative_path.clone(),
+            ext_path.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "participant_id".to_string(),
+            }],
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(sanity.overlap_count, 4);
+        assert_eq!(sanity.unmatched_left_count, 4);
+    }
+
+    #[test]
+    fn test_integration_duplicate_right_keys() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap();
+        let test_metadata_dir = workspace_dir.join("test/fixtures/metadata");
+        let project_root = workspace_dir.join("test/fixtures");
+        let qcbf_relative_path = "mean_qCBF_mock.tsv".to_string();
+        let ext_path = test_metadata_dir.join("duplicate_right_keys.csv");
+
+        let state = AppState::default();
+        load_qcbf_data_impl(project_root.clone(), qcbf_relative_path.clone(), &state).unwrap();
+
+        let sanity = check_join_sanity_impl(
+            project_root.clone(),
+            qcbf_relative_path.clone(),
+            ext_path.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "subject".to_string(),
+                right: "Subject".to_string(),
+            }],
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert!(!sanity.right_keys_unique);
+    }
+
+    #[test]
+    fn test_integration_collision_columns() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap();
+        let test_metadata_dir = workspace_dir.join("test/fixtures/metadata");
+        let project_root = workspace_dir.join("test/fixtures");
+        let qcbf_relative_path = "mean_qCBF_mock.tsv".to_string();
+        let ext_path = test_metadata_dir.join("collision_columns.csv");
+
+        let state = AppState::default();
+        load_qcbf_data_impl(project_root.clone(), qcbf_relative_path.clone(), &state).unwrap();
+
+        let joined = execute_join_impl(
+            project_root,
+            qcbf_relative_path,
+            ext_path.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "participant_id".to_string(),
+            }],
+            true,
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        assert!(joined.columns.iter().any(|c| c.name == "MeanMotion_x"));
+        assert!(joined.columns.iter().any(|c| c.name == "MeanMotion_y"));
+        assert!(joined.columns.iter().any(|c| c.name == "Site_x"));
+        assert!(joined.columns.iter().any(|c| c.name == "Site_y"));
+        assert!(joined.columns.iter().any(|c| c.name == "Total_GM_B_x"));
+        assert!(joined.columns.iter().any(|c| c.name == "Total_GM_B_y"));
+    }
+
+    #[test]
+    fn test_integration_successive_joins_no_leak() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace_dir = manifest_dir.parent().unwrap();
+        let test_metadata_dir = workspace_dir.join("test/fixtures/metadata");
+        let project_root = workspace_dir.join("test/fixtures");
+        let qcbf_relative_path = "mean_qCBF_mock.tsv".to_string();
+        let ext_path_1 = test_metadata_dir.join("clinical_covariates.csv");
+        let ext_path_2 = test_metadata_dir.join("demographics.tsv");
+
+        let state = AppState::default();
+
+        // 1. Load data
+        load_qcbf_data_impl(project_root.clone(), qcbf_relative_path.clone(), &state).unwrap();
+
+        // 2. Perform first join (clinical covariates)
+        execute_join_impl(
+            project_root.clone(),
+            qcbf_relative_path.clone(),
+            ext_path_1.to_string_lossy().to_string(),
+            vec![JoinKeyPair {
+                left: "participant_id".to_string(),
+                right: "participant_id".to_string(),
+            }],
+            true,
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        // 3. Now run sanity check for a DIFFERENT join (demographics.tsv)
+        // This sanity check should run against the raw qCBF rows, NOT the merged rows!
+        let sanity = check_join_sanity_impl(
+            project_root,
+            qcbf_relative_path,
+            ext_path_2.to_string_lossy().to_string(),
+            vec![
+                JoinKeyPair {
+                    left: "subject".to_string(),
+                    right: "Subject".to_string(),
+                },
+                JoinKeyPair {
+                    left: "session".to_string(),
+                    right: "Session".to_string(),
+                },
+            ],
+            default_na_tokens(),
+            None,
+            None,
+            &state,
+        )
+        .unwrap();
+
+        // If leakage occurred, sanity check would read the merged rows (which has 8 rows but with collision suffixes/merged fields)
+        // or could fail sanity expectations.
+        // It should successfully overlap exactly 8 rows.
+        assert_eq!(sanity.overlap_count, 8);
+        assert_eq!(sanity.unmatched_left_count, 0);
+        assert!(sanity.left_keys_unique);
     }
 }

@@ -1,0 +1,9 @@
+participant_id,Diagnosis,Age,Sex,Site,CDR_Global,MMSE
+sub-001_01,Presymptomatic,58,F,London,0,29
+sub-001_02,Presymptomatic,58,F,London,0,28
+sub-001_11,Presymptomatic,59,F,London,0.5,27
+sub-002_01,Symptomatic,62,M,Milan,1,22
+sub-002_02,Symptomatic,62,M,Milan,1,21
+sub-002_11,Symptomatic,63,M,Milan,1.5,19
+sub-002_12,Symptomatic,63,M,Milan,1.5,18
+sub-002_13,Symptomatic,63,M,Milan,2,16
