@@ -37,7 +37,6 @@ export default defineConfig(async () => ({
     setupFiles: ["./src/test/setup.tsx"],
     exclude: ["**/node_modules/**", "**/.worktrees/**", "e2e-tests/**"],
     pool: "forks",
-    dangerouslyIgnoreUnhandledErrors: true,
     testTimeout: 30000,
   },
 }));
