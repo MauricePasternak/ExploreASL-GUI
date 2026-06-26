@@ -3,19 +3,19 @@ import {
   Button,
   Checkbox,
   Group,
+  Paper,
   Select,
   Stack,
   TagsInput,
   Text,
-  Paper,
 } from "@mantine/core";
 import { IconUpload } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
-import { useVisualizationStore } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { useVisualizationStore } from "../../stores/visualizationStore";
 import JoinDiagram from "./JoinDiagram";
 import SanityChecks from "./SanityChecks";
 
@@ -220,7 +220,7 @@ export default function JoinConfig() {
           {keyPairs.map((pair, i) => (
             <Group key={i} gap="xs" data-testid={`key-pair-${i}`}>
               <Select
-                placeholder="qCBF column"
+                placeholder="column from qCBF data"
                 data={leftColumns}
                 value={pair.left || null}
                 onChange={(val) => handleKeyPairChange(i, "left", val)}
@@ -228,7 +228,7 @@ export default function JoinConfig() {
               />
               <Text>↔</Text>
               <Select
-                placeholder="External column"
+                placeholder="column from external data"
                 data={extColumns}
                 value={pair.right || null}
                 onChange={(val) => handleKeyPairChange(i, "right", val)}

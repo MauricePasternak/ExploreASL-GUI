@@ -1302,6 +1302,12 @@ pub fn run_pipeline(
     let n_workers = workers as usize;
 
     for i_worker in 1..=n_workers {
+        // Stagger worker launches to avoid ExploreASL initialization races
+        // that can cause early worker exits (exitCode 1).
+        if i_worker > 1 {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+
         let batch = format!(
             "addpath('{}'); ExploreASL('{}', 0, [{}], 0, {}, {})",
             exploreasl_str, project_root_str, b_process_str, i_worker, n_workers,
