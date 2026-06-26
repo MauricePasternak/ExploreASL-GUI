@@ -1,4 +1,5 @@
-import { Switch, NumberInput, Select, Stack, Group } from "@mantine/core";
+import { Switch, NumberInput, Select, Stack, Group, Alert } from "@mantine/core";
+import { IconAlertTriangle } from "@tabler/icons-react";
 
 import type { DataParState } from "../../schemas/dataParSchema";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
@@ -40,6 +41,35 @@ export function GeneralSettingsSection({
         placeholder={FIELD_METADATA.Quality.defaultHint}
         data-testid="field-Quality"
       />
+
+      <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
+        <Switch
+          id="switch-enableMetadataGroupingCorrection"
+          checked={dataPar.enableMetadataGroupingCorrection ?? false}
+          onChange={(e) =>
+            onFieldChange("enableMetadataGroupingCorrection", e.currentTarget.checked)
+          }
+          data-testid="field-enableMetadataGroupingCorrection"
+        />
+        <DataParFieldLabel
+          fieldKey="enableMetadataGroupingCorrection"
+          htmlFor="switch-enableMetadataGroupingCorrection"
+        />
+      </Group>
+
+      {dataPar.enableMetadataGroupingCorrection && (
+        <Alert
+          color="yellow"
+          title="Warning: Site-Scanner Correction"
+          icon={<IconAlertTriangle size={16} />}
+          data-testid="participants-warning-callout"
+        >
+          Because site will be present in the participants.tsv file, ExploreASL's Population
+          directory WILL enact Site-Scanner correction on that basis (i.e., creates a site-specific
+          mean scan and derives multiplicative images to normalize between-site/scanner intensity
+          differences). If you do not want this behavior, do not enable this option.
+        </Alert>
+      )}
 
       <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
 

@@ -53,6 +53,7 @@ const ALL_EXPECTED_KEYS = [
   "stopAfterErrors",
   "bLesionFilling",
   "bAutoACPC",
+  "enableMetadataGroupingCorrection",
   // aslProcessing
   "motionCorrection",
   "bTopUp",

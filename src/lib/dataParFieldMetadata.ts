@@ -377,6 +377,15 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     tier: "advanced",
     widget: "toggle",
   },
+  enableMetadataGroupingCorrection: {
+    label: "Enable Metadata-grouping difference correction",
+    description:
+      "Generate or modify participants.tsv (at derivatives/ExploreASL/participants.tsv) and participants.json before starting the pipeline. Columns participant_id, session, and site (whitespace replaced with underscores, mapped from your metadata groups and subject row assignments) will be ensured.",
+    defaultHint: "false",
+    section: "generalSettings",
+    tier: "basic",
+    widget: "toggle",
+  },
 
   // === aslProcessing ===
   motionCorrection: {

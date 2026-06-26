@@ -7,7 +7,6 @@ import {
   Stack,
   Text,
   TextInput,
-  Tooltip,
   type ComboboxItem,
 } from "@mantine/core";
 import { Controller, type Control, type FieldPath } from "react-hook-form";
@@ -74,18 +73,7 @@ export function BidsFieldLabel({ label, fieldName }: BidsFieldLabelProps) {
           </Text>
         )}
       </Text>
-      <Tooltip
-        label={description}
-        multiline
-        w={320}
-        withArrow
-        withinPortal
-        transitionProps={{ duration: 0 }}
-        openDelay={0}
-        closeDelay={0}
-      >
-        <FieldInfoIcon aria-label={`Info for ${label}`} />
-      </Tooltip>
+      <FieldInfoIcon tooltipLabel={description} aria-label={`Info for ${label}`} />
     </Group>
   );
 }

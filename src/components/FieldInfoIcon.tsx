@@ -1,5 +1,7 @@
 import { IconInfoCircle } from "@tabler/icons-react";
-import { forwardRef, type CSSProperties, type MouseEvent } from "react";
+import { forwardRef, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+
+import { PremiumTooltip } from "./PremiumTooltip";
 
 const ICON_SIZE_PX = 18;
 
@@ -15,15 +17,16 @@ const wrapperStyle: CSSProperties = {
 
 interface FieldInfoIconProps {
   "aria-label": string;
+  tooltipLabel?: ReactNode;
   onClick?: (e: MouseEvent<HTMLSpanElement>) => void;
   onMouseDown?: (e: MouseEvent<HTMLSpanElement>) => void;
 }
 
 export const FieldInfoIcon = forwardRef<HTMLSpanElement, FieldInfoIconProps>(function FieldInfoIcon(
-  { "aria-label": ariaLabel, onClick, onMouseDown },
+  { "aria-label": ariaLabel, tooltipLabel, onClick, onMouseDown },
   ref,
 ) {
-  return (
+  const iconNode = (
     <span
       ref={ref}
       aria-label={ariaLabel}
@@ -40,5 +43,15 @@ export const FieldInfoIcon = forwardRef<HTMLSpanElement, FieldInfoIconProps>(fun
         style={{ display: "block", pointerEvents: "none" }}
       />
     </span>
+  );
+
+  if (!tooltipLabel) {
+    return iconNode;
+  }
+
+  return (
+    <PremiumTooltip label={tooltipLabel} w={320}>
+      {iconNode}
+    </PremiumTooltip>
   );
 });

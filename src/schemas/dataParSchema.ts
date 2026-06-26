@@ -49,6 +49,7 @@ export const GeneralSettingsSectionSchema = z.object({
   SkipIfNoASL: z.boolean().optional(),
   SkipIfNoM0: z.boolean().optional(),
   stopAfterErrors: z.number().optional(),
+  enableMetadataGroupingCorrection: z.boolean().optional(),
 });
 
 export const ASLProcessingSectionSchema = z.object({
