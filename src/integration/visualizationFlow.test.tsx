@@ -62,19 +62,62 @@ const mockInspection = {
   columns: [
     {
       name: "participant_id",
+      originalName: "participant_id",
+      source: "qcbf" as const,
       units: "",
       inferredType: "nominal",
       levels: ["sub-X_01"],
       isIdentifier: true,
     },
-    { name: "subject", units: "", inferredType: "nominal", levels: ["sub-X"], isIdentifier: true },
-    { name: "session", units: "", inferredType: "nominal", levels: ["01"], isIdentifier: true },
-    { name: "run", units: "", inferredType: "nominal", levels: ["ASL_1"], isIdentifier: true },
-    { name: "GM_vol", units: "Liter", inferredType: "continuous", levels: [], isIdentifier: false },
-    { name: "Site", units: "", inferredType: "nominal", levels: ["1", "2"], isIdentifier: false },
+    {
+      name: "subject",
+      originalName: "subject",
+      source: "qcbf" as const,
+      units: "",
+      inferredType: "nominal",
+      levels: ["sub-X"],
+      isIdentifier: true,
+    },
+    {
+      name: "session",
+      originalName: "session",
+      source: "qcbf" as const,
+      units: "",
+      inferredType: "nominal",
+      levels: ["01"],
+      isIdentifier: true,
+    },
+    {
+      name: "run",
+      originalName: "run",
+      source: "qcbf" as const,
+      units: "",
+      inferredType: "nominal",
+      levels: ["ASL_1"],
+      isIdentifier: true,
+    },
+    {
+      name: "GM_vol",
+      originalName: "GM_vol",
+      source: "qcbf" as const,
+      units: "Liter",
+      inferredType: "continuous",
+      levels: [],
+      isIdentifier: false,
+    },
+    {
+      name: "Site",
+      originalName: "Site",
+      source: "qcbf" as const,
+      units: "",
+      inferredType: "nominal",
+      levels: ["1", "2"],
+      isIdentifier: false,
+    },
   ],
   rowCount: 10,
-  fileHash: "abc123",
+  qcbfHash: "abc123",
+  externalHash: null,
 };
 
 const mockRows = [
@@ -92,13 +135,14 @@ describe("Visualization setup flow integration", () => {
   beforeEach(() => {
     // Reset stores
     useVisualizationStore.setState({
-      contractSources: [],
+      qcbfSource: null,
+      joinConfig: null,
       columnTypes: {},
       identifiers: null,
       levelOrderings: {},
       axisAssignment: { x: null, y: null, colorBy: null },
       domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
-      stage: "selectFile",
+      stage: "selectData",
       splitRatio: 0.6,
       filtersExpanded: false,
       availableFiles: [],
@@ -133,7 +177,7 @@ describe("Visualization setup flow integration", () => {
     // Default mock: list_stats_files returns files
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "list_stats_files") return Promise.resolve(mockFiles);
-      if (cmd === "inspect_tsv") return Promise.resolve(mockInspection);
+      if (cmd === "load_qcbf_data") return Promise.resolve(mockInspection);
       if (cmd === "read_tsv_columns") return Promise.resolve(mockRows);
       if (cmd === "set_active_project") return Promise.resolve(undefined);
       return Promise.resolve([]);
@@ -148,21 +192,21 @@ describe("Visualization setup flow integration", () => {
 
   it("shows file dropdown in step 1", async () => {
     renderWithMantine(<VisualizationPage />);
-    const dropdown = await screen.findByTestId("file-selection-dropdown");
+    const dropdown = await screen.findByTestId("qcbf-file-dropdown");
     expect(dropdown).toBeInTheDocument();
   });
 
   it("shows invalidation banner on hash mismatch", async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "list_stats_files") return Promise.resolve(mockFiles);
-      if (cmd === "inspect_tsv")
-        return Promise.resolve({ ...mockInspection, fileHash: "different_hash" });
+      if (cmd === "load_qcbf_data")
+        return Promise.resolve({ ...mockInspection, qcbfHash: "different_hash" });
       return Promise.resolve([]);
     });
 
     // Set a contract with a hash that won't match
     useVisualizationStore.setState({
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc123" }],
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       stage: "visualize",
     });
 
@@ -173,8 +217,8 @@ describe("Visualization setup flow integration", () => {
 
   it("re-populates inspection and enables next button when loaded with valid contract", async () => {
     useVisualizationStore.setState({
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc123" }],
-      stage: "selectFile",
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
+      stage: "selectData",
     });
 
     renderWithMantine(<VisualizationPage />);
@@ -189,7 +233,7 @@ describe("Visualization setup flow integration", () => {
 
   it("keeps the selected point loaded when opening the settings drawer", async () => {
     useVisualizationStore.setState({
-      contractSources: [{ relativePath: "test.tsv", fileHash: "abc123" }],
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       stage: "visualize",
       axisAssignment: { x: "Site", y: "GM_vol", colorBy: null },
       columnTypes: { Site: "nominal", GM_vol: "continuous" },
@@ -221,5 +265,63 @@ describe("Visualization setup flow integration", () => {
 
     // Verify selected point is still selected
     expect(useVisualizationStore.getState().selectedPointId).toBe("sub-X_01");
+  });
+
+  it("calls execute_join when Next is clicked with join configured", async () => {
+    const mockJoinedInspection = {
+      ...mockInspection,
+      columns: [
+        ...mockInspection.columns,
+        {
+          name: "Diagnosis",
+          originalName: "Diagnosis",
+          source: "external" as const,
+          units: "",
+          inferredType: "nominal",
+          levels: ["HC", "FTD"],
+          isIdentifier: false,
+        },
+      ],
+      qcbfHash: "abc123",
+      externalHash: "ext123",
+    };
+
+    mockInvoke.mockImplementation((cmd: string, args: any) => {
+      if (cmd === "list_stats_files") return Promise.resolve(mockFiles);
+      if (cmd === "load_qcbf_data") return Promise.resolve(mockInspection);
+      if (cmd === "execute_join") {
+        expect(args.qcbfRelativePath).toBe("test.tsv");
+        expect(args.externalAbsolutePath).toBe("/tmp/external.csv");
+        return Promise.resolve(mockJoinedInspection);
+      }
+      return Promise.resolve([]);
+    });
+
+    useVisualizationStore.setState({
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
+      joinConfig: {
+        externalSource: { absolutePath: "/tmp/external.csv", fileHash: "ext123", sheetName: null },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+        dropRightOn: true,
+        naTokens: ["", "NaN"],
+        delimiter: ",",
+      },
+      stage: "selectData",
+      inspection: mockInspection,
+    });
+
+    renderWithMantine(<VisualizationPage />);
+
+    // Click next button
+    const nextBtn = await screen.findByTestId("stepper-next-btn");
+    expect(nextBtn).not.toBeDisabled();
+    nextBtn.click();
+
+    // Wait for state transition
+    await vi.waitFor(() => {
+      expect(useVisualizationStore.getState().stage).toBe("columnTypes");
+    });
+
+    expect(useVisualizationStore.getState().inspection).toEqual(mockJoinedInspection);
   });
 });

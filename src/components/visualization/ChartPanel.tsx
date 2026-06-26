@@ -53,7 +53,7 @@ export default function ChartPanel() {
   const axisAssignment = useVisualizationStore((s) => s.axisAssignment);
   const columnTypes = useVisualizationStore((s) => s.columnTypes);
   const inspection = useVisualizationStore((s) => s.inspection);
-  const contractSources = useVisualizationStore((s) => s.contractSources);
+  const qcbfSource = useVisualizationStore((s) => s.qcbfSource);
   const chartData = useVisualizationStore((s) => s.chartData);
   const setChartData = useVisualizationStore((s) => s.setChartData);
   const selectPoint = useVisualizationStore((s) => s.selectPoint);
@@ -106,8 +106,8 @@ export default function ChartPanel() {
   const isUnsupported = yType !== "continuous" && yType !== null;
 
   const projectRoot = project?.projectMeta.rootPath;
-  const fileSourcePath = contractSources[0]?.relativePath;
-  const fileSourceHash = contractSources[0]?.fileHash;
+  const fileSourcePath = qcbfSource?.relativePath;
+  const fileSourceHash = qcbfSource?.fileHash;
   const columnTypesSerialized = JSON.stringify(columnTypes);
 
   useEffect(() => {
