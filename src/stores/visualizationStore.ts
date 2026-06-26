@@ -110,13 +110,16 @@ interface EphemeralState {
   inspection: {
     columns: Array<{
       name: string;
+      originalName: string;
+      source: "qcbf" | "external";
       units: string;
       inferredType: string;
       levels: string[];
       isIdentifier: boolean;
     }>;
     rowCount: number;
-    fileHash: string;
+    qcbfHash: string;
+    externalHash: string | null;
   } | null;
   chartData: ChartPoint[];
   selectedPointId: string | null;
