@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 import ColumnTypes from "../components/visualization/ColumnTypes";
-import FileSelection from "../components/visualization/FileSelection";
+import DataSelection from "../components/visualization/DataSelection";
 import LevelOrdering from "../components/visualization/LevelOrdering";
 import VisualizeStep from "../components/visualization/VisualizeStep";
 import { useVisualizationSync } from "../hooks/useVisualizationSync";
@@ -32,7 +32,7 @@ export default function VisualizationPage() {
         !c.isIdentifier && (columnTypes[c.name] === "ordinal" || columnTypes[c.name] === "nominal"),
     ) ?? false;
 
-  const visibleSteps = ["selectFile", "columnTypes"];
+  const visibleSteps = ["selectData", "columnTypes"];
   if (hasCategorical) visibleSteps.push("levelOrdering");
   visibleSteps.push("visualize");
   const activeStep = visibleSteps.indexOf(stage);
@@ -64,25 +64,75 @@ export default function VisualizationPage() {
   useEffect(() => {
     async function validateContract() {
       const currentProject = useProjectStore.getState().project;
-      const sources = useVisualizationStore.getState().contractSources;
-      if (!currentProject || sources.length === 0) return;
-      for (const source of sources) {
+      const qcbfSource = useVisualizationStore.getState().qcbfSource;
+      const joinConfig = useVisualizationStore.getState().joinConfig;
+      if (!currentProject || !qcbfSource) return;
+
+      if (joinConfig) {
+        // Join-active path: call execute_join
         try {
           const result = await invoke<{
             columns: Array<{
               name: string;
+              originalName: string;
+              source: "qcbf" | "external";
               units: string;
               inferredType: string;
               levels: string[];
               isIdentifier: boolean;
             }>;
             rowCount: number;
-            fileHash: string;
-          }>("inspect_tsv", {
+            qcbfHash: string;
+            externalHash: string | null;
+          }>("execute_join", {
             projectRoot: currentProject.projectMeta.rootPath,
-            relativePath: source.relativePath,
+            qcbfRelativePath: qcbfSource.relativePath,
+            externalAbsolutePath: joinConfig.externalSource.absolutePath,
+            keys: joinConfig.keys,
+            dropRightOn: joinConfig.dropRightOn,
+            naTokens: joinConfig.naTokens,
+            sheetName: joinConfig.externalSource.sheetName,
+            delimiter: joinConfig.delimiter,
           });
-          if (result.fileHash !== source.fileHash) {
+          if (result.qcbfHash !== qcbfSource.fileHash) {
+            useVisualizationStore.getState().invalidateContract();
+            setInvalidationBanner("Data file has changed. Please reconfigure.");
+            return;
+          }
+          if (result.externalHash !== joinConfig.externalSource.fileHash) {
+            useVisualizationStore.getState().setJoinConfig(null);
+            setInvalidationBanner(
+              "External data file has changed. Join configuration has been reset.",
+            );
+            return;
+          }
+          useVisualizationStore.getState().setInspection(result);
+        } catch {
+          useVisualizationStore.getState().invalidateContract();
+          setInvalidationBanner(`File '${qcbfSource.relativePath}' no longer exists.`);
+          return;
+        }
+      } else {
+        // qCBF-only path: call load_qcbf_data
+        try {
+          const result = await invoke<{
+            columns: Array<{
+              name: string;
+              originalName: string;
+              source: "qcbf" | "external";
+              units: string;
+              inferredType: string;
+              levels: string[];
+              isIdentifier: boolean;
+            }>;
+            rowCount: number;
+            qcbfHash: string;
+            externalHash: string | null;
+          }>("load_qcbf_data", {
+            projectRoot: currentProject.projectMeta.rootPath,
+            relativePath: qcbfSource.relativePath,
+          });
+          if (result.qcbfHash !== qcbfSource.fileHash) {
             useVisualizationStore.getState().invalidateContract();
             setInvalidationBanner("Data file has changed. Please reconfigure.");
             return;
@@ -90,7 +140,7 @@ export default function VisualizationPage() {
           useVisualizationStore.getState().setInspection(result);
         } catch {
           useVisualizationStore.getState().invalidateContract();
-          setInvalidationBanner(`File '${source.relativePath}' no longer exists.`);
+          setInvalidationBanner(`File '${qcbfSource.relativePath}' no longer exists.`);
           return;
         }
       }
@@ -99,7 +149,7 @@ export default function VisualizationPage() {
   }, []);
 
   function handleNext() {
-    if (stage === "selectFile") {
+    if (stage === "selectData") {
       setStage("columnTypes");
     } else if (stage === "columnTypes") {
       if (hasCategorical) {
@@ -118,16 +168,16 @@ export default function VisualizationPage() {
     } else if (stage === "levelOrdering") {
       setStage("columnTypes");
     } else if (stage === "columnTypes") {
-      setStage("selectFile");
+      setStage("selectData");
     }
   }
 
   const nextDisabled =
-    (stage === "selectFile" && !inspection) ||
+    (stage === "selectData" && !inspection) ||
     (stage === "columnTypes" && Object.values(columnTypes).every((t) => t === "excluded"));
 
   const nextLabel =
-    stage === "selectFile"
+    stage === "selectData"
       ? "Next"
       : stage === "columnTypes"
         ? hasCategorical
@@ -193,8 +243,8 @@ export default function VisualizationPage() {
           },
         }}
       >
-        <Stepper.Step label="Select File" data-testid="step-select-file">
-          <FileSelection />
+        <Stepper.Step label="Select Data" data-testid="step-select-data">
+          <DataSelection />
         </Stepper.Step>
         <Stepper.Step label="Column Types" data-testid="step-column-types">
           <ColumnTypes />
