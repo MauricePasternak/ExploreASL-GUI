@@ -44,9 +44,9 @@ describe("ProjectFileSchema", () => {
       uiState: {
         population: { completed: true },
         dataVis: {
-          contractSources: [{ relativePath: "test.tsv", fileHash: "abc123" }],
+          qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
           columnTypes: { GM_vol: "continuous" },
-          stage: "visualize",
+          stage: "selectData",
         },
       },
     };

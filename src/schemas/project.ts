@@ -80,13 +80,31 @@ export const ProjectFileSchema = z.object({
       population: z.object({ completed: z.boolean().optional() }).optional(),
       dataVis: z
         .object({
-          contractSources: z
-            .array(
-              z.object({
-                relativePath: z.string(),
+          qcbfSource: z
+            .object({
+              relativePath: z.string(),
+              fileHash: z.string(),
+            })
+            .nullable()
+            .optional(),
+          joinConfig: z
+            .object({
+              externalSource: z.object({
+                absolutePath: z.string(),
                 fileHash: z.string(),
+                sheetName: z.string().nullable(),
               }),
-            )
+              keys: z.array(
+                z.object({
+                  left: z.string(),
+                  right: z.string(),
+                }),
+              ),
+              dropRightOn: z.boolean(),
+              naTokens: z.array(z.string()),
+              delimiter: z.string(),
+            })
+            .nullable()
             .optional(),
           columnTypes: z.record(z.string(), z.string()).optional(),
           identifiers: z
