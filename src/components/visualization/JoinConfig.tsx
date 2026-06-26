@@ -289,7 +289,7 @@ export default function JoinConfig() {
             data-testid="na-tokens-input"
           />
           {joinConfig.naTokens.length === 0 && (
-            <Alert color="yellow" size="sm" data-testid="no-na-tokens-warning">
+            <Alert color="yellow" data-testid="no-na-tokens-warning">
               No NA tokens specified — all values treated as present.
             </Alert>
           )}

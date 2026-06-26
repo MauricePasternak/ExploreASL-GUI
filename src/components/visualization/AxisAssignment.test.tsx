@@ -35,6 +35,8 @@ describe("AxisAssignment", () => {
         columns: [
           {
             name: "age",
+            originalName: "age",
+            source: "qcbf",
             units: "years",
             inferredType: "continuous",
             levels: [],
@@ -42,15 +44,26 @@ describe("AxisAssignment", () => {
           },
           {
             name: "group",
+            originalName: "group",
+            source: "qcbf",
             units: "",
             inferredType: "nominal",
             levels: ["A", "B"],
             isIdentifier: false,
           },
-          { name: "score", units: "", inferredType: "continuous", levels: [], isIdentifier: false },
+          {
+            name: "score",
+            originalName: "score",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
         ],
         rowCount: 10,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       columnTypes: {
         age: "continuous",
@@ -72,14 +85,26 @@ describe("AxisAssignment", () => {
         columns: [
           {
             name: "age",
+            originalName: "age",
+            source: "qcbf",
             units: "years",
             inferredType: "continuous",
             levels: [],
             isIdentifier: false,
           },
-          { name: "id", units: "", inferredType: "nominal", levels: [], isIdentifier: true },
+          {
+            name: "id",
+            originalName: "id",
+            source: "qcbf",
+            units: "",
+            inferredType: "nominal",
+            levels: [],
+            isIdentifier: true,
+          },
           {
             name: "group",
+            originalName: "group",
+            source: "qcbf",
             units: "",
             inferredType: "nominal",
             levels: ["A", "B"],
@@ -87,7 +112,8 @@ describe("AxisAssignment", () => {
           },
         ],
         rowCount: 10,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       columnTypes: {
         age: "continuous",
@@ -106,6 +132,8 @@ describe("AxisAssignment", () => {
         columns: [
           {
             name: "age",
+            originalName: "age",
+            source: "qcbf",
             units: "years",
             inferredType: "continuous",
             levels: [],
@@ -113,6 +141,8 @@ describe("AxisAssignment", () => {
           },
           {
             name: "group",
+            originalName: "group",
+            source: "qcbf",
             units: "",
             inferredType: "nominal",
             levels: ["A", "B"],
@@ -120,7 +150,8 @@ describe("AxisAssignment", () => {
           },
         ],
         rowCount: 10,
-        fileHash: "abc",
+        qcbfHash: "abc",
+        externalHash: null,
       },
       columnTypes: {
         age: "continuous",

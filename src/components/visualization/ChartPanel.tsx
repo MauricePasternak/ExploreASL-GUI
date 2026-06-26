@@ -112,13 +112,12 @@ export default function ChartPanel() {
 
   useEffect(() => {
     async function loadData() {
-      if (!projectRoot || !xCol || !yCol || !fileSourcePath) return;
+      if (!projectRoot || !xCol || !yCol) return;
       const columnsToFetch = [xCol, yCol];
       if (colorByCol && !columnsToFetch.includes(colorByCol)) columnsToFetch.push(colorByCol);
       try {
-        const rows = await invoke<Record<string, string>[]>("read_tsv_columns", {
+        const rows = await invoke<Record<string, string>[]>("read_data_columns", {
           projectRoot,
-          relativePath: fileSourcePath,
           columnNames: columnsToFetch,
         });
         const { points, excluded } = transformToChartData(
@@ -135,11 +134,11 @@ export default function ChartPanel() {
       }
     }
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     xCol,
     yCol,
     colorByCol,
-    fileSourcePath,
     fileSourceHash,
     columnTypesSerialized,
     projectRoot,
