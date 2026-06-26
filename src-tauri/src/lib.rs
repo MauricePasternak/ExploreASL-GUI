@@ -25,7 +25,7 @@ use tauri::Manager;
 use tauri::{LogicalSize, Size};
 use visualization::{
     check_join_sanity, clear_active_project, execute_join, inspect_external_data, list_stats_files,
-    load_qcbf_data, read_data_columns, set_active_project,
+    load_qcbf_data, read_data_columns, set_active_project, stat_file,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -92,6 +92,7 @@ pub fn run() {
             set_active_project,
             clear_active_project,
             check_join_sanity,
+            stat_file,
         ])
         .register_uri_scheme_protocol("niivue", niivue_protocol::handle_niivue_protocol)
         .setup(|app| {

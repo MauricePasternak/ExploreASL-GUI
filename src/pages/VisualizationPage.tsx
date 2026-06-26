@@ -12,6 +12,26 @@ import { useVisualizationSync } from "../hooks/useVisualizationSync";
 import { useProjectStore } from "../stores/projectStore";
 import { useVisualizationStore } from "../stores/visualizationStore";
 
+interface FileStats {
+  mtime: string;
+  size: number;
+}
+
+interface DataInspection {
+  columns: Array<{
+    name: string;
+    originalName: string;
+    source: "qcbf" | "external";
+    units: string;
+    inferredType: string;
+    levels: string[];
+    isIdentifier: boolean;
+  }>;
+  rowCount: number;
+  qcbfHash: string;
+  externalHash: string | null;
+}
+
 export default function VisualizationPage() {
   useVisualizationSync();
   const { colorScheme } = useMantineColorScheme();
@@ -57,10 +77,101 @@ export default function VisualizationPage() {
     }
     scanStats();
 
-    const handleFocus = () => scanStats();
+    const handleFocus = async () => {
+      await scanStats();
+
+      const joinConfig = useVisualizationStore.getState().joinConfig;
+      const qcbfSource = useVisualizationStore.getState().qcbfSource;
+      const currentProject = useProjectStore.getState().project;
+      if (!joinConfig || !qcbfSource || !currentProject) return;
+
+      // Step 1: Stat external file mtime (cheap, no full read)
+      let stats: FileStats;
+      try {
+        stats = await invoke<FileStats>("stat_file", {
+          path: joinConfig.externalSource.absolutePath,
+        });
+      } catch {
+        // File deleted mid-session
+        useVisualizationStore.getState().setJoinConfig(null);
+        const filename =
+          joinConfig.externalSource.absolutePath.split("/").pop() ??
+          joinConfig.externalSource.absolutePath;
+        setInvalidationBanner(`External file '${filename}' no longer exists.`);
+        // Re-run load_qcbf_data to revert to qCBF-only
+        try {
+          const result = await invoke<DataInspection>("load_qcbf_data", {
+            projectRoot: currentProject.projectMeta.rootPath,
+            relativePath: qcbfSource.relativePath,
+          });
+          useVisualizationStore.getState().setInspection(result);
+          const types: Record<string, string> = {};
+          for (const col of result.columns) {
+            types[col.name] = col.inferredType;
+          }
+          useVisualizationStore.getState().setColumnTypes(types);
+          useVisualizationStore.getState().setLevelOrderings({});
+          useVisualizationStore.getState().setAxisAssignment({ x: null, y: null, colorBy: null });
+        } catch {
+          // qCBF file also gone — full invalidation
+          useVisualizationStore.getState().invalidateContract();
+        }
+        return;
+      }
+
+      // Step 2: Compare mtime — skip if unchanged
+      const lastMtime = useVisualizationStore.getState()._lastExtMtime;
+      if (lastMtime && stats.mtime === lastMtime) return;
+      useVisualizationStore.getState()._setLastExtMtime(stats.mtime);
+
+      // Step 3: mtime changed — re-run execute_join to get fresh hash
+      try {
+        const result = await invoke<DataInspection>("execute_join", {
+          projectRoot: currentProject.projectMeta.rootPath,
+          qcbfRelativePath: qcbfSource.relativePath,
+          externalAbsolutePath: joinConfig.externalSource.absolutePath,
+          keys: joinConfig.keys,
+          dropRightOn: joinConfig.dropRightOn,
+          naTokens: joinConfig.naTokens,
+          sheetName: joinConfig.externalSource.sheetName,
+          delimiter: joinConfig.delimiter === "auto" ? null : joinConfig.delimiter,
+        });
+
+        // Step 4: Compare external hash
+        if (result.externalHash !== joinConfig.externalSource.fileHash) {
+          // Content changed — invalidate join, revert to qCBF-only
+          useVisualizationStore.getState().setJoinConfig(null);
+          const qcbfOnlyResult = await invoke<DataInspection>("load_qcbf_data", {
+            projectRoot: currentProject.projectMeta.rootPath,
+            relativePath: qcbfSource.relativePath,
+          });
+          useVisualizationStore.getState().setInspection(qcbfOnlyResult);
+          const types: Record<string, string> = {};
+          for (const col of qcbfOnlyResult.columns) {
+            types[col.name] = col.inferredType;
+          }
+          useVisualizationStore.getState().setColumnTypes(types);
+          useVisualizationStore.getState().setLevelOrderings({});
+          useVisualizationStore.getState().setAxisAssignment({ x: null, y: null, colorBy: null });
+          setInvalidationBanner(
+            "External data file has changed. Join configuration has been reset.",
+          );
+        } else {
+          // Content identical (file was touched but unchanged) — update inspection with fresh merged data
+          useVisualizationStore.getState().setInspection(result);
+        }
+      } catch {
+        // execute_join failed (e.g., file became unreadable) — invalidate join
+        useVisualizationStore.getState().setJoinConfig(null);
+        setInvalidationBanner(
+          "External data file could not be read. Join configuration has been reset.",
+        );
+      }
+    };
+
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [project?.projectMeta.rootPath, setAvailableFiles]);
+  }, [project, setAvailableFiles]);
 
   useEffect(() => {
     async function validateContract() {

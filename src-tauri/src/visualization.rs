@@ -1149,3 +1149,27 @@ pub async fn execute_join(
         &state,
     )
 }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileStats {
+    pub mtime: String,
+    pub size: u64,
+}
+
+#[tauri::command]
+pub async fn stat_file(path: String) -> Result<FileStats, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let mtime = meta
+        .modified()
+        .map(|t| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    Ok(FileStats {
+        mtime,
+        size: meta.len(),
+    })
+}
