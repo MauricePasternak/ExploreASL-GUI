@@ -14,10 +14,10 @@ interface ExternalSource {
 
 interface JoinConfig {
   externalSource: ExternalSource;
-  leftOn: string[];
-  rightOn: string[];
+  keys: Array<{ left: string; right: string }>;
   dropRightOn: boolean;
   naTokens: string[];
+  delimiter: string;
 }
 
 interface Identifiers {
