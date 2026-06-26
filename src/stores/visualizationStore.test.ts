@@ -84,7 +84,7 @@ describe("visualizationStore", () => {
     store.setColumnType("GM_vol", "continuous");
     store.invalidateContract();
     expect(useVisualizationStore.getState().columnTypes).toEqual({});
-    expect(useVisualizationStore.getState().stage).toBe("selectFile");
+    expect(useVisualizationStore.getState().stage).toBe("selectData");
   });
 
   it("setAxisAssignment merges with existing", () => {
@@ -106,7 +106,7 @@ describe("visualizationStore", () => {
       { id: "test", x: 1, y: 2, participantId: "p", subject: "s", session: "01", run: "ASL_1" },
     ]);
     store.reset();
-    expect(useVisualizationStore.getState().stage).toBe("selectFile");
+    expect(useVisualizationStore.getState().stage).toBe("selectData");
     expect(useVisualizationStore.getState().chartData).toEqual([]);
     expect(useVisualizationStore.getState().pointSize).toBe(10);
     expect(useVisualizationStore.getState().nvColormap).toBe("gray");

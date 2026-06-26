@@ -10,7 +10,7 @@ import { useProjectStore } from "../stores/projectStore";
 const AUTOSAVE_DEBOUNCE_MS = 2000;
 
 const VALID_STAGES: readonly StepperStage[] = [
-  "selectFile",
+  "selectData",
   "columnTypes",
   "levelOrdering",
   "visualize",
@@ -18,7 +18,8 @@ const VALID_STAGES: readonly StepperStage[] = [
 
 function extractPersisted(state: ReturnType<typeof useVisualizationStore.getState>) {
   return {
-    contractSources: state.contractSources,
+    qcbfSource: state.qcbfSource,
+    joinConfig: state.joinConfig,
     columnTypes: state.columnTypes,
     identifiers: state.identifiers,
     levelOrderings: state.levelOrderings,
@@ -65,7 +66,8 @@ export function useVisualizationSync() {
 
     const store = useVisualizationStore.getState();
 
-    if (dataVis.contractSources) store.setContractSources(dataVis.contractSources);
+    if (dataVis.qcbfSource !== undefined) store.setQcbfSource(dataVis.qcbfSource ?? null);
+    if (dataVis.joinConfig !== undefined) store.setJoinConfig(dataVis.joinConfig ?? null);
     if (dataVis.columnTypes) store.setColumnTypes(dataVis.columnTypes);
     if (dataVis.identifiers) store.setIdentifiers(dataVis.identifiers);
     if (dataVis.levelOrderings) store.setLevelOrderings(dataVis.levelOrderings);
