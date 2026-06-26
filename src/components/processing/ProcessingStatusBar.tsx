@@ -1,24 +1,6 @@
-import { Badge, Group, Text } from "@mantine/core";
-import { useNavigate, useParams } from "react-router";
+import { Group, Text } from "@mantine/core";
 
 import { useProcessingStore } from "../../stores/processingStore";
-import { useProjectStore } from "../../stores/projectStore";
-
-const PHASE_LABELS: Record<string, string> = {
-  preparing: "Preparing",
-  running: "Running",
-  completed: "Completed",
-  failed: "Failed",
-  cancelled: "Cancelled",
-};
-
-const PHASE_COLORS: Record<string, string> = {
-  preparing: "blue",
-  running: "orange",
-  completed: "teal",
-  failed: "red",
-  cancelled: "gray",
-};
 
 const MODULE_LABELS: Record<string, string> = {
   structural: "Structural",
@@ -67,38 +49,17 @@ function computeModuleStats(
 export default function ProcessingStatusBar() {
   const processingPhase = useProcessingStore((s) => s.processingPhase);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
-  const navigate = useNavigate();
-  const params = useParams();
-  const project = useProjectStore((s) => s.project);
 
   if (processingPhase === "idle") {
     return null;
   }
 
-  const label = PHASE_LABELS[processingPhase] ?? processingPhase;
-  const color = PHASE_COLORS[processingPhase] ?? "gray";
   const moduleStats = computeModuleStats(subjectStatuses);
 
-  const handleClick = () => {
-    const id = params.id ?? project?.projectMeta.id;
-    if (id) {
-      navigate(`/project/${id}/processing`);
-    }
-  };
-
   return (
-    <Group
-      gap="xs"
-      align="center"
-      onClick={handleClick}
-      style={{ cursor: "pointer" }}
-      data-testid="processing-status-bar"
-    >
-      <Badge size="sm" variant="light" color={color}>
-        {label}
-      </Badge>
+    <Group gap="xs" align="center" data-testid="processing-status-bar">
       {moduleStats.length > 0 && (
-        <Text size="xs" c="dimmed" data-testid="processing-status-bar-progress">
+        <Text size="sm" data-testid="processing-status-bar-progress">
           {moduleStats.map((m) => `${m.label} ${m.completeCount}/${m.totalCount}`).join(" · ")}
         </Text>
       )}

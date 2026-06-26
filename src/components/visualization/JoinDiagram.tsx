@@ -1,4 +1,5 @@
 import { Group, Paper, Stack, Text, Badge } from "@mantine/core";
+import { IconArrowLeft } from "@tabler/icons-react";
 
 interface JoinDiagramProps {
   qcbfFileName: string;
@@ -58,10 +59,21 @@ export default function JoinDiagram({
             </Text>
           </Stack>
 
-          <Stack justify="center" style={{ flexShrink: 0 }} data-testid="diagram-connector">
+          <Stack
+            gap={4}
+            align="center"
+            justify="center"
+            style={{ flexShrink: 0 }}
+            data-testid="diagram-connector"
+          >
             <Text size="xs" fw={700} ta="center">
               LEFT
             </Text>
+            <IconArrowLeft
+              size={16}
+              data-testid="diagram-arrow"
+              style={{ color: "var(--mantine-color-dimmed)" }}
+            />
             <Text size="xs" fw={700} ta="center">
               JOIN
             </Text>

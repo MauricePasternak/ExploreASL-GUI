@@ -55,6 +55,7 @@ describe("JoinDiagram", () => {
   it("renders qcbf and external columns, badges and keys", () => {
     renderComponent(defaultProps);
     expect(screen.getByTestId("join-diagram")).toBeInTheDocument();
+    expect(screen.getByTestId("diagram-arrow")).toBeInTheDocument();
 
     // Check files and row counts
     expect(screen.getByText("subjects.tsv")).toBeInTheDocument();
