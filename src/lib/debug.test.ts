@@ -55,14 +55,19 @@ describe("captureSnapshot", () => {
   it("returns a snapshot with all stores and metadata", async () => {
     const globalStore = { theme: "dark" };
     const projectStore = { project: null };
+    const dataParState = { Atlases: ["Total"], TissueMasking: ["GM"], TissueThreshold: [0.7] };
 
     const snapshot = await captureSnapshot(
       () => globalStore,
       () => projectStore,
+      () => dataParState,
     );
 
     expect(snapshot.globalStore).toEqual(globalStore);
     expect(snapshot.projectStore).toEqual(projectStore);
+    expect(snapshot.dataParJson).toEqual({
+      x: { S: { Atlases: ["Total"], TissueMasking: ["GM"], TissueThreshold: [0.7] } },
+    });
     expect(snapshot.route).toBeDefined();
     expect(snapshot.timestamp).toBeDefined();
     expect(snapshot.userAgent).toBeDefined();
@@ -79,6 +84,7 @@ describe("copySnapshotToClipboard", () => {
       route: "#/project/123/import",
       globalStore: {},
       projectStore: {},
+      dataParJson: { x: {} },
       actionLog: [],
       userAgent: "test",
     };
@@ -96,12 +102,14 @@ describe("initDebugKeyboardShortcuts", () => {
     const { notifications } = await import("@mantine/notifications");
     const globalStore = { theme: "dark" };
     const projectStore = { project: null };
+    const dataParState = {};
     const writeText = vi.fn((_text: string) => Promise.resolve());
     Object.assign(navigator, { clipboard: { writeText } });
 
     initDebugKeyboardShortcuts(
       () => globalStore,
       () => projectStore,
+      () => dataParState,
     );
 
     const event = new KeyboardEvent("keydown", {

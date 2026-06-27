@@ -9,6 +9,9 @@
 import { debug, info, warn, error } from "@tauri-apps/plugin-log";
 import { notifications } from "@mantine/notifications";
 
+import { assembleDataPar, type DataParJson } from "./assembleDataPar";
+import type { DataParState } from "../schemas/dataParSchema";
+
 // =============================================================================
 // Console Bridge
 // =============================================================================
@@ -120,6 +123,7 @@ export interface StoreSnapshot {
   route: string;
   globalStore: unknown;
   projectStore: unknown;
+  dataParJson: DataParJson;
   actionLog: ActionEntry[];
   userAgent: string;
 }
@@ -127,12 +131,14 @@ export interface StoreSnapshot {
 export async function captureSnapshot(
   getGlobalStore: () => unknown,
   getProjectStore: () => unknown,
+  getDataParState: () => DataParState,
 ): Promise<StoreSnapshot> {
   return {
     timestamp: new Date().toISOString(),
     route: window.location.hash,
     globalStore: getGlobalStore(),
     projectStore: getProjectStore(),
+    dataParJson: assembleDataPar(getDataParState()),
     actionLog: getActionLog(),
     userAgent: navigator.userAgent,
   };
@@ -146,11 +152,12 @@ export async function copySnapshotToClipboard(snapshot: StoreSnapshot): Promise<
 export function initDebugKeyboardShortcuts(
   getGlobalStore: () => unknown,
   getProjectStore: () => unknown,
+  getDataParState: () => DataParState,
 ) {
   window.addEventListener("keydown", async (event) => {
     if (event.ctrlKey && event.shiftKey && event.key === "D") {
       event.preventDefault();
-      const snapshot = await captureSnapshot(getGlobalStore, getProjectStore);
+      const snapshot = await captureSnapshot(getGlobalStore, getProjectStore, getDataParState);
       await copySnapshotToClipboard(snapshot);
       void info("[DEBUG] Store snapshot copied to clipboard (Ctrl+Shift+D)").catch(() => undefined);
 

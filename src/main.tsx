@@ -19,6 +19,7 @@ import {
 import { compressSnapshot, decompressSnapshot } from "./lib/snapshotCompression";
 import { useGlobalStore } from "./stores/globalStore";
 import { useImportStore } from "./stores/importStore";
+import { useDataParStore } from "./stores/dataParStore";
 import { useProjectStore } from "./stores/projectStore";
 
 const theme = createTheme({
@@ -75,6 +76,7 @@ initConsoleBridge();
 initDebugKeyboardShortcuts(
   () => useGlobalStore.getState(),
   () => useProjectStore.getState(),
+  () => useDataParStore.getState().dataPar,
 );
 
 // Expose debug utilities to window for devtools console access
@@ -91,6 +93,7 @@ window.__DEBUG__ = {
       globalStore: useGlobalStore.getState(),
       projectStore: useProjectStore.getState(),
       importStore: useImportStore.getState(),
+      dataParStore: useDataParStore.getState(),
     };
   },
   get log() {
@@ -103,6 +106,7 @@ window.__DEBUG__ = {
     const snapshot = await captureSnapshot(
       () => useGlobalStore.getState(),
       () => useProjectStore.getState(),
+      () => useDataParStore.getState().dataPar,
     );
     await copySnapshotToClipboard(snapshot);
 
