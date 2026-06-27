@@ -1,3 +1,98 @@
+import { afterEach, vi } from "vitest";
+
+// Wrap global/window timers to track and clean them up after each test.
+// This prevents React 19 scheduler and Mantine transitions from triggering
+// asynchronous callbacks after the JSDOM window object has been torn down.
+const activeTimeouts = new Set<any>();
+const activeIntervals = new Set<any>();
+const activeRays = new Set<any>();
+
+const originalSetTimeout = globalThis.setTimeout;
+const originalClearTimeout = globalThis.clearTimeout;
+const originalSetInterval = globalThis.setInterval;
+const originalClearInterval = globalThis.clearInterval;
+
+globalThis.setTimeout = function (cb: (...args: any[]) => void, delay?: number, ...args: any[]) {
+  let timerId: any;
+  const wrappedCb = (...callbackArgs: any[]) => {
+    activeTimeouts.delete(timerId);
+    cb(...callbackArgs);
+  };
+  timerId = originalSetTimeout(wrappedCb, delay, ...args);
+  activeTimeouts.add(timerId);
+  return timerId;
+} as any;
+
+globalThis.clearTimeout = function (timerId: any) {
+  activeTimeouts.delete(timerId);
+  return originalClearTimeout(timerId);
+} as any;
+
+globalThis.setInterval = function (cb: (...args: any[]) => void, delay?: number, ...args: any[]) {
+  const timerId = originalSetInterval(cb, delay, ...args);
+  activeIntervals.add(timerId);
+  return timerId;
+} as any;
+
+globalThis.clearInterval = function (timerId: any) {
+  activeIntervals.delete(timerId);
+  return originalClearInterval(timerId);
+} as any;
+
+const originalRaf = typeof window !== "undefined" ? window.requestAnimationFrame : undefined;
+const originalCaf = typeof window !== "undefined" ? window.cancelAnimationFrame : undefined;
+
+if (originalRaf && originalCaf) {
+  const wrapRaf = (raf: typeof originalRaf) => {
+    return function (cb: FrameRequestCallback) {
+      let rayId: any;
+      const wrappedCb = (time: number) => {
+        activeRays.delete(rayId);
+        cb(time);
+      };
+      rayId = raf(wrappedCb);
+      activeRays.add(rayId);
+      return rayId;
+    };
+  };
+
+  const wrapCaf = (caf: typeof originalCaf) => {
+    return function (rayId: any) {
+      activeRays.delete(rayId);
+      return caf(rayId);
+    };
+  };
+
+  if (typeof globalThis.requestAnimationFrame === "function") {
+    globalThis.requestAnimationFrame = wrapRaf(globalThis.requestAnimationFrame);
+  }
+  if (typeof globalThis.cancelAnimationFrame === "function") {
+    globalThis.cancelAnimationFrame = wrapCaf(globalThis.cancelAnimationFrame);
+  }
+  if (typeof window !== "undefined") {
+    window.requestAnimationFrame = wrapRaf(originalRaf);
+    window.cancelAnimationFrame = wrapCaf(originalCaf);
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.setTimeout = globalThis.setTimeout;
+  window.clearTimeout = globalThis.clearTimeout;
+  window.setInterval = globalThis.setInterval;
+  window.clearInterval = globalThis.clearInterval;
+}
+
+afterEach(() => {
+  activeTimeouts.forEach((timerId) => originalClearTimeout(timerId));
+  activeTimeouts.clear();
+  activeIntervals.forEach((timerId) => originalClearInterval(timerId));
+  activeIntervals.clear();
+  if (originalCaf) {
+    activeRays.forEach((rayId) => originalCaf(rayId));
+    activeRays.clear();
+  }
+});
+
 import "@testing-library/jest-dom/vitest";
 import "mantine-datatable/styles.css";
 
