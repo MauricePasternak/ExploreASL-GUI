@@ -10,26 +10,11 @@ import LevelOrdering from "../components/visualization/LevelOrdering";
 import VisualizeStep from "../components/visualization/VisualizeStep";
 import { useVisualizationSync } from "../hooks/useVisualizationSync";
 import { useProjectStore } from "../stores/projectStore";
-import { useVisualizationStore } from "../stores/visualizationStore";
+import { useVisualizationStore, DataInspection } from "../stores/visualizationStore";
 
 interface FileStats {
   mtime: string;
   size: number;
-}
-
-interface DataInspection {
-  columns: Array<{
-    name: string;
-    originalName: string;
-    source: "qcbf" | "external";
-    units: string;
-    inferredType: string;
-    levels: string[];
-    isIdentifier: boolean;
-  }>;
-  rowCount: number;
-  qcbfHash: string;
-  externalHash: string | null;
 }
 
 export default function VisualizationPage() {

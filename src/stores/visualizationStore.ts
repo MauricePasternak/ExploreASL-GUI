@@ -104,24 +104,26 @@ interface PersistedState {
   yLegendOffset: number;
 }
 
+export interface DataInspection {
+  columns: Array<{
+    name: string;
+    originalName: string;
+    source: "qcbf" | "external";
+    units: string;
+    inferredType: string;
+    levels: string[];
+    isIdentifier: boolean;
+  }>;
+  rowCount: number;
+  qcbfRowCount: number;
+  qcbfHash: string;
+  externalHash: string | null;
+}
+
 // Ephemeral fields (not persisted)
 interface EphemeralState {
   availableFiles: Array<{ fileName: string; relativePath: string; size: number; modified: string }>;
-  inspection: {
-    columns: Array<{
-      name: string;
-      originalName: string;
-      source: "qcbf" | "external";
-      units: string;
-      inferredType: string;
-      levels: string[];
-      isIdentifier: boolean;
-    }>;
-    rowCount: number;
-    qcbfRowCount: number;
-    qcbfHash: string;
-    externalHash: string | null;
-  } | null;
+  inspection: DataInspection | null;
   chartData: ChartPoint[];
   selectedPointId: string | null;
   viewerState: ViewerState;
