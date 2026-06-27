@@ -7,6 +7,10 @@ describe("PROJECT_PHASES", () => {
   it("includes visualization", () => {
     expect(PROJECT_PHASES).toContain("visualization");
   });
+
+  it("includes manifest", () => {
+    expect(PROJECT_PHASES).toContain("manifest");
+  });
 });
 
 describe("canAccessPhase", () => {
@@ -35,6 +39,21 @@ describe("canAccessPhase", () => {
     const projectWithoutImport = { ...validProject, uiState: {} };
     expect(canAccessPhase(projectWithoutImport, "processing")).toBe(false);
   });
+
+  it("grants manifest when population.completed is true", () => {
+    const project = { ...validProject, uiState: { population: { completed: true } } };
+    expect(canAccessPhase(project, "manifest")).toBe(true);
+  });
+
+  it("denies manifest when population.completed is false", () => {
+    const project = { ...validProject, uiState: { population: { completed: false } } };
+    expect(canAccessPhase(project, "manifest")).toBe(false);
+  });
+
+  it("denies manifest when population.completed is undefined", () => {
+    const project = { ...validProject, uiState: {} };
+    expect(canAccessPhase(project, "manifest")).toBe(false);
+  });
 });
 
 describe("ProjectFileSchema", () => {
@@ -51,5 +70,79 @@ describe("ProjectFileSchema", () => {
       },
     };
     expect(() => ProjectFileSchema.parse(project)).not.toThrow();
+  });
+
+  it("parses project file with manifest.verdicts", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        manifest: {
+          verdicts: {
+            "sub-01_ses-01": { status: "pass", setAt: 1719000000000 },
+            "sub-02_ses-01": {
+              status: "fail",
+              reason: "motion",
+              notes: "Large motion artifacts",
+              setAt: 1719000001000,
+            },
+          },
+        },
+      },
+    };
+    expect(() => ProjectFileSchema.parse(project)).not.toThrow();
+  });
+
+  it("rejects manifest verdict with status fail but no reason", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        manifest: {
+          verdicts: {
+            "sub-01_ses-01": { status: "fail", setAt: 1719000000000 },
+          },
+        },
+      },
+    };
+    const result = ProjectFileSchema.safeParse(project);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects manifest verdict with unknown reason", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        manifest: {
+          verdicts: {
+            "sub-01_ses-01": { status: "fail", reason: "bogus", setAt: 1719000000000 },
+          },
+        },
+      },
+    };
+    const result = ProjectFileSchema.safeParse(project);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects manifest verdict with notes exceeding 500 chars", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        manifest: {
+          verdicts: {
+            "sub-01_ses-01": {
+              status: "fail",
+              reason: "motion",
+              notes: "a".repeat(501),
+              setAt: 1719000000000,
+            },
+          },
+        },
+      },
+    };
+    const result = ProjectFileSchema.safeParse(project);
+    expect(result.success).toBe(false);
+  });
+
+  it("parses legacy file without manifest field", () => {
+    expect(() => ProjectFileSchema.parse(validProject)).not.toThrow();
   });
 });

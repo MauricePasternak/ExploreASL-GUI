@@ -3,7 +3,13 @@ import { DataParSchema } from "./dataParSchema";
 import { ProcessConfigSchema, ProcessingPhaseSchema } from "./processingSchemas";
 import { decompressSnapshot } from "../lib/snapshotCompression";
 
-export const PROJECT_PHASES = ["import", "parameters", "processing", "visualization"] as const;
+export const PROJECT_PHASES = [
+  "import",
+  "parameters",
+  "processing",
+  "visualization",
+  "manifest",
+] as const;
 export const IMPORT_EXECUTION_PHASES = [
   "idle",
   "preparing",
@@ -21,6 +27,48 @@ export const ProjectMetaSchema = z.object({
   lastOpened: z.string(),
   currentPhase: z.enum(PROJECT_PHASES),
 });
+
+export const MANIFEST_FAIL_REASONS = [
+  "motion",
+  "coverage",
+  "dropout",
+  "artifact",
+  "registration",
+  "other",
+] as const;
+
+export const ManifestVerdictSchema = z
+  .object({
+    status: z.enum(["pass", "fail"]),
+    reason: z.enum(MANIFEST_FAIL_REASONS).optional(),
+    notes: z.string().max(500).optional(),
+    setAt: z.number().int(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.status === "fail" && !v.reason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "reason is required when status is fail",
+        path: ["reason"],
+      });
+    }
+  });
+
+export const ManifestUiStateSchema = z.object({
+  verdicts: z.record(z.string(), ManifestVerdictSchema).default({}),
+  lastRunVersions: z
+    .object({
+      exploreASL: z.string().optional(),
+      matlab: z.string().optional(),
+      gui: z.string().optional(),
+    })
+    .default({}),
+  lastPopulationRunMtime: z.number().int().nullable().default(null),
+});
+
+export type ManifestFailReason = (typeof MANIFEST_FAIL_REASONS)[number];
+export type ManifestVerdict = z.infer<typeof ManifestVerdictSchema>;
+export type ManifestUiState = z.infer<typeof ManifestUiStateSchema>;
 
 export const ImportUiStateSchema = z.object({
   activeStep: z.number().int().min(0).optional(),
@@ -77,6 +125,7 @@ export const ProjectFileSchema = z.object({
             .optional(),
         })
         .optional(),
+      manifest: ManifestUiStateSchema.optional(),
       population: z.object({ completed: z.boolean().optional() }).optional(),
       dataVis: z
         .object({
@@ -226,6 +275,9 @@ export function canAccessPhase(project: ProjectFile, targetPhase: ProjectPhase) 
     return project.uiState?.import?.completed === true;
   }
   if (targetPhase === "visualization") {
+    return project.uiState?.population?.completed === true;
+  }
+  if (targetPhase === "manifest") {
     return project.uiState?.population?.completed === true;
   }
   return false;

@@ -202,4 +202,15 @@ describe("PageHelpButton", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("renders manifest help with re-run lockout warning", async () => {
+    renderComponent("/project/proj1/manifest");
+
+    const helpBtn = screen.getByTestId("page-help-btn");
+    fireEvent.click(helpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/re-running/i)).toBeInTheDocument();
+    });
+  });
 });
