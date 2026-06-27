@@ -45,9 +45,7 @@ pub fn run() {
             let mut builder = tauri_plugin_log::Builder::default();
             #[cfg(debug_assertions)]
             {
-                let log_dir = std::env::temp_dir()
-                    .join("opencode")
-                    .join("exploreasl-gui-logs");
+                let log_dir = std::env::temp_dir().join("exploreasl-gui-logs");
                 let _ = std::fs::create_dir_all(&log_dir);
                 builder =
                     builder

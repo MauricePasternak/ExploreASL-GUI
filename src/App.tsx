@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMantineColorScheme } from "@mantine/core";
-import { Route, Routes } from "react-router";
+import { Route, Routes, useLocation } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -10,8 +10,18 @@ import LandingPage from "./pages/LandingPage";
 import ProjectPage from "./pages/ProjectPage";
 import OverviewPage from "./pages/OverviewPage";
 import { useGlobalStore } from "./stores/globalStore";
+import { logAction } from "./lib/debug";
 
 export default function App() {
+  const location = useLocation();
+
+  useEffect(() => {
+    logAction("navigation_change", {
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    });
+  }, [location]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const loadSettings = useGlobalStore((state) => state.loadSettings);
   const theme = useGlobalStore((state) => state.settings.theme);

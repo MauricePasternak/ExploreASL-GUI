@@ -116,6 +116,7 @@ export default function ChartPanel() {
       const columnsToFetch = [xCol, yCol];
       if (colorByCol && !columnsToFetch.includes(colorByCol)) columnsToFetch.push(colorByCol);
       try {
+        console.log("[ChartPanel] loading columns:", columnsToFetch);
         const rows = await invoke<Record<string, string>[]>("read_data_columns", {
           projectRoot,
           columnNames: columnsToFetch,
@@ -127,10 +128,13 @@ export default function ChartPanel() {
           colorByCol,
           columnTypes,
         );
+        console.log(
+          `[ChartPanel] successfully loaded ${points.length} points (excluded ${excluded})`,
+        );
         setChartData(points);
         setExclusionCount({ plotted: points.length, excluded });
       } catch (err) {
-        console.error("Failed to load chart data:", err);
+        console.error("[ChartPanel] Failed to load chart data:", err);
       }
     }
     loadData();
