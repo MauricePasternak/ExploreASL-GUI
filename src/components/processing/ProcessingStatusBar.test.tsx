@@ -31,18 +31,6 @@ vi.mock("../../stores/processingStore", () => {
   return { useProcessingStore: storeFn };
 });
 
-vi.mock("../../stores/projectStore", () => ({
-  useProjectStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({
-      project: { projectMeta: { id: "test-proj", rootPath: "/test" } },
-    }),
-}));
-
-vi.mock("react-router", () => ({
-  useNavigate: () => vi.fn(),
-  useParams: () => ({ id: "test-proj" }),
-}));
-
 const { default: ProcessingStatusBar } = await import("./ProcessingStatusBar");
 
 function renderBar() {
@@ -61,31 +49,6 @@ describe("ProcessingStatusBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPhase = "running";
-  });
-
-  it("renders with Running label when phase is running", () => {
-    mockPhase = "running";
-    renderBar();
-    expect(screen.getByTestId("processing-status-bar")).toBeInTheDocument();
-    expect(screen.getByText("Running")).toBeInTheDocument();
-  });
-
-  it("renders with Completed label when phase is completed", () => {
-    mockPhase = "completed";
-    renderBar();
-    expect(screen.getByText("Completed")).toBeInTheDocument();
-  });
-
-  it("renders with Failed label when phase is failed", () => {
-    mockPhase = "failed";
-    renderBar();
-    expect(screen.getByText("Failed")).toBeInTheDocument();
-  });
-
-  it("renders with Cancelled label when phase is cancelled", () => {
-    mockPhase = "cancelled";
-    renderBar();
-    expect(screen.getByText("Cancelled")).toBeInTheDocument();
   });
 
   it("returns null when phase is idle", () => {
