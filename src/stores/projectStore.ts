@@ -18,6 +18,7 @@ import {
   type ProjectMeta,
 } from "../schemas/project";
 import type { ImportSnapshot } from "../schemas/importSchemas";
+import type { ManifestFailReason, ManifestVerdict } from "../schemas/project";
 import type { ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
 
@@ -35,6 +36,13 @@ interface ProjectState {
     processingState: Pick<ProcessingState, "config" | "processingPhase">,
   ) => void;
   setPopulationCompleted: (value: boolean) => void;
+  setManifestVerdict: (
+    subjectSession: string,
+    status: "pass" | "fail",
+    opts: { reason?: ManifestFailReason; notes?: string; setAt: number },
+  ) => void;
+  setLastRunVersions: (versions: { exploreASL?: string; matlab?: string; gui?: string }) => void;
+  setLastPopulationRunMtime: (mtime: number | null) => void;
   closeProject: () => void;
 }
 
@@ -203,6 +211,82 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             uiState: {
               ...state.project.uiState,
               population: { completed: value },
+            },
+          }
+        : null,
+      isDirty: true,
+    }));
+  },
+
+  setManifestVerdict: (subjectSession, status, opts) => {
+    if (status === "fail" && !opts.reason) {
+      throw new Error("reason is required when status is fail");
+    }
+    set((state) => {
+      if (!state.project) return state;
+      const verdict: ManifestVerdict = {
+        status,
+        reason: opts.reason as ManifestFailReason | undefined,
+        notes: opts.notes,
+        setAt: opts.setAt,
+      };
+      const prev = state.project.uiState?.manifest?.verdicts?.[subjectSession];
+      if (prev?.status === "pass" && status === "fail" && opts.notes === undefined) {
+        verdict.notes = undefined;
+      }
+      return {
+        isDirty: true,
+        project: {
+          ...state.project,
+          uiState: {
+            ...state.project.uiState,
+            manifest: {
+              verdicts: {
+                ...(state.project.uiState?.manifest?.verdicts ?? {}),
+                [subjectSession]: verdict,
+              },
+              lastRunVersions: state.project.uiState?.manifest?.lastRunVersions ?? {},
+              lastPopulationRunMtime:
+                state.project.uiState?.manifest?.lastPopulationRunMtime ?? null,
+            },
+          },
+        },
+      };
+    });
+  },
+
+  setLastRunVersions: (versions) => {
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            uiState: {
+              ...state.project.uiState,
+              manifest: {
+                verdicts: state.project.uiState?.manifest?.verdicts ?? {},
+                lastRunVersions: versions,
+                lastPopulationRunMtime:
+                  state.project.uiState?.manifest?.lastPopulationRunMtime ?? null,
+              },
+            },
+          }
+        : null,
+      isDirty: true,
+    }));
+  },
+
+  setLastPopulationRunMtime: (mtime) => {
+    set((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            uiState: {
+              ...state.project.uiState,
+              manifest: {
+                verdicts: state.project.uiState?.manifest?.verdicts ?? {},
+                lastRunVersions: state.project.uiState?.manifest?.lastRunVersions ?? {},
+                lastPopulationRunMtime: mtime,
+              },
             },
           }
         : null,

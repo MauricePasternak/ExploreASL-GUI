@@ -9,7 +9,15 @@ import {
   stopProcessingPipeline,
   watchLockDir,
 } from "../lib/processingEvents";
+import { invoke } from "@tauri-apps/api/core";
 import { useProcessingStore } from "./processingStore";
+
+const { mockSetPopulationCompleted, mockSetLastRunVersions, mockSetLastPopulationRunMtime } =
+  vi.hoisted(() => ({
+    mockSetPopulationCompleted: vi.fn(),
+    mockSetLastRunVersions: vi.fn(),
+    mockSetLastPopulationRunMtime: vi.fn(),
+  }));
 
 vi.mock("../lib/processingEvents", () => ({
   runProcessingPipeline: vi.fn().mockResolvedValue([1234]),
@@ -27,10 +35,22 @@ vi.mock("./projectStore", () => ({
     getState: vi.fn(() => ({
       project: {
         projectMeta: { rootPath: "/test/project" },
+        mappingState: {},
       },
-      setPopulationCompleted: vi.fn(),
+      setPopulationCompleted: mockSetPopulationCompleted,
+      setLastRunVersions: mockSetLastRunVersions,
+      setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
     })),
   },
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn((cmd: string) => {
+    if (cmd === "capture_environment_versions")
+      return Promise.resolve({ explore_asl: "1.0.0", matlab: "R2023b" });
+    if (cmd === "read_population_ready_mtime") return Promise.resolve(1700000000000);
+    return Promise.resolve(null);
+  }),
 }));
 
 afterEach(() => {
@@ -792,5 +812,102 @@ describe("processingStore Tauri integration: event listener cleanup", () => {
 
   it("resetProcessing is safe to call without prior startProcessing", () => {
     expect(() => useProcessingStore.getState().resetProcessing()).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Manifest version capture during startProcessing
+// ---------------------------------------------------------------------------
+
+describe("processingStore manifest version capture", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockClear();
+    mockSetPopulationCompleted.mockClear();
+    mockSetLastRunVersions.mockClear();
+    mockSetLastPopulationRunMtime.mockClear();
+
+    useProcessingStore.getState().setAvailableSubjects([
+      {
+        subjectSession: "sub-001_01",
+        subject: "001",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+        aslRuns: [],
+      },
+      {
+        subjectSession: "sub-002_02",
+        subject: "002",
+        session: "02",
+        hasStructural: true,
+        hasASL: true,
+        aslRuns: [],
+      },
+    ]);
+  });
+
+  it("calls capture_environment_versions when population is in modules", async () => {
+    useProcessingStore.getState().setConfig(POPULATION_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+    expect(invoke).toHaveBeenCalledWith(
+      "capture_environment_versions",
+      expect.objectContaining({
+        exploreAslPath: "/opt/ExploreASL",
+        matlabPath: "/usr/local/bin/matlab",
+      }),
+    );
+  });
+
+  it("does not call capture_environment_versions when population is not in modules", async () => {
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+    expect(invoke).not.toHaveBeenCalledWith("capture_environment_versions", expect.any(Object));
+  });
+
+  it("calls setLastRunVersions after version capture with mapped fields", async () => {
+    useProcessingStore.getState().setConfig(POPULATION_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+    expect(mockSetLastRunVersions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exploreASL: "1.0.0",
+        matlab: "R2023b",
+        gui: expect.any(String),
+      }),
+    );
+  });
+
+  it("clears population completed flag when re-running Population", async () => {
+    useProcessingStore.getState().setConfig(POPULATION_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+    expect(mockSetPopulationCompleted).toHaveBeenCalledWith(false);
+  });
+
+  it("falls back to unknown versions when capture_environment_versions throws", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "capture_environment_versions")
+        return Promise.reject(new Error("MATLAB not found"));
+      return Promise.resolve(null);
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    useProcessingStore.getState().setConfig(POPULATION_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+
+    expect(mockSetLastRunVersions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exploreASL: "unknown",
+        matlab: "unknown",
+        gui: "unknown",
+      }),
+    );
+    warnSpy.mockRestore();
+
+    // Restore default invoke mock
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "capture_environment_versions")
+        return Promise.resolve({ explore_asl: "1.0.0", matlab: "R2023b" });
+      if (cmd === "read_population_ready_mtime") return Promise.resolve(1700000000000);
+      return Promise.resolve(null);
+    });
   });
 });

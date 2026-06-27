@@ -517,4 +517,168 @@ describe("useProjectStore", () => {
       expect(useProjectStore.getState().project).toBeNull();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Manifest verdicts
+  // ---------------------------------------------------------------------------
+
+  const validProject = {
+    version: "0.1.0" as const,
+    projectMeta: {
+      id: "test",
+      name: "Test",
+      rootPath: "/tmp",
+      createdAt: new Date().toISOString(),
+      lastOpened: new Date().toISOString(),
+      currentPhase: "manifest" as const,
+    },
+    uiState: {} as Record<string, unknown>,
+    mappingState: {} as Record<string, unknown>,
+    exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+  };
+
+  describe("manifest verdicts: setManifestVerdict", () => {
+    it("setManifestVerdict with pass writes verdict slot", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      store.setManifestVerdict("sub-A_01", "pass", { setAt: 1700000000000 });
+      expect(useProjectStore.getState().project?.uiState?.manifest?.verdicts["sub-A_01"]).toEqual({
+        status: "pass",
+        setAt: 1700000000000,
+      });
+      expect(useProjectStore.getState().isDirty).toBe(true);
+    });
+
+    it("setManifestVerdict with fail requires reason", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      expect(() => store.setManifestVerdict("sub-B_01", "fail", { setAt: 1 })).toThrow(
+        /reason is required/,
+      );
+    });
+
+    it("setManifestVerdict preserves prior verdict's notes when toggling pass→fail (clears notes by default)", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      store.setManifestVerdict("sub-C_01", "pass", { setAt: 1000, notes: "looks good" });
+      expect(
+        useProjectStore.getState().project?.uiState?.manifest?.verdicts["sub-C_01"].notes,
+      ).toBe("looks good");
+      store.setManifestVerdict("sub-C_01", "fail", { setAt: 2000, reason: "motion" });
+      expect(
+        useProjectStore.getState().project?.uiState?.manifest?.verdicts["sub-C_01"].notes,
+      ).toBeUndefined();
+    });
+
+    it("setManifestVerdict preserves notes when explicitly passed on fail toggle", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      store.setManifestVerdict("sub-D_01", "pass", { setAt: 1000, notes: "looks good" });
+      store.setManifestVerdict("sub-D_01", "fail", {
+        setAt: 2000,
+        reason: "motion",
+        notes: "still relevant",
+      });
+      expect(
+        useProjectStore.getState().project?.uiState?.manifest?.verdicts["sub-D_01"].notes,
+      ).toBe("still relevant");
+    });
+
+    it("setManifestVerdict is a no-op when project is null", () => {
+      useProjectStore.setState({ project: null });
+      const store = useProjectStore.getState() as any;
+      expect(() => store.setManifestVerdict("sub-E_01", "pass", { setAt: 1 })).not.toThrow();
+      expect(useProjectStore.getState().project).toBeNull();
+    });
+  });
+
+  describe("manifest versions: setLastRunVersions", () => {
+    it("stores version strings", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      store.setLastRunVersions({ exploreASL: "1.0.0", matlab: "R2023b", gui: "0.1.0" });
+      expect(useProjectStore.getState().project?.uiState?.manifest?.lastRunVersions).toEqual({
+        exploreASL: "1.0.0",
+        matlab: "R2023b",
+        gui: "0.1.0",
+      });
+      expect(useProjectStore.getState().isDirty).toBe(true);
+    });
+
+    it("handles partial version info", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      store.setLastRunVersions({ exploreASL: "1.0.0" });
+      expect(useProjectStore.getState().project?.uiState?.manifest?.lastRunVersions).toEqual({
+        exploreASL: "1.0.0",
+      });
+    });
+
+    it("is a no-op when project is null", () => {
+      useProjectStore.setState({ project: null });
+      const store = useProjectStore.getState() as any;
+      expect(() => store.setLastRunVersions({ gui: "0.1.0" })).not.toThrow();
+      expect(useProjectStore.getState().project).toBeNull();
+    });
+  });
+
+  describe("manifest mtime: setLastPopulationRunMtime", () => {
+    it("stores a numeric mtime", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      store.setLastPopulationRunMtime(1700000000000);
+      expect(useProjectStore.getState().project?.uiState?.manifest?.lastPopulationRunMtime).toBe(
+        1700000000000,
+      );
+      expect(useProjectStore.getState().isDirty).toBe(true);
+    });
+
+    it("stores null for missing file", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      store.setLastPopulationRunMtime(null);
+      expect(
+        useProjectStore.getState().project?.uiState?.manifest?.lastPopulationRunMtime,
+      ).toBeNull();
+    });
+
+    it("is a no-op when project is null", () => {
+      useProjectStore.setState({ project: null });
+      const store = useProjectStore.getState() as any;
+      expect(() => store.setLastPopulationRunMtime(1700000000000)).not.toThrow();
+      expect(useProjectStore.getState().project).toBeNull();
+    });
+  });
 });

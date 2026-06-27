@@ -1,12 +1,18 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
-import { mapModuleName, runProcessingPipeline } from "./processingEvents";
+import { mapModuleName, runProcessingPipeline, setupProcessingListeners } from "./processingEvents";
 import { useProjectStore } from "../stores/projectStore";
+import { useProcessingStore } from "../stores/processingStore";
 import type { ProcessConfig } from "../schemas/processingSchemas";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockResolvedValue([1234]),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
 }));
 
 describe("mapModuleName", () => {
@@ -118,5 +124,140 @@ describe("runProcessingPipeline worker capping", () => {
         workers: 4, // Keeps 4
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Population completion — mtime capture
+// ---------------------------------------------------------------------------
+
+describe("population completion mtime capture", () => {
+  const COMPLETED_POPULATION_STATUS = {
+    subjectSession: "sub-001_01",
+    module: "xASL_module_Population",
+    status: "complete",
+    completedSteps: ["999_ready"],
+    locked: false,
+  };
+
+  beforeEach(() => {
+    vi.mocked(invoke).mockClear();
+    vi.mocked(listen).mockClear();
+
+    // Set up invoke mock for all commands called during completion
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "stop_watch_lock_dir") return Promise.resolve(undefined);
+      if (cmd === "clear_stale_locks") return Promise.resolve(undefined);
+      if (cmd === "read_lock_status") return Promise.resolve([COMPLETED_POPULATION_STATUS]);
+      if (cmd === "read_population_ready_mtime") return Promise.resolve(1700000000000);
+      return Promise.resolve([1234]);
+    });
+
+    // Set up project store with setLastPopulationRunMtime
+    useProjectStore.setState({
+      project: {
+        projectMeta: {
+          rootPath: "/test/project_root",
+        },
+      } as any,
+    });
+
+    // Set up processing store with population config and empty worker list
+    useProcessingStore.setState({
+      config: {
+        subjects: [],
+        modules: ["population"],
+        matlabPath: "",
+        exploreAslPath: "",
+        workers: 1,
+        subjectRegexp: "",
+      } as any,
+      workerPids: [] as number[],
+      processingPhase: "running" as any,
+      subjectStatuses: [] as any[],
+    });
+  });
+
+  afterEach(() => {
+    useProcessingStore.setState({
+      config: null,
+      workerPids: [],
+      processingPhase: "idle" as any,
+      subjectStatuses: [],
+    });
+    useProjectStore.setState({ project: null });
+  });
+
+  it("calls read_population_ready_mtime after all workers exit with population completion", async () => {
+    // Capture the WorkerExited callback from listen
+    const listeners: Record<string, (event: any) => void> = {};
+    vi.mocked(listen).mockImplementation(async (eventName: string, callback: any) => {
+      listeners[eventName] = callback;
+      return () => {};
+    });
+
+    await setupProcessingListeners();
+
+    // Verify listener was registered
+    expect(listen).toHaveBeenCalledWith("WorkerExited", expect.any(Function));
+
+    // Set a worker PID that will be removed
+    useProcessingStore.setState({ workerPids: [99] });
+
+    // Trigger WorkerExited for the last worker
+    const workerExitedCb = listeners["WorkerExited"];
+    expect(workerExitedCb).toBeDefined();
+
+    await workerExitedCb({
+      payload: { pid: 99, exitCode: 0 },
+    });
+
+    expect(invoke).toHaveBeenCalledWith("read_population_ready_mtime", {
+      projectRoot: "/test/project_root",
+    });
+
+    expect(useProjectStore.getState().project?.uiState?.manifest?.lastPopulationRunMtime).toBe(
+      1700000000000,
+    );
+  });
+
+  it("falls back to null when read_population_ready_mtime throws", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "read_population_ready_mtime") return Promise.reject(new Error("fs error"));
+      if (cmd === "stop_watch_lock_dir") return Promise.resolve(undefined);
+      if (cmd === "clear_stale_locks") return Promise.resolve(undefined);
+      if (cmd === "read_lock_status") return Promise.resolve([COMPLETED_POPULATION_STATUS]);
+      return Promise.resolve([1234]);
+    });
+
+    const listeners: Record<string, (event: any) => void> = {};
+    vi.mocked(listen).mockImplementation(async (eventName: string, callback: any) => {
+      listeners[eventName] = callback;
+      return () => {};
+    });
+
+    // Re-setup with the new invoke mock
+    useProcessingStore.setState({
+      config: {
+        subjects: [],
+        modules: ["population"],
+        matlabPath: "",
+        exploreAslPath: "",
+        workers: 1,
+        subjectRegexp: "",
+      } as any,
+      workerPids: [99],
+      processingPhase: "running" as any,
+      subjectStatuses: [],
+    });
+
+    await setupProcessingListeners();
+
+    const workerExitedCb = listeners["WorkerExited"];
+    await workerExitedCb({ payload: { pid: 99, exitCode: 0 } });
+
+    expect(
+      useProjectStore.getState().project?.uiState?.manifest?.lastPopulationRunMtime,
+    ).toBeNull();
   });
 });

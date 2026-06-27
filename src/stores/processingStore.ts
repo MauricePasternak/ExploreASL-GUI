@@ -117,6 +117,34 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     // Clear population completion flag when re-running Population
     if (config.modules.includes("population")) {
       useProjectStore.getState().setPopulationCompleted(false);
+
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const versions = await invoke<{ explore_asl: string; matlab: string }>(
+          "capture_environment_versions",
+          {
+            exploreAslPath: config.exploreAslPath,
+            matlabPath: config.matlabPath,
+          },
+        );
+        const gui = import.meta.env.VITE_APP_VERSION ?? "unknown";
+        useProjectStore.getState().setLastRunVersions({
+          exploreASL: versions.explore_asl,
+          matlab: versions.matlab,
+          gui,
+        });
+      } catch (err) {
+        console.warn("[manifest] version capture failed", err);
+        try {
+          useProjectStore.getState().setLastRunVersions({
+            exploreASL: "unknown",
+            matlab: "unknown",
+            gui: "unknown",
+          });
+        } catch {
+          // store action might not exist if projectStore hasn't been updated
+        }
+      }
     }
 
     set({ processingPhase: "preparing", subjectStatuses: [] });
