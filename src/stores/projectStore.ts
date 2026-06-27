@@ -39,7 +39,7 @@ interface ProjectState {
   setManifestVerdict: (
     subjectSession: string,
     status: "pass" | "fail",
-    opts: { reason?: ManifestFailReason; notes?: string; setAt: number },
+    opts: { reason?: ManifestFailReason; notes?: string; setAt?: number },
   ) => void;
   removeManifestVerdict: (subjectSession: string) => void;
   setLastRunVersions: (versions: { exploreASL?: string; matlab?: string; gui?: string }) => void;
@@ -225,11 +225,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
     set((state) => {
       if (!state.project) return state;
+      const fallbackMtime = state.project.uiState?.manifest?.lastPopulationRunMtime ?? Date.now();
       const verdict: ManifestVerdict = {
         status,
         reason: opts.reason as ManifestFailReason | undefined,
         notes: opts.notes,
-        setAt: opts.setAt,
+        setAt: opts.setAt ?? fallbackMtime,
       };
       const prev = state.project.uiState?.manifest?.verdicts?.[subjectSession];
       if (prev?.status === "pass" && status === "fail" && opts.notes === undefined) {

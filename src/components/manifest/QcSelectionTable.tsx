@@ -122,7 +122,7 @@ const FILTER_OPTIONS: { label: string; value: FilterValue }[] = [
 // ---------------------------------------------------------------------------
 
 export default function QcSelectionTable({
-  noInfoSubjects = new Set(),
+  noInfoSubjects: propNoInfoSubjects = new Set(),
   onNextReady,
 }: QcSelectionTableProps) {
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
@@ -131,6 +131,22 @@ export default function QcSelectionTable({
   const rawVerdicts = useProjectStore((s) => s.project?.uiState?.manifest?.verdicts);
   const verdicts = useMemo(() => rawVerdicts ?? {}, [rawVerdicts]);
   const staleVerdicts = useManifestStore((s) => s.staleVerdicts);
+  const qcData = useManifestStore((s) => s.qcData);
+  const qcLoaded = useManifestStore((s) => s.qcLoaded);
+  const lastPopulationRunMtime =
+    useProjectStore((s) => s.project?.uiState?.manifest?.lastPopulationRunMtime) ?? undefined;
+
+  const noInfoSubjects = useMemo(() => {
+    const set = new Set<string>(propNoInfoSubjects);
+    if (qcLoaded && qcData) {
+      for (const info of availableSubjects) {
+        if (!(info.subjectSession in qcData)) {
+          set.add(info.subjectSession);
+        }
+      }
+    }
+    return set;
+  }, [propNoInfoSubjects, availableSubjects, qcData, qcLoaded]);
 
   const [filter, setFilter] = useState<FilterValue>("neutral");
   const [page, setPage] = useState(1);
@@ -158,44 +174,50 @@ export default function QcSelectionTable({
     return map;
   }, [mappingState]);
 
-  const handleVerdictChange = useCallback((subjectSession: string, value: string) => {
-    if (value === "pass") {
-      setPendingFails((prev) => {
-        const next = new Map(prev);
-        next.delete(subjectSession);
-        return next;
-      });
-      useProjectStore.getState().setManifestVerdict(subjectSession, "pass", {
-        setAt: Date.now(),
-      });
-    } else if (value === "fail") {
-      setPendingFails((prev) => {
-        const next = new Map(prev);
-        next.set(subjectSession, undefined);
-        return next;
-      });
-    } else if (value === "neutral") {
-      setPendingFails((prev) => {
-        const next = new Map(prev);
-        next.delete(subjectSession);
-        return next;
-      });
-      useProjectStore.getState().removeManifestVerdict(subjectSession);
-    }
-  }, []);
+  const handleVerdictChange = useCallback(
+    (subjectSession: string, value: string) => {
+      if (value === "pass") {
+        setPendingFails((prev) => {
+          const next = new Map(prev);
+          next.delete(subjectSession);
+          return next;
+        });
+        useProjectStore.getState().setManifestVerdict(subjectSession, "pass", {
+          setAt: lastPopulationRunMtime,
+        });
+      } else if (value === "fail") {
+        setPendingFails((prev) => {
+          const next = new Map(prev);
+          next.set(subjectSession, undefined);
+          return next;
+        });
+      } else if (value === "neutral") {
+        setPendingFails((prev) => {
+          const next = new Map(prev);
+          next.delete(subjectSession);
+          return next;
+        });
+        useProjectStore.getState().removeManifestVerdict(subjectSession);
+      }
+    },
+    [lastPopulationRunMtime],
+  );
 
-  const handleReasonChange = useCallback((subjectSession: string, reason: string | null) => {
-    if (!reason) return;
-    setPendingFails((prev) => {
-      const next = new Map(prev);
-      next.set(subjectSession, reason);
-      return next;
-    });
-    useProjectStore.getState().setManifestVerdict(subjectSession, "fail", {
-      reason: reason as ManifestFailReason,
-      setAt: Date.now(),
-    });
-  }, []);
+  const handleReasonChange = useCallback(
+    (subjectSession: string, reason: string | null) => {
+      if (!reason) return;
+      setPendingFails((prev) => {
+        const next = new Map(prev);
+        next.set(subjectSession, reason);
+        return next;
+      });
+      useProjectStore.getState().setManifestVerdict(subjectSession, "fail", {
+        reason: reason as ManifestFailReason,
+        setAt: lastPopulationRunMtime,
+      });
+    },
+    [lastPopulationRunMtime],
+  );
 
   const handleNotesBlur = useCallback(
     (subjectSession: string, notes: string) => {
@@ -385,18 +407,13 @@ export default function QcSelectionTable({
 
   const handleBulkMarkPass = useCallback(() => {
     for (const row of rows) {
-      if (
-        row.structuralStatus === "complete" &&
-        row.aslStatus === "complete" &&
-        !row.noInfo &&
-        row.displayedVerdict === "neutral"
-      ) {
+      if (row.structuralStatus === "complete" && row.aslStatus === "complete" && !row.noInfo) {
         useProjectStore.getState().setManifestVerdict(row.subjectSession, "pass", {
-          setAt: Date.now(),
+          setAt: lastPopulationRunMtime,
         });
       }
     }
-  }, [rows]);
+  }, [rows, lastPopulationRunMtime]);
 
   const hasNeutral = useMemo(() => {
     const visible = filter === "all" ? rows : filteredRows;

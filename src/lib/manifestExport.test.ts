@@ -83,6 +83,11 @@ function makeFixtureManifest(): ManifestPayload {
     ],
     pipelineParagraph:
       "Data were processed with ExploreASL (version 1.0.0) running in MATLAB R2023b through the ExploreASL GUI (version 0.1.0). This manifest covers 4 subjects across 3 groups.",
+    dataPar: {
+      "x.Q.M0": 1,
+      "x.bPVCNativeSpace": 0,
+      "x.SESSIONS": "01",
+    },
   };
 }
 

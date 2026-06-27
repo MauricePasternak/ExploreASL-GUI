@@ -16,6 +16,7 @@ export interface ManifestPayload {
     failReasons: string;
   }>;
   pipelineParagraph: string;
+  dataPar?: Record<string, string | number | boolean>;
 }
 
 export function renderMarkdown(m: ManifestPayload): string {
@@ -46,6 +47,15 @@ export function renderMarkdown(m: ManifestPayload): string {
   lines.push(`| ExploreASL GUI | ${m.versions.gui ?? "unknown"} |`);
   lines.push(`| MATLAB | ${m.versions.matlab ?? "unknown"} |`);
   lines.push("");
+
+  if (m.dataPar && Object.keys(m.dataPar).length > 0) {
+    lines.push("| Key | Value |");
+    lines.push("|-----|-------|");
+    for (const [key, value] of Object.entries(m.dataPar)) {
+      lines.push(`| ${key} | ${value} |`);
+    }
+    lines.push("");
+  }
 
   lines.push("## Section 3: QC Summary");
   lines.push("");
@@ -128,7 +138,11 @@ function simpleMarkdownToHtml(markdown: string): string {
         out.push("<tr>" + cells.map((c) => `<td>${escapeHtml(c)}</td>`).join("") + "</tr>");
       }
     } else if (line === "") {
-      // skip empty lines
+      if (inTable) {
+        out.push("</tbody></table>");
+        inTable = false;
+        headerRendered = false;
+      }
     } else {
       if (inTable) {
         out.push("</tbody></table>");

@@ -207,11 +207,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
             useProjectStore.getState().setLastPopulationRunMtime(mtime);
           } catch (err) {
             console.warn("[manifest] mtime read failed", err);
-            try {
-              useProjectStore.getState().setLastPopulationRunMtime(null);
-            } catch {
-              // store action might not exist yet
-            }
+            useProjectStore.getState().setLastPopulationRunMtime(null);
           }
         }
       }

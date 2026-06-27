@@ -367,8 +367,8 @@ describe("QcSelectionTable", () => {
     expect(verdicts["sub-02_01"]).toBeUndefined();
   });
 
-  // 12.12c — Mark all complete→Pass skips existing fail verdicts
-  it("Mark all complete→Pass skips subjects with fail verdict", async () => {
+  // 12.12c — Mark all complete→Pass overwrites existing fail verdicts
+  it("Mark all complete→Pass overwrites subjects with fail verdict", async () => {
     const user = userEvent.setup();
     mockAvailableSubjects = [subject1];
     mockSubjectStatuses = [
@@ -393,7 +393,7 @@ describe("QcSelectionTable", () => {
     await user.click(bulkBtn);
 
     const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
-    expect(verdicts["sub-01_01"]?.status).toBe("fail");
+    expect(verdicts["sub-01_01"]?.status).toBe("pass");
   });
 
   // 13.2c — verdict control renders with Neutral/Pass/Fail when no verdict stored

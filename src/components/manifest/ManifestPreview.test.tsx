@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import ManifestPreview from "./ManifestPreview";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
+import { useManifestStore } from "../../stores/manifestStore";
 import type { SubjectInfo } from "../../schemas/processingSchemas";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import type { ManifestVerdict } from "../../schemas/project";
@@ -166,6 +167,7 @@ afterEach(() => {
   mockVersions = {};
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
   useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
+  useManifestStore.setState({ qcData: null, qcLoaded: false, dataPar: null });
 });
 
 // ---------------------------------------------------------------------------
@@ -290,8 +292,8 @@ describe("ManifestPreview", () => {
     expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("2 / 2");
   });
 
-  // 13.6a — coverage/CoV/motion render "N/A"
-  it("renders N/A for QC metrics (CSV reading is async)", () => {
+  // 13.6a — coverage/CoV/motion render "N/A" when QC data is not loaded
+  it("renders N/A for QC metrics when QC data is not loaded", () => {
     mockMetadataGroups = [groupPcasl];
     mockSubjectRows = [subjectRow1, subjectRow2];
     mockAvailableSubjects = [subj1, subj2];
@@ -300,14 +302,72 @@ describe("ManifestPreview", () => {
       SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
     };
 
+    useManifestStore.setState({ qcData: null, qcLoaded: false });
+
     renderPreview();
 
-    const qcSection = screen.getByTestId("manifest-section-qc-summary");
-    // Should show "N/A" for coverage, CoV, motion, motion exclusion
-    expect(qcSection).toHaveTextContent("Mean ASL Coverage % (SD)");
-    expect(qcSection).toHaveTextContent("Mean Spatial CoV % (SD)");
-    expect(qcSection).toHaveTextContent("Mean Motion (mm RMS) (SD)");
-    expect(qcSection).toHaveTextContent("Mean Motion Exclusion % (SD)");
+    expect(screen.getByTestId("Group A (PCASL)-coverage")).toHaveTextContent("N/A");
+    expect(screen.getByTestId("Group A (PCASL)-spatialCov")).toHaveTextContent("N/A");
+    expect(screen.getByTestId("Group A (PCASL)-motion")).toHaveTextContent("N/A");
+    expect(screen.getByTestId("Group A (PCASL)-motionExclusion")).toHaveTextContent("N/A");
+  });
+
+  it("renders metric aggregates when QC data is loaded", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "pass", setAt: 1 },
+    };
+
+    useManifestStore.setState({
+      qcData: {
+        SUB_01: { coverage: 95, spatialCov: 8, motion: [0.3, 0.4], motionExclusionPct: 5 },
+        SUB2_01: { coverage: 90, spatialCov: 9, motion: [0.5], motionExclusionPct: 3 },
+      },
+      qcLoaded: true,
+    });
+
+    renderPreview();
+
+    // coverage: mean of 95, 90 is 92.5; SD is 3.54
+    expect(screen.getByTestId("Group A (PCASL)-coverage")).toHaveTextContent("92.50 (3.54)");
+    // spatialCov: mean of 8, 9 is 8.5; SD is 0.71
+    expect(screen.getByTestId("Group A (PCASL)-spatialCov")).toHaveTextContent("8.50 (0.71)");
+    // motion: max for SUB_01 is 0.4, for SUB2_01 is 0.5; mean of 0.4, 0.5 is 0.45; SD is 0.07 (0.0707)
+    expect(screen.getByTestId("Group A (PCASL)-motion")).toHaveTextContent("0.45 (0.07)");
+    // motionExclusion: mean of 5, 3 is 4; SD is 1.41
+    expect(screen.getByTestId("Group A (PCASL)-motionExclusion")).toHaveTextContent("4.00 (1.41)");
+  });
+
+  // 13.6d — No Info rows are excluded from Pass/Total and summary paragraph
+  it("excludes No Info rows from Pass/Total and pipeline summary count", () => {
+    mockMetadataGroups = [groupPcasl];
+    const subjectRow4InG1 = { id: "SUB4/01", subject: "SUB4", session: "01", groupId: "g1" };
+    mockSubjectRows = [subjectRow1, subjectRow2, subjectRow4InG1];
+    mockAvailableSubjects = [subj1, subj2, subj4];
+
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
+      SUB4_01: { status: "pass", setAt: 1 },
+    };
+
+    useManifestStore.setState({
+      qcData: {
+        SUB_01: { coverage: 95, spatialCov: 8, motion: [0.4], motionExclusionPct: 5 },
+        SUB2_01: { coverage: 90, spatialCov: 9, motion: [0.5], motionExclusionPct: 3 },
+      },
+      qcLoaded: true,
+    });
+
+    renderPreview();
+
+    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("1 / 2");
+
+    const summary = screen.getByTestId("manifest-section-pipeline-summary");
+    expect(summary).toHaveTextContent("2 subjects");
   });
 
   // 13.6c — Fail Reasons breakdown per group
@@ -363,6 +423,15 @@ describe("ManifestPreview", () => {
     mockAvailableSubjects = [subj1, subj2, subj3];
     mockVerdicts = {};
     mockVersions = { exploreASL: "1.0", matlab: "R2023b", gui: "0.1" };
+
+    useManifestStore.setState({
+      qcData: {
+        SUB_01: { coverage: 95, spatialCov: 8, motion: [0.4], motionExclusionPct: 5 },
+        SUB2_01: { coverage: 90, spatialCov: 9, motion: [0.5], motionExclusionPct: 3 },
+        SUB3_01: { coverage: 85, spatialCov: 10, motion: [0.6], motionExclusionPct: 2 },
+      },
+      qcLoaded: true,
+    });
 
     renderPreview();
 

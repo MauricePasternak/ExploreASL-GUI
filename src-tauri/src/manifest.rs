@@ -96,6 +96,7 @@ pub fn read_population_ready_mtime(project_root: String) -> Option<i64> {
     let p = PathBuf::from(&project_root)
         .join("derivatives")
         .join("ExploreASL")
+        .join("lock")
         .join("xASL_module_Population")
         .join("xASL_module_Population")
         .join("999_ready.status");
@@ -113,7 +114,6 @@ pub fn read_population_ready_mtime(project_root: String) -> Option<i64> {
 }
 
 #[cfg(test)]
-#[cfg(unix)]
 mod tests {
     use super::*;
     use std::io::Write;
@@ -160,6 +160,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn probes_matlab_version() {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -220,6 +221,7 @@ mod tests {
         let pop_dir = tmp
             .join("derivatives")
             .join("ExploreASL")
+            .join("lock")
             .join("xASL_module_Population")
             .join("xASL_module_Population");
         fs::create_dir_all(&pop_dir).unwrap();

@@ -135,15 +135,11 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
         });
       } catch (err) {
         console.warn("[manifest] version capture failed", err);
-        try {
-          useProjectStore.getState().setLastRunVersions({
-            exploreASL: "unknown",
-            matlab: "unknown",
-            gui: "unknown",
-          });
-        } catch {
-          // store action might not exist if projectStore hasn't been updated
-        }
+        useProjectStore.getState().setLastRunVersions({
+          exploreASL: "unknown",
+          matlab: "unknown",
+          gui: "unknown",
+        });
       }
     }
 

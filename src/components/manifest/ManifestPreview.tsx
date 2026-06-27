@@ -1,7 +1,13 @@
 import { Box, Button, Group, Stack, Table, Text, Title } from "@mantine/core";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
-import { aggregateFailReasons } from "../../lib/manifestQc";
+import { useManifestStore } from "../../stores/manifestStore";
+import {
+  aggregateFailReasons,
+  aggregateMeanSd,
+  aggregateMotionBySubject,
+  formatMeanSd,
+} from "../../lib/manifestQc";
 import { renderHtml, renderMarkdown } from "../../lib/manifestExport";
 import type { ManifestPayload } from "../../lib/manifestExport";
 import type { ManifestVerdict } from "../../schemas/project";
@@ -10,6 +16,9 @@ import type { MetadataGroup } from "../../schemas/importSchemas";
 function useBuildManifestPayload(): ManifestPayload {
   const project = useProjectStore((s) => s.project);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
+  const qcData = useManifestStore((s) => s.qcData);
+  const qcLoaded = useManifestStore((s) => s.qcLoaded);
+  const dataPar = useManifestStore((s) => s.dataPar);
 
   const mappingState = project?.mappingState as Record<string, unknown> | undefined;
   const metadataGroups: MetadataGroup[] = (mappingState?.metadataGroups as MetadataGroup[]) ?? [];
@@ -74,17 +83,38 @@ function useBuildManifestPayload(): ManifestPayload {
   }
 
   const qcGroups: ManifestPayload["qcGroups"] = [];
+
+  // Aggregate metadata groups
   for (const group of metadataGroups) {
     const memberSs = new Set<string>();
     for (const [ss, gid] of subjectSessionGroups) {
       if (gid === group.id) memberSs.add(ss);
     }
-    const groupRows: Array<{ verdict: string; reason?: string }> = [];
+    const groupRows: Array<{
+      verdict: string;
+      reason?: string;
+      coverage?: number;
+      spatialCov?: number;
+      motion?: number[];
+      motionExclusionPct?: number;
+    }> = [];
     for (const s of availableSubjects) {
       if (!memberSs.has(s.subjectSession)) continue;
       const v = verdicts[s.subjectSession];
       if (!v) continue;
-      groupRows.push({ verdict: v.status, reason: v.reason });
+
+      const isNoInfo = qcLoaded && (!qcData || !(s.subjectSession in qcData));
+      if (isNoInfo) continue;
+
+      const qc = qcData?.[s.subjectSession];
+      groupRows.push({
+        verdict: v.status,
+        reason: v.reason,
+        coverage: qc?.coverage,
+        spatialCov: qc?.spatialCov,
+        motion: qc?.motion,
+        motionExclusionPct: qc?.motionExclusionPct,
+      });
     }
     if (groupRows.length === 0) continue;
 
@@ -98,19 +128,91 @@ function useBuildManifestPayload(): ManifestPayload {
             .join(", ")
         : "none";
 
+    const coverageStats = aggregateMeanSd(groupRows, (r) => r.coverage);
+    const spatialCovStats = aggregateMeanSd(groupRows, (r) => r.spatialCov);
+    const motionStats = aggregateMeanSd(groupRows, (r) =>
+      r.motion ? (aggregateMotionBySubject(r.motion) ?? undefined) : undefined,
+    );
+    const motionExclusionStats = aggregateMeanSd(groupRows, (r) => r.motionExclusionPct);
+
     qcGroups.push({
       label: group.label,
       passTotal: `${passCount} / ${passCount + failCount}`,
-      coverage: "N/A",
-      spatialCov: "N/A",
-      motion: "N/A",
-      motionExclusion: "N/A",
+      coverage: formatMeanSd(coverageStats),
+      spatialCov: formatMeanSd(spatialCovStats),
+      motion: formatMeanSd(motionStats),
+      motionExclusion: formatMeanSd(motionExclusionStats),
       failReasons,
     });
   }
 
-  const nSubjects = availableSubjects.length;
+  // Aggregate Ungrouped members
+  if (ungroupedMembers.length > 0) {
+    const ungroupedSs = new Set(ungroupedMembers.map((m) => m.subjectSession));
+    const groupRows: Array<{
+      verdict: string;
+      reason?: string;
+      coverage?: number;
+      spatialCov?: number;
+      motion?: number[];
+      motionExclusionPct?: number;
+    }> = [];
+    for (const s of availableSubjects) {
+      if (!ungroupedSs.has(s.subjectSession)) continue;
+      const v = verdicts[s.subjectSession];
+      if (!v) continue;
+
+      const isNoInfo = qcLoaded && (!qcData || !(s.subjectSession in qcData));
+      if (isNoInfo) continue;
+
+      const qc = qcData?.[s.subjectSession];
+      groupRows.push({
+        verdict: v.status,
+        reason: v.reason,
+        coverage: qc?.coverage,
+        spatialCov: qc?.spatialCov,
+        motion: qc?.motion,
+        motionExclusionPct: qc?.motionExclusionPct,
+      });
+    }
+    if (groupRows.length > 0) {
+      const passCount = groupRows.filter((r) => r.verdict === "pass").length;
+      const failCount = groupRows.filter((r) => r.verdict === "fail").length;
+      const reasonCounts = aggregateFailReasons(groupRows);
+      const failReasons =
+        Object.entries(reasonCounts).length > 0
+          ? Object.entries(reasonCounts)
+              .map(([r, c]) => `${r}: ${c}`)
+              .join(", ")
+          : "none";
+
+      const coverageStats = aggregateMeanSd(groupRows, (r) => r.coverage);
+      const spatialCovStats = aggregateMeanSd(groupRows, (r) => r.spatialCov);
+      const motionStats = aggregateMeanSd(groupRows, (r) =>
+        r.motion ? (aggregateMotionBySubject(r.motion) ?? undefined) : undefined,
+      );
+      const motionExclusionStats = aggregateMeanSd(groupRows, (r) => r.motionExclusionPct);
+
+      qcGroups.push({
+        label: "Ungrouped",
+        passTotal: `${passCount} / ${passCount + failCount}`,
+        coverage: formatMeanSd(coverageStats),
+        spatialCov: formatMeanSd(spatialCovStats),
+        motion: formatMeanSd(motionStats),
+        motionExclusion: formatMeanSd(motionExclusionStats),
+        failReasons,
+      });
+    }
+  }
+
+  // Count SubjectSessions included in the manifest (excluding No Info) (Issue 4)
+  const includedSubjects = availableSubjects.filter(
+    (s) => !qcLoaded || (qcData && s.subjectSession in qcData),
+  );
+  const nSubjects = includedSubjects.length;
   const nGroups = metadataGroups.length + (ungroupedMembers.length > 0 ? 1 : 0);
+
+  // NOTE: This paragraph text is sourced from notes/Manifest_Pipeline_Summary.md as per spec D6 (Issue 18).
   const pipelineParagraph = `Data were processed with ExploreASL (version ${versions.exploreASL ?? "unknown"}) running in MATLAB ${versions.matlab ?? "unknown"} through the ExploreASL GUI (version ${versions.gui ?? "unknown"}). This manifest covers ${nSubjects} subjects across ${nGroups} groups.`;
 
   return {
@@ -118,6 +220,7 @@ function useBuildManifestPayload(): ManifestPayload {
     versions,
     qcGroups,
     pipelineParagraph,
+    dataPar: dataPar ?? {},
   };
 }
 
@@ -231,6 +334,32 @@ export default function ManifestPreview() {
             </Table.Tr>
           </Table.Tbody>
         </Table>
+
+        {payload.dataPar && Object.keys(payload.dataPar).length > 0 && (
+          <Table
+            withTableBorder
+            withColumnBorders
+            striped
+            highlightOnHover
+            mt="sm"
+            data-testid="datapar-table"
+          >
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Key</Table.Th>
+                <Table.Th>Value</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {Object.entries(payload.dataPar).map(([key, val]) => (
+                <Table.Tr key={key}>
+                  <Table.Td>{key}</Table.Td>
+                  <Table.Td>{String(val)}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
       </Box>
 
       {/* Section 3: QC Summary */}
@@ -253,23 +382,25 @@ export default function ManifestPreview() {
                 </Table.Tr>
                 <Table.Tr>
                   <Table.Td>Mean ASL Coverage % (SD)</Table.Td>
-                  <Table.Td>{g.coverage}</Table.Td>
+                  <Table.Td data-testid={`${g.label}-coverage`}>{g.coverage}</Table.Td>
                 </Table.Tr>
                 <Table.Tr>
                   <Table.Td>Mean Spatial CoV % (SD)</Table.Td>
-                  <Table.Td>{g.spatialCov}</Table.Td>
+                  <Table.Td data-testid={`${g.label}-spatialCov`}>{g.spatialCov}</Table.Td>
                 </Table.Tr>
                 <Table.Tr>
                   <Table.Td>Mean Motion (mm RMS) (SD)</Table.Td>
-                  <Table.Td>{g.motion}</Table.Td>
+                  <Table.Td data-testid={`${g.label}-motion`}>{g.motion}</Table.Td>
                 </Table.Tr>
                 <Table.Tr>
                   <Table.Td>Mean Motion Exclusion % (SD)</Table.Td>
-                  <Table.Td>{g.motionExclusion}</Table.Td>
+                  <Table.Td data-testid={`${g.label}-motionExclusion`}>
+                    {g.motionExclusion}
+                  </Table.Td>
                 </Table.Tr>
                 <Table.Tr>
                   <Table.Td>Fail Reasons</Table.Td>
-                  <Table.Td>{g.failReasons}</Table.Td>
+                  <Table.Td data-testid={`${g.label}-failReasons`}>{g.failReasons}</Table.Td>
                 </Table.Tr>
               </Table.Tbody>
             </Table>
