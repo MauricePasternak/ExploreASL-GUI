@@ -131,8 +131,12 @@ export default function MetadataGrouping() {
     sourceDataPath.length > 0 && rawPaths.length > 0 && pathPatterns.length > 0;
 
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
-  const [modalMode, setModalMode] = useState<"edit" | "override" | null>(null);
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [modalMode, setModalMode] = useState<"edit" | "override" | null>(() =>
+    metadataGroups.length === 0 ? "edit" : null,
+  );
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(() =>
+    metadataGroups.length === 0 ? DEFAULT_GROUP_ID : null,
+  );
 
   const derivedRows = useMemo(
     () =>
@@ -175,8 +179,6 @@ export default function MetadataGrouping() {
         label: "Global Defaults",
         bidsParams: {},
       });
-      setEditingGroupId(DEFAULT_GROUP_ID);
-      setModalMode("edit");
     }
   }, [addMetadataGroup, metadataGroups.length]);
 

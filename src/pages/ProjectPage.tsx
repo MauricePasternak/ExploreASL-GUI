@@ -66,7 +66,7 @@ export default function ProjectPage() {
     if (project) {
       hadProjectRef.current = true;
       restoreInFlight.current = false;
-      setRestoring(false);
+      Promise.resolve().then(() => setRestoring(false));
       return;
     }
 
@@ -76,7 +76,7 @@ export default function ProjectPage() {
 
     if (hadProjectRef.current) {
       hadProjectRef.current = false;
-      setRestoring(false);
+      Promise.resolve().then(() => setRestoring(false));
       navigate("/", { replace: true });
       return;
     }
@@ -94,26 +94,13 @@ export default function ProjectPage() {
       if (cancelled) {
         return;
       }
-
-      if (!restored) {
-        restoreInFlight.current = false;
-        setRestoring(false);
-        navigate("/", { replace: true });
-        return;
-      }
-
-      const loaded = useProjectStore.getState().project;
-      if (!loaded) {
-        restoreInFlight.current = false;
-        setRestoring(false);
-        navigate("/", { replace: true });
-        return;
-      }
-
-      const phase = resolveRestoredPhase(params.phase, loaded);
-      navigate(`/project/${loaded.projectMeta.id}/${phase}`, { replace: true });
       restoreInFlight.current = false;
       setRestoring(false);
+
+      if (!restored) {
+        // Project failed to load / doesn't exist
+        navigate("/", { replace: true });
+      }
     }
 
     void restore();
@@ -121,20 +108,28 @@ export default function ProjectPage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, params.id, params.phase, project]);
+  }, [params.id, navigate, project]);
 
-  // Keep checkpoint aligned with the active route while a project is open
+  // Keep project session checkpoint up to date as we navigate/change settings
+  useEffect(() => {
+    if (!project) {
+      return;
+    }
+    void syncSessionCheckpointFromProject(project);
+  }, [project]);
+
+  // Route guarding based on phase accessibility
   useEffect(() => {
     if (!project) {
       return;
     }
 
-    const phase = isProjectPhase(params.phase) ? params.phase : project.projectMeta.currentPhase;
-    syncSessionCheckpointFromProject(project, phase);
-  }, [params.phase, project]);
-
-  useEffect(() => {
-    if (!project) {
+    // Default to the project's currentPhase if no phase parameter is present
+    if (!params.phase) {
+      const resolvedPhase = resolveRestoredPhase(project);
+      navigate(`/project/${project.projectMeta.id}/${resolvedPhase}`, {
+        replace: true,
+      });
       return;
     }
 
@@ -159,13 +154,14 @@ export default function ProjectPage() {
   }, [navigate, params.phase, project, saveProject, setPhase]);
 
   // Register active project root for niivue:// protocol
+  const rootPath = project?.projectMeta.rootPath;
   useEffect(() => {
-    if (!project) return;
-    invoke("set_active_project", { rootPath: project.projectMeta.rootPath }).catch(console.error);
+    if (!rootPath) return;
+    invoke("set_active_project", { rootPath }).catch(console.error);
     return () => {
       invoke("clear_active_project").catch(console.error);
     };
-  }, [project?.projectMeta.rootPath]);
+  }, [rootPath]);
 
   if (!project) {
     if (restoring) {
