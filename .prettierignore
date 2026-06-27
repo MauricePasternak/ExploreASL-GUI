@@ -10,3 +10,4 @@ e2e-tests/pnpm-lock.yaml
 .cursor/
 .opencode/
 .worktrees/
+src/lib/__fixtures__/
