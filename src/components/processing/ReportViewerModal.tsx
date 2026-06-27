@@ -13,7 +13,7 @@ import {
   Title,
 } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchReportImage, fetchSubjectQC, type QcMeasure } from "../../lib/reportViewer";
 
@@ -36,11 +36,13 @@ interface ImageCardProps {
 }
 
 function ImageCard({ title, url, loading, error, errorLabel, testIdPrefix }: ImageCardProps) {
+  const [prevUrl, setPrevUrl] = useState<string | null>(url);
   const [decodeError, setDecodeError] = useState(false);
 
-  useEffect(() => {
+  if (url !== prevUrl) {
+    setPrevUrl(url);
     setDecodeError(false);
-  }, [url]);
+  }
 
   const hasError = error || decodeError;
 
@@ -100,6 +102,8 @@ export default function ReportViewerModal({
   module,
   runs = [],
 }: ReportViewerModalProps) {
+  const [prevRunsJoined, setPrevRunsJoined] = useState<string>("");
+  const [prevSubjectSession, setPrevSubjectSession] = useState<string>("");
   const [selectedRun, setSelectedRun] = useState<string>("1");
 
   const [axialUrl, setAxialUrl] = useState<string | null>(null);
@@ -126,11 +130,41 @@ export default function ReportViewerModal({
   const [qcLoading, setQcLoading] = useState(false);
   const [qcError, setQcError] = useState<string | null>(null);
 
+  // Sync selectedRun when runs or subjectSession change
+  const runsJoined = runs.join(",");
+  if (runsJoined !== prevRunsJoined || subjectSession !== prevSubjectSession) {
+    setPrevRunsJoined(runsJoined);
+    setPrevSubjectSession(subjectSession);
+    setSelectedRun(runs && runs.length > 0 ? runs[0] : "1");
+  }
+
+  // Reset QC state when parameters change
+  const [prevQCKey, setPrevQCKey] = useState<string>("");
+  const qcKey = `${opened}-${projectRoot}-${subjectSession}-${module}-${selectedRun}`;
+  if (qcKey !== prevQCKey) {
+    setPrevQCKey(qcKey);
+    setQcMeasures([]);
+    setQcLoading(Boolean(opened && projectRoot && subjectSession));
+    setQcError(null);
+  }
+
+  // Reset image URL and error states when parameters change
+  const [prevImageKey, setPrevImageKey] = useState<string>("");
+  const imageKey = `${opened}-${projectRoot}-${subjectSession}-${module}-${selectedRun}`;
+  if (imageKey !== prevImageKey) {
+    setPrevImageKey(imageKey);
+    setAxialUrl(null);
+    setCoronalUrl(null);
+    setM0AxialUrl(null);
+    setM0CoronalUrl(null);
+    setAxialErr(false);
+    setCoronalErr(false);
+    setM0AxialErr(false);
+    setM0CoronalErr(false);
+  }
+
   useEffect(() => {
     let active = true;
-    setQcMeasures([]);
-    setQcLoading(false);
-    setQcError(null);
 
     if (!opened || !projectRoot || !subjectSession) {
       return;
@@ -162,14 +196,6 @@ export default function ReportViewerModal({
     };
   }, [opened, projectRoot, subjectSession, module, selectedRun]);
 
-  useEffect(() => {
-    if (runs && runs.length > 0) {
-      setSelectedRun(runs[0]);
-    } else {
-      setSelectedRun("1");
-    }
-  }, [runs, subjectSession]);
-
   const cleanupUrls = () => {
     if (axialUrlRef.current) {
       URL.revokeObjectURL(axialUrlRef.current);
@@ -189,49 +215,43 @@ export default function ReportViewerModal({
     }
   };
 
-  const loadImage = async (
-    mod: "structural" | "asl" | "m0",
-    view: "axial" | "coronal",
-    runVal: string | undefined,
-    setUrl: (url: string | null) => void,
-    setLoad: (l: boolean) => void,
-    setErr: (e: boolean) => void,
-    urlRef: React.MutableRefObject<string | null>,
-    active: { current: boolean },
-  ) => {
-    if (!projectRoot || !subjectSession) return;
-    setLoad(true);
-    setErr(false);
-    setUrl(null);
-    try {
-      const bytes = await fetchReportImage(projectRoot, subjectSession, mod, runVal, view);
-      if (!active.current) return;
-      const blob = new Blob([bytes as BlobPart], { type: "image/jpeg" });
-      const url = URL.createObjectURL(blob);
-      urlRef.current = url;
-      setUrl(url);
-    } catch (err) {
-      console.error(err);
-      if (!active.current) return;
-      setErr(true);
-    } finally {
-      if (active.current) {
-        setLoad(false);
+  const loadImage = useCallback(
+    async (
+      mod: "structural" | "asl" | "m0",
+      view: "axial" | "coronal",
+      runVal: string | undefined,
+      setUrl: (url: string | null) => void,
+      setLoad: (l: boolean) => void,
+      setErr: (e: boolean) => void,
+      urlRef: React.MutableRefObject<string | null>,
+      active: { current: boolean },
+    ) => {
+      if (!projectRoot || !subjectSession) return;
+      setLoad(true);
+      setErr(false);
+      setUrl(null);
+      try {
+        const bytes = await fetchReportImage(projectRoot, subjectSession, mod, runVal, view);
+        if (!active.current) return;
+        const blob = new Blob([bytes as BlobPart], { type: "image/jpeg" });
+        const url = URL.createObjectURL(blob);
+        urlRef.current = url;
+        setUrl(url);
+      } catch (err) {
+        console.error(err);
+        if (!active.current) return;
+        setErr(true);
+      } finally {
+        if (active.current) {
+          setLoad(false);
+        }
       }
-    }
-  };
+    },
+    [projectRoot, subjectSession],
+  );
 
   useEffect(() => {
     const active = { current: true };
-    cleanupUrls();
-    setAxialUrl(null);
-    setCoronalUrl(null);
-    setM0AxialUrl(null);
-    setM0CoronalUrl(null);
-    setAxialErr(false);
-    setCoronalErr(false);
-    setM0AxialErr(false);
-    setM0CoronalErr(false);
 
     if (!opened || !projectRoot || !subjectSession) {
       return;
@@ -307,7 +327,7 @@ export default function ReportViewerModal({
       active.current = false;
       cleanupUrls();
     };
-  }, [opened, projectRoot, subjectSession, module, selectedRun]);
+  }, [opened, projectRoot, subjectSession, module, selectedRun, loadImage]);
 
   // Parse subject and session labels
   const [sub, ses] = subjectSession ? subjectSession.split("_") : ["", ""];

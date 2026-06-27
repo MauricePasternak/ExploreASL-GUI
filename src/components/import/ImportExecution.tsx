@@ -271,8 +271,59 @@ export default function ImportExecution() {
   const canRun = hasMatlab && hasExploreAsl && hasSubjects;
   const noMatlab = settings.matlabInstallations.length === 0;
 
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [prevImportProgress, setPrevImportProgress] = useState(importProgress);
+  const [prevImportPhase, setPrevImportPhase] = useState(importPhase);
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>(() => {
+    const subjects = Object.values(importProgress);
+    if (subjects.length === 0) return [];
+    if (importPhase === "idle" || importPhase === "failed" || importPhase === "cancelled") {
+      const hasCompleted = subjects.some((s) => s.status === "completed");
+      if (!hasCompleted) {
+        return subjects.map((s) => s.subject);
+      }
+      const toSelect = subjects
+        .filter(
+          (s) =>
+            s.stale ||
+            s.status === "failed" ||
+            s.status === "pending" ||
+            s.status === "running" ||
+            s.status === "cancelled",
+        )
+        .map((s) => s.subject);
+      return toSelect.length > 0 ? toSelect : subjects.map((s) => s.subject);
+    }
+    return [];
+  });
   const [confirmSubjects, setConfirmSubjects] = useState<string[] | null>(null);
+
+  if (importProgress !== prevImportProgress || importPhase !== prevImportPhase) {
+    setPrevImportProgress(importProgress);
+    setPrevImportPhase(importPhase);
+
+    const subjects = Object.values(importProgress);
+    if (subjects.length > 0) {
+      if (importPhase === "idle" || importPhase === "failed" || importPhase === "cancelled") {
+        const hasCompleted = subjects.some((s) => s.status === "completed");
+
+        if (!hasCompleted) {
+          setSelectedSubjects(subjects.map((s) => s.subject));
+        } else {
+          const toSelect = subjects
+            .filter(
+              (s) =>
+                s.stale ||
+                s.status === "failed" ||
+                s.status === "pending" ||
+                s.status === "running" ||
+                s.status === "cancelled",
+            )
+            .map((s) => s.subject);
+          setSelectedSubjects(toSelect.length > 0 ? toSelect : subjects.map((s) => s.subject));
+        }
+      }
+    }
+  }
 
   const matlabOptions = useMemo(
     () =>
@@ -290,31 +341,6 @@ export default function ImportExecution() {
       setSelectedMatlabPath(settings.matlabInstallations[0].path);
     }
   }, [selectedMatlabPath, settings.matlabInstallations, setSelectedMatlabPath]);
-
-  useEffect(() => {
-    const subjects = Object.values(importProgress);
-    if (subjects.length === 0) return;
-
-    if (importPhase === "idle" || importPhase === "failed" || importPhase === "cancelled") {
-      const hasCompleted = subjects.some((s) => s.status === "completed");
-
-      if (!hasCompleted) {
-        setSelectedSubjects(subjects.map((s) => s.subject));
-      } else {
-        const toSelect = subjects
-          .filter(
-            (s) =>
-              s.stale ||
-              s.status === "failed" ||
-              s.status === "pending" ||
-              s.status === "running" ||
-              s.status === "cancelled",
-          )
-          .map((s) => s.subject);
-        setSelectedSubjects(toSelect.length > 0 ? toSelect : subjects.map((s) => s.subject));
-      }
-    }
-  }, [importProgress, importPhase]);
 
   const pidRef = useRef<number | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
