@@ -81,6 +81,20 @@ Hardcoded — part of ExploreASL's contract. Rarely changes.
 - **Merged Inspection**: The `inspection` store field when a join is active. Populated by `execute_join` instead of `inspect_tsv`. Same shape, but columns carry `source` ("qcbf" | "external") and `originalName` (pre-suffix). Identifier columns are qCBF-side only.
 - **NA Tokens**: User-specified missing-value strings for the external file. Defaults: `["", "NaN", "NA", "n/a", "<NA>"]`. Applied during `execute_join`; normalized to empty strings in cached merged data. qCBF side keeps its existing missing-value handling.
 
+## Manifest Module
+
+- **Manifest Verdict**: User QC judgment on a SubjectSession after Population module completion: `pass` or `fail`. Stored in `.easl` under `uiState.manifest.verdicts` keyed by SubjectSession. Distinct from pipeline `ModuleDisplayStatus` — orthogonal to it. Set via the QC Selection step of the Manifest stepper.
+  _Avoid_: QC flag, subject status, review mark
+- **Verdict Unit**: SubjectSession only (`sub-X_Y`). One verdict per SubjectSession regardless of ASL run count. Q3 resolution.
+- **Neutral Verdict**: Default unset state — a SubjectSession rendered in QC Selection before the user has triaged it. Progression to Manifest Preview is gated on zero Neutral verdicts across visible rows.
+  _Avoid_: pending (collides with pipeline status), unreviewed
+- **No Info Verdict**: Derived, non-user-touchable exclusion state — SubjectSession whose Population QC outputs (coverage / SpatialCoV / motion CSVs) are missing or unreadable. Removed from manifest aggregation; not counted in Pass/Total.
+  _Avoid_: missing data, no data
+- **Stale Verdict**: A Manifest verdict whose `setAtPopulationRunId` differs from the current Population run id. Re-running Population marks prior verdicts stale (mirrors the Import StaleSubject pattern); stale verdicts cannot enter a manifest without re-confirmation.
+- **N Subjects (per group)**: Count of unique SubjectSessions assigned to a metadata group.
+- **N Total Runs (per group)**: Sum of `aslRuns.length` across SubjectSessions in the group. Distinct from N Subjects (e.g. one SubjectSession with 3 ASL runs contributes 1 to N Subjects, 3 to N Total Runs).
+- **Per-SubjectSession Mean Motion**: Worst ASL run within the SubjectSession — `max(runs[].motionRmsMm)`, not mean. Coverage and SpatialCoV are emitted per-SubjectSession (no across-run aggregation needed).
+
 ## Import Module
 
 - **Stale import subject**: An import subject whose result may no longer reflect current configuration. Structural config changes (tokenizer, aliases, renames) stale all subjects; metadata group changes stale only subjects in affected groups.
