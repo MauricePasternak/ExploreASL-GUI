@@ -17,6 +17,7 @@ import {
   IconAdjustments,
   IconArrowLeft,
   IconBrain,
+  IconBug,
   IconChartDots,
   IconCheck,
   IconCopy,
@@ -35,7 +36,7 @@ import {
   IconSettings,
   IconTags,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 interface TreeRowProps {
@@ -86,6 +87,31 @@ export default function OverviewPage() {
   const fromPath = location.state?.from;
   const isFromProject = fromPath && fromPath !== "/" && fromPath !== "/overview";
   const [bibtexCopied, setBibtexCopied] = useState(false);
+  const [resolvedDevLog, setResolvedDevLog] = useState<string>("");
+  const [resolvedReleaseLogDir, setResolvedReleaseLogDir] = useState<string>("");
+
+  useEffect(() => {
+    let active = true;
+    async function fetchPaths() {
+      try {
+        const { tempDir, appDataDir, join } = await import("@tauri-apps/api/path");
+        const temp = await tempDir();
+        const appData = await appDataDir();
+        const devPath = await join(temp, "exploreasl-gui-logs", "dev.log");
+        const releaseDir = await join(appData, "logs");
+        if (active) {
+          setResolvedDevLog(devPath);
+          setResolvedReleaseLogDir(releaseDir);
+        }
+      } catch (e) {
+        console.warn("Failed to resolve log paths dynamically:", e);
+      }
+    }
+    void fetchPaths();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const bibtexEntry = `@article{mutsaerts2020exploreasl-a04, 
   year     = {2020}, 
@@ -664,6 +690,121 @@ export default function OverviewPage() {
             </Button>
           </Tooltip>
         </Alert>
+      </Stack>
+
+      <Divider />
+
+      {/* Troubleshooting & Debugging */}
+      <Stack gap="md" data-testid="section-troubleshooting">
+        <Group gap="xs">
+          <ThemeIcon color="orange" size="lg" radius="xl">
+            <IconBug size={20} />
+          </ThemeIcon>
+          <Title order={2} component="h1">
+            Troubleshooting & Debugging
+          </Title>
+          <Badge color="orange" variant="outline">
+            Helpful Tools
+          </Badge>
+        </Group>
+        <Text size="sm">
+          If you encounter issues, errors, or unexpected behavior while using the GUI, several
+          built-in debugging features are available to help you diagnose the problem or share
+          diagnostic info with developers/AI coding assistants.
+        </Text>
+        <Accordion variant="separated" data-testid="troubleshooting-accordion">
+          <Accordion.Item value="shortcuts">
+            <Accordion.Control
+              icon={<IconCopy size={16} color="var(--mantine-color-orange-filled)" />}
+            >
+              <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                Capturing State Snapshots (Ctrl+Shift+D)
+              </Title>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Text size="sm" mb="xs">
+                Pressing <strong>Ctrl+Shift+D</strong> anywhere in the application will
+                automatically capture a diagnostic snapshot of the application state and copy it to
+                your clipboard.
+              </Text>
+              <Text size="sm" mb="xs">
+                This snapshot includes a JSON report of:
+              </Text>
+              <div style={{ fontSize: "0.875rem" }}>
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>The active route (current screen).</li>
+                  <li>
+                    Contents of the global settings store and project metadata store (including
+                    import and processing settings).
+                  </li>
+                  <li>A rolling action replay log of recent events.</li>
+                  <li>System details like your user agent.</li>
+                </ul>
+              </div>
+              <Text size="sm" mt="xs">
+                You can paste this JSON snapshot directly into a bug report or share it with an AI
+                assistant to help reconstruct the exact application state.
+              </Text>
+            </Accordion.Panel>
+          </Accordion.Item>
+
+          <Accordion.Item value="logs">
+            <Accordion.Control
+              icon={<IconFileText size={16} color="var(--mantine-color-orange-filled)" />}
+            >
+              <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                Accessing Log Files
+              </Title>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Text size="sm" mb="xs">
+                The application writes detailed execution logs (including command tracing,
+                stdout/stderr from MATLAB, and frontend console outputs) to disk.
+              </Text>
+              <Text size="sm" component="div">
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>
+                    <strong>Development Mode:</strong> Logs are stored in your OS temporary
+                    directory:{" "}
+                    {resolvedDevLog ? (
+                      <code style={{ wordBreak: "break-all" }}>{resolvedDevLog}</code>
+                    ) : (
+                      <code style={{ wordBreak: "break-all" }}>
+                        &lt;OS_TEMP_DIR&gt;/exploreasl-gui-logs/dev.log
+                      </code>
+                    )}
+                  </li>
+                  <li>
+                    <strong>Release Mode:</strong> Logs are stored in the standard OS application
+                    data directory for the GUI app:{" "}
+                    {resolvedReleaseLogDir ? (
+                      <code style={{ wordBreak: "break-all" }}>{resolvedReleaseLogDir}</code>
+                    ) : (
+                      <code style={{ wordBreak: "break-all" }}>&lt;APP_DATA_DIR&gt;/logs/</code>
+                    )}
+                  </li>
+                </ul>
+              </Text>
+            </Accordion.Panel>
+          </Accordion.Item>
+
+          <Accordion.Item value="error-boundary">
+            <Accordion.Control
+              icon={<IconExclamationMark size={16} color="var(--mantine-color-orange-filled)" />}
+            >
+              <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                React Crashes & Error Boundary
+              </Title>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Text size="sm">
+                If a critical rendering error occurs in the user interface, the GUI will show a
+                fallback crash screen. Click the <strong>"Copy error report"</strong> button on that
+                screen to copy the error stack trace to your clipboard to paste into a bug report.
+              </Text>
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
       </Stack>
 
       <Divider />

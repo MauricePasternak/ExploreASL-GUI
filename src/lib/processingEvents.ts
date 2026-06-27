@@ -74,8 +74,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
   const unlistenStatus = await listen<StatusFileCreatedPayload>("StatusFileCreated", (event) => {
     const { subjectSession, stepCode, run } = event.payload;
     console.log(
-      `[${new Date().toISOString()}] [FRONTEND_WATCHER] StatusFileCreated event:`,
-      event.payload,
+      `[FRONTEND_WATCHER] StatusFileCreated: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} stepCode=${stepCode} run=${run ?? "None"}`,
     );
     const module = mapModuleName(event.payload.module);
     if (!module) return;
@@ -117,8 +116,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
   const unlistenLock = await listen<LockCreatedPayload>("LockCreated", (event) => {
     const { subjectSession, run } = event.payload;
     console.log(
-      `[${new Date().toISOString()}] [FRONTEND_WATCHER] LockCreated event:`,
-      event.payload,
+      `[FRONTEND_WATCHER] LockCreated: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} run=${run ?? "None"}`,
     );
     const module = mapModuleName(event.payload.module);
     if (!module) return;
@@ -151,8 +149,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
   const unlistenLockRemoved = await listen<LockRemovedPayload>("LockRemoved", (event) => {
     const { subjectSession, run } = event.payload;
     console.log(
-      `[${new Date().toISOString()}] [FRONTEND_WATCHER] LockRemoved event:`,
-      event.payload,
+      `[FRONTEND_WATCHER] LockRemoved: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} run=${run ?? "None"}`,
     );
     const module = mapModuleName(event.payload.module);
     if (!module) return;
@@ -177,10 +174,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
   // 3. WorkerExited
   const unlistenWorker = await listen<WorkerExitedPayload>("WorkerExited", async (event) => {
     const { pid } = event.payload;
-    console.log(
-      `[${new Date().toISOString()}] [FRONTEND_WATCHER] WorkerExited event:`,
-      event.payload,
-    );
+    console.log(`[FRONTEND_WATCHER] WorkerExited: pid=${pid} exitCode=${event.payload.exitCode}`);
     removeWorkerPid(pid);
 
     const remaining = useProcessingStore.getState().workerPids;

@@ -3,6 +3,7 @@ import { create } from "zustand";
 
 import { ensureBidsIgnore, isBidsProject } from "../lib/bidsUtils";
 import { compressSnapshot } from "../lib/snapshotCompression";
+import { logAction } from "../lib/debug";
 import {
   clearSessionCheckpoint,
   projectEaslPath,
@@ -81,6 +82,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       isDirty: false,
       loaded: true,
     });
+    logAction("project_load", {
+      name: hydratedProject.projectMeta.name,
+      path: hydratedProject.projectMeta.rootPath,
+    });
     syncSessionCheckpointFromProject(hydratedProject);
   },
 
@@ -101,6 +106,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       project,
       isDirty: false,
       loaded: true,
+    });
+    logAction("project_create", {
+      name: project.projectMeta.name,
+      path: project.projectMeta.rootPath,
     });
     syncSessionCheckpointFromProject(project);
   },
@@ -178,6 +187,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   closeProject: () => {
     clearSessionCheckpoint();
+    logAction("project_close");
     set({
       project: null,
       isDirty: false,

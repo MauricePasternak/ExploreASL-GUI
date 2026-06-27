@@ -60,7 +60,7 @@ Refer to [DEBUGGING.md](file:///mnt/Samsung_NVME_4TB/ExploreASL_GUI/notes/DEBUGG
 **Logs:**
 | Mode | Location |
 | ------- | ------------------------------------------- |
-| Dev | `<OS temp dir>/opencode/exploreasl-gui-logs/dev.log` |
+| Dev | `<OS temp dir>/exploreasl-gui-logs/dev.log` |
 | Release | OS app data dir |
 
 **Error Boundary:** Catches React errors. "Copy error report" → clipboard JSON.

@@ -7,6 +7,7 @@ import {
   type StoreSnapshot,
   captureSnapshot,
   copySnapshotToClipboard,
+  initDebugKeyboardShortcuts,
 } from "./debug";
 
 vi.mock("@tauri-apps/plugin-log", () => ({
@@ -54,17 +55,14 @@ describe("captureSnapshot", () => {
   it("returns a snapshot with all stores and metadata", async () => {
     const globalStore = { theme: "dark" };
     const projectStore = { project: null };
-    const importStore = { activeStep: 2 };
 
     const snapshot = await captureSnapshot(
       () => globalStore,
       () => projectStore,
-      () => importStore,
     );
 
     expect(snapshot.globalStore).toEqual(globalStore);
     expect(snapshot.projectStore).toEqual(projectStore);
-    expect(snapshot.importStore).toEqual(importStore);
     expect(snapshot.route).toBeDefined();
     expect(snapshot.timestamp).toBeDefined();
     expect(snapshot.userAgent).toBeDefined();
@@ -81,7 +79,6 @@ describe("copySnapshotToClipboard", () => {
       route: "#/project/123/import",
       globalStore: {},
       projectStore: {},
-      importStore: {},
       actionLog: [],
       userAgent: "test",
     };
@@ -91,5 +88,37 @@ describe("copySnapshotToClipboard", () => {
     expect(writeText).toHaveBeenCalledOnce();
     const written = writeText.mock.calls[0]![0] as string;
     expect(JSON.parse(written)).toEqual(snapshot);
+  });
+});
+
+describe("initDebugKeyboardShortcuts", () => {
+  it("listens to Ctrl+Shift+D, copies snapshot, and shows a notification", async () => {
+    const { notifications } = await import("@mantine/notifications");
+    const globalStore = { theme: "dark" };
+    const projectStore = { project: null };
+    const writeText = vi.fn((_text: string) => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    initDebugKeyboardShortcuts(
+      () => globalStore,
+      () => projectStore,
+    );
+
+    const event = new KeyboardEvent("keydown", {
+      key: "D",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    window.dispatchEvent(event);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Snapshot Copied",
+        color: "teal",
+      }),
+    );
   });
 });

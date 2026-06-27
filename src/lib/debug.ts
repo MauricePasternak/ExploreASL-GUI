@@ -7,6 +7,7 @@
  */
 
 import { debug, info, warn, error } from "@tauri-apps/plugin-log";
+import { notifications } from "@mantine/notifications";
 
 // =============================================================================
 // Console Bridge
@@ -119,7 +120,6 @@ export interface StoreSnapshot {
   route: string;
   globalStore: unknown;
   projectStore: unknown;
-  importStore: unknown;
   actionLog: ActionEntry[];
   userAgent: string;
 }
@@ -127,14 +127,12 @@ export interface StoreSnapshot {
 export async function captureSnapshot(
   getGlobalStore: () => unknown,
   getProjectStore: () => unknown,
-  getImportStore: () => unknown,
 ): Promise<StoreSnapshot> {
   return {
     timestamp: new Date().toISOString(),
     route: window.location.hash,
     globalStore: getGlobalStore(),
     projectStore: getProjectStore(),
-    importStore: getImportStore(),
     actionLog: getActionLog(),
     userAgent: navigator.userAgent,
   };
@@ -148,16 +146,20 @@ export async function copySnapshotToClipboard(snapshot: StoreSnapshot): Promise<
 export function initDebugKeyboardShortcuts(
   getGlobalStore: () => unknown,
   getProjectStore: () => unknown,
-  getImportStore: () => unknown,
 ) {
   window.addEventListener("keydown", async (event) => {
     if (event.ctrlKey && event.shiftKey && event.key === "D") {
       event.preventDefault();
-      const snapshot = await captureSnapshot(getGlobalStore, getProjectStore, getImportStore);
+      const snapshot = await captureSnapshot(getGlobalStore, getProjectStore);
       await copySnapshotToClipboard(snapshot);
       void info("[DEBUG] Store snapshot copied to clipboard (Ctrl+Shift+D)").catch(() => undefined);
 
       console.log("[DEBUG] Store snapshot copied to clipboard");
+      notifications.show({
+        color: "teal",
+        title: "Snapshot Copied",
+        message: "Application state snapshot has been copied to your clipboard (Ctrl+Shift+D).",
+      });
     }
   });
 }

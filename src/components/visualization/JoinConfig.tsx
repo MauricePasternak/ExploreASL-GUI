@@ -61,6 +61,12 @@ export default function JoinConfig() {
     let active = true;
     async function loadExt() {
       try {
+        console.log(
+          "[JoinConfig] Inspecting external file:",
+          currentPath,
+          "with delimiter:",
+          currentDelimiter,
+        );
         const result = await invoke<{
           columns: Array<{
             name: string;
@@ -76,6 +82,7 @@ export default function JoinConfig() {
           delimiter: currentDelimiter,
         });
         if (active) {
+          console.log("[JoinConfig] External file inspection success:", result);
           setExtInspection(result);
           lastInspectedRef.current = {
             path: currentPath,
@@ -85,6 +92,7 @@ export default function JoinConfig() {
         }
       } catch (err) {
         if (active) {
+          console.error("[JoinConfig] Failed to inspect external file:", err);
           setError(
             `Failed to inspect external file: ${err instanceof Error ? err.message : "Unknown error"}`,
           );
@@ -111,15 +119,21 @@ export default function JoinConfig() {
       defaultPath = project.projectMeta.rootPath;
     }
 
+    console.log("[JoinConfig] Browsing for external file...");
     const selected = await open({
       filters: [{ name: "Data files", extensions: ["csv", "tsv", "xlsx"] }],
       multiple: false,
       defaultPath,
     });
-    if (!selected || typeof selected !== "string") return;
+    if (!selected || typeof selected !== "string") {
+      console.log("[JoinConfig] File browse cancelled");
+      return;
+    }
+    console.log("[JoinConfig] Selected file path:", selected);
     if (!project) return;
     setError(null);
     try {
+      console.log("[JoinConfig] Inspecting selected file:", selected);
       const result = await invoke<{
         columns: Array<{
           name: string;
@@ -134,6 +148,7 @@ export default function JoinConfig() {
         absolutePath: selected,
         delimiter: joinConfig?.delimiter ?? "auto",
       });
+      console.log("[JoinConfig] Selected file inspection success:", result);
       setExtInspection(result);
       lastInspectedRef.current = {
         path: selected,
@@ -155,6 +170,7 @@ export default function JoinConfig() {
         delimiter: existing?.delimiter ?? "auto",
       });
     } catch (err) {
+      console.error("[JoinConfig] Failed to inspect selected file:", err);
       setError(
         `Failed to inspect external file: ${err instanceof Error ? err.message : "Unknown error"}`,
       );
@@ -162,6 +178,7 @@ export default function JoinConfig() {
   }
 
   function handleRemoveExternal() {
+    console.log("[JoinConfig] Removing external dataset join configuration");
     setJoinConfig(null);
     setExtInspection(null);
     lastInspectedRef.current = null;

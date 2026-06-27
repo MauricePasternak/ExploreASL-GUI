@@ -13,7 +13,7 @@ const originalSetInterval = globalThis.setInterval;
 const originalClearInterval = globalThis.clearInterval;
 
 globalThis.setTimeout = function (cb: (...args: any[]) => void, delay?: number, ...args: any[]) {
-  let timerId: any;
+  let timerId: any = null;
   const wrappedCb = (...callbackArgs: any[]) => {
     activeTimeouts.delete(timerId);
     cb(...callbackArgs);
@@ -45,7 +45,7 @@ const originalCaf = typeof window !== "undefined" ? window.cancelAnimationFrame 
 if (originalRaf && originalCaf) {
   const wrapRaf = (raf: typeof originalRaf) => {
     return function (cb: FrameRequestCallback) {
-      let rayId: any;
+      let rayId: any = null;
       const wrappedCb = (time: number) => {
         activeRays.delete(rayId);
         cb(time);
@@ -186,6 +186,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("@tauri-apps/api/path", () => ({
   homeDir: vi.fn(() => "/home/testuser"),
   join: vi.fn((...parts: string[]) => parts.join("/")),
+  tempDir: vi.fn(() => Promise.resolve("/tmp")),
+  appDataDir: vi.fn(() => Promise.resolve("/home/testuser/.local/share/exploreasl_gui")),
 }));
 
 vi.mock("@tauri-apps/plugin-fs", () => ({

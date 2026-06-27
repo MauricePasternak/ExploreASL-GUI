@@ -75,7 +75,6 @@ initConsoleBridge();
 initDebugKeyboardShortcuts(
   () => useGlobalStore.getState(),
   () => useProjectStore.getState(),
-  () => useImportStore.getState(),
 );
 
 // Expose debug utilities to window for devtools console access
@@ -104,7 +103,6 @@ window.__DEBUG__ = {
     const snapshot = await captureSnapshot(
       () => useGlobalStore.getState(),
       () => useProjectStore.getState(),
-      () => useImportStore.getState(),
     );
     await copySnapshotToClipboard(snapshot);
 
