@@ -41,6 +41,7 @@ interface ProjectState {
     status: "pass" | "fail",
     opts: { reason?: ManifestFailReason; notes?: string; setAt: number },
   ) => void;
+  removeManifestVerdict: (subjectSession: string) => void;
   setLastRunVersions: (versions: { exploreASL?: string; matlab?: string; gui?: string }) => void;
   setLastPopulationRunMtime: (mtime: number | null) => void;
   closeProject: () => void;
@@ -245,6 +246,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                 ...(state.project.uiState?.manifest?.verdicts ?? {}),
                 [subjectSession]: verdict,
               },
+              lastRunVersions: state.project.uiState?.manifest?.lastRunVersions ?? {},
+              lastPopulationRunMtime:
+                state.project.uiState?.manifest?.lastPopulationRunMtime ?? null,
+            },
+          },
+        },
+      };
+    });
+  },
+
+  removeManifestVerdict: (subjectSession) => {
+    set((state) => {
+      if (!state.project) return state;
+      const prev = state.project.uiState?.manifest?.verdicts ?? {};
+      if (!(subjectSession in prev)) return state;
+      const { [subjectSession]: _, ...remaining } = prev;
+      return {
+        isDirty: true,
+        project: {
+          ...state.project,
+          uiState: {
+            ...state.project.uiState,
+            manifest: {
+              verdicts: remaining,
               lastRunVersions: state.project.uiState?.manifest?.lastRunVersions ?? {},
               lastPopulationRunMtime:
                 state.project.uiState?.manifest?.lastPopulationRunMtime ?? null,
