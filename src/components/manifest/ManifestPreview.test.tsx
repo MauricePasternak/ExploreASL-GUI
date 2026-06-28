@@ -1,0 +1,428 @@
+import { cleanup, render, screen } from "@testing-library/react";
+import { MantineProvider } from "@mantine/core";
+import { afterEach, describe, expect, it } from "vitest";
+
+import ManifestPreview from "./ManifestPreview";
+import { useProjectStore } from "../../stores/projectStore";
+import { useProcessingStore } from "../../stores/processingStore";
+import type { SubjectInfo } from "../../schemas/processingSchemas";
+import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
+import type { ManifestVerdict } from "../../schemas/project";
+
+// ---------------------------------------------------------------------------
+// Test data
+// ---------------------------------------------------------------------------
+
+const groupPcasl: MetadataGroup = {
+  id: "g1",
+  label: "Group A (PCASL)",
+  bidsParams: {
+    ArterialSpinLabelingType: "PCASL",
+    LabelingDuration: 1800,
+    PostLabelingDelay: 2000,
+    BackgroundSuppression: true,
+    BolusCutOffFlag: true,
+    BolusCutOffDelayTime: 2000,
+  } as any,
+};
+
+const groupPasl: MetadataGroup = {
+  id: "g2",
+  label: "Group B (PASL)",
+  bidsParams: {
+    ArterialSpinLabelingType: "PASL",
+    LabelingDuration: 1000,
+    PostLabelingDelay: 1500,
+  } as any,
+};
+
+const groupNoFlag: MetadataGroup = {
+  id: "g3",
+  label: "Group C (No Bolus)",
+  bidsParams: {
+    ArterialSpinLabelingType: "PCASL",
+    LabelingDuration: 1500,
+    BolusCutOffFlag: false,
+    BolusCutOffDelayTime: 800,
+  } as any,
+};
+
+const subjectRow1: SubjectRow = { id: "SUB/01", subject: "SUB", session: "01", groupId: "g1" };
+const subjectRow2: SubjectRow = { id: "SUB2/01", subject: "SUB2", session: "01", groupId: "g1" };
+const subjectRow3: SubjectRow = { id: "SUB3/01", subject: "SUB3", session: "01", groupId: "g2" };
+const subjectRow4: SubjectRow = { id: "SUB4/01", subject: "SUB4", session: "01", groupId: "g3" };
+
+const subj1: SubjectInfo = {
+  subjectSession: "SUB_01",
+  subject: "SUB",
+  session: "01",
+  hasStructural: true,
+  hasASL: true,
+  aslRuns: ["01", "02"],
+};
+const subj2: SubjectInfo = {
+  subjectSession: "SUB2_01",
+  subject: "SUB2",
+  session: "01",
+  hasStructural: true,
+  hasASL: true,
+  aslRuns: ["01"],
+};
+const subj3: SubjectInfo = {
+  subjectSession: "SUB3_01",
+  subject: "SUB3",
+  session: "01",
+  hasStructural: true,
+  hasASL: true,
+  aslRuns: [],
+};
+const subj4: SubjectInfo = {
+  subjectSession: "SUB4_01",
+  subject: "SUB4",
+  session: "01",
+  hasStructural: true,
+  hasASL: true,
+  aslRuns: ["01"],
+};
+const ungroupedSubj: SubjectInfo = {
+  subjectSession: "SUB_X_01",
+  subject: "SUB-X",
+  session: "01",
+  hasStructural: true,
+  hasASL: true,
+  aslRuns: ["01"],
+};
+
+// ---------------------------------------------------------------------------
+// Shared mutable state (reset in afterEach)
+// ---------------------------------------------------------------------------
+
+let mockMetadataGroups: MetadataGroup[] = [];
+let mockSubjectRows: SubjectRow[] = [];
+let mockAvailableSubjects: SubjectInfo[] = [];
+let mockVerdicts: Record<string, ManifestVerdict> = {};
+let mockVersions: { exploreASL?: string; matlab?: string; gui?: string } = {};
+
+function buildProjectState() {
+  return {
+    version: "0.1.0" as const,
+    projectMeta: {
+      id: "project-1",
+      name: "Brain Study",
+      rootPath: "/test/project",
+      createdAt: "2026-05-03T00:00:00.000Z",
+      lastOpened: "2026-05-03T00:00:00.000Z",
+      currentPhase: "manifest" as const,
+    },
+    mappingState: {
+      metadataGroups: mockMetadataGroups,
+      subjectRows: mockSubjectRows,
+    },
+    uiState: {
+      manifest: {
+        verdicts: mockVerdicts,
+        lastRunVersions: mockVersions,
+        lastPopulationRunMtime: null,
+      },
+    },
+    exploreAslConfig: {
+      sourcestructure: {},
+      studyPar: {},
+      dataPar: {},
+    },
+  };
+}
+
+function renderPreview() {
+  useProcessingStore.setState({
+    availableSubjects: mockAvailableSubjects,
+    subjectStatuses: [],
+  });
+  useProjectStore.setState({
+    project: buildProjectState() as any,
+    loaded: true,
+  });
+  return render(
+    <MantineProvider>
+      <ManifestPreview />
+    </MantineProvider>,
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  mockMetadataGroups = [];
+  mockSubjectRows = [];
+  mockAvailableSubjects = [];
+  mockVerdicts = {};
+  mockVersions = {};
+  useProjectStore.setState({ project: null, isDirty: false, loaded: false });
+  useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
+});
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("ManifestPreview", () => {
+  // 13.1 — renders 4 sections
+  it("renders 4 sections when data is present", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
+    };
+    mockVersions = { exploreASL: "1.0.0", matlab: "R2023b", gui: "0.1.0" };
+
+    renderPreview();
+
+    expect(screen.getByTestId("manifest-preview")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-section-study-parameters")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-section-software-manifest")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-section-qc-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-section-pipeline-summary")).toBeInTheDocument();
+  });
+
+  // 13.4 — conditional rows: PCASL shows LabelingDuration, PASL omits
+  it("omits LabelingDuration row for PASL groups and shows it for PCASL", () => {
+    mockMetadataGroups = [groupPcasl, groupPasl];
+    mockSubjectRows = [subjectRow1, subjectRow3];
+    mockAvailableSubjects = [subj1, subj3];
+    mockVerdicts = {};
+
+    renderPreview();
+
+    // PCASL group should show LabelingDuration
+    expect(screen.getByText("Group A (PCASL)")).toBeInTheDocument();
+    const pcaslTables = screen.getAllByRole("table");
+    const pcaslTable = pcaslTables[0];
+    expect(pcaslTable).toHaveTextContent("LabelingDuration");
+    expect(pcaslTable).toHaveTextContent("1800");
+
+    // PASL group should NOT show LabelingDuration
+    expect(screen.getByText("Group B (PASL)")).toBeInTheDocument();
+    const paslTable = pcaslTables[1];
+    expect(paslTable).not.toHaveTextContent("LabelingDuration");
+  });
+
+  // 13.4b — BolusCutOffDelayTime omitted when BolusCutOffFlag is false
+  it("omits BolusCutOffDelayTime when BolusCutOffFlag is false", () => {
+    mockMetadataGroups = [groupNoFlag];
+    mockSubjectRows = [subjectRow4];
+    mockAvailableSubjects = [subj4];
+    mockVerdicts = {};
+
+    renderPreview();
+
+    const tables = screen.getAllByRole("table");
+    const table = tables[0];
+    expect(table).toHaveTextContent("LabelingDuration");
+    expect(table).not.toHaveTextContent("BolusCutOffDelayTime");
+  });
+
+  // 13.8 — unknown versions render "unknown"
+  it("shows unknown for missing version fields", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = {};
+    mockVersions = {};
+
+    renderPreview();
+
+    expect(screen.getByTestId("version-exploreasl")).toHaveTextContent("unknown");
+    expect(screen.getByTestId("version-gui")).toHaveTextContent("unknown");
+    expect(screen.getByTestId("version-matlab")).toHaveTextContent("unknown");
+  });
+
+  // 13.8b — known versions show values
+  it("shows version values when set", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = {};
+    mockVersions = { exploreASL: "2.0.0", matlab: "R2024a", gui: "1.5.0" };
+
+    renderPreview();
+
+    expect(screen.getByTestId("version-exploreasl")).toHaveTextContent("2.0.0");
+    expect(screen.getByTestId("version-gui")).toHaveTextContent("1.5.0");
+    expect(screen.getByTestId("version-matlab")).toHaveTextContent("R2024a");
+  });
+
+  // 13.6 — Pass/Total from stored verdicts
+  it("renders Pass / Total from stored verdicts", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
+    };
+
+    renderPreview();
+
+    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("1 / 2");
+  });
+
+  // 13.6a — Pass/Total when all subjects pass
+  it("shows all pass when all have pass verdicts", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "pass", setAt: 1 },
+    };
+
+    renderPreview();
+
+    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("2 / 2");
+  });
+
+  // 13.6a — coverage/CoV/motion render "N/A"
+  it("renders N/A for QC metrics (CSV reading is async)", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
+    };
+
+    renderPreview();
+
+    const qcSection = screen.getByTestId("manifest-section-qc-summary");
+    // Should show "N/A" for coverage, CoV, motion, motion exclusion
+    expect(qcSection).toHaveTextContent("Mean ASL Coverage % (SD)");
+    expect(qcSection).toHaveTextContent("Mean Spatial CoV % (SD)");
+    expect(qcSection).toHaveTextContent("Mean Motion (mm RMS) (SD)");
+    expect(qcSection).toHaveTextContent("Mean Motion Exclusion % (SD)");
+  });
+
+  // 13.6c — Fail Reasons breakdown per group
+  it("renders Fail Reasons breakdown from stored verdicts", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
+    };
+
+    renderPreview();
+
+    const qcSection = screen.getByTestId("manifest-section-qc-summary");
+    expect(qcSection).toHaveTextContent("Fail Reasons");
+    expect(qcSection).toHaveTextContent("motion: 1");
+  });
+
+  // 13.6c — Multiple fail reasons
+  it("counts multiple fail reasons correctly", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockVerdicts = {
+      SUB_01: { status: "fail", reason: "motion", setAt: 1 },
+      SUB2_01: { status: "fail", reason: "coverage", setAt: 1 },
+    };
+
+    renderPreview();
+
+    const qcSection = screen.getByTestId("manifest-section-qc-summary");
+    expect(qcSection).toHaveTextContent("motion: 1");
+    expect(qcSection).toHaveTextContent("coverage: 1");
+  });
+
+  // Empty QC data message
+  it("shows empty QC message when no verdicts present", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = {};
+
+    renderPreview();
+
+    expect(screen.getByText(/No QC data available/)).toBeInTheDocument();
+  });
+
+  // Section 4 pipeline paragraph
+  it("renders pipeline summary paragraph with subject and group counts", () => {
+    mockMetadataGroups = [groupPcasl, groupPasl];
+    mockSubjectRows = [subjectRow1, subjectRow2, subjectRow3];
+    mockAvailableSubjects = [subj1, subj2, subj3];
+    mockVerdicts = {};
+    mockVersions = { exploreASL: "1.0", matlab: "R2023b", gui: "0.1" };
+
+    renderPreview();
+
+    const summary = screen.getByTestId("manifest-section-pipeline-summary");
+    expect(summary).toHaveTextContent("ExploreASL (version 1.0)");
+    expect(summary).toHaveTextContent("MATLAB R2023b");
+    expect(summary).toHaveTextContent("3 subjects");
+    expect(summary).toHaveTextContent("2 groups");
+  });
+
+  // 13.6b — Ungrouped subjects appear in study parameters
+  it("shows Ungrouped group for subjects without metadata group", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1, ungroupedSubj];
+
+    renderPreview();
+
+    expect(screen.getByText("Ungrouped")).toBeInTheDocument();
+  });
+
+  // 13.10 — live update on re-render with changed store
+  it("updates Pass/Total when store verdicts change", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
+    };
+
+    const { rerender } = renderPreview();
+    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("1 / 2");
+
+    // Change verdicts
+    mockVerdicts = {
+      SUB_01: { status: "pass", setAt: 1 },
+      SUB2_01: { status: "pass", setAt: 1 },
+    };
+    useProjectStore.setState({
+      project: buildProjectState() as any,
+      loaded: true,
+    });
+
+    rerender(
+      <MantineProvider>
+        <ManifestPreview />
+      </MantineProvider>,
+    );
+
+    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("2 / 2");
+  });
+
+  // Empty state — no data at all
+  it("renders without crashing when project has no data", () => {
+    useProjectStore.setState({ project: null, loaded: false });
+    useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
+
+    render(
+      <MantineProvider>
+        <ManifestPreview />
+      </MantineProvider>,
+    );
+
+    // Should render empty/missing state without crashing
+    expect(screen.getByTestId("manifest-preview")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-section-qc-summary")).toHaveTextContent(
+      "No QC data available",
+    );
+  });
+});
