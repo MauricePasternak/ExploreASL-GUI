@@ -9,6 +9,7 @@ import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/pr
 import { useProjectStore } from "../stores/projectStore";
 import { useImportStore } from "../stores/importStore";
 import ImportPage from "./ImportPage";
+import ManifestPage from "./ManifestPage";
 import ProcessingPage from "./ProcessingPage";
 import VisualizationPage from "./VisualizationPage";
 import DataParEditor from "../components/parameters/DataParEditor";
@@ -188,6 +189,8 @@ export default function ProjectPage() {
       return <ProcessingPage />;
     case "visualization":
       return <VisualizationPage />;
+    case "manifest":
+      return <ManifestPage />;
     default:
       return <Text>Current phase: {project.projectMeta.currentPhase}</Text>;
   }

@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MantineProvider } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -47,6 +47,10 @@ describe("Layout", () => {
     vi.mocked(writeTextFile).mockResolvedValue(undefined);
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders the global shell without a project navbar", () => {
     renderLayout();
 
@@ -86,6 +90,7 @@ describe("Layout", () => {
     expect(screen.getAllByRole("button", { name: /parameters/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /processing/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /visualization/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /manifest/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /return to home/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/subjects: 0/i).length).toBeGreaterThan(0);
     expect(screen.queryByTestId("processing-status-bar")).not.toBeInTheDocument();
@@ -374,6 +379,7 @@ describe("Layout", () => {
       expect(screen.getAllByText("Parameters").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Processing").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Visualization").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Manifest").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Return to home").length).toBeGreaterThan(0);
     });
   });
@@ -446,5 +452,65 @@ describe("Layout", () => {
       expect(useProjectStore.getState().project?.uiState.navbarCollapsed).toBe(false);
       expect(useProjectStore.getState().isDirty).toBe(true);
     });
+  });
+
+  it("renders Manifest nav button when population is completed", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: { navbarCollapsed: false, population: { completed: true } },
+        mappingState: {},
+        exploreAslConfig: {
+          sourcestructure: {},
+          studyPar: {},
+          dataPar: {},
+        },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    renderLayout("/project/project-1/import");
+
+    const manifestBtn = screen.getByTestId("layout-nav-manifest");
+    expect(manifestBtn).toBeInTheDocument();
+    expect(manifestBtn).not.toHaveAttribute("data-disabled", "true");
+  });
+
+  it("renders ManifestPage on manifest route", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "manifest",
+        },
+        uiState: { navbarCollapsed: false, population: { completed: true } },
+        mappingState: {},
+        exploreAslConfig: {
+          sourcestructure: {},
+          studyPar: {},
+          dataPar: {},
+        },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    renderLayout("/project/project-1/manifest");
+
+    expect(screen.getByTestId("manifest-page")).toBeInTheDocument();
   });
 });

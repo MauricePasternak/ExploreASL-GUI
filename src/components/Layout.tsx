@@ -20,6 +20,7 @@ import {
   IconChartScatter,
   IconChevronLeft,
   IconChevronRight,
+  IconFileReport,
   IconHelp,
   IconHome,
   IconPlayerPlay,
@@ -40,6 +41,7 @@ const PHASE_NAV = [
   { phase: "parameters", label: "Parameters", icon: IconAdjustments },
   { phase: "processing", label: "Processing", icon: IconPlayerPlay },
   { phase: "visualization", label: "Visualization", icon: IconChartScatter },
+  { phase: "manifest", label: "Manifest", icon: IconFileReport },
 ] as const;
 
 interface LayoutProps {

@@ -183,6 +183,20 @@ const HELP_DATA: Record<string, HelpContent> = {
     tipContent:
       "Reordering levels does not imply any statistical relationship or trend. It purely controls the left-to-right display order on the chart.",
   },
+  manifest: {
+    title: "Project Manifest",
+    subtitle: "Phase 5: Manifest",
+    goal: "After Population completes, review each SubjectSession as Pass or Fail, then export a journal-ready manifest as Markdown or HTML.",
+    steps: [
+      "Use the QC Selection table to set a Pass/Fail verdict for each SubjectSession",
+      "Neutral rows block progression — resolve all or exclude via No Info",
+      "Open Manifest Preview to review the 4 sections (Study Parameters, Software Manifest, QC Summary, Pipeline Summary)",
+      "Export Markdown or HTML — both are byte-identical across Windows 11, macOS, and Linux",
+    ],
+    tipTitle: "Re-run lockout",
+    tipContent:
+      "Re-running the Population module locks this phase until the new run completes. Verdicts are retained and marked Stale once the new run finishes; confirm or re-triage them before exporting.",
+  },
   "viz-visualize": {
     title: "Explore Data",
     subtitle: "Phase 4: Visualization Module",
@@ -229,6 +243,8 @@ function PageHelpButtonInner() {
     contentKey = "processing";
   } else if (phase === "visualization") {
     contentKey = `viz-${vizStage}`;
+  } else if (phase === "manifest") {
+    contentKey = "manifest";
   }
 
   const helpContent = HELP_DATA[contentKey];
