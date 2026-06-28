@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Project Manifest</title>
+<style>
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #222; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+th, td { border: 1px solid #ccc; padding: 0.5rem 0.75rem; text-align: left; }
+th { background: #f5f5f5; font-weight: 600; }
+h2 { border-bottom: 2px solid #eee; padding-bottom: 0.25rem; margin-top: 2rem; }
+h3 { margin-top: 1.5rem; }
+</style>
+</head>
+<body>
+<h1>Project Manifest</h1>
+<h2>Section 1: Study Parameters</h2>
+<h3>Group A</h3>
+<table><thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead><tbody>
+<tr><td>N Subjects</td><td>2</td></tr>
+<tr><td>N Total Runs</td><td>4</td></tr>
+<tr><td>Arterial Spin Labeling Type</td><td>PCASL</td></tr>
+<tr><td>Labeling Duration</td><td>1800 ms</td></tr>
+<tr><td>Post Labeling Delay</td><td>2000 ms</td></tr>
+<tr><td>M0 Type</td><td>Separate</td></tr>
+<tr><td>Background Suppression</td><td>true</td></tr>
+</tbody></table>
+<h3>Group B</h3>
+<table><thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead><tbody>
+<tr><td>N Subjects</td><td>1</td></tr>
+<tr><td>N Total Runs</td><td>2</td></tr>
+<tr><td>Arterial Spin Labeling Type</td><td>PASL</td></tr>
+<tr><td>Post Labeling Delay</td><td>1800 ms</td></tr>
+<tr><td>Bolus Cut Off Flag</td><td>true</td></tr>
+<tr><td>Bolus Cut Off Delay Time</td><td>1000 ms</td></tr>
+<tr><td>M0 Type</td><td>Included</td></tr>
+<tr><td>Background Suppression</td><td>false</td></tr>
+</tbody></table>
+<h3>Ungrouped</h3>
+<table><thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead><tbody>
+<tr><td>N Subjects</td><td>1</td></tr>
+<tr><td>N Total Runs</td><td>1</td></tr>
+<tr><td>Arterial Spin Labeling Type</td><td>PCASL</td></tr>
+<tr><td>Labeling Duration</td><td>1500 ms</td></tr>
+<tr><td>Post Labeling Delay</td><td>1500 ms</td></tr>
+<tr><td>M0 Type</td><td>Separate</td></tr>
+<tr><td>Background Suppression</td><td>true</td></tr>
+</tbody></table>
+<h2>Section 2: Software Manifest</h2>
+<table><thead>
+<tr><th>Software</th><th>Version</th></tr>
+</thead><tbody>
+<tr><td>ExploreASL</td><td>1.0.0</td></tr>
+<tr><td>ExploreASL GUI</td><td>0.1.0</td></tr>
+<tr><td>MATLAB</td><td>R2023b</td></tr>
+</tbody></table>
+<h2>Section 3: QC Summary</h2>
+<h3>Group A</h3>
+<table><thead>
+<tr><th>Metric</th><th>Value</th></tr>
+</thead><tbody>
+<tr><td>Pass / Total</td><td>2 / 2</td></tr>
+<tr><td>Mean ASL Coverage % (SD)</td><td>95.00 (3.54)</td></tr>
+<tr><td>Mean Spatial CoV % (SD)</td><td>8.50 (0.71)</td></tr>
+<tr><td>Mean Motion (mm RMS) (SD)</td><td>0.40 (0.14)</td></tr>
+<tr><td>Mean Motion Exclusion % (SD)</td><td>5.00 (4.24)</td></tr>
+<tr><td>Fail Reasons</td><td>none</td></tr>
+</tbody></table>
+<h3>Group B</h3>
+<table><thead>
+<tr><th>Metric</th><th>Value</th></tr>
+</thead><tbody>
+<tr><td>Pass / Total</td><td>0 / 1</td></tr>
+<tr><td>Mean ASL Coverage % (SD)</td><td>N/A</td></tr>
+<tr><td>Mean Spatial CoV % (SD)</td><td>N/A</td></tr>
+<tr><td>Mean Motion (mm RMS) (SD)</td><td>N/A</td></tr>
+<tr><td>Mean Motion Exclusion % (SD)</td><td>N/A</td></tr>
+<tr><td>Fail Reasons</td><td>motion: 1</td></tr>
+</tbody></table>
+<h3>Ungrouped</h3>
+<table><thead>
+<tr><th>Metric</th><th>Value</th></tr>
+</thead><tbody>
+<tr><td>Pass / Total</td><td>1 / 1</td></tr>
+<tr><td>Mean ASL Coverage % (SD)</td><td>88.00 (N/A)</td></tr>
+<tr><td>Mean Spatial CoV % (SD)</td><td>10.00 (N/A)</td></tr>
+<tr><td>Mean Motion (mm RMS) (SD)</td><td>0.50 (N/A)</td></tr>
+<tr><td>Mean Motion Exclusion % (SD)</td><td>2.00 (N/A)</td></tr>
+<tr><td>Fail Reasons</td><td>none</td></tr>
+</tbody></table>
+<h2>Section 4: Pipeline Summary</h2>
+<p>Data were processed with ExploreASL (version 1.0.0) running in MATLAB R2023b through the ExploreASL GUI (version 0.1.0). This manifest covers 4 subjects across 3 groups.</p>
+</body>
+</html>
