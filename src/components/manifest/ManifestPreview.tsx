@@ -1,7 +1,8 @@
-import { Box, Stack, Table, Text, Title } from "@mantine/core";
+import { Box, Button, Group, Stack, Table, Text, Title } from "@mantine/core";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import { aggregateFailReasons } from "../../lib/manifestQc";
+import { renderHtml, renderMarkdown } from "../../lib/manifestExport";
 import type { ManifestPayload } from "../../lib/manifestExport";
 import type { ManifestVerdict } from "../../schemas/project";
 import type { MetadataGroup } from "../../schemas/importSchemas";
@@ -122,9 +123,51 @@ function useBuildManifestPayload(): ManifestPayload {
 
 export default function ManifestPreview() {
   const payload = useBuildManifestPayload();
+  const project = useProjectStore((s) => s.project);
+  const verdictCount = Object.keys(project?.uiState?.manifest?.verdicts ?? {}).length;
+  const exportDisabled = verdictCount === 0;
 
   return (
     <Stack data-testid="manifest-preview" gap="lg">
+      <Group justify="flex-end" gap="sm">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            const { save } = await import("@tauri-apps/plugin-dialog");
+            const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+            const path = await save({
+              defaultPath: "manifest.md",
+              filters: [{ name: "Markdown", extensions: ["md"] }],
+            });
+            if (!path) return;
+            await writeTextFile(path, renderMarkdown(payload));
+          }}
+          disabled={exportDisabled}
+          data-testid="export-markdown-btn"
+        >
+          Export Markdown
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            const { save } = await import("@tauri-apps/plugin-dialog");
+            const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+            const path = await save({
+              defaultPath: "manifest.html",
+              filters: [{ name: "HTML", extensions: ["html"] }],
+            });
+            if (!path) return;
+            await writeTextFile(path, renderHtml(payload));
+          }}
+          disabled={exportDisabled}
+          data-testid="export-html-btn"
+        >
+          Export HTML
+        </Button>
+      </Group>
+
       {/* Section 1: Study Parameters */}
       <Box data-testid="manifest-section-study-parameters">
         <Title order={3}>Study Parameters</Title>

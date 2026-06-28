@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ManifestPreview from "./ManifestPreview";
 import { useProjectStore } from "../../stores/projectStore";
@@ -8,6 +9,13 @@ import { useProcessingStore } from "../../stores/processingStore";
 import type { SubjectInfo } from "../../schemas/processingSchemas";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import type { ManifestVerdict } from "../../schemas/project";
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  save: vi.fn(),
+}));
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  writeTextFile: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Test data
@@ -424,5 +432,85 @@ describe("ManifestPreview", () => {
     expect(screen.getByTestId("manifest-section-qc-summary")).toHaveTextContent(
       "No QC data available",
     );
+  });
+
+  // 14.1 — Export Markdown invokes save + writeTextFile
+  it("clicking Export Markdown invokes save + writeTextFile", async () => {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    vi.mocked(save).mockResolvedValue("/tmp/manifest.md");
+    vi.mocked(writeTextFile).mockResolvedValue(undefined);
+
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = { SUB_01: { status: "pass", setAt: 1 } };
+
+    renderPreview();
+
+    const btn = screen.getByTestId("export-markdown-btn");
+    await userEvent.click(btn);
+
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultPath: "manifest.md",
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      }),
+    );
+    expect(writeTextFile).toHaveBeenCalledWith("/tmp/manifest.md", expect.any(String));
+  });
+
+  // 14.3 — Export HTML invokes save + writeTextFile
+  it("clicking Export HTML invokes save + writeTextFile", async () => {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    vi.mocked(save).mockResolvedValue("/tmp/manifest.html");
+    vi.mocked(writeTextFile).mockResolvedValue(undefined);
+
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = { SUB_01: { status: "pass", setAt: 1 } };
+
+    renderPreview();
+
+    const btn = screen.getByTestId("export-html-btn");
+    await userEvent.click(btn);
+
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultPath: "manifest.html",
+        filters: [{ name: "HTML", extensions: ["html"] }],
+      }),
+    );
+    expect(writeTextFile).toHaveBeenCalledWith("/tmp/manifest.html", expect.any(String));
+  });
+
+  // 14.5 — both export buttons disabled when no verdicts exist
+  it("export buttons disabled when no verdicts", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = {};
+
+    renderPreview();
+
+    expect(screen.getByTestId("export-markdown-btn")).toBeDisabled();
+    expect(screen.getByTestId("export-html-btn")).toBeDisabled();
+  });
+
+  // 14.5b — export buttons disabled when project is null
+  it("export buttons disabled when project is null", () => {
+    useProjectStore.setState({ project: null, loaded: false });
+    useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
+
+    render(
+      <MantineProvider>
+        <ManifestPreview />
+      </MantineProvider>,
+    );
+
+    expect(screen.getByTestId("export-markdown-btn")).toBeDisabled();
+    expect(screen.getByTestId("export-html-btn")).toBeDisabled();
   });
 });
