@@ -145,4 +145,21 @@ describe("ProjectFileSchema", () => {
   it("parses legacy file without manifest field", () => {
     expect(() => ProjectFileSchema.parse(validProject)).not.toThrow();
   });
+
+  it("parses partial manifest slot with undefined fields", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        manifest: {
+          verdicts: {
+            "sub-A_01": { status: "pass", setAt: 1700000000000 },
+          },
+        },
+      },
+    };
+    const parsed = ProjectFileSchema.parse(project);
+    expect(parsed.uiState.manifest?.verdicts?.["sub-A_01"]).toBeDefined();
+    expect(parsed.uiState.manifest?.lastRunVersions).toBeUndefined();
+    expect(parsed.uiState.manifest?.lastPopulationRunMtime).toBeUndefined();
+  });
 });

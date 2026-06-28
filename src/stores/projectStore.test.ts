@@ -546,10 +546,12 @@ describe("useProjectStore", () => {
       });
       const store = useProjectStore.getState() as any;
       store.setManifestVerdict("sub-A_01", "pass", { setAt: 1700000000000 });
-      expect(useProjectStore.getState().project?.uiState?.manifest?.verdicts["sub-A_01"]).toEqual({
-        status: "pass",
-        setAt: 1700000000000,
-      });
+      expect(useProjectStore.getState().project?.uiState?.manifest?.verdicts?.["sub-A_01"]).toEqual(
+        {
+          status: "pass",
+          setAt: 1700000000000,
+        },
+      );
       expect(useProjectStore.getState().isDirty).toBe(true);
     });
 
@@ -574,11 +576,11 @@ describe("useProjectStore", () => {
       const store = useProjectStore.getState() as any;
       store.setManifestVerdict("sub-C_01", "pass", { setAt: 1000, notes: "looks good" });
       expect(
-        useProjectStore.getState().project?.uiState?.manifest?.verdicts["sub-C_01"].notes,
+        useProjectStore.getState().project?.uiState?.manifest?.verdicts?.["sub-C_01"]?.notes,
       ).toBe("looks good");
       store.setManifestVerdict("sub-C_01", "fail", { setAt: 2000, reason: "motion" });
       expect(
-        useProjectStore.getState().project?.uiState?.manifest?.verdicts["sub-C_01"].notes,
+        useProjectStore.getState().project?.uiState?.manifest?.verdicts?.["sub-C_01"]?.notes,
       ).toBeUndefined();
     });
 
@@ -596,7 +598,7 @@ describe("useProjectStore", () => {
         notes: "still relevant",
       });
       expect(
-        useProjectStore.getState().project?.uiState?.manifest?.verdicts["sub-D_01"].notes,
+        useProjectStore.getState().project?.uiState?.manifest?.verdicts?.["sub-D_01"]?.notes,
       ).toBe("still relevant");
     });
 

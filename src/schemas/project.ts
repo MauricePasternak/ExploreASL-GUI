@@ -55,15 +55,15 @@ export const ManifestVerdictSchema = z
   });
 
 export const ManifestUiStateSchema = z.object({
-  verdicts: z.record(z.string(), ManifestVerdictSchema).default({}),
+  verdicts: z.record(z.string(), ManifestVerdictSchema).optional(),
   lastRunVersions: z
     .object({
       exploreASL: z.string().optional(),
       matlab: z.string().optional(),
       gui: z.string().optional(),
     })
-    .default({}),
-  lastPopulationRunMtime: z.number().int().nullable().default(null),
+    .optional(),
+  lastPopulationRunMtime: z.number().int().nullable().optional(),
 });
 
 export type ManifestFailReason = (typeof MANIFEST_FAIL_REASONS)[number];

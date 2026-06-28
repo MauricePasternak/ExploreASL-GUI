@@ -47,6 +47,12 @@
 | ExploreASL GUI | 0.1.0 |
 | MATLAB | R2023b |
 
+| Key | Value |
+|-----|-------|
+| x.Q.M0 | 1 |
+| x.bPVCNativeSpace | 0 |
+| x.SESSIONS | 01 |
+
 ## Section 3: QC Summary
 
 ### Group A

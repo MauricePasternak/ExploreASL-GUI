@@ -25,8 +25,8 @@ describe("aggregateMotionBySubject", () => {
   it("takes max across runs", () => {
     expect(aggregateMotionBySubject([0.4, 0.7, 0.5])).toBe(0.7);
   });
-  it("returns 0 for empty array", () => {
-    expect(aggregateMotionBySubject([])).toBe(0);
+  it("returns null for empty array", () => {
+    expect(aggregateMotionBySubject([])).toBeNull();
   });
 });
 
