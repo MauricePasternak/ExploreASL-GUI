@@ -200,6 +200,19 @@ export async function setupProcessingListeners(): Promise<() => void> {
         const config = useProcessingStore.getState().config;
         if (config?.modules.includes("population")) {
           useProjectStore.getState().setPopulationCompleted(true);
+          try {
+            const mtime = await invoke<number | null>("read_population_ready_mtime", {
+              projectRoot,
+            });
+            useProjectStore.getState().setLastPopulationRunMtime(mtime);
+          } catch (err) {
+            console.warn("[manifest] mtime read failed", err);
+            try {
+              useProjectStore.getState().setLastPopulationRunMtime(null);
+            } catch {
+              // store action might not exist yet
+            }
+          }
         }
       }
     } catch {
