@@ -120,8 +120,8 @@ class ResizeObserverMock {
             y: 0,
             toJSON: () => ({}),
           },
-          borderBoxSize: [],
-          contentBoxSize: [],
+          borderBoxSize: [{ inlineSize: 800, blockSize: 600 }],
+          contentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
           devicePixelContentBoxSize: [],
         } as ResizeObserverEntry,
       ],
@@ -132,9 +132,7 @@ class ResizeObserverMock {
   unobserve() {}
   disconnect() {}
 }
-if (typeof window.ResizeObserver === "undefined") {
-  (window as unknown as Record<string, unknown>).ResizeObserver = ResizeObserverMock;
-}
+(window as unknown as Record<string, unknown>).ResizeObserver = ResizeObserverMock;
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
