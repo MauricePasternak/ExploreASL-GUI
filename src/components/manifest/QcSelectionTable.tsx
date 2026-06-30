@@ -11,15 +11,23 @@ import {
   TextInput,
 } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
-import { IconCheck, IconMinus, IconAlertCircle, IconSquareCheck } from "@tabler/icons-react";
+import { IconSquareCheck, IconBook } from "@tabler/icons-react";
 
 import { useManifestStore } from "../../stores/manifestStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
-import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import { FAIL_REASON_LABELS } from "../../schemas/manifestSchemas";
 import type { ManifestVerdict, ManifestFailReason } from "../../schemas/project";
+
+import type { LogFileInfo, LogContent } from "../../lib/logViewer";
+import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
+import LogViewerModal from "../processing/LogViewerModal";
+import { fetchSubjectReports } from "../../lib/reportViewer";
+import ReportViewerModal from "../processing/ReportViewerModal";
+import type { ModuleDisplayStatus } from "../processing/SubjectSelection.helpers";
+import { resolveLogBadge, resolveModuleDisplay } from "../processing/SubjectSelection.helpers";
+import { StatusIcon } from "../processing/SubjectSelection";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,80 +41,19 @@ interface QcRow {
   subject: string;
   session: string;
   groupLabel: string;
-  structuralStatus: "complete" | "incomplete" | "pending" | "skipped";
-  aslStatus: "complete" | "incomplete" | "pending" | "skipped";
+  structuralStatus: ModuleDisplayStatus;
+  aslStatus: ModuleDisplayStatus;
   noInfo: boolean;
   displayedVerdict: DisplayVerdict;
   storedVerdict?: ManifestVerdict;
   reason?: ManifestFailReason;
   notes?: string;
+  aslRuns: string[];
 }
 
 interface QcSelectionTableProps {
   noInfoSubjects?: Set<string>;
   onNextReady?: (ready: boolean) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === "skipped")
-    return (
-      <Badge size="sm" color="gray" data-testid={`status-${status}`}>
-        —
-      </Badge>
-    );
-  if (status === "complete")
-    return (
-      <Badge
-        size="sm"
-        color="green"
-        leftSection={<IconCheck size={12} />}
-        data-testid={`status-${status}`}
-      >
-        Done
-      </Badge>
-    );
-  if (status === "incomplete")
-    return (
-      <Badge
-        size="sm"
-        color="orange"
-        leftSection={<IconMinus size={12} />}
-        data-testid={`status-${status}`}
-      >
-        Partial
-      </Badge>
-    );
-  return (
-    <Badge
-      size="sm"
-      color="yellow"
-      leftSection={<IconAlertCircle size={12} />}
-      data-testid={`status-${status}`}
-    >
-      Pending
-    </Badge>
-  );
-}
-
-function resolveModuleDisplay(
-  subjectInfo: SubjectInfo,
-  module: "structural" | "asl",
-  statuses: SubjectModuleStatus[],
-): "complete" | "incomplete" | "pending" | "skipped" {
-  if (module === "structural" && !subjectInfo.hasStructural) return "skipped";
-  if (module === "asl" && !subjectInfo.hasASL) return "skipped";
-
-  const entry = statuses.find(
-    (s) => s.subjectSession === subjectInfo.subjectSession && s.module === module,
-  );
-  if (!entry) return "pending";
-  if (entry.status === "complete") return "complete";
-  if (entry.status === "incomplete") return "incomplete";
-  return "pending";
 }
 
 const FILTER_OPTIONS: { label: string; value: FilterValue }[] = [
@@ -127,6 +74,7 @@ export default function QcSelectionTable({
 }: QcSelectionTableProps) {
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
+  const processingPhase = useProcessingStore((s) => s.processingPhase);
   const mappingState = useProjectStore((s) => s.project?.mappingState);
   const rawVerdicts = useProjectStore((s) => s.project?.uiState?.manifest?.verdicts);
   const verdicts = useMemo(() => rawVerdicts ?? {}, [rawVerdicts]);
@@ -135,6 +83,77 @@ export default function QcSelectionTable({
   const qcLoaded = useManifestStore((s) => s.qcLoaded);
   const lastPopulationRunMtime =
     useProjectStore((s) => s.project?.uiState?.manifest?.lastPopulationRunMtime) ?? undefined;
+  const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
+
+  const [logFiles, setLogFiles] = useState<Map<string, LogFileInfo[]>>(new Map());
+  const [modalOpened, setModalOpened] = useState(false);
+  const [modalModule, setModalModule] = useState<"structural" | "asl">("structural");
+  const [modalSubjectSession, setModalSubjectSession] = useState("");
+  const [modalContent, setModalContent] = useState<LogContent | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const [existingReports, setExistingReports] = useState<Set<string>>(new Set());
+  const [reportModalOpened, setReportModalOpened] = useState(false);
+  const [reportModalModule, setReportModalModule] = useState<"structural" | "asl">("structural");
+  const [reportModalSubjectSession, setReportModalSubjectSession] = useState("");
+  const [reportModalRuns, setReportModalRuns] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!projectRoot) return;
+    fetchModuleLogs(projectRoot)
+      .then((files) => {
+        const map = new Map<string, LogFileInfo[]>();
+        for (const f of files) {
+          const key = `${f.subjectSession}:${f.module}`;
+          const existing = map.get(key) ?? [];
+          existing.push(f);
+          map.set(key, existing);
+        }
+        setLogFiles(map);
+      })
+      .catch(() => {
+        setLogFiles(new Map());
+      });
+  }, [projectRoot, processingPhase]);
+
+  useEffect(() => {
+    if (!projectRoot) return;
+    fetchSubjectReports(projectRoot)
+      .then((reports) => {
+        const set = new Set<string>();
+        for (const r of reports) {
+          set.add(`${r.subjectSession}:${r.module}`);
+        }
+        setExistingReports(set);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch reports list:", err);
+        setExistingReports(new Set());
+      });
+  }, [projectRoot, processingPhase]);
+
+  const structuralLogInfo = useMemo(() => {
+    const map = new Map<string, LogFileInfo[]>();
+    for (const [key, files] of logFiles) {
+      if (key.endsWith(":structural")) {
+        const ss = key.replace(/:structural$/, "");
+        map.set(ss, files);
+      }
+    }
+    return map;
+  }, [logFiles]);
+
+  const aslLogInfo = useMemo(() => {
+    const map = new Map<string, LogFileInfo[]>();
+    for (const [key, files] of logFiles) {
+      if (key.endsWith(":asl")) {
+        const ss = key.replace(/:asl$/, "");
+        map.set(ss, files);
+      }
+    }
+    return map;
+  }, [logFiles]);
 
   const noInfoSubjects = useMemo(() => {
     const set = new Set<string>(propNoInfoSubjects);
@@ -148,7 +167,7 @@ export default function QcSelectionTable({
     return set;
   }, [propNoInfoSubjects, availableSubjects, qcData, qcLoaded]);
 
-  const [filter, setFilter] = useState<FilterValue>("neutral");
+  const [filter, setFilter] = useState<FilterValue>("all");
   const [page, setPage] = useState(1);
   const [pendingFails, setPendingFails] = useState<Map<string, string | undefined>>(new Map());
 
@@ -169,7 +188,8 @@ export default function QcSelectionTable({
       : [];
     const map = new Map<string, string>();
     for (const row of rows) {
-      map.set(`${row.subject}_${row.session}`, row.groupId);
+      const cleanSub = row.subject.replace(/^sub-/, "");
+      map.set(`${cleanSub}_${row.session}`, row.groupId);
     }
     return map;
   }, [mappingState]);
@@ -239,7 +259,8 @@ export default function QcSelectionTable({
     return sorted.map((info) => {
       const structuralStatus = resolveModuleDisplay(info, "structural", subjectStatuses);
       const aslStatus = resolveModuleDisplay(info, "asl", subjectStatuses);
-      const groupId = rowGroupMap.get(info.subjectSession);
+      const cleanSs = info.subjectSession.replace(/^sub-/, "");
+      const groupId = rowGroupMap.get(cleanSs);
       const groupLabel = groupId ? (groupMap.get(groupId)?.label ?? "Ungrouped") : "Ungrouped";
       const verdict = verdicts[info.subjectSession];
       const noInfo = noInfoSubjects.has(info.subjectSession);
@@ -263,9 +284,74 @@ export default function QcSelectionTable({
         storedVerdict: verdict,
         reason: verdict?.reason,
         notes: verdict?.notes,
+        aslRuns: info.aslRuns || [],
       };
     });
   }, [availableSubjects, subjectStatuses, rowGroupMap, groupMap, verdicts, noInfoSubjects]);
+
+  const handleViewLog = useCallback(
+    async (subjectSession: string, module: "structural" | "asl") => {
+      if (!projectRoot) return;
+      setModalModule(module);
+      setModalSubjectSession(subjectSession);
+      setModalOpened(true);
+      setModalLoading(true);
+      setModalError(null);
+      try {
+        const content = await fetchLogContent(projectRoot, subjectSession, module);
+        setModalContent(content);
+      } catch {
+        setModalError("Failed to load log content");
+        setModalContent(null);
+      } finally {
+        setModalLoading(false);
+      }
+    },
+    [projectRoot],
+  );
+
+  const handleCloseModal = useCallback(() => {
+    setModalOpened(false);
+    setModalContent(null);
+    setModalLoading(false);
+    setModalError(null);
+  }, []);
+
+  const handleCloseReportModal = useCallback(() => {
+    setReportModalOpened(false);
+    setReportModalSubjectSession("");
+    setReportModalRuns([]);
+  }, []);
+
+  const handleViewReport = useCallback(
+    (subjectSession: string, module: "structural" | "asl") => {
+      const row = rows.find((r) => r.subjectSession === subjectSession);
+      const runs = row?.aslRuns || [];
+      setReportModalSubjectSession(subjectSession);
+      setReportModalModule(module);
+      setReportModalRuns(runs);
+      setReportModalOpened(true);
+    },
+    [rows],
+  );
+
+  const modalRunErrorMap = useMemo(() => {
+    const files =
+      modalModule === "structural"
+        ? structuralLogInfo.get(modalSubjectSession)
+        : aslLogInfo.get(modalSubjectSession);
+    const row = rows.find((r) => r.subjectSession === modalSubjectSession);
+    const moduleIncomplete =
+      modalModule === "structural"
+        ? row?.structuralStatus === "incomplete"
+        : row?.aslStatus === "incomplete";
+    if (!files) return {};
+    const map: Record<string, boolean> = {};
+    for (const f of files) {
+      map[f.filename] = f.hasError || !!moduleIncomplete;
+    }
+    return map;
+  }, [modalModule, modalSubjectSession, structuralLogInfo, aslLogInfo, rows]);
 
   const filterCounts = useMemo(() => {
     const counts: Record<FilterValue, number> = {
@@ -327,15 +413,174 @@ export default function QcSelectionTable({
       },
       {
         accessor: "structuralStatus",
-        title: "Structural",
+        title: (
+          <>
+            Structural
+            <br />
+            Status
+          </>
+        ),
         textAlign: "center",
-        render: (row) => <StatusBadge status={row.structuralStatus} />,
+        render: (row) => (
+          <StatusIcon status={row.structuralStatus} processingPhase={processingPhase} />
+        ),
+      },
+      {
+        accessor: "structuralLogs",
+        title: (
+          <>
+            Structural
+            <br />
+            Logs/Errors
+          </>
+        ),
+        textAlign: "center",
+        render: (row) => {
+          if (row.structuralStatus === "skipped") return null;
+          const files = structuralLogInfo.get(row.subjectSession);
+          const badge = resolveLogBadge(row.structuralStatus, files);
+          if (badge === "no-logs") {
+            return (
+              <Text size="xs" c="dimmed" data-testid="no-structural-logs">
+                No Logs
+              </Text>
+            );
+          }
+          const isError = badge === "errors";
+          return (
+            <Badge
+              size="sm"
+              color={isError ? "red" : "teal"}
+              variant="outline"
+              leftSection={<IconBook size={12} />}
+              style={isError ? undefined : { cursor: "pointer" }}
+              onClick={isError ? undefined : () => handleViewLog(row.subjectSession, "structural")}
+              data-testid={isError ? "view-structural-errors" : "view-structural-logs"}
+            >
+              {isError ? "View Errors" : "View Logs"}
+            </Badge>
+          );
+        },
+      },
+      {
+        accessor: "structuralReport",
+        title: (
+          <>
+            Structural
+            <br />
+            Report
+          </>
+        ),
+        textAlign: "center",
+        render: (row) => {
+          if (row.structuralStatus === "skipped") return null;
+          const hasReport = existingReports.has(`${row.subjectSession}:structural`);
+          if (!hasReport) {
+            return (
+              <Text size="xs" c="dimmed" data-testid="no-structural-report">
+                No Report
+              </Text>
+            );
+          }
+          return (
+            <Badge
+              size="sm"
+              color="blue"
+              variant="outline"
+              style={{ cursor: "pointer" }}
+              onClick={() => handleViewReport(row.subjectSession, "structural")}
+              data-testid="view-structural-report"
+            >
+              View Report
+            </Badge>
+          );
+        },
       },
       {
         accessor: "aslStatus",
-        title: "ASL",
+        title: (
+          <>
+            ASL
+            <br />
+            Status
+          </>
+        ),
         textAlign: "center",
-        render: (row) => <StatusBadge status={row.aslStatus} />,
+        render: (row) => <StatusIcon status={row.aslStatus} processingPhase={processingPhase} />,
+      },
+      {
+        accessor: "aslLogs",
+        title: (
+          <>
+            ASL
+            <br />
+            Logs/Errors
+          </>
+        ),
+        textAlign: "center",
+        render: (row) => {
+          if (row.aslStatus === "skipped") return null;
+          const files = aslLogInfo.get(row.subjectSession);
+          const badge = resolveLogBadge(row.aslStatus, files);
+          if (badge === "no-logs") {
+            return (
+              <Text size="xs" c="dimmed" data-testid="no-asl-logs">
+                No Logs
+              </Text>
+            );
+          }
+          const isError = badge === "errors";
+          return (
+            <Badge
+              size="sm"
+              color={isError ? "red" : "teal"}
+              variant="outline"
+              leftSection={<IconBook size={12} />}
+              style={isError ? undefined : { cursor: "pointer" }}
+              onClick={isError ? undefined : () => handleViewLog(row.subjectSession, "asl")}
+              data-testid={isError ? "view-asl-errors" : "view-asl-logs"}
+            >
+              {isError ? "View Errors" : "View Logs"}
+            </Badge>
+          );
+        },
+      },
+      {
+        accessor: "aslReport",
+        title: (
+          <>
+            ASL
+            <br />
+            Report
+          </>
+        ),
+        textAlign: "center",
+        render: (row) => {
+          if (row.aslStatus === "skipped") return null;
+          const hasReport =
+            existingReports.has(`${row.subjectSession}:asl`) ||
+            existingReports.has(`${row.subjectSession}:m0`);
+          if (!hasReport) {
+            return (
+              <Text size="xs" c="dimmed" data-testid="no-asl-report">
+                No Report
+              </Text>
+            );
+          }
+          const isOutdated = row.aslStatus === "outdated";
+          return (
+            <Badge
+              size="sm"
+              color={isOutdated ? "orange" : "blue"}
+              variant="outline"
+              style={{ cursor: "pointer" }}
+              onClick={() => handleViewReport(row.subjectSession, "asl")}
+              data-testid="view-asl-report"
+            >
+              {isOutdated ? "View Outdated Report" : "View Report"}
+            </Badge>
+          );
+        },
       },
       {
         accessor: "verdict",
@@ -402,7 +647,19 @@ export default function QcSelectionTable({
         },
       },
     ],
-    [pendingFails, handleVerdictChange, handleReasonChange, handleNotesBlur, staleVerdicts],
+    [
+      pendingFails,
+      handleVerdictChange,
+      handleReasonChange,
+      handleNotesBlur,
+      staleVerdicts,
+      processingPhase,
+      structuralLogInfo,
+      aslLogInfo,
+      existingReports,
+      handleViewLog,
+      handleViewReport,
+    ],
   );
 
   const handleBulkMarkPass = useCallback(() => {
@@ -500,6 +757,25 @@ export default function QcSelectionTable({
           data-testid="qc-verdict-table"
         />
       </Box>
+
+      <LogViewerModal
+        opened={modalOpened}
+        onClose={handleCloseModal}
+        logContent={modalContent}
+        module={modalModule}
+        subjectSession={modalSubjectSession}
+        loading={modalLoading}
+        error={modalError}
+        runErrorMap={modalRunErrorMap}
+      />
+      <ReportViewerModal
+        opened={reportModalOpened}
+        onClose={handleCloseReportModal}
+        projectRoot={projectRoot}
+        subjectSession={reportModalSubjectSession}
+        module={reportModalModule}
+        runs={reportModalRuns}
+      />
     </Stack>
   );
 }

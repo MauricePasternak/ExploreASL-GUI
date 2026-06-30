@@ -74,6 +74,6 @@ describe("StructuralSection", () => {
     const onFieldChange = vi.fn();
     renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={onFieldChange} />);
     clickSwitch(/longitudinal registration/i);
-    expect(onFieldChange).toHaveBeenCalledWith("bRunLongReg", expect.any(Boolean));
+    expect(onFieldChange).toHaveBeenCalledWith("bRunLongReg", expect.any(Number));
   });
 });

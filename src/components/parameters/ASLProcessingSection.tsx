@@ -5,6 +5,7 @@ import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
 import { DataParFieldLabel } from "./DataParFieldLabel";
 import { AdvancedDivider } from "./AdvancedDivider";
 import { ApplyQuantificationGroup } from "./ApplyQuantificationGroup";
+import { FlagToggle } from "./FlagToggle";
 import { PVCConfig } from "./PVCConfig";
 
 interface ASLProcessingSectionProps {
@@ -22,20 +23,17 @@ export function ASLProcessingSection({
 }: ASLProcessingSectionProps) {
   return (
     <Stack gap="md">
-      <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
-        <Switch
-          id="switch-motionCorrection"
-          checked={dataPar.motionCorrection ?? true}
-          onChange={(e) => onFieldChange("motionCorrection", e.currentTarget.checked)}
-          data-testid="field-motionCorrection"
-        />
-        <DataParFieldLabel fieldKey="motionCorrection" htmlFor="switch-motionCorrection" />
-      </Group>
+      <FlagToggle
+        fieldKey="motionCorrection"
+        value={dataPar.motionCorrection}
+        defaultValue={true}
+        onChange={(v) => onFieldChange("motionCorrection", v)}
+      />
 
       <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
         <Switch
           id="switch-bTopUp"
-          checked={dataPar.bTopUp ?? true}
+          checked={dataPar.bTopUp ?? false}
           onChange={(e) => onFieldChange("bTopUp", e.currentTarget.checked)}
           data-testid="field-bTopUp"
         />
@@ -87,10 +85,10 @@ export function ASLProcessingSection({
           <Select
             label={<DataParFieldLabel fieldKey="bRegistrationContrast" />}
             data={[
-              { value: "0", label: "0 — Control to T1-weighted" },
-              { value: "1", label: "1 — CBF to pseudo-CBF template" },
-              { value: "2", label: "2 — Automatic (PWI-based mixture)" },
-              { value: "3", label: "3 — Force CBF to pseudo-CBF" },
+              { value: "0", label: "Control images to T1-weighted" },
+              { value: "1", label: "PWI to pseudo-CBF template as an intermediate" },
+              { value: "2", label: "Automatic based on spatial CoV of PWI" },
+              { value: "3", label: "Force PWI to pseudo-CBF intermediate" },
             ]}
             value={
               dataPar.bRegistrationContrast != null ? String(dataPar.bRegistrationContrast) : null
@@ -103,9 +101,9 @@ export function ASLProcessingSection({
           <Select
             label={<DataParFieldLabel fieldKey="bAffineRegistration" />}
             data={[
-              { value: "0", label: "0 — Disabled (rigid-body only)" },
-              { value: "1", label: "1 — Enabled" },
-              { value: "2", label: "2 — Automatic (based on perfusion variation)" },
+              { value: "0", label: "Rigid-body" },
+              { value: "1", label: "Affine" },
+              { value: "2", label: "Automatic (based on perfusion variation)" },
             ]}
             value={dataPar.bAffineRegistration != null ? String(dataPar.bAffineRegistration) : null}
             onChange={(v) => onFieldChange("bAffineRegistration", v ? Number(v) : undefined)}
@@ -116,9 +114,9 @@ export function ASLProcessingSection({
           <Select
             label={<DataParFieldLabel fieldKey="bDCTRegistration" />}
             data={[
-              { value: "0", label: "0 — Disabled (affine only)" },
-              { value: "1", label: "1 — Enabled (Discrete Cosine Transform)" },
-              { value: "2", label: "2 — Enabled with Partial Volume Correction" },
+              { value: "0", label: "Disabled (affine only)" },
+              { value: "1", label: "Enabled" },
+              { value: "2", label: "Enabled with Partial Volume Correction" },
             ]}
             value={dataPar.bDCTRegistration != null ? String(dataPar.bDCTRegistration) : null}
             onChange={(v) => onFieldChange("bDCTRegistration", v ? Number(v) : undefined)}
@@ -126,25 +124,18 @@ export function ASLProcessingSection({
             data-testid="field-bDCTRegistration"
           />
 
-          <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
-            <Switch
-              id="switch-bUseMNIasDummyStructural"
-              checked={dataPar.bUseMNIasDummyStructural ?? false}
-              onChange={(e) => onFieldChange("bUseMNIasDummyStructural", e.currentTarget.checked)}
-              data-testid="field-bUseMNIasDummyStructural"
-            />
-            <DataParFieldLabel
-              fieldKey="bUseMNIasDummyStructural"
-              htmlFor="switch-bUseMNIasDummyStructural"
-            />
-          </Group>
+          <FlagToggle
+            fieldKey="bUseMNIasDummyStructural"
+            value={dataPar.bUseMNIasDummyStructural}
+            onChange={(v) => onFieldChange("bUseMNIasDummyStructural", v)}
+          />
 
           <Select
             label={<DataParFieldLabel fieldKey="bHct2BloodT1" />}
             data={[
-              { value: "0", label: "0 — Disabled (use fixed blood T1)" },
-              { value: "1", label: "1 — Use Hematocrit (Hct) values" },
-              { value: "2", label: "2 — Estimate from Age and Sex" },
+              { value: "0", label: "Disabled (use fixed blood T1)" },
+              { value: "1", label: "Use Hematocrit (Hct) values" },
+              { value: "2", label: "Estimate from Age and Sex" },
             ]}
             value={dataPar.bHct2BloodT1 != null ? String(dataPar.bHct2BloodT1) : null}
             onChange={(v) => onFieldChange("bHct2BloodT1", v ? Number(v) : undefined)}

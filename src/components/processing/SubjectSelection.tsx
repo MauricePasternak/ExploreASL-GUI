@@ -14,8 +14,7 @@ import {
   IconAlertCircle,
 } from "@tabler/icons-react";
 
-import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
-import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
+import type { SubjectInfo } from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
 import type { LogFileInfo, LogContent } from "../../lib/logViewer";
@@ -24,7 +23,7 @@ import LogViewerModal from "./LogViewerModal";
 import { fetchSubjectReports } from "../../lib/reportViewer";
 import ReportViewerModal from "./ReportViewerModal";
 import type { ModuleDisplayStatus } from "./SubjectSelection.helpers";
-import { resolveLogBadge } from "./SubjectSelection.helpers";
+import { resolveLogBadge, resolveModuleDisplay } from "./SubjectSelection.helpers";
 
 type FilterValue = "all" | "pending" | "incomplete" | "complete";
 
@@ -45,7 +44,7 @@ interface SubjectRow extends SubjectInfo {
 // Status icon
 // ---------------------------------------------------------------------------
 
-function StatusIcon({
+export function StatusIcon({
   status,
   processingPhase,
 }: {
@@ -113,14 +112,6 @@ function StatusIcon({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function lookupModuleStatus(
-  subjectSession: string,
-  module: (typeof PROCESSING_MODULES)[number],
-  statuses: SubjectModuleStatus[],
-): SubjectModuleStatus | undefined {
-  return statuses.find((s) => s.subjectSession === subjectSession && s.module === module);
-}
 
 // ---------------------------------------------------------------------------
 // Columns
@@ -329,21 +320,7 @@ function buildColumns(
   ];
 }
 
-function resolveModuleDisplay(
-  subjectInfo: SubjectInfo,
-  module: (typeof PROCESSING_MODULES)[number],
-  statuses: SubjectModuleStatus[],
-): ModuleDisplayStatus {
-  if (module === "structural" && !subjectInfo.hasStructural) return "skipped";
-  if (module === "asl" && !subjectInfo.hasASL) return "skipped";
-
-  const entry = lookupModuleStatus(subjectInfo.subjectSession, module, statuses);
-  if (!entry) return "pending";
-  if (entry.status === "complete") return "complete";
-  if (entry.status === "incomplete") return "incomplete";
-  if (entry.status === "outdated") return "outdated";
-  return "pending";
-}
+// resolveModuleDisplay imported from helpers
 
 function deriveOverallStatus(
   structural: ModuleDisplayStatus,

@@ -1,12 +1,14 @@
-import { Switch, NumberInput, Group, Stack } from "@mantine/core";
+import { Switch, Group, Stack, Select } from "@mantine/core";
 import { DataParFieldLabel } from "./DataParFieldLabel";
+import { NumberTupleInput } from "./NumberTupleInput";
+import { fromFlag, toFlag } from "../../lib/dataParFlags";
 
 interface PVCConfigProps {
-  bPVCNativeSpace: boolean | undefined;
-  bPVCGaussianMM: boolean | undefined;
+  bPVCNativeSpace: 0 | 1 | undefined;
+  bPVCGaussianMM: 0 | 1 | undefined;
   PVCNativeSpaceKernel: [number, number, number] | undefined;
-  onBpvChange: (v: boolean) => void;
-  onGaussianChange: (v: boolean) => void;
+  onBpvChange: (v: 0 | 1) => void;
+  onGaussianChange: (v: 0 | 1) => void;
   onKernelChange: (v: [number, number, number]) => void;
   showAdvanced: boolean;
 }
@@ -20,16 +22,9 @@ export function PVCConfig({
   onKernelChange,
   showAdvanced,
 }: PVCConfigProps) {
-  const pvcEnabled = bPVCNativeSpace !== false;
-  const gaussianEnabled = bPVCGaussianMM === true;
+  const pvcEnabled = fromFlag(bPVCNativeSpace);
+  const gaussianEnabled = fromFlag(bPVCGaussianMM);
   const kernel = PVCNativeSpaceKernel ?? (gaussianEnabled ? [10, 10, 4] : [5, 5, 1]);
-
-  const updateKernel = (index: number, value: number | string) => {
-    const num = typeof value === "number" ? value : parseFloat(value) || 0;
-    const next = [...kernel] as [number, number, number];
-    next[index] = num;
-    onKernelChange(next);
-  };
 
   return (
     <Stack gap="sm">
@@ -37,7 +32,7 @@ export function PVCConfig({
         <Switch
           id="switch-bPVCNativeSpace"
           checked={pvcEnabled}
-          onChange={() => onBpvChange(!pvcEnabled)}
+          onChange={() => onBpvChange(toFlag(!pvcEnabled))}
           data-testid="field-bPVCNativeSpace"
         />
         <DataParFieldLabel fieldKey="bPVCNativeSpace" htmlFor="switch-bPVCNativeSpace" />
@@ -45,10 +40,14 @@ export function PVCConfig({
       {pvcEnabled && showAdvanced && (
         <Stack gap="xs" pl="md">
           <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
-            <Switch
-              id="switch-bPVCGaussianMM"
-              checked={gaussianEnabled}
-              onChange={() => onGaussianChange(!gaussianEnabled)}
+            <Select
+              id="select-bPVCGaussianMM"
+              data={[
+                { label: "Gaussian", value: "1" },
+                { label: "Flat", value: "0" },
+              ]}
+              value={gaussianEnabled ? "1" : "0"}
+              onChange={(v) => onGaussianChange(toFlag(v === "1"))}
               data-testid="field-bPVCGaussianMM"
             />
             <DataParFieldLabel fieldKey="bPVCGaussianMM" htmlFor="switch-bPVCGaussianMM" />
@@ -57,20 +56,13 @@ export function PVCConfig({
             fieldKey="PVCNativeSpaceKernel"
             label={gaussianEnabled ? "Kernel FWHM (mm)" : "Kernel size (voxels)"}
           />
-          <Group gap="xs">
-            {(["X", "Y", "Z"] as const).map((axis, i) => (
-              <NumberInput
-                key={axis}
-                label={axis}
-                value={kernel[i]}
-                onChange={(v) => updateKernel(i, v ?? 0)}
-                size="xs"
-                w={80}
-                min={0}
-                data-testid={`field-PVCNativeSpaceKernel-${axis}`}
-              />
-            ))}
-          </Group>
+          <NumberTupleInput
+            labels={gaussianEnabled ? ["LR", "AP", "IS"] : ["X", "Y", "Z"]}
+            value={kernel as [number, number, number]}
+            onChange={onKernelChange}
+            testId="field-PVCNativeSpaceKernel"
+            min={0}
+          />
         </Stack>
       )}
     </Stack>

@@ -26,6 +26,7 @@ export interface FieldMeta {
   label: string;
   description: string;
   defaultHint: string;
+  default?: unknown;
   section: SectionId;
   tier: Tier;
   widget: WidgetType;
@@ -54,6 +55,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "M0 source",
     description:
       "Select the M0 (equilibrium magnetization) calibration strategy. Choose 'Separate M0 scan' if you acquired a dedicated calibration scan, 'Use control as M0' to estimate it from control images, or 'Absent' to skip M0 processing entirely.",
+    default: "Absent",
     defaultHint: "Absent",
     section: "m0",
     tier: "basic",
@@ -63,6 +65,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Background suppression pulses",
     description:
       "The number of background suppression pulses applied to reduce background tissue signal and improve contrast-to-noise ratio.",
+    default: 0,
     defaultHint: "0",
     section: "m0",
     tier: "basic",
@@ -82,6 +85,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "M0 grey-matter scale factor",
     description:
       "A scaling factor applied to the M0 image to calibrate the signal in grey matter regions.",
+    default: 1,
     defaultHint: "1",
     section: "m0",
     tier: "basic",
@@ -91,7 +95,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Register M0 to ASL",
     description:
       "Align/register the M0 calibration scan to the ASL space before performing blood flow quantification to correct for head movement between scans.",
-    defaultHint: "true",
+    default: 0,
+    defaultHint: "false",
     section: "m0",
     tier: "basic",
     widget: "toggle",
@@ -100,6 +105,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Conventional M0 processing",
     description:
       "Enable legacy (conventional) processing of the M0 calibration scan instead of the newer standard pipeline.",
+    default: 0,
     defaultHint: "false",
     section: "m0",
     tier: "advanced",
@@ -109,6 +115,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "TR of M0 preparation",
     description:
       "The repetition time (TR) of the M0 preparation scan (in seconds), which is used to correct for T1 relaxation effects.",
+    default: [],
     defaultHint: "",
     section: "m0",
     tier: "advanced",
@@ -120,7 +127,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Number of compartments",
     description:
       "The number of physical/tissue compartments modeled in the kinetic quantification. Usually set to 1 (single-compartment model).",
-    defaultHint: "1",
+    default: 1,
+    defaultHint: "Single compartment model",
     section: "quantification",
     tier: "basic",
     widget: "select",
@@ -129,6 +137,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Blood-brain partition coefficient",
     description:
       "The blood-brain partition coefficient (water solubility ratio between brain tissue and blood). Standard value is 0.9 mL/g.",
+    default: 0.9,
     defaultHint: "0.9",
     section: "quantification",
     tier: "advanced",
@@ -137,7 +146,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   T2art: {
     label: "T2 of arterial blood",
     description: "The transverse relaxation time (T2) of arterial blood in milliseconds.",
-    defaultHint: "50",
+    default: 165,
+    defaultHint: "165",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -146,6 +156,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "T1 of arterial blood",
     description:
       "The longitudinal relaxation time (T1) of arterial blood in milliseconds. Typically 1650 ms at 3 Tesla.",
+    default: 1650,
     defaultHint: "1650",
     section: "quantification",
     tier: "advanced",
@@ -155,6 +166,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "T1 of grey matter",
     description:
       "The longitudinal relaxation time (T1) of grey matter tissue in milliseconds (typically 1240 ms).",
+    default: 1240,
     defaultHint: "1240",
     section: "quantification",
     tier: "advanced",
@@ -164,6 +176,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "T1 of white matter",
     description:
       "The longitudinal relaxation time (T1) of white matter tissue in milliseconds (typically 800 ms).",
+    default: 800,
     defaultHint: "800",
     section: "quantification",
     tier: "advanced",
@@ -173,6 +186,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "T2 of grey matter",
     description:
       "The transverse relaxation time (T2) of grey matter tissue in milliseconds (typically 85 ms).",
+    default: 85,
     defaultHint: "85",
     section: "quantification",
     tier: "advanced",
@@ -182,6 +196,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "T2 of white matter",
     description:
       "The transverse relaxation time (T2) of white matter tissue in milliseconds (typically 76 ms).",
+    default: 76,
     defaultHint: "76",
     section: "quantification",
     tier: "advanced",
@@ -191,6 +206,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "T2 tissue (multi-TE)",
     description:
       "The transverse relaxation time (T2) of brain tissue in milliseconds, used specifically for multi-echo-time (multi-TE) ASL sequences.",
+    default: 85,
     defaultHint: "85",
     section: "quantification",
     tier: "advanced",
@@ -200,6 +216,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Use external quantification",
     description:
       "Enable external toolboxes (like FSL BASIL) for blood flow quantification instead of the built-in ExploreASL quantification model.",
+    default: false,
     defaultHint: "false",
     section: "quantification",
     tier: "advanced",
@@ -209,6 +226,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "External quantification type",
     description:
       "The specific external quantification engine to run (e.g. BASIL, FABBER, or VABY).",
+    default: "BASIL",
     defaultHint: "BASIL",
     section: "quantification",
     tier: "advanced",
@@ -219,7 +237,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "External quantification smoothing (mm)",
     description:
       "Apply Gaussian smoothing (Full Width at Half Maximum in millimeters) during the external quantification process.",
-    defaultHint: "",
+    default: [5, 5, 1],
+    defaultHint: "5, 5, 1",
     section: "quantification",
     tier: "advanced",
     widget: "numberTuple",
@@ -229,7 +248,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Mask external quantification",
     description:
       "Enable spatial brain masking during external quantification to limit calculations to brain tissue.",
-    defaultHint: "false",
+    default: true,
+    defaultHint: "true",
     section: "quantification",
     tier: "advanced",
     widget: "toggle",
@@ -239,6 +259,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Spatial BASIL",
     description:
       "Enable spatial regularization/smoothing in the BASIL model to improve signal coherence across neighboring voxels.",
+    default: false,
     defaultHint: "false",
     section: "quantification",
     tier: "advanced",
@@ -249,6 +270,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Infer T1 in BASIL",
     description:
       "Allow the BASIL quantification model to dynamically estimate/infer the local T1 relaxation values rather than using a fixed assumption.",
+    default: false,
     defaultHint: "false",
     section: "quantification",
     tier: "advanced",
@@ -259,7 +281,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Infer ATT in BASIL",
     description:
       "Allow the BASIL model to dynamically estimate/infer the arterial transit time (ATT / blood arrival time).",
-    defaultHint: "false",
+    default: true,
+    defaultHint: "true",
     section: "quantification",
     tier: "advanced",
     widget: "toggle",
@@ -269,17 +292,19 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "BASIL exchange model",
     description:
       "Specify the water exchange model between blood vessels and brain tissue (e.g. simple single-stage or multi-compartment model).",
-    defaultHint: "simple",
+    default: "simple",
+    defaultHint: "Simple single-compartment model with T1 of blood",
     section: "quantification",
     tier: "advanced",
     widget: "select",
     condition: isExternalQuant,
   },
   DispBASIL: {
-    label: "BASIL dispersion model",
+    label: "BASIL model of the label bolus dispersion",
     description:
       "Specify how the arterial bolus dispersion is modeled as it travels through the vasculature (e.g. none, Gaussian, or Gamma distribution).",
-    defaultHint: "none",
+    default: "none",
+    defaultHint: "None",
     section: "quantification",
     tier: "advanced",
     widget: "select",
@@ -289,6 +314,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "BASIL ATT standard deviation",
     description:
       "The expected variation/standard deviation of the arterial transit time (ATT) prior assumption within BASIL.",
+    default: 1.0,
     defaultHint: "1.0",
     section: "quantification",
     tier: "advanced",
@@ -299,6 +325,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Clean up external quantification",
     description:
       "Delete temporary and intermediate calculation files generated by the external quantification engine once finished.",
+    default: false,
     defaultHint: "false",
     section: "quantification",
     tier: "advanced",
@@ -311,7 +338,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Processing quality",
     description:
       "Specify processing quality level. Select 'Normal processing' for full-quality final analysis, or 'Fast try-out mode' for rapid testing with reduced resolution and iterations.",
-    defaultHint: "1",
+    default: 1,
+    defaultHint: "Normal processing",
     section: "generalSettings",
     tier: "basic",
     widget: "select",
@@ -320,7 +348,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Delete temporary files",
     description:
       "Automatically remove intermediate files and temporary data after processing is complete to save storage space.",
-    defaultHint: "false",
+    default: 1,
+    defaultHint: "1",
     section: "generalSettings",
     tier: "advanced",
     widget: "toggle",
@@ -328,7 +357,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   SkipIfNoFlair: {
     label: "Skip if no FLAIR",
     description: "Skip processing for any subjects/sessions that do not have a FLAIR image.",
-    defaultHint: "false",
+    default: 0,
+    defaultHint: "0",
     section: "generalSettings",
     tier: "advanced",
     widget: "toggle",
@@ -336,7 +366,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   SkipIfNoASL: {
     label: "Skip if no ASL",
     description: "Skip processing for any subjects/sessions that do not have an ASL image.",
-    defaultHint: "false",
+    default: 0,
+    defaultHint: "0",
     section: "generalSettings",
     tier: "advanced",
     widget: "toggle",
@@ -345,16 +376,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Skip if no M0",
     description:
       "Skip processing for any subjects/sessions that do not have an M0 calibration image.",
-    defaultHint: "false",
-    section: "generalSettings",
-    tier: "advanced",
-    widget: "toggle",
-  },
-  stopAfterErrors: {
-    label: "Stop after errors",
-    description:
-      "Halt the entire multi-subject processing pipeline immediately if an error occurs in any subject, rather than continuing with other subjects.",
-    defaultHint: "false",
+    default: 0,
+    defaultHint: "0",
     section: "generalSettings",
     tier: "advanced",
     widget: "toggle",
@@ -363,6 +386,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Lesion filling",
     description:
       "Fill white-matter lesions with surrounding normal tissue signal before structural segmentation, reducing tissue segmentation errors.",
+    default: false,
     defaultHint: "false",
     section: "generalSettings",
     tier: "advanced",
@@ -372,7 +396,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Auto AC-PC alignment",
     description:
       "Automatically orient and align anatomical images along the Anterior Commissure - Posterior Commissure (AC-PC) line.",
-    defaultHint: "false",
+    default: true,
+    defaultHint: "true",
     section: "generalSettings",
     tier: "advanced",
     widget: "toggle",
@@ -381,6 +406,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Enable Metadata-grouping difference correction",
     description:
       "Generate or modify participants.tsv (at derivatives/ExploreASL/participants.tsv) and participants.json before starting the pipeline. Columns participant_id, session, and site (whitespace replaced with underscores, mapped from your metadata groups and subject row assignments) will be ensured.",
+    default: false,
     defaultHint: "false",
     section: "generalSettings",
     tier: "basic",
@@ -391,7 +417,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   motionCorrection: {
     label: "Motion correction",
     description: "Enable head motion correction for the ASL timeseries using SPM realignment.",
-    defaultHint: "true",
+    default: 1,
+    defaultHint: "1",
     section: "aslProcessing",
     tier: "basic",
     widget: "toggle",
@@ -400,7 +427,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "FSL TopUp",
     description:
       "Enable FSL TopUp distortion correction if a calibration scan with reversed phase encoding direction is available.",
-    defaultHint: "true",
+    default: false,
+    defaultHint: "false",
     section: "aslProcessing",
     tier: "basic",
     widget: "toggle",
@@ -409,25 +437,27 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Partial volume correction (native)",
     description:
       "Correct for partial volume effects (mixing of grey matter, white matter, and CSF within a voxel) in native space before standardizing the images.",
-    defaultHint: "true",
+    default: 0,
+    defaultHint: "0",
     section: "aslProcessing",
     tier: "basic",
     widget: "toggle",
   },
   bPVCGaussianMM: {
-    label: "PVC Gaussian kernel (mm)",
-    description:
-      "Apply Gaussian smoothing with the specified kernel size (in millimeters) during partial volume correction.",
-    defaultHint: "false",
+    label: "PVC kernel type",
+    description: "Select the type of kernel used for partial volume correction.",
+    default: 0,
+    defaultHint: "0",
     section: "aslProcessing",
     tier: "advanced",
-    widget: "number",
+    widget: "select",
     condition: isPVCEnabled,
   },
   PVCNativeSpaceKernel: {
     label: "PVC native-space kernel",
     description:
-      "Define the dimensions (X, Y, Z) of the local kernel used for native-space partial volume correction.",
+      "Define the dimensions (Left-Right [LR], Anterior-Posterior [AP], Inferior-Superior [IS]) of the local kernel used for native-space partial volume correction.",
+    default: [5, 5, 1],
     defaultHint: "5, 5, 1",
     section: "aslProcessing",
     tier: "advanced",
@@ -438,6 +468,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Save 4D CBF",
     description:
       "Save individual cerebral blood flow (CBF) volumes sequentially as a 4D timeseries rather than just the averaged 3D map.",
+    default: false,
     defaultHint: "false",
     section: "aslProcessing",
     tier: "basic",
@@ -447,6 +478,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Spike removal threshold",
     description:
       "The statistical threshold (Z-score) used to detect and filter out sudden signal spikes (e.g. due to motion or scanner instability) in the ASL timeseries.",
+    default: 0.01,
     defaultHint: "0.01",
     section: "aslProcessing",
     tier: "advanced",
@@ -456,25 +488,28 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Absolute spike removal threshold",
     description:
       "The absolute signal value threshold above which any timeseries volume is classified as a spike and removed.",
+    default: 0,
     defaultHint: "0",
     section: "aslProcessing",
     tier: "advanced",
     widget: "number",
   },
   bRegistrationContrast: {
-    label: "Registration contrast",
+    label: "Registration contrast source",
     description:
-      "Select the image contrast type for aligning the ASL scans to structural anatomical scans: 0 = Control image, 1 = CBF image, 2 = Mean control/CBF, 3 = T1-weighted equivalent.",
-    defaultHint: "2",
+      "Select the image contrast type for aligning the ASL scans to structural anatomical scans.",
+    default: 2,
+    defaultHint: "Automatic based on spatial CoV of PWI",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
   },
   bAffineRegistration: {
-    label: "Affine registration",
+    label: "Registration method",
     description:
-      "Method for linear affine alignment between ASL and structural images: 0 = Default, 1 = Robust linear alignment, 2 = Disable linear alignment.",
-    defaultHint: "0",
+      "Method to use for linear alignment between ASL and structural images (e.g. rigid-body, affine, or automatic based on perfusion variation).",
+    default: 0,
+    defaultHint: "Rigid-body",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -482,8 +517,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bDCTRegistration: {
     label: "DCT registration",
     description:
-      "Method for non-linear registration using Discrete Cosine Transform (DCT): 0 = Default, 1 = Enable non-linear registration, 2 = Disable non-linear registration.",
-    defaultHint: "0",
+      "Whether to use Discrete Cosine Transform (DCT) on top of affine registration to improve registration accuracy.",
+    default: 0,
+    defaultHint: "Disabled (affine only)",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -492,7 +528,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Use MNI as dummy structural",
     description:
       "Use a standard MNI template brain as a dummy structural placeholder for subjects that lack a high-resolution T1/structural scan.",
-    defaultHint: "false",
+    default: 0,
+    defaultHint: "0",
     section: "aslProcessing",
     tier: "advanced",
     widget: "toggle",
@@ -501,6 +538,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Hct to blood T1 conversion",
     description:
       "Choose the formula/relationship used to calculate arterial blood T1 from hematocrit values (0 = Standard literature assumption, 1 = Alternative/custom clinical formula).",
+    default: 0,
     defaultHint: "0",
     section: "aslProcessing",
     tier: "advanced",
@@ -510,7 +548,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Apply quantification",
     description:
       "Determine which scaling, calibration, and division steps to execute during the quantification of cerebral blood flow maps.",
-    defaultHint: "",
+    default: [1, 1, 1, 1, 1, 1],
+    defaultHint: "1, 1, 1, 1, 1, 1",
     section: "aslProcessing",
     tier: "advanced",
     widget: "checkboxGroup",
@@ -521,6 +560,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Brain atlases",
     description:
       "The anatomical brain atlases (e.g., automated anatomical labeling, vascular territories, or deep white matter masks) to use for regional/ROI cerebral blood flow analysis.",
+    default: ["Total", "DeepWM"],
     defaultHint: "Total, DeepWM",
     section: "atlases",
     tier: "basic",
@@ -530,7 +570,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Tissue masking",
     description:
       "The target tissue type (Grey Matter, White Matter, CSF, or combined) to mask regional analysis to for each selected atlas.",
-    defaultHint: "",
+    default: ["GM", "WM"],
+    defaultHint: "GM, WM",
     section: "atlases",
     tier: "advanced",
     widget: "select",
@@ -539,7 +580,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Tissue probability threshold",
     description:
       "The minimum probability threshold (0.0 to 1.0) required for a voxel to be classified as grey matter, white matter, or CSF in the atlas mask.",
-    defaultHint: "",
+    default: [0.7, 0.7],
+    defaultHint: "0.7, 0.7",
     section: "atlases",
     tier: "advanced",
     widget: "number",
@@ -548,6 +590,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "ROI masking",
     description:
       "Select which subject-specific masks to apply to regional analyses: Susceptibility masking (removes artifacts/signal dropouts), Vascular masking (removes large blood vessels), Tissue-masking (limits ROIs to GM/WM/CSF tissue), or WholeBrain masking (reduces memory usage).",
+    default: [1, 1, 1, 1],
     defaultHint: "1",
     section: "atlases",
     tier: "advanced",
@@ -557,6 +600,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Minimal ROI volume",
     description:
       "The minimum volume (in milliliters) an anatomical region (ROI) must occupy in a subject to be included in regional analysis statistics.",
+    default: 1,
     defaultHint: "1",
     section: "atlases",
     tier: "advanced",
@@ -566,6 +610,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "White-matter hyperintensity analysis",
     description:
       "Enable automated detection, segmentation, and regional analysis of white-matter hyperintensities (lesions).",
+    default: false,
     defaultHint: "false",
     section: "atlases",
     tier: "advanced",
@@ -575,6 +620,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Data types",
     description:
       "The statistical maps and output metric types to generate from quantification (e.g. quantitative CBF, arterial transit time, etc.).",
+    default: ["qCBF"],
     defaultHint: "qCBF",
     section: "atlases",
     tier: "advanced",
@@ -586,7 +632,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Longitudinal registration",
     description:
       "Enable specialized longitudinal registration to register and track anatomical changes across multiple timepoints/scans per subject.",
-    defaultHint: "false",
+    default: 0,
+    defaultHint: "0",
     section: "structural",
     tier: "advanced",
     widget: "toggle",
@@ -595,7 +642,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "DARTEL registration",
     description:
       "Enable DARTEL (SPM's high-dimensional diffeomorphic registration) to align brains more accurately to standard MNI space.",
-    defaultHint: "false",
+    default: 0,
+    defaultHint: "0",
     section: "structural",
     tier: "advanced",
     widget: "toggle",
@@ -604,6 +652,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "WMH segmentation algorithm",
     description:
       "The algorithm used for segmenting white-matter hyperintensities (e.g., LST LPA or LST LGA).",
+    default: "LPA",
     defaultHint: "LPA",
     section: "structural",
     tier: "advanced",
@@ -613,7 +662,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "SPM12 segmentation",
     description:
       "Enable standard SPM12 tissue segmentation to partition structural T1 images into grey matter, white matter, and CSF.",
-    defaultHint: "false",
+    default: 0,
+    defaultHint: "0",
     section: "structural",
     tier: "advanced",
     widget: "toggle",
@@ -621,7 +671,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bHammersCAT12: {
     label: "Hammers atlas via CAT12",
     description: "Use CAT12 to generate Hammers atlas parcellation.",
-    defaultHint: "false",
+    default: 0,
+    defaultHint: "0",
     section: "structural",
     tier: "advanced",
     widget: "toggle",
@@ -630,6 +681,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Fix resolution",
     description:
       "Automatically resample high-resolution structural scans to a standard 1mm isotropic resolution if they deviate.",
+    default: false,
     defaultHint: "false",
     section: "structural",
     tier: "advanced",
@@ -641,7 +693,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Auto-detect FSL",
     description:
       "Allow the processing pipeline to automatically locate the FSL (FMRIB Software Library) installation path on your system.",
-    defaultHint: "true",
+    default: false,
+    defaultHint: "false",
     section: "environment",
     tier: "advanced",
     widget: "toggle",
@@ -650,7 +703,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Auto-detect Vaby",
     description:
       "Allow the processing pipeline to automatically locate the Vaby/FABBER installation path on your system.",
-    defaultHint: "true",
+    default: false,
+    defaultHint: "false",
     section: "environment",
     tier: "advanced",
     widget: "toggle",

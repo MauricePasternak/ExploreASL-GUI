@@ -1,4 +1,5 @@
 import type { LogFileInfo } from "../../lib/logViewer";
+import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
 
 export type ModuleDisplayStatus = "complete" | "incomplete" | "pending" | "skipped" | "outdated";
 
@@ -12,4 +13,22 @@ export function resolveLogBadge(
     return moduleStatus === "incomplete" ? "errors" : "no-logs";
   }
   return moduleStatus === "incomplete" ? "errors" : "logs";
+}
+
+export function resolveModuleDisplay(
+  subjectInfo: SubjectInfo,
+  module: "structural" | "asl",
+  statuses: SubjectModuleStatus[],
+): ModuleDisplayStatus {
+  if (module === "structural" && !subjectInfo.hasStructural) return "skipped";
+  if (module === "asl" && !subjectInfo.hasASL) return "skipped";
+
+  const entry = statuses.find(
+    (s) => s.subjectSession === subjectInfo.subjectSession && s.module === module,
+  );
+  if (!entry) return "pending";
+  if (entry.status === "complete") return "complete";
+  if (entry.status === "incomplete") return "incomplete";
+  if (entry.status === "outdated") return "outdated";
+  return "pending";
 }

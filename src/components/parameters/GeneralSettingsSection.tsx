@@ -1,10 +1,11 @@
-import { Switch, NumberInput, Select, Stack, Group, Alert } from "@mantine/core";
+import { Alert, Group, Select, Stack, Switch } from "@mantine/core";
 import { IconAlertTriangle } from "@tabler/icons-react";
 
-import type { DataParState } from "../../schemas/dataParSchema";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
-import { DataParFieldLabel } from "./DataParFieldLabel";
+import type { DataParState } from "../../schemas/dataParSchema";
 import { AdvancedDivider } from "./AdvancedDivider";
+import { DataParFieldLabel } from "./DataParFieldLabel";
+import { FlagToggle } from "./FlagToggle";
 
 interface GeneralSettingsSectionProps {
   dataPar: DataParState;
@@ -13,14 +14,9 @@ interface GeneralSettingsSectionProps {
   onToggleAdvanced: () => void;
 }
 
-const ADVANCED_TOGGLE_FIELDS = [
-  "DELETETEMP",
-  "SkipIfNoFlair",
-  "SkipIfNoASL",
-  "SkipIfNoM0",
-  "bLesionFilling",
-  "bAutoACPC",
-] as const;
+const ADVANCED_FLAG_FIELDS = ["DELETETEMP", "SkipIfNoFlair", "SkipIfNoASL", "SkipIfNoM0"] as const;
+
+const ADVANCED_BOOLEAN_FIELDS = ["bLesionFilling", "bAutoACPC"] as const;
 
 export function GeneralSettingsSection({
   dataPar,
@@ -33,8 +29,8 @@ export function GeneralSettingsSection({
       <Select
         label={<DataParFieldLabel fieldKey="Quality" />}
         data={[
-          { value: "1", label: "1 — Normal" },
-          { value: "0", label: "0 — Fast try-out" },
+          { value: "1", label: "Normal processing" },
+          { value: "0", label: "Low quality (fast try-out)" },
         ]}
         value={dataPar.Quality != null ? String(dataPar.Quality) : null}
         onChange={(v) => onFieldChange("Quality", v ? Number(v) : undefined)}
@@ -75,7 +71,15 @@ export function GeneralSettingsSection({
 
       {showAdvanced && (
         <>
-          {ADVANCED_TOGGLE_FIELDS.map((key) => (
+          {ADVANCED_FLAG_FIELDS.map((key) => (
+            <FlagToggle
+              key={key}
+              fieldKey={key}
+              value={dataPar[key] as 0 | 1 | undefined}
+              onChange={(v) => onFieldChange(key, v)}
+            />
+          ))}
+          {ADVANCED_BOOLEAN_FIELDS.map((key) => (
             <Group key={key} gap="xs" align="center" style={{ minHeight: "32px" }}>
               <Switch
                 id={`switch-${key}`}
@@ -86,14 +90,6 @@ export function GeneralSettingsSection({
               <DataParFieldLabel fieldKey={key} htmlFor={`switch-${key}`} />
             </Group>
           ))}
-
-          <NumberInput
-            label={<DataParFieldLabel fieldKey="stopAfterErrors" />}
-            placeholder={FIELD_METADATA.stopAfterErrors.defaultHint}
-            value={dataPar.stopAfterErrors}
-            onChange={(v) => onFieldChange("stopAfterErrors", v === "" ? undefined : v)}
-            data-testid="field-stopAfterErrors"
-          />
         </>
       )}
     </Stack>

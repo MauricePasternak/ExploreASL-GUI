@@ -100,7 +100,7 @@ describe("ASLProcessingSection", () => {
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/spike removal threshold/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/registration contrast/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/affine registration/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/registration method/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/dct registration/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/use mni as dummy/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/apply quantification/i).length).toBeGreaterThan(0);
@@ -112,7 +112,7 @@ describe("ASLProcessingSection", () => {
       <ASLProcessingSectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />,
     );
     clickSwitch(/motion correction/i);
-    expect(onFieldChange).toHaveBeenCalledWith("motionCorrection", expect.any(Boolean));
+    expect(onFieldChange).toHaveBeenCalledWith("motionCorrection", expect.any(Number));
   });
 
   it("calls onToggleAdvanced when Show advanced is toggled", () => {

@@ -14,8 +14,8 @@ export const M0SectionSchema = z.object({
   BackgroundSuppressionNumberPulses: z.number().optional(),
   BackgroundSuppressionPulseTime: z.union([z.number(), z.array(z.number())]).optional(),
   M0_GMScaleFactor: z.number().optional(),
-  bRegisterM02ASL: z.boolean().optional(),
-  M0_conventionalProcessing: z.boolean().optional(),
+  bRegisterM02ASL: z.union([z.literal(0), z.literal(1)]).optional(),
+  M0_conventionalProcessing: z.union([z.literal(0), z.literal(1)]).optional(),
   RepetitionTimePreparationM0: z.union([z.number(), z.array(z.number())]).optional(),
 });
 
@@ -31,7 +31,9 @@ export const QuantificationSectionSchema = z.object({
   T2tissueMultiTE: z.number().optional(),
   bUseExternalQuantification: z.boolean().optional(),
   ExternalQuantificationType: z.string().optional(),
-  ExternalQuantificationSmoothGaussianMM: z.tuple([z.number(), z.number(), z.number()]).optional(),
+  ExternalQuantificationSmoothGaussianMM: z
+    .tuple([z.number().int(), z.number().int(), z.number().int()])
+    .optional(),
   bMaskingExternal: z.boolean().optional(),
   bSpatialBASIL: z.boolean().optional(),
   bInferT1BASIL: z.boolean().optional(),
@@ -43,20 +45,19 @@ export const QuantificationSectionSchema = z.object({
 });
 
 export const GeneralSettingsSectionSchema = z.object({
-  Quality: z.number().optional(),
-  DELETETEMP: z.boolean().optional(),
-  SkipIfNoFlair: z.boolean().optional(),
-  SkipIfNoASL: z.boolean().optional(),
-  SkipIfNoM0: z.boolean().optional(),
-  stopAfterErrors: z.number().optional(),
+  Quality: z.union([z.literal(0), z.literal(1)]).optional(),
+  DELETETEMP: z.union([z.literal(0), z.literal(1)]).optional(),
+  SkipIfNoFlair: z.union([z.literal(0), z.literal(1)]).optional(),
+  SkipIfNoASL: z.union([z.literal(0), z.literal(1)]).optional(),
+  SkipIfNoM0: z.union([z.literal(0), z.literal(1)]).optional(),
   enableMetadataGroupingCorrection: z.boolean().optional(),
 });
 
 export const ASLProcessingSectionSchema = z.object({
-  motionCorrection: z.boolean().optional(),
+  motionCorrection: z.union([z.literal(0), z.literal(1)]).optional(),
   bTopUp: z.boolean().optional(),
-  bPVCNativeSpace: z.boolean().optional(),
-  bPVCGaussianMM: z.boolean().optional(),
+  bPVCNativeSpace: z.union([z.literal(0), z.literal(1)]).optional(),
+  bPVCGaussianMM: z.union([z.literal(0), z.literal(1)]).optional(),
   PVCNativeSpaceKernel: PVCNativeSpaceKernelSchema.optional(),
   SaveCBF4D: z.boolean().optional(),
   SpikeRemovalThreshold: z.number().optional(),
@@ -64,7 +65,7 @@ export const ASLProcessingSectionSchema = z.object({
   bRegistrationContrast: z.number().optional(),
   bAffineRegistration: z.number().optional(),
   bDCTRegistration: z.number().optional(),
-  bUseMNIasDummyStructural: z.boolean().optional(),
+  bUseMNIasDummyStructural: z.union([z.literal(0), z.literal(1)]).optional(),
   bHct2BloodT1: z.number().optional(),
   ApplyQuantification: ApplyQuantificationSchema.optional(),
 });
@@ -74,15 +75,11 @@ export const AtlasesSectionSchema = z.object({
   TissueMasking: z.array(z.string()).optional(),
   TissueThreshold: z.array(z.number().min(0).max(1)).optional(),
   bMasking: z
-    .union([
-      z.literal(0),
-      z.literal(1),
-      z.tuple([
-        z.union([z.literal(0), z.literal(1)]),
-        z.union([z.literal(0), z.literal(1)]),
-        z.union([z.literal(0), z.literal(1)]),
-        z.union([z.literal(0), z.literal(1)]),
-      ]),
+    .tuple([
+      z.union([z.literal(0), z.literal(1)]),
+      z.union([z.literal(0), z.literal(1)]),
+      z.union([z.literal(0), z.literal(1)]),
+      z.union([z.literal(0), z.literal(1)]),
     ])
     .optional(),
   MinimalROIVolume: z.number().optional(),
@@ -91,11 +88,11 @@ export const AtlasesSectionSchema = z.object({
 });
 
 export const StructuralSectionSchema = z.object({
-  bRunLongReg: z.boolean().optional(),
-  bRunDARTEL: z.boolean().optional(),
+  bRunLongReg: z.union([z.literal(0), z.literal(1)]).optional(),
+  bRunDARTEL: z.union([z.literal(0), z.literal(1)]).optional(),
   WMHsegmAlg: z.string().optional(),
-  bSegmentSPM12: z.boolean().optional(),
-  bHammersCAT12: z.boolean().optional(),
+  bSegmentSPM12: z.union([z.literal(0), z.literal(1)]).optional(),
+  bHammersCAT12: z.union([z.literal(0), z.literal(1)]).optional(),
   bFixResolution: z.boolean().optional(),
   bLesionFilling: z.boolean().optional(),
   bAutoACPC: z.boolean().optional(),
@@ -108,13 +105,13 @@ export const EnvironmentSectionSchema = z.object({
 
 export const DataParSchema = z
   .object({})
-  .merge(M0SectionSchema)
-  .merge(QuantificationSectionSchema)
-  .merge(GeneralSettingsSectionSchema)
-  .merge(ASLProcessingSectionSchema)
-  .merge(AtlasesSectionSchema)
-  .merge(StructuralSectionSchema)
-  .merge(EnvironmentSectionSchema)
-  .passthrough();
+  .extend(M0SectionSchema.shape)
+  .extend(QuantificationSectionSchema.shape)
+  .extend(GeneralSettingsSectionSchema.shape)
+  .extend(ASLProcessingSectionSchema.shape)
+  .extend(AtlasesSectionSchema.shape)
+  .extend(StructuralSectionSchema.shape)
+  .extend(EnvironmentSectionSchema.shape)
+  .loose();
 
 export type DataParState = z.infer<typeof DataParSchema>;

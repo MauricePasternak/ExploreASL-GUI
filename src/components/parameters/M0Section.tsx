@@ -1,4 +1,4 @@
-import { Switch, NumberInput, Stack, Text, Group } from "@mantine/core";
+import { NumberInput, Stack, Text } from "@mantine/core";
 
 import type { DataParState } from "../../schemas/dataParSchema";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
@@ -6,6 +6,7 @@ import { DataParFieldLabel } from "./DataParFieldLabel";
 import { AdvancedDivider } from "./AdvancedDivider";
 import { M0Select } from "./M0Select";
 import { CommaNumberInput } from "../CommaNumberInput";
+import { FlagToggle } from "./FlagToggle";
 
 interface M0SectionProps {
   dataPar: DataParState;
@@ -65,32 +66,21 @@ export function M0Section({
         data-testid="field-M0_GMScaleFactor"
       />
 
-      <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
-        <Switch
-          id="switch-bRegisterM02ASL"
-          checked={dataPar.bRegisterM02ASL ?? true}
-          onChange={(e) => onFieldChange("bRegisterM02ASL", e.currentTarget.checked)}
-          data-testid="field-bRegisterM02ASL"
-        />
-        <DataParFieldLabel fieldKey="bRegisterM02ASL" htmlFor="switch-bRegisterM02ASL" />
-      </Group>
+      <FlagToggle
+        fieldKey="bRegisterM02ASL"
+        value={dataPar.bRegisterM02ASL}
+        onChange={(v) => onFieldChange("bRegisterM02ASL", v)}
+      />
 
       <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
 
       {showAdvanced && (
         <>
-          <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
-            <Switch
-              id="switch-M0_conventionalProcessing"
-              checked={dataPar.M0_conventionalProcessing ?? false}
-              onChange={(e) => onFieldChange("M0_conventionalProcessing", e.currentTarget.checked)}
-              data-testid="field-M0_conventionalProcessing"
-            />
-            <DataParFieldLabel
-              fieldKey="M0_conventionalProcessing"
-              htmlFor="switch-M0_conventionalProcessing"
-            />
-          </Group>
+          <FlagToggle
+            fieldKey="M0_conventionalProcessing"
+            value={dataPar.M0_conventionalProcessing}
+            onChange={(v) => onFieldChange("M0_conventionalProcessing", v)}
+          />
 
           <CommaNumberInput
             label={<DataParFieldLabel fieldKey="RepetitionTimePreparationM0" />}

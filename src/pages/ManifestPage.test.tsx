@@ -44,17 +44,22 @@ vi.mock("../components/manifest/ManifestPreview", () => ({
   default: vi.fn(() => <div data-testid="manifest-preview">Preview</div>),
 }));
 
-vi.mock("../stores/projectStore", () => ({
-  useProjectStore: vi.fn((selector?: any) => {
-    const state = {
-      project: {
-        projectMeta: { rootPath: "/test/project" },
-        uiState: { manifest: { verdicts: {} } },
-      },
-    };
-    return selector ? selector(state) : state;
-  }),
-}));
+const mockProjectState = {
+  project: {
+    projectMeta: { rootPath: "/test/project" },
+    uiState: { manifest: { verdicts: {} } },
+  },
+};
+
+vi.mock("../stores/projectStore", () => {
+  const mockHook = vi.fn((selector?: any) => {
+    return selector ? selector(mockProjectState) : mockProjectState;
+  });
+  (mockHook as any).getState = vi.fn(() => mockProjectState);
+  return {
+    useProjectStore: mockHook,
+  };
+});
 
 function renderPage() {
   return render(
