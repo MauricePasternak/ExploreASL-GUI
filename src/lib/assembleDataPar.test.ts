@@ -46,9 +46,9 @@ describe("assembleDataPar", () => {
   it("maps ASL module fields to x.modules.asl.*", () => {
     const state: DataParState = {
       bTopUp: true,
-      motionCorrection: false,
-      bPVCNativeSpace: true,
-      bPVCGaussianMM: false,
+      motionCorrection: 0,
+      bPVCNativeSpace: 1,
+      bPVCGaussianMM: 0,
       PVCNativeSpaceKernel: [5, 5, 5],
       SaveCBF4D: true,
       SpikeRemovalThreshold: 3.0,
@@ -56,7 +56,7 @@ describe("assembleDataPar", () => {
       bRegistrationContrast: 1,
       bAffineRegistration: 2,
       bDCTRegistration: 0,
-      bUseMNIasDummyStructural: false,
+      bUseMNIasDummyStructural: 0,
       bHct2BloodT1: 1,
       ApplyQuantification: [1, 0, 1, 0, 1, 0],
       BackgroundSuppressionNumberPulses: 4,
@@ -66,9 +66,9 @@ describe("assembleDataPar", () => {
     const result = assembleDataPar(state);
     expect(result.x.modules?.asl).toEqual({
       bTopUp: true,
-      motionCorrection: false,
-      bPVCNativeSpace: true,
-      bPVCGaussianMM: false,
+      motionCorrection: 0,
+      bPVCNativeSpace: 1,
+      bPVCGaussianMM: 0,
       PVCNativeSpaceKernel: [5, 5, 5],
       SaveCBF4D: true,
       SpikeRemovalThreshold: 3.0,
@@ -76,7 +76,7 @@ describe("assembleDataPar", () => {
       bRegistrationContrast: 1,
       bAffineRegistration: 2,
       bDCTRegistration: 0,
-      bUseMNIasDummyStructural: false,
+      bUseMNIasDummyStructural: 0,
       bHct2BloodT1: 1,
       ApplyQuantification: [1, 0, 1, 0, 1, 0],
       BackgroundSuppressionNumberPulses: 4,
@@ -87,20 +87,20 @@ describe("assembleDataPar", () => {
 
   it("maps structural fields to x.modules.structural.*", () => {
     const state: DataParState = {
-      bRunLongReg: true,
-      bRunDARTEL: false,
+      bRunLongReg: 1,
+      bRunDARTEL: 0,
       WMHsegmAlg: "LPA",
-      bSegmentSPM12: true,
-      bHammersCAT12: false,
+      bSegmentSPM12: 1,
+      bHammersCAT12: 0,
       bFixResolution: true,
     };
     const result = assembleDataPar(state);
     expect(result.x.modules?.structural).toEqual({
-      bRunLongReg: true,
-      bRunDARTEL: false,
+      bRunLongReg: 1,
+      bRunDARTEL: 0,
       WMHsegmAlg: "LPA",
-      bSegmentSPM12: true,
-      bHammersCAT12: false,
+      bSegmentSPM12: 1,
+      bHammersCAT12: 0,
       bFixResolution: true,
     });
   });
@@ -108,22 +108,20 @@ describe("assembleDataPar", () => {
   it("maps settings fields to x.settings.*", () => {
     const state: DataParState = {
       Quality: 1,
-      DELETETEMP: true,
-      SkipIfNoFlair: false,
-      SkipIfNoASL: true,
-      SkipIfNoM0: false,
-      stopAfterErrors: 5,
+      DELETETEMP: 1,
+      SkipIfNoFlair: 0,
+      SkipIfNoASL: 1,
+      SkipIfNoM0: 0,
       bLesionFilling: true,
       bAutoACPC: false,
     };
     const result = assembleDataPar(state);
     expect(result.x.settings).toEqual({
       Quality: 1,
-      DELETETEMP: true,
-      SkipIfNoFlair: false,
-      SkipIfNoASL: true,
-      SkipIfNoM0: false,
-      stopAfterErrors: 5,
+      DELETETEMP: 1,
+      SkipIfNoFlair: 0,
+      SkipIfNoASL: 1,
+      SkipIfNoM0: 0,
       bLesionFilling: true,
       bAutoACPC: false,
     });
@@ -187,13 +185,13 @@ describe("assembleDataPar", () => {
   });
 
   it("maps bRegisterM02ASL to x.Q.bRegisterM02ASL", () => {
-    const result = assembleDataPar({ bRegisterM02ASL: true });
-    expect(result).toEqual({ x: { Q: { bRegisterM02ASL: true } } });
+    const result = assembleDataPar({ bRegisterM02ASL: 1 });
+    expect(result).toEqual({ x: { Q: { bRegisterM02ASL: 1 } } });
   });
 
   it("maps M0_conventionalProcessing to x.Q.M0_conventionalProcessing", () => {
-    const result = assembleDataPar({ M0_conventionalProcessing: false });
-    expect(result).toEqual({ x: { Q: { M0_conventionalProcessing: false } } });
+    const result = assembleDataPar({ M0_conventionalProcessing: 0 });
+    expect(result).toEqual({ x: { Q: { M0_conventionalProcessing: 0 } } });
   });
 
   it("maps RepetitionTimePreparationM0 to x.Q.RepetitionTimePreparationM0", () => {
@@ -232,7 +230,7 @@ describe("assembleDataPar", () => {
       bTopUp: true,
       Quality: 1,
       Atlases: ["MNI_Structural"],
-      bRunLongReg: true,
+      bRunLongReg: 1,
       bAutomaticallyDetectFSL: true,
       bUseExternalQuantification: true,
     };
@@ -242,7 +240,7 @@ describe("assembleDataPar", () => {
     expect(result.x.modules?.asl?.bTopUp).toBe(true);
     expect(result.x.settings?.Quality).toBe(1);
     expect(result.x.S?.Atlases).toEqual(["MNI_Structural"]);
-    expect(result.x.modules?.structural?.bRunLongReg).toBe(true);
+    expect(result.x.modules?.structural?.bRunLongReg).toBe(1);
     expect(result.x.bAutomaticallyDetectFSL).toBe(true);
     expect(result.x.external?.bUseExternalQuantification).toBe(true);
   });
@@ -276,14 +274,14 @@ describe("assembleDataPar", () => {
       T2WM: 45,
       T2tissueMultiTE: 0.04,
       M0_GMScaleFactor: 1.0,
-      bRegisterM02ASL: true,
-      M0_conventionalProcessing: false,
+      bRegisterM02ASL: 1,
+      M0_conventionalProcessing: 0,
       RepetitionTimePreparationM0: 8.0,
       // ASL module
       bTopUp: true,
-      motionCorrection: false,
-      bPVCNativeSpace: true,
-      bPVCGaussianMM: false,
+      motionCorrection: 0,
+      bPVCNativeSpace: 1,
+      bPVCGaussianMM: 0,
       PVCNativeSpaceKernel: [5, 5, 5],
       SaveCBF4D: true,
       SpikeRemovalThreshold: 3.0,
@@ -291,26 +289,25 @@ describe("assembleDataPar", () => {
       bRegistrationContrast: 1,
       bAffineRegistration: 2,
       bDCTRegistration: 0,
-      bUseMNIasDummyStructural: false,
+      bUseMNIasDummyStructural: 0,
       bHct2BloodT1: 1,
       ApplyQuantification: [1, 1, 1, 1, 1, 1],
       BackgroundSuppressionNumberPulses: 4,
       BackgroundSuppressionPulseTime: 0.5,
       nCompartments: 1,
       // Structural module
-      bRunLongReg: true,
-      bRunDARTEL: false,
+      bRunLongReg: 1,
+      bRunDARTEL: 0,
       WMHsegmAlg: "LPA",
-      bSegmentSPM12: true,
-      bHammersCAT12: false,
-      bFixResolution: true,
+      bSegmentSPM12: 0,
+      bHammersCAT12: 0,
+      bFixResolution: false,
       // Settings
       Quality: 1,
-      DELETETEMP: true,
-      SkipIfNoFlair: false,
-      SkipIfNoASL: true,
-      SkipIfNoM0: false,
-      stopAfterErrors: 5,
+      DELETETEMP: 1,
+      SkipIfNoFlair: 0,
+      SkipIfNoASL: 1,
+      SkipIfNoM0: 0,
       bLesionFilling: true,
       bAutoACPC: false,
       // S section
@@ -390,13 +387,13 @@ describe("assembleDataPar", () => {
 
   it("only structural module present — no ASL", () => {
     const state: DataParState = {
-      bRunLongReg: true,
+      bRunLongReg: 1,
     };
     const result = assembleDataPar(state);
 
     expect(result.x.modules).toBeDefined();
     expect(result.x.modules?.asl).toBeUndefined();
-    expect(result.x.modules?.structural).toEqual({ bRunLongReg: true });
+    expect(result.x.modules?.structural).toEqual({ bRunLongReg: 1 });
   });
 
   it("M0 named modes produce string output", () => {

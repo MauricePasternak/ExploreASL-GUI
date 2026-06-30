@@ -132,7 +132,7 @@ describe("M0Section", () => {
     const onFieldChange = vi.fn();
     renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />);
     clickSwitch(/register m0 to asl/i);
-    expect(onFieldChange).toHaveBeenCalledWith("bRegisterM02ASL", expect.any(Boolean));
+    expect(onFieldChange).toHaveBeenCalledWith("bRegisterM02ASL", expect.any(Number));
   });
 
   it("calls onToggleAdvanced when Show advanced is toggled", () => {

@@ -1,9 +1,10 @@
-import { Switch, NumberInput, Select, Stack, Group } from "@mantine/core";
+import { Group, NumberInput, Select, Stack, Switch, Text } from "@mantine/core";
 
-import type { DataParState } from "../../schemas/dataParSchema";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
-import { DataParFieldLabel } from "./DataParFieldLabel";
+import type { DataParState } from "../../schemas/dataParSchema";
 import { AdvancedDivider } from "./AdvancedDivider";
+import { DataParFieldLabel } from "./DataParFieldLabel";
+import { NumberTupleInput } from "./NumberTupleInput";
 
 interface QuantificationSectionProps {
   dataPar: DataParState;
@@ -44,8 +45,8 @@ export function QuantificationSection({
       <Select
         label={<DataParFieldLabel fieldKey="nCompartments" />}
         data={[
-          { value: "1", label: "1" },
-          { value: "2", label: "2" },
+          { value: "1", label: "Single-compartment model" },
+          { value: "2", label: "Two-compartment model" },
         ]}
         value={dataPar.nCompartments != null ? String(dataPar.nCompartments) : null}
         onChange={(v) => onFieldChange("nCompartments", v ? Number(v) : undefined)}
@@ -92,20 +93,19 @@ export function QuantificationSection({
                 data-testid="field-ExternalQuantificationType"
               />
 
-              <NumberInput
-                label={<DataParFieldLabel fieldKey="ExternalQuantificationSmoothGaussianMM" />}
-                placeholder={FIELD_METADATA.ExternalQuantificationSmoothGaussianMM.defaultHint}
-                value={dataPar.ExternalQuantificationSmoothGaussianMM?.[0]}
-                onChange={(v) => {
-                  const existing = dataPar.ExternalQuantificationSmoothGaussianMM ?? [0, 0, 0];
-                  onFieldChange("ExternalQuantificationSmoothGaussianMM", [
-                    v === "" ? 0 : v,
-                    existing[1],
-                    existing[2],
-                  ]);
-                }}
-                data-testid="field-ExternalQuantificationSmoothGaussianMM"
-              />
+              <Stack gap={4}>
+                <Text size="sm" fw={500}>
+                  <DataParFieldLabel fieldKey="ExternalQuantificationSmoothGaussianMM" />
+                </Text>
+                <NumberTupleInput
+                  value={dataPar.ExternalQuantificationSmoothGaussianMM}
+                  onChange={(v) => onFieldChange("ExternalQuantificationSmoothGaussianMM", v)}
+                  labels={["LR", "AP", "IS"]}
+                  testId="field-ExternalQuantificationSmoothGaussianMM"
+                  integerOnly
+                  placeholder={[5, 5, 1]}
+                />
+              </Stack>
 
               {EXTERNAL_TOGGLE_FIELDS.map((key) => (
                 <Group key={key} gap="xs" align="center" style={{ minHeight: "32px" }}>
@@ -121,7 +121,12 @@ export function QuantificationSection({
 
               <Select
                 label={<DataParFieldLabel fieldKey="ExchBASIL" />}
-                data={["mix", "simple", "2cpt", "spa"]}
+                data={[
+                  { value: "mix", label: "Well-mixed single compartment" },
+                  { value: "simple", label: "Simple single-compartment model with T1 of blood" },
+                  { value: "2cpt", label: "Two-compartment model following Parkes & Tofts (2002)" },
+                  { value: "spa", label: "Single-pass approximation from St. Lawrence" },
+                ]}
                 value={dataPar.ExchBASIL ?? null}
                 onChange={(v) => onFieldChange("ExchBASIL", v)}
                 placeholder={FIELD_METADATA.ExchBASIL.defaultHint}
@@ -130,7 +135,12 @@ export function QuantificationSection({
 
               <Select
                 label={<DataParFieldLabel fieldKey="DispBASIL" />}
-                data={["none", "gamma", "gauss", "sgauss"]}
+                data={[
+                  { value: "none", label: "None" },
+                  { value: "gamma", label: "Gamma distribution" },
+                  { value: "gauss", label: "Gaussian distribution" },
+                  { value: "sgauss", label: "Spatially-derived Gaussian distribution" },
+                ]}
                 value={dataPar.DispBASIL ?? null}
                 onChange={(v) => onFieldChange("DispBASIL", v)}
                 placeholder={FIELD_METADATA.DispBASIL.defaultHint}

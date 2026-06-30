@@ -44,7 +44,6 @@ export const DataParStateSchema = z
     SkipIfNoFlair: z.union([z.literal(0), z.literal(1)]).optional(),
     SkipIfNoASL: z.union([z.literal(0), z.literal(1)]).optional(),
     SkipIfNoM0: z.union([z.literal(0), z.literal(1)]).optional(),
-    stopAfterErrors: z.number().optional(),
     bLesionFilling: z.boolean().optional(),
     bAutoACPC: z.boolean().optional(),
 

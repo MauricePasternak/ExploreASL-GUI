@@ -1,7 +1,10 @@
 import { Stack, Stepper, Group, Button, Tooltip, Box } from "@mantine/core";
+import { IconFileReport } from "@tabler/icons-react";
+import HeaderCard from "../components/HeaderCard";
 import { useState, useEffect } from "react";
 import { useManifestStore } from "../stores/manifestStore";
 import { useProjectStore } from "../stores/projectStore";
+import { useProcessingStore } from "../stores/processingStore";
 import QcSelectionTable from "../components/manifest/QcSelectionTable";
 import ManifestPreview from "../components/manifest/ManifestPreview";
 
@@ -22,6 +25,20 @@ export default function ManifestPage() {
     if (projectRoot) {
       loadQcData(projectRoot);
       loadDataPar(projectRoot);
+
+      // Hydrate processing config/phase from project file if available, and scan subjects / lock statuses
+      const project = useProjectStore.getState().project;
+      if (project) {
+        const processing = project.uiState.processing;
+        if (processing?.config) {
+          useProcessingStore.getState().setConfig(processing.config);
+        }
+        if (processing?.currentPhase !== undefined) {
+          useProcessingStore.getState().setPhase(processing.currentPhase);
+        }
+      }
+      useProcessingStore.getState().scanAvailableSubjects().catch(console.error);
+      useProcessingStore.getState().loadLockFileStatus().catch(console.error);
     }
   }, [projectRoot, loadQcData, loadDataPar]);
 
@@ -36,6 +53,13 @@ export default function ManifestPage() {
 
   return (
     <Stack data-testid="manifest-page" gap="md">
+      <HeaderCard
+        icon={IconFileReport}
+        title="Manifest"
+        subtitle="Review subject-level QC results, triage sessions, and export a journal-ready project manifest."
+        color="teal"
+        dataTestId="manifest-header"
+      />
       <Stepper active={step} onStepClick={handleStepClick} data-testid="manifest-stepper">
         <Stepper.Step label="QC Selection" description="Review and triage subjects" />
         <Stepper.Step label="Preview & Export" description="Review manifest and export" />
@@ -61,7 +85,14 @@ export default function ManifestPage() {
           </Group>
         </Stack>
       ) : (
-        <ManifestPreview />
+        <Stack gap="md">
+          <Group justify="flex-start">
+            <Button variant="default" data-testid="back-button" onClick={() => setStep(0)}>
+              Back
+            </Button>
+          </Group>
+          <ManifestPreview />
+        </Stack>
       )}
     </Stack>
   );

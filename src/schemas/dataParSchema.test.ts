@@ -30,14 +30,14 @@ describe("DataParSchema", () => {
       bTopUp: true,
       Quality: 1,
       Atlases: ["MNI_Structural", "Hammers"],
-      bRunLongReg: false,
+      bRunLongReg: 0,
       bAutomaticallyDetectFSL: true,
     });
     expect(result.M0).toBe("separate_scan");
     expect(result.bTopUp).toBe(true);
     expect(result.Quality).toBe(1);
     expect(result.Atlases).toEqual(["MNI_Structural", "Hammers"]);
-    expect(result.bRunLongReg).toBe(false);
+    expect(result.bRunLongReg).toBe(0);
     expect(result.bAutomaticallyDetectFSL).toBe(true);
   });
 
@@ -47,8 +47,8 @@ describe("DataParSchema", () => {
       BackgroundSuppressionNumberPulses: 4,
       BackgroundSuppressionPulseTime: [0.5, 1.2],
       M0_GMScaleFactor: 1.0,
-      bRegisterM02ASL: true,
-      M0_conventionalProcessing: false,
+      bRegisterM02ASL: 1,
+      M0_conventionalProcessing: 0,
       RepetitionTimePreparationM0: [8.0, 4.0],
     });
     expect(result.M0).toBe("Absent");
@@ -88,10 +88,10 @@ describe("DataParSchema", () => {
 
   it("accepts all ASLProcessing section fields", () => {
     const result = DataParSchema.parse({
-      motionCorrection: true,
+      motionCorrection: 1,
       bTopUp: false,
-      bPVCNativeSpace: true,
-      bPVCGaussianMM: false,
+      bPVCNativeSpace: 1,
+      bPVCGaussianMM: 0,
       PVCNativeSpaceKernel: [5, 5, 5],
       SaveCBF4D: true,
       SpikeRemovalThreshold: 3.0,
@@ -99,7 +99,7 @@ describe("DataParSchema", () => {
       bRegistrationContrast: 1,
       bAffineRegistration: 2,
       bDCTRegistration: 0,
-      bUseMNIasDummyStructural: false,
+      bUseMNIasDummyStructural: 0,
       bHct2BloodT1: 1,
       ApplyQuantification: [1, 0, 1, 0, 1, 0],
     });
@@ -113,13 +113,13 @@ describe("DataParSchema", () => {
       Atlases: ["MNI_Structural"],
       TissueMasking: ["GM", "WM"],
       TissueThreshold: [0.7, 0.7],
-      bMasking: 1,
+      bMasking: [1, 1, 1, 1],
       MinimalROIVolume: 10,
       bWMH: true,
       DataTypes: ["CBF", "M0map"],
     });
     expect(result.Atlases).toEqual(["MNI_Structural"]);
-    expect(result.bMasking).toBe(1);
+    expect(result.bMasking).toEqual([1, 1, 1, 1]);
   });
 
   it("accepts bMasking as tuple", () => {
@@ -127,18 +127,18 @@ describe("DataParSchema", () => {
     expect(result.bMasking).toEqual([1, 0, 1, 0]);
   });
 
-  it("accepts bMasking as scalar 0", () => {
-    const result = DataParSchema.parse({ bMasking: 0 });
-    expect(result.bMasking).toBe(0);
+  it("accepts bMasking as scalar 0 via tuple", () => {
+    const result = DataParSchema.parse({ bMasking: [0, 0, 0, 0] });
+    expect(result.bMasking).toEqual([0, 0, 0, 0]);
   });
 
   it("accepts all Structural section fields", () => {
     const result = DataParSchema.parse({
-      bRunLongReg: true,
-      bRunDARTEL: false,
+      bRunLongReg: 1,
+      bRunDARTEL: 0,
       WMHsegmAlg: "LPA",
-      bSegmentSPM12: true,
-      bHammersCAT12: false,
+      bSegmentSPM12: 1,
+      bHammersCAT12: 0,
       bFixResolution: true,
       bLesionFilling: false,
       bAutoACPC: true,

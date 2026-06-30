@@ -91,7 +91,6 @@ export function assembleDataPar(state: DataParState): DataParJson {
     "SkipIfNoFlair",
     "SkipIfNoASL",
     "SkipIfNoM0",
-    "stopAfterErrors",
     "bLesionFilling",
     "bAutoACPC",
   ];

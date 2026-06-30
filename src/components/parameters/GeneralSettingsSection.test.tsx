@@ -92,7 +92,7 @@ describe("GeneralSettingsSection", () => {
     );
     clickSwitch(/show advanced/i);
     clickSwitch(/delete temporary/i);
-    expect(onFieldChange).toHaveBeenCalledWith("DELETETEMP", expect.any(Boolean));
+    expect(onFieldChange).toHaveBeenCalledWith("DELETETEMP", expect.any(Number));
   });
 
   it("calls onToggleAdvanced when Show advanced is toggled", () => {

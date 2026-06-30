@@ -16,7 +16,25 @@ export interface ManifestPayload {
     failReasons: string;
   }>;
   pipelineParagraph: string;
-  dataPar?: Record<string, string | number | boolean>;
+  dataPar?: Record<string, unknown>;
+}
+
+/**
+ * Returns a sanitised copy of the dataPar object suitable for export:
+ * - x.dataset.subjectRegexp defaults to "^sub-.*" if absent/empty
+ * - x.dataset.ForceInclusionList is omitted (not relevant for reproducibility)
+ */
+function sanitiseDataParForExport(dataPar: Record<string, unknown>): Record<string, unknown> {
+  const copy = structuredClone(dataPar) as Record<string, unknown>;
+  const x = copy["x"] as Record<string, unknown> | undefined;
+  if (x) {
+    const dataset = x["dataset"] as Record<string, unknown> | undefined;
+    if (dataset) {
+      dataset["subjectRegexp"] = "^sub-.*";
+      delete dataset["ForceInclusionList"];
+    }
+  }
+  return copy;
 }
 
 export function renderMarkdown(m: ManifestPayload): string {
@@ -49,11 +67,11 @@ export function renderMarkdown(m: ManifestPayload): string {
   lines.push("");
 
   if (m.dataPar && Object.keys(m.dataPar).length > 0) {
-    lines.push("| Key | Value |");
-    lines.push("|-----|-------|");
-    for (const [key, value] of Object.entries(m.dataPar)) {
-      lines.push(`| ${key} | ${value} |`);
-    }
+    lines.push("### ExploreASL Data Parameter Configuration");
+    lines.push("");
+    lines.push("```json");
+    lines.push(JSON.stringify(sanitiseDataParForExport(m.dataPar), null, 2));
+    lines.push("```");
     lines.push("");
   }
 
@@ -91,9 +109,30 @@ function escapeHtml(s: string): string {
 function simpleMarkdownToHtml(markdown: string): string {
   let inTable = false;
   let headerRendered = false;
+  let inFencedCode = false;
   const lines = markdown.split("\n");
   const out: string[] = [];
   for (const line of lines) {
+    // Handle fenced code blocks
+    if (line.startsWith("```")) {
+      if (!inFencedCode) {
+        if (inTable) {
+          out.push("</tbody></table>");
+          inTable = false;
+          headerRendered = false;
+        }
+        out.push("<pre><code>");
+        inFencedCode = true;
+      } else {
+        out.push("</code></pre>");
+        inFencedCode = false;
+      }
+      continue;
+    }
+    if (inFencedCode) {
+      out.push(escapeHtml(line));
+      continue;
+    }
     if (line.startsWith("# ")) {
       if (inTable) {
         out.push("</tbody></table>");
@@ -173,6 +212,8 @@ th, td { border: 1px solid #ccc; padding: 0.5rem 0.75rem; text-align: left; }
 th { background: #f5f5f5; font-weight: 600; }
 h2 { border-bottom: 2px solid #eee; padding-bottom: 0.25rem; margin-top: 2rem; }
 h3 { margin-top: 1.5rem; }
+pre { background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 1rem; overflow-x: auto; font-size: 0.875rem; }
+pre code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; white-space: pre; }
 </style>
 </head>
 <body>

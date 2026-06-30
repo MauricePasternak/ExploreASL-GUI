@@ -93,7 +93,7 @@ describe("QuantificationSection", () => {
     expect(screen.getAllByText(/external quantification type/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/spatial basil/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/basil exchange/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/basil dispersion/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/bolus dispersion/i).length).toBeGreaterThan(0);
   });
 
   it("hides external quantification subtree when bUseExternalQuantification is false", () => {

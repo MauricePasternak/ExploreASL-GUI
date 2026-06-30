@@ -26,10 +26,12 @@ import {
   IconExternalLink,
   IconEye,
   IconFileImport,
+  IconFileReport,
   IconFileText,
   IconFolder,
   IconFolderOpen,
   IconHelpCircle,
+  IconListCheck,
   IconPlayerPlay,
   IconPlus,
   IconRoute,
@@ -228,9 +230,6 @@ export default function OverviewPage() {
           <Title order={2} component="h1">
             Prerequisites & Setup
           </Title>
-          <Badge color="blue" variant="outline">
-            Required
-          </Badge>
         </Group>
         <Text size="sm">
           Before using ExploreASL GUI, you need two pieces of software installed on your machine:{" "}
@@ -480,9 +479,6 @@ export default function OverviewPage() {
           <Title order={2} component="h1">
             Project Management
           </Title>
-          <Badge color="teal" variant="outline">
-            Overview
-          </Badge>
         </Group>
         <Text size="sm">
           ExploreASL GUI processes data inside structured workspaces called{" "}
@@ -703,9 +699,6 @@ export default function OverviewPage() {
           <Title order={2} component="h1">
             Troubleshooting & Debugging
           </Title>
-          <Badge color="orange" variant="outline">
-            Helpful Tools
-          </Badge>
         </Group>
         <Text size="sm">
           If you encounter issues, errors, or unexpected behavior while using the GUI, several
@@ -814,8 +807,8 @@ export default function OverviewPage() {
         <Title order={3} mb="md" data-testid="workflow-map-title">
           Interactive Workflow Map
         </Title>
-        <Grid gap="md" align="stretch">
-          <Grid.Col span={{ base: 12, md: 3 }}>
+        <Grid gap="md" align="stretch" data-testid="workflow-map-grid">
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
             <Card
               p="sm"
               radius="sm"
@@ -840,7 +833,7 @@ export default function OverviewPage() {
             </Card>
           </Grid.Col>
 
-          <Grid.Col span={{ base: 12, md: 3 }}>
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
             <Card
               p="sm"
               radius="sm"
@@ -864,7 +857,7 @@ export default function OverviewPage() {
             </Card>
           </Grid.Col>
 
-          <Grid.Col span={{ base: 12, md: 3 }}>
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
             <Card
               p="sm"
               radius="sm"
@@ -889,7 +882,7 @@ export default function OverviewPage() {
             </Card>
           </Grid.Col>
 
-          <Grid.Col span={{ base: 12, md: 3 }}>
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
             <Card
               p="sm"
               radius="sm"
@@ -908,8 +901,33 @@ export default function OverviewPage() {
                 </Text>
               </Group>
               <Text size="xs" c="dimmed">
-                [Future Feature] Explore interactive scatterplots and swarmplots with WebGL volume
-                rendering.
+                Explore interactive scatterplots and swarmplots with WebGL volume rendering of
+                individual subject CBF maps.
+              </Text>
+            </Card>
+          </Grid.Col>
+
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+            <Card
+              p="sm"
+              radius="sm"
+              style={{
+                backgroundColor: "var(--mantine-color-teal-light)",
+                borderLeft: "4px solid var(--mantine-color-teal-filled)",
+                height: "100%",
+              }}
+            >
+              <Group gap="xs" mb={8}>
+                <ThemeIcon color="teal" size="sm">
+                  <IconFileReport size={14} />
+                </ThemeIcon>
+                <Text fw={700} size="sm">
+                  5. Manifest
+                </Text>
+              </Group>
+              <Text size="xs" c="dimmed">
+                Triage subject-sessions as Pass or Fail, then export a journal-ready reproducibility
+                manifest (Markdown / HTML) for publication.
               </Text>
             </Card>
           </Grid.Col>
@@ -1472,6 +1490,206 @@ export default function OverviewPage() {
                   This lets you inspect outlier subjects visually in real-time, verifying whether
                   their high or low CBF values represent pathology or processing artifacts.
                 </Text>
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
+        </Stack>
+
+        <Divider />
+
+        {/* STEP 5: PROJECT MANIFEST */}
+        <Stack gap="md" data-testid="section-manifest">
+          <Group gap="xs">
+            <ThemeIcon color="teal" size="lg" radius="xl">
+              <IconFileReport size={20} />
+            </ThemeIcon>
+            <Title order={2} component="h1">
+              5. Project Manifest
+            </Title>
+          </Group>
+          <Text size="sm">
+            After Population completes, journals like <em>NeuroImage</em>,{" "}
+            <em>Human Brain Mapping</em>, and other neuroimaging venues increasingly require authors
+            to document their analysis pipeline, software versions, and cohort-level quality control
+            decisions. The Manifest module generates this documentation automatically from your
+            ExploreASL project — no manual write-up needed.
+          </Text>
+
+          <Alert
+            color="teal"
+            title="Why a Manifest?"
+            icon={<IconFileReport size={18} />}
+            data-testid="manifest-why-callout"
+          >
+            <Text size="sm">
+              Reproducibility is a central requirement of modern neuroimaging research. Reviewers
+              and data-sharing repositories expect a clear record of: which subjects passed QC and
+              why, what software version was used, and what acquisition parameters were applied. The
+              Manifest module captures all of this from your project's existing data, saving hours
+              of manual documentation per study.
+            </Text>
+          </Alert>
+
+          <Accordion variant="separated" data-testid="manifest-accordion">
+            <Accordion.Item value="qc-triage">
+              <Accordion.Control
+                icon={<IconListCheck size={16} color="var(--mantine-color-teal-filled)" />}
+              >
+                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                  5.1 Subject-Level QC Triage
+                </Title>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Text size="sm" mb="xs">
+                  The QC Selection table presents every subject-session in your cohort alongside the
+                  key quality metrics computed by ExploreASL during Population processing:
+                </Text>
+                <div style={{ fontSize: "0.875rem" }}>
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    <li>
+                      <strong>Spatial CoV (sCoV):</strong> Coefficient of Variation of the CBF map —
+                      a high sCoV typically indicates poor ASL signal quality or motion corruption.
+                    </li>
+                    <li>
+                      <strong>Temporal SNR (tSNR):</strong> Signal-to-noise ratio across the ASL
+                      time series — low tSNR may reflect excessive head motion or scanner
+                      instability.
+                    </li>
+                    <li>
+                      <strong>Mean CBF:</strong> Whole-brain mean perfusion in mL/100g/min — values
+                      far outside the physiological range (roughly 30–80) may flag processing
+                      failures or pathological outliers.
+                    </li>
+                  </ul>
+                </div>
+                <Text size="sm" mt="sm" mb="xs">
+                  For each subject-session you assign one of four verdicts:
+                </Text>
+                <div style={{ fontSize: "0.875rem" }}>
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    <li>
+                      <strong>Pass</strong> — data are acceptable for inclusion in the final
+                      analysis.
+                    </li>
+                    <li>
+                      <strong>Fail</strong> — data are excluded; the reason is recorded in the
+                      manifest.
+                    </li>
+                    <li>
+                      <strong>No Info</strong> — subject is excluded due to missing or unprocessable
+                      data (e.g., DICOM conversion failure, missing T1w).
+                    </li>
+                    <li>
+                      <strong>Neutral</strong> — undecided; the GUI will not allow you to advance
+                      until every session has a resolved verdict, ensuring no subject is
+                      accidentally overlooked.
+                    </li>
+                  </ul>
+                </div>
+                <Alert
+                  color="blue"
+                  title="Tip"
+                  variant="light"
+                  icon={<IconHelpCircle size={16} />}
+                  mt="xs"
+                >
+                  <Text size="xs">
+                    Verdicts are saved automatically to your <code>project.easl</code> file as you
+                    work, so you can close and reopen the project without losing your triage
+                    decisions.
+                  </Text>
+                </Alert>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            <Accordion.Item value="manifest-sections">
+              <Accordion.Control
+                icon={<IconFileReport size={16} color="var(--mantine-color-teal-filled)" />}
+              >
+                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                  5.2 The Four Manifest Sections
+                </Title>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Text size="sm" mb="xs">
+                  The generated manifest document is divided into four standardized sections,
+                  mirroring the information that journals such as <em>NeuroImage</em> request in the
+                  Methods and Supplementary Material:
+                </Text>
+                <div style={{ fontSize: "0.875rem" }}>
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    <li>
+                      <strong>Study Parameters:</strong> A human-readable summary of your{" "}
+                      <code>dataPar.json</code> configuration — acquisition parameters (PLD,
+                      labeling duration, M0 type), processing quality level, atlas selection, and
+                      any advanced overrides. This corresponds directly to the{" "}
+                      <em>"Data acquisition"</em> and <em>"Image processing"</em> subsections of a
+                      typical Methods section.
+                    </li>
+                    <li>
+                      <strong>Software Manifest:</strong> Records the exact ExploreASL version
+                      (including Git commit hash when available), the GUI version, MATLAB version,
+                      and the host operating system. Sufficient for a reviewer to reproduce your
+                      environment.
+                    </li>
+                    <li>
+                      <strong>QC Summary:</strong> Tabulates pass/fail/no-info counts per
+                      subject-session with the assigned verdict and the quantitative metrics that
+                      informed the decision. Suitable for a Supplementary Table in a journal
+                      submission.
+                    </li>
+                    <li>
+                      <strong>Pipeline Summary:</strong> A high-level narrative of the processing
+                      steps executed, including which ExploreASL modules ran, the multiprocessing
+                      configuration, and the date the pipeline was completed.
+                    </li>
+                  </ul>
+                </div>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            <Accordion.Item value="manifest-export">
+              <Accordion.Control
+                icon={<IconFileText size={16} color="var(--mantine-color-teal-filled)" />}
+              >
+                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                  5.3 Export Formats
+                </Title>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Text size="sm" mb="xs">
+                  The Preview &amp; Export step shows a live rendered preview of the manifest before
+                  writing anything to disk. You can export to two formats:
+                </Text>
+                <div style={{ fontSize: "0.875rem" }}>
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    <li>
+                      <strong>Markdown (.md):</strong> Plain-text format with lightweight
+                      formatting. Can be pasted directly into GitHub READMEs, OSF repositories, or
+                      supplementary files submitted alongside a manuscript. Rendered by most
+                      code-hosting and preprint platforms.
+                    </li>
+                    <li>
+                      <strong>HTML (.html):</strong> A self-contained, browser-viewable document
+                      with full styling. Suitable for attaching as a standalone supplementary file
+                      to a journal submission or sharing with collaborators via email.
+                    </li>
+                  </ul>
+                </div>
+                <Alert
+                  color="teal"
+                  title="Reproducibility tip"
+                  variant="light"
+                  icon={<IconHelpCircle size={16} />}
+                  mt="xs"
+                >
+                  <Text size="xs">
+                    Archive both the exported manifest <em>and</em> your <code>project.easl</code>{" "}
+                    file alongside your dataset (e.g., on OSF or Zenodo). Together they provide a
+                    complete, machine-readable record of every configuration decision and QC outcome
+                    for your study.
+                  </Text>
+                </Alert>
               </Accordion.Panel>
             </Accordion.Item>
           </Accordion>
