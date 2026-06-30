@@ -16,6 +16,8 @@ export interface ManifestPayload {
     failReasons: string;
   }>;
   pipelineParagraph: string;
+  methodsParagraphs: string[];
+  methodsReferences: string[];
   dataPar?: Record<string, unknown>;
 }
 
@@ -94,6 +96,25 @@ export function renderMarkdown(m: ManifestPayload): string {
   lines.push("## Section 4: Pipeline Summary");
   lines.push("");
   lines.push(m.pipelineParagraph);
+  lines.push("");
+
+  if (m.methodsParagraphs.length > 0) {
+    lines.push("### Methods");
+    lines.push("");
+    for (const paragraph of m.methodsParagraphs) {
+      lines.push(paragraph);
+      lines.push("");
+    }
+  }
+
+  if (m.methodsReferences.length > 0) {
+    lines.push("### References");
+    lines.push("");
+    for (const reference of m.methodsReferences) {
+      lines.push(`- ${reference}`);
+    }
+    lines.push("");
+  }
 
   return lines.join("\n");
 }
@@ -176,6 +197,13 @@ function simpleMarkdownToHtml(markdown: string): string {
       } else {
         out.push("<tr>" + cells.map((c) => `<td>${escapeHtml(c)}</td>`).join("") + "</tr>");
       }
+    } else if (line.startsWith("- ")) {
+      if (inTable) {
+        out.push("</tbody></table>");
+        inTable = false;
+        headerRendered = false;
+      }
+      out.push(`<p>${escapeHtml(line.slice(2))}</p>`);
     } else if (line === "") {
       if (inTable) {
         out.push("</tbody></table>");
@@ -207,9 +235,11 @@ export function renderHtml(m: ManifestPayload): string {
 <title>Project Manifest</title>
 <style>
 body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #222; }
-table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; table-layout: fixed; }
 th, td { border: 1px solid #ccc; padding: 0.5rem 0.75rem; text-align: left; }
 th { background: #f5f5f5; font-weight: 600; }
+th:first-child, td:first-child { width: 40%; }
+th:last-child, td:last-child { width: 60%; }
 h2 { border-bottom: 2px solid #eee; padding-bottom: 0.25rem; margin-top: 2rem; }
 h3 { margin-top: 1.5rem; }
 pre { background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 1rem; overflow-x: auto; font-size: 0.875rem; }

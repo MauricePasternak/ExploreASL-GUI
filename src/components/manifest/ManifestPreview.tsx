@@ -2,14 +2,18 @@ import { Accordion, Box, Button, Code, Group, Stack, Table, Text, Title } from "
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useManifestStore } from "../../stores/manifestStore";
+import { useGlobalStore } from "../../stores/globalStore";
 import {
   aggregateFailReasons,
   aggregateMeanSd,
   aggregateMotionBySubject,
   formatMeanSd,
 } from "../../lib/manifestQc";
+import { getDefaultDataPar } from "../../lib/dataParDefaults";
+import { flattenRunDataPar, generateMethodsParagraph } from "../../lib/manifestMethods";
 import { renderHtml, renderMarkdown } from "../../lib/manifestExport";
 import type { ManifestPayload } from "../../lib/manifestExport";
+import type { DataParState } from "../../schemas/dataParSchema";
 import type { ManifestVerdict } from "../../schemas/project";
 import type { MetadataGroup } from "../../schemas/importSchemas";
 
@@ -48,9 +52,20 @@ function useBuildManifestPayload(): ManifestPayload {
       groupId: string;
     }>) ?? [];
 
+  const exploreAslGlobalVersion = useGlobalStore((s) => s.settings.exploreAslVersion);
   const verdicts: Record<string, ManifestVerdict> =
     (project?.uiState?.manifest?.verdicts as Record<string, ManifestVerdict> | undefined) ?? {};
-  const versions = project?.uiState?.manifest?.lastRunVersions ?? {};
+  const versions = {
+    exploreASL:
+      project?.uiState?.manifest?.lastRunVersions?.exploreASL ||
+      exploreAslGlobalVersion ||
+      undefined,
+    matlab: project?.uiState?.manifest?.lastRunVersions?.matlab,
+    gui:
+      project?.uiState?.manifest?.lastRunVersions?.gui ??
+      project?.version ??
+      import.meta.env.VITE_APP_VERSION,
+  };
 
   const subjectSessionGroups = new Map<string, string>();
   for (const row of subjectRows) {
@@ -243,14 +258,22 @@ function useBuildManifestPayload(): ManifestPayload {
   const nSubjects = includedSubjects.length;
   const nGroups = metadataGroups.length + (ungroupedMembers.length > 0 ? 1 : 0);
 
-  // NOTE: This paragraph text is sourced from notes/Manifest_Pipeline_Summary.md as per spec D6 (Issue 18).
   const pipelineParagraph = `Data were processed with ExploreASL (version ${versions.exploreASL ?? "unknown"}) running in MATLAB ${versions.matlab ?? "unknown"} through the ExploreASL GUI (version ${versions.gui ?? "unknown"}). This manifest covers ${nSubjects} subjects across ${nGroups} groups.`;
+
+  const fullDataPar: DataParState = {
+    ...getDefaultDataPar(),
+    ...flattenRunDataPar((dataPar ?? {}) as Record<string, unknown>),
+  };
+  const { paragraphs: methodsParagraphs, references: methodsReferences } =
+    generateMethodsParagraph(fullDataPar);
 
   return {
     metadataGroups: section1Groups,
     versions,
     qcGroups,
     pipelineParagraph,
+    methodsParagraphs,
+    methodsReferences,
     dataPar: dataPar ?? {},
   };
 }
@@ -292,8 +315,10 @@ export default function ManifestPreview() {
           onClick={async () => {
             const { save } = await import("@tauri-apps/plugin-dialog");
             const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+            const projectRoot = project?.projectMeta?.rootPath;
+            const defaultPath = projectRoot ? `${projectRoot}/manifest.md` : "manifest.md";
             const path = await save({
-              defaultPath: "manifest.md",
+              defaultPath,
               filters: [{ name: "Markdown", extensions: ["md"] }],
             });
             if (!path) return;
@@ -310,8 +335,10 @@ export default function ManifestPreview() {
           onClick={async () => {
             const { save } = await import("@tauri-apps/plugin-dialog");
             const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+            const projectRoot = project?.projectMeta?.rootPath;
+            const defaultPath = projectRoot ? `${projectRoot}/manifest.html` : "manifest.html";
             const path = await save({
-              defaultPath: "manifest.html",
+              defaultPath,
               filters: [{ name: "HTML", extensions: ["html"] }],
             });
             if (!path) return;
@@ -446,7 +473,17 @@ export default function ManifestPreview() {
             {payload.qcGroups.map((g, i) => (
               <Box key={i} mt="sm">
                 <Text fw={600}>{g.label}</Text>
-                <Table withTableBorder withColumnBorders striped highlightOnHover>
+                <Table
+                  withTableBorder
+                  withColumnBorders
+                  striped
+                  highlightOnHover
+                  style={{ tableLayout: "fixed", width: "100%" }}
+                >
+                  <colgroup>
+                    <col style={{ width: "33%" }} />
+                    <col style={{ width: "67%" }} />
+                  </colgroup>
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>Metric</Table.Th>
@@ -499,6 +536,24 @@ export default function ManifestPreview() {
           </Accordion.Control>
           <Accordion.Panel>
             <Text mt="sm">{payload.pipelineParagraph}</Text>
+            {payload.methodsParagraphs.length > 0 && (
+              <Stack mt="md" gap="sm" data-testid="manifest-methods">
+                <Title order={5}>Methods</Title>
+                {payload.methodsParagraphs.map((paragraph, index) => (
+                  <Text key={index}>{paragraph}</Text>
+                ))}
+              </Stack>
+            )}
+            {payload.methodsReferences.length > 0 && (
+              <Stack mt="md" gap="xs" data-testid="manifest-references">
+                <Title order={5}>References</Title>
+                {payload.methodsReferences.map((reference, index) => (
+                  <Text key={index} size="sm">
+                    {reference}
+                  </Text>
+                ))}
+              </Stack>
+            )}
           </Accordion.Panel>
         </Accordion.Item>
       </Accordion>

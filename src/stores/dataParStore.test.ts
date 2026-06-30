@@ -135,13 +135,13 @@ describe("dataParStore loadDataPar", () => {
   it("replaces dataPar state and aligns atlas arrays", () => {
     useDataParStore.getState().setDataParField("bTopUp", true);
     useDataParStore.getState().loadDataPar({
-      Quality: 2,
+      Quality: 1,
       Lambda: 0.9,
       Atlases: ["WholeBrain"],
     });
     const dp = useDataParStore.getState().dataPar;
     expect(dp.bTopUp).toBeUndefined();
-    expect(dp.Quality).toBe(2);
+    expect(dp.Quality).toBe(1);
     expect(dp.Lambda).toBe(0.9);
     expect(dp.Atlases).toEqual(["WholeBrain"]);
     expect(dp.TissueMasking).toEqual(["GM"]);

@@ -127,7 +127,10 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
             matlabPath: config.matlabPath,
           },
         );
-        const gui = import.meta.env.VITE_APP_VERSION ?? "unknown";
+        const gui =
+          import.meta.env.VITE_APP_VERSION ??
+          useProjectStore.getState().project?.version ??
+          "unknown";
         useProjectStore.getState().setLastRunVersions({
           exploreASL: versions.explore_asl,
           matlab: versions.matlab,
@@ -138,7 +141,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
         useProjectStore.getState().setLastRunVersions({
           exploreASL: "unknown",
           matlab: "unknown",
-          gui: "unknown",
+          gui: useProjectStore.getState().project?.version ?? "unknown",
         });
       }
     }

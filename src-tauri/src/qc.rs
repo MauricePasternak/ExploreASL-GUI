@@ -301,6 +301,162 @@ pub fn get_subject_session_qc(
     result
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SubjectQcOutputs {
+    pub coverage: f64,
+    pub spatial_cov: f64,
+    pub motion: Vec<f64>,
+    pub motion_exclusion_pct: f64,
+}
+
+fn val_to_f64(val: &Value) -> Option<f64> {
+    match val {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.trim().parse::<f64>().ok(),
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                None
+            } else {
+                val_to_f64(&arr[0])
+            }
+        }
+        _ => None,
+    }
+}
+
+pub fn find_qc_collection_file(project_root: &str, subject_session: &str) -> Option<PathBuf> {
+    let session_dir = PathBuf::from(project_root)
+        .join("derivatives")
+        .join("ExploreASL")
+        .join(subject_session);
+
+    if !session_dir.exists() {
+        return None;
+    }
+
+    let file_path = session_dir.join(format!("QC_collection_{}.json", subject_session));
+    if file_path.exists() {
+        return Some(file_path);
+    }
+
+    // Fallback: search for any QC_collection_*.json in the directory
+    if let Ok(entries) = fs::read_dir(&session_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with("QC_collection_") && name.ends_with(".json") {
+                        return Some(entry.path());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+pub fn extract_subject_qc_outputs(file_path: &Path) -> Result<SubjectQcOutputs, String> {
+    let content = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read file {}: {}", file_path.display(), e))?;
+
+    let json: Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse JSON in {}: {}", file_path.display(), e))?;
+
+    let asl_val = json
+        .get("ASL")
+        .ok_or("Field 'ASL' not found in JSON".to_string())?;
+    let asl_obj = asl_val
+        .as_object()
+        .ok_or("Field 'ASL' in JSON is not an object".to_string())?;
+
+    let mut coverages = Vec::new();
+    let mut spatial_covs = Vec::new();
+    let mut motions = Vec::new();
+    let mut motion_exclusions = Vec::new();
+
+    for (key, val) in asl_obj {
+        if key.starts_with("ASL_") {
+            if let Some(run_obj) = val.as_object() {
+                if let Some(cov_val) = run_obj.get("ASL_Coverage_Perc") {
+                    if let Some(cov) = val_to_f64(cov_val) {
+                        coverages.push(cov);
+                    }
+                }
+                if let Some(sc_val) = run_obj.get("SpatialCoV_GM_Perc") {
+                    if let Some(sc) = val_to_f64(sc_val) {
+                        spatial_covs.push(sc);
+                    }
+                }
+                if let Some(mot_val) = run_obj.get("MotionMean_mm") {
+                    if let Some(mot) = val_to_f64(mot_val) {
+                        motions.push(mot);
+                    }
+                }
+                if let Some(excl_val) = run_obj.get("MotionExcl_Perc") {
+                    if let Some(excl) = val_to_f64(excl_val) {
+                        motion_exclusions.push(excl);
+                    }
+                }
+            }
+        }
+    }
+
+    let coverage = if coverages.is_empty() {
+        0.0
+    } else {
+        coverages.iter().sum::<f64>() / coverages.len() as f64
+    };
+
+    let spatial_cov = if spatial_covs.is_empty() {
+        0.0
+    } else {
+        spatial_covs.iter().sum::<f64>() / spatial_covs.len() as f64
+    };
+
+    let motion_exclusion_pct = if motion_exclusions.is_empty() {
+        0.0
+    } else {
+        motion_exclusions.iter().sum::<f64>() / motion_exclusions.len() as f64
+    };
+
+    Ok(SubjectQcOutputs {
+        coverage,
+        spatial_cov,
+        motion: motions,
+        motion_exclusion_pct,
+    })
+}
+
+#[tauri::command]
+pub fn get_all_subjects_qc(
+    project_root: String,
+    subject_sessions: Vec<String>,
+) -> Result<std::collections::HashMap<String, SubjectQcOutputs>, String> {
+    let trace = CommandTrace::new("get_all_subjects_qc");
+    trace.arg("project_root", &project_root);
+    trace.arg("subject_sessions_count", subject_sessions.len().to_string());
+
+    let mut results = std::collections::HashMap::new();
+
+    for ss in subject_sessions {
+        if let Some(file_path) = find_qc_collection_file(&project_root, &ss) {
+            match extract_subject_qc_outputs(&file_path) {
+                Ok(outputs) => {
+                    results.insert(ss, outputs);
+                }
+                Err(err) => {
+                    log::warn!("Failed to extract QC for {}: {}", ss, err);
+                }
+            }
+        }
+    }
+
+    trace.success(&format!("Batch fetched QC for {} subjects", results.len()));
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -401,5 +557,49 @@ mod tests {
 
         let vendor = measures.iter().find(|m| m.key == "Vendor").unwrap();
         assert_eq!(vendor.value, "Philips");
+    }
+
+    #[test]
+    fn test_val_to_f64() {
+        assert_eq!(
+            val_to_f64(&Value::Number(serde_json::Number::from_f64(1.23).unwrap())),
+            Some(1.23)
+        );
+        assert_eq!(val_to_f64(&Value::String("2.34".to_string())), Some(2.34));
+        assert_eq!(
+            val_to_f64(&Value::Array(vec![Value::Number(
+                serde_json::Number::from_f64(3.45).unwrap()
+            )])),
+            Some(3.45)
+        );
+        assert_eq!(val_to_f64(&Value::Null), None);
+    }
+
+    #[test]
+    fn test_extract_subject_qc_outputs_multi_run() {
+        let mut tmp_file = NamedTempFile::new().unwrap();
+        let sample_json = r#"{
+            "ASL": {
+                "ASL_1": {
+                    "ASL_Coverage_Perc": 90.0,
+                    "SpatialCoV_GM_Perc": 70.0,
+                    "MotionMean_mm": 0.1,
+                    "MotionExcl_Perc": 10
+                },
+                "ASL_2": {
+                    "ASL_Coverage_Perc": 92.0,
+                    "SpatialCoV_GM_Perc": 72.0,
+                    "MotionMean_mm": 0.2,
+                    "MotionExcl_Perc": 20
+                }
+            }
+        }"#;
+        tmp_file.write_all(sample_json.as_bytes()).unwrap();
+
+        let outputs = extract_subject_qc_outputs(tmp_file.path()).unwrap();
+        assert_eq!(outputs.coverage, 91.0);
+        assert_eq!(outputs.spatial_cov, 71.0);
+        assert_eq!(outputs.motion, vec![0.1, 0.2]);
+        assert_eq!(outputs.motion_exclusion_pct, 15.0);
     }
 }

@@ -1,23 +1,51 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  readSubjectQcOutputs,
+  readAllSubjectQcOutputs,
   aggregateMotionBySubject,
   aggregateMeanSd,
   aggregateFailReasons,
   formatMeanSd,
 } from "./manifestQc";
 
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  exists: vi.fn(),
-  readTextFile: vi.fn(),
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
 }));
 
-describe("readSubjectQcOutputs", () => {
-  it("returns null when coverage.csv missing", async () => {
-    const { exists } = await import("@tauri-apps/plugin-fs");
-    vi.mocked(exists).mockResolvedValue(false);
-    const result = await readSubjectQcOutputs("/tmp/project", "sub-X_01");
+describe("readAllSubjectQcOutputs", () => {
+  it("returns null when subjectSessions is empty", async () => {
+    const result = await readAllSubjectQcOutputs("/tmp/project", []);
     expect(result).toBeNull();
+  });
+
+  it("invokes Tauri command get_all_subjects_qc and returns mapped data", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const mockData = {
+      "sub-01_01": {
+        coverage: 95.0,
+        spatialCov: 10.0,
+        motion: [0.1, 0.2],
+        motionExclusionPct: 0.0,
+      },
+    };
+    vi.mocked(invoke).mockResolvedValue(mockData);
+
+    const result = await readAllSubjectQcOutputs("/tmp/project", ["sub-01_01"]);
+    expect(invoke).toHaveBeenCalledWith("get_all_subjects_qc", {
+      projectRoot: "/tmp/project",
+      subjectSessions: ["sub-01_01"],
+    });
+    expect(result).toEqual(mockData);
+  });
+
+  it("returns null and logs warning on invoke failure", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockRejectedValue(new Error("IPC failure"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await readAllSubjectQcOutputs("/tmp/project", ["sub-01_01"]);
+    expect(result).toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 

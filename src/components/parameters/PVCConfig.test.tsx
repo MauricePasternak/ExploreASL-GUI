@@ -28,8 +28,8 @@ describe("PVCConfig", () => {
   it("shows kernel fields when PVC and showAdvanced are enabled", () => {
     renderWithMantine(
       <PVCConfig
-        bPVCNativeSpace={true}
-        bPVCGaussianMM={false}
+        bPVCNativeSpace={1}
+        bPVCGaussianMM={0}
         PVCNativeSpaceKernel={[5, 5, 1]}
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
@@ -44,8 +44,8 @@ describe("PVCConfig", () => {
   it("hides kernel fields when PVC is disabled, even if showAdvanced is true", () => {
     const { container } = renderWithMantine(
       <PVCConfig
-        bPVCNativeSpace={false}
-        bPVCGaussianMM={false}
+        bPVCNativeSpace={0}
+        bPVCGaussianMM={0}
         PVCNativeSpaceKernel={[5, 5, 1]}
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
@@ -62,8 +62,8 @@ describe("PVCConfig", () => {
   it("hides kernel fields when showAdvanced is false, even if PVC is enabled", () => {
     const { container } = renderWithMantine(
       <PVCConfig
-        bPVCNativeSpace={true}
-        bPVCGaussianMM={false}
+        bPVCNativeSpace={1}
+        bPVCGaussianMM={0}
         PVCNativeSpaceKernel={[5, 5, 1]}
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
@@ -80,8 +80,8 @@ describe("PVCConfig", () => {
   it("shows 'Kernel FWHM (mm)' when Gaussian is on", () => {
     renderWithMantine(
       <PVCConfig
-        bPVCNativeSpace={true}
-        bPVCGaussianMM={true}
+        bPVCNativeSpace={1}
+        bPVCGaussianMM={1}
         PVCNativeSpaceKernel={[10, 10, 4]}
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
@@ -96,8 +96,8 @@ describe("PVCConfig", () => {
   it("shows Gaussian toggle when PVC is enabled and showAdvanced is true", () => {
     renderWithMantine(
       <PVCConfig
-        bPVCNativeSpace={true}
-        bPVCGaussianMM={false}
+        bPVCNativeSpace={1}
+        bPVCGaussianMM={0}
         PVCNativeSpaceKernel={[5, 5, 1]}
         onBpvChange={() => {}}
         onGaussianChange={() => {}}
