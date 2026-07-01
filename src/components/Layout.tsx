@@ -27,11 +27,14 @@ import {
   IconSettings,
   IconUpload,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 
 import { canAccessPhase, type ProjectPhase } from "../schemas/project";
 import { useProcessingStore } from "../stores/processingStore";
+import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { logAction } from "../lib/debug";
 import ProcessingStatusBar from "./processing/ProcessingStatusBar";
@@ -51,13 +54,57 @@ interface LayoutProps {
 export default function Layout({ onOpenSettings }: LayoutProps) {
   const [opened, { toggle, close: closeMobileNav }] = useDisclosure(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [leaveTarget, setLeaveTarget] = useState<"home" | "exit">("home");
   const project = useProjectStore((state) => state.project);
+  const isDirty = useProjectStore((state) => state.isDirty);
   const setPhase = useProjectStore((state) => state.setPhase);
   const toggleNavbar = useProjectStore((state) => state.toggleNavbar);
   const saveProject = useProjectStore((state) => state.saveProject);
   const closeProject = useProjectStore((state) => state.closeProject);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const processingPhase = useProcessingStore((state) => state.processingPhase);
+  const importPhase = useImportStore((state) => state.importPhase);
+  const importRunning = useImportStore((state) => state.importRunning);
+  const isProcessRunning =
+    processingPhase === "running" || importPhase === "running" || importRunning;
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    async function setupCloseListener() {
+      try {
+        const appWindow = getCurrentWindow();
+        unlisten = await appWindow.onCloseRequested(async (event) => {
+          const { project: currentProject, isDirty: currentIsDirty } = useProjectStore.getState();
+          const currentProcessingPhase = useProcessingStore.getState().processingPhase;
+          const currentImportPhase = useImportStore.getState().importPhase;
+          const currentImportRunning = useImportStore.getState().importRunning;
+          const activeProcess =
+            currentProcessingPhase === "running" ||
+            currentImportPhase === "running" ||
+            currentImportRunning;
+
+          if (currentProject && (currentIsDirty || activeProcess)) {
+            event.preventDefault();
+            setLeaveTarget("exit");
+            setLeaveModalOpen(true);
+          }
+        });
+      } catch (err) {
+        console.error("Failed to setup close listener:", err);
+      }
+    }
+
+    void setupCloseListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   const subjectCount = useProcessingStore((s) => {
     const subjects = new Set(s.availableSubjects.map((info) => info.subject));
@@ -78,6 +125,28 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
 
   async function leaveProject({ saveChanges }: { saveChanges: boolean }) {
     logAction("layout_leave_project", { saveChanges });
+
+    const currentProcessingPhase = useProcessingStore.getState().processingPhase;
+    const currentImportPhase = useImportStore.getState().importPhase;
+    const currentImportRunning = useImportStore.getState().importRunning;
+    const activeProcess =
+      currentProcessingPhase === "running" ||
+      currentImportPhase === "running" ||
+      currentImportRunning;
+
+    if (activeProcess) {
+      try {
+        if (currentProcessingPhase === "running") {
+          await useProcessingStore.getState().killProcessing();
+        }
+        if (currentImportPhase === "running" || currentImportRunning) {
+          await invoke("stop_active_import");
+        }
+      } catch (err) {
+        console.error("Failed to abort running processes:", err);
+      }
+    }
+
     if (saveChanges) {
       try {
         await saveProject();
@@ -95,20 +164,38 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     }
 
     setLeaveModalOpen(false);
-    closeMobileNav();
-    navigate("/");
-    closeProject();
+
+    if (leaveTarget === "exit") {
+      try {
+        const appWindow = getCurrentWindow();
+        await appWindow.destroy();
+      } catch (error) {
+        console.error("Failed to destroy window on exit:", error);
+      }
+    } else {
+      closeMobileNav();
+      navigate("/");
+      closeProject();
+    }
   }
 
   function handleReturnHome() {
     const { project: currentProject, isDirty: currentIsDirty } = useProjectStore.getState();
+    const currentProcessingPhase = useProcessingStore.getState().processingPhase;
+    const currentImportPhase = useImportStore.getState().importPhase;
+    const currentImportRunning = useImportStore.getState().importRunning;
+    const activeProcess =
+      currentProcessingPhase === "running" ||
+      currentImportPhase === "running" ||
+      currentImportRunning;
 
     if (!currentProject) {
       navigate("/");
       return;
     }
 
-    if (currentIsDirty) {
+    if (currentIsDirty || activeProcess) {
+      setLeaveTarget("home");
       setLeaveModalOpen(true);
       return;
     }
@@ -262,12 +349,28 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         <Modal
           opened={leaveModalOpen}
           onClose={() => setLeaveModalOpen(false)}
-          title="Leave project"
+          title={
+            isProcessRunning
+              ? leaveTarget === "exit"
+                ? "Abort and exit"
+                : "Abort and leave"
+              : leaveTarget === "exit"
+                ? "Exit application"
+                : "Leave project"
+          }
           centered
           data-testid="layout-leave-modal"
         >
           <Stack gap="md">
-            <Text>Save your changes before leaving this project?</Text>
+            <Text>
+              {isProcessRunning
+                ? leaveTarget === "exit"
+                  ? "An active ExploreASL process/import is running. Exiting the application will abort the execution. Do you want to abort and exit?"
+                  : "An active ExploreASL process/import is running. Leaving the project will abort the execution. Do you want to abort and leave?"
+                : leaveTarget === "exit"
+                  ? "Save your changes before exiting the application?"
+                  : "Save your changes before leaving this project?"}
+            </Text>
             <Group justify="flex-end">
               <Button
                 variant="default"
@@ -276,20 +379,32 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
               >
                 Cancel
               </Button>
-              <Button
-                variant="light"
-                color="red"
-                onClick={() => void leaveProject({ saveChanges: false })}
-                data-testid="layout-leave-modal-leave-without-saving-btn"
-              >
-                Leave without saving
-              </Button>
-              <Button
-                onClick={() => void leaveProject({ saveChanges: true })}
-                data-testid="layout-leave-modal-save-and-leave-btn"
-              >
-                Save and leave
-              </Button>
+              {isProcessRunning ? (
+                <Button
+                  color="red"
+                  onClick={() => void leaveProject({ saveChanges: project ? isDirty : false })}
+                  data-testid="layout-leave-modal-abort-btn"
+                >
+                  {leaveTarget === "exit" ? "Abort and exit" : "Abort and leave"}
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="light"
+                    color="red"
+                    onClick={() => void leaveProject({ saveChanges: false })}
+                    data-testid="layout-leave-modal-leave-without-saving-btn"
+                  >
+                    {leaveTarget === "exit" ? "Exit without saving" : "Leave without saving"}
+                  </Button>
+                  <Button
+                    onClick={() => void leaveProject({ saveChanges: true })}
+                    data-testid="layout-leave-modal-save-and-leave-btn"
+                  >
+                    {leaveTarget === "exit" ? "Save and exit" : "Save and leave"}
+                  </Button>
+                </>
+              )}
             </Group>
           </Stack>
         </Modal>

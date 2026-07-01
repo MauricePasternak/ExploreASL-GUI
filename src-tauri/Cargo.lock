@@ -1172,6 +1172,7 @@ version = "0.1.0"
 dependencies = [
  "calamine",
  "csv",
+ "libc",
  "log",
  "nix 0.31.3",
  "notify",

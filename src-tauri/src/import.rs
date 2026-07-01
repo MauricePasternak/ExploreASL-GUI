@@ -906,6 +906,17 @@ fn spawn_matlab_import_process(matlab_path: &str, batch: &str) -> std::io::Resul
         command.creation_flags(CREATE_NEW_PROCESS_GROUP);
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            command.pre_exec(|| {
+                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+                Ok(())
+            });
+        }
+    }
+
     command.spawn()
 }
 
@@ -1223,6 +1234,22 @@ pub fn run_import_pipeline(
 #[tauri::command]
 pub fn stop_import(state: State<'_, AppState>, pid: u32) -> Result<(), String> {
     stop_import_pid(&state, pid)
+}
+
+#[tauri::command]
+pub fn stop_active_import(state: State<'_, AppState>) -> Result<(), String> {
+    let pid = state
+        .import_state
+        .lock()
+        .map_err(|_| "Import state lock was poisoned".to_string())?
+        .child_pid;
+
+    if let Some(pid) = pid {
+        if pid != RESERVED_IMPORT_PID {
+            stop_import_pid(&state, pid)?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]

@@ -15,7 +15,7 @@ use commands::{
 };
 use import::{
     clean_import_status, copy_lock_files, move_import_output, read_import_status,
-    run_import_pipeline, stop_import, stop_running_import_for_exit, AppState,
+    run_import_pipeline, stop_active_import, stop_import, stop_running_import_for_exit, AppState,
 };
 use manifest::{capture_environment_versions, read_population_ready_mtime};
 use processing::{
@@ -70,6 +70,7 @@ pub fn run() {
             get_available_memory_mb,
             run_import_pipeline,
             stop_import,
+            stop_active_import,
             clean_import_status,
             move_import_output,
             copy_lock_files,

@@ -39,4 +39,5 @@ sha2 = "0.10"
 tempfile = "3"
 csv = "1.4.0"
 calamine = "0.35.0"
+libc = "0.2"
 
