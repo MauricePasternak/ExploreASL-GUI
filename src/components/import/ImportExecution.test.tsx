@@ -225,8 +225,6 @@ describe("ImportExecution", () => {
         uiState: {},
         mappingState: {},
         exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
           dataPar: {},
         },
       },
@@ -264,8 +262,6 @@ describe("ImportExecution", () => {
         uiState: {},
         mappingState: {},
         exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
           dataPar: {},
         },
       },
@@ -349,8 +345,6 @@ describe("ImportExecution", () => {
         uiState: {},
         mappingState: {},
         exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
           dataPar: {},
         },
       },

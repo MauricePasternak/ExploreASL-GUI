@@ -135,8 +135,6 @@ function buildProjectState() {
       },
     },
     exploreAslConfig: {
-      sourcestructure: {},
-      studyPar: {},
       dataPar: {},
     },
   };

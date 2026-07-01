@@ -20,8 +20,6 @@ const PROJECT_JSON = {
   uiState: {},
   mappingState: {},
   exploreAslConfig: {
-    sourcestructure: {},
-    studyPar: {},
     dataPar: {},
   },
 };

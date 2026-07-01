@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef } from "react";
 import type { DataParState } from "../../schemas/dataParSchema";
 import { useDataParStore } from "../../stores/dataParStore";
 import { useProcessingStore } from "../../stores/processingStore";
-import { useProjectStore } from "../../stores/projectStore";
 import HeaderCard from "../HeaderCard";
 import { ASLProcessingSection } from "./ASLProcessingSection";
 import { AtlasesSection } from "./AtlasesSection";
@@ -21,19 +20,7 @@ export default function DataParEditor() {
   const clearDataParField = useDataParStore((s) => s.clearDataParField);
   const setAdvancedVisibility = useDataParStore((s) => s.setAdvancedVisibility);
   const saveToProject = useDataParStore((s) => s.saveToProject);
-  const loadDataPar = useDataParStore((s) => s.loadDataPar);
-  const project = useProjectStore((s) => s.project);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
-
-  // Load from project on mount
-  useEffect(() => {
-    if (project?.exploreAslConfig?.dataPar) {
-      loadDataPar(project.exploreAslConfig.dataPar as DataParState);
-    }
-    if (project?.uiState?.datapar?.advancedVisibility) {
-      setAdvancedVisibility(project.uiState.datapar.advancedVisibility);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced save to project
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

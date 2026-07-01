@@ -235,8 +235,6 @@ describe("dataParStore saveToProject", () => {
     useDataParStore.getState().saveToProject();
 
     const project = useProjectStore.getState().project;
-    expect(project?.exploreAslConfig.sourcestructure).toBeDefined();
-    expect(project?.exploreAslConfig.studyPar).toBeDefined();
     expect(project?.exploreAslConfig.dataPar).toMatchObject({ bTopUp: true });
   });
 });

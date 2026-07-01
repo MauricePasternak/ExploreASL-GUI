@@ -36,8 +36,6 @@ const PROJECT_JSON = {
   uiState: {},
   mappingState: {},
   exploreAslConfig: {
-    sourcestructure: {},
-    studyPar: {},
     dataPar: {},
   },
 };
@@ -62,8 +60,6 @@ describe("ProjectPage", () => {
         uiState: {},
         mappingState: {},
         exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
           dataPar: {},
         },
       },

@@ -63,7 +63,7 @@ describe("JoinConfig", () => {
         },
         uiState: { population: { completed: true } },
         mappingState: {},
-        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+        exploreAslConfig: { dataPar: {} },
       },
     });
     mockInvoke.mockReset();

@@ -74,8 +74,6 @@ describe("DicomIngestion", () => {
         uiState: {},
         mappingState: {},
         exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
           dataPar: {},
         },
       },

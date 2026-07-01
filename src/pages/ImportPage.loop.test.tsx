@@ -29,8 +29,6 @@ describe("Import autosave loop", () => {
           ingestionComplete: true,
         },
         exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
           dataPar: {},
         },
       },

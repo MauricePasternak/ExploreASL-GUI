@@ -57,8 +57,6 @@ describe("useProjectStore", () => {
         uiState: {},
         mappingState: {},
         exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
           dataPar: {},
         },
       }),
@@ -306,7 +304,7 @@ describe("useProjectStore", () => {
           },
         },
         mappingState: {},
-        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+        exploreAslConfig: { dataPar: {} },
       });
 
       vi.mocked(readTextFile).mockResolvedValue(legacyJson);
@@ -386,8 +384,6 @@ describe("useProjectStore", () => {
           uiState: {},
           mappingState: {},
           exploreAslConfig: {
-            sourcestructure: {},
-            studyPar: {},
             dataPar: {},
           },
         }),
@@ -415,8 +411,6 @@ describe("useProjectStore", () => {
           uiState: {},
           mappingState: {},
           exploreAslConfig: {
-            sourcestructure: {},
-            studyPar: {},
             dataPar: {},
           },
         }),
@@ -444,8 +438,6 @@ describe("useProjectStore", () => {
           uiState: {},
           mappingState: {},
           exploreAslConfig: {
-            sourcestructure: {},
-            studyPar: {},
             dataPar: {},
           },
         }),
@@ -474,7 +466,7 @@ describe("useProjectStore", () => {
           },
           uiState: {},
           mappingState: {},
-          exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+          exploreAslConfig: { dataPar: {} },
         },
         isDirty: false,
         loaded: true,
@@ -500,7 +492,7 @@ describe("useProjectStore", () => {
           },
           uiState: { population: { completed: true } },
           mappingState: {},
-          exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+          exploreAslConfig: { dataPar: {} },
         },
         isDirty: false,
         loaded: true,
@@ -535,7 +527,7 @@ describe("useProjectStore", () => {
     },
     uiState: {} as Record<string, unknown>,
     mappingState: {} as Record<string, unknown>,
-    exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+    exploreAslConfig: { dataPar: {} },
   };
 
   describe("manifest verdicts: setManifestVerdict", () => {
