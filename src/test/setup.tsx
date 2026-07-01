@@ -163,6 +163,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "run_import_pipeline":
         return Promise.resolve(12345);
       case "stop_import":
+      case "stop_active_import":
       case "clean_import_status":
       case "move_import_output":
       case "copy_lock_files":
@@ -170,6 +171,8 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "read_import_status":
       case "list_subject_reports":
       case "read_report_image":
+      case "read_lock_status":
+      case "list_subjects":
         return Promise.resolve([]);
       default:
         return Promise.resolve(null);
@@ -179,6 +182,23 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
+}));
+
+const mockDestroy = vi.fn(() => Promise.resolve());
+const mockOnCloseRequested = vi.fn((cb) => {
+  (window as any).__mockCloseRequestedListener = cb;
+  return Promise.resolve(() => {
+    if ((window as any).__mockCloseRequestedListener === cb) {
+      (window as any).__mockCloseRequestedListener = null;
+    }
+  });
+});
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(() => ({
+    destroy: mockDestroy,
+    onCloseRequested: mockOnCloseRequested,
+  })),
 }));
 
 vi.mock("@tauri-apps/api/path", () => ({

@@ -799,6 +799,17 @@ fn spawn_matlab_processing_process(matlab_path: &str, batch: &str) -> std::io::R
         command.creation_flags(CREATE_NEW_PROCESS_GROUP);
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            command.pre_exec(|| {
+                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+                Ok(())
+            });
+        }
+    }
+
     command.spawn()
 }
 

@@ -8,6 +8,8 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
+import { useProcessingStore } from "../stores/processingStore";
+import { useImportStore } from "../stores/importStore";
 import ProjectPage from "../pages/ProjectPage";
 import Layout from "./Layout";
 
@@ -43,6 +45,14 @@ describe("Layout", () => {
       project: null,
       isDirty: false,
       loaded: false,
+    });
+    useProcessingStore.setState({
+      processingPhase: "idle",
+      workerPids: [],
+    });
+    useImportStore.setState({
+      importPhase: "idle",
+      importRunning: false,
     });
     vi.mocked(writeTextFile).mockResolvedValue(undefined);
   });
@@ -512,5 +522,247 @@ describe("Layout", () => {
     renderLayout("/project/project-1/manifest");
 
     expect(screen.getByTestId("manifest-page")).toBeInTheDocument();
+  });
+
+  it("does not intercept close request when project is clean", async () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    renderLayout("/project/project-1/import");
+
+    await waitFor(() => {
+      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+    });
+
+    const preventDefault = vi.fn();
+    await (window as any).__mockCloseRequestedListener({ preventDefault });
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Save your changes/i)).not.toBeInTheDocument();
+  });
+
+  it("intercepts close request and prompts when project is dirty, can save and exit", async () => {
+    const saveProject = vi.fn().mockResolvedValue(undefined);
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: true,
+      loaded: true,
+      saveProject,
+    });
+
+    renderLayout("/project/project-1/import");
+
+    await waitFor(() => {
+      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+    });
+
+    const preventDefault = vi.fn();
+    await (window as any).__mockCloseRequestedListener({ preventDefault });
+
+    expect(preventDefault).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(screen.getByText("Exit application")).toBeInTheDocument();
+      expect(
+        screen.getByText("Save your changes before exiting the application?"),
+      ).toBeInTheDocument();
+    });
+
+    const saveAndExitBtn = screen.getByRole("button", { name: /save and exit/i });
+    fireEvent.click(saveAndExitBtn);
+
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const appWindow = getCurrentWindow();
+
+    await waitFor(() => {
+      expect(saveProject).toHaveBeenCalled();
+      expect(appWindow.destroy).toHaveBeenCalled();
+    });
+  });
+
+  it("intercepts close request and prompts when project is dirty, can exit without saving", async () => {
+    const saveProject = vi.fn().mockResolvedValue(undefined);
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: true,
+      loaded: true,
+      saveProject,
+    });
+
+    renderLayout("/project/project-1/import");
+
+    await waitFor(() => {
+      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+    });
+
+    const preventDefault = vi.fn();
+    await (window as any).__mockCloseRequestedListener({ preventDefault });
+
+    expect(preventDefault).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(screen.getByText("Exit application")).toBeInTheDocument();
+    });
+
+    const exitWithoutSavingBtn = screen.getByRole("button", { name: /exit without saving/i });
+    fireEvent.click(exitWithoutSavingBtn);
+
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const appWindow = getCurrentWindow();
+
+    await waitFor(() => {
+      expect(saveProject).not.toHaveBeenCalled();
+      expect(appWindow.destroy).toHaveBeenCalled();
+    });
+  });
+
+  it("prompts for abort when close request is sent and processing is running", async () => {
+    const killProcessing = vi.fn().mockResolvedValue(undefined);
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "processing",
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+    useProcessingStore.setState({
+      processingPhase: "running",
+      killProcessing,
+    });
+
+    renderLayout("/project/project-1/processing");
+
+    await waitFor(() => {
+      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+    });
+
+    const preventDefault = vi.fn();
+    await (window as any).__mockCloseRequestedListener({ preventDefault });
+
+    expect(preventDefault).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Abort and exit").length).toBeGreaterThan(0);
+      expect(
+        screen.getByText(
+          /An active ExploreASL process\/import is running\. Exiting the application will abort the execution\./,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    const abortBtn = screen.getByRole("button", { name: /abort and exit/i });
+    fireEvent.click(abortBtn);
+
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const appWindow = getCurrentWindow();
+
+    await waitFor(() => {
+      expect(killProcessing).toHaveBeenCalled();
+      expect(appWindow.destroy).toHaveBeenCalled();
+    });
+  });
+
+  it("prompts for abort when close request is sent and import is running", async () => {
+    const invokeMock = vi.mocked((await import("@tauri-apps/api/core")).invoke);
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: {},
+        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+      },
+      isDirty: false,
+      loaded: true,
+    });
+    useImportStore.setState({
+      importPhase: "running",
+    });
+
+    renderLayout("/project/project-1/import");
+
+    await waitFor(() => {
+      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+    });
+
+    const preventDefault = vi.fn();
+    await (window as any).__mockCloseRequestedListener({ preventDefault });
+
+    expect(preventDefault).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Abort and exit").length).toBeGreaterThan(0);
+    });
+
+    const abortBtn = screen.getByRole("button", { name: /abort and exit/i });
+    fireEvent.click(abortBtn);
+
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const appWindow = getCurrentWindow();
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("stop_active_import");
+      expect(appWindow.destroy).toHaveBeenCalled();
+    });
   });
 });
