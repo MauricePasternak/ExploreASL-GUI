@@ -766,8 +766,7 @@ describe("Layout", () => {
     });
   });
 
-  it("shows clean/fresh status icon and tooltip when project is not dirty, and triggers save on click", async () => {
-    vi.useFakeTimers();
+  it("shows clean/fresh status icon and disables manual save when project is not dirty", async () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
@@ -794,20 +793,13 @@ describe("Layout", () => {
     const saveBtn = screen.getByTestId("layout-save-status-btn");
     expect(saveBtn).toBeInTheDocument();
     expect(saveBtn).toHaveAttribute("aria-label", "Project changes in sync");
+    expect(saveBtn).toBeDisabled();
 
-    // Click it to trigger save
     fireEvent.click(saveBtn);
     expect(saveProject).not.toHaveBeenCalled();
-
-    // Advance timers by 500ms
-    vi.advanceTimersByTime(500);
-    expect(saveProject).toHaveBeenCalledTimes(1);
-
-    vi.useRealTimers();
   });
 
-  it("shows dirty/staleness status icon and tooltip when project is dirty, and triggers save on click", async () => {
-    vi.useFakeTimers();
+  it("shows dirty/staleness status icon and triggers save immediately on click", async () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
@@ -834,20 +826,16 @@ describe("Layout", () => {
     const saveBtn = screen.getByTestId("layout-save-status-btn");
     expect(saveBtn).toBeInTheDocument();
     expect(saveBtn).toHaveAttribute("aria-label", "Save project changes");
+    expect(saveBtn).not.toBeDisabled();
 
-    // Click it to trigger save
     fireEvent.click(saveBtn);
-    expect(saveProject).not.toHaveBeenCalled();
 
-    // Advance timers by 500ms
-    vi.advanceTimersByTime(500);
-    expect(saveProject).toHaveBeenCalledTimes(1);
-
-    vi.useRealTimers();
+    await waitFor(() => {
+      expect(saveProject).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("saves the project when Ctrl+S keyboard shortcut is pressed", async () => {
-    vi.useFakeTimers();
     const saveProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
@@ -880,12 +868,8 @@ describe("Layout", () => {
     });
     window.dispatchEvent(event);
 
-    expect(saveProject).not.toHaveBeenCalled();
-
-    // Advance timers by 500ms
-    vi.advanceTimersByTime(500);
-    expect(saveProject).toHaveBeenCalledTimes(1);
-
-    vi.useRealTimers();
+    await waitFor(() => {
+      expect(saveProject).toHaveBeenCalledTimes(1);
+    });
   });
 });

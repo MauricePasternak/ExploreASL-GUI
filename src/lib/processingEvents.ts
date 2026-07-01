@@ -309,7 +309,12 @@ export async function loadLockStatus(projectRoot: string): Promise<SubjectModule
  * Stops any existing watcher before starting a new one.
  */
 export async function watchLockDir(projectRoot: string): Promise<void> {
-  await invoke("stop_watch_lock_dir").catch(() => {});
+  await invoke("stop_watch_lock_dir").catch((err) => {
+    console.debug(
+      "[processingEvents] stop_watch_lock_dir failed (this is normal if not running):",
+      err,
+    );
+  });
   await invoke("watch_lock_dir", { projectRoot });
 }
 
@@ -318,5 +323,7 @@ export async function watchLockDir(projectRoot: string): Promise<void> {
  * Stops the file watcher if one is running.
  */
 export async function stopWatcher(): Promise<void> {
-  await invoke("stop_watch_lock_dir").catch(() => {});
+  await invoke("stop_watch_lock_dir").catch((err) => {
+    console.debug("[processingEvents] stopWatcher failed:", err);
+  });
 }

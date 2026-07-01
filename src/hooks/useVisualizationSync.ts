@@ -110,6 +110,7 @@ export function useVisualizationSync() {
     const unsubscribe = useVisualizationStore.subscribe((state) => {
       const project = useProjectStore.getState().project;
       if (!project) return;
+      const projectId = project.projectMeta.id;
 
       const persisted = extractPersisted(state);
 
@@ -117,23 +118,14 @@ export function useVisualizationSync() {
       if (JSON.stringify(prevPersisted) === JSON.stringify(persisted)) return;
       prevPersisted = persisted;
 
-      // Update project store's uiState.dataVis
-      useProjectStore.setState((prev) => ({
-        project: prev.project
-          ? {
-              ...prev.project,
-              uiState: {
-                ...prev.project.uiState,
-                dataVis: persisted,
-              },
-              isDirty: true,
-            }
-          : null,
-      }));
+      useProjectStore.getState().syncVisualizationState(persisted);
 
       if (autosaveTimerRef.current !== null) clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = setTimeout(() => {
-        useProjectStore.getState().saveProject().catch(console.error);
+        const current = useProjectStore.getState();
+        if (current.project?.projectMeta.id === projectId) {
+          current.saveProject().catch(console.error);
+        }
         autosaveTimerRef.current = null;
       }, AUTOSAVE_DEBOUNCE_MS);
     });

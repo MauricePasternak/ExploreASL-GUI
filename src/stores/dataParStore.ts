@@ -134,28 +134,8 @@ export const useDataParStore = create<DataParSlice>((set, get) => ({
 
   saveToProject: () => {
     const { dataPar, advancedVisibility } = get();
-    const projectState = useProjectStore.getState();
-    if (!projectState.project) return;
+    if (!useProjectStore.getState().project) return;
 
-    useProjectStore.setState((prev) => {
-      if (!prev.project) return prev;
-      return {
-        project: {
-          ...prev.project,
-          exploreAslConfig: {
-            ...prev.project.exploreAslConfig,
-            dataPar,
-          },
-          uiState: {
-            ...prev.project.uiState,
-            datapar: {
-              ...prev.project.uiState.datapar,
-              advancedVisibility,
-            },
-          },
-        },
-        isDirty: true,
-      };
-    });
+    useProjectStore.getState().syncDataParState(dataPar, advancedVisibility);
   },
 }));

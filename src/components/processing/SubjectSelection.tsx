@@ -379,7 +379,8 @@ export default function SubjectSelection() {
         }
         setLogFiles(map);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn("[SubjectSelection] Failed to fetch module logs:", err);
         setLogFiles(new Map());
       });
   }, [projectRoot, processingPhase]);

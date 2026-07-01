@@ -9,6 +9,7 @@ import {
   projectEaslPath,
   syncSessionCheckpointFromProject,
 } from "../lib/sessionCheckpoint";
+import type { DataParState } from "../schemas/dataParSchema";
 import {
   canAccessPhase,
   DEFAULT_PROJECT_FILE,
@@ -21,6 +22,11 @@ import type { ImportSnapshot } from "../schemas/importSchemas";
 import type { ManifestFailReason, ManifestVerdict } from "../schemas/project";
 import type { ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
+
+type DataVisState = NonNullable<ProjectFile["uiState"]["dataVis"]>;
+type DataParAdvancedVisibility = NonNullable<
+  NonNullable<ProjectFile["uiState"]["datapar"]>["advancedVisibility"]
+>;
 
 interface ProjectState {
   project: ProjectFile | null;
@@ -35,6 +41,8 @@ interface ProjectState {
   syncProcessingState: (
     processingState: Pick<ProcessingState, "config" | "processingPhase">,
   ) => void;
+  syncDataParState: (dataPar: DataParState, advancedVisibility: DataParAdvancedVisibility) => void;
+  syncVisualizationState: (dataVis: DataVisState) => void;
   setPopulationCompleted: (value: boolean) => void;
   setManifestVerdict: (
     subjectSession: string,
@@ -47,12 +55,76 @@ interface ProjectState {
   closeProject: () => void;
 }
 
+/** Incremented on every successful in-memory project mutation; used to guard saveProject. */
+let projectRevision = 0;
+
+/** Serializes concurrent saveProject calls so writes complete in order. */
+let saveChain: Promise<void> = Promise.resolve();
+
 function getProjectFilePath(rootPath: string) {
   return projectEaslPath(rootPath);
 }
 
 function isProjectFilePath(easlPath: string) {
   return easlPath.split("/").filter(Boolean).pop() === PROJECT_FILE_NAME;
+}
+
+function serializeProject(project: ProjectFile): string {
+  return JSON.stringify(
+    project,
+    (key, value) => {
+      if (
+        key === "mostRecentConfig" &&
+        value &&
+        typeof value === "object" &&
+        "sourceDataPath" in value
+      ) {
+        return compressSnapshot(value as ImportSnapshot);
+      }
+      return value;
+    },
+    2,
+  );
+}
+
+type ProjectUpdater = (project: ProjectFile) => ProjectFile | null;
+
+function updateProject(
+  set: (partial: Partial<ProjectState> | ((state: ProjectState) => Partial<ProjectState>)) => void,
+  updater: ProjectUpdater,
+  options?: { syncCheckpoint?: boolean; phase?: ProjectMeta["currentPhase"] },
+) {
+  set((state) => {
+    if (!state.project) return state;
+
+    const nextProject = updater(state.project);
+    if (!nextProject) return state;
+
+    if (options?.syncCheckpoint) {
+      syncSessionCheckpointFromProject(nextProject, options.phase);
+    }
+
+    projectRevision++;
+    return {
+      project: nextProject,
+      isDirty: true,
+    };
+  });
+}
+
+function resetProjectRevision() {
+  projectRevision = 0;
+}
+
+/** @internal Exposed for unit tests only. */
+export function __getProjectRevisionForTests() {
+  return projectRevision;
+}
+
+/** @internal Exposed for unit tests only. */
+export function __resetProjectRevisionForTests() {
+  projectRevision = 0;
+  saveChain = Promise.resolve();
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -86,6 +158,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.warn("Failed to check BIDS project status or write .bidsignore:", e);
     }
 
+    resetProjectRevision();
     set({
       project: hydratedProject,
       isDirty: false,
@@ -111,6 +184,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.warn("Failed to check BIDS project status or write .bidsignore:", e);
     }
 
+    resetProjectRevision();
     set({
       project,
       isDirty: false,
@@ -124,79 +198,68 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   saveProject: async () => {
-    const { project } = get();
-    if (!project) {
-      return;
-    }
+    const runSave = async () => {
+      const { project, isDirty } = get();
+      if (!project || !isDirty) {
+        return;
+      }
 
-    const serialized = JSON.stringify(
-      project,
-      (key, value) => {
-        if (
-          key === "mostRecentConfig" &&
-          value &&
-          typeof value === "object" &&
-          "sourceDataPath" in value
-        ) {
-          return compressSnapshot(value as ImportSnapshot);
-        }
-        return value;
-      },
-      2,
-    );
+      const revisionAtSaveStart = projectRevision;
+      const projectIdAtSaveStart = project.projectMeta.id;
+      const snapshot = project;
+      const serialized = serializeProject(snapshot);
 
-    await writeTextFile(getProjectFilePath(project.projectMeta.rootPath), serialized);
+      await writeTextFile(getProjectFilePath(snapshot.projectMeta.rootPath), serialized);
 
-    set({ isDirty: false });
+      const current = get().project;
+      if (
+        current?.projectMeta.id === projectIdAtSaveStart &&
+        projectRevision === revisionAtSaveStart
+      ) {
+        set({ isDirty: false });
+      }
+    };
+
+    saveChain = saveChain.then(runSave, runSave);
+    return saveChain;
   },
 
   setPhase: (phase) => {
-    set((state) => {
-      if (!state.project) {
-        return state;
-      }
+    updateProject(
+      set,
+      (project) => {
+        if (!canAccessPhase(project, phase)) {
+          return null;
+        }
 
-      if (!canAccessPhase(state.project, phase)) {
-        return state;
-      }
-
-      const nextProject = {
-        ...state.project,
-        projectMeta: {
-          ...state.project.projectMeta,
-          currentPhase: phase,
-          lastOpened: new Date().toISOString(),
-        },
-      };
-
-      syncSessionCheckpointFromProject(nextProject, phase);
-
-      return {
-        project: nextProject,
-        isDirty: true,
-      };
-    });
+        return {
+          ...project,
+          projectMeta: {
+            ...project.projectMeta,
+            currentPhase: phase,
+            lastOpened: new Date().toISOString(),
+          },
+        };
+      },
+      { syncCheckpoint: true, phase },
+    );
   },
 
   toggleNavbar: () => {
-    set((state) => {
-      if (!state.project) return state;
-      return {
-        project: {
-          ...state.project,
-          uiState: {
-            ...state.project.uiState,
-            navbarCollapsed: !state.project.uiState.navbarCollapsed,
-          },
-        },
-        isDirty: true,
-      };
-    });
+    updateProject(set, (project) => ({
+      ...project,
+      uiState: {
+        ...project.uiState,
+        navbarCollapsed: !project.uiState?.navbarCollapsed,
+      },
+    }));
   },
 
   closeProject: () => {
     clearSessionCheckpoint();
     logAction("project_close");
+    resetProjectRevision();
+    saveChain = Promise.resolve();
     set({
       project: null,
       isDirty: false,
@@ -205,52 +268,56 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   setPopulationCompleted: (value) => {
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            uiState: {
-              ...state.project.uiState,
-              population: { completed: value },
-            },
-          }
-        : null,
-      isDirty: true,
-    }));
+    updateProject(set, (project) => {
+      if (project.uiState?.population?.completed === value) {
+        return null;
+      }
+
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          population: { completed: value },
+        },
+      };
+    });
   },
 
   setManifestVerdict: (subjectSession, status, opts) => {
     if (status === "fail" && !opts.reason) {
       throw new Error("reason is required when status is fail");
     }
-    set((state) => {
-      if (!state.project) return state;
-      const fallbackMtime = state.project.uiState?.manifest?.lastPopulationRunMtime ?? Date.now();
+
+    updateProject(set, (project) => {
+      const fallbackMtime = project.uiState?.manifest?.lastPopulationRunMtime ?? Date.now();
       const verdict: ManifestVerdict = {
         status,
         reason: opts.reason as ManifestFailReason | undefined,
         notes: opts.notes,
         setAt: opts.setAt ?? fallbackMtime,
       };
-      const prev = state.project.uiState?.manifest?.verdicts?.[subjectSession];
+      const prev = project.uiState?.manifest?.verdicts?.[subjectSession];
       if (prev?.status === "pass" && status === "fail" && opts.notes === undefined) {
         verdict.notes = undefined;
       }
+
+      const nextVerdicts = {
+        ...(project.uiState?.manifest?.verdicts ?? {}),
+        [subjectSession]: verdict,
+      };
+
+      if (JSON.stringify(prev) === JSON.stringify(verdict)) {
+        return null;
+      }
+
       return {
-        isDirty: true,
-        project: {
-          ...state.project,
-          uiState: {
-            ...state.project.uiState,
-            manifest: {
-              verdicts: {
-                ...(state.project.uiState?.manifest?.verdicts ?? {}),
-                [subjectSession]: verdict,
-              },
-              lastRunVersions: state.project.uiState?.manifest?.lastRunVersions ?? {},
-              lastPopulationRunMtime:
-                state.project.uiState?.manifest?.lastPopulationRunMtime ?? null,
-            },
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            verdicts: nextVerdicts,
+            lastRunVersions: project.uiState?.manifest?.lastRunVersions ?? {},
+            lastPopulationRunMtime: project.uiState?.manifest?.lastPopulationRunMtime ?? null,
           },
         },
       };
@@ -258,23 +325,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   removeManifestVerdict: (subjectSession) => {
-    set((state) => {
-      if (!state.project) return state;
-      const prev = state.project.uiState?.manifest?.verdicts ?? {};
-      if (!(subjectSession in prev)) return state;
+    updateProject(set, (project) => {
+      const prev = project.uiState?.manifest?.verdicts ?? {};
+      if (!(subjectSession in prev)) return null;
       const { [subjectSession]: _, ...remaining } = prev;
+
       return {
-        isDirty: true,
-        project: {
-          ...state.project,
-          uiState: {
-            ...state.project.uiState,
-            manifest: {
-              verdicts: remaining,
-              lastRunVersions: state.project.uiState?.manifest?.lastRunVersions ?? {},
-              lastPopulationRunMtime:
-                state.project.uiState?.manifest?.lastPopulationRunMtime ?? null,
-            },
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            verdicts: remaining,
+            lastRunVersions: project.uiState?.manifest?.lastRunVersions ?? {},
+            lastPopulationRunMtime: project.uiState?.manifest?.lastPopulationRunMtime ?? null,
           },
         },
       };
@@ -282,107 +345,141 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   setLastRunVersions: (versions) => {
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            uiState: {
-              ...state.project.uiState,
-              manifest: {
-                verdicts: state.project.uiState?.manifest?.verdicts ?? {},
-                lastRunVersions: versions,
-                lastPopulationRunMtime:
-                  state.project.uiState?.manifest?.lastPopulationRunMtime ?? null,
-              },
-            },
-          }
-        : null,
-      isDirty: true,
-    }));
+    updateProject(set, (project) => {
+      if (JSON.stringify(project.uiState?.manifest?.lastRunVersions) === JSON.stringify(versions)) {
+        return null;
+      }
+
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            verdicts: project.uiState?.manifest?.verdicts ?? {},
+            lastRunVersions: versions,
+            lastPopulationRunMtime: project.uiState?.manifest?.lastPopulationRunMtime ?? null,
+          },
+        },
+      };
+    });
   },
 
   setLastPopulationRunMtime: (mtime) => {
-    set((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            uiState: {
-              ...state.project.uiState,
-              manifest: {
-                verdicts: state.project.uiState?.manifest?.verdicts ?? {},
-                lastRunVersions: state.project.uiState?.manifest?.lastRunVersions ?? {},
-                lastPopulationRunMtime: mtime,
-              },
-            },
-          }
-        : null,
-      isDirty: true,
-    }));
+    updateProject(set, (project) => {
+      if (project.uiState?.manifest?.lastPopulationRunMtime === mtime) {
+        return null;
+      }
+
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            verdicts: project.uiState?.manifest?.verdicts ?? {},
+            lastRunVersions: project.uiState?.manifest?.lastRunVersions ?? {},
+            lastPopulationRunMtime: mtime,
+          },
+        },
+      };
+    });
   },
 
   syncImportState: (importState) => {
-    set((state) => {
-      if (!state.project) return state;
-
+    updateProject(set, (project) => {
       const { activeStep, importPhase, importCompleted, mostRecentConfig, ...payload } =
         importState;
 
       if (
-        JSON.stringify(state.project.mappingState) === JSON.stringify(payload) &&
-        state.project.uiState.import?.activeStep === activeStep &&
-        state.project.uiState.import?.currentPhase === importPhase &&
-        state.project.uiState.import?.completed === importCompleted
+        JSON.stringify(project.mappingState) === JSON.stringify(payload) &&
+        project.uiState?.import?.activeStep === activeStep &&
+        project.uiState?.import?.currentPhase === importPhase &&
+        project.uiState?.import?.completed === importCompleted &&
+        JSON.stringify(project.uiState?.import?.mostRecentConfig) ===
+          JSON.stringify(mostRecentConfig ?? project.uiState?.import?.mostRecentConfig ?? null)
       ) {
-        return state;
+        return null;
       }
 
       return {
-        project: {
-          ...state.project,
-          mappingState: payload,
-          uiState: {
-            ...state.project.uiState,
-            import: {
-              ...state.project.uiState.import,
-              activeStep,
-              currentPhase: importPhase,
-              completed: importCompleted,
-              mostRecentConfig:
-                mostRecentConfig ?? state.project.uiState.import?.mostRecentConfig ?? null,
-            },
+        ...project,
+        mappingState: payload,
+        uiState: {
+          ...project.uiState,
+          import: {
+            ...project.uiState?.import,
+            activeStep,
+            currentPhase: importPhase,
+            completed: importCompleted,
+            mostRecentConfig: mostRecentConfig ?? project.uiState?.import?.mostRecentConfig ?? null,
           },
         },
-        isDirty: true,
       };
     });
   },
 
   syncProcessingState: ({ config, processingPhase }) => {
-    set((state) => {
-      if (!state.project) return state;
-
+    updateProject(set, (project) => {
       const persistedConfig = config && config.modules.length > 0 ? config : undefined;
 
       if (
-        JSON.stringify(state.project.uiState.processing?.config) ===
-          JSON.stringify(persistedConfig) &&
-        state.project.uiState.processing?.currentPhase === processingPhase
+        JSON.stringify(project.uiState?.processing?.config) === JSON.stringify(persistedConfig) &&
+        project.uiState?.processing?.currentPhase === processingPhase
       ) {
-        return state;
+        return null;
       }
 
       return {
-        project: {
-          ...state.project,
-          uiState: {
-            ...state.project.uiState,
-            processing: {
-              config: persistedConfig,
-              currentPhase: processingPhase,
-            },
+        ...project,
+        uiState: {
+          ...project.uiState,
+          processing: {
+            config: persistedConfig,
+            currentPhase: processingPhase,
           },
         },
-        isDirty: true,
+      };
+    });
+  },
+
+  syncDataParState: (dataPar, advancedVisibility) => {
+    updateProject(set, (project) => {
+      if (
+        JSON.stringify(project.exploreAslConfig.dataPar) === JSON.stringify(dataPar) &&
+        JSON.stringify(project.uiState?.datapar?.advancedVisibility) ===
+          JSON.stringify(advancedVisibility)
+      ) {
+        return null;
+      }
+
+      return {
+        ...project,
+        exploreAslConfig: {
+          ...project.exploreAslConfig,
+          dataPar,
+        },
+        uiState: {
+          ...project.uiState,
+          datapar: {
+            ...project.uiState?.datapar,
+            advancedVisibility,
+          },
+        },
+      };
+    });
+  },
+
+  syncVisualizationState: (dataVis) => {
+    updateProject(set, (project) => {
+      if (JSON.stringify(project.uiState?.dataVis) === JSON.stringify(dataVis)) {
+        return null;
+      }
+
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          dataVis,
+        },
       };
     });
   },
