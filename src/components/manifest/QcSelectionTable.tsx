@@ -112,7 +112,8 @@ export default function QcSelectionTable({
         }
         setLogFiles(map);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn("[QcSelectionTable] Failed to fetch module logs:", err);
         setLogFiles(new Map());
       });
   }, [projectRoot, processingPhase]);

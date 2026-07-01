@@ -172,7 +172,8 @@ export default function ImportSubjectTable({
         }
         setLogFiles(map);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn("[ImportSubjectTable] Failed to fetch import logs:", err);
         setLogFiles(new Map());
       });
   }, [projectRoot, importPhase]);

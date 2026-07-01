@@ -51,7 +51,10 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   useEffect(() => {
     invoke<number>("get_cpu_cores")
       .then(setSystemCores)
-      .catch(() => setSystemCores(0));
+      .catch((err) => {
+        console.warn("[ProcessingStatusAlert] Failed to get CPU cores:", err);
+        setSystemCores(0);
+      });
   }, []);
 
   // Check MATLAB executable existence
@@ -64,7 +67,13 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     Promise.resolve().then(() => setMatlabExists(null));
     exists(path)
       .then(setMatlabExists)
-      .catch(() => setMatlabExists(false));
+      .catch((err) => {
+        console.warn(
+          `[ProcessingStatusAlert] Failed to check MATLAB path existence (${path}):`,
+          err,
+        );
+        setMatlabExists(false);
+      });
   }, [config?.matlabPath]);
 
   // Check ExploreASL path and ExploreASL.m
@@ -86,7 +95,11 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
         setExploreAslExists(dirExists);
         setExploreAslHasM(mExists);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn(
+          `[ProcessingStatusAlert] Failed to check ExploreASL path existence (${path}):`,
+          err,
+        );
         setExploreAslExists(false);
         setExploreAslHasM(false);
       });
@@ -103,7 +116,13 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     const dataParDir = `${rootPath}/derivatives/ExploreASL`;
     exists(dataParDir)
       .then(setDataParDirExists)
-      .catch(() => setDataParDirExists(false));
+      .catch((err) => {
+        console.warn(
+          `[ProcessingStatusAlert] Failed to check dataPar directory existence (${dataParDir}):`,
+          err,
+        );
+        setDataParDirExists(false);
+      });
   }, [project?.projectMeta.rootPath]);
 
   // Orphaned lock entries: subjects in subjectStatuses but not in availableSubjects.

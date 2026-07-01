@@ -176,7 +176,8 @@ export default function PopulationSection() {
         const popLogs = files.filter((f) => f.module === "population");
         setLogs(popLogs);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn("[PopulationSection] Failed to fetch module logs:", err);
         setLogs([]);
       });
   }, [projectRoot]);

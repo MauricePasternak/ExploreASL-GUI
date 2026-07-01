@@ -29,7 +29,7 @@ import {
   IconSettings,
   IconUpload,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
@@ -66,48 +66,30 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const debouncedSave = useCallback(() => {
-    if (!project) return;
-    if (saveTimeoutRef.current !== null) {
-      clearTimeout(saveTimeoutRef.current);
+  const saveNow = useCallback(async () => {
+    if (!project || !isDirty) return;
+    try {
+      await saveProject();
+      notifications.show({
+        color: "teal",
+        title: "Project Saved",
+        message: "All changes successfully saved to file.",
+      });
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: "Failed to save project",
+        message: err instanceof Error ? err.message : "ExploreASL GUI could not save your project.",
+      });
     }
-    saveTimeoutRef.current = setTimeout(async () => {
-      try {
-        await saveProject();
-        notifications.show({
-          color: "teal",
-          title: "Project Saved",
-          message: "All changes successfully saved to file.",
-        });
-      } catch (err) {
-        notifications.show({
-          color: "red",
-          title: "Failed to save project",
-          message:
-            err instanceof Error ? err.message : "ExploreASL GUI could not save your project.",
-        });
-      } finally {
-        saveTimeoutRef.current = null;
-      }
-    }, 500);
-  }, [project, saveProject]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current !== null) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
+  }, [isDirty, project, saveProject]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         if (project) {
           event.preventDefault();
-          debouncedSave();
+          void saveNow();
         }
       }
     }
@@ -115,7 +97,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [project, debouncedSave]);
+  }, [project, saveNow]);
 
   const processingPhase = useProcessingStore((state) => state.processingPhase);
   const importPhase = useImportStore((state) => state.importPhase);
@@ -306,8 +288,9 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                   aria-label={isDirty ? "Save project changes" : "Project changes in sync"}
                   variant="subtle"
                   color={isDirty ? "yellow" : "gray"}
-                  onClick={debouncedSave}
+                  onClick={() => void saveNow()}
                   data-testid="layout-save-status-btn"
+                  disabled={!isDirty}
                 >
                   {isDirty ? <IconRefreshAlert size={18} /> : <IconRefresh size={18} />}
                 </ActionIcon>

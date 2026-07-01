@@ -5,7 +5,7 @@ import { PROJECT_FILE_NAME } from "../schemas/project";
 import type { ImportSnapshot } from "../schemas/importSchemas";
 import { readSessionCheckpoint } from "../lib/sessionCheckpoint";
 import { useImportStore } from "./importStore";
-import { useProjectStore } from "./projectStore";
+import { __resetProjectRevisionForTests, useProjectStore } from "./projectStore";
 import { isBidsProject, ensureBidsIgnore } from "../lib/bidsUtils";
 
 vi.mock("../lib/bidsUtils", () => ({
@@ -16,6 +16,7 @@ vi.mock("../lib/bidsUtils", () => ({
 describe("useProjectStore", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    __resetProjectRevisionForTests();
     useProjectStore.setState({
       project: null,
       isDirty: false,
@@ -681,6 +682,168 @@ describe("useProjectStore", () => {
       const store = useProjectStore.getState() as any;
       expect(() => store.setLastPopulationRunMtime(1700000000000)).not.toThrow();
       expect(useProjectStore.getState().project).toBeNull();
+    });
+  });
+
+  describe("cross-store uiState sync safety", () => {
+    it("preserves sibling uiState branches when processing and visualization sync in sequence", async () => {
+      await useProjectStore.getState().createProject("/tmp/cross-sync", "Cross Sync");
+
+      useProjectStore.getState().syncProcessingState({
+        config: {
+          subjects: ["sub-01_01"],
+          modules: ["structural"],
+          matlabPath: "/matlab",
+          exploreAslPath: "/eas",
+          workers: 1,
+          subjectRegexp: "^sub-.*$",
+        },
+        processingPhase: "idle",
+      });
+
+      useProjectStore.getState().syncVisualizationState({
+        stage: "selectData",
+        pointSize: 12,
+      });
+
+      const project = useProjectStore.getState().project!;
+      expect(project.uiState.processing?.config?.subjects).toEqual(["sub-01_01"]);
+      expect(project.uiState.processing?.currentPhase).toBe("idle");
+      expect(project.uiState.dataVis?.stage).toBe("selectData");
+      expect(project.uiState.dataVis?.pointSize).toBe(12);
+      expect(useProjectStore.getState().isDirty).toBe(true);
+    });
+
+    it("preserves dataPar and processing uiState when both sync", async () => {
+      await useProjectStore.getState().createProject("/tmp/datapar-sync", "DataPar Sync");
+
+      useProjectStore.getState().syncProcessingState({
+        config: {
+          subjects: [],
+          modules: ["population"],
+          matlabPath: "/matlab",
+          exploreAslPath: "/eas",
+          workers: 1,
+          subjectRegexp: "^sub-.*$",
+        },
+        processingPhase: "running",
+      });
+
+      useProjectStore.getState().syncDataParState(
+        { Atlases: ["Total"], TissueMasking: ["GM"], TissueThreshold: [0.7] },
+        {
+          showAdvancedSections: true,
+          showAdvancedM0Params: false,
+          showAdvancedQuantification: false,
+          showAdvancedGeneralSettings: false,
+          showAdvancedASLProcessing: false,
+          showAdvancedAtlases: false,
+        },
+      );
+
+      const project = useProjectStore.getState().project!;
+      expect(project.uiState.processing?.currentPhase).toBe("running");
+      expect(project.exploreAslConfig.dataPar.Atlases).toEqual(["Total"]);
+      expect(project.uiState.datapar?.advancedVisibility?.showAdvancedSections).toBe(true);
+    });
+  });
+
+  describe("queued saveProject", () => {
+    it("does not write when the project is clean", async () => {
+      await useProjectStore.getState().createProject("/tmp/clean-save", "Clean Save");
+      vi.mocked(writeTextFile).mockClear();
+
+      await useProjectStore.getState().saveProject();
+
+      expect(writeTextFile).not.toHaveBeenCalled();
+      expect(useProjectStore.getState().isDirty).toBe(false);
+    });
+
+    it("writes saves in order and keeps isDirty when a mutation occurs during save", async () => {
+      await useProjectStore.getState().createProject("/tmp/queued-save", "Queued Save");
+      useProjectStore.getState().toggleNavbar();
+
+      let resolveFirstWrite: (() => void) | undefined;
+      const firstWriteGate = new Promise<void>((resolve) => {
+        resolveFirstWrite = resolve;
+      });
+
+      vi.mocked(writeTextFile).mockImplementationOnce(async () => {
+        await firstWriteGate;
+      });
+
+      const firstSave = useProjectStore.getState().saveProject();
+      await Promise.resolve();
+      useProjectStore.getState().syncVisualizationState({ stage: "visualize", pointSize: 8 });
+
+      const secondSave = useProjectStore.getState().saveProject();
+      resolveFirstWrite?.();
+
+      await firstSave;
+      expect(useProjectStore.getState().isDirty).toBe(true);
+
+      await secondSave;
+      expect(useProjectStore.getState().isDirty).toBe(false);
+
+      const writes = vi.mocked(writeTextFile).mock.calls.slice(-2);
+      const firstSaved = JSON.parse(writes[0][1] as string);
+      const secondSaved = JSON.parse(writes[1][1] as string);
+
+      expect(firstSaved.uiState.navbarCollapsed).toBe(false);
+      expect(firstSaved.uiState.dataVis).toBeUndefined();
+      expect(secondSaved.uiState.dataVis).toMatchObject({
+        stage: "visualize",
+        pointSize: 8,
+      });
+    });
+
+    it("does not clear isDirty when a stale save completes after a newer mutation", async () => {
+      await useProjectStore.getState().createProject("/tmp/stale-save", "Stale Save");
+      useProjectStore.getState().toggleNavbar();
+
+      let resolveSlowWrite: (() => void) | undefined;
+      const slowWriteGate = new Promise<void>((resolve) => {
+        resolveSlowWrite = resolve;
+      });
+
+      vi.mocked(writeTextFile).mockImplementationOnce(async () => {
+        await slowWriteGate;
+      });
+
+      const slowSave = useProjectStore.getState().saveProject();
+      await Promise.resolve();
+      useProjectStore.getState().toggleNavbar();
+
+      resolveSlowWrite?.();
+      await slowSave;
+
+      expect(useProjectStore.getState().isDirty).toBe(true);
+    });
+
+    it("does not clear isDirty if a different project is loaded while save is in flight", async () => {
+      await useProjectStore.getState().createProject("/tmp/project-a", "Project A");
+      useProjectStore.getState().toggleNavbar();
+
+      let resolveSlowWrite: (() => void) | undefined;
+      const slowWriteGate = new Promise<void>((resolve) => {
+        resolveSlowWrite = resolve;
+      });
+
+      vi.mocked(writeTextFile).mockImplementationOnce(async () => {
+        await slowWriteGate;
+      });
+
+      const slowSave = useProjectStore.getState().saveProject();
+      await Promise.resolve();
+
+      await useProjectStore.getState().createProject("/tmp/project-b", "Project B");
+      useProjectStore.getState().toggleNavbar();
+
+      resolveSlowWrite?.();
+      await slowSave;
+
+      expect(useProjectStore.getState().project?.projectMeta.name).toBe("Project B");
+      expect(useProjectStore.getState().isDirty).toBe(true);
     });
   });
 });

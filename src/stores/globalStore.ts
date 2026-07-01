@@ -154,7 +154,9 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     }));
     void get()
       .saveSettings()
-      .catch(() => undefined);
+      .catch((err) => {
+        console.error("[globalStore] Failed to save settings:", err);
+      });
   },
 
   removeRecentProject: (path) => {
@@ -166,6 +168,8 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     }));
     void get()
       .saveSettings()
-      .catch(() => undefined);
+      .catch((err) => {
+        console.error("[globalStore] Failed to save settings:", err);
+      });
   },
 }));

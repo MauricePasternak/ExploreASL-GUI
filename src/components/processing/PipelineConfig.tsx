@@ -43,8 +43,8 @@ export default function PipelineConfig() {
         setSystemCores(cores);
         setDefaultWorkers(calcDefaultWorkers(cores, memMb));
       })
-      .catch(() => {
-        // Keep defaults if invoke fails
+      .catch((err) => {
+        console.warn("[PipelineConfig] Failed to query CPU/Memory, keeping defaults:", err);
       });
   }, []);
 

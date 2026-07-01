@@ -274,7 +274,9 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
   resetProcessing: () => {
     clearProcessingListeners();
     import("../lib/processingEvents").then(({ stopWatcher }) => {
-      stopWatcher().catch(() => {});
+      stopWatcher().catch((err) => {
+        console.warn("[processingStore] stopWatcher failed:", err);
+      });
     });
     set({ ...INITIAL_STATE });
   },

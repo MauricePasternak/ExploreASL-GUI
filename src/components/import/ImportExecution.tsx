@@ -382,8 +382,11 @@ export default function ImportExecution() {
         const staleness = computeStaleness(currentStore, currentStore.mostRecentConfig);
         currentStore.reconstructProgressFromLockFiles(statuses, subjects, staleness);
       })
-      .catch(() => {
-        // Silently fail — stale reconstruction is best-effort
+      .catch((err) => {
+        console.debug(
+          "[ImportExecution] readImportStatus failed (stale reconstruction is best-effort):",
+          err,
+        );
       });
     return () => {
       cancelled = true;
@@ -523,7 +526,9 @@ export default function ImportExecution() {
 
   const handleStop = useCallback(() => {
     if (pidRef.current !== null) {
-      void stopImportProcess(pidRef.current).catch(() => {});
+      void stopImportProcess(pidRef.current).catch((err) => {
+        console.warn("[ImportExecution] stopImportProcess failed:", err);
+      });
       pidRef.current = null;
     }
     cancelImportAction();

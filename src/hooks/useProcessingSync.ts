@@ -39,6 +39,7 @@ export function useProcessingSync() {
     const unsubscribe = useProcessingStore.subscribe((state) => {
       const project = useProjectStore.getState().project;
       if (!project) return;
+      const projectId = project.projectMeta.id;
 
       useProjectStore.getState().syncProcessingState({
         config: state.config,
@@ -49,7 +50,10 @@ export function useProcessingSync() {
         clearTimeout(autosaveTimerRef.current);
       }
       autosaveTimerRef.current = setTimeout(() => {
-        useProjectStore.getState().saveProject();
+        const current = useProjectStore.getState();
+        if (current.project?.projectMeta.id === projectId) {
+          current.saveProject();
+        }
         autosaveTimerRef.current = null;
       }, AUTOSAVE_DEBOUNCE_MS);
     });

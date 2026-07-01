@@ -77,7 +77,9 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
         await useProcessingStore
           .getState()
           .scanAvailableSubjects()
-          .catch(() => {});
+          .catch((err) => {
+            console.warn("[manifestStore] scanAvailableSubjects failed during QC load:", err);
+          });
         subjects = useProcessingStore.getState().availableSubjects;
       }
 
