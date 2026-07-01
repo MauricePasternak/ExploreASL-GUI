@@ -162,4 +162,19 @@ describe("ProjectFileSchema", () => {
     expect(parsed.uiState.manifest?.lastRunVersions).toBeUndefined();
     expect(parsed.uiState.manifest?.lastPopulationRunMtime).toBeUndefined();
   });
+
+  it("parses mappingState with invalid/wrong-typed properties using fallback defaults", () => {
+    const project = {
+      ...validProject,
+      mappingState: {
+        sourceDataPath: 12345,
+        rawPaths: "not-an-array",
+        runAliases: [{ captured: 123, alias: "alias" }],
+      },
+    };
+    const parsed = ProjectFileSchema.parse(project);
+    expect(parsed.mappingState.sourceDataPath).toBe("");
+    expect(parsed.mappingState.rawPaths).toEqual([]);
+    expect(parsed.mappingState.runAliases).toEqual([]);
+  });
 });
