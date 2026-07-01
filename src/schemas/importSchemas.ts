@@ -520,6 +520,14 @@ export type SourcestructureJson = z.infer<typeof SourcestructureJsonSchema>;
 
 export const IMPORT_STEPS = ["DCM2NII", "NII2BIDS"] as const;
 export const IMPORT_STATUSES = ["pending", "running", "completed", "failed", "cancelled"] as const;
+export const IMPORT_EXECUTION_PHASES = [
+  "idle",
+  "preparing",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
 
 export const ImportProgressSchema = z.object({
   subject: z.string(),
@@ -542,7 +550,7 @@ export type ImportProgress = z.infer<typeof ImportProgressSchema>;
 export const MetadataGroupSchema = z.object({
   id: z.string(),
   label: z.string(),
-  bidsParams: BidsAslMetadataSchema,
+  bidsParams: BidsAslMetadataBaseSchema,
 });
 
 export type MetadataGroup = z.infer<typeof MetadataGroupSchema>;
@@ -577,6 +585,23 @@ export const ImportSnapshotSchema = z.object({
 });
 
 export type ImportSnapshot = z.infer<typeof ImportSnapshotSchema>;
+
+export const MappingStateSchema = z.object({
+  sourceDataPath: z.string().catch("").optional(),
+  rawPaths: z.array(z.string()).catch([]).optional(),
+  pathPatterns: z.array(PathPatternSchema).catch([]).optional(),
+  bMatchDirectories: z.boolean().catch(true).optional(),
+  ingestionComplete: z.boolean().catch(false).optional(),
+  tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)).catch({}).optional(),
+  modalityAliases: z.array(ModalityAliasSchema).catch([]).optional(),
+  sessionAliases: z.array(SessionAliasSchema).catch([]).optional(),
+  runAliases: z.array(SessionAliasSchema).catch([]).optional(),
+  subjectRenames: z.array(SubjectRenameSchema).catch([]).optional(),
+  metadataGroups: z.array(MetadataGroupSchema).catch([]).optional(),
+  subjectRows: z.array(SubjectRowSchema).catch([]).optional(),
+});
+
+export type MappingState = z.infer<typeof MappingStateSchema>;
 
 // =============================================================================
 // Staging Entry (for symlink tree creation)

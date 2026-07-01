@@ -1,8 +1,20 @@
+import { z } from "zod";
 import { create } from "zustand";
 
 import { type ImportSubjectStatus } from "../lib/importStatus";
 import { getMaxRestorableImportStep } from "../lib/importStepAccess";
 
+import {
+  ImportSnapshotSchema,
+  IMPORT_EXECUTION_PHASES,
+  PathPatternSchema,
+  TokenAssignmentSchema,
+  ModalityAliasSchema,
+  SessionAliasSchema,
+  SubjectRenameSchema,
+  MetadataGroupSchema,
+  SubjectRowSchema,
+} from "../schemas/importSchemas";
 import type {
   ImportProgress,
   ImportSnapshot,
@@ -606,43 +618,61 @@ export const useImportStore = create<ImportState>((set) => ({
   },
 
   loadPersistedState: (persisted) => {
-    const safe = (key: string, fallback: unknown) => {
-      const val = (persisted as Record<string, unknown>)[key];
-      return val !== undefined ? val : fallback;
-    };
+    const schema = z.object({
+      sourceDataPath: z.string().catch("").default(""),
+      rawPaths: z.array(z.string()).catch([]).default([]),
+      pathPatterns: z.array(PathPatternSchema).catch([]).default([]),
+      bMatchDirectories: z.boolean().catch(true).default(true),
+      ingestionComplete: z.boolean().catch(false).default(false),
+      tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)).catch({}).default({}),
+      modalityAliases: z.array(ModalityAliasSchema).catch([]).default([]),
+      sessionAliases: z.array(SessionAliasSchema).catch([]).default([]),
+      runAliases: z.array(SessionAliasSchema).catch([]).default([]),
+      subjectRenames: z.array(SubjectRenameSchema).catch([]).default([]),
+      metadataGroups: z.array(MetadataGroupSchema).catch([]).default([]),
+      subjectRows: z.array(SubjectRowSchema).catch([]).default([]),
+      activeStep: z
+        .number()
+        .int()
+        .min(0)
+        .catch(INITIAL_STATE.activeStep)
+        .default(INITIAL_STATE.activeStep),
+      importPhase: z
+        .enum(IMPORT_EXECUTION_PHASES)
+        .catch(INITIAL_STATE.importPhase)
+        .default(INITIAL_STATE.importPhase),
+      importCompleted: z
+        .boolean()
+        .catch(INITIAL_STATE.importCompleted)
+        .default(INITIAL_STATE.importCompleted),
+      mostRecentConfig: ImportSnapshotSchema.nullable().catch(null).default(null),
+    });
 
-    const importPhase = normalizePersistedImportPhase(
-      safe("importPhase", INITIAL_STATE.importPhase),
-    );
-    const importCompleted =
-      importPhase === "failed"
-        ? false
-        : (safe("importCompleted", INITIAL_STATE.importCompleted) as boolean);
+    const parsed = schema.parse(persisted);
+
+    const importPhase = normalizePersistedImportPhase(parsed.importPhase);
+    const importCompleted = importPhase === "failed" ? false : parsed.importCompleted;
 
     const partialState = {
-      sourceDataPath: safe("sourceDataPath", INITIAL_STATE.sourceDataPath) as string,
-      rawPaths: safe("rawPaths", INITIAL_STATE.rawPaths) as string[],
-      pathPatterns: safe("pathPatterns", INITIAL_STATE.pathPatterns) as PathPattern[],
-      bMatchDirectories: safe("bMatchDirectories", INITIAL_STATE.bMatchDirectories) as boolean,
-      ingestionComplete: safe("ingestionComplete", INITIAL_STATE.ingestionComplete) as boolean,
-      tokenizerConfigs: safe("tokenizerConfigs", INITIAL_STATE.tokenizerConfigs) as Record<
-        string,
-        TokenAssignment[]
-      >,
-      modalityAliases: safe("modalityAliases", INITIAL_STATE.modalityAliases) as ModalityAlias[],
-      sessionAliases: safe("sessionAliases", INITIAL_STATE.sessionAliases) as SessionAlias[],
-      runAliases: safe("runAliases", INITIAL_STATE.runAliases) as SessionAlias[],
-      subjectRenames: safe("subjectRenames", INITIAL_STATE.subjectRenames) as SubjectRename[],
-      metadataGroups: safe("metadataGroups", INITIAL_STATE.metadataGroups) as MetadataGroup[],
-      subjectRows: safe("subjectRows", INITIAL_STATE.subjectRows) as SubjectRow[],
-      mostRecentConfig: (safe("mostRecentConfig", INITIAL_STATE.mostRecentConfig) ??
-        null) as ImportSnapshot | null,
+      sourceDataPath: parsed.sourceDataPath,
+      rawPaths: parsed.rawPaths,
+      pathPatterns: parsed.pathPatterns,
+      bMatchDirectories: parsed.bMatchDirectories,
+      ingestionComplete: parsed.ingestionComplete,
+      tokenizerConfigs: parsed.tokenizerConfigs,
+      modalityAliases: parsed.modalityAliases,
+      sessionAliases: parsed.sessionAliases,
+      runAliases: parsed.runAliases,
+      subjectRenames: parsed.subjectRenames,
+      metadataGroups: parsed.metadataGroups,
+      subjectRows: parsed.subjectRows,
+      mostRecentConfig: parsed.mostRecentConfig,
       importPhase,
       importCompleted,
       importRunning: false,
     };
 
-    const requestedStep = safe("activeStep", INITIAL_STATE.activeStep) as number;
+    const requestedStep = parsed.activeStep;
     const maxStep = getMaxRestorableImportStep(partialState);
 
     set({

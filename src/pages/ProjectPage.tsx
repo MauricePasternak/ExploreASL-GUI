@@ -58,6 +58,7 @@ export default function ProjectPage() {
       activeStep: project.uiState?.import?.activeStep,
       importPhase: project.uiState?.import?.currentPhase,
       importCompleted: project.uiState?.import?.completed,
+      mostRecentConfig: project.uiState?.import?.mostRecentConfig,
     };
     loadPersistedState(persistedState as Record<string, unknown>);
   }, [project?.projectMeta.id, loadPersistedState, project]);

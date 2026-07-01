@@ -2,6 +2,7 @@ import { z } from "zod";
 import { DataParSchema } from "./dataParSchema";
 import { ProcessConfigSchema, ProcessingPhaseSchema } from "./processingSchemas";
 import { decompressSnapshot } from "../lib/snapshotCompression";
+import { MappingStateSchema, IMPORT_EXECUTION_PHASES } from "./importSchemas";
 
 export const PROJECT_PHASES = [
   "import",
@@ -9,14 +10,6 @@ export const PROJECT_PHASES = [
   "processing",
   "visualization",
   "manifest",
-] as const;
-export const IMPORT_EXECUTION_PHASES = [
-  "idle",
-  "preparing",
-  "running",
-  "completed",
-  "failed",
-  "cancelled",
 ] as const;
 
 export const ProjectMetaSchema = z.object({
@@ -211,7 +204,7 @@ export const ProjectFileSchema = z.object({
     })
     .passthrough()
     .default({}),
-  mappingState: z.object({}).passthrough().default({}),
+  mappingState: MappingStateSchema.default({}),
   exploreAslConfig: z
     .object({
       sourcestructure: z.object({}).passthrough().default({}),

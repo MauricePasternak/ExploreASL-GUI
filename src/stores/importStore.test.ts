@@ -767,6 +767,32 @@ describe("importStore mostRecentConfig", () => {
     useImportStore.getState().loadPersistedState({});
     expect(useImportStore.getState().mostRecentConfig).toBeNull();
   });
+
+  it("loadPersistedState recovers gracefully using catch fallbacks for wrong-typed fields", () => {
+    const store = useImportStore.getState();
+    store.loadPersistedState({
+      sourceDataPath: 12345,
+      rawPaths: "not-an-array",
+      pathPatterns: [{ signature: 123 }],
+      bMatchDirectories: "yes",
+      tokenizerConfigs: null,
+      runAliases: ["corrupted"],
+      activeStep: -1,
+      importPhase: "not-a-phase",
+      importCompleted: 42,
+    });
+
+    const state = useImportStore.getState();
+    expect(state.sourceDataPath).toBe("");
+    expect(state.rawPaths).toEqual([]);
+    expect(state.pathPatterns).toEqual([]);
+    expect(state.bMatchDirectories).toBe(true);
+    expect(state.tokenizerConfigs).toEqual({});
+    expect(state.runAliases).toEqual([]);
+    expect(state.activeStep).toBe(0);
+    expect(state.importPhase).toBe("idle");
+    expect(state.importCompleted).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
