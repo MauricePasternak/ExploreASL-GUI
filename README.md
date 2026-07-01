@@ -236,6 +236,12 @@ Raw DICOM / NIfTI
 │  Visualization Module                                   │
 │  Scatter/swarm plots of ROI stats + NIfTI volume viewer │
 └─────────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│  Manifest Module                                        │
+│  QC triage (Pass/Fail) → Preview → Export methods doc   │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Import Dataset
@@ -259,6 +265,10 @@ Select the subjects and pipeline modules (Structural / ASL / Population) you wan
 ### Visualize Results
 
 Load population-level statistics TSV files and explore data via scatter and swarm plots. Click any data point to load the corresponding subject's qCBF NIfTI volume in an interactive 3D viewer.
+
+### Project Manifest
+
+After the Population pipeline completes, review per-subject QC metrics (ASL coverage, spatial CoV, motion, motion exclusion) and assign Pass / Fail verdicts with reasons. Stale detection flags verdicts set before the latest Population re-run. Export a self-contained Markdown or HTML document with per-group study parameters, software versions, QC summary statistics, and auto-generated methods paragraphs with full citations — ready for a paper's methods section or supplementary materials.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -298,8 +308,7 @@ ExploreASL_GUI/
 │   ├── src/                # Rust source files
 │   └── icons/              # Application icons
 ├── openspec/               # Feature specs (authoritative)
-│   ├── specs/              # Canonical specifications
-│   └── changes/            # In-progress change documents
+│   └── specs/              # Canonical specifications
 ├── e2e-tests/              # End-to-end tests (WebdriverIO + tauri-driver)
 └── test/                   # Test data & datasets
 ```
@@ -341,6 +350,8 @@ Unit tests cover schemas, Zustand stores, and utility functions. Component tests
 - [x] Processing parameter configuration (`dataPar.json`)
 - [x] Pipeline execution with real-time progress tracking
 - [x] Results visualization (population stats + NIfTI viewer)
+- [ ] Project manifest export
+- [ ] Import BIDS-ready datasets
 - [ ] Auto-update support
 - [ ] Documentation site
 
