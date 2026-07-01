@@ -70,7 +70,19 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
     set({ qcLoading: true });
     try {
       const { readAllSubjectQcOutputs } = await import("../lib/manifestQc");
-      const data = await readAllSubjectQcOutputs(projectRoot);
+      const { useProcessingStore } = await import("./processingStore");
+
+      let subjects = useProcessingStore.getState().availableSubjects;
+      if (subjects.length === 0) {
+        await useProcessingStore
+          .getState()
+          .scanAvailableSubjects()
+          .catch(() => {});
+        subjects = useProcessingStore.getState().availableSubjects;
+      }
+
+      const subjectSessions = subjects.map((s) => s.subjectSession);
+      const data = await readAllSubjectQcOutputs(projectRoot, subjectSessions);
       set({ qcData: data, qcLoaded: true, qcLoading: false });
     } catch (err) {
       console.warn("[manifestStore] failed to load QC data", err);

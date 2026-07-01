@@ -243,7 +243,9 @@ describe("ManifestPreview", () => {
     renderPreview();
 
     expect(screen.getByTestId("version-exploreasl")).toHaveTextContent("unknown");
-    expect(screen.getByTestId("version-gui")).toHaveTextContent("unknown");
+    expect(screen.getByTestId("version-gui")).toHaveTextContent(
+      import.meta.env.VITE_APP_VERSION ?? "unknown",
+    );
     expect(screen.getByTestId("version-matlab")).toHaveTextContent("unknown");
   });
 
@@ -440,6 +442,8 @@ describe("ManifestPreview", () => {
     expect(summary).toHaveTextContent("MATLAB R2023b");
     expect(summary).toHaveTextContent("3 subjects");
     expect(summary).toHaveTextContent("2 groups");
+    expect(screen.getByTestId("manifest-methods")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-references")).toBeInTheDocument();
   });
 
   // 13.6b — Ungrouped subjects appear in study parameters
@@ -522,7 +526,7 @@ describe("ManifestPreview", () => {
 
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({
-        defaultPath: "manifest.md",
+        defaultPath: "/test/project/manifest.md",
         filters: [{ name: "Markdown", extensions: ["md"] }],
       }),
     );
@@ -548,7 +552,7 @@ describe("ManifestPreview", () => {
 
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({
-        defaultPath: "manifest.html",
+        defaultPath: "/test/project/manifest.html",
         filters: [{ name: "HTML", extensions: ["html"] }],
       }),
     );

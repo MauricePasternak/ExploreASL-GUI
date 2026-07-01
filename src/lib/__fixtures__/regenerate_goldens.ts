@@ -5,6 +5,8 @@ import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import type { ManifestPayload } from "../manifestExport";
 import { renderHtml, renderMarkdown } from "../manifestExport";
+import { getDefaultDataPar } from "../dataParDefaults";
+import { generateMethodsParagraph } from "../manifestMethods";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -82,6 +84,13 @@ function makeFixtureManifest(): ManifestPayload {
     ],
     pipelineParagraph:
       "Data were processed with ExploreASL (version 1.0.0) running in MATLAB R2023b through the ExploreASL GUI (version 0.1.0). This manifest covers 4 subjects across 3 groups.",
+    ...(() => {
+      const methods = generateMethodsParagraph(getDefaultDataPar());
+      return {
+        methodsParagraphs: methods.paragraphs,
+        methodsReferences: methods.references,
+      };
+    })(),
     dataPar: {
       "x.Q.M0": 1,
       "x.bPVCNativeSpace": 0,
