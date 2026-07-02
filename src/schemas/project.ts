@@ -207,13 +207,9 @@ export const ProjectFileSchema = z.object({
   mappingState: MappingStateSchema.default({}),
   exploreAslConfig: z
     .object({
-      sourcestructure: z.object({}).passthrough().default({}),
-      studyPar: z.object({}).passthrough().default({}),
       dataPar: DataParSchema.default({}),
     })
     .default({
-      sourcestructure: {},
-      studyPar: {},
       dataPar: {},
     }),
 });
@@ -248,8 +244,6 @@ export const DEFAULT_PROJECT_FILE = (id: string, name: string, rootPath: string)
   },
   mappingState: {},
   exploreAslConfig: {
-    sourcestructure: {},
-    studyPar: {},
     dataPar: {},
   },
 });

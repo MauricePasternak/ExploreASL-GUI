@@ -8,6 +8,7 @@ import { syncSessionCheckpointFromProject } from "../lib/sessionCheckpoint";
 import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/project";
 import { useProjectStore } from "../stores/projectStore";
 import { useImportStore } from "../stores/importStore";
+import { useDataParStore } from "../stores/dataParStore";
 import ImportPage from "./ImportPage";
 import ManifestPage from "./ManifestPage";
 import ProcessingPage from "./ProcessingPage";
@@ -29,6 +30,29 @@ export default function ProjectPage() {
   const restoreInFlight = useRef(false);
   const hadProjectRef = useRef(Boolean(useProjectStore.getState().project));
   const hydratedProjectId = useRef<string | null>(null);
+  const hydratedDataParProjectId = useRef<string | null>(null);
+
+  // Hydrate dataPar store once per opened project
+  useEffect(() => {
+    if (!project) {
+      hydratedDataParProjectId.current = null;
+      useDataParStore.getState().resetDataPar();
+      return;
+    }
+
+    if (hydratedDataParProjectId.current === project.projectMeta.id) {
+      return;
+    }
+
+    hydratedDataParProjectId.current = project.projectMeta.id;
+
+    if (project.exploreAslConfig?.dataPar) {
+      useDataParStore.getState().loadDataPar(project.exploreAslConfig.dataPar);
+    }
+    if (project.uiState?.datapar?.advancedVisibility) {
+      useDataParStore.getState().setAdvancedVisibility(project.uiState.datapar.advancedVisibility);
+    }
+  }, [project]);
 
   // Hydrate import store once per opened project (not on every mappingState autosave)
   useEffect(() => {

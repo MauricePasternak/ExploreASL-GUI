@@ -179,7 +179,7 @@ describe("Visualization setup flow integration", () => {
         },
         uiState: { population: { completed: true } },
         mappingState: {},
-        exploreAslConfig: { sourcestructure: {}, studyPar: {}, dataPar: {} },
+        exploreAslConfig: { dataPar: {} },
       },
       isDirty: false,
       loaded: true,

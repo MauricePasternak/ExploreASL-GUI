@@ -138,8 +138,6 @@ describe("ImportSubjectTable", () => {
         uiState: {},
         mappingState: {},
         exploreAslConfig: {
-          sourcestructure: {},
-          studyPar: {},
           dataPar: {},
         },
       },
