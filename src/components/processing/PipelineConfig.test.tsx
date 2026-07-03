@@ -8,7 +8,6 @@ let mockConfig: Record<string, unknown> | null = {
   matlabPath: "/usr/bin/matlab",
   exploreAslPath: "/opt/ExploreASL",
   workers: 1,
-  subjectRegexp: "",
 };
 
 const mockSetConfig = vi.fn();
@@ -64,7 +63,6 @@ describe("PipelineConfig", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 4,
-        subjectRegexp: "",
       };
     });
 
@@ -83,7 +81,6 @@ describe("PipelineConfig", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       mockSetConfig.mockClear();
     });

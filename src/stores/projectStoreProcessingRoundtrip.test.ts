@@ -29,7 +29,6 @@ describe("processing config round-trip persistence", () => {
       matlabPath: "/usr/local/bin/matlab",
       exploreAslPath: "/opt/ExploreASL",
       workers: 4,
-      subjectRegexp: "^(sub-001|sub-002)$",
     } as any;
 
     useProjectStore.getState().syncProcessingState({

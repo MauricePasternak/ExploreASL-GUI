@@ -224,9 +224,7 @@ describe("ImportExecution", () => {
         },
         uiState: {},
         mappingState: {},
-        exploreAslConfig: {
-          dataPar: {},
-        },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,
@@ -261,9 +259,7 @@ describe("ImportExecution", () => {
         },
         uiState: {},
         mappingState: {},
-        exploreAslConfig: {
-          dataPar: {},
-        },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,
@@ -344,9 +340,7 @@ describe("ImportExecution", () => {
         },
         uiState: {},
         mappingState: {},
-        exploreAslConfig: {
-          dataPar: {},
-        },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,

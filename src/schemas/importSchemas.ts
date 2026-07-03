@@ -247,10 +247,10 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
   const hasM0Scan = aslContextTokens.includes("m0scan");
 
   if (hasM0Scan) {
-    if (data.M0Type && data.M0Type !== "Integrated") {
+    if (data.M0Type && data.M0Type !== "Included") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "M0 Type must be 'integrated' when ASL Context contains 'm0scan'",
+        message: "M0 Type must be 'Included' when ASL Context contains 'm0scan'",
         path: ["M0Type"],
       });
     }
@@ -262,10 +262,10 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
         path: ["M0Type"],
       });
     }
-    if (data.M0Type === "Integrated") {
+    if (data.M0Type === "Included") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'",
+        message: "M0 Type cannot be 'Included' when ASL Context does not contain 'm0scan'",
         path: ["M0Type"],
       });
     }
@@ -440,7 +440,7 @@ export const BidsAslMetadataBaseSchema = z
     Manufacturer: z.enum(["GE_product", "Philips", "Siemens"]).optional(),
 
     // === M0 ===
-    M0Type: z.enum(["Separate", "Integrated", "Absent", "Estimate"]).optional(),
+    M0Type: z.enum(["Separate", "Included", "Absent", "Estimate"]).optional(),
     M0_GMScaleFactor: z.number().positive().optional(),
 
     // === ExploreASL-specific ===
@@ -673,15 +673,15 @@ export function validateBidsMetadataGroup(params: BidsAslMetadata): string[] {
   const hasM0Scan = aslContextTokens.includes("m0scan");
 
   if (hasM0Scan) {
-    if (params.M0Type && params.M0Type !== "Integrated") {
-      errors.push("M0 Type must be 'Integrated' when ASL Context contains 'm0scan'.");
+    if (params.M0Type && params.M0Type !== "Included") {
+      errors.push("M0 Type must be 'Included' when ASL Context contains 'm0scan'.");
     }
   } else {
     if (!params.M0Type) {
       errors.push("M0 Type is required when ASL Context does not contain 'm0scan'.");
     }
-    if (params.M0Type === "Integrated") {
-      errors.push("M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.");
+    if (params.M0Type === "Included") {
+      errors.push("M0 Type cannot be 'Included' when ASL Context does not contain 'm0scan'.");
     }
   }
 

@@ -41,7 +41,7 @@ After `processingPhase` transitions to `"completed"` and `modules` includes `"po
 
 #### Scenario: Population flag cleared on re-run
 
-- **WHEN** the user starts processing with `config.modules` including `"population"` and `uiState.population.completed` is currently `true`
+- **WHEN** the user starts processing with `config.modules` including `"population"` and `uiState.processing.population.completed` is currently `true`
 - **THEN** the store SHALL call `setPopulationCompleted(false)` before transitioning to `preparing`, which in turn SHALL disable both the Visualization and Manifest phase nav entries via `canAccessPhase`
 
 #### Scenario: Population flag not cleared on non-Population re-run
@@ -52,7 +52,7 @@ After `processingPhase` transitions to `"completed"` and `modules` includes `"po
 #### Scenario: Versions captured on Population run start
 
 - **WHEN** `startProcessing` is called with `modules: ["population"]` and both version probes succeed
-- **THEN** before the run enters `preparing` phase, `project.uiState.manifest.lastRunVersions` SHALL be populated with non-`"unknown"` values for `exploreASL`, `matlab`, and `gui`
+- **THEN** before the run enters `preparing` phase, `project.uiState.processing.population.lastRun` SHALL be populated with non-`"unknown"` values for `exploreASLVersion`, `matlabVersion`, and `guiVersion`
 
 #### Scenario: Version probe failure does not block run
 

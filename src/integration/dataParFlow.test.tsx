@@ -81,7 +81,7 @@ describe("dataPar flow: store ↔ project sync", () => {
           },
         },
         mappingState: {},
-        exploreAslConfig: { dataPar: {} },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,
@@ -92,7 +92,7 @@ describe("dataPar flow: store ↔ project sync", () => {
     useDataParStore.getState().saveToProject();
 
     const project = useProjectStore.getState().project!;
-    expect(project.exploreAslConfig.dataPar).toMatchObject({
+    expect(project.dataPar).toMatchObject({
       bTopUp: true,
       Quality: 1,
     });
@@ -124,7 +124,7 @@ describe("dataPar flow: store ↔ project sync", () => {
           },
         },
         mappingState: {},
-        exploreAslConfig: { dataPar: {} },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,
@@ -144,7 +144,7 @@ describe("dataPar flow: store ↔ project sync", () => {
     }
     store.saveToProject();
 
-    const saved = useProjectStore.getState().project!.exploreAslConfig.dataPar;
+    const saved = useProjectStore.getState().project!.dataPar;
     expect(saved).toMatchObject(fields);
   });
 
@@ -173,7 +173,7 @@ describe("dataPar flow: store ↔ project sync", () => {
           },
         },
         mappingState: {},
-        exploreAslConfig: { dataPar: {} },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,

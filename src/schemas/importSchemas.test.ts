@@ -177,7 +177,7 @@ describe("BidsAslMetadataSchema", () => {
     MRAcquisitionType: "3D" as const,
     MagneticFieldStrength: 3,
     Manufacturer: "Siemens" as const,
-    M0Type: "Integrated" as const,
+    M0Type: "Included" as const,
     ASLContext: "m0scan,deltam",
     LabelingDuration: 1.8,
     BackgroundSuppression: false,
@@ -362,12 +362,12 @@ describe("BidsAslMetadataSchema", () => {
     ).toThrow();
   });
 
-  it("rejects M0Type 'integrated' when ASLContext does not contain m0scan", () => {
+  it("rejects M0Type 'Included' when ASLContext does not contain m0scan", () => {
     expect(() =>
       BidsAslMetadataSchema.parse({
         ...validBase,
         ASLContext: "control,label",
-        M0Type: "Integrated",
+        M0Type: "Included",
       }),
     ).toThrow();
   });
@@ -421,7 +421,7 @@ describe("validateBidsMetadataGroup", () => {
     EchoTime: 0.014,
     RepetitionTimePreparation: 4,
     Manufacturer: "Siemens" as const,
-    M0Type: "Integrated" as const,
+    M0Type: "Included" as const,
     ASLContext: "m0scan,deltam",
     LabelingDuration: 1.8,
     BackgroundSuppression: false,
@@ -444,25 +444,25 @@ describe("validateBidsMetadataGroup", () => {
     expect(errors).toContain("M0 Type is required when ASL Context does not contain 'm0scan'.");
   });
 
-  it("flags M0Type 'integrated' as invalid when no m0scan in ASLContext", () => {
+  it("flags M0Type 'Included' as invalid when no m0scan in ASLContext", () => {
     const errors = validateBidsMetadataGroup({
       ...validData,
       ASLContext: "control,label",
-      M0Type: "Integrated",
+      M0Type: "Included",
     });
     expect(errors).toContain(
-      "M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.",
+      "M0 Type cannot be 'Included' when ASL Context does not contain 'm0scan'.",
     );
   });
 
-  it("auto-accepts M0Type 'integrated' when m0scan is in ASLContext", () => {
+  it("auto-accepts M0Type 'Included' when m0scan is in ASLContext", () => {
     const errors = validateBidsMetadataGroup({
       ...validData,
-      M0Type: "Integrated",
+      M0Type: "Included",
       ASLContext: "m0scan,deltam",
     });
     expect(errors).not.toContain(
-      "M0 Type cannot be 'Integrated' when ASL Context does not contain 'm0scan'.",
+      "M0 Type cannot be 'Included' when ASL Context does not contain 'm0scan'.",
     );
   });
 

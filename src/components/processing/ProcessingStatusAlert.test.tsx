@@ -83,7 +83,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       renderAlert();
       const alert = screen.getByTestId("processing-status-alert");
@@ -100,7 +99,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       // Delay exists() resolution by returning a pending promise
       const { exists } = await import("@tauri-apps/plugin-fs");
@@ -122,7 +120,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -140,7 +137,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -158,7 +154,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -176,7 +171,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -194,7 +188,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       mockExistsResult = false;
       renderAlert();
@@ -213,7 +206,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       const { exists } = await import("@tauri-apps/plugin-fs");
       // First call: MATLAB exists. Second call: ExploreASL dir. Third call: ExploreASL.m missing.
@@ -238,7 +230,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 16,
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -256,7 +247,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 2,
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -276,7 +266,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       const { exists } = await import("@tauri-apps/plugin-fs");
       // MATLAB exists, ExploreASL dir exists, ExploreASL.m exists, dataPar dir missing
@@ -303,7 +292,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 4,
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -321,7 +309,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       mockAvailableSubjects = [{ subjectSession: "sub-001_01", module: "structural" }];
       mockSubjectStatuses = [{ subjectSession: "sub-999_01", module: "structural" }];
@@ -343,7 +330,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -361,7 +347,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 4, // workers > subjects triggers warning
-        subjectRegexp: "",
       };
       renderAlert();
       await waitFor(() => {
@@ -381,7 +366,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       const onResult = vi.fn();
       renderAlert(onResult);
@@ -399,7 +383,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/usr/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       const onResult = vi.fn();
       renderAlert(onResult);
@@ -418,7 +401,6 @@ describe("ProcessingStatusAlert", () => {
         matlabPath: "/bin/matlab",
         exploreAslPath: "/opt/ExploreASL",
         workers: 1,
-        subjectRegexp: "",
       };
       // exists() returns true for all paths (matlab exists on disk)
       const onResult = vi.fn();

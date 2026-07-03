@@ -56,9 +56,7 @@ describe("useProjectStore", () => {
         },
         uiState: {},
         mappingState: {},
-        exploreAslConfig: {
-          dataPar: {},
-        },
+        dataPar: {},
       }),
     );
 
@@ -304,7 +302,7 @@ describe("useProjectStore", () => {
           },
         },
         mappingState: {},
-        exploreAslConfig: { dataPar: {} },
+        dataPar: {},
       });
 
       vi.mocked(readTextFile).mockResolvedValue(legacyJson);
@@ -383,9 +381,7 @@ describe("useProjectStore", () => {
           },
           uiState: {},
           mappingState: {},
-          exploreAslConfig: {
-            dataPar: {},
-          },
+          dataPar: {},
         }),
       );
 
@@ -410,9 +406,7 @@ describe("useProjectStore", () => {
           },
           uiState: {},
           mappingState: {},
-          exploreAslConfig: {
-            dataPar: {},
-          },
+          dataPar: {},
         }),
       );
 
@@ -437,9 +431,7 @@ describe("useProjectStore", () => {
           },
           uiState: {},
           mappingState: {},
-          exploreAslConfig: {
-            dataPar: {},
-          },
+          dataPar: {},
         }),
       );
 
@@ -466,7 +458,7 @@ describe("useProjectStore", () => {
           },
           uiState: {},
           mappingState: {},
-          exploreAslConfig: { dataPar: {} },
+          dataPar: {},
         },
         isDirty: false,
         loaded: true,
@@ -474,7 +466,9 @@ describe("useProjectStore", () => {
 
       const { setPopulationCompleted } = useProjectStore.getState();
       setPopulationCompleted(true);
-      expect(useProjectStore.getState().project?.uiState.population?.completed).toBe(true);
+      expect(useProjectStore.getState().project?.uiState.processing?.population?.completed).toBe(
+        true,
+      );
       expect(useProjectStore.getState().isDirty).toBe(true);
     });
 
@@ -490,9 +484,9 @@ describe("useProjectStore", () => {
             lastOpened: new Date().toISOString(),
             currentPhase: "processing",
           },
-          uiState: { population: { completed: true } },
+          uiState: { processing: { population: { completed: true } } },
           mappingState: {},
-          exploreAslConfig: { dataPar: {} },
+          dataPar: {},
         },
         isDirty: false,
         loaded: true,
@@ -500,7 +494,9 @@ describe("useProjectStore", () => {
 
       const { setPopulationCompleted } = useProjectStore.getState();
       setPopulationCompleted(false);
-      expect(useProjectStore.getState().project?.uiState.population?.completed).toBe(false);
+      expect(useProjectStore.getState().project?.uiState.processing?.population?.completed).toBe(
+        false,
+      );
     });
 
     it("is a no-op when project is null", () => {
@@ -527,7 +523,7 @@ describe("useProjectStore", () => {
     },
     uiState: {} as Record<string, unknown>,
     mappingState: {} as Record<string, unknown>,
-    exploreAslConfig: { dataPar: {} },
+    dataPar: {},
   };
 
   describe("manifest verdicts: setManifestVerdict", () => {
@@ -611,11 +607,15 @@ describe("useProjectStore", () => {
         loaded: true,
       });
       const store = useProjectStore.getState() as any;
-      store.setLastRunVersions({ exploreASL: "1.0.0", matlab: "R2023b", gui: "0.1.0" });
-      expect(useProjectStore.getState().project?.uiState?.manifest?.lastRunVersions).toEqual({
-        exploreASL: "1.0.0",
-        matlab: "R2023b",
-        gui: "0.1.0",
+      store.setLastRunVersions({
+        exploreASLVersion: "1.0.0",
+        matlabVersion: "R2023b",
+        guiVersion: "0.1.0",
+      });
+      expect(useProjectStore.getState().project?.uiState?.processing?.population?.lastRun).toEqual({
+        exploreASLVersion: "1.0.0",
+        matlabVersion: "R2023b",
+        guiVersion: "0.1.0",
       });
       expect(useProjectStore.getState().isDirty).toBe(true);
     });
@@ -627,16 +627,16 @@ describe("useProjectStore", () => {
         loaded: true,
       });
       const store = useProjectStore.getState() as any;
-      store.setLastRunVersions({ exploreASL: "1.0.0" });
-      expect(useProjectStore.getState().project?.uiState?.manifest?.lastRunVersions).toEqual({
-        exploreASL: "1.0.0",
+      store.setLastRunVersions({ exploreASLVersion: "1.0.0" });
+      expect(useProjectStore.getState().project?.uiState?.processing?.population?.lastRun).toEqual({
+        exploreASLVersion: "1.0.0",
       });
     });
 
     it("is a no-op when project is null", () => {
       useProjectStore.setState({ project: null });
       const store = useProjectStore.getState() as any;
-      expect(() => store.setLastRunVersions({ gui: "0.1.0" })).not.toThrow();
+      expect(() => store.setLastRunVersions({ guiVersion: "0.1.0" })).not.toThrow();
       expect(useProjectStore.getState().project).toBeNull();
     });
   });
@@ -650,9 +650,9 @@ describe("useProjectStore", () => {
       });
       const store = useProjectStore.getState() as any;
       store.setLastPopulationRunMtime(1700000000000);
-      expect(useProjectStore.getState().project?.uiState?.manifest?.lastPopulationRunMtime).toBe(
-        1700000000000,
-      );
+      expect(
+        useProjectStore.getState().project?.uiState?.processing?.population?.lastRun?.Mtime,
+      ).toBe(1700000000000);
       expect(useProjectStore.getState().isDirty).toBe(true);
     });
 
@@ -665,7 +665,7 @@ describe("useProjectStore", () => {
       const store = useProjectStore.getState() as any;
       store.setLastPopulationRunMtime(null);
       expect(
-        useProjectStore.getState().project?.uiState?.manifest?.lastPopulationRunMtime,
+        useProjectStore.getState().project?.uiState?.processing?.population?.lastRun?.Mtime,
       ).toBeNull();
     });
 
@@ -688,7 +688,6 @@ describe("useProjectStore", () => {
           matlabPath: "/matlab",
           exploreAslPath: "/eas",
           workers: 1,
-          subjectRegexp: "^sub-.*$",
         },
         processingPhase: "idle",
       });
@@ -716,7 +715,6 @@ describe("useProjectStore", () => {
           matlabPath: "/matlab",
           exploreAslPath: "/eas",
           workers: 1,
-          subjectRegexp: "^sub-.*$",
         },
         processingPhase: "running",
       });
@@ -735,7 +733,7 @@ describe("useProjectStore", () => {
 
       const project = useProjectStore.getState().project!;
       expect(project.uiState.processing?.currentPhase).toBe("running");
-      expect(project.exploreAslConfig.dataPar.Atlases).toEqual(["Total"]);
+      expect(project.dataPar.Atlases).toEqual(["Total"]);
       expect(project.uiState.datapar?.advancedVisibility?.showAdvancedSections).toBe(true);
     });
   });

@@ -35,9 +35,7 @@ const PROJECT_JSON = {
   },
   uiState: {},
   mappingState: {},
-  exploreAslConfig: {
-    dataPar: {},
-  },
+  dataPar: {},
 };
 
 describe("ProjectPage", () => {
@@ -59,9 +57,7 @@ describe("ProjectPage", () => {
         },
         uiState: {},
         mappingState: {},
-        exploreAslConfig: {
-          dataPar: {},
-        },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,
@@ -96,7 +92,10 @@ describe("ProjectPage", () => {
             projectMeta: { ...state.project.projectMeta, currentPhase: "visualization" },
             uiState: {
               ...state.project.uiState,
-              population: { completed: true },
+              processing: {
+                ...state.project.uiState?.processing,
+                population: { completed: true },
+              },
             },
           }
         : null,

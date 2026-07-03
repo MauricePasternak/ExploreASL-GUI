@@ -12,6 +12,7 @@ import { modulesToBProcess, PROCESSING_MODULES } from "../schemas/processingSche
 import type { DataParJson } from "./assembleDataPar";
 import { useProcessingStore, clearProcessingListeners } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
+import { generateSubjectRegexp } from "./subjectMatching";
 
 // =============================================================================
 // Event Payload Types (matching Rust event shapes)
@@ -255,7 +256,7 @@ export async function runProcessingPipeline(
     dataParJson: JSON.stringify(dataPar),
     bProcess,
     workers,
-    subjectRegexp: config.subjectRegexp,
+    subjectRegexp: generateSubjectRegexp(config.subjects),
   });
 
   return pids;

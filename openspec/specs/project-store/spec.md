@@ -42,17 +42,17 @@ The project store SHALL persist `processingConfig` and `processingPhase` in the 
 
 ### Requirement: Population Completion Persistence
 
-The project store SHALL provide a `setPopulationCompleted(value: boolean)` action that sets `uiState.population.completed` and persists the change to the `.easl` project file. The `population` object in `uiState` SHALL be optional with a single `completed: boolean` field.
+The project store SHALL provide a `setPopulationCompleted(value: boolean)` action that sets `uiState.processing.population.completed` and persists the change to the `.easl` project file. The `population` object in `uiState.processing` SHALL be optional with a `completed: boolean` field and a `lastRun` metadata object.
 
 #### Scenario: Flag set to true
 
 - **WHEN** `setPopulationCompleted(true)` is called
-- **THEN** `uiState.population.completed` SHALL be set to `true` in the project store and persisted to the `.easl` file
+- **THEN** `uiState.processing.population.completed` SHALL be set to `true` in the project store and persisted to the `.easl` file
 
 #### Scenario: Flag cleared to false
 
 - **WHEN** `setPopulationCompleted(false)` is called
-- **THEN** `uiState.population.completed` SHALL be set to `false` and persisted
+- **THEN** `uiState.processing.population.completed` SHALL be set to `false` and persisted
 
 ### Requirement: DataVis Contract Persistence
 

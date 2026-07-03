@@ -25,7 +25,6 @@ export const ProcessConfigSchema = z.object({
   matlabPath: z.string(),
   exploreAslPath: z.string(),
   workers: z.number().int().min(1),
-  subjectRegexp: z.string(),
 });
 
 export const SubjectModuleStatusSchema = z.object({

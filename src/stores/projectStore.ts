@@ -50,7 +50,11 @@ interface ProjectState {
     opts: { reason?: ManifestFailReason; notes?: string; setAt?: number },
   ) => void;
   removeManifestVerdict: (subjectSession: string) => void;
-  setLastRunVersions: (versions: { exploreASL?: string; matlab?: string; gui?: string }) => void;
+  setLastRunVersions: (versions: {
+    exploreASLVersion?: string;
+    matlabVersion?: string;
+    guiVersion?: string;
+  }) => void;
   setLastPopulationRunMtime: (mtime: number | null) => void;
   closeProject: () => void;
 }
@@ -269,7 +273,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setPopulationCompleted: (value) => {
     updateProject(set, (project) => {
-      if (project.uiState?.population?.completed === value) {
+      if (project.uiState?.processing?.population?.completed === value) {
         return null;
       }
 
@@ -277,7 +281,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         ...project,
         uiState: {
           ...project.uiState,
-          population: { completed: value },
+          processing: {
+            ...project.uiState?.processing,
+            population: {
+              ...project.uiState?.processing?.population,
+              completed: value,
+            },
+          },
         },
       };
     });
@@ -289,7 +299,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
 
     updateProject(set, (project) => {
-      const fallbackMtime = project.uiState?.manifest?.lastPopulationRunMtime ?? Date.now();
+      const fallbackMtime = project.uiState?.processing?.population?.lastRun?.Mtime ?? Date.now();
       const verdict: ManifestVerdict = {
         status,
         reason: opts.reason as ManifestFailReason | undefined,
@@ -315,9 +325,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         uiState: {
           ...project.uiState,
           manifest: {
+            ...project.uiState?.manifest,
             verdicts: nextVerdicts,
-            lastRunVersions: project.uiState?.manifest?.lastRunVersions ?? {},
-            lastPopulationRunMtime: project.uiState?.manifest?.lastPopulationRunMtime ?? null,
           },
         },
       };
@@ -335,9 +344,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         uiState: {
           ...project.uiState,
           manifest: {
+            ...project.uiState?.manifest,
             verdicts: remaining,
-            lastRunVersions: project.uiState?.manifest?.lastRunVersions ?? {},
-            lastPopulationRunMtime: project.uiState?.manifest?.lastPopulationRunMtime ?? null,
           },
         },
       };
@@ -346,7 +354,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setLastRunVersions: (versions) => {
     updateProject(set, (project) => {
-      if (JSON.stringify(project.uiState?.manifest?.lastRunVersions) === JSON.stringify(versions)) {
+      const currentLastRun = project.uiState?.processing?.population?.lastRun;
+      if (
+        currentLastRun?.exploreASLVersion === versions.exploreASLVersion &&
+        currentLastRun?.matlabVersion === versions.matlabVersion &&
+        currentLastRun?.guiVersion === versions.guiVersion
+      ) {
         return null;
       }
 
@@ -354,10 +367,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         ...project,
         uiState: {
           ...project.uiState,
-          manifest: {
-            verdicts: project.uiState?.manifest?.verdicts ?? {},
-            lastRunVersions: versions,
-            lastPopulationRunMtime: project.uiState?.manifest?.lastPopulationRunMtime ?? null,
+          processing: {
+            ...project.uiState?.processing,
+            population: {
+              ...project.uiState?.processing?.population,
+              lastRun: {
+                ...currentLastRun,
+                exploreASLVersion: versions.exploreASLVersion,
+                matlabVersion: versions.matlabVersion,
+                guiVersion: versions.guiVersion,
+              },
+            },
           },
         },
       };
@@ -366,7 +386,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setLastPopulationRunMtime: (mtime) => {
     updateProject(set, (project) => {
-      if (project.uiState?.manifest?.lastPopulationRunMtime === mtime) {
+      if (project.uiState?.processing?.population?.lastRun?.Mtime === mtime) {
         return null;
       }
 
@@ -374,10 +394,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         ...project,
         uiState: {
           ...project.uiState,
-          manifest: {
-            verdicts: project.uiState?.manifest?.verdicts ?? {},
-            lastRunVersions: project.uiState?.manifest?.lastRunVersions ?? {},
-            lastPopulationRunMtime: mtime,
+          processing: {
+            ...project.uiState?.processing,
+            population: {
+              ...project.uiState?.processing?.population,
+              lastRun: {
+                ...project.uiState?.processing?.population?.lastRun,
+                Mtime: mtime,
+              },
+            },
           },
         },
       };
@@ -444,7 +469,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   syncDataParState: (dataPar, advancedVisibility) => {
     updateProject(set, (project) => {
       if (
-        JSON.stringify(project.exploreAslConfig.dataPar) === JSON.stringify(dataPar) &&
+        JSON.stringify(project.dataPar) === JSON.stringify(dataPar) &&
         JSON.stringify(project.uiState?.datapar?.advancedVisibility) ===
           JSON.stringify(advancedVisibility)
       ) {
@@ -453,10 +478,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
       return {
         ...project,
-        exploreAslConfig: {
-          ...project.exploreAslConfig,
-          dataPar,
-        },
+        dataPar,
         uiState: {
           ...project.uiState,
           datapar: {

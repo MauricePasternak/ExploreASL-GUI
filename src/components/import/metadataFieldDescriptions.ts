@@ -63,12 +63,12 @@ export const BIDS_FIELD_DESCRIPTIONS: Record<keyof BidsAslMetadata, string> = {
 
   // M0 Calibration
   M0Type:
-    "Describes how the M0 scan was acquired. Automatically set to 'Integrated' when ASL Context contains 'm0scan'. Otherwise choose: Separate (different file), Absent (no calibration data), or Estimate (calculated mathematically).",
+    "Describes how the M0 scan was acquired. Automatically set to 'Included' when ASL Context contains 'm0scan'. Otherwise choose: Separate (different file), Absent (no calibration data), or Estimate (calculated mathematically).",
   M0_GMScaleFactor: "Add additional scale factor to multiply the M0 image by.",
 
   // ExploreASL Specifics
   ASLContext:
-    "Comma-separated sequence describing each volume in the 4D timeseries. Valid values: control, label, m0scan, deltam. Example: 'm0scan, label, control, label, control'. When 'm0scan' is present, M0 Type is automatically set to 'Integrated'.",
+    "Comma-separated sequence describing each volume in the 4D timeseries. Valid values: control, label, m0scan, deltam. Example: 'm0scan, label, control, label, control'. When 'm0scan' is present, M0 Type is automatically set to 'Included'.",
   DatasetType:
     "Internal pipeline key used to identify the format structure of the input raw dataset.",
   LabelingType:

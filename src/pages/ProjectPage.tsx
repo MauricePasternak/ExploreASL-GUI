@@ -46,8 +46,8 @@ export default function ProjectPage() {
 
     hydratedDataParProjectId.current = project.projectMeta.id;
 
-    if (project.exploreAslConfig?.dataPar) {
-      useDataParStore.getState().loadDataPar(project.exploreAslConfig.dataPar);
+    if (project.dataPar) {
+      useDataParStore.getState().loadDataPar(project.dataPar);
     }
     if (project.uiState?.datapar?.advancedVisibility) {
       useDataParStore.getState().setAdvancedVisibility(project.uiState.datapar.advancedVisibility);

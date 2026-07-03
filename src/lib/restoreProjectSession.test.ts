@@ -19,9 +19,7 @@ const PROJECT_JSON = {
   },
   uiState: {},
   mappingState: {},
-  exploreAslConfig: {
-    dataPar: {},
-  },
+  dataPar: {},
 };
 
 describe("restoreProjectSession", () => {

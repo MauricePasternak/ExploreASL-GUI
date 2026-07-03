@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { matchSubjectsInFailureDescription } from "./subjectMatching";
+import { matchSubjectsInFailureDescription, generateSubjectRegexp } from "./subjectMatching";
 
 describe("matchSubjectsInFailureDescription", () => {
   it("matches subject names embedded in NII2BIDS failure descriptions", () => {
@@ -24,5 +24,19 @@ describe("matchSubjectsInFailureDescription", () => {
     expect(
       matchSubjectsInFailureDescription("NII2BIDS failed for unknown scan", ["BADDIE"]),
     ).toEqual([]);
+  });
+});
+
+describe("generateSubjectRegexp", () => {
+  it("returns default pattern when subjects list is empty", () => {
+    expect(generateSubjectRegexp([])).toBe("^sub-.*$");
+  });
+
+  it("escapes regex characters in subject names", () => {
+    expect(generateSubjectRegexp(["sub.001", "sub+002"])).toBe("^(sub\\.001|sub\\+002)$");
+  });
+
+  it("creates alternation pattern for multiple subjects", () => {
+    expect(generateSubjectRegexp(["sub-001", "sub-002"])).toBe("^(sub-001|sub-002)$");
   });
 });
