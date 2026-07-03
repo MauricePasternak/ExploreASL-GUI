@@ -146,15 +146,18 @@ function buildProjectState() {
       subjectRows: mockSubjectRows,
     },
     uiState: {
+      processing: {
+        population: {
+          lastRun: {
+            Mtime: null,
+          },
+        },
+      },
       manifest: {
         verdicts: mockVerdicts,
-        lastRunVersions: {},
-        lastPopulationRunMtime: null,
       },
     },
-    exploreAslConfig: {
-      dataPar: {},
-    },
+    dataPar: {},
   };
 }
 

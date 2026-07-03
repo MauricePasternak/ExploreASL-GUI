@@ -185,7 +185,7 @@ describe("dataParStore resetDataPar", () => {
 // saveToProject
 // ---------------------------------------------------------------------------
 describe("dataParStore saveToProject", () => {
-  it("syncs dataPar into project exploreAslConfig.dataPar", async () => {
+  it("syncs dataPar into project dataPar", async () => {
     await useProjectStore.getState().createProject("/tmp/test", "Test");
     useDataParStore.getState().setDataParField("bTopUp", true);
     useDataParStore.getState().setDataParField("Quality", 1);
@@ -193,7 +193,7 @@ describe("dataParStore saveToProject", () => {
     useDataParStore.getState().saveToProject();
 
     const project = useProjectStore.getState().project;
-    expect(project?.exploreAslConfig.dataPar).toMatchObject({
+    expect(project?.dataPar).toMatchObject({
       bTopUp: true,
       Quality: 1,
     });
@@ -228,13 +228,13 @@ describe("dataParStore saveToProject", () => {
     expect(useProjectStore.getState().project).toBeNull();
   });
 
-  it("merges with existing exploreAslConfig fields", async () => {
+  it("merges with existing dataPar fields", async () => {
     await useProjectStore.getState().createProject("/tmp/test3", "Test3");
     useDataParStore.getState().setDataParField("bTopUp", true);
 
     useDataParStore.getState().saveToProject();
 
     const project = useProjectStore.getState().project;
-    expect(project?.exploreAslConfig.dataPar).toMatchObject({ bTopUp: true });
+    expect(project?.dataPar).toMatchObject({ bTopUp: true });
   });
 });

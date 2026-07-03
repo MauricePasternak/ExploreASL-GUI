@@ -56,7 +56,6 @@ describe("runProcessingPipeline worker capping", () => {
     matlabPath: "/usr/bin/matlab",
     exploreAslPath: "/opt/ExploreASL",
     workers: 4,
-    subjectRegexp: "^(sub-001_01|sub-002_01)$",
   };
 
   beforeEach(() => {
@@ -170,7 +169,6 @@ describe("population completion mtime capture", () => {
         matlabPath: "",
         exploreAslPath: "",
         workers: 1,
-        subjectRegexp: "",
       } as any,
       workerPids: [] as number[],
       processingPhase: "running" as any,
@@ -216,9 +214,9 @@ describe("population completion mtime capture", () => {
       projectRoot: "/test/project_root",
     });
 
-    expect(useProjectStore.getState().project?.uiState?.manifest?.lastPopulationRunMtime).toBe(
-      1700000000000,
-    );
+    expect(
+      useProjectStore.getState().project?.uiState?.processing?.population?.lastRun?.Mtime,
+    ).toBe(1700000000000);
   });
 
   it("falls back to null when read_population_ready_mtime throws", async () => {
@@ -244,7 +242,6 @@ describe("population completion mtime capture", () => {
         matlabPath: "",
         exploreAslPath: "",
         workers: 1,
-        subjectRegexp: "",
       } as any,
       workerPids: [99],
       processingPhase: "running" as any,
@@ -257,7 +254,7 @@ describe("population completion mtime capture", () => {
     await workerExitedCb({ payload: { pid: 99, exitCode: 0 } });
 
     expect(
-      useProjectStore.getState().project?.uiState?.manifest?.lastPopulationRunMtime,
+      useProjectStore.getState().project?.uiState?.processing?.population?.lastRun?.Mtime,
     ).toBeNull();
   });
 });

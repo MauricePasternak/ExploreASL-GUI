@@ -82,7 +82,7 @@ export default function QcSelectionTable({
   const qcData = useManifestStore((s) => s.qcData);
   const qcLoaded = useManifestStore((s) => s.qcLoaded);
   const lastPopulationRunMtime =
-    useProjectStore((s) => s.project?.uiState?.manifest?.lastPopulationRunMtime) ?? undefined;
+    useProjectStore((s) => s.project?.uiState?.processing?.population?.lastRun?.Mtime) ?? undefined;
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
 
   const [logFiles, setLogFiles] = useState<Map<string, LogFileInfo[]>>(new Map());

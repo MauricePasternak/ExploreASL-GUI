@@ -52,7 +52,6 @@ describe("participantsUtils", () => {
       matlabPath: "/usr/bin/matlab",
       exploreAslPath: "/opt/ExploreASL",
       workers: 4,
-      subjectRegexp: "",
     };
 
     const mappingState = {

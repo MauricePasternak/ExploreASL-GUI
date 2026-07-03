@@ -138,12 +138,12 @@ The system SHALL provide an `assembleDataPar(state: DataParState): DataParJson` 
 
 ### Requirement: Write timing — dataPar.json at processing time
 
-The dataPar.json file SHALL NOT be written to disk on every field change. Edits SHALL be persisted to `.easl` under `exploreAslConfig.dataPar` immediately. The Rust backend SHALL merge `.easl` dataPar state with per-run dataset params and write the combined result to `<root>/derivatives/ExploreASL/dataPar.json` only when "Start Processing" is invoked.
+The dataPar.json file SHALL NOT be written to disk on every field change. Edits SHALL be persisted to `.easl` under `dataPar` immediately. The Rust backend SHALL merge `.easl` dataPar state with per-run dataset params and write the combined result to `<root>/derivatives/ExploreASL/dataPar.json` only when "Start Processing" is invoked.
 
 #### Scenario: User edits parameters without running processing
 
 - **WHEN** user toggles bTopUp and navigates away
-- **THEN** `.easl` file contains `{ "exploreAslConfig": { "dataPar": { "modules": { "asl": { "bTopUp": true } } } } }` but `dataPar.json` on disk is unchanged
+- **THEN** `.easl` file contains `{ "dataPar": { "modules": { "asl": { "bTopUp": true } } } }` but `dataPar.json` on disk is unchanged
 
 #### Scenario: User starts processing
 

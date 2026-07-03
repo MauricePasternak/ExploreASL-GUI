@@ -110,7 +110,7 @@ let mockMetadataGroups: MetadataGroup[] = [];
 let mockSubjectRows: SubjectRow[] = [];
 let mockAvailableSubjects: SubjectInfo[] = [];
 let mockVerdicts: Record<string, ManifestVerdict> = {};
-let mockVersions: { exploreASL?: string; matlab?: string; gui?: string } = {};
+let mockVersions: { exploreASLVersion?: string; matlabVersion?: string; guiVersion?: string } = {};
 
 function buildProjectState() {
   return {
@@ -128,15 +128,16 @@ function buildProjectState() {
       subjectRows: mockSubjectRows,
     },
     uiState: {
+      processing: {
+        population: {
+          lastRun: mockVersions,
+        },
+      },
       manifest: {
         verdicts: mockVerdicts,
-        lastRunVersions: mockVersions,
-        lastPopulationRunMtime: null,
       },
     },
-    exploreAslConfig: {
-      dataPar: {},
-    },
+    dataPar: {},
   };
 }
 
@@ -182,7 +183,7 @@ describe("ManifestPreview", () => {
       SUB_01: { status: "pass", setAt: 1 },
       SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
     };
-    mockVersions = { exploreASL: "1.0.0", matlab: "R2023b", gui: "0.1.0" };
+    mockVersions = { exploreASLVersion: "1.0.0", matlabVersion: "R2023b", guiVersion: "0.1.0" };
 
     renderPreview();
 
@@ -253,7 +254,7 @@ describe("ManifestPreview", () => {
     mockSubjectRows = [subjectRow1];
     mockAvailableSubjects = [subj1];
     mockVerdicts = {};
-    mockVersions = { exploreASL: "2.0.0", matlab: "R2024a", gui: "1.5.0" };
+    mockVersions = { exploreASLVersion: "2.0.0", matlabVersion: "R2024a", guiVersion: "1.5.0" };
 
     renderPreview();
 
@@ -422,7 +423,7 @@ describe("ManifestPreview", () => {
     mockSubjectRows = [subjectRow1, subjectRow2, subjectRow3];
     mockAvailableSubjects = [subj1, subj2, subj3];
     mockVerdicts = {};
-    mockVersions = { exploreASL: "1.0", matlab: "R2023b", gui: "0.1" };
+    mockVersions = { exploreASLVersion: "1.0", matlabVersion: "R2023b", guiVersion: "0.1" };
 
     useManifestStore.setState({
       qcData: {

@@ -8,6 +8,7 @@ import type {
 } from "../schemas/processingSchemas";
 import { useProjectStore } from "./projectStore";
 import { useDataParStore } from "./dataParStore";
+import { generateSubjectRegexp } from "../lib/subjectMatching";
 
 // =============================================================================
 // State Interface
@@ -43,16 +44,6 @@ const INITIAL_STATE = {
   subjectStatuses: [] as SubjectModuleStatus[],
   workerPids: [] as number[],
 };
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-function generateSubjectRegexp(subjects: string[]): string {
-  if (subjects.length === 0) return "^sub-.*$";
-  const escaped = subjects.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  return `^(${escaped.join("|")})$`;
-}
 
 // =============================================================================
 // Cleanup ref
@@ -93,8 +84,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     const patched = modules.includes("population")
       ? { ...config, modules, workers: 1 }
       : { ...config, modules };
-    const subjectRegexp = generateSubjectRegexp(patched.subjects);
-    set({ config: { ...patched, subjectRegexp } });
+    set({ config: patched });
   },
 
   startProcessing: async () => {
@@ -132,16 +122,16 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
           useProjectStore.getState().project?.version ??
           "unknown";
         useProjectStore.getState().setLastRunVersions({
-          exploreASL: versions.explore_asl,
-          matlab: versions.matlab,
-          gui,
+          exploreASLVersion: versions.explore_asl,
+          matlabVersion: versions.matlab,
+          guiVersion: gui,
         });
       } catch (err) {
         console.warn("[manifest] version capture failed", err);
         useProjectStore.getState().setLastRunVersions({
-          exploreASL: "unknown",
-          matlab: "unknown",
-          gui: useProjectStore.getState().project?.version ?? "unknown",
+          exploreASLVersion: "unknown",
+          matlabVersion: "unknown",
+          guiVersion: useProjectStore.getState().project?.version ?? "unknown",
         });
       }
     }
@@ -174,7 +164,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     const { assembleDataPar } = await import("../lib/assembleDataPar");
     const dataParJson = assembleDataPar(dataPar);
     dataParJson.x.dataset = {
-      subjectRegexp: config.subjectRegexp,
+      subjectRegexp: generateSubjectRegexp(config.subjects),
       ...(config.subjects.length > 0 && { ForceInclusionList: config.subjects }),
     };
 

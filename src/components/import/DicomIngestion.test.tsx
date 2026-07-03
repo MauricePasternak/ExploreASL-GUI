@@ -73,9 +73,7 @@ describe("DicomIngestion", () => {
         },
         uiState: {},
         mappingState: {},
-        exploreAslConfig: {
-          dataPar: {},
-        },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,

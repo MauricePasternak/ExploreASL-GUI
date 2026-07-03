@@ -68,7 +68,6 @@ const STRUCTURAL_ASL_CONFIG: ProcessConfig = {
   matlabPath: "/usr/local/bin/matlab",
   exploreAslPath: "/opt/ExploreASL",
   workers: 4,
-  subjectRegexp: "^(sub-001_01|sub-002_02)$",
 };
 
 const POPULATION_CONFIG: ProcessConfig = {
@@ -77,7 +76,6 @@ const POPULATION_CONFIG: ProcessConfig = {
   matlabPath: "/usr/local/bin/matlab",
   exploreAslPath: "/opt/ExploreASL",
   workers: 8,
-  subjectRegexp: "^sub-.*$",
 };
 
 const STATUS_A: SubjectModuleStatus = {
@@ -145,66 +143,6 @@ describe("processingStore setConfig", () => {
     expect(useProcessingStore.getState().config?.workers).toBe(4);
   });
 
-  it("recomputes subjectRegexp when subjects change", () => {
-    const config: ProcessConfig = {
-      subjects: [],
-      modules: ["structural", "asl"],
-      matlabPath: "/usr/local/bin/matlab",
-      exploreAslPath: "/opt/ExploreASL",
-      workers: 4,
-      subjectRegexp: "^sub-.*$",
-    };
-    useProcessingStore.getState().setConfig(config);
-    expect(useProcessingStore.getState().config?.subjectRegexp).toBe("^sub-.*$");
-  });
-
-  it("recomputes subjectRegexp to alternation when subjects are selected", () => {
-    const config: ProcessConfig = {
-      subjects: ["sub-001", "sub-002"],
-      modules: ["structural", "asl"],
-      matlabPath: "/usr/local/bin/matlab",
-      exploreAslPath: "/opt/ExploreASL",
-      workers: 4,
-      subjectRegexp: "^sub-.*$",
-    };
-    useProcessingStore.getState().setConfig(config);
-    expect(useProcessingStore.getState().config?.subjectRegexp).toBe("^(sub-001|sub-002)$");
-  });
-
-  it("recomputes subjectRegexp when setConfig changes subjects", () => {
-    const initial: ProcessConfig = {
-      subjects: [],
-      modules: ["structural"],
-      matlabPath: "/usr/local/bin/matlab",
-      exploreAslPath: "/opt/ExploreASL",
-      workers: 2,
-      subjectRegexp: "^sub-.*$",
-    };
-    useProcessingStore.getState().setConfig(initial);
-    expect(useProcessingStore.getState().config?.subjectRegexp).toBe("^sub-.*$");
-
-    const updated: ProcessConfig = {
-      ...initial,
-      subjects: ["sub-003"],
-      subjectRegexp: "^sub-.*$",
-    };
-    useProcessingStore.getState().setConfig(updated);
-    expect(useProcessingStore.getState().config?.subjectRegexp).toBe("^(sub-003)$");
-  });
-
-  it("escapes regex special characters in subject names", () => {
-    const config: ProcessConfig = {
-      subjects: ["sub-001.5", "sub+002"],
-      modules: ["structural"],
-      matlabPath: "/usr/local/bin/matlab",
-      exploreAslPath: "/opt/ExploreASL",
-      workers: 2,
-      subjectRegexp: "^sub-.*$",
-    };
-    useProcessingStore.getState().setConfig(config);
-    expect(useProcessingStore.getState().config?.subjectRegexp).toBe("^(sub-001\\.5|sub\\+002)$");
-  });
-
   it("removes structural and asl when population is added", () => {
     const { setConfig } = useProcessingStore.getState();
     setConfig({
@@ -213,7 +151,6 @@ describe("processingStore setConfig", () => {
       matlabPath: "",
       exploreAslPath: "",
       workers: 4,
-      subjectRegexp: "",
     });
     setConfig({
       subjects: [],
@@ -221,7 +158,6 @@ describe("processingStore setConfig", () => {
       matlabPath: "",
       exploreAslPath: "",
       workers: 4,
-      subjectRegexp: "",
     });
     expect(useProcessingStore.getState().config?.modules).toEqual(["population"]);
   });
@@ -234,7 +170,6 @@ describe("processingStore setConfig", () => {
       matlabPath: "",
       exploreAslPath: "",
       workers: 1,
-      subjectRegexp: "",
     });
     setConfig({
       subjects: [],
@@ -242,7 +177,6 @@ describe("processingStore setConfig", () => {
       matlabPath: "",
       exploreAslPath: "",
       workers: 1,
-      subjectRegexp: "",
     });
     expect(useProcessingStore.getState().config?.modules).toEqual(["structural"]);
   });
@@ -255,7 +189,6 @@ describe("processingStore setConfig", () => {
       matlabPath: "",
       exploreAslPath: "",
       workers: 1,
-      subjectRegexp: "",
     });
     setConfig({
       subjects: [],
@@ -263,7 +196,6 @@ describe("processingStore setConfig", () => {
       matlabPath: "",
       exploreAslPath: "",
       workers: 1,
-      subjectRegexp: "",
     });
     expect(useProcessingStore.getState().config?.modules).toEqual(["asl"]);
   });
@@ -607,7 +539,7 @@ describe("processingStore Tauri integration: startProcessing", () => {
     const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
     expect(lastCall?.[0]).toEqual(STRUCTURAL_ASL_CONFIG);
     expect(lastCall?.[1].x.dataset).toEqual({
-      subjectRegexp: STRUCTURAL_ASL_CONFIG.subjectRegexp,
+      subjectRegexp: "^(sub-001_01|sub-002_02)$",
       ForceInclusionList: STRUCTURAL_ASL_CONFIG.subjects,
     });
   });
@@ -620,7 +552,7 @@ describe("processingStore Tauri integration: startProcessing", () => {
     const expectedConfig = { ...POPULATION_CONFIG, workers: 1 };
     expect(lastCall?.[0]).toEqual(expectedConfig);
     expect(lastCall?.[1].x.dataset).toEqual({
-      subjectRegexp: POPULATION_CONFIG.subjectRegexp,
+      subjectRegexp: "^sub-.*$",
     });
     expect(lastCall?.[1].x.dataset.ForceInclusionList).toBeUndefined();
   });
@@ -869,9 +801,9 @@ describe("processingStore manifest version capture", () => {
     await useProcessingStore.getState().startProcessing();
     expect(mockSetLastRunVersions).toHaveBeenCalledWith(
       expect.objectContaining({
-        exploreASL: "1.0.0",
-        matlab: "R2023b",
-        gui: expect.any(String),
+        exploreASLVersion: "1.0.0",
+        matlabVersion: "R2023b",
+        guiVersion: expect.any(String),
       }),
     );
   });
@@ -895,9 +827,9 @@ describe("processingStore manifest version capture", () => {
 
     expect(mockSetLastRunVersions).toHaveBeenCalledWith(
       expect.objectContaining({
-        exploreASL: "unknown",
-        matlab: "unknown",
-        gui: "unknown",
+        exploreASLVersion: "unknown",
+        matlabVersion: "unknown",
+        guiVersion: "unknown",
       }),
     );
     warnSpy.mockRestore();

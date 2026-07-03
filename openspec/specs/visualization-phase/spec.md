@@ -27,46 +27,46 @@ The project phase system SHALL include `visualization` as the fourth phase after
 
 ### Requirement: Visualization Phase Gate
 
-Access to the visualization phase SHALL be gated by `uiState.population?.completed === true`. The `canAccessPhase` function SHALL return true for `"visualization"` only when this flag is set. The flag is a static persisted value — it SHALL NOT re-verify the filesystem on every route change.
+Access to the visualization phase SHALL be gated by `uiState.processing.population?.completed === true`. The `canAccessPhase` function SHALL return true for `"visualization"` only when this flag is set. The flag is a static persisted value — it SHALL NOT re-verify the filesystem on every route change.
 
 #### Scenario: Access granted after Population completion
 
-- **WHEN** `uiState.population.completed` is `true` and the user navigates to visualization
+- **WHEN** `uiState.processing.population.completed` is `true` and the user navigates to visualization
 - **THEN** `canAccessPhase` SHALL return true and the page SHALL render
 
 #### Scenario: Access denied without Population completion
 
-- **WHEN** `uiState.population.completed` is `undefined` or `false`
+- **WHEN** `uiState.processing.population.completed` is `undefined` or `false`
 - **THEN** `canAccessPhase` SHALL return false for `"visualization"` and the user SHALL be redirected to the current phase
 
 #### Scenario: Access denied when Population flag missing
 
-- **WHEN** `uiState.population` is entirely absent from the project file
+- **WHEN** `uiState.processing.population` is entirely absent from the project file
 - **THEN** `canAccessPhase` SHALL return false for `"visualization"`
 
 ### Requirement: Population Completion Flag
 
-The `processingStore` SHALL set `uiState.population.completed = true` via a `setPopulationCompleted(true)` action on the project store when `processingPhase` transitions to `"completed"` AND the processing config's `modules` includes `"population"`. The flag SHALL be persisted to the `.easl` project file. The `processingStore` SHALL clear the flag (`setPopulationCompleted(false)`) when `startProcessing` is called with Population module selected (re-run scenario).
+The `processingStore` SHALL set `uiState.processing.population.completed = true` via a `setPopulationCompleted(true)` action on the project store when `processingPhase` transitions to `"completed"` AND the processing config's `modules` includes `"population"`. The flag SHALL be persisted to the `.easl` project file. The `processingStore` SHALL clear the flag (`setPopulationCompleted(false)`) when `startProcessing` is called with Population module selected (re-run scenario).
 
 #### Scenario: Flag set on Population completion
 
 - **WHEN** all workers exit, `read_lock_status` confirms all subjects complete, and `config.modules` includes `"population"`
-- **THEN** `uiState.population.completed` SHALL be set to `true` and persisted to the `.easl` file
+- **THEN** `uiState.processing.population.completed` SHALL be set to `true` and persisted to the `.easl` file
 
 #### Scenario: Flag not set when Population not selected
 
 - **WHEN** all workers exit successfully but `config.modules` does not include `"population"`
-- **THEN** `uiState.population.completed` SHALL NOT be set
+- **THEN** `uiState.processing.population.completed` SHALL NOT be set
 
 #### Scenario: Flag cleared on Population re-run
 
-- **WHEN** the user starts processing with `config.modules` including `"population"` and `uiState.population.completed` is currently `true`
-- **THEN** `uiState.population.completed` SHALL be cleared to `false` before workers are spawned
+- **WHEN** the user starts processing with `config.modules` including `"population"` and `uiState.processing.population.completed` is currently `true`
+- **THEN** `uiState.processing.population.completed` SHALL be cleared to `false` before workers are spawned
 
 #### Scenario: Flag not cleared on non-Population re-run
 
 - **WHEN** the user starts processing with `config.modules` not including `"population"`
-- **THEN** `uiState.population.completed` SHALL NOT be cleared
+- **THEN** `uiState.processing.population.completed` SHALL NOT be cleared
 
 ### Requirement: Stats Directory Runtime Scan
 
@@ -98,12 +98,12 @@ The navbar SHALL include a "Visualization" entry with `IconChartScatter` icon. T
 
 #### Scenario: Navbar entry enabled after Population completion
 
-- **WHEN** `uiState.population.completed` is `true`
+- **WHEN** `uiState.processing.population.completed` is `true`
 - **THEN** the "Visualization" navbar entry SHALL be enabled and clickable
 
 #### Scenario: Navbar entry disabled before Population completion
 
-- **WHEN** `uiState.population.completed` is `undefined` or `false`
+- **WHEN** `uiState.processing.population.completed` is `undefined` or `false`
 - **THEN** the "Visualization" navbar entry SHALL be disabled and non-clickable
 
 #### Scenario: Collapsed navbar shows icon only

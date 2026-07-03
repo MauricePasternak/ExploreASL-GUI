@@ -46,7 +46,6 @@ const DEFAULT_CONFIG = {
   matlabPath: "/usr/bin/matlab",
   exploreAslPath: "/opt/ExploreASL",
   workers: 2,
-  subjectRegexp: "^(sub-001_01|sub-002_01)$",
 };
 
 const DEFAULT_SUBJECTS = [
@@ -201,7 +200,6 @@ describe("ProcessingPage", () => {
           ...DEFAULT_CONFIG,
           subjects: [],
           modules: ["structural", "asl"],
-          subjectRegexp: "^sub-.*$",
         },
       });
       renderPage();
@@ -220,7 +218,6 @@ describe("ProcessingPage", () => {
         config: {
           ...DEFAULT_CONFIG,
           modules: [],
-          subjectRegexp: "^sub-.*$",
         },
       });
       renderPage();

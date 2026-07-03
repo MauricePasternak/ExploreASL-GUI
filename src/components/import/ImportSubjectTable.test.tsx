@@ -137,9 +137,7 @@ describe("ImportSubjectTable", () => {
         },
         uiState: {},
         mappingState: {},
-        exploreAslConfig: {
-          dataPar: {},
-        },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,

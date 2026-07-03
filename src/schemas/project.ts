@@ -49,14 +49,6 @@ export const ManifestVerdictSchema = z
 
 export const ManifestUiStateSchema = z.object({
   verdicts: z.record(z.string(), ManifestVerdictSchema).optional(),
-  lastRunVersions: z
-    .object({
-      exploreASL: z.string().optional(),
-      matlab: z.string().optional(),
-      gui: z.string().optional(),
-    })
-    .optional(),
-  lastPopulationRunMtime: z.number().int().nullable().optional(),
 });
 
 export type ManifestFailReason = (typeof MANIFEST_FAIL_REASONS)[number];
@@ -94,6 +86,19 @@ export const ProjectFileSchema = z.object({
         .object({
           config: ProcessConfigSchema.optional(),
           currentPhase: ProcessingPhaseSchema.optional(),
+          population: z
+            .object({
+              completed: z.boolean().optional(),
+              lastRun: z
+                .object({
+                  exploreASLVersion: z.string().optional(),
+                  matlabVersion: z.string().optional(),
+                  guiVersion: z.string().optional(),
+                  Mtime: z.number().int().nullable().optional(),
+                })
+                .optional(),
+            })
+            .optional(),
         })
         .optional(),
       datapar: z
@@ -119,7 +124,6 @@ export const ProjectFileSchema = z.object({
         })
         .optional(),
       manifest: ManifestUiStateSchema.optional(),
-      population: z.object({ completed: z.boolean().optional() }).optional(),
       dataVis: z
         .object({
           qcbfSource: z
@@ -205,13 +209,7 @@ export const ProjectFileSchema = z.object({
     .passthrough()
     .default({}),
   mappingState: MappingStateSchema.default({}),
-  exploreAslConfig: z
-    .object({
-      dataPar: DataParSchema.default({}),
-    })
-    .default({
-      dataPar: {},
-    }),
+  dataPar: DataParSchema.default({}),
 });
 
 export type ImportUiState = z.infer<typeof ImportUiStateSchema>;
@@ -243,9 +241,7 @@ export const DEFAULT_PROJECT_FILE = (id: string, name: string, rootPath: string)
     },
   },
   mappingState: {},
-  exploreAslConfig: {
-    dataPar: {},
-  },
+  dataPar: {},
 });
 
 export const PROJECT_FILE_NAME = "project.easl";
@@ -262,10 +258,10 @@ export function canAccessPhase(project: ProjectFile, targetPhase: ProjectPhase) 
     return project.uiState?.import?.completed === true;
   }
   if (targetPhase === "visualization") {
-    return project.uiState?.population?.completed === true;
+    return project.uiState?.processing?.population?.completed === true;
   }
   if (targetPhase === "manifest") {
-    return project.uiState?.population?.completed === true;
+    return project.uiState?.processing?.population?.completed === true;
   }
   return false;
 }

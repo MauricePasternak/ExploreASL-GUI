@@ -19,7 +19,6 @@ describe("ProcessConfigSchema", () => {
     matlabPath: "/usr/local/MATLAB/R2023b",
     exploreAslPath: "/opt/ExploreASL",
     workers: 4,
-    subjectRegexp: "^sub-.*$",
   };
 
   it("accepts valid config", () => {

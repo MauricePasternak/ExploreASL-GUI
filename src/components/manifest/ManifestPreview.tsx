@@ -55,16 +55,11 @@ function useBuildManifestPayload(): ManifestPayload {
   const exploreAslGlobalVersion = useGlobalStore((s) => s.settings.exploreAslVersion);
   const verdicts: Record<string, ManifestVerdict> =
     (project?.uiState?.manifest?.verdicts as Record<string, ManifestVerdict> | undefined) ?? {};
+  const lastRun = project?.uiState?.processing?.population?.lastRun;
   const versions = {
-    exploreASL:
-      project?.uiState?.manifest?.lastRunVersions?.exploreASL ||
-      exploreAslGlobalVersion ||
-      undefined,
-    matlab: project?.uiState?.manifest?.lastRunVersions?.matlab,
-    gui:
-      project?.uiState?.manifest?.lastRunVersions?.gui ??
-      project?.version ??
-      import.meta.env.VITE_APP_VERSION,
+    exploreASL: lastRun?.exploreASLVersion || exploreAslGlobalVersion || undefined,
+    matlab: lastRun?.matlabVersion,
+    gui: lastRun?.guiVersion ?? project?.version ?? import.meta.env.VITE_APP_VERSION,
   };
 
   const subjectSessionGroups = new Map<string, string>();

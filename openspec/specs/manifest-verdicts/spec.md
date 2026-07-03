@@ -75,12 +75,12 @@ A verdict's `setAt` field SHALL equal the integer mtime (milliseconds since epoc
 
 ### Requirement: Population Re-run Locks Manifest Phase
 
-Because the existing `processingStore.startProcessing` already calls `setPopulationCompleted(false)` when re-running the Population module, no new logic SHALL be added for the lockout — the gate's existing dependency on `population.completed` SHALL cascade to the manifest phase via the shared `canAccessPhase` gate. No verdict SHALL be deleted by a re-run; verdicts persist and become stale per the Staleness Reference requirement.
+Because the existing `processingStore.startProcessing` already calls `setPopulationCompleted(false)` when re-running the Population module, no new logic SHALL be added for the lockout — the gate's existing dependency on `processing.population.completed` SHALL cascade to the manifest phase via the shared `canAccessPhase` gate. No verdict SHALL be deleted by a re-run; verdicts persist and become stale per the Staleness Reference requirement.
 
 #### Scenario: Re-running Population hides Manifest nav
 
 - **WHEN** a user with stored verdicts re-runs the Population module and the run enters `preparing`
-- **THEN** `population.completed` SHALL become `false`, `canAccessPhase(project, "manifest")` SHALL return `false`, and the Manifest nav button SHALL be disabled
+- **THEN** `processing.population.completed` SHALL become `false`, `canAccessPhase(project, "manifest")` SHALL return `false`, and the Manifest nav button SHALL be disabled
 
 #### Scenario: Verdicts remain on disk during re-run
 

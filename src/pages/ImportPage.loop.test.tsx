@@ -28,9 +28,7 @@ describe("Import autosave loop", () => {
           sourceDataPath: "/tmp/brain-study/sourcedata",
           ingestionComplete: true,
         },
-        exploreAslConfig: {
-          dataPar: {},
-        },
+        dataPar: {},
       },
       isDirty: false,
       loaded: true,

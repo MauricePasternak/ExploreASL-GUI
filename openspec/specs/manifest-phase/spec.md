@@ -17,16 +17,16 @@ The `PROJECT_PHASES` constant in `src/schemas/project.ts` SHALL include a new en
 
 #### Scenario: Project file explicitly set to manifest phase
 
-- **WHEN** `projectStore.setPhase("manifest")` is called on a project whose `uiState.population.completed === true`
+- **WHEN** `projectStore.setPhase("manifest")` is called on a project whose `uiState.processing.population.completed === true`
 - **THEN** the resulting `.easl` payload SHALL have `projectMeta.currentPhase === "manifest"` and the file SHALL round-trip through `ProjectFileSchema.parse`
 
 ### Requirement: Manifest Phase Access Gate
 
-`canAccessPhase` SHALL treat the `"manifest"` phase identically to `"visualization"` — access SHALL be granted iff `project.uiState?.population?.completed === true`. The `manifest` phase SHALL NOT be independently selectable without that flag.
+`canAccessPhase` SHALL treat the `"manifest"` phase identically to `"visualization"` — access SHALL be granted iff `project.uiState?.processing?.population?.completed === true`. The `manifest` phase SHALL NOT be independently selectable without that flag.
 
 #### Scenario: Manifest nav disabled before Population completion
 
-- **WHEN** the user opens a project whose `uiState.population.completed` is falsy
+- **WHEN** the user opens a project whose `uiState.processing.population.completed` is falsy
 - **THEN** `canAccessPhase(project, "manifest")` SHALL return `false`, and the `Layout` component SHALL render the Manifest nav button in a disabled state
 
 #### Scenario: Manifest nav enabled after Population completion
@@ -40,12 +40,12 @@ The `PHASE_NAV` array in `src/components/Layout.tsx` SHALL contain a 5th entry w
 
 #### Scenario: Nav button click navigates to manifest phase
 
-- **WHEN** a user with `population.completed === true` clicks the Manifest nav button
+- **WHEN** a user with `processing.population.completed === true` clicks the Manifest nav button
 - **THEN** the route SHALL transition to `/project/<id>/manifest` and the `ManifestPage` component SHALL mount
 
 #### Scenario: Direct URL entry blocked by gate
 
-- **WHEN** a user manually navigates to `/project/<id>/manifest` on a project where `population.completed` is falsy
+- **WHEN** a user manually navigates to `/project/<id>/manifest` on a project where `processing.population.completed` is falsy
 - **THEN** `Layout` SHALL redirect to the highest reachable phase (visualization or earlier) and the `ManifestPage` SHALL NOT mount
 
 ### Requirement: Manifest Phase Help Drawer Content

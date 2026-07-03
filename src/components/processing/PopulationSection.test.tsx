@@ -48,7 +48,6 @@ describe("PopulationSection", () => {
         matlabPath: "",
         exploreAslPath: "",
         workers: 4,
-        subjectRegexp: "",
       },
       availableSubjects: [],
       subjectStatuses: [],
@@ -165,7 +164,6 @@ describe("PopulationSection", () => {
         matlabPath: "",
         exploreAslPath: "",
         workers: 4,
-        subjectRegexp: "",
       },
       availableSubjects: [
         {
@@ -208,7 +206,6 @@ describe("PopulationSection", () => {
         matlabPath: "",
         exploreAslPath: "",
         workers: 4,
-        subjectRegexp: "",
       },
       availableSubjects: [
         {

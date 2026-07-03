@@ -17,7 +17,6 @@ let mockConfig: {
   matlabPath: string;
   exploreAslPath: string;
   workers: number;
-  subjectRegexp: string;
 } | null = null;
 
 let mockSubjectStatuses: SubjectModuleStatus[] = [];
@@ -148,7 +147,6 @@ describe("ControlButtons Start button disabled state", () => {
       matlabPath: "/usr/bin/matlab",
       exploreAslPath: "/opt/easl",
       workers: 1,
-      subjectRegexp: "^sub-.*$",
     };
     mockSubjectStatuses = [];
     renderButtons({ startDisabled: false });
@@ -188,7 +186,6 @@ describe("ControlButtons re-process confirmation", () => {
       matlabPath: "/usr/bin/matlab",
       exploreAslPath: "/opt/easl",
       workers: 1,
-      subjectRegexp: "^(sub-001_01|sub-002_01)$",
     };
     mockSubjectStatuses = [];
   });
@@ -329,7 +326,6 @@ describe("ControlButtons re-process confirmation", () => {
       matlabPath: "/usr/bin/matlab",
       exploreAslPath: "/opt/easl",
       workers: 1,
-      subjectRegexp: "^sub-.*$",
     };
     mockSubjectStatuses = [
       {

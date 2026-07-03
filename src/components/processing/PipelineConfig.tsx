@@ -57,7 +57,6 @@ export default function PipelineConfig() {
         matlabPath: settings.matlabInstallations[0]?.path ?? "",
         exploreAslPath: settings.exploreAslPath,
         workers: defaultWorkers,
-        subjectRegexp: "^sub-.*$",
       });
     }
   }, [config, settings, defaultWorkers, setConfig]);

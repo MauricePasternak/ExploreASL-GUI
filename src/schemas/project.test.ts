@@ -15,12 +15,18 @@ describe("PROJECT_PHASES", () => {
 
 describe("canAccessPhase", () => {
   it("grants visualization when population.completed is true", () => {
-    const project = { ...validProject, uiState: { population: { completed: true } } };
+    const project = {
+      ...validProject,
+      uiState: { processing: { population: { completed: true } } },
+    };
     expect(canAccessPhase(project, "visualization")).toBe(true);
   });
 
   it("denies visualization when population.completed is false", () => {
-    const project = { ...validProject, uiState: { population: { completed: false } } };
+    const project = {
+      ...validProject,
+      uiState: { processing: { population: { completed: false } } },
+    };
     expect(canAccessPhase(project, "visualization")).toBe(false);
   });
 
@@ -41,12 +47,18 @@ describe("canAccessPhase", () => {
   });
 
   it("grants manifest when population.completed is true", () => {
-    const project = { ...validProject, uiState: { population: { completed: true } } };
+    const project = {
+      ...validProject,
+      uiState: { processing: { population: { completed: true } } },
+    };
     expect(canAccessPhase(project, "manifest")).toBe(true);
   });
 
   it("denies manifest when population.completed is false", () => {
-    const project = { ...validProject, uiState: { population: { completed: false } } };
+    const project = {
+      ...validProject,
+      uiState: { processing: { population: { completed: false } } },
+    };
     expect(canAccessPhase(project, "manifest")).toBe(false);
   });
 
@@ -61,7 +73,7 @@ describe("ProjectFileSchema", () => {
     const project = {
       ...validProject,
       uiState: {
-        population: { completed: true },
+        processing: { population: { completed: true } },
         dataVis: {
           qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
           columnTypes: { GM_vol: "continuous" },
@@ -159,8 +171,8 @@ describe("ProjectFileSchema", () => {
     };
     const parsed = ProjectFileSchema.parse(project);
     expect(parsed.uiState.manifest?.verdicts?.["sub-A_01"]).toBeDefined();
-    expect(parsed.uiState.manifest?.lastRunVersions).toBeUndefined();
-    expect(parsed.uiState.manifest?.lastPopulationRunMtime).toBeUndefined();
+    expect(Reflect.get(parsed.uiState.manifest ?? {}, "lastRunVersions")).toBeUndefined();
+    expect(Reflect.get(parsed.uiState.manifest ?? {}, "lastPopulationRunMtime")).toBeUndefined();
   });
 
   it("parses mappingState with invalid/wrong-typed properties using fallback defaults", () => {

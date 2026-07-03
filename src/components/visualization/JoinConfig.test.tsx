@@ -61,9 +61,9 @@ describe("JoinConfig", () => {
           lastOpened: new Date().toISOString(),
           currentPhase: "visualization",
         },
-        uiState: { population: { completed: true } },
+        uiState: { processing: { population: { completed: true } } },
         mappingState: {},
-        exploreAslConfig: { dataPar: {} },
+        dataPar: {},
       },
     });
     mockInvoke.mockReset();
