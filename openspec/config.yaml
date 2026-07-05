@@ -24,6 +24,4 @@ rules:
   tasks:
     - "Break down items so no individual task takes more than 2 hours to complete."
     - "Ensure tasks strictly map to the requirements defined in the specs phase."
-
-  plan:
     - "Strictly follow the superpowers:writing-plans TDD structure."
