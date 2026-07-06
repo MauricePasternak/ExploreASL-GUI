@@ -22,7 +22,7 @@ export default function JoinDiagram({
 }: JoinDiagramProps) {
   const pairedLeft = new Set(keyPairs.map((p) => p.left));
   const pairedRight = new Set(keyPairs.map((p) => p.right));
-  const extFileName = extFilePath.split("/").pop() ?? extFilePath;
+  const extFileName = extFilePath.split(/[/\\]/).pop() ?? extFilePath;
 
   return (
     <Paper p="md" withBorder data-testid="join-diagram">

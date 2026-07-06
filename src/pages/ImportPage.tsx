@@ -10,6 +10,7 @@ import {
 import { useEffect, useRef } from "react";
 
 import AliasResolution from "../components/import/AliasResolution";
+import BIDSReviewPanel from "../components/import/BIDSReviewPanel";
 import DicomIngestion from "../components/import/DicomIngestion";
 import ImportExecution from "../components/import/ImportExecution";
 import ImportPreview from "../components/import/ImportPreview";
@@ -48,6 +49,7 @@ const IMPORT_STEPPER_MAX_HEIGHT = `calc(100vh - ${APP_SHELL_HEADER_HEIGHT}px - $
 export default function ImportPage() {
   const activeStep = useImportStore((s) => s.activeStep);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dataSource = useProjectStore((s) => s.project?.projectMeta?.dataSource);
 
   // Auto-sync import state → project mappingState → file (debounced)
   useEffect(() => {
@@ -77,6 +79,11 @@ export default function ImportPage() {
       }
     };
   }, []);
+
+  // BIDS-direct: render BIDSReviewPanel only (skip stepper sidebar)
+  if (dataSource === "bids") {
+    return <BIDSReviewPanel />;
+  }
 
   return (
     <Group align="flex-start" gap="lg" wrap="nowrap" style={{ minHeight: "calc(100vh - 140px)" }}>

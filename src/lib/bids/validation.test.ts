@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { isBidsProject, ensureBidsIgnore } from "./bidsUtils";
+import { isBidsProject, ensureBidsIgnore } from "./validation";
 
-describe("bidsUtils", () => {
+describe("validation", () => {
   beforeEach(() => {
     vi.mocked(exists).mockReset();
     vi.mocked(readTextFile).mockReset();

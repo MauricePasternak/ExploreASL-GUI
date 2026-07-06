@@ -5,11 +5,13 @@ import type { PathPattern } from "../schemas/importSchemas";
  * Handles trailing slashes on rootPath.
  */
 export function getRelativePath(fullPath: string, rootPath: string): string {
-  const normalizedRoot = rootPath.endsWith("/") ? rootPath : `${rootPath}/`;
-  if (fullPath.startsWith(normalizedRoot)) {
-    return fullPath.slice(normalizedRoot.length);
+  const normFullPath = fullPath.replace(/\\/g, "/");
+  const normRootPath = rootPath.replace(/\\/g, "/");
+  const normalizedRoot = normRootPath.endsWith("/") ? normRootPath : `${normRootPath}/`;
+  if (normFullPath.startsWith(normalizedRoot)) {
+    return normFullPath.slice(normalizedRoot.length);
   }
-  return fullPath;
+  return normFullPath;
 }
 
 /**

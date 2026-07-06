@@ -25,8 +25,9 @@ mod tests {
 
     #[test]
     fn import_state_new_tracks_roots_and_subjects() {
-        let staging_root = PathBuf::from("/tmp/project/.easl_staging");
-        let project_root = PathBuf::from("/tmp/project");
+        let temp = std::env::temp_dir();
+        let staging_root = temp.join("project").join(".easl_staging");
+        let project_root = temp.join("project");
         let subject_list = vec!["sub-001".to_string(), "sub-002".to_string()];
 
         let state = ImportState::new(
@@ -59,20 +60,24 @@ mod tests {
 
     #[test]
     fn validate_staging_root_requires_easl_staging_leaf() {
-        let invalid_root = PathBuf::from("/tmp/project/rawdata");
+        let temp = std::env::temp_dir();
+        let invalid_root = temp.join("project").join("rawdata");
 
         let error =
             validate_staging_root(&invalid_root).expect_err("non-staging root should be rejected");
 
         assert_eq!(
             error,
-            "staging_root must end with .easl_staging: /tmp/project/rawdata"
+            format!(
+                "staging_root must end with .easl_staging: {}",
+                invalid_root.display()
+            )
         );
     }
 
     #[test]
     fn validate_staging_root_accepts_easl_staging_leaf() {
-        let staging_root = PathBuf::from("/tmp/project/.easl_staging");
+        let staging_root = std::env::temp_dir().join("project").join(".easl_staging");
 
         validate_staging_root(&staging_root)
             .expect("staging root ending in .easl_staging should be accepted");
@@ -260,9 +265,10 @@ mod tests {
 
     #[test]
     fn validate_import_not_running_rejects_active_child_pid() {
+        let temp = std::env::temp_dir();
         let mut state = ImportState::new(
-            PathBuf::from("/tmp/project/.easl_staging"),
-            PathBuf::from("/tmp/project"),
+            temp.join("project").join(".easl_staging"),
+            temp.join("project"),
             vec!["sub-001".to_string()],
         );
         state.child_pid = Some(42);
@@ -275,9 +281,10 @@ mod tests {
 
     #[test]
     fn clear_import_child_pid_if_matches_only_clears_matching_pid() {
+        let temp = std::env::temp_dir();
         let mut state = ImportState::new(
-            PathBuf::from("/tmp/project/.easl_staging"),
-            PathBuf::from("/tmp/project"),
+            temp.join("project").join(".easl_staging"),
+            temp.join("project"),
             vec!["sub-001".to_string()],
         );
         state.child_pid = Some(42);
@@ -484,9 +491,10 @@ mod tests {
 
     #[test]
     fn intentional_termination_suppresses_matlab_exit_error_once() {
+        let temp = std::env::temp_dir();
         let mut state = ImportState::new(
-            PathBuf::from("/tmp/project/.easl_staging"),
-            PathBuf::from("/tmp/project"),
+            temp.join("project").join(".easl_staging"),
+            temp.join("project"),
             vec!["sub-001".to_string()],
         );
         state.child_pid = Some(42);
@@ -523,9 +531,10 @@ mod tests {
 
     #[test]
     fn successful_matlab_exit_does_not_emit_exit_error() {
+        let temp = std::env::temp_dir();
         let mut state = ImportState::new(
-            PathBuf::from("/tmp/project/.easl_staging"),
-            PathBuf::from("/tmp/project"),
+            temp.join("project").join(".easl_staging"),
+            temp.join("project"),
             vec!["sub-001".to_string()],
         );
 

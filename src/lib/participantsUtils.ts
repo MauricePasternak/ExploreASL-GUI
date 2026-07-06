@@ -62,6 +62,50 @@ const DEFAULT_PARTICIPANTS_JSON = {
   },
 };
 
+/** Base participant_id for subject-level site lookup (sub-01_1 → sub-01). */
+export function participantBaseId(participantId: string): string {
+  const lastUnderscore = participantId.lastIndexOf("_");
+  if (lastUnderscore === -1) return participantId;
+  return participantId.slice(0, lastUnderscore);
+}
+
+async function loadRootSiteMap(projectRoot: string): Promise<Map<string, string>> {
+  const rootTsvPath = `${projectRoot}/participants.tsv`;
+  const map = new Map<string, string>();
+
+  try {
+    if (!(await exists(rootTsvPath))) return map;
+    // Strip UTF-8 BOM if present (real-world participants.tsv files ship
+    // with one). Without this, the first header column would parse as
+    // "\uFEFFparticipant_id" and indexOf("participant_id") would return -1.
+    const raw = await readTextFile(rootTsvPath);
+    const content = raw.replace(/^\uFEFF/, "");
+    const lines = content
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return map;
+
+    const headers = lines[0].split("\t").map((h) => h.trim());
+    const participantIdx = headers.indexOf("participant_id");
+    const siteIdx = headers.indexOf("site");
+    if (participantIdx === -1 || siteIdx === -1) return map;
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split("\t");
+      const participantId = cols[participantIdx]?.trim();
+      const site = cols[siteIdx]?.trim();
+      if (participantId && site) {
+        map.set(participantId, site);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to read root-level participants.tsv for site lookup:", err);
+  }
+
+  return map;
+}
+
 /**
  * Ensures that participants.tsv and participants.json exist in <projectRoot>/derivatives/ExploreASL
  * and contain the required columns (participant_id, session, site). If they exist,
@@ -73,13 +117,31 @@ export async function ensureParticipantsFiles(
   mappingState: MappingState | null | undefined,
   availableSubjects: SubjectInfo[],
   enabled: boolean = false,
+  dataSource: "dicom" | "bids" = "dicom",
 ): Promise<void> {
   const derivativesDir = `${projectRoot}/derivatives/ExploreASL`;
   const tsvPath = `${derivativesDir}/participants.tsv`;
   const jsonPath = `${derivativesDir}/participants.json`;
 
+  const rootSiteMap =
+    dataSource === "bids" ? await loadRootSiteMap(projectRoot) : new Map<string, string>();
+  const preserveRootSite = dataSource === "bids" && rootSiteMap.size > 0;
+
   if (!enabled) {
-    // Strip site column if files exist
+    if (preserveRootSite) {
+      // BIDS-direct: keep root-authored site values in derivatives even when correction disabled
+      await ensureParticipantsFiles(
+        projectRoot,
+        config,
+        mappingState,
+        availableSubjects,
+        true,
+        dataSource,
+      );
+      return;
+    }
+
+    // Strip site column if files exist (DICOM path)
     try {
       if (await exists(tsvPath)) {
         const content = await readTextFile(tsvPath);
@@ -175,7 +237,11 @@ export async function ensureParticipantsFiles(
     // Determine site mapping
     const rowMatch = subjectRows.find((r) => r.subject === subject && r.session === session);
     let siteVal = "";
-    if (rowMatch) {
+    const baseId = participantBaseId(subjectSession);
+    const rootSite = rootSiteMap.get(baseId);
+    if (rootSite) {
+      siteVal = rootSite;
+    } else if (rowMatch) {
       const groupMatch = metadataGroups.find((g) => g.id === rowMatch.groupId);
       if (groupMatch) {
         siteVal = groupMatch.label.trim().replace(/\s+/g, "_");

@@ -19,6 +19,7 @@ export const ProjectMetaSchema = z.object({
   createdAt: z.string(),
   lastOpened: z.string(),
   currentPhase: z.enum(PROJECT_PHASES),
+  dataSource: z.enum(["dicom", "bids"]),
 });
 
 export const MANIFEST_FAIL_REASONS = [
@@ -58,6 +59,8 @@ export type ManifestUiState = z.infer<typeof ManifestUiStateSchema>;
 export const ImportUiStateSchema = z.object({
   activeStep: z.number().int().min(0).optional(),
   completed: z.boolean().optional(),
+  bidsReviewConfirmed: z.boolean().default(false),
+  skippedSubjects: z.array(z.string()).default([]),
   currentPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
   mostRecentConfig: z
     .preprocess((val) => {
@@ -226,9 +229,14 @@ export const DEFAULT_PROJECT_FILE = (id: string, name: string, rootPath: string)
     createdAt: new Date().toISOString(),
     lastOpened: new Date().toISOString(),
     currentPhase: "import",
+    dataSource: "dicom",
   },
   uiState: {
     navbarCollapsed: true,
+    import: {
+      bidsReviewConfirmed: false,
+      skippedSubjects: [],
+    },
     datapar: {
       advancedVisibility: {
         showAdvancedSections: false,
@@ -255,6 +263,9 @@ export function canAccessPhase(project: ProjectFile, targetPhase: ProjectPhase) 
     return true;
   }
   if (targetPhase === "processing") {
+    if (project.projectMeta.dataSource === "bids") {
+      return project.uiState?.import?.bidsReviewConfirmed === true;
+    }
     return project.uiState?.import?.completed === true;
   }
   if (targetPhase === "visualization") {

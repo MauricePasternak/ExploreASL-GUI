@@ -2,6 +2,9 @@ import type { DataParState } from "../schemas/dataParSchema";
 
 export interface DataParJson {
   x: {
+    opts?: {
+      subjectFolder?: string;
+    };
     Q?: Record<string, unknown>;
     modules?: {
       asl?: Record<string, unknown>;

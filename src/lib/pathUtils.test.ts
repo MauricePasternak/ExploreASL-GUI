@@ -51,6 +51,15 @@ describe("getRelativePath", () => {
   it("returns full path if root does not match", () => {
     expect(getRelativePath("/other/path/file", ROOT)).toBe("/other/path/file");
   });
+
+  it("normalizes and handles Windows backslashes", () => {
+    expect(
+      getRelativePath(
+        "C:\\data\\project\\sourcedata\\BAR\\05022026_01\\scan",
+        "C:\\data\\project\\sourcedata",
+      ),
+    ).toBe("BAR/05022026_01/scan");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -185,8 +194,25 @@ describe("discoverPathPatterns", () => {
     const depth3 = patterns.find((p) => p.depth === 3)!;
     const depth4 = patterns.find((p) => p.depth === 4)!;
 
-    expect(depth3.count).toBe(BAR_PATHS.length);
-    expect(depth4.count).toBe(FOO_PATHS.length);
+    expect(depth3.count).toBe(5);
+    expect(depth4.count).toBe(5);
+  });
+
+  it("handles Windows backslashes in discoverPathPatterns", () => {
+    const winRoot = "C:\\data\\project\\sourcedata";
+    const winPaths = [
+      "C:\\data\\project\\sourcedata\\BAR\\05022026_01\\sernum-0001_ser-AAHead_Scout",
+      "C:\\data\\project\\sourcedata\\BAR\\05022026_01\\sernum-0002_ser-AAHead_Scout_MPR_sag",
+      "C:\\data\\project\\sourcedata\\FOO\\05022026_01\\DICOM\\sernum-0001_ser-AAHead_Scout",
+    ];
+    const patterns = discoverPathPatterns(winPaths, winRoot);
+    expect(patterns).toHaveLength(2);
+    const depth3 = patterns.find((p) => p.depth === 3)!;
+    const depth4 = patterns.find((p) => p.depth === 4)!;
+    expect(depth3.count).toBe(2);
+    expect(depth4.count).toBe(1);
+    expect(depth3.uniqueNames[0]).toEqual(["BAR"]);
+    expect(depth4.uniqueNames[2]).toEqual(["DICOM"]);
   });
 
   it("correctly identifies varying segments (scan names) at leaf level", () => {

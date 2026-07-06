@@ -186,7 +186,7 @@ describe("dataParStore resetDataPar", () => {
 // ---------------------------------------------------------------------------
 describe("dataParStore saveToProject", () => {
   it("syncs dataPar into project dataPar", async () => {
-    await useProjectStore.getState().createProject("/tmp/test", "Test");
+    await useProjectStore.getState().createProject("/tmp/test", "Test", { dataSource: "dicom" });
     useDataParStore.getState().setDataParField("bTopUp", true);
     useDataParStore.getState().setDataParField("Quality", 1);
 
@@ -201,7 +201,7 @@ describe("dataParStore saveToProject", () => {
   });
 
   it("syncs advancedVisibility into project uiState.datapar.advancedVisibility", async () => {
-    await useProjectStore.getState().createProject("/tmp/test2", "Test2");
+    await useProjectStore.getState().createProject("/tmp/test2", "Test2", { dataSource: "dicom" });
     useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
 
     useDataParStore.getState().saveToProject();
@@ -229,7 +229,7 @@ describe("dataParStore saveToProject", () => {
   });
 
   it("merges with existing dataPar fields", async () => {
-    await useProjectStore.getState().createProject("/tmp/test3", "Test3");
+    await useProjectStore.getState().createProject("/tmp/test3", "Test3", { dataSource: "dicom" });
     useDataParStore.getState().setDataParField("bTopUp", true);
 
     useDataParStore.getState().saveToProject();

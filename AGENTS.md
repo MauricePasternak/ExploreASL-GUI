@@ -41,3 +41,4 @@ GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agen
 - No sync `setState` in `useEffect`. Sync state in render or use component `key`.
 - No ref update/access in render. Use `useEffect` to update refs.
 - Complete hook dependencies. Use Ref Sync pattern for non-reactive reads.
+- Never hardcode `"/tmp/"` or other filepaths. Make use of the correct tauri/rust filesystem functions.

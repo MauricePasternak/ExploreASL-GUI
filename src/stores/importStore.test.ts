@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MetadataGroup, PathPattern, ImportSnapshot } from "../schemas/importSchemas";
 import { computeStaleness } from "../lib/importStaleness";
@@ -1087,5 +1087,198 @@ describe("importStore reconstructProgressFromLockFiles", () => {
     store.reconstructProgressFromLockFiles(statuses, ["BAR"], {});
 
     expect(useImportStore.getState().importProgress.BAR.session).toBe("01");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BIDS Review Slice
+// ---------------------------------------------------------------------------
+describe("importStore BIDS review slice", () => {
+  const SAMPLE_DERIVED_GROUP: import("../schemas/importSchemas").DerivedMetadataGroup = {
+    id: "group-1",
+    label: "Siemens_3T_PCASL_3D_Included",
+    vendor: "Siemens",
+    sequence: "3D_PCASL",
+    labelingType: "PCASL",
+    bidsParams: {
+      ArterialSpinLabelingType: "PCASL",
+      PostLabelingDelay: [1.8],
+      MRAcquisitionType: "3D",
+      MagneticFieldStrength: 3,
+      Manufacturer: "Siemens",
+      ASLContext: "m0scan,control,label",
+      M0Type: "Included",
+      LabelingDuration: 1.8,
+      BackgroundSuppression: false,
+    },
+    subjects: [
+      { subjectLabel: "sub-01", sessionLabels: ["1"] },
+      { subjectLabel: "sub-02", sessionLabels: ["1"] },
+    ],
+  };
+
+  it("starts with initial BIDS review state", () => {
+    const state = useImportStore.getState();
+    expect(state.bidsReview).toEqual({
+      scanComplete: false,
+      scanError: null,
+      detectedGroups: [],
+      skippedSubjects: [],
+    });
+  });
+
+  it("startBidsScan populates detectedGroups and skippedSubjects on success", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValueOnce({
+      groups: [SAMPLE_DERIVED_GROUP],
+      skipped: ["sub-UNK_1"],
+    });
+
+    await useImportStore.getState().startBidsScan("/tmp/bids-root");
+
+    const state = useImportStore.getState();
+    expect(state.bidsReview.scanComplete).toBe(true);
+    expect(state.bidsReview.scanError).toBeNull();
+    expect(state.bidsReview.detectedGroups).toHaveLength(1);
+    expect(state.bidsReview.detectedGroups[0].id).toBe("group-1");
+    expect(state.bidsReview.skippedSubjects).toEqual(["sub-UNK_1"]);
+  });
+
+  it("startBidsScan sets scanError and clears detectedGroups on failure", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("permission denied"));
+
+    await useImportStore.getState().startBidsScan("/tmp/bads-root");
+
+    const state = useImportStore.getState();
+    expect(state.bidsReview.scanComplete).toBe(false);
+    expect(state.bidsReview.scanError).toBe("permission denied");
+    expect(state.bidsReview.detectedGroups).toEqual([]);
+    expect(state.bidsReview.skippedSubjects).toEqual([]);
+  });
+
+  it("retryBidsScan clears scanError and re-invokes scan_bids_sidecars", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+
+    // First call fails
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("timeout"));
+    await useImportStore.getState().startBidsScan("/tmp/retry-root");
+    expect(useImportStore.getState().bidsReview.scanError).toBe("timeout");
+
+    // Retry succeeds
+    vi.mocked(invoke).mockResolvedValueOnce({
+      groups: [SAMPLE_DERIVED_GROUP],
+      skipped: [],
+    });
+    await useImportStore.getState().retryBidsScan("/tmp/retry-root");
+
+    const state = useImportStore.getState();
+    expect(state.bidsReview.scanError).toBeNull();
+    expect(state.bidsReview.scanComplete).toBe(true);
+    expect(state.bidsReview.detectedGroups).toHaveLength(1);
+    expect(invoke).toHaveBeenCalledWith("scan_bids_sidecars", {
+      rootPath: "/tmp/retry-root",
+    });
+  });
+
+  it("rescanConfirmedBidsProject failure only updates session scan error state", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    useImportStore.setState({
+      bidsReview: {
+        scanComplete: true,
+        scanError: null,
+        detectedGroups: [SAMPLE_DERIVED_GROUP],
+        skippedSubjects: ["sub-old_1"],
+      },
+    });
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("permission denied"));
+
+    await useImportStore.getState().rescanConfirmedBidsProject("/tmp/confirmed-root");
+
+    const state = useImportStore.getState();
+    expect(state.bidsReview.scanComplete).toBe(false);
+    expect(state.bidsReview.scanError).toBe("permission denied");
+    expect(state.bidsReview.detectedGroups).toEqual([]);
+    expect(state.bidsReview.skippedSubjects).toEqual([]);
+    expect(invoke).toHaveBeenCalledWith("scan_bids_sidecars", {
+      rootPath: "/tmp/confirmed-root",
+    });
+  });
+
+  it("setDetectedGroups syncs the result of a scan", () => {
+    useImportStore.getState().setDetectedGroups([SAMPLE_DERIVED_GROUP]);
+    expect(useImportStore.getState().bidsReview.detectedGroups).toHaveLength(1);
+    expect(useImportStore.getState().bidsReview.detectedGroups[0].label).toBe(
+      "Siemens_3T_PCASL_3D_Included",
+    );
+  });
+
+  it("resetBidsReview clears the slice to initial values", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValueOnce({
+      groups: [SAMPLE_DERIVED_GROUP],
+      skipped: ["sub-UNK_1"],
+    });
+
+    await useImportStore.getState().startBidsScan("/tmp/reset-root");
+    expect(useImportStore.getState().bidsReview.detectedGroups).toHaveLength(1);
+
+    useImportStore.getState().resetBidsReview();
+    expect(useImportStore.getState().bidsReview).toEqual({
+      scanComplete: false,
+      scanError: null,
+      detectedGroups: [],
+      skippedSubjects: [],
+    });
+  });
+
+  it("backToLanding resets BIDS review state", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValueOnce({
+      groups: [SAMPLE_DERIVED_GROUP],
+      skipped: [],
+    });
+
+    await useImportStore.getState().startBidsScan("/tmp/landing-root");
+    expect(useImportStore.getState().bidsReview.scanComplete).toBe(true);
+
+    useImportStore.getState().backToLanding();
+    expect(useImportStore.getState().bidsReview).toEqual({
+      scanComplete: false,
+      scanError: null,
+      detectedGroups: [],
+      skippedSubjects: [],
+    });
+  });
+
+  it("startBidsScan rejects malformed skipped entries (non-string) and surfaces scanError", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValueOnce({
+      groups: [],
+      skipped: ["sub-01_1", 42],
+    } as any);
+
+    await useImportStore.getState().startBidsScan("/tmp/bad-skipped");
+
+    const state = useImportStore.getState();
+    expect(state.bidsReview.scanComplete).toBe(false);
+    expect(state.bidsReview.scanError).toMatch(/string/i);
+    expect(state.bidsReview.detectedGroups).toEqual([]);
+  });
+
+  it("startBidsScan with 0 groups sets scanComplete true (empty result is valid)", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValueOnce({
+      groups: [],
+      skipped: [],
+    });
+
+    await useImportStore.getState().startBidsScan("/tmp/empty-bids");
+
+    const state = useImportStore.getState();
+    expect(state.bidsReview.scanComplete).toBe(true);
+    expect(state.bidsReview.scanError).toBeNull();
+    expect(state.bidsReview.detectedGroups).toEqual([]);
+    expect(state.bidsReview.skippedSubjects).toEqual([]);
   });
 });

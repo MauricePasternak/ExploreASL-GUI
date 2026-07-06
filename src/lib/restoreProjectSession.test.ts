@@ -16,6 +16,7 @@ const PROJECT_JSON = {
     createdAt: "2026-05-03T00:00:00.000Z",
     lastOpened: "2026-05-03T00:00:00.000Z",
     currentPhase: "import",
+    dataSource: "dicom",
   },
   uiState: {},
   mappingState: {},

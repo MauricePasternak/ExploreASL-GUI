@@ -272,8 +272,14 @@ export async function stopProcessingPipeline(): Promise<void> {
 /**
  * Invoke the Rust `list_subjects` command.
  */
-export async function loadSubjects(projectRoot: string): Promise<SubjectInfo[]> {
-  return await invoke<SubjectInfo[]>("list_subjects", { projectRoot });
+export async function loadSubjects(
+  projectRoot: string,
+  dataSource?: "dicom" | "bids",
+): Promise<SubjectInfo[]> {
+  return await invoke<SubjectInfo[]>("list_subjects", {
+    projectRoot,
+    dataSource: dataSource ?? null,
+  });
 }
 
 /**

@@ -20,7 +20,9 @@ describe("processing config round-trip persistence", () => {
 
   it("saves processing config to .easl and restores it on reload", async () => {
     // Create project
-    await useProjectStore.getState().createProject("/tmp/roundtrip-project", "Roundtrip");
+    await useProjectStore
+      .getState()
+      .createProject("/tmp/roundtrip-project", "Roundtrip", { dataSource: "dicom" });
 
     // Sync processing config into project
     const config = {
@@ -59,7 +61,9 @@ describe("processing config round-trip persistence", () => {
   });
 
   it("persists processingPhase transitions across save/reload", async () => {
-    await useProjectStore.getState().createProject("/tmp/phase-roundtrip", "Phase Roundtrip");
+    await useProjectStore
+      .getState()
+      .createProject("/tmp/phase-roundtrip", "Phase Roundtrip", { dataSource: "dicom" });
 
     useProjectStore.getState().syncProcessingState({
       config: null,
@@ -82,7 +86,9 @@ describe("processing config round-trip persistence", () => {
   });
 
   it("does not persist null config as null in JSON (omits field)", async () => {
-    await useProjectStore.getState().createProject("/tmp/null-roundtrip", "Null Roundtrip");
+    await useProjectStore
+      .getState()
+      .createProject("/tmp/null-roundtrip", "Null Roundtrip", { dataSource: "dicom" });
 
     // Don't sync any processing state — processingConfig should be undefined
     await useProjectStore.getState().saveProject();

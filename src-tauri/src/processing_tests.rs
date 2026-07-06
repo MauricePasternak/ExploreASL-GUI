@@ -210,11 +210,29 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[test]
+    fn list_subjects_bids_direct_scans_project_root() {
+        let root = unique_temp_path("list-bids-root");
+        let perf = root.join("sub-01").join("perf");
+        fs::create_dir_all(&perf).unwrap();
+        fs::write(perf.join("sub-01_asl.nii.gz"), b"fake").unwrap();
+        fs::write(perf.join("sub-01_asl.json"), b"{}").unwrap();
+
+        let subjects = list_subjects(root.to_string_lossy().to_string(), Some("bids".to_string()))
+            .expect("list_subjects should succeed for BIDS-direct");
+
+        assert_eq!(subjects.len(), 1);
+        assert_eq!(subjects[0].subject_session, "sub-01_1");
+        assert_eq!(subjects[0].session, "1");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn list_subjects_returns_empty_when_rawdata_missing() {
         let root = unique_temp_path("no-rawdata");
         fs::create_dir_all(&root).expect("test root should be created");
 
-        let subjects = list_subjects(root.to_string_lossy().to_string())
+        let subjects = list_subjects(root.to_string_lossy().to_string(), None)
             .expect("list_subjects should succeed");
 
         assert!(subjects.is_empty());
@@ -227,10 +245,28 @@ mod tests {
         let root = unique_temp_path("list-subjects");
         let rawdata = root.join("rawdata");
         fs::create_dir_all(rawdata.join("sub-001").join("ses-01").join("anat")).unwrap();
+        fs::write(
+            rawdata
+                .join("sub-001")
+                .join("ses-01")
+                .join("anat")
+                .join("sub-001_ses-01_T1w.nii.gz"),
+            b"fake",
+        )
+        .unwrap();
         fs::create_dir_all(rawdata.join("sub-001").join("ses-01").join("perf")).unwrap();
+        fs::write(
+            rawdata
+                .join("sub-001")
+                .join("ses-01")
+                .join("perf")
+                .join("sub-001_ses-01_asl.nii.gz"),
+            b"fake",
+        )
+        .unwrap();
         fs::create_dir_all(rawdata.join("sub-002").join("ses-02")).unwrap();
 
-        let subjects = list_subjects(root.to_string_lossy().to_string())
+        let subjects = list_subjects(root.to_string_lossy().to_string(), None)
             .expect("list_subjects should succeed");
 
         assert_eq!(subjects.len(), 2);
@@ -257,11 +293,76 @@ mod tests {
         fs::create_dir_all(rawdata.join("README")).unwrap();
         fs::create_dir_all(rawdata.join("dataset")).unwrap();
 
-        let subjects = list_subjects(root.to_string_lossy().to_string())
+        let subjects = list_subjects(root.to_string_lossy().to_string(), None)
             .expect("list_subjects should succeed");
 
         assert_eq!(subjects.len(), 1);
         assert_eq!(subjects[0].subject, "001");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn list_subjects_cross_sectional_defaults_session_to_1() {
+        let root = unique_temp_path("cross-sectional");
+        let rawdata = root.join("rawdata");
+        // sub-01/perf/sub-01_asl.nii.gz — no ses-* dir (ds000240 layout)
+        let perf = rawdata.join("sub-01").join("perf");
+        fs::create_dir_all(&perf).unwrap();
+        fs::write(perf.join("sub-01_asl.nii.gz"), b"fake").unwrap();
+        fs::write(perf.join("sub-01_asl.json"), b"{}").unwrap();
+
+        let subjects = list_subjects(root.to_string_lossy().to_string(), None)
+            .expect("list_subjects should succeed");
+
+        assert_eq!(subjects.len(), 1);
+        let sub01 = &subjects[0];
+        assert_eq!(sub01.subject, "01");
+        assert_eq!(sub01.session, "1"); // cross-sectional default
+        assert_eq!(sub01.subject_session, "sub-01_1");
+        assert!(sub01.has_asl);
+        assert_eq!(sub01.asl_runs, vec!["1"]);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn list_subjects_parses_run_entities_from_filenames() {
+        let root = unique_temp_path("run-entities");
+        let rawdata = root.join("rawdata");
+        let perf = rawdata.join("sub-01").join("ses-01").join("perf");
+        fs::create_dir_all(&perf).unwrap();
+        // Two ASL files with explicit non-sequential run labels
+        fs::write(perf.join("sub-01_ses-01_run-2_asl.nii.gz"), b"fake").unwrap();
+        fs::write(perf.join("sub-01_ses-01_run-2_asl.json"), b"{}").unwrap();
+        fs::write(perf.join("sub-01_ses-01_run-5_asl.nii.gz"), b"fake").unwrap();
+        fs::write(perf.join("sub-01_ses-01_run-5_asl.json"), b"{}").unwrap();
+
+        let subjects = list_subjects(root.to_string_lossy().to_string(), None)
+            .expect("list_subjects should succeed");
+
+        assert_eq!(subjects.len(), 1);
+        // Run labels parsed from filenames, sorted ascending
+        assert_eq!(subjects[0].asl_runs, vec!["2", "5"]);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn list_subjects_asl_run_default_when_no_run_entity() {
+        let root = unique_temp_path("default-run");
+        let rawdata = root.join("rawdata");
+        let perf = rawdata.join("sub-01").join("ses-01").join("perf");
+        fs::create_dir_all(&perf).unwrap();
+        // Single ASL file with no run- entity → default "1"
+        fs::write(perf.join("sub-01_ses-01_asl.nii.gz"), b"fake").unwrap();
+        fs::write(perf.join("sub-01_ses-01_asl.json"), b"{}").unwrap();
+
+        let subjects = list_subjects(root.to_string_lossy().to_string(), None)
+            .expect("list_subjects should succeed");
+
+        assert_eq!(subjects.len(), 1);
+        assert_eq!(subjects[0].asl_runs, vec!["1"]);
 
         let _ = fs::remove_dir_all(root);
     }
@@ -663,8 +764,13 @@ mod tests {
         // which switches from CreateKind::File to EventKind::Create(_).
         // This test ensures parse_lock_path correctly handles paths
         // that would come from CreateKind::Any or CreateKind::Folder.
-        let lock_root = PathBuf::from("/tmp/test/lock");
-        let path = PathBuf::from("/tmp/test/lock/xASL_module_Structural/sub-001_01/xASL_module_Structural/060_Segment_T1w.status");
+        let temp = std::env::temp_dir();
+        let lock_root = temp.join("test").join("lock");
+        let path = lock_root
+            .join("xASL_module_Structural")
+            .join("sub-001_01")
+            .join("xASL_module_Structural")
+            .join("060_Segment_T1w.status");
         let result = parse_lock_path(&lock_root, &path);
         assert!(result.is_some());
         let event = result.unwrap();
@@ -673,7 +779,11 @@ mod tests {
         assert_eq!(event.step_code, "060_Segment_T1w");
 
         // ASL path
-        let asl_path = PathBuf::from("/tmp/test/lock/xASL_module_ASL/sub-001_01/xASL_module_ASL_ASL_01/020_RealignASL.status");
+        let asl_path = lock_root
+            .join("xASL_module_ASL")
+            .join("sub-001_01")
+            .join("xASL_module_ASL_ASL_01")
+            .join("020_RealignASL.status");
         let asl_result = parse_lock_path(&lock_root, &asl_path);
         assert!(asl_result.is_some());
         let asl_event = asl_result.unwrap();

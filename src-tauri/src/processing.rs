@@ -140,79 +140,61 @@ pub struct LockRemoved {
 }
 
 #[tauri::command]
-pub fn list_subjects(project_root: String) -> Result<Vec<SubjectInfo>, String> {
+pub fn list_subjects(
+    project_root: String,
+    data_source: Option<String>,
+) -> Result<Vec<SubjectInfo>, String> {
     let trace = CommandTrace::new("list_subjects");
     trace.arg("project_root", &project_root);
+    if let Some(ref ds) = data_source {
+        trace.arg("data_source", ds);
+    }
 
-    let root = PathBuf::from(project_root);
-    let rawdata = root.join("rawdata");
-    if !rawdata.exists() {
+    let root = PathBuf::from(&project_root);
+    let scan_root = if data_source.as_deref() == Some("bids") {
+        root.clone()
+    } else {
+        root.join("rawdata")
+    };
+
+    if !scan_root.exists() {
         trace.success(&Vec::<SubjectInfo>::new());
         return Ok(Vec::new());
     }
 
+    let bids_subjects = crate::bids::scan::parse_bids_structure(&scan_root)?;
+
     let mut subjects = Vec::new();
-    for entry in
-        std::fs::read_dir(&rawdata).map_err(|e| format!("Failed to read rawdata: {}", e))?
-    {
-        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-            continue;
-        }
-        let file_name = entry.file_name().to_string_lossy().to_string();
-        if !file_name.starts_with("sub-") {
-            continue;
-        }
-        let subject = file_name.strip_prefix("sub-").unwrap().to_string();
-        let subject_path = entry.path();
+    for bids_sub in &bids_subjects {
+        let subject_label = bids_sub
+            .subject_label
+            .strip_prefix("sub-")
+            .unwrap_or(&bids_sub.subject_label)
+            .to_string();
 
-        for ses_entry in std::fs::read_dir(&subject_path)
-            .map_err(|e| format!("Failed to read subject dir: {}", e))?
-        {
-            let ses_entry =
-                ses_entry.map_err(|e| format!("Failed to read session entry: {}", e))?;
-            if !ses_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                continue;
-            }
-            let ses_name = ses_entry.file_name().to_string_lossy().to_string();
-            if !ses_name.starts_with("ses-") {
-                continue;
-            }
-            let session = ses_name.strip_prefix("ses-").unwrap().to_string();
-            let session_path = ses_entry.path();
+        for session in &bids_sub.sessions {
+            let session_label = session.session_label.clone();
+            let subject_session = format!("sub-{}_{}", subject_label, session_label);
 
-            let perf_path = session_path.join("perf");
-            let has_asl = perf_path.exists();
-            let mut asl_runs = Vec::new();
-            if has_asl {
-                let mut count = 0;
-                if let Ok(entries) = std::fs::read_dir(&perf_path) {
-                    for entry in entries.flatten() {
-                        if let Ok(file_type) = entry.file_type() {
-                            if file_type.is_file() {
-                                let name = entry.file_name().to_string_lossy().to_string();
-                                if name.ends_with("_asl.nii") || name.ends_with("_asl.nii.gz") {
-                                    count += 1;
-                                }
-                            }
-                        }
-                    }
-                }
-                let run_count = if count > 0 { count } else { 1 };
-                for r in 1..=run_count {
-                    asl_runs.push(r.to_string());
-                }
-            }
+            let mut asl_runs: Vec<String> = session
+                .asl_files
+                .iter()
+                .filter_map(|f| f.run_label.clone())
+                .collect();
+            asl_runs.sort();
+            asl_runs.dedup();
 
-            let has_structural = session_path.join("anat").exists();
-            let subject_session = format!("sub-{}_{}", subject, session);
+            // Fallback: if perf dir exists but no ASL files or no run labels found, default to ["1"]
+            if asl_runs.is_empty() && session.has_perf {
+                asl_runs.push("1".to_string());
+            }
 
             subjects.push(SubjectInfo {
                 subject_session,
-                subject: subject.clone(),
-                session,
-                has_structural,
-                has_asl,
+                subject: subject_label.clone(),
+                session: session_label,
+                has_structural: !session.anat_files.is_empty(),
+                has_asl: !session.asl_files.is_empty(),
                 asl_runs,
             });
         }

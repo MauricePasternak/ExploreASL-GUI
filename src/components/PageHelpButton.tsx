@@ -16,6 +16,7 @@ import {
 import { IconHelp, IconBook, IconInfoCircle, IconChevronRight } from "@tabler/icons-react";
 import { useImportStore } from "../stores/importStore";
 import { useVisualizationStore } from "../stores/visualizationStore";
+import { useProjectStore } from "../stores/projectStore";
 
 interface HelpContent {
   title: string;
@@ -111,6 +112,21 @@ const HELP_DATA: Record<string, HelpContent> = {
     tipTitle: "Background Execution",
     tipContent:
       "The import process copies and converts files (using dcm2niix). Depending on dataset size and hard drive speed, this can take a few minutes.",
+  },
+  "bids-review": {
+    title: "BIDS Review",
+    subtitle: "Phase 1: Import Module",
+    goal: "Review the detected BIDS dataset, assign or override group labels, and inspect subjects and sessions before importing.",
+    steps: [
+      "Review the identified BIDS metadata groups in the list.",
+      "You can customize the 'Group Label' for each metadata group to your liking.",
+      "Check the subject and session list for each group to ensure no data is missing.",
+      "If there are any warnings (e.g. skipped subjects), check the reason and resolve them if needed.",
+      "Click 'Confirm' at the bottom right to complete the import and proceed to parameters configuration.",
+    ],
+    tipTitle: "Participants TSV",
+    tipContent:
+      "If a participants.tsv file exists in the raw BIDS directory, ExploreASL GUI does not modify it, keeping your authored file intact.",
   },
   parameters: {
     title: "Configure Pipeline Parameters",
@@ -233,10 +249,16 @@ function PageHelpButtonInner() {
   const activeStep = useImportStore((s) => s.activeStep);
   const vizStage = useVisualizationStore((s) => s.stage);
 
+  const dataSource = useProjectStore((s) => s.project?.projectMeta?.dataSource);
+
   // Determine help content key
   let contentKey = "";
   if (phase === "import") {
-    contentKey = `import-${activeStep}`;
+    if (dataSource === "bids") {
+      contentKey = "bids-review";
+    } else {
+      contentKey = `import-${activeStep}`;
+    }
   } else if (phase === "parameters") {
     contentKey = "parameters";
   } else if (phase === "processing") {
