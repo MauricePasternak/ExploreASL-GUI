@@ -3,6 +3,7 @@ import {
   parseCommaSeparatedNumbers,
   parseNumberOrArray,
 } from "../components/import/metadataFormUtils";
+import { normalizePulseSequenceType, normalizeManufacturer } from "../lib/bids/normalize";
 
 const preprocessCommaNumber = (val: unknown) => {
   if (typeof val === "string") {
@@ -436,14 +437,23 @@ export const BidsAslMetadataBaseSchema = z
     FlipAngle: CommaNumberSchema.optional(),
     SliceTiming: CommaArraySchema.optional(),
 
-    PulseSequenceType: z.enum(["spiral", "GRASE", "EPI"]).optional(),
-    Manufacturer: z.enum(["GE_product", "Philips", "Siemens"]).optional(),
+    PulseSequenceType: z
+      .string()
+      .transform((val) => normalizePulseSequenceType(val))
+      .optional(),
+    Manufacturer: z
+      .string()
+      .transform((val) => normalizeManufacturer(val))
+      .optional(),
 
     // === M0 ===
     M0Type: z.enum(["Separate", "Included", "Absent", "Estimate"]).optional(),
     M0_GMScaleFactor: z.number().positive().optional(),
 
     // === ExploreASL-specific ===
+    // `.nullish()` (not `.optional()`) so legacy sidecars that ship
+    // `ASLContext: null` at top level are accepted rather than dropped via
+    // `skipped` (Phase 11 / RI2 fix).
     ASLContext: z
       .string()
       .refine(
@@ -458,9 +468,9 @@ export const BidsAslMetadataBaseSchema = z
         },
         { message: "Must contain comma-separated values from: control, label, m0scan, deltam" },
       )
-      .optional(),
+      .nullish(),
     DatasetType: z.string().optional(),
-    LabelingType: z.enum(["PASL", "CASL"]).optional(),
+    LabelingType: z.enum(["PASL", "CASL", "PCASL"]).optional(),
     DummyScanPositionInASL4D: CommaArraySchema.optional(),
     RepetitionTimePreparationM0: CommaArraySchema.optional(),
   })
@@ -554,6 +564,20 @@ export const MetadataGroupSchema = z.object({
 });
 
 export type MetadataGroup = z.infer<typeof MetadataGroupSchema>;
+
+export const DerivedMetadataGroupSchema = MetadataGroupSchema.extend({
+  vendor: z.string(),
+  sequence: z.string(),
+  labelingType: z.string(),
+  subjects: z.array(
+    z.object({
+      subjectLabel: z.string(),
+      sessionLabels: z.array(z.string()),
+    }),
+  ),
+});
+
+export type DerivedMetadataGroup = z.infer<typeof DerivedMetadataGroupSchema>;
 
 /** A row in the subjects DataTable for metadata group assignment */
 export const SubjectRowSchema = z.object({

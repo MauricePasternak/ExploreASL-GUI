@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router";
 
@@ -7,6 +7,7 @@ import ImportPage from "./ImportPage";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { useImportStore } from "../stores/importStore";
 import { useGlobalStore } from "../stores/globalStore";
+import { useProjectStore } from "../stores/projectStore";
 
 function renderWithProviders() {
   return render(
@@ -757,5 +758,77 @@ describe("ImportPage stepper navigation", () => {
 
     fireEvent.click(within(sidebar).getByTestId("import-step-3"));
     expect(useImportStore.getState().activeStep).toBe(1);
+  });
+});
+
+describe("ImportPage dataSource conditional rendering", () => {
+  afterEach(() => {
+    cleanup();
+    useImportStore.getState().resetImport();
+    useProjectStore.setState({ project: null });
+  });
+
+  it("renders BIDSReviewPanel when dataSource is bids", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0",
+        projectMeta: {
+          id: "proj-bids",
+          name: "BIDS Study",
+          rootPath: "/tmp/bids-study",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          lastOpened: "2026-01-01T00:00:00.000Z",
+          currentPhase: "import",
+          dataSource: "bids" as const,
+        },
+        uiState: { import: { bidsReviewConfirmed: false, skippedSubjects: [] } },
+        mappingState: {},
+        dataPar: {},
+      } as any,
+      loaded: true,
+    });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <ImportPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    expect(screen.getAllByTestId("bids-review-panel").length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("import-stepper-sidebar")).not.toBeInTheDocument();
+  });
+
+  it("renders DICOM wizard stepper when dataSource is dicom", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0",
+        projectMeta: {
+          id: "proj-dicom",
+          name: "DICOM Study",
+          rootPath: "/tmp/dicom-study",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          lastOpened: "2026-01-01T00:00:00.000Z",
+          currentPhase: "import",
+          dataSource: "dicom" as const,
+        },
+        uiState: {},
+        mappingState: {},
+        dataPar: {},
+      } as any,
+      loaded: true,
+    });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <ImportPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    expect(screen.getByTestId("import-stepper-sidebar")).toBeInTheDocument();
+    expect(screen.queryByTestId("bids-review-panel")).not.toBeInTheDocument();
   });
 });

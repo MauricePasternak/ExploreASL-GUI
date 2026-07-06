@@ -20,9 +20,10 @@ export interface ProcessingState {
   availableSubjects: SubjectInfo[];
   subjectStatuses: SubjectModuleStatus[];
   workerPids: number[];
+  pendingRawdataWarning: string | null;
 
   setConfig: (config: ProcessConfig) => void;
-  startProcessing: () => Promise<void>;
+  startProcessing: (explicitConfirm?: boolean) => Promise<void>;
   killProcessing: () => Promise<void>;
   updateSubjectStatus: (status: SubjectModuleStatus) => void;
   removeWorkerPid: (pid: number) => void;
@@ -31,6 +32,7 @@ export interface ProcessingState {
   scanAvailableSubjects: () => Promise<void>;
   loadLockFileStatus: () => Promise<void>;
   resetProcessing: () => void;
+  clearPendingRawdataWarning: () => void;
 }
 
 // =============================================================================
@@ -43,6 +45,7 @@ const INITIAL_STATE = {
   availableSubjects: [] as SubjectInfo[],
   subjectStatuses: [] as SubjectModuleStatus[],
   workerPids: [] as number[],
+  pendingRawdataWarning: null as string | null,
 };
 
 // =============================================================================
@@ -87,7 +90,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     set({ config: patched });
   },
 
-  startProcessing: async () => {
+  startProcessing: async (explicitConfirm = false) => {
     const config = useProcessingStore.getState().config;
     if (!config) throw new Error("No config set");
     if (config.modules.length === 0) throw new Error("No modules selected");
@@ -100,7 +103,13 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
         );
       }
       if (!available.some((a) => a.subjectSession === subj)) {
-        throw new Error(`Selected subject session "${subj}" is not present in the rawdata folder`);
+        throw new Error(
+          `Selected subject session "${subj}" is not present in the ${
+            useProjectStore.getState().project?.projectMeta.dataSource === "bids"
+              ? "project root"
+              : "rawdata folder"
+          }`,
+        );
       }
     }
 
@@ -144,6 +153,26 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
     if (!projectRoot) throw new Error("No project loaded");
 
+    const dataSource = useProjectStore.getState().project?.projectMeta.dataSource ?? "dicom";
+
+    if (dataSource === "bids") {
+      const { invoke } = await import("@tauri-apps/api/core");
+      if (!explicitConfirm) {
+        const result = await invoke<{
+          warning: string | null;
+          created: boolean;
+          bidsignoreUpdated: boolean;
+        }>("ensure_rawdata_dir", { rootPath: projectRoot });
+        if (result.warning) {
+          set({ pendingRawdataWarning: result.warning });
+          return;
+        }
+      } else {
+        // Clear warning state when proceeding after confirmation
+        set({ pendingRawdataWarning: null });
+      }
+    }
+
     // Generate/update participants.tsv (always call to either add or strip the 'site' column)
     const dataPar = useDataParStore.getState().dataPar;
     const mappingState = useProjectStore.getState().project?.mappingState;
@@ -154,6 +183,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       mappingState,
       available,
       dataPar.enableMetadataGroupingCorrection ?? false,
+      dataSource,
     );
 
     await watchLockDir(projectRoot);
@@ -163,6 +193,12 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
 
     const { assembleDataPar } = await import("../lib/assembleDataPar");
     const dataParJson = assembleDataPar(dataPar);
+    if (dataSource === "bids") {
+      dataParJson.x.opts = {
+        ...(dataParJson.x.opts ?? {}),
+        subjectFolder: projectRoot,
+      };
+    }
     dataParJson.x.dataset = {
       subjectRegexp: generateSubjectRegexp(config.subjects),
       ...(config.subjects.length > 0 && { ForceInclusionList: config.subjects }),
@@ -246,10 +282,11 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
   },
 
   scanAvailableSubjects: async () => {
-    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
+    const project = useProjectStore.getState().project;
+    const projectRoot = project?.projectMeta.rootPath;
     if (!projectRoot) throw new Error("No project loaded");
     const { loadSubjects } = await import("../lib/processingEvents");
-    const subjects = await loadSubjects(projectRoot);
+    const subjects = await loadSubjects(projectRoot, project.projectMeta.dataSource);
     set({ availableSubjects: subjects });
   },
 
@@ -269,5 +306,16 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       });
     });
     set({ ...INITIAL_STATE });
+  },
+
+  clearPendingRawdataWarning: () => {
+    // Clear the warning AND reset the preparing phase that was set just before
+    // ensure_rawdata_dir was invoked. Without the phase reset the Start button
+    // would remain permanently disabled after the user cancels the warning.
+    set((state) => ({
+      pendingRawdataWarning: null,
+      processingPhase:
+        state.processingPhase === "preparing" ? ("idle" as ProcessingPhase) : state.processingPhase,
+    }));
   },
 }));

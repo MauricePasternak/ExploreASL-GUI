@@ -122,6 +122,7 @@ function buildProjectState() {
       createdAt: "2026-05-03T00:00:00.000Z",
       lastOpened: "2026-05-03T00:00:00.000Z",
       currentPhase: "manifest" as const,
+      dataSource: "dicom" as const,
     },
     mappingState: {
       metadataGroups: mockMetadataGroups,
@@ -584,5 +585,51 @@ describe("ManifestPreview", () => {
 
     expect(screen.getByTestId("export-markdown-btn")).toBeDisabled();
     expect(screen.getByTestId("export-html-btn")).toBeDisabled();
+  });
+
+  // Phase 9 — ASLContext summarized display
+  it("renders ASLContext as summarized run-length form", () => {
+    const groupWithAslContext: MetadataGroup = {
+      id: "g-aslctx",
+      label: "ASLContext Group",
+      bidsParams: {
+        ArterialSpinLabelingType: "PCASL",
+        ASLContext: "m0scan,m0scan,label,label,label",
+      } as any,
+    };
+    mockMetadataGroups = [groupWithAslContext];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = {};
+
+    renderPreview();
+
+    // Should render summarized form, not raw string
+    const tables = screen.getAllByRole("table");
+    const paramsTable = tables[0];
+    expect(paramsTable).toHaveTextContent("ASLContext");
+    expect(paramsTable).toHaveTextContent("m0scan×2, label×3");
+    // Should NOT contain the raw comma-separated form
+    expect(paramsTable).not.toHaveTextContent("m0scan,m0scan,label,label,label");
+  });
+
+  it("hides ASLContext row when value is undefined", () => {
+    const groupNoAslContext: MetadataGroup = {
+      id: "g-no-ctx",
+      label: "No ASLContext",
+      bidsParams: {
+        ArterialSpinLabelingType: "PCASL",
+      } as any,
+    };
+    mockMetadataGroups = [groupNoAslContext];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = {};
+
+    renderPreview();
+
+    const tables = screen.getAllByRole("table");
+    const paramsTable = tables[0];
+    expect(paramsTable).not.toHaveTextContent("ASLContext");
   });
 });

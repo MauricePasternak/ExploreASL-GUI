@@ -140,6 +140,7 @@ function buildProjectState() {
       createdAt: "2026-05-03T00:00:00.000Z",
       lastOpened: "2026-05-03T00:00:00.000Z",
       currentPhase: "manifest" as const,
+      dataSource: "dicom" as const,
     },
     mappingState: {
       metadataGroups: mockMetadataGroups,

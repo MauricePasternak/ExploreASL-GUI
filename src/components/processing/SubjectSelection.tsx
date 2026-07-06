@@ -188,8 +188,8 @@ function buildColumns(
             color={isError ? "red" : "teal"}
             variant="outline"
             leftSection={<IconBook size={12} />}
-            style={isError ? undefined : { cursor: "pointer" }}
-            onClick={isError ? undefined : () => onViewLog(row.subjectSession, "structural")}
+            style={{ cursor: "pointer" }}
+            onClick={() => onViewLog(row.subjectSession, "structural")}
             data-testid={isError ? "view-structural-errors" : "view-structural-logs"}
           >
             {isError ? "View Errors" : "View Logs"}
@@ -271,8 +271,8 @@ function buildColumns(
             color={isError ? "red" : "teal"}
             variant="outline"
             leftSection={<IconBook size={12} />}
-            style={isError ? undefined : { cursor: "pointer" }}
-            onClick={isError ? undefined : () => onViewLog(row.subjectSession, "asl")}
+            style={{ cursor: "pointer" }}
+            onClick={() => onViewLog(row.subjectSession, "asl")}
             data-testid={isError ? "view-asl-errors" : "view-asl-logs"}
           >
             {isError ? "View Errors" : "View Logs"}
@@ -425,6 +425,9 @@ export default function SubjectSelection() {
 
   const handleViewLog = useCallback(
     async (subjectSession: string, module: "structural" | "asl") => {
+      console.log(
+        `[SubjectSelection] Viewing logs for subjectSession: ${subjectSession}, module: ${module}`,
+      );
       if (!projectRoot) return;
       setModalModule(module);
       setModalSubjectSession(subjectSession);
@@ -531,6 +534,9 @@ export default function SubjectSelection() {
 
   const handleViewReport = useCallback(
     (subjectSession: string, module: "structural" | "asl") => {
+      console.log(
+        `[SubjectSelection] Viewing reports for subjectSession: ${subjectSession}, module: ${module}`,
+      );
       const row = rows.find((r) => r.subjectSession === subjectSession);
       const runs = row?.aslRuns || [];
       setReportModalSubjectSession(subjectSession);

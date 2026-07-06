@@ -16,6 +16,7 @@ import type { ManifestPayload } from "../../lib/manifestExport";
 import type { DataParState } from "../../schemas/dataParSchema";
 import type { ManifestVerdict } from "../../schemas/project";
 import type { MetadataGroup } from "../../schemas/importSchemas";
+import { summarizeAslContext } from "../../lib/bids/sidecar";
 
 const ARRAY_PARAM_UNIQUE_THRESHOLD = 5;
 
@@ -92,7 +93,12 @@ function useBuildManifestPayload(): ManifestPayload {
         !(group.bidsParams as Record<string, unknown>).BolusCutOffFlag
       )
         continue;
-      params[key] = Array.isArray(val) ? formatArrayParam(val as unknown[]) : String(val);
+      params[key] =
+        key === "ASLContext"
+          ? summarizeAslContext(val as string | undefined)
+          : Array.isArray(val)
+            ? formatArrayParam(val as unknown[])
+            : String(val);
     }
     section1Groups.push({
       label: group.label,

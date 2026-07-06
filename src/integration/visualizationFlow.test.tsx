@@ -176,6 +176,7 @@ describe("Visualization setup flow integration", () => {
           createdAt: new Date().toISOString(),
           lastOpened: new Date().toISOString(),
           currentPhase: "visualization",
+          dataSource: "dicom" as const,
         },
         uiState: { processing: { population: { completed: true } } },
         mappingState: {},

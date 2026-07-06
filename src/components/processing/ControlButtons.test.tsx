@@ -8,6 +8,8 @@ import { findCompletedSubjects } from "./ControlButton.helpers";
 
 const mockKillProcessing = vi.fn();
 const mockStartProcessing = vi.fn();
+const mockClearPendingRawdataWarning = vi.fn();
+let mockPendingRawdataWarning: string | null = null;
 
 let mockPhase: "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled" = "running";
 
@@ -30,6 +32,8 @@ vi.mock("../../stores/processingStore", () => ({
         killProcessing: mockKillProcessing,
         config: mockConfig,
         subjectStatuses: mockSubjectStatuses,
+        pendingRawdataWarning: mockPendingRawdataWarning,
+        clearPendingRawdataWarning: mockClearPendingRawdataWarning,
       }),
     {
       getState: () => ({
@@ -38,6 +42,8 @@ vi.mock("../../stores/processingStore", () => ({
         killProcessing: mockKillProcessing,
         config: mockConfig,
         subjectStatuses: mockSubjectStatuses,
+        pendingRawdataWarning: mockPendingRawdataWarning,
+        clearPendingRawdataWarning: mockClearPendingRawdataWarning,
       }),
     },
   ),
@@ -108,6 +114,7 @@ describe("ControlButtons Start button disabled state", () => {
   afterEach(() => {
     cleanup();
     mockPhase = "running";
+    mockPendingRawdataWarning = null;
   });
 
   beforeEach(() => {
@@ -175,6 +182,7 @@ describe("ControlButtons re-process confirmation", () => {
     mockPhase = "idle";
     mockConfig = null;
     mockSubjectStatuses = [];
+    mockPendingRawdataWarning = null;
   });
 
   beforeEach(() => {
@@ -452,5 +460,64 @@ describe("findCompletedSubjects", () => {
     ];
     const result = findCompletedSubjects(["sub-001_01", "sub-002_01"], ["structural"], statuses);
     expect(result).toEqual([{ subjectSession: "sub-001_01", modules: ["structural"] }]);
+  });
+});
+
+describe("ControlButtons rawdata warning modal (Phase 8.2)", () => {
+  afterEach(() => {
+    cleanup();
+    mockPhase = "idle";
+    mockPendingRawdataWarning = null;
+    vi.clearAllMocks();
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPhase = "idle";
+    mockPendingRawdataWarning = null;
+  });
+
+  it("does not render the rawdata warning modal when no warning is pending", () => {
+    renderButtons();
+    // Mantine 9 always renders the Modal root container in the DOM; the modal
+    // is treated as closed when its inner content is absent.
+    expect(screen.queryByTestId("bids-rawdata-warning-text")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bids-rawdata-warning-confirm-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bids-rawdata-warning-cancel-btn")).not.toBeInTheDocument();
+  });
+
+  it("renders the rawdata warning modal with text and Proceed/Cancel buttons when warning set", () => {
+    mockPendingRawdataWarning = "rawdata/ already contains 5 sub-directories";
+    renderButtons();
+    expect(screen.getByTestId("bids-rawdata-warning-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-rawdata-warning-text")).toHaveTextContent(
+      "rawdata/ already contains 5 sub-directories",
+    );
+    expect(screen.getByTestId("bids-rawdata-warning-confirm-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-rawdata-warning-cancel-btn")).toBeInTheDocument();
+  });
+
+  it("calls clearPendingRawdataWarning when Cancel is clicked (does NOT call startProcessing)", async () => {
+    const user = userEvent.setup();
+    mockPendingRawdataWarning = "rawdata/ already contains 5 sub-directories";
+    renderButtons();
+
+    await user.click(screen.getByTestId("bids-rawdata-warning-cancel-btn"));
+
+    expect(mockClearPendingRawdataWarning).toHaveBeenCalledTimes(1);
+    expect(mockStartProcessing).not.toHaveBeenCalled();
+  });
+
+  it("calls startProcessing(true) when Proceed is clicked (explicit confirmation)", async () => {
+    const user = userEvent.setup();
+    mockPendingRawdataWarning = "rawdata/ already contains 5 sub-directories";
+    renderButtons();
+
+    await user.click(screen.getByTestId("bids-rawdata-warning-confirm-btn"));
+
+    expect(mockStartProcessing).toHaveBeenCalledWith(true);
+    // Should NOT clear warning locally — the store clears it once the
+    // explicit-confirm proceed invocation completes successfully.
+    expect(mockClearPendingRawdataWarning).not.toHaveBeenCalled();
   });
 });

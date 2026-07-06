@@ -77,6 +77,8 @@ export default function ControlButtons({ startDisabled = false }: ControlButtons
   const phase = useProcessingStore((s) => s.processingPhase);
   const startProcessing = useProcessingStore((s) => s.startProcessing);
   const killProcessing = useProcessingStore((s) => s.killProcessing);
+  const pendingRawdataWarning = useProcessingStore((s) => s.pendingRawdataWarning);
+  const clearPendingRawdataWarning = useProcessingStore((s) => s.clearPendingRawdataWarning);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reprocessEntries, setReprocessEntries] = useState<CompletedSubjectEntry[]>([]);
 
@@ -117,6 +119,18 @@ export default function ControlButtons({ startDisabled = false }: ControlButtons
   const handleCancelReprocess = useCallback(() => {
     setReprocessEntries([]);
   }, []);
+
+  const handleRawdataWarningCancel = useCallback(() => {
+    // User declined — abort processing; do NOT call startProcessing(true)
+    clearPendingRawdataWarning();
+  }, [clearPendingRawdataWarning]);
+
+  const handleRawdataWarningConfirm = useCallback(() => {
+    // User confirmed — proceed past the warning. startProcessing(true) skips
+    // the ensure_rawdata_dir call (already invoked) and clears the warning
+    // state from inside the store on success.
+    void startProcessing(true);
+  }, [startProcessing]);
 
   return (
     <>
@@ -169,6 +183,55 @@ export default function ControlButtons({ startDisabled = false }: ControlButtons
         onConfirm={handleConfirmReprocess}
         entries={reprocessEntries}
       />
+
+      {/*
+        BIDS-direct rawdata/ warning modal — required by Phase 8.2 spec
+        ("processing MUST wait for user confirmation before proceeding").
+        Pending warning state is set by processingStore.startProcessing()
+        when ensure_rawdata_dir returns a non-empty sub-directory count.
+      */}
+      <Modal
+        opened={pendingRawdataWarning != null}
+        onClose={handleRawdataWarningCancel}
+        title="Existing rawdata/ directory"
+        size="lg"
+        data-testid="bids-rawdata-warning-modal"
+        returnFocus={false}
+        transitionProps={{ duration: 0, exitDuration: 0 }}
+      >
+        <Stack gap="md">
+          <Text size="sm" ff="monospace" data-testid="bids-rawdata-warning-text">
+            {pendingRawdataWarning ?? ""}
+          </Text>
+          <Text size="sm">
+            The{" "}
+            <Text span ff="monospace" size="xs">
+              subjectFolder
+            </Text>{" "}
+            override scans root-level subjects only; files inside{" "}
+            <Text span ff="monospace" size="xs">
+              rawdata/
+            </Text>{" "}
+            will be ignored by ExploreASL. Proceed?
+          </Text>
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="default"
+              onClick={handleRawdataWarningCancel}
+              data-testid="bids-rawdata-warning-cancel-btn"
+            >
+              Cancel
+            </Button>
+            <Button
+              color="orange"
+              onClick={handleRawdataWarningConfirm}
+              data-testid="bids-rawdata-warning-confirm-btn"
+            >
+              Proceed anyway
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </>
   );
 }

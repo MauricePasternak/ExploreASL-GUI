@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BidsAslMetadataBaseSchema,
   BidsAslMetadataSchema,
+  DerivedMetadataGroupSchema,
   ImportProgressSchema,
   MetadataGroupSchema,
   ModalityAliasSchema,
@@ -232,6 +234,17 @@ describe("BidsAslMetadataSchema", () => {
     ).toThrow();
   });
 
+  it("accepts LabelingType with PCASL, CASL, or PASL", () => {
+    const pcasl = BidsAslMetadataSchema.parse({ ...validBase, LabelingType: "PCASL" });
+    expect(pcasl.LabelingType).toBe("PCASL");
+
+    const casl = BidsAslMetadataSchema.parse({ ...validBase, LabelingType: "CASL" });
+    expect(casl.LabelingType).toBe("CASL");
+
+    const pasl = BidsAslMetadataSchema.parse({ ...validBase, LabelingType: "PASL" });
+    expect(pasl.LabelingType).toBe("PASL");
+  });
+
   it("rejects invalid BolusCutOffTechnique", () => {
     expect(() =>
       BidsAslMetadataSchema.parse({
@@ -360,6 +373,22 @@ describe("BidsAslMetadataSchema", () => {
     expect(() =>
       BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "control,label,invalid" }),
     ).toThrow();
+  });
+
+  it("accepts ASLContext: null on BaseSchema (RI2: legacy sidecars ship null)", () => {
+    // BidsAslMetadataBaseSchema (no superRefine) must accept null at the
+    // Zod layer so groups are not dropped via `skipped`. The full
+    // BidsAslMetadataSchema still raises a refine issue ("ASL Context is
+    // required"); that is correct — the base layer is what flows through
+    // scan results persisted as bidsParams.
+    const parsed = BidsAslMetadataBaseSchema.parse({ ...validBase, ASLContext: null });
+    expect(parsed.ASLContext).toBeNull();
+  });
+
+  it("accepts ASLContext absent (undefined) on BaseSchema", () => {
+    const { ASLContext: _omit, ...noCtx } = validBase;
+    const parsed = BidsAslMetadataBaseSchema.parse(noCtx);
+    expect(parsed.ASLContext).toBeUndefined();
   });
 
   it("rejects M0Type 'Included' when ASLContext does not contain m0scan", () => {
@@ -891,5 +920,144 @@ describe("StagingEntrySchema", () => {
       sourcePath: "/path/to/BAR/05022026_01/sernum-0024_ser-t1_mpr_tra_iso",
     };
     expect(StagingEntrySchema.parse(data)).toEqual(data);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 1.4: PulseSequenceType Zod transform
+// ---------------------------------------------------------------------------
+describe("PulseSequenceType Zod transform", () => {
+  const base = {
+    ArterialSpinLabelingType: "PCASL" as const,
+    PostLabelingDelay: 1.8,
+    MRAcquisitionType: "3D" as const,
+    MagneticFieldStrength: 3,
+    Manufacturer: "Siemens",
+    M0Type: "Included" as const,
+    ASLContext: "m0scan,deltam",
+    LabelingDuration: 1.8,
+    BackgroundSuppression: false,
+  };
+
+  it("transforms '3D_SPIRAL' to 'spiral'", () => {
+    const result = BidsAslMetadataSchema.parse({ ...base, PulseSequenceType: "3D_SPIRAL" });
+    expect(result.PulseSequenceType).toBe("spiral");
+  });
+
+  it("transforms 'EPI' to 'EPI'", () => {
+    const result = BidsAslMetadataSchema.parse({
+      ...base,
+      PulseSequenceType: "EPI",
+      MRAcquisitionType: "2D",
+      SliceTiming: [0, 0.5, 1.0],
+    });
+    expect(result.PulseSequenceType).toBe("EPI");
+  });
+
+  it("transforms '3d_grase' to 'GRASE'", () => {
+    const result = BidsAslMetadataSchema.parse({ ...base, PulseSequenceType: "3d_grase" });
+    expect(result.PulseSequenceType).toBe("GRASE");
+  });
+
+  it("drops unrecognized PulseSequenceType (returns undefined)", () => {
+    const result = BidsAslMetadataSchema.parse({ ...base, PulseSequenceType: "unknown_readout" });
+    expect(result.PulseSequenceType).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 1.5: Manufacturer Zod transform
+// ---------------------------------------------------------------------------
+describe("Manufacturer Zod transform", () => {
+  const base = {
+    ArterialSpinLabelingType: "PCASL" as const,
+    PostLabelingDelay: 1.8,
+    MRAcquisitionType: "3D" as const,
+    MagneticFieldStrength: 3,
+    PulseSequenceType: "spiral",
+    M0Type: "Included" as const,
+    ASLContext: "m0scan,deltam",
+    LabelingDuration: 1.8,
+    BackgroundSuppression: false,
+  };
+
+  it("transforms 'SIEMENS TrioTim' to 'Siemens'", () => {
+    const result = BidsAslMetadataSchema.parse({ ...base, Manufacturer: "SIEMENS TrioTim" });
+    expect(result.Manufacturer).toBe("Siemens");
+  });
+
+  it("transforms 'GE MEDICAL SYSTEMS' to 'GE_product'", () => {
+    const result = BidsAslMetadataSchema.parse({ ...base, Manufacturer: "GE MEDICAL SYSTEMS" });
+    expect(result.Manufacturer).toBe("GE_product");
+  });
+
+  it("transforms 'Philips' to 'Philips'", () => {
+    const result = BidsAslMetadataSchema.parse({ ...base, Manufacturer: "Philips" });
+    expect(result.Manufacturer).toBe("Philips");
+  });
+
+  it("drops unrecognized Manufacturer (returns undefined, fails superRefine)", () => {
+    const result = BidsAslMetadataSchema.safeParse({
+      ...base,
+      Manufacturer: "Canon Medical Systems",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 1.7: DerivedMetadataGroupSchema
+// ---------------------------------------------------------------------------
+describe("DerivedMetadataGroupSchema", () => {
+  it("parses complete fixture with all derived fields", () => {
+    const data = {
+      id: "group-1",
+      label: "Siemens PCASL 3D",
+      bidsParams: {
+        ArterialSpinLabelingType: "PCASL",
+        MRAcquisitionType: "3D",
+        PostLabelingDelay: [1.8],
+        MagneticFieldStrength: 3,
+        Manufacturer: "Siemens",
+        ASLContext: "control,label",
+        M0Type: "Separate",
+        LabelingDuration: 1.8,
+        BackgroundSuppression: false,
+      },
+      vendor: "Siemens",
+      sequence: "3D_SPIRAL",
+      labelingType: "CASL",
+      subjects: [
+        { subjectLabel: "sub-01", sessionLabels: ["1"] },
+        { subjectLabel: "sub-02", sessionLabels: ["1"] },
+      ],
+    };
+    const result = DerivedMetadataGroupSchema.parse(data);
+    expect(result.id).toBe("group-1");
+    expect(result.vendor).toBe("Siemens");
+    expect(result.sequence).toBe("3D_SPIRAL");
+    expect(result.labelingType).toBe("CASL");
+    expect(result.subjects).toHaveLength(2);
+    expect(result.subjects[0].subjectLabel).toBe("sub-01");
+    expect(result.subjects[0].sessionLabels).toEqual(["1"]);
+  });
+
+  it("rejects missing derived fields", () => {
+    const data = {
+      id: "group-1",
+      label: "Test",
+      bidsParams: {
+        ArterialSpinLabelingType: "PCASL",
+        MRAcquisitionType: "3D",
+        PostLabelingDelay: [1.8],
+        MagneticFieldStrength: 3,
+        Manufacturer: "Siemens",
+        ASLContext: "control,label",
+        M0Type: "Separate",
+        LabelingDuration: 1.8,
+        BackgroundSuppression: false,
+      },
+    };
+    expect(() => DerivedMetadataGroupSchema.parse(data)).toThrow();
   });
 });

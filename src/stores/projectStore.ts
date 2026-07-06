@@ -1,7 +1,7 @@
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { create } from "zustand";
 
-import { ensureBidsIgnore, isBidsProject } from "../lib/bidsUtils";
+import { ensureBidsIgnore, isBidsProject } from "../lib/bids/validation";
 import { compressSnapshot } from "../lib/snapshotCompression";
 import { logAction } from "../lib/debug";
 import {
@@ -18,7 +18,8 @@ import {
   type ProjectFile,
   type ProjectMeta,
 } from "../schemas/project";
-import type { ImportSnapshot } from "../schemas/importSchemas";
+import { flattenBidsGroupsToSubjectRows } from "../lib/bids/subjectRows";
+import type { ImportSnapshot, MetadataGroup } from "../schemas/importSchemas";
 import type { ManifestFailReason, ManifestVerdict } from "../schemas/project";
 import type { ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
@@ -33,7 +34,11 @@ interface ProjectState {
   isDirty: boolean;
   loaded: boolean;
   loadProject: (easlPath: string) => Promise<void>;
-  createProject: (rootPath: string, name: string) => Promise<void>;
+  createProject: (
+    rootPath: string,
+    name: string,
+    options: { dataSource: "dicom" | "bids" },
+  ) => Promise<void>;
   saveProject: () => Promise<void>;
   setPhase: (phase: ProjectMeta["currentPhase"]) => void;
   toggleNavbar: () => void;
@@ -57,6 +62,7 @@ interface ProjectState {
   }) => void;
   setLastPopulationRunMtime: (mtime: number | null) => void;
   closeProject: () => void;
+  confirmBidsReview: () => Promise<void>;
 }
 
 /** Incremented on every successful in-memory project mutation; used to guard saveProject. */
@@ -70,7 +76,7 @@ function getProjectFilePath(rootPath: string) {
 }
 
 function isProjectFilePath(easlPath: string) {
-  return easlPath.split("/").filter(Boolean).pop() === PROJECT_FILE_NAME;
+  return easlPath.split(/[/\\]/).filter(Boolean).pop() === PROJECT_FILE_NAME;
 }
 
 function serializeProject(project: ProjectFile): string {
@@ -175,8 +181,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     syncSessionCheckpointFromProject(hydratedProject);
   },
 
-  createProject: async (rootPath, name) => {
+  /**
+   * Create a new project at the given root path.
+   *
+   * @param rootPath - Absolute path to the project root directory.
+   * @param name - Human-readable project name.
+   * @param options - Required. `dataSource` is immutable for the project lifetime;
+   *   callers MUST NOT mutate it after creation.
+   */
+  createProject: async (rootPath, name, options) => {
+    if (!options?.dataSource) {
+      throw new Error("createProject requires options.dataSource");
+    }
+
     const project = DEFAULT_PROJECT_FILE(crypto.randomUUID(), name, rootPath);
+    project.projectMeta.dataSource = options.dataSource;
 
     await writeTextFile(getProjectFilePath(rootPath), JSON.stringify(project, null, 2));
 
@@ -414,8 +433,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const { activeStep, importPhase, importCompleted, mostRecentConfig, ...payload } =
         importState;
 
+      // Gate mappingState: BIDS-direct projects own mappingState after confirm;
+      // DICOM sync must not clobber the 4-field mappingState written by
+      // confirmBidsReview. We still allow uiState.import fields to sync.
+      const bidsConfirmed = project.uiState?.import?.bidsReviewConfirmed === true;
+      const mappingChanged =
+        !bidsConfirmed && JSON.stringify(project.mappingState) !== JSON.stringify(payload);
+
       if (
-        JSON.stringify(project.mappingState) === JSON.stringify(payload) &&
+        !mappingChanged &&
         project.uiState?.import?.activeStep === activeStep &&
         project.uiState?.import?.currentPhase === importPhase &&
         project.uiState?.import?.completed === importCompleted &&
@@ -427,7 +453,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
       return {
         ...project,
-        mappingState: payload,
+        ...(bidsConfirmed ? {} : { mappingState: payload }),
         uiState: {
           ...project.uiState,
           import: {
@@ -435,6 +461,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             activeStep,
             currentPhase: importPhase,
             completed: importCompleted,
+            bidsReviewConfirmed: project.uiState?.import?.bidsReviewConfirmed ?? false,
+            skippedSubjects: project.uiState?.import?.skippedSubjects ?? [],
             mostRecentConfig: mostRecentConfig ?? project.uiState?.import?.mostRecentConfig ?? null,
           },
         },
@@ -503,6 +531,95 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           dataVis,
         },
       };
+    });
+  },
+
+  /**
+   * Confirm BIDS review: project importStore.detectedGroups into
+   * project.mappingState, persist uiState, advance to "parameters" phase.
+   *
+   * The caller (BIDSReviewPanel in Phase 7) MUST navigate to
+   * `/project/:id/parameters` via React Router after this action resolves.
+   */
+  confirmBidsReview: async () => {
+    const { project } = get();
+    if (!project) throw new Error("No project loaded");
+
+    // Read from importStore (cross-store access)
+    const { useImportStore: importStore } = await import("./importStore");
+    const { detectedGroups, skippedSubjects } = importStore.getState().bidsReview;
+
+    console.debug("[projectStore] confirmBidsReview:", {
+      groups: detectedGroups.length,
+      skipped: skippedSubjects.length,
+    });
+
+    if (detectedGroups.length === 0) {
+      throw new Error(
+        "Confirm requires at least one detected BIDS group — re-scan before confirming",
+      );
+    }
+
+    // Validate labels: non-empty + unique (case-insensitive)
+    const labels = detectedGroups.map((g) => g.label);
+    for (const label of labels) {
+      if (!label.trim()) {
+        throw new Error("All group labels must be non-empty");
+      }
+    }
+    const lower = labels.map((l) => l.toLowerCase());
+    const seen = new Set<string>();
+    for (const l of lower) {
+      if (seen.has(l)) {
+        throw new Error("Duplicate label detected — labels must be unique (case-insensitive)");
+      }
+      seen.add(l);
+    }
+
+    // Project detectedGroups to MetadataGroup[] (id, label, bidsParams only)
+    const metadataGroups: MetadataGroup[] = detectedGroups.map((g) => ({
+      id: g.id,
+      label: g.label,
+      bidsParams: g.bidsParams,
+    }));
+
+    // Flatten to SubjectRow[]
+    const subjectRows = flattenBidsGroupsToSubjectRows(detectedGroups);
+
+    // Write to mappingState (only 4 fields) + uiState + phase
+    updateProject(
+      set,
+      (proj) => ({
+        ...proj,
+        mappingState: {
+          metadataGroups,
+          subjectRows,
+          ingestionComplete: true,
+          sourceDataPath: proj.projectMeta.rootPath,
+        },
+        uiState: {
+          ...proj.uiState,
+          import: {
+            ...proj.uiState?.import,
+            skippedSubjects,
+            bidsReviewConfirmed: true,
+          },
+        },
+        projectMeta: {
+          ...proj.projectMeta,
+          currentPhase: "parameters",
+        },
+      }),
+      { syncCheckpoint: true, phase: "parameters" },
+    );
+
+    // Save project
+    await get().saveProject();
+
+    logAction("bids_review_confirmed", {
+      groupCount: metadataGroups.length,
+      subjectCount: subjectRows.length,
+      skippedCount: skippedSubjects.length,
     });
   },
 }));

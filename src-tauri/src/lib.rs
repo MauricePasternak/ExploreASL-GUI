@@ -1,3 +1,5 @@
+pub mod bids;
+pub mod bids_commands;
 mod commands;
 pub mod import;
 pub mod import_parser;
@@ -9,6 +11,7 @@ mod tracing;
 pub mod visualization;
 mod visualization_tests;
 
+use bids_commands::{check_bids_dataset, ensure_rawdata_dir, scan_bids_sidecars};
 use commands::{
     create_symlink_tree, get_available_memory_mb, get_cpu_cores, is_writable, walk_directory,
     which_matlab,
@@ -100,6 +103,9 @@ pub fn run() {
             stat_file,
             get_subject_session_qc,
             get_all_subjects_qc,
+            check_bids_dataset,
+            scan_bids_sidecars,
+            ensure_rawdata_dir,
         ])
         .register_uri_scheme_protocol("niivue", niivue_protocol::handle_niivue_protocol)
         .setup(|app| {

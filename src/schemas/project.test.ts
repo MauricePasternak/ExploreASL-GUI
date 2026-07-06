@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { PROJECT_PHASES, canAccessPhase, DEFAULT_PROJECT_FILE, ProjectFileSchema } from "./project";
+import {
+  PROJECT_PHASES,
+  canAccessPhase,
+  DEFAULT_PROJECT_FILE,
+  ProjectFileSchema,
+  ProjectMetaSchema,
+  ImportUiStateSchema,
+} from "./project";
 
 const validProject = DEFAULT_PROJECT_FILE("test-id", "Test", "/tmp/test");
 
@@ -38,7 +45,9 @@ describe("canAccessPhase", () => {
   it("canAccessPhase for processing still works after visualization was added", () => {
     const projectWithImport = {
       ...validProject,
-      uiState: { import: { completed: true } },
+      uiState: {
+        import: { completed: true, bidsReviewConfirmed: false, skippedSubjects: [] as string[] },
+      },
     };
     expect(canAccessPhase(projectWithImport, "processing")).toBe(true);
 
@@ -188,5 +197,145 @@ describe("ProjectFileSchema", () => {
     expect(parsed.mappingState.sourceDataPath).toBe("");
     expect(parsed.mappingState.rawPaths).toEqual([]);
     expect(parsed.mappingState.runAliases).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 1.1: dataSource on ProjectMetaSchema
+// ---------------------------------------------------------------------------
+describe("ProjectMetaSchema (dataSource)", () => {
+  it("rejects projectMeta without dataSource", () => {
+    const result = ProjectMetaSchema.safeParse({
+      id: "test",
+      name: "Test",
+      rootPath: "/tmp",
+      createdAt: new Date().toISOString(),
+      lastOpened: new Date().toISOString(),
+      currentPhase: "import",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts dataSource 'dicom'", () => {
+    const result = ProjectMetaSchema.safeParse({
+      id: "test",
+      name: "Test",
+      rootPath: "/tmp",
+      createdAt: new Date().toISOString(),
+      lastOpened: new Date().toISOString(),
+      currentPhase: "import",
+      dataSource: "dicom",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts dataSource 'bids'", () => {
+    const result = ProjectMetaSchema.safeParse({
+      id: "test",
+      name: "Test",
+      rootPath: "/tmp",
+      createdAt: new Date().toISOString(),
+      lastOpened: new Date().toISOString(),
+      currentPhase: "import",
+      dataSource: "bids",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects invalid dataSource value", () => {
+    const result = ProjectMetaSchema.safeParse({
+      id: "test",
+      name: "Test",
+      rootPath: "/tmp",
+      createdAt: new Date().toISOString(),
+      lastOpened: new Date().toISOString(),
+      currentPhase: "import",
+      dataSource: "invalid",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("DEFAULT_PROJECT_FILE includes dataSource 'dicom'", () => {
+    const project = DEFAULT_PROJECT_FILE("id", "name", "/tmp");
+    expect(project.projectMeta.dataSource).toBe("dicom");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 1.2: bidsReviewConfirmed and skippedSubjects on ImportUiStateSchema
+// ---------------------------------------------------------------------------
+describe("ImportUiStateSchema (BIDS review state)", () => {
+  it("defaults bidsReviewConfirmed to false", () => {
+    const result = ImportUiStateSchema.parse({});
+    expect(result.bidsReviewConfirmed).toBe(false);
+  });
+
+  it("defaults skippedSubjects to empty array", () => {
+    const result = ImportUiStateSchema.parse({});
+    expect(result.skippedSubjects).toEqual([]);
+  });
+
+  it("accepts explicit bidsReviewConfirmed true", () => {
+    const result = ImportUiStateSchema.parse({ bidsReviewConfirmed: true });
+    expect(result.bidsReviewConfirmed).toBe(true);
+  });
+
+  it("accepts explicit skippedSubjects", () => {
+    const result = ImportUiStateSchema.parse({ skippedSubjects: ["sub-01_1"] });
+    expect(result.skippedSubjects).toEqual(["sub-01_1"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 1.3: canAccessPhase dispatches on dataSource for processing gate
+// ---------------------------------------------------------------------------
+describe("canAccessPhase (BIDS processing gate)", () => {
+  it("DICOM project: processing gated on import.completed", () => {
+    const project = {
+      ...validProject,
+      projectMeta: { ...validProject.projectMeta, dataSource: "dicom" as const },
+      uiState: {
+        import: { completed: true, bidsReviewConfirmed: false, skippedSubjects: [] as string[] },
+      },
+    };
+    expect(canAccessPhase(project, "processing")).toBe(true);
+  });
+
+  it("DICOM project: processing blocked when import.completed is false", () => {
+    const project = {
+      ...validProject,
+      projectMeta: { ...validProject.projectMeta, dataSource: "dicom" as const },
+      uiState: {
+        import: { completed: false, bidsReviewConfirmed: false, skippedSubjects: [] as string[] },
+      },
+    };
+    expect(canAccessPhase(project, "processing")).toBe(false);
+  });
+
+  it("BIDS project: processing blocked when bidsReviewConfirmed is false", () => {
+    const project = {
+      ...validProject,
+      projectMeta: { ...validProject.projectMeta, dataSource: "bids" as const },
+      uiState: { import: { bidsReviewConfirmed: false, skippedSubjects: [] as string[] } },
+    };
+    expect(canAccessPhase(project, "processing")).toBe(false);
+  });
+
+  it("BIDS project: processing admitted when bidsReviewConfirmed is true", () => {
+    const project = {
+      ...validProject,
+      projectMeta: { ...validProject.projectMeta, dataSource: "bids" as const },
+      uiState: { import: { bidsReviewConfirmed: true, skippedSubjects: [] as string[] } },
+    };
+    expect(canAccessPhase(project, "processing")).toBe(true);
+  });
+
+  it("BIDS project: processing blocked when import.uiState is missing", () => {
+    const project = {
+      ...validProject,
+      projectMeta: { ...validProject.projectMeta, dataSource: "bids" as const },
+      uiState: {},
+    };
+    expect(canAccessPhase(project, "processing")).toBe(false);
   });
 });

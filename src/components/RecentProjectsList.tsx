@@ -17,7 +17,7 @@ interface RecentProjectsListProps {
 }
 
 function getProjectLabel(path: string) {
-  const segments = path.split("/").filter(Boolean);
+  const segments = path.split(/[/\\]/).filter(Boolean);
   const fileName = segments[segments.length - 1] ?? path;
 
   if (fileName === "project.easl" && segments.length >= 2) {

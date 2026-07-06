@@ -292,6 +292,9 @@ export default function QcSelectionTable({
 
   const handleViewLog = useCallback(
     async (subjectSession: string, module: "structural" | "asl") => {
+      console.log(
+        `[QcSelectionTable] Viewing logs for subjectSession: ${subjectSession}, module: ${module}`,
+      );
       if (!projectRoot) return;
       setModalModule(module);
       setModalSubjectSession(subjectSession);
@@ -326,6 +329,9 @@ export default function QcSelectionTable({
 
   const handleViewReport = useCallback(
     (subjectSession: string, module: "structural" | "asl") => {
+      console.log(
+        `[QcSelectionTable] Viewing reports for subjectSession: ${subjectSession}, module: ${module}`,
+      );
       const row = rows.find((r) => r.subjectSession === subjectSession);
       const runs = row?.aslRuns || [];
       setReportModalSubjectSession(subjectSession);
@@ -454,8 +460,8 @@ export default function QcSelectionTable({
               color={isError ? "red" : "teal"}
               variant="outline"
               leftSection={<IconBook size={12} />}
-              style={isError ? undefined : { cursor: "pointer" }}
-              onClick={isError ? undefined : () => handleViewLog(row.subjectSession, "structural")}
+              style={{ cursor: "pointer" }}
+              onClick={() => handleViewLog(row.subjectSession, "structural")}
               data-testid={isError ? "view-structural-errors" : "view-structural-logs"}
             >
               {isError ? "View Errors" : "View Logs"}
@@ -537,8 +543,8 @@ export default function QcSelectionTable({
               color={isError ? "red" : "teal"}
               variant="outline"
               leftSection={<IconBook size={12} />}
-              style={isError ? undefined : { cursor: "pointer" }}
-              onClick={isError ? undefined : () => handleViewLog(row.subjectSession, "asl")}
+              style={{ cursor: "pointer" }}
+              onClick={() => handleViewLog(row.subjectSession, "asl")}
               data-testid={isError ? "view-asl-errors" : "view-asl-logs"}
             >
               {isError ? "View Errors" : "View Logs"}

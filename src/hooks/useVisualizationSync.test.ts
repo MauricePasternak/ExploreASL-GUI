@@ -63,6 +63,7 @@ describe("useVisualizationSync", () => {
           createdAt: new Date().toISOString(),
           lastOpened: new Date().toISOString(),
           currentPhase: "visualization",
+          dataSource: "dicom" as const,
         },
         uiState: {
           dataVis: {
@@ -101,6 +102,7 @@ describe("useVisualizationSync", () => {
           createdAt: new Date().toISOString(),
           lastOpened: new Date().toISOString(),
           currentPhase: "visualization",
+          dataSource: "dicom" as const,
         },
         uiState: {},
         mappingState: {},
@@ -135,6 +137,7 @@ describe("useVisualizationSync", () => {
           createdAt: new Date().toISOString(),
           lastOpened: new Date().toISOString(),
           currentPhase: "visualization",
+          dataSource: "dicom" as const,
         },
         uiState: {},
         mappingState: {},
@@ -161,6 +164,7 @@ describe("useVisualizationSync", () => {
           createdAt: new Date().toISOString(),
           lastOpened: new Date().toISOString(),
           currentPhase: "visualization",
+          dataSource: "dicom" as const,
         },
         uiState: {},
         mappingState: {},

@@ -80,7 +80,7 @@ export default function VisualizationPage() {
         // File deleted mid-session
         useVisualizationStore.getState().setJoinConfig(null);
         const filename =
-          joinConfig.externalSource.absolutePath.split("/").pop() ??
+          joinConfig.externalSource.absolutePath.split(/[/\\]/).pop() ??
           joinConfig.externalSource.absolutePath;
         setInvalidationBanner(`External file '${filename}' no longer exists.`);
         // Re-run load_qcbf_data to revert to qCBF-only

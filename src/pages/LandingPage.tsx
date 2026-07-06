@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
-import { Button, Divider, Group, Image, Stack, Text } from "@mantine/core";
-import { IconFolderOpen, IconPlus } from "@tabler/icons-react";
+import { Button, Divider, Group, Image, Modal, Radio, Stack, Text, Alert } from "@mantine/core";
+import { IconAlertTriangle, IconFolderOpen, IconPlus } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
 import { useNavigate } from "react-router";
@@ -14,6 +14,29 @@ import RecentProjectsList from "../components/RecentProjectsList";
 import { logAction } from "../lib/debug";
 import appLogo from "../../src-tauri/icons/easl_gui_logo.png";
 
+/** Shape returned by the Rust `check_bids_dataset` command. */
+interface BidsCheckResult {
+  isBids: boolean;
+  hasDatasetDescription: boolean;
+  datasetDescError: string | null;
+  bidsVersion: string | null;
+  aslSubjectCount: number;
+  aslSessionCount: number;
+  totalSubjectCount: number;
+  missingSidecars: string[];
+  missingAslcontextCount: number;
+  hasPerfDirectory: boolean;
+  isCrossSectional: boolean;
+  error: string | null;
+}
+
+type BidsDialogState =
+  | null
+  | { kind: "bids-detected"; result: BidsCheckResult }
+  | { kind: "no-subjects"; result: BidsCheckResult }
+  | { kind: "no-asl"; result: BidsCheckResult }
+  | { kind: "corrupt-desc"; result: BidsCheckResult };
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -21,12 +44,34 @@ export default function LandingPage() {
   const loadProject = useProjectStore((state) => state.loadProject);
   const addRecentProject = useGlobalStore((state) => state.addRecentProject);
 
+  // BIDS detection dialog state
+  const [bidsDialog, setBidsDialog] = useState<BidsDialogState>(null);
+  const [bidsRadioValue, setBidsRadioValue] = useState<"bids" | "dicom" | null>(null);
+  // Store the selected folder path + project name for dialog actions
+  const [pendingFolder, setPendingFolder] = useState<{ path: string; name: string } | null>(null);
+
   function showError(title: string, message: string) {
     notifications.show({
       color: "red",
       title,
       message,
     });
+  }
+
+  async function proceedWithProject(
+    selected: string,
+    projectName: string,
+    dataSource: "dicom" | "bids",
+  ) {
+    const projectPath = `${selected}/${PROJECT_FILE_NAME}`;
+    await createProject(selected, projectName, { dataSource });
+    addRecentProject(projectPath);
+    logAction("landing_new_project_created", { path: selected, name: projectName, dataSource });
+
+    const project = useProjectStore.getState().project;
+    if (project) {
+      navigate(`/project/${project.projectMeta.id}/import`);
+    }
   }
 
   async function handleNewProject() {
@@ -45,7 +90,7 @@ export default function LandingPage() {
         return;
       }
 
-      const projectName = selected.split("/").filter(Boolean).pop() ?? "Untitled";
+      const projectName = selected.split(/[/\\]/).filter(Boolean).pop() ?? "Untitled";
       const projectPath = `${selected}/${PROJECT_FILE_NAME}`;
       const writable = (await invoke("is_writable", { path: selected })) as boolean;
       if (!writable) {
@@ -63,13 +108,52 @@ export default function LandingPage() {
         return;
       }
 
-      await createProject(selected, projectName);
-      addRecentProject(projectPath);
-      logAction("landing_new_project_created", { path: selected, name: projectName });
+      // Invoke BIDS detection before creating the project
+      const bidsResult = (await invoke("check_bids_dataset", {
+        rootPath: selected,
+      })) as BidsCheckResult;
 
-      const project = useProjectStore.getState().project;
-      if (project) {
-        navigate(`/project/${project.projectMeta.id}/import`);
+      setPendingFolder({ path: selected, name: projectName });
+
+      // Route to appropriate dialog
+      if (bidsResult.datasetDescError != null && bidsResult.aslSubjectCount >= 1) {
+        logAction("landing_bids_corrupt_desc", { aslSubjectCount: bidsResult.aslSubjectCount });
+        setBidsDialog({ kind: "corrupt-desc", result: bidsResult });
+      } else if (bidsResult.error == null && bidsResult.isBids) {
+        logAction("landing_bids_detected", {
+          aslSubjectCount: bidsResult.aslSubjectCount,
+          aslSessionCount: bidsResult.aslSessionCount,
+          bidsVersion: bidsResult.bidsVersion,
+        });
+        setBidsRadioValue(null);
+        setBidsDialog({ kind: "bids-detected", result: bidsResult });
+      } else if (
+        !bidsResult.isBids &&
+        bidsResult.aslSubjectCount === 0 &&
+        bidsResult.totalSubjectCount === 0
+      ) {
+        logAction("landing_bids_no_subjects");
+        setBidsDialog({ kind: "no-subjects", result: bidsResult });
+      } else if (
+        !bidsResult.isBids &&
+        bidsResult.aslSubjectCount === 0 &&
+        bidsResult.totalSubjectCount > 0
+      ) {
+        logAction("landing_bids_no_asl", { totalSubjectCount: bidsResult.totalSubjectCount });
+        setBidsDialog({ kind: "no-asl", result: bidsResult });
+      } else if (bidsResult.error != null && bidsResult.isBids) {
+        // Defensive: spec implies this state is unreachable (a BIDS dataset
+        // with ASL subjects but a non-null `error`). If the Rust layer ever
+        // emits it, surface a non-fatal corrupt-desc warning rather than
+        // silently creating a DICOM project over a BIDS folder.
+        logAction("landing_bids_defensive_corrupt_desc", {
+          error: bidsResult.error,
+          aslSubjectCount: bidsResult.aslSubjectCount,
+        });
+        setBidsDialog({ kind: "corrupt-desc", result: bidsResult });
+      } else {
+        // Fallback: no BIDS, create DICOM project directly
+        await proceedWithProject(selected, projectName, "dicom");
       }
     } catch {
       showError(
@@ -80,6 +164,60 @@ export default function LandingPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleDialogCancel() {
+    setBidsDialog(null);
+    setBidsRadioValue(null);
+    setPendingFolder(null);
+    logAction("landing_bids_dialog_cancelled");
+  }
+
+  async function handleBidsDetectedContinue() {
+    if (!bidsRadioValue || !pendingFolder) return;
+    const dataSource = bidsRadioValue === "bids" ? "bids" : "dicom";
+    logAction("landing_bids_detect_continue", { dataSource });
+    setBidsDialog(null);
+    setBidsRadioValue(null);
+    setPendingFolder(null);
+    setLoading(true);
+    try {
+      await proceedWithProject(pendingFolder.path, pendingFolder.name, dataSource);
+    } catch {
+      showError(
+        "Failed to create project",
+        "ExploreASL GUI could not initialize the project files in the selected directory.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCorruptDescSkip() {
+    if (!pendingFolder) return;
+    logAction("landing_bids_corrupt_desc_skip", { path: pendingFolder.path });
+    setBidsDialog(null);
+    setPendingFolder(null);
+    setLoading(true);
+    try {
+      await proceedWithProject(pendingFolder.path, pendingFolder.name, "bids");
+    } catch {
+      showError(
+        "Failed to create project",
+        "ExploreASL GUI could not initialize the project files in the selected directory.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleNoBidsChooseDifferent() {
+    logAction("landing_bids_choose_different");
+    setBidsDialog(null);
+    setBidsRadioValue(null);
+    setPendingFolder(null);
+    // Re-trigger the new project flow (reopens folder picker)
+    await handleNewProject();
   }
 
   async function handleOpenProject() {
@@ -277,6 +415,199 @@ export default function LandingPage() {
           />
         </Stack>
       </div>
+
+      {/* ===== BIDS Detection Dialogs ===== */}
+
+      {/* Case 1: BIDS detected — radio choice */}
+      <Modal
+        opened={bidsDialog?.kind === "bids-detected"}
+        onClose={handleDialogCancel}
+        title="BIDS Dataset Detected"
+        centered
+        data-testid="bids-detection-dialog"
+        transitionProps={{ duration: 0, exitDuration: 0 }}
+      >
+        {bidsDialog?.kind === "bids-detected" && (
+          <Stack gap="md">
+            <Text size="sm">
+              The selected folder contains a BIDS-formatted dataset with ASL data.
+            </Text>
+
+            <Stack gap="xs">
+              <Text size="sm">
+                <strong>ASL subjects:</strong> {bidsDialog.result.aslSubjectCount}
+              </Text>
+              <Text size="sm">
+                <strong>ASL sessions:</strong> {bidsDialog.result.aslSessionCount}
+              </Text>
+              <Text size="sm">
+                <strong>Cross-sectional:</strong>{" "}
+                {bidsDialog.result.isCrossSectional ? "Yes" : "No"}
+              </Text>
+            </Stack>
+
+            {bidsDialog.result.missingAslcontextCount > 0 && (
+              <Alert color="yellow" icon={<IconAlertTriangle size={16} />}>
+                {bidsDialog.result.missingAslcontextCount} session
+                {bidsDialog.result.missingAslcontextCount > 1 ? "s" : ""} will be skipped during
+                review due to missing{" "}
+                <Text span ff="monospace" size="xs">
+                  *_aslcontext.tsv
+                </Text>{" "}
+                files.
+              </Alert>
+            )}
+
+            <Text size="sm" c="dimmed">
+              Note: A{" "}
+              <Text span ff="monospace" size="xs">
+                rawdata/
+              </Text>{" "}
+              directory will be created in this folder during processing (required for ExploreASL
+              compatibility).
+            </Text>
+
+            <Radio.Group
+              value={bidsRadioValue ?? ""}
+              onChange={(val) => setBidsRadioValue(val as "bids" | "dicom")}
+            >
+              <Stack>
+                <Radio
+                  value="bids"
+                  label="Skip Import — review BIDS metadata"
+                  data-testid="bids-detection-dialog-skip-radio"
+                />
+                <Radio
+                  value="dicom"
+                  label="Import from DICOM"
+                  data-testid="bids-detection-dialog-dicom-radio"
+                />
+              </Stack>
+            </Radio.Group>
+
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                onClick={handleDialogCancel}
+                data-testid="bids-detection-dialog-cancel-btn"
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={!bidsRadioValue}
+                onClick={handleBidsDetectedContinue}
+                data-testid="bids-detection-dialog-continue-btn"
+              >
+                Continue
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      {/* Case 2: No BIDS subjects found */}
+      <Modal
+        opened={bidsDialog?.kind === "no-subjects"}
+        onClose={handleDialogCancel}
+        title="No BIDS Subjects Found"
+        centered
+        data-testid="bids-no-subjects-dialog"
+        transitionProps={{ duration: 0, exitDuration: 0 }}
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            No BIDS subjects found in the selected folder. Ensure the folder contains{" "}
+            <Text span ff="monospace" size="xs">
+              sub-*
+            </Text>{" "}
+            directories with ASL data.
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={handleDialogCancel}
+              data-testid="bids-no-subjects-cancel-btn"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleNoBidsChooseDifferent} data-testid="bids-no-subjects-choose-btn">
+              Choose Different Folder
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Case 3: Subjects but no ASL */}
+      <Modal
+        opened={bidsDialog?.kind === "no-asl"}
+        onClose={handleDialogCancel}
+        title="No Valid ASL BIDS Data Found"
+        centered
+        data-testid="bids-no-asl-dialog"
+        transitionProps={{ duration: 0, exitDuration: 0 }}
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            The selected folder contains BIDS subjects but none have valid ASL data. Ensure at least
+            one subject has a{" "}
+            <Text span ff="monospace" size="xs">
+              perf/
+            </Text>{" "}
+            directory with{" "}
+            <Text span ff="monospace" size="xs">
+              *_asl.json
+            </Text>{" "}
+            sidecars.
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={handleDialogCancel}
+              data-testid="bids-no-asl-cancel-btn"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleNoBidsChooseDifferent} data-testid="bids-no-asl-choose-btn">
+              Choose Different Folder
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Case 4: Corrupt dataset_description but ASL present */}
+      <Modal
+        opened={bidsDialog?.kind === "corrupt-desc"}
+        onClose={handleDialogCancel}
+        title="Corrupt dataset_description.json"
+        centered
+        data-testid="bids-corrupt-desc-dialog"
+        transitionProps={{ duration: 0, exitDuration: 0 }}
+      >
+        {bidsDialog?.kind === "corrupt-desc" && (
+          <Stack gap="md">
+            <Text size="sm">
+              The{" "}
+              <Text span ff="monospace" size="xs">
+                dataset_description.json
+              </Text>{" "}
+              file is corrupt, but {bidsDialog.result.aslSubjectCount} ASL subjects were found.
+              Proceed with BIDS import?
+            </Text>
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                onClick={handleDialogCancel}
+                data-testid="bids-corrupt-desc-cancel-btn"
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleCorruptDescSkip} data-testid="bids-corrupt-desc-skip-btn">
+                Skip Import anyway
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
     </div>
   );
 }

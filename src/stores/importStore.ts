@@ -1,21 +1,15 @@
 import { z } from "zod";
 import { create } from "zustand";
 
+import { invoke } from "@tauri-apps/api/core";
+
+import { formatBidsScanValidationError } from "../lib/bids/errorFormatter";
+import { logAction } from "../lib/debug";
 import { type ImportSubjectStatus } from "../lib/importStatus";
 import { getMaxRestorableImportStep } from "../lib/importStepAccess";
 
-import {
-  ImportSnapshotSchema,
-  IMPORT_EXECUTION_PHASES,
-  PathPatternSchema,
-  TokenAssignmentSchema,
-  ModalityAliasSchema,
-  SessionAliasSchema,
-  SubjectRenameSchema,
-  MetadataGroupSchema,
-  SubjectRowSchema,
-} from "../schemas/importSchemas";
 import type {
+  DerivedMetadataGroup,
   ImportProgress,
   ImportSnapshot,
   MetadataGroup,
@@ -27,12 +21,36 @@ import type {
   TokenAssignment,
   TokenTag,
 } from "../schemas/importSchemas";
+import {
+  DerivedMetadataGroupSchema,
+  IMPORT_EXECUTION_PHASES,
+  ImportSnapshotSchema,
+  MetadataGroupSchema,
+  ModalityAliasSchema,
+  PathPatternSchema,
+  SessionAliasSchema,
+  SubjectRenameSchema,
+  SubjectRowSchema,
+  TokenAssignmentSchema,
+} from "../schemas/importSchemas";
 
 // =============================================================================
 // State Interface
 // =============================================================================
 
 export type ImportPhase = "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled";
+
+/** Session-only BIDS review scan state. Not persisted to .easl. */
+export interface BidsReviewState {
+  scanComplete: boolean;
+  scanError: string | null;
+  detectedGroups: DerivedMetadataGroup[];
+  /**
+   * Subjects skipped by the BIDS scanner (e.g. missing ASL sidecars).
+   * Format convention: `"sub-XX_<session>"` per design D2/D11/D20.
+   */
+  skippedSubjects: string[];
+}
 
 export interface ImportState {
   // Step tracking
@@ -74,6 +92,9 @@ export interface ImportState {
 
   // Snapshot
   mostRecentConfig: ImportSnapshot | null;
+
+  // BIDS review (session-only, not persisted)
+  bidsReview: BidsReviewState;
 
   // MATLAB selection
   selectedMatlabPath: string;
@@ -131,6 +152,13 @@ export interface ImportState {
   ) => void;
   loadPersistedState: (persisted: Record<string, unknown>) => void;
   resetImport: () => void;
+  // BIDS review actions
+  startBidsScan: (rootPath: string) => Promise<void>;
+  setDetectedGroups: (groups: DerivedMetadataGroup[]) => void;
+  retryBidsScan: (rootPath: string) => Promise<void>;
+  rescanConfirmedBidsProject: (rootPath: string) => Promise<void>;
+  backToLanding: () => void;
+  resetBidsReview: () => void;
 }
 
 // =============================================================================
@@ -159,6 +187,12 @@ const INITIAL_STATE = {
   importRunning: false,
   importSummary: null as ImportState["importSummary"],
   mostRecentConfig: null as ImportSnapshot | null,
+  bidsReview: {
+    scanComplete: false,
+    scanError: null,
+    detectedGroups: [] as DerivedMetadataGroup[],
+    skippedSubjects: [] as string[],
+  },
   selectedMatlabPath: "",
 };
 
@@ -182,6 +216,40 @@ function normalizePersistedImportPhase(phase: unknown): ImportPhase {
   }
 
   return INITIAL_STATE.importPhase;
+}
+
+async function scanBidsSidecars(rootPath: string) {
+  let groupsWithId: Array<
+    Record<string, unknown> & { fingerprintHash?: string; id?: string; label?: string }
+  > = [];
+
+  try {
+    const result = (await invoke("scan_bids_sidecars", { rootPath })) as {
+      groups: Array<Record<string, unknown> & { fingerprintHash?: string; id?: string }>;
+      skipped: string[];
+    };
+
+    // Map fingerprintHash to id to match schema expectations.
+    groupsWithId = (result.groups ?? []).map((g) => ({
+      ...g,
+      id: g.id ?? g.fingerprintHash,
+    }));
+
+    const detectedGroups = DerivedMetadataGroupSchema.array().parse(groupsWithId);
+    const skippedSubjects = z.array(z.string()).parse(result.skipped ?? []);
+
+    return {
+      detectedGroups,
+      skippedSubjects,
+    };
+  } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    if (err instanceof z.ZodError) {
+      message = formatBidsScanValidationError(err, groupsWithId);
+    }
+    // @ts-expect-error - Error cause option is not defined in ES2020 target library
+    throw new Error(message, { cause: err });
+  }
 }
 
 // =============================================================================
@@ -683,5 +751,108 @@ export const useImportStore = create<ImportState>((set) => ({
 
   resetImport: () => {
     set({ ...INITIAL_STATE });
+  },
+
+  // ---------------------------------------------------------------------------
+  // BIDS Review Slice
+  // ---------------------------------------------------------------------------
+
+  startBidsScan: async (rootPath: string) => {
+    console.debug("[importStore] startBidsScan:", rootPath);
+    try {
+      const { detectedGroups, skippedSubjects } = await scanBidsSidecars(rootPath);
+
+      console.debug("[importStore] scan_bids_sidecars success:", {
+        groups: detectedGroups.length,
+        skipped: skippedSubjects.length,
+      });
+
+      set({
+        bidsReview: {
+          scanComplete: true,
+          scanError: null,
+          detectedGroups,
+          skippedSubjects,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[importStore] startBidsScan error:", message, err);
+      set({
+        bidsReview: {
+          scanComplete: false,
+          scanError: message,
+          detectedGroups: [],
+          skippedSubjects: [],
+        },
+      });
+    }
+  },
+
+  setDetectedGroups: (groups) => {
+    console.debug("[importStore] setDetectedGroups:", groups.length);
+    set((state) => ({
+      bidsReview: { ...state.bidsReview, detectedGroups: groups },
+    }));
+  },
+
+  /**
+   * Clear any previous scan error and re-run the BIDS sidecar scan.
+   * @param rootPath - Absolute path to the BIDS project root directory.
+   */
+  retryBidsScan: async (rootPath: string) => {
+    console.debug("[importStore] retryBidsScan:", rootPath);
+    logAction("bids_scan_retry", { rootPath });
+    set((state) => ({
+      bidsReview: { ...state.bidsReview, scanError: null },
+    }));
+    await useImportStore.getState().startBidsScan(rootPath);
+  },
+
+  /**
+   * Re-scan an already-confirmed BIDS project. This updates only the
+   * session-only review slice; persisted project mapping is overwritten later
+   * by confirmBidsReview after the user explicitly confirms.
+   */
+  rescanConfirmedBidsProject: async (rootPath: string) => {
+    console.debug("[importStore] rescanConfirmedBidsProject:", rootPath);
+    logAction("bids_confirmed_rescan", { rootPath });
+    set({
+      bidsReview: {
+        scanComplete: false,
+        scanError: null,
+        detectedGroups: [],
+        skippedSubjects: [],
+      },
+    });
+
+    await useImportStore.getState().startBidsScan(rootPath);
+  },
+
+  /**
+   * Reset BIDS review state and return to the landing/source-selection view.
+   * The calling component must call `navigate("/")` separately.
+   */
+  backToLanding: () => {
+    console.debug("[importStore] backToLanding");
+    set({
+      bidsReview: {
+        scanComplete: false,
+        scanError: null,
+        detectedGroups: [],
+        skippedSubjects: [],
+      },
+    });
+  },
+
+  resetBidsReview: () => {
+    set({
+      bidsReview: {
+        scanComplete: false,
+        scanError: null,
+        detectedGroups: [],
+        skippedSubjects: [],
+      },
+    });
   },
 }));

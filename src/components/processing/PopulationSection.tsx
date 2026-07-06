@@ -191,6 +191,7 @@ export default function PopulationSection() {
   const hasError = logs.some((l) => l.hasError);
 
   const handleViewLog = useCallback(async () => {
+    console.log("[PopulationSection] Viewing population logs");
     if (!projectRoot || !hasLog) return;
     setModalOpened(true);
     setModalLoading(true);
@@ -291,8 +292,8 @@ export default function PopulationSection() {
               color={hasError ? "red" : "teal"}
               variant="outline"
               leftSection={<IconBook size={12} />}
-              style={hasError ? undefined : { cursor: "pointer" }}
-              onClick={hasError ? undefined : handleViewLog}
+              style={{ cursor: "pointer" }}
+              onClick={handleViewLog}
               data-testid={hasError ? "population-error-btn" : "population-log-btn"}
             >
               {hasError ? "View Errors" : "View Logs"}

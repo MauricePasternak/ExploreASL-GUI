@@ -67,6 +67,7 @@ describe("dataPar flow: store ↔ project sync", () => {
           createdAt: "",
           lastOpened: "",
           currentPhase: "parameters",
+          dataSource: "dicom" as const,
         },
         uiState: {
           datapar: {
@@ -110,6 +111,7 @@ describe("dataPar flow: store ↔ project sync", () => {
           createdAt: "",
           lastOpened: "",
           currentPhase: "parameters",
+          dataSource: "dicom" as const,
         },
         uiState: {
           datapar: {
@@ -159,6 +161,7 @@ describe("dataPar flow: store ↔ project sync", () => {
           createdAt: "",
           lastOpened: "",
           currentPhase: "parameters",
+          dataSource: "dicom" as const,
         },
         uiState: {
           datapar: {
