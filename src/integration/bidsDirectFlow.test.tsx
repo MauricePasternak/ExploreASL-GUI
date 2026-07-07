@@ -258,4 +258,52 @@ describe("BIDS-direct revisit import after confirmation", () => {
       expect(project?.uiState?.import?.skippedSubjects).toEqual(["sub-NEW_1"]);
     });
   });
+
+  it("updates subjectRows only after explicit re-scan and re-confirm when a subject is added externally", async () => {
+    seedBidsProject(true); // confirmed project with 25 subjects
+
+    // Check initial subjectRows length is 25
+    expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(25);
+
+    // Mock scan to return 26 subjects (adding sub-26)
+    const mockGroupWithNewSubject: DerivedMetadataGroup = {
+      ...MOCK_GROUP,
+      subjects: [...MOCK_GROUP.subjects, { subjectLabel: "sub-26", sessionLabels: ["1"] }],
+    };
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "scan_bids_sidecars") {
+        return Promise.resolve({
+          groups: [mockGroupWithNewSubject],
+          skipped: [],
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    renderWithProviders(<BIDSReviewPanel />);
+
+    // Renders the read-only summary showing the persisted 25 subjects.
+    // The store's subjectRows remains 25.
+    expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(25);
+
+    // Click Re-scan BIDS
+    await userEvent.click(screen.getByRole("button", { name: /re-scan bids/i }));
+
+    // Wait for latest scan result to render in editable state
+    await waitFor(() => {
+      expect(screen.getByTestId("bids-group-label-input-g1")).toBeInTheDocument();
+    });
+
+    // The scan completed, but until Confirm is clicked, the persisted subjectRows MUST still be 25
+    expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(25);
+
+    // Click Confirm to persist the updated scan result
+    await userEvent.click(screen.getByRole("button", { name: /confirm/i }));
+
+    // Now it should be updated to 26
+    await waitFor(() => {
+      expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(26);
+    });
+  });
 });
