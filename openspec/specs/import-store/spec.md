@@ -1,5 +1,4 @@
 ## Requirements
-
 ### Requirement: ImportProgress state shape
 
 The `ImportProgress` type in the import store SHALL be extended to include: `errorStep?: "DCM2NII" | "NII2BIDS"` (which step failed), `warnings?: string[]` (collected warning messages from stdout), `duration?: number` (processing duration in seconds), and `stale?: boolean` (whether the config has changed since this subject was imported). The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`.
@@ -33,6 +32,8 @@ The `ImportProgress` type in the import store SHALL be extended to include: `err
 
 The import store SHALL add: `importCompleted: boolean` (defaults to `false`, set to `true` when all subjects complete successfully), `importLog: string[]` (accumulated raw stdout lines from `ImportRawEvent`), `importPhase: "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled"` (defaults to `"idle"`), and `mostRecentConfig: ImportSnapshot | null` (defaults to `null`, set at `startImport()` time from current import configuration).
 
+The import store additionally SHALL support a BIDS review slice (`BidsReviewState` as specified above: `scanComplete`, `scanError`, `detectedGroups`, `skippedSubjects`, with actions `startBidsScan`, `setDetectedGroups`, `retryBidsScan`, `rescanConfirmedBidsProject`, `backToLanding`, `resetBidsReview`). The BIDS review slice is session-only; its `confirmed` equivalent is read from `project.uiState.import.bidsReviewConfirmed`.
+
 The `ImportSnapshot` type SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, `subjectRows`.
 
 The `importCompleted` flag and `mostRecentConfig` SHALL be persisted in the project file under `uiState.import.completed` and `uiState.import.mostRecentConfig` respectively.
@@ -42,41 +43,6 @@ The `startImport()` action SHALL capture the current import configuration as an 
 The store SHALL provide a `reconstructProgressFromLockFiles(progress: Record<string, ImportProgress>)` action that replaces `importProgress` with lock file scan results and preserves real-time events if an import is currently running.
 
 The store SHALL provide a `computeStaleness(currentConfig: ImportState, snapshot: ImportSnapshot | null): Record<string, boolean>` function that returns per-subject staleness. This function SHALL be called on entering step 5 and the results stored in each subject's `stale` field in `importProgress`.
-
-#### Scenario: Import starts with snapshot capture
-
-- **WHEN** user clicks "Start Import"
-- **THEN** `importPhase` transitions from `"idle"` to `"preparing"`, `importLog` is cleared, `mostRecentConfig` is set to current import configuration snapshot
-
-#### Scenario: Import completes successfully
-
-- **WHEN** all subjects succeed and post-processing finishes
-- **THEN** `importPhase` is `"completed"`, `importCompleted` is `true`, both are persisted to project file under `uiState.import.completed`
-
-#### Scenario: Progress reconstruction on re-visit
-
-- **WHEN** the user navigates to step 5 and `read_import_status` returns lock file data
-- **THEN** `reconstructProgressFromLockFiles` is called with the scan results, replacing the ephemeral progress with reconstructed per-subject status
-
-#### Scenario: Staleness computation on re-visit
-
-- **WHEN** the user navigates to step 5 after changing a metadata group parameter
-- **THEN** `computeStaleness` identifies that `metadataGroups` differ, determines which groups changed, and marks subjects in those groups as stale
-
-#### Scenario: Structural staleness on re-visit
-
-- **WHEN** the user navigates to step 5 after changing a tokenizer assignment
-- **THEN** `computeStaleness` identifies that `tokenizerConfigs` differ and marks ALL subjects as stale
-
-#### Scenario: Page reload after successful import
-
-- **WHEN** user reopens a project where `uiState.import.completed` was `true`
-- **THEN** step 5 shows the reconstructed progress from lock files with appropriate staleness indicators
-
-#### Scenario: Stale running state on reload (V0)
-
-- **WHEN** user reopens a project where `uiState.import.currentPhase` was `"running"` (frontend reload during import)
-- **THEN** a warning is shown: "Previous import may be running. Check status or retry."
 
 ### Requirement: Subject error detail matching
 
@@ -106,8 +72,6 @@ The progress table SHALL be populated immediately when `importPhase` transitions
 - **WHEN** a `subject_start` event arrives for subject "GOOD"
 - **THEN** `importProgress["GOOD"].status` transitions from `"pending"` to `"running"`
 
-## MODIFIED Requirements
-
 ### Requirement: DataPar state in project file schema
 
 The `ProjectFileSchema` in `src/schemas/project.ts` SHALL replace the current `dataPar` field from `z.object({}).passthrough()` with a structured Zod object `DataParSchema`. All fields within `DataParSchema` SHALL use `.optional()`. The `assembleDataPar` function SHALL convert stored `DataParSchema` state to the nested `x.*` JSON structure for ExploreASL consumption. The `uiState` object SHALL include `showAdvancedParameters: z.boolean().default(false)`.
@@ -126,3 +90,47 @@ The `ProjectFileSchema` in `src/schemas/project.ts` SHALL replace the current `d
 
 - **WHEN** user enables "Show advanced parameter sections" and closes the app
 - **THEN** on next load, `uiState.showAdvancedParameters` is `true` and Structural and Environment sections are visible
+
+### Requirement: BIDS review slice for scan lifecycle
+
+`importStore` SHALL add a `BidsReviewState` slice with:
+- `scanComplete: boolean`
+- `scanError: string | null`
+- `detectedGroups: DerivedMetadataGroup[]`
+- `skippedSubjects: string[]` (session-only copy; persisted version lives in `uiState.import.skippedSubjects`)
+
+Actions:
+- `startBidsScan(rootPath: string)`: invokes `scan_bids_sidecars`, populates `detectedGroups` and `skippedSubjects` on success
+- `setDetectedGroups(groups)`: syncs the result of a scan
+- `retryBidsScan()`: clears `scanError` and re-invokes `scan_bids_sidecars`
+- `rescanConfirmedBidsProject(rootPath: string)`: starts a fresh scan for an already-confirmed BIDS project without clearing persisted project mapping state
+- `backToLanding()`: navigates to `/` (abandons project; project remains in store)
+- `resetBidsReview()`: clears BIDS review state (called on project switch)
+
+Session-only state. Not persisted to `.easl`. The `confirmed` flag is NOT in this slice — `project.uiState.import.bidsReviewConfirmed` (persisted) is the single source of truth for confirmed state.
+
+#### Scenario: Scan successful
+
+- **WHEN** `startBidsScan` returns successfully with 1 group and 0 skipped subjects
+- **THEN** `scanComplete = true`, `scanError = null`, `detectedGroups.length = 1`, `skippedSubjects.length = 0`
+
+#### Scenario: Scan error
+
+- **WHEN** `startBidsScan` returns `Err("permission denied")`
+- **THEN** `scanComplete = false`, `scanError = "permission denied"`, `detectedGroups = []`
+
+#### Scenario: Retry clears error
+
+- **WHEN** user clicks `[Retry]` after scan error
+- **THEN** `retryBidsScan()` clears `scanError` to `null` and re-invokes `scan_bids_sidecars`
+
+#### Scenario: Confirmed state read from project store
+
+- **WHEN** `BIDSReviewPanel` needs to render the persisted revisit summary
+- **THEN** the panel reads `confirmed` from `projectStore.project.uiState.import.bidsReviewConfirmed`, not from `BidsReviewState`
+
+#### Scenario: Confirmed project re-scan does not mutate persisted project state
+
+- **WHEN** `rescanConfirmedBidsProject` fails with a scan error
+- **THEN** `scanError` is set in session state and persisted `mappingState` / `uiState.import.skippedSubjects` remain unchanged
+

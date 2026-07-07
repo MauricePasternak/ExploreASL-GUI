@@ -1,5 +1,4 @@
 ## Requirements
-
 ### Requirement: Import execution pipeline
 
 The system SHALL provide a single Rust command `run_import_pipeline(staging_root, staging_entries, sourcestructure_json, studypar_json, matlab_path, exploreasl_path, subject_list)` that atomically performs: (1) delete `.easl_staging/` if it exists, (2) create the standardized 4-level symlink tree at `.easl_staging/sourcedata/` from `staging_entries`, (3) write clean ExploreASL `sourcestructure.json` and `studyPar.json` configs to `.easl_staging/`, (4) spawn MATLAB as `matlab -batch "addpath('exploreasl_path'); ExploreASL('staging_root', [1,1,0], 0, 0)"`, (5) return the process PID on success or an error string on failure. The `staging_entries` parameter contains the GUI staging mappings with subject, session, run, modality, and source path. The `subject_list` parameter provides known subject names for stdout pattern matching. The command SHALL emit a `ImportPrepareComplete` event after steps 1-3 succeed and before MATLAB is spawned.
@@ -206,3 +205,57 @@ During import execution, the table SHALL update in real-time as structured event
 
 - **WHEN** a `subject_start` event arrives for subject "GOOD" during an active import
 - **THEN** `importProgress["GOOD"].status` transitions from "pending" to "running"
+
+### Requirement: canAccessPhase dispatches on dataSource
+
+`canAccessPhase(project, targetPhase)` SHALL implement the phase gating logic:
+
+- `idx = PROJECT_PHASES.indexOf(targetPhase)`, `currentIdx = PROJECT_PHASES.indexOf(project.projectMeta.currentPhase)`.
+- If `idx <= currentIdx` → return `true`.
+- If `targetPhase === "parameters"` → return `true`.
+- If `targetPhase === "processing"` → dispatch on `dataSource`:
+  - `dataSource === "bids"` → return `project.uiState?.import?.bidsReviewConfirmed === true`
+  - `dataSource === "dicom"` → return `project.uiState?.import?.completed === true`
+- If `targetPhase === "visualization" || targetPhase === "manifest"` → return `project.uiState?.population?.completed === true`.
+- Else → return `false`.
+
+`dataSource` is required (no fallback default per `ProjectMetaSchema`). Existing test fixtures that omitted `dataSource` MUST be updated to set it explicitly.
+
+#### Scenario: BIDS project before confirmation blocked from processing
+
+- **WHEN** `canAccessPhase(project, "processing")` is called where `dataSource = "bids"` and `bidsReviewConfirmed = false`
+- **THEN** returns `false`
+
+#### Scenario: BIDS project after confirmation reaches processing
+
+- **WHEN** `canAccessPhase(project, "processing")` is called where `dataSource = "bids"` and `bidsReviewConfirmed = true`
+- **THEN** returns `true`
+
+#### Scenario: DICOM project gate unchanged
+
+- **WHEN** `canAccessPhase(project, "processing")` is called where `dataSource = "dicom"` and `uiState.import.completed = true`
+- **THEN** returns `true`
+
+### Requirement: ImportPage conditional rendering
+
+`ImportPage` SHALL render based on `project.projectMeta.dataSource`:
+- `"bids"` → render `BIDSReviewPanel`
+- `"dicom"` → render the existing 6-step DICOM wizard
+
+When `uiState.import.bidsReviewConfirmed = true` and user revisits Import on a BIDS project, `BIDSReviewPanel` renders a persisted summary with explicit re-scan/re-confirm capability.
+
+#### Scenario: BIDS project lands on review panel
+
+- **WHEN** user creates a BIDS-direct project and navigates to `/project/:id/import`
+- **THEN** `ImportPage` renders `BIDSReviewPanel` (not the 6-step wizard)
+
+#### Scenario: DICOM project lands on wizard
+
+- **WHEN** user creates a DICOM project and navigates to `/project/:id/import`
+- **THEN** `ImportPage` renders the existing 6-step DICOM wizard
+
+#### Scenario: BIDS project revisit supports re-sync
+
+- **WHEN** user with `bidsReviewConfirmed = true` navigates back to Import on a BIDS-direct project
+- **THEN** `ImportPage` renders `BIDSReviewPanel` with persisted summary and `[Re-scan BIDS]`
+

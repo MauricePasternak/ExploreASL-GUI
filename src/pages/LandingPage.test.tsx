@@ -325,7 +325,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     expect(createProject).not.toHaveBeenCalled();
   });
 
-  it("shows error dialog when subjects exist but no ASL data found", async () => {
+  it("shows error dialog when subjects exist but no ASL data found, and cancel dismisses it", async () => {
     const createProject = vi.fn();
     useProjectStore.setState({ createProject });
     vi.mocked(open).mockResolvedValue("/tmp/no-asl");
@@ -350,7 +350,13 @@ describe("LandingPage BIDS detection dialogs", () => {
       expect(screen.getByTestId("bids-no-asl-dialog")).toBeInTheDocument();
     });
     expect(screen.getByTestId("bids-no-asl-choose-btn")).toBeInTheDocument();
-    expect(screen.getByTestId("bids-no-asl-cancel-btn")).toBeInTheDocument();
+
+    // Click cancel button
+    fireEvent.click(screen.getByTestId("bids-no-asl-cancel-btn"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("bids-no-asl-choose-btn")).not.toBeInTheDocument();
+    });
+
     expect(createProject).not.toHaveBeenCalled();
   });
 
