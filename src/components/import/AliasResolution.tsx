@@ -9,7 +9,7 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import { useEffect, useMemo } from "react";
-import HeaderCard from "../HeaderCard";
+import HeaderCard from "../common/HeaderCard";
 
 import { hasTokenizerTag, isAliasResolutionComplete } from "../../lib/importStepAccess";
 import { extractUniqueValues } from "../../lib/tokenizerUtils";

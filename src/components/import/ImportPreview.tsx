@@ -1,7 +1,7 @@
 import { Button, Group, Stack, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconEye } from "@tabler/icons-react";
 import { useMemo } from "react";
-import HeaderCard from "../HeaderCard";
+import HeaderCard from "../common/HeaderCard";
 
 import { buildAllStagingMappings } from "../../lib/importPreviewUtils";
 import { canEnterStep5 } from "../../lib/importStepAccess";

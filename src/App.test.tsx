@@ -3,7 +3,7 @@ import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_SETTINGS } from "./schemas/globalSettings";
+import { seedValidProfileGate } from "./test/landingProfileGate";
 import { useGlobalStore } from "./stores/globalStore";
 import { useProjectStore } from "./stores/projectStore";
 import App from "./App";
@@ -14,10 +14,7 @@ vi.mock("./components/settings/SettingsModal", () => ({
 
 describe("App", () => {
   beforeEach(() => {
-    useGlobalStore.setState({
-      loaded: true,
-      settings: DEFAULT_SETTINGS,
-    });
+    seedValidProfileGate();
     useProjectStore.setState({
       project: null,
       isDirty: false,

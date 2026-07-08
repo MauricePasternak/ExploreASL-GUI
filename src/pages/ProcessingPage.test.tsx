@@ -1,5 +1,5 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProcessingStore } from "../stores/processingStore";

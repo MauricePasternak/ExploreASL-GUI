@@ -1,12 +1,14 @@
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { seedValidProfileGate } from "../test/landingProfileGate";
 import { useProcessingStore } from "./processingStore";
 import { useProjectStore } from "./projectStore";
 
 describe("processing config round-trip persistence", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    seedValidProfileGate();
     useProjectStore.setState({
       project: null,
       isDirty: false,

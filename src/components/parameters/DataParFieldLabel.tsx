@@ -1,7 +1,7 @@
-import { Text, Box } from "@mantine/core";
+import { Box, Text } from "@mantine/core";
 
-import { FieldInfoIcon } from "../FieldInfoIcon";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
+import { FieldInfoIcon } from "../common/FieldInfoIcon";
 
 interface DataParFieldLabelProps {
   fieldKey: string;

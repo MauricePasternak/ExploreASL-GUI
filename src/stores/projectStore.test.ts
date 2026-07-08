@@ -4,19 +4,38 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PROJECT_FILE_NAME } from "../schemas/project";
 import type { ImportSnapshot } from "../schemas/importSchemas";
 import { readSessionCheckpoint } from "../lib/sessionCheckpoint";
+import { makeMatlabProfile } from "../test/profileFixtures";
+import { useGlobalStore } from "./globalStore";
 import { useImportStore } from "./importStore";
 import { __resetProjectRevisionForTests, useProjectStore } from "./projectStore";
 import { isBidsProject, ensureBidsIgnore } from "../lib/bids/validation";
+import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 
 vi.mock("../lib/bids/validation", () => ({
   isBidsProject: vi.fn(),
   ensureBidsIgnore: vi.fn(),
 }));
 
+function seedValidProfileGate() {
+  const profile = makeMatlabProfile();
+  useGlobalStore.setState({
+    loaded: true,
+    settings: {
+      ...DEFAULT_SETTINGS,
+      executionProfiles: [profile],
+    },
+    profileValidationState: {
+      [profile.id]: { valid: true, errors: [] },
+    },
+  });
+  return profile;
+}
+
 describe("useProjectStore", () => {
   beforeEach(() => {
     sessionStorage.clear();
     __resetProjectRevisionForTests();
+    seedValidProfileGate();
     useProjectStore.setState({
       project: null,
       isDirty: false,
@@ -43,6 +62,75 @@ describe("useProjectStore", () => {
     expect(readSessionCheckpoint()?.projectId).toBe(
       useProjectStore.getState().project?.projectMeta.id,
     );
+  });
+
+  it("defaults import selectedProfileId to the first valid profile on create", async () => {
+    const valid = makeMatlabProfile({ id: "valid-profile", label: "Valid" });
+    const invalid = makeMatlabProfile({ id: "invalid-profile", label: "Invalid" });
+    useGlobalStore.setState({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        executionProfiles: [invalid, valid],
+      },
+      profileValidationState: {
+        [invalid.id]: { valid: false, errors: ["bad"] },
+        [valid.id]: { valid: true, errors: [] },
+      },
+    });
+
+    await useProjectStore
+      .getState()
+      .createProject("/tmp/profile-default", "Profile Default", { dataSource: "dicom" });
+
+    expect(useProjectStore.getState().project?.uiState.import?.selectedProfileId).toBe(valid.id);
+    expect(writeTextFile).toHaveBeenCalledWith(
+      `/tmp/profile-default/${PROJECT_FILE_NAME}`,
+      expect.stringContaining(`"selectedProfileId": "${valid.id}"`),
+    );
+  });
+
+  it("throws when creating a project without a valid execution profile", async () => {
+    useGlobalStore.setState({
+      settings: DEFAULT_SETTINGS,
+      profileValidationState: {},
+    });
+
+    await expect(
+      useProjectStore
+        .getState()
+        .createProject("/tmp/no-profile", "No Profile", { dataSource: "dicom" }),
+    ).rejects.toThrow(/valid execution profile/i);
+    expect(useProjectStore.getState().project).toBeNull();
+  });
+
+  it("throws when loading a project without a valid execution profile", async () => {
+    useGlobalStore.setState({
+      settings: DEFAULT_SETTINGS,
+      profileValidationState: {},
+    });
+
+    vi.mocked(readTextFile).mockResolvedValue(
+      JSON.stringify({
+        version: "0.1.0",
+        projectMeta: {
+          id: "project-1",
+          name: "Loaded Project",
+          rootPath: "/tmp/loaded",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "parameters",
+          dataSource: "dicom",
+        },
+        uiState: {},
+        mappingState: {},
+        dataPar: {},
+      }),
+    );
+
+    await expect(
+      useProjectStore.getState().loadProject("/tmp/loaded/project.easl"),
+    ).rejects.toThrow(/valid execution profile/i);
+    expect(useProjectStore.getState().project).toBeNull();
   });
 
   it("DICOM creation sets dataSource dicom and bidsReviewConfirmed false", async () => {

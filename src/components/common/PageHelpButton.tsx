@@ -1,22 +1,22 @@
-import { useState } from "react";
-import { useLocation, useParams, useNavigate, useInRouterContext } from "react-router";
 import {
   ActionIcon,
+  Alert,
+  Button,
+  Group,
+  List,
   Modal,
   Stack,
   Text,
-  Title,
-  Button,
-  Alert,
-  Tooltip,
-  List,
   ThemeIcon,
-  Group,
+  Title,
+  Tooltip,
 } from "@mantine/core";
-import { IconHelp, IconBook, IconInfoCircle, IconChevronRight } from "@tabler/icons-react";
-import { useImportStore } from "../stores/importStore";
-import { useVisualizationStore } from "../stores/visualizationStore";
-import { useProjectStore } from "../stores/projectStore";
+import { IconBook, IconChevronRight, IconHelp, IconInfoCircle } from "@tabler/icons-react";
+import { useState } from "react";
+import { useInRouterContext, useLocation, useNavigate, useParams } from "react-router";
+import { useImportStore } from "../../stores/importStore";
+import { useProjectStore } from "../../stores/projectStore";
+import { useVisualizationStore } from "../../stores/visualizationStore";
 
 interface HelpContent {
   title: string;

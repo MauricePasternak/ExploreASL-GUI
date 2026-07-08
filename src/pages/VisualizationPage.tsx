@@ -1,8 +1,8 @@
 import { Alert, Button, Group, Stack, Stepper, Text, useMantineColorScheme } from "@mantine/core";
 import { IconAlertCircle, IconChartDots } from "@tabler/icons-react";
-import HeaderCard from "../components/HeaderCard";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import HeaderCard from "../components/common/HeaderCard";
 
 import ColumnTypes from "../components/visualization/ColumnTypes";
 import DataSelection from "../components/visualization/DataSelection";
@@ -10,7 +10,7 @@ import LevelOrdering from "../components/visualization/LevelOrdering";
 import VisualizeStep from "../components/visualization/VisualizeStep";
 import { useVisualizationSync } from "../hooks/useVisualizationSync";
 import { useProjectStore } from "../stores/projectStore";
-import { useVisualizationStore, DataInspection } from "../stores/visualizationStore";
+import { DataInspection, useVisualizationStore } from "../stores/visualizationStore";
 
 interface FileStats {
   mtime: string;

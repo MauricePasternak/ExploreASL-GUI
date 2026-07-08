@@ -1,7 +1,7 @@
 import { Badge, Button, Card, Checkbox, Group, Stack, Table, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconFileImport, IconPlus } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import HeaderCard from "../HeaderCard";
+import HeaderCard from "../common/HeaderCard";
 
 import { notifications } from "@mantine/notifications";
 

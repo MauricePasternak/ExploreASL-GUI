@@ -15,8 +15,8 @@ import { discoverPathPatterns } from "../../lib/pathUtils";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import HeaderCard from "../HeaderCard";
-import HelpTooltip from "../HelpTooltip";
+import HeaderCard from "../common/HeaderCard";
+import HelpTooltip from "../common/HelpTooltip";
 
 /**
  * Step 1: DICOM Ingestion.

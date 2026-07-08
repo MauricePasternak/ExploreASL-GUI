@@ -10,7 +10,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Virtuoso } from "react-virtuoso";
 
-import ProfileSelector from "../common/ProfileSelector";
 import { runImportPipeline, setupImportListeners, stopImportProcess } from "../../lib/importEvents";
 import { buildAllStagingMappings } from "../../lib/importPreviewUtils";
 import { computeStaleness } from "../../lib/importStaleness";
@@ -19,7 +18,8 @@ import { assembleSourcestructure, assembleStudyPar } from "../../lib/tokenizerUt
 import { useGlobalStore } from "../../stores/globalStore";
 import { type ImportPhase, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import HeaderCard from "../HeaderCard";
+import HeaderCard from "../common/HeaderCard";
+import ProfileSelector from "../common/ProfileSelector";
 import ImportSubjectTable from "./ImportSubjectTable";
 
 const PHASE_META: Record<

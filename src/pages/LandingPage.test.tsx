@@ -7,10 +7,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router";
 
-import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { PROJECT_FILE_NAME } from "../schemas/project";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
+import {
+  seedInvalidProfileGate,
+  seedValidProfileGate,
+  seedZeroProfilesGate,
+} from "../test/landingProfileGate";
+import { makeMatlabProfile } from "../test/profileFixtures";
 import LandingPage from "./LandingPage";
 
 describe("LandingPage", () => {
@@ -18,10 +23,7 @@ describe("LandingPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useGlobalStore.setState({
-      loaded: true,
-      settings: DEFAULT_SETTINGS,
-    });
+    seedValidProfileGate();
     useProjectStore.setState({
       project: null,
       isDirty: false,
@@ -136,6 +138,81 @@ describe("LandingPage", () => {
     });
   });
 
+  it("shows WelcomeCard when no execution profiles are configured", () => {
+    seedZeroProfilesGate();
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage onOpenSettings={vi.fn()} />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    expect(screen.getByTestId("welcome-card")).toBeInTheDocument();
+    expect(screen.queryByTestId("landing-new-project-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("landing-open-project-btn")).not.toBeInTheDocument();
+  });
+
+  it("calls onOpenSettings from WelcomeCard", () => {
+    seedZeroProfilesGate();
+    const onOpenSettings = vi.fn();
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage onOpenSettings={onOpenSettings} />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("welcome-open-settings-btn"));
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables project actions when all profiles are invalid", async () => {
+    seedInvalidProfileGate();
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    expect(screen.getByTestId("landing-invalid-profiles-alert")).toBeInTheDocument();
+    expect(screen.getByTestId("landing-new-project-btn")).toBeDisabled();
+    expect(screen.getByTestId("landing-open-project-btn")).toBeDisabled();
+  });
+
+  it("disables recent project open buttons when all profiles are invalid", async () => {
+    const profile = makeMatlabProfile();
+    seedInvalidProfileGate(profile);
+    useGlobalStore.setState((state) => ({
+      settings: {
+        ...state.settings,
+        recentProjects: ["/tmp/recent/project.easl"],
+      },
+    }));
+    vi.mocked(exists).mockResolvedValue(true);
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("landing-recent-projects-list")).toBeInTheDocument();
+    });
+
+    const openBtn = screen.getByTestId("recent-open-btn--tmp-recent-project-easl");
+    expect(openBtn).toBeDisabled();
+  });
+
   it("rejects opening easl files that are not named project.easl", async () => {
     const loadProject = vi.fn().mockRejectedValue(new Error("Expected project.easl"));
     useProjectStore.setState({ loadProject });
@@ -168,7 +245,7 @@ describe("LandingPage BIDS detection dialogs", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useGlobalStore.setState({ loaded: true, settings: DEFAULT_SETTINGS });
+    seedValidProfileGate();
     useProjectStore.setState({ project: null, isDirty: false, loaded: false });
     vi.mocked(open).mockResolvedValue(null);
     vi.mocked(exists).mockResolvedValue(false);
@@ -440,5 +517,89 @@ describe("LandingPage BIDS detection dialogs", () => {
     // The warning is rendered inside the dialog — check it exists
     const dialog = screen.getByTestId("bids-detection-dialog");
     expect(dialog.textContent).toMatch(/3.*session.*skip/i);
+  });
+
+  it("disables BIDS and allows DICOM import confirm when no BIDS subjects are found", async () => {
+    const createProject = vi.fn().mockResolvedValue(undefined);
+    useProjectStore.setState({ createProject });
+    vi.mocked(open).mockResolvedValue("/tmp/no-subjects");
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "is_writable") return true;
+      if (cmd === "check_bids_dataset") {
+        return {
+          ...BASE_BIDS_RESULT,
+          isBids: false,
+          aslSubjectCount: 0,
+          totalSubjectCount: 0,
+          error: "No BIDS subjects found",
+        };
+      }
+      return true;
+    });
+
+    renderLanding();
+    fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("bids-no-subjects-dialog")).toBeInTheDocument();
+    });
+
+    const skipRadio = screen.getByTestId("bids-detection-dialog-skip-radio");
+    const dicomRadio = screen.getByTestId("bids-detection-dialog-dicom-radio");
+    expect(skipRadio).toBeDisabled();
+    expect(dicomRadio).not.toBeDisabled();
+    expect(dicomRadio).toBeChecked(); // should be auto-selected
+
+    const confirmBtn = screen.getByTestId("bids-no-subjects-confirm-btn");
+    expect(confirmBtn).not.toBeDisabled();
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(createProject).toHaveBeenCalledWith("/tmp/no-subjects", "no-subjects", {
+        dataSource: "dicom",
+      });
+    });
+  });
+
+  it("disables BIDS and allows DICOM import confirm when subjects exist but no ASL data is found", async () => {
+    const createProject = vi.fn().mockResolvedValue(undefined);
+    useProjectStore.setState({ createProject });
+    vi.mocked(open).mockResolvedValue("/tmp/no-asl");
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "is_writable") return true;
+      if (cmd === "check_bids_dataset") {
+        return {
+          ...BASE_BIDS_RESULT,
+          isBids: false,
+          aslSubjectCount: 0,
+          totalSubjectCount: 5,
+          error: "No valid ASL BIDS data found",
+        };
+      }
+      return true;
+    });
+
+    renderLanding();
+    fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("bids-no-asl-dialog")).toBeInTheDocument();
+    });
+
+    const skipRadio = screen.getByTestId("bids-detection-dialog-skip-radio");
+    const dicomRadio = screen.getByTestId("bids-detection-dialog-dicom-radio");
+    expect(skipRadio).toBeDisabled();
+    expect(dicomRadio).not.toBeDisabled();
+    expect(dicomRadio).toBeChecked(); // should be auto-selected
+
+    const confirmBtn = screen.getByTestId("bids-no-asl-confirm-btn");
+    expect(confirmBtn).not.toBeDisabled();
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(createProject).toHaveBeenCalledWith("/tmp/no-asl", "no-asl", {
+        dataSource: "dicom",
+      });
+    });
   });
 });

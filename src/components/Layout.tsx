@@ -49,6 +49,10 @@ const PHASE_NAV = [
   { phase: "manifest", label: "Manifest", icon: IconFileReport },
 ] as const;
 
+export interface LayoutOutletContext {
+  onOpenSettings: () => void;
+}
+
 interface LayoutProps {
   onOpenSettings: () => void;
 }
@@ -465,7 +469,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
             </Group>
           </Stack>
         </Modal>
-        <Outlet />
+        <Outlet context={{ onOpenSettings } satisfies LayoutOutletContext} />
       </AppShell.Main>
     </AppShell>
   );

@@ -1,7 +1,7 @@
 import { Stack } from "@mantine/core";
 import { IconBrain } from "@tabler/icons-react";
 import { useState } from "react";
-import HeaderCard from "../components/HeaderCard";
+import HeaderCard from "../components/common/HeaderCard";
 
 import ControlButtons from "../components/processing/ControlButtons";
 import ExecutionDashboard from "../components/processing/ExecutionDashboard";

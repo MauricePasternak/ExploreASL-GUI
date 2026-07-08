@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { DataParState } from "../../schemas/dataParSchema";
 import { useDataParStore } from "../../stores/dataParStore";
 import { useProcessingStore } from "../../stores/processingStore";
-import HeaderCard from "../HeaderCard";
+import HeaderCard from "../common/HeaderCard";
 import { ASLProcessingSection } from "./ASLProcessingSection";
 import { AtlasesSection } from "./AtlasesSection";
 import { EnvironmentSection } from "./EnvironmentSection";

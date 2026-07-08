@@ -23,6 +23,7 @@ import type { ImportSnapshot, MetadataGroup } from "../schemas/importSchemas";
 import type { ManifestFailReason, ManifestVerdict } from "../schemas/project";
 import type { ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
+import { useGlobalStore } from "./globalStore";
 
 type DataVisState = NonNullable<ProjectFile["uiState"]["dataVis"]>;
 type DataParAdvancedVisibility = NonNullable<
@@ -147,6 +148,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   loaded: false,
 
   loadProject: async (easlPath) => {
+    if (!useGlobalStore.getState().hasValidProfile()) {
+      throw new Error(
+        "Cannot open a project without at least one valid execution profile. Fix a profile in Settings.",
+      );
+    }
+
     if (!isProjectFilePath(easlPath)) {
       throw new Error(`Project files must be named ${PROJECT_FILE_NAME}.`);
     }
@@ -198,8 +205,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       throw new Error("createProject requires options.dataSource");
     }
 
+    const global = useGlobalStore.getState();
+    if (!global.hasValidProfile()) {
+      throw new Error(
+        "Cannot create a project without at least one valid execution profile. Fix a profile in Settings.",
+      );
+    }
+
     const project = DEFAULT_PROJECT_FILE(crypto.randomUUID(), name, rootPath);
     project.projectMeta.dataSource = options.dataSource;
+
+    const firstValidProfile = global.settings.executionProfiles.find(
+      (profile) => global.profileValidationState[profile.id]?.valid === true,
+    );
+    if (firstValidProfile) {
+      project.uiState = {
+        ...project.uiState,
+        import: {
+          bidsReviewConfirmed: false,
+          skippedSubjects: [],
+          ...project.uiState.import,
+          selectedProfileId: firstValidProfile.id,
+        },
+      };
+    }
 
     await writeTextFile(getProjectFilePath(rootPath), JSON.stringify(project, null, 2));
 

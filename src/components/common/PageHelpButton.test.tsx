@@ -1,9 +1,9 @@
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { useImportStore } from "../stores/importStore";
-import { useVisualizationStore } from "../stores/visualizationStore";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useImportStore } from "../../stores/importStore";
+import { useVisualizationStore } from "../../stores/visualizationStore";
 import PageHelpButton from "./PageHelpButton";
 
 const mockNavigate = vi.fn();
