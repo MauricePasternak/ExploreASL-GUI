@@ -2,14 +2,16 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PreflightResult } from "./ProcessingStatusAlert";
+import { makeMatlabProfile } from "../../test/profileFixtures";
 
 let mockConfig: Record<string, unknown> | null = null;
 let mockAvailableSubjects: { subjectSession: string; module: string }[] = [];
 let mockSubjectStatuses: { subjectSession: string; module: string }[] = [];
-let mockMatlabInstallations: { label: string; path: string; version: string }[] = [
-  { label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" },
-];
-let mockExploreAslPath = "/opt/ExploreASL";
+const validProfile = makeMatlabProfile({ id: "profile-1", label: "R2024a" });
+let mockExecutionProfiles = [validProfile];
+let mockProfileValidationState: Record<string, { valid: boolean; errors: string[] }> = {
+  [validProfile.id]: { valid: true, errors: [] },
+};
 
 vi.mock("../../stores/processingStore", () => ({
   useProcessingStore: (selector: (state: Record<string, unknown>) => unknown) =>
@@ -24,9 +26,14 @@ vi.mock("../../stores/globalStore", () => ({
   useGlobalStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       settings: {
-        matlabInstallations: mockMatlabInstallations,
-        exploreAslPath: mockExploreAslPath,
+        executionProfiles: mockExecutionProfiles,
       },
+      profileValidationState: mockProfileValidationState,
+      hasValidProfile: () =>
+        mockExecutionProfiles.some(
+          (profile) => mockProfileValidationState[profile.id]?.valid === true,
+        ),
+      getProfileById: (id: string) => mockExecutionProfiles.find((profile) => profile.id === id),
     }),
 }));
 
@@ -71,8 +78,8 @@ describe("ProcessingStatusAlert", () => {
     mockConfig = null;
     mockAvailableSubjects = [];
     mockSubjectStatuses = [];
-    mockMatlabInstallations = [{ label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" }];
-    mockExploreAslPath = "/opt/ExploreASL";
+    mockExecutionProfiles = [validProfile];
+    mockProfileValidationState = { [validProfile.id]: { valid: true, errors: [] } };
   });
 
   describe("idle state", () => {
@@ -80,8 +87,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: [],
         modules: [],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
       renderAlert();
@@ -96,14 +102,12 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
-      // Delay exists() resolution by returning a pending promise
       const { exists } = await import("@tauri-apps/plugin-fs");
       vi.mocked(exists).mockImplementationOnce(
-        () => new Promise<boolean>(() => undefined), // never resolves
+        () => new Promise<boolean>(() => undefined),
       );
       renderAlert();
       const alert = screen.getByTestId("processing-status-alert");
@@ -117,8 +121,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: [],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
       renderAlert();
@@ -134,8 +137,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: [],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
       renderAlert();
@@ -151,8 +153,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: [],
         modules: ["population"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
       renderAlert();
@@ -164,12 +165,13 @@ describe("ProcessingStatusAlert", () => {
       expect(screen.queryByText(/No subjects selected/i)).not.toBeInTheDocument();
     });
 
-    it("shows red error when MATLAB path missing", async () => {
+    it("shows red error when no valid execution profile exists", async () => {
+      mockExecutionProfiles = [];
+      mockProfileValidationState = {};
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: "",
         workers: 1,
       };
       renderAlert();
@@ -178,57 +180,49 @@ describe("ProcessingStatusAlert", () => {
           "error",
         );
       });
-      expect(screen.getByText(/No MATLAB installation configured/i)).toBeInTheDocument();
+      expect(screen.getByText(/No valid execution profile configured/i)).toBeInTheDocument();
     });
 
-    it("shows red error when MATLAB executable not found", async () => {
+    it("shows red error when selected profile is invalid", async () => {
+      mockProfileValidationState = {
+        [validProfile.id]: { valid: false, errors: ["MATLAB executable not found"] },
+      };
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
-      mockExistsResult = false;
       renderAlert();
       await waitFor(() => {
         expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
           "error",
         );
       });
-      expect(screen.getByText(/MATLAB executable not found/i)).toBeInTheDocument();
+      expect(screen.getByText(/Execution profile "R2024a" is invalid/i)).toBeInTheDocument();
     });
 
-    it("shows red error when ExploreASL.m missing", async () => {
+    it("shows red error when selected profile is missing", async () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: "missing-profile",
         workers: 1,
       };
-      const { exists } = await import("@tauri-apps/plugin-fs");
-      // First call: MATLAB exists. Second call: ExploreASL dir. Third call: ExploreASL.m missing.
-      vi.mocked(exists)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false)
-        .mockResolvedValue(true); // dataPar dir
       renderAlert();
       await waitFor(() => {
         expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
           "error",
         );
       });
-      expect(screen.getByText(/ExploreASL\.m not found/i)).toBeInTheDocument();
+      expect(screen.getByText(/Selected execution profile not found/i)).toBeInTheDocument();
     });
 
     it("shows red error when worker count exceeds cores", async () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 16,
       };
       renderAlert();
@@ -244,8 +238,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: [],
         modules: ["population"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 2,
       };
       renderAlert();
@@ -263,17 +256,10 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
-      const { exists } = await import("@tauri-apps/plugin-fs");
-      // MATLAB exists, ExploreASL dir exists, ExploreASL.m exists, dataPar dir missing
-      vi.mocked(exists)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false);
+      mockExistsResult = false;
       renderAlert();
       await waitFor(() => {
         expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
@@ -289,8 +275,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 4,
       };
       renderAlert();
@@ -306,8 +291,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
       mockAvailableSubjects = [{ subjectSession: "sub-001_01", module: "structural" }];
@@ -327,8 +311,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
       renderAlert();
@@ -344,9 +327,8 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
-        workers: 4, // workers > subjects triggers warning
+        selectedProfileId: validProfile.id,
+        workers: 4,
       };
       renderAlert();
       await waitFor(() => {
@@ -363,8 +345,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
       const onResult = vi.fn();
@@ -380,8 +361,7 @@ describe("ProcessingStatusAlert", () => {
       mockConfig = {
         subjects: [],
         modules: [],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: validProfile.id,
         workers: 1,
       };
       const onResult = vi.fn();
@@ -392,17 +372,16 @@ describe("ProcessingStatusAlert", () => {
     });
   });
 
-  describe("global store matlabInstallations empty edge case", () => {
-    it("shows error when global store has no installations but config.matlabPath is set and exists on disk", async () => {
-      mockMatlabInstallations = [];
+  describe("global store profiles empty edge case", () => {
+    it("shows error when no profiles exist even if config.selectedProfileId is set", async () => {
+      mockExecutionProfiles = [];
+      mockProfileValidationState = {};
       mockConfig = {
         subjects: ["sub-001_01"],
         modules: ["structural"],
-        matlabPath: "/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: "stale-profile",
         workers: 1,
       };
-      // exists() returns true for all paths (matlab exists on disk)
       const onResult = vi.fn();
       renderAlert(onResult);
       await waitFor(() => {
@@ -411,7 +390,7 @@ describe("ProcessingStatusAlert", () => {
         );
         expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ ready: false }));
       });
-      expect(screen.getByText(/No MATLAB installation configured/i)).toBeInTheDocument();
+      expect(screen.getByText(/No valid execution profile configured/i)).toBeInTheDocument();
     });
   });
 

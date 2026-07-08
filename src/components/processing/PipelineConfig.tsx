@@ -1,20 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Checkbox, NumberInput, Select, Stack, Text, SimpleGrid, Group } from "@mantine/core";
+import { useCallback, useEffect, useState } from "react";
+import { Checkbox, NumberInput, Stack, Text, SimpleGrid, Group } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
 
+import ProfileSelector from "../common/ProfileSelector";
 import { FieldInfoIcon } from "../FieldInfoIcon";
 
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useProcessingStore } from "../../stores/processingStore";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const GB_PER_WORKER = 4;
 const MAX_DEFAULT_WORKERS = 4;
@@ -25,12 +18,9 @@ function calcDefaultWorkers(cores: number, memMb: number): number {
   return Math.min(workersByMemory, cores, MAX_DEFAULT_WORKERS);
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export default function PipelineConfig() {
-  const settings = useGlobalStore((s) => s.settings);
+  const executionProfiles = useGlobalStore((s) => s.settings.executionProfiles);
+  const profileValidationState = useGlobalStore((s) => s.profileValidationState);
   const config = useProcessingStore((s) => s.config);
   const setConfig = useProcessingStore((s) => s.setConfig);
 
@@ -48,38 +38,33 @@ export default function PipelineConfig() {
       });
   }, []);
 
-  // Initialize config if null
   useEffect(() => {
-    if (!config) {
-      setConfig({
-        subjects: [],
-        modules: [],
-        matlabPath: settings.matlabInstallations[0]?.path ?? "",
-        exploreAslPath: settings.exploreAslPath,
-        workers: defaultWorkers,
-      });
+    if (config) return;
+    const firstValid = executionProfiles.find(
+      (profile) => profileValidationState[profile.id]?.valid === true,
+    );
+    setConfig({
+      subjects: [],
+      modules: [],
+      selectedProfileId: firstValid?.id ?? "",
+      workers: defaultWorkers,
+    });
+  }, [config, executionProfiles, profileValidationState, defaultWorkers, setConfig]);
+
+  useEffect(() => {
+    if (!config || config.selectedProfileId) return;
+    const firstValid = executionProfiles.find(
+      (profile) => profileValidationState[profile.id]?.valid === true,
+    );
+    if (firstValid) {
+      setConfig({ ...config, selectedProfileId: firstValid.id });
     }
-  }, [config, settings, defaultWorkers, setConfig]);
+  }, [config, executionProfiles, profileValidationState, setConfig]);
 
-  // MATLAB select options
-  const matlabOptions = useMemo(
-    () =>
-      settings.matlabInstallations.map((inst) => ({
-        value: inst.path,
-        label: inst.version
-          ? `${inst.label} [${inst.version}] — ${inst.path}`
-          : `${inst.label} (${inst.path})`,
-      })),
-    [settings.matlabInstallations],
-  );
-
-  const noMatlab = settings.matlabInstallations.length === 0;
-
-  // Handlers
-  const handleMatlabChange = useCallback(
-    (value: string | null) => {
+  const handleProfileChange = useCallback(
+    (profileId: string) => {
       if (!config) return;
-      setConfig({ ...config, matlabPath: value ?? "" });
+      setConfig({ ...config, selectedProfileId: profileId });
     },
     [config, setConfig],
   );
@@ -91,7 +76,6 @@ export default function PipelineConfig() {
         ? config.modules.filter((m) => m !== module)
         : [...config.modules, module];
 
-      // If checking structural or asl, uncheck population
       if (modules.includes(module) && (module === "structural" || module === "asl")) {
         modules = modules.filter((m) => m !== "population");
       }
@@ -116,35 +100,12 @@ export default function PipelineConfig() {
   return (
     <Stack gap="md" data-testid="pipeline-config">
       <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
-        {/* MATLAB version */}
-        <Select
-          label={
-            <Group gap="xs" align="center" style={{ display: "inline-flex" }}>
-              <span>MATLAB Version</span>
-              <FieldInfoIcon
-                tooltipLabel="Select the installed MATLAB version to use for executing the processing pipeline."
-                aria-label="Info for MATLAB Version"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-              />
-            </Group>
-          }
-          placeholder={noMatlab ? "No MATLAB configured" : "Select MATLAB installation"}
-          data={matlabOptions}
-          value={config.matlabPath || null}
-          onChange={handleMatlabChange}
-          disabled={noMatlab}
-          nothingFoundMessage="No MATLAB installations found"
-          data-testid="matlab-select"
+        <ProfileSelector
+          value={config.selectedProfileId}
+          onChange={handleProfileChange}
+          disabled={executionProfiles.length === 0}
         />
 
-        {/* Modules */}
         <div>
           <Group gap="xs" align="center" mb="xs" style={{ display: "inline-flex" }}>
             <Text fw={600} size="sm" data-testid="modules-label">
@@ -180,7 +141,6 @@ export default function PipelineConfig() {
           </Stack>
         </div>
 
-        {/* Worker count */}
         <NumberInput
           label={
             <Group gap="xs" align="center" style={{ display: "inline-flex" }}>

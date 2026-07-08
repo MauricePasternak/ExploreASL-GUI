@@ -8,7 +8,7 @@ import { useGlobalStore } from "./stores/globalStore";
 import { useProjectStore } from "./stores/projectStore";
 import App from "./App";
 
-vi.mock("./components/SettingsModal", () => ({
+vi.mock("./components/settings/SettingsModal", () => ({
   default: () => <div data-testid="mock-settings-modal" />,
 }));
 

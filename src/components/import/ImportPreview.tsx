@@ -26,6 +26,7 @@ export default function ImportPreview() {
   const subjectRows = useImportStore((s) => s.subjectRows);
   const setActiveStep = useImportStore((s) => s.setActiveStep);
   const settings = useGlobalStore((s) => s.settings);
+  const profileValidationState = useGlobalStore((s) => s.profileValidationState);
   const tokenSubDelimiters = useGlobalStore((s) => s.settings.tokenSubDelimiters);
 
   const subjectRenamesMap = useMemo(
@@ -81,7 +82,10 @@ export default function ImportPreview() {
       metadataGroups,
       subjectRows,
     },
-    settings,
+    {
+      executionProfiles: settings.executionProfiles,
+      profileValidationState,
+    },
   );
 
   return (

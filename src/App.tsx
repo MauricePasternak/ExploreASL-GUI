@@ -4,7 +4,7 @@ import { Route, Routes, useLocation } from "react-router";
 
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
-import SettingsModal from "./components/SettingsModal";
+import SettingsModal from "./components/settings/SettingsModal";
 import LandingPage from "./pages/LandingPage";
 import ProjectPage from "./pages/ProjectPage";
 import OverviewPage from "./pages/OverviewPage";

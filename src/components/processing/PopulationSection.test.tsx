@@ -45,8 +45,7 @@ describe("PopulationSection", () => {
       config: {
         subjects: [],
         modules: [],
-        matlabPath: "",
-        exploreAslPath: "",
+        selectedProfileId: "",
         workers: 4,
       },
       availableSubjects: [],
@@ -161,8 +160,7 @@ describe("PopulationSection", () => {
       config: {
         subjects: [],
         modules: ["structural"],
-        matlabPath: "",
-        exploreAslPath: "",
+        selectedProfileId: "",
         workers: 4,
       },
       availableSubjects: [
@@ -203,8 +201,7 @@ describe("PopulationSection", () => {
       config: {
         subjects: [],
         modules: [],
-        matlabPath: "",
-        exploreAslPath: "",
+        selectedProfileId: "",
         workers: 4,
       },
       availableSubjects: [

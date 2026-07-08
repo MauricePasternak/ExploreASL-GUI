@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Group, Modal, Paper, Select, Stack, Text } from "@mantine/core";
+import { Alert, Badge, Button, Group, Modal, Paper, Stack, Text } from "@mantine/core";
 import {
   IconAlertTriangle,
   IconArrowLeft,
@@ -6,10 +6,11 @@ import {
   IconPlayerPlay,
   IconPlayerStop,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Virtuoso } from "react-virtuoso";
 
+import ProfileSelector from "../common/ProfileSelector";
 import { runImportPipeline, setupImportListeners, stopImportProcess } from "../../lib/importEvents";
 import { buildAllStagingMappings } from "../../lib/importPreviewUtils";
 import { computeStaleness } from "../../lib/importStaleness";
@@ -66,64 +67,65 @@ function ImportExecutionControls({
   canRun,
   onStart,
   onStop,
-  noMatlab,
-  matlabOptions,
-  selectedMatlabPath,
-  onMatlabChange,
+  noProfiles,
+  selectedProfileId,
+  onProfileChange,
   hasSelectedSubjects,
+  profileError,
 }: {
   phase: ImportPhase;
   canRun: boolean;
   onStart: () => void;
   onStop: () => void;
-  noMatlab: boolean;
-  matlabOptions: { value: string; label: string }[];
-  selectedMatlabPath: string | null;
-  onMatlabChange: (value: string | null) => void;
+  noProfiles: boolean;
+  selectedProfileId: string;
+  onProfileChange: (id: string) => void;
   hasSelectedSubjects: boolean;
+  profileError: string | null;
 }) {
   return (
-    <Group align="flex-end" data-testid="import-execution-controls">
-      <Select
-        label="MATLAB Version"
-        placeholder={noMatlab ? "No MATLAB configured" : "Select MATLAB installation"}
-        data={matlabOptions}
-        value={selectedMatlabPath}
-        onChange={onMatlabChange}
-        disabled={noMatlab || phase === "running"}
-        nothingFoundMessage="No MATLAB installations found"
-        data-testid="matlab-select"
-        w={320}
-      />
-      <Button
-        leftSection={<IconPlayerPlay size={16} />}
-        disabled={phase === "running" || !canRun || !hasSelectedSubjects || noMatlab}
-        onClick={onStart}
-        data-testid="start-import-btn"
-      >
-        Start Import
-      </Button>
-      <Button
-        leftSection={<IconPlayerStop size={16} />}
-        color="red"
-        variant="light"
-        disabled={phase !== "running"}
-        onClick={onStop}
-        data-testid="stop-import-btn"
-      >
-        Stop
-      </Button>
-      {noMatlab ? (
+    <Stack gap="sm" data-testid="import-execution-controls">
+      <Group align="flex-end">
+        <ProfileSelector
+          value={selectedProfileId}
+          onChange={onProfileChange}
+          disabled={phase === "running"}
+        />
+        <Button
+          leftSection={<IconPlayerPlay size={16} />}
+          disabled={phase === "running" || !canRun || !hasSelectedSubjects || noProfiles}
+          onClick={onStart}
+          data-testid="start-import-btn"
+        >
+          Start Import
+        </Button>
+        <Button
+          leftSection={<IconPlayerStop size={16} />}
+          color="red"
+          variant="light"
+          disabled={phase !== "running"}
+          onClick={onStop}
+          data-testid="stop-import-btn"
+        >
+          Stop
+        </Button>
+      </Group>
+      {noProfiles ? (
         <Alert
           color="red"
           icon={<IconAlertTriangle size={16} />}
           p="xs"
-          data-testid="no-matlab-alert"
+          data-testid="no-profiles-alert"
         >
-          <Text size="sm">No MATLAB installation configured. Add one in Settings.</Text>
+          <Text size="sm">No execution profiles configured. Add one in Settings.</Text>
         </Alert>
       ) : null}
-    </Group>
+      {profileError ? (
+        <Alert color="red" icon={<IconAlertTriangle size={16} />} p="xs" data-testid="profile-error-alert">
+          <Text size="sm">{profileError}</Text>
+        </Alert>
+      ) : null}
+    </Stack>
   );
 }
 
@@ -250,26 +252,29 @@ export default function ImportExecution() {
   const importProgress = useImportStore((state) => state.importProgress);
   const importLog = useImportStore((state) => state.importLog);
   const subjectRows = useImportStore((state) => state.subjectRows);
-  const selectedMatlabPath = useImportStore((state) => state.selectedMatlabPath);
-  const setSelectedMatlabPath = useImportStore((state) => state.setSelectedMatlabPath);
+  const selectedProfileId = useImportStore((state) => state.selectedProfileId);
+  const setSelectedProfileId = useImportStore((state) => state.setSelectedProfileId);
+  const autoSelectProfile = useImportStore((state) => state.autoSelectProfile);
+  const profileError = useImportStore((state) => state.profileError);
+  const clearProfileError = useImportStore((state) => state.clearProfileError);
   const setActiveStep = useImportStore((state) => state.setActiveStep);
   const startImport = useImportStore((state) => state.startImport);
   const cancelImportAction = useImportStore((state) => state.cancelImport);
   const resetImportPhase = useImportStore((state) => state.resetImportPhase);
   const addLogLine = useImportStore((state) => state.addLogLine);
   const failImport = useImportStore((state) => state.failImport);
-  const settings = useGlobalStore((state) => state.settings);
+  const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
+  const profileValidationState = useGlobalStore((state) => state.profileValidationState);
   const backLocked = importPhase === "running";
   const progressRows = Object.values(importProgress).sort((left, right) =>
     left.subject.localeCompare(right.subject),
   );
-  const hasMatlab = settings.matlabInstallations.some(
-    (installation) => installation.path.trim().length > 0,
-  );
-  const hasExploreAsl = settings.exploreAslPath.trim().length > 0;
   const hasSubjects = subjectRows.length > 0;
-  const canRun = hasMatlab && hasExploreAsl && hasSubjects;
-  const noMatlab = settings.matlabInstallations.length === 0;
+  const selectedId = selectedProfileId ?? "";
+  const selectedProfileValid =
+    selectedId.length > 0 && profileValidationState[selectedId]?.valid === true;
+  const noProfiles = executionProfiles.length === 0;
+  const canRun = selectedProfileValid && hasSubjects;
 
   const [prevImportProgress, setPrevImportProgress] = useState(importProgress);
   const [prevImportPhase, setPrevImportPhase] = useState(importPhase);
@@ -325,22 +330,13 @@ export default function ImportExecution() {
     }
   }
 
-  const matlabOptions = useMemo(
-    () =>
-      settings.matlabInstallations.map((inst) => ({
-        value: inst.path,
-        label: inst.version
-          ? `${inst.label} [${inst.version}] — ${inst.path}`
-          : `${inst.label} (${inst.path})`,
-      })),
-    [settings.matlabInstallations],
-  );
+  useEffect(() => {
+    autoSelectProfile();
+  }, [autoSelectProfile, executionProfiles, profileValidationState]);
 
   useEffect(() => {
-    if (!selectedMatlabPath && settings.matlabInstallations.length > 0) {
-      setSelectedMatlabPath(settings.matlabInstallations[0].path);
-    }
-  }, [selectedMatlabPath, settings.matlabInstallations, setSelectedMatlabPath]);
+    clearProfileError();
+  }, [selectedProfileId, clearProfileError]);
 
   const pidRef = useRef<number | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -433,6 +429,12 @@ export default function ImportExecution() {
       try {
         const store = useImportStore.getState();
         const globalSettings = useGlobalStore.getState().settings;
+        const globalState = useGlobalStore.getState();
+        const profileId = store.selectedProfileId;
+        const executionProfile = profileId ? globalState.getProfileById(profileId) : undefined;
+        if (!executionProfile) {
+          throw new Error("No execution profile selected.");
+        }
 
         const subjectRenamesMap = Object.fromEntries(
           store.subjectRenames.map((r) => [r.original, r.target]),
@@ -461,9 +463,6 @@ export default function ImportExecution() {
           unknown
         >;
 
-        const matlabPath =
-          store.selectedMatlabPath || (globalSettings.matlabInstallations[0]?.path ?? "");
-        const exploreaslPath = globalSettings.exploreAslPath;
         const subjectList = subjectsToImport;
 
         if (succeededForRetry.length > 0) {
@@ -477,8 +476,7 @@ export default function ImportExecution() {
           stagingEntries,
           sourcestructureJson,
           studyparJson,
-          matlabPath,
-          exploreaslPath,
+          executionProfile,
           subjectList,
           subjectsToPreserve: succeededForRetry.length > 0 ? succeededForRetry : undefined,
         });
@@ -552,14 +550,10 @@ export default function ImportExecution() {
         canRun={canRun}
         onStart={handleStartImport}
         onStop={handleStop}
-        noMatlab={noMatlab}
-        matlabOptions={matlabOptions}
-        selectedMatlabPath={selectedMatlabPath || null}
-        onMatlabChange={(value) => {
-          if (value !== null) {
-            setSelectedMatlabPath(value);
-          }
-        }}
+        noProfiles={noProfiles}
+        selectedProfileId={selectedId}
+        onProfileChange={setSelectedProfileId}
+        profileError={profileError}
         hasSelectedSubjects={
           selectedSubjects.length > 0 ||
           (Object.keys(importProgress).length === 0 && subjectRows.length > 0)
@@ -568,9 +562,9 @@ export default function ImportExecution() {
 
       {!canRun ? (
         <Text c="dimmed" size="sm">
-          {hasMatlab && hasExploreAsl
+          {selectedProfileValid
             ? "Stage at least one subject before running import."
-            : "Configure MATLAB and ExploreASL paths in settings before running import."}
+            : "Select a valid execution profile in Settings before running import."}
         </Text>
       ) : null}
 

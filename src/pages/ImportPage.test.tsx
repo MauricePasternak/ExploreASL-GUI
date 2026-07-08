@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 
 import ImportPage from "./ImportPage";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
+import { makeMatlabProfile } from "../test/profileFixtures";
 import { useImportStore } from "../stores/importStore";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -24,6 +25,7 @@ afterEach(() => {
   useGlobalStore.setState({
     settings: DEFAULT_SETTINGS,
     loaded: true,
+    profileValidationState: {},
   });
 });
 
@@ -679,13 +681,18 @@ describe("ImportPage import runner step", () => {
       currentStep: "DCM2NII",
     });
 
+    const profile = makeMatlabProfile({
+      id: "import-page-profile",
+      matlabPath: "/opt/matlab",
+      exploreAslPath: "/opt/ExploreASL",
+    });
     useGlobalStore.setState({
       settings: {
         ...DEFAULT_SETTINGS,
-        matlabInstallations: [
-          { id: "matlab-r2025a", label: "MATLAB R2025a", path: "/opt/matlab", version: "" },
-        ],
-        exploreAslPath: "/opt/ExploreASL",
+        executionProfiles: [profile],
+      },
+      profileValidationState: {
+        [profile.id]: { valid: true, errors: [] },
       },
       loaded: true,
     });

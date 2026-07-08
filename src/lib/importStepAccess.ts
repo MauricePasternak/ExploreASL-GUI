@@ -19,7 +19,16 @@ type Step5State = StepPrerequisiteState &
     >
   >;
 
-type ImportExecutionSettings = Pick<GlobalSettings, "matlabInstallations" | "exploreAslPath">;
+type ImportExecutionGate = {
+  executionProfiles: GlobalSettings["executionProfiles"];
+  profileValidationState: Record<string, { valid: boolean; errors: string[] }>;
+};
+
+export function hasValidExecutionProfile(gate: ImportExecutionGate): boolean {
+  return gate.executionProfiles.some(
+    (profile) => gate.profileValidationState[profile.id]?.valid === true,
+  );
+}
 
 /** Step 0 complete: scan finished with at least one path pattern. */
 export function isIngestionComplete(
@@ -64,7 +73,7 @@ export function isAliasResolutionComplete(state: Pick<ImportState, "modalityAlia
  */
 export function getMaxUnlockedImportStep(
   state: Step5State,
-  settings?: ImportExecutionSettings,
+  gate?: ImportExecutionGate,
 ): number {
   if (!isIngestionComplete(state)) {
     return 0;
@@ -78,7 +87,7 @@ export function getMaxUnlockedImportStep(
     return 2;
   }
 
-  if (!settings || !canEnterStep5(state, settings)) {
+  if (!gate || !canEnterStep5(state, gate)) {
     return 4;
   }
 
@@ -108,12 +117,12 @@ export function getMaxRestorableImportStep(state: Step5State): number {
 export function canSelectImportStep(
   stepIndex: number,
   state: Step5State,
-  settings?: ImportExecutionSettings,
+  gate?: ImportExecutionGate,
 ): boolean {
-  return stepIndex >= 0 && stepIndex <= getMaxUnlockedImportStep(state, settings);
+  return stepIndex >= 0 && stepIndex <= getMaxUnlockedImportStep(state, gate);
 }
 
-export function canEnterStep5(state: Step5State, settings: ImportExecutionSettings): boolean {
+export function canEnterStep5(state: Step5State, gate: ImportExecutionGate): boolean {
   if (
     !isIngestionComplete(state) ||
     !isTokenizerComplete(state) ||
@@ -122,12 +131,7 @@ export function canEnterStep5(state: Step5State, settings: ImportExecutionSettin
     return false;
   }
 
-  const matlabConfigured = settings.matlabInstallations.some(
-    (installation) => installation.path.trim().length > 0,
-  );
-  const exploreAslConfigured = settings.exploreAslPath.trim().length > 0;
-
-  if (!matlabConfigured || !exploreAslConfigured) {
+  if (!hasValidExecutionProfile(gate)) {
     return false;
   }
 

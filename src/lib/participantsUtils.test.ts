@@ -49,8 +49,7 @@ describe("participantsUtils", () => {
     const config: ProcessConfig = {
       subjects: ["sub-C9ORF007Philips_01", "sub-C9ORF059Siemens_02"],
       modules: ["structural", "asl"],
-      matlabPath: "/usr/bin/matlab",
-      exploreAslPath: "/opt/ExploreASL",
+      selectedProfileId: "profile-1",
       workers: 4,
     };
 
@@ -396,8 +395,7 @@ describe("participantsUtils", () => {
       const multiSessionConfig: ProcessConfig = {
         subjects: ["sub-C9ORF007Philips_01", "sub-C9ORF007Philips_03", "sub-C9ORF059Siemens_02"],
         modules: ["structural", "asl"],
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: "profile-1",
         workers: 4,
       };
 

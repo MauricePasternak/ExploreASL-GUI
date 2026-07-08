@@ -97,6 +97,9 @@ import "@testing-library/jest-dom/vitest";
 import "mantine-datatable/styles.css";
 
 // ResizeObserver polyfill for mantine-datatable — must invoke the callback so rows render in jsdom
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
 class ResizeObserverMock {
   private callback: ResizeObserverCallback;
 
@@ -167,7 +170,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "clean_import_status":
       case "move_import_output":
       case "copy_lock_files":
-      case "detect_exploreasl_version":
+      case "validate_all_execution_profiles":
       case "read_import_status":
       case "list_subject_reports":
       case "read_report_image":

@@ -4,13 +4,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProcessingStore } from "../stores/processingStore";
 
-const { mockProject, mockSettings } = vi.hoisted(() => ({
-  mockProject: { project: { projectMeta: { rootPath: "/test/project" } } },
-  mockSettings: {
-    matlabInstallations: [{ label: "R2024a", path: "/usr/bin/matlab", version: "R2024a" }],
-    exploreAslPath: "/opt/ExploreASL",
-  },
-}));
+const { mockProject, mockSettings, mockValidationState, mockGetProfileById, mockHasValidProfile } = vi.hoisted(() => {
+  const settings = {
+    executionProfiles: [
+      {
+        id: "profile-1",
+        label: "R2024a",
+        type: "matlab" as const,
+        matlabPath: "/usr/bin/matlab",
+        exploreAslPath: "/opt/ExploreASL",
+        exploreAslVersion: "1.11.0",
+      },
+    ],
+  };
+  return {
+    mockProject: { project: { projectMeta: { rootPath: "/test/project" } } },
+    mockSettings: settings,
+    mockValidationState: {
+      "profile-1": { valid: true, errors: [] as string[] },
+    },
+    mockGetProfileById: (id: string) => settings.executionProfiles.find((p) => p.id === id),
+    mockHasValidProfile: () => true,
+  };
+});
 
 vi.mock("../stores/projectStore", () => ({
   useProjectStore: (selector: (state: Record<string, unknown>) => unknown) => selector(mockProject),
@@ -18,7 +34,12 @@ vi.mock("../stores/projectStore", () => ({
 
 vi.mock("../stores/globalStore", () => ({
   useGlobalStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({ settings: mockSettings }),
+    selector({
+      settings: mockSettings,
+      profileValidationState: mockValidationState,
+      getProfileById: mockGetProfileById,
+      hasValidProfile: mockHasValidProfile,
+    }),
 }));
 
 vi.mock("../hooks/useProcessingSync", () => ({
@@ -43,8 +64,7 @@ const { default: ProcessingPage } = await import("./ProcessingPage");
 const DEFAULT_CONFIG = {
   subjects: ["sub-001_01", "sub-002_01"],
   modules: ["structural", "asl"] as ("structural" | "asl" | "population")[],
-  matlabPath: "/usr/bin/matlab",
-  exploreAslPath: "/opt/ExploreASL",
+  selectedProfileId: "profile-1",
   workers: 2,
 };
 
@@ -136,9 +156,9 @@ describe("ProcessingPage", () => {
     expect(screen.getByTestId("control-buttons")).toBeInTheDocument();
   });
 
-  it("renders MATLAB version select", () => {
+  it("renders profile selector", () => {
     renderPage();
-    expect(screen.getByTestId("matlab-select")).toBeInTheDocument();
+    expect(screen.getByTestId("profile-selector")).toBeInTheDocument();
   });
 
   it("renders worker count input", () => {
