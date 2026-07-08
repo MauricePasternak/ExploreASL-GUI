@@ -4,13 +4,14 @@ import {
   canEnterStep5,
   canSelectImportStep,
   getMaxUnlockedImportStep,
+  hasValidExecutionProfile,
   isAliasResolutionComplete,
   isIngestionComplete,
   isTokenizerComplete,
   TOTAL_IMPORT_STEPS,
 } from "./importStepAccess";
 import type { PathPattern } from "../schemas/importSchemas";
-import type { GlobalSettings } from "../schemas/globalSettings";
+import { makeMatlabProfile } from "../test/profileFixtures";
 
 const PATTERN: PathPattern = {
   signature: "VARYING/VARYING",
@@ -37,11 +38,12 @@ const VALID_METADATA = {
   },
 };
 
-const SETTINGS: Pick<GlobalSettings, "matlabInstallations" | "exploreAslPath"> = {
-  matlabInstallations: [
-    { id: "matlab-r2025a", label: "MATLAB R2025a", path: "/opt/matlab", version: "" },
-  ],
-  exploreAslPath: "/opt/ExploreASL",
+const profile = makeMatlabProfile({ id: "profile-1" });
+const VALID_GATE = {
+  executionProfiles: [profile],
+  profileValidationState: {
+    [profile.id]: { valid: true, errors: [] },
+  },
 };
 
 const READY_FOR_PREVIEW_STATE = {
@@ -145,10 +147,11 @@ describe("importStepAccess", () => {
     expect(canSelectImportStep(3, mapped)).toBe(true);
   });
 
-  it("keeps run import locked until metadata and settings are valid", () => {
-    expect(canEnterStep5(READY_FOR_PREVIEW_STATE, SETTINGS)).toBe(true);
-    expect(getMaxUnlockedImportStep(READY_FOR_PREVIEW_STATE, SETTINGS)).toBe(5);
-    expect(canSelectImportStep(5, READY_FOR_PREVIEW_STATE, SETTINGS)).toBe(true);
+  it("keeps run import locked until metadata and valid profile gate are satisfied", () => {
+    expect(hasValidExecutionProfile(VALID_GATE)).toBe(true);
+    expect(canEnterStep5(READY_FOR_PREVIEW_STATE, VALID_GATE)).toBe(true);
+    expect(getMaxUnlockedImportStep(READY_FOR_PREVIEW_STATE, VALID_GATE)).toBe(5);
+    expect(canSelectImportStep(5, READY_FOR_PREVIEW_STATE, VALID_GATE)).toBe(true);
 
     expect(
       canEnterStep5(
@@ -156,21 +159,23 @@ describe("importStepAccess", () => {
           ...READY_FOR_PREVIEW_STATE,
           metadataGroups: [{ ...VALID_METADATA, bidsParams: {} }],
         },
-        SETTINGS,
+        VALID_GATE,
       ),
     ).toBe(false);
 
     expect(
       canEnterStep5(READY_FOR_PREVIEW_STATE, {
-        ...SETTINGS,
-        matlabInstallations: [],
+        executionProfiles: [],
+        profileValidationState: {},
       }),
     ).toBe(false);
 
     expect(
       canEnterStep5(READY_FOR_PREVIEW_STATE, {
-        ...SETTINGS,
-        exploreAslPath: "   ",
+        executionProfiles: [profile],
+        profileValidationState: {
+          [profile.id]: { valid: false, errors: ["MATLAB not found"] },
+        },
       }),
     ).toBe(false);
   });

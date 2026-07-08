@@ -53,7 +53,14 @@ function useBuildManifestPayload(): ManifestPayload {
       groupId: string;
     }>) ?? [];
 
-  const exploreAslGlobalVersion = useGlobalStore((s) => s.settings.exploreAslVersion);
+  const executionProfiles = useGlobalStore((s) => s.settings.executionProfiles);
+  const profileValidationState = useGlobalStore((s) => s.profileValidationState);
+  const selectedProfileId = project?.uiState?.processing?.config?.selectedProfileId;
+  const activeProfile =
+    executionProfiles.find((p) => p.id === selectedProfileId) ||
+    executionProfiles.find((p) => profileValidationState[p.id]?.valid);
+  const exploreAslGlobalVersion = activeProfile?.exploreAslVersion;
+
   const verdicts: Record<string, ManifestVerdict> =
     (project?.uiState?.manifest?.verdicts as Record<string, ManifestVerdict> | undefined) ?? {};
   const lastRun = project?.uiState?.processing?.population?.lastRun;

@@ -14,10 +14,6 @@ import { useGlobalStore } from "../../stores/globalStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export interface PreflightResult {
   errors: string[];
   warnings: string[];
@@ -30,24 +26,19 @@ interface ProcessingStatusAlertProps {
   onResult?: (result: PreflightResult) => void;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAlertProps) {
   const config = useProcessingStore((s) => s.config);
-  const settings = useGlobalStore((s) => s.settings);
+  const executionProfiles = useGlobalStore((s) => s.settings.executionProfiles);
+  const profileValidationState = useGlobalStore((s) => s.profileValidationState);
+  const hasValidProfile = useGlobalStore((s) => s.hasValidProfile);
+  const getProfileById = useGlobalStore((s) => s.getProfileById);
   const project = useProjectStore((s) => s.project);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
 
   const [systemCores, setSystemCores] = useState(0);
-  const [matlabExists, setMatlabExists] = useState<boolean | null>(null);
-  const [exploreAslExists, setExploreAslExists] = useState<boolean | null>(null);
-  const [exploreAslHasM, setExploreAslHasM] = useState<boolean | null>(null);
   const [dataParDirExists, setDataParDirExists] = useState<boolean | null>(null);
 
-  // Query system cores once
   useEffect(() => {
     invoke<number>("get_cpu_cores")
       .then(setSystemCores)
@@ -57,55 +48,6 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
       });
   }, []);
 
-  // Check MATLAB executable existence
-  useEffect(() => {
-    const path = config?.matlabPath;
-    if (!path?.trim()) {
-      Promise.resolve().then(() => setMatlabExists(false));
-      return;
-    }
-    Promise.resolve().then(() => setMatlabExists(null));
-    exists(path)
-      .then(setMatlabExists)
-      .catch((err) => {
-        console.warn(
-          `[ProcessingStatusAlert] Failed to check MATLAB path existence (${path}):`,
-          err,
-        );
-        setMatlabExists(false);
-      });
-  }, [config?.matlabPath]);
-
-  // Check ExploreASL path and ExploreASL.m
-  useEffect(() => {
-    const path = config?.exploreAslPath ?? settings.exploreAslPath;
-    if (!path?.trim()) {
-      Promise.resolve().then(() => {
-        setExploreAslExists(false);
-        setExploreAslHasM(false);
-      });
-      return;
-    }
-    Promise.resolve().then(() => {
-      setExploreAslExists(null);
-      setExploreAslHasM(null);
-    });
-    Promise.all([exists(path), exists(`${path}/ExploreASL.m`)])
-      .then(([dirExists, mExists]) => {
-        setExploreAslExists(dirExists);
-        setExploreAslHasM(mExists);
-      })
-      .catch((err) => {
-        console.warn(
-          `[ProcessingStatusAlert] Failed to check ExploreASL path existence (${path}):`,
-          err,
-        );
-        setExploreAslExists(false);
-        setExploreAslHasM(false);
-      });
-  }, [config?.exploreAslPath, settings.exploreAslPath]);
-
-  // Check dataPar.json directory
   useEffect(() => {
     const rootPath = project?.projectMeta.rootPath;
     if (!rootPath) {
@@ -125,8 +67,6 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
       });
   }, [project?.projectMeta.rootPath]);
 
-  // Orphaned lock entries: subjects in subjectStatuses but not in availableSubjects.
-  // Population is group-level (subjectSession is empty) — exclude from orphan check.
   const orphanedSubjects = useMemo(() => {
     const subjectSet = new Set(availableSubjects.map((s) => s.subjectSession));
     return subjectStatuses
@@ -137,55 +77,44 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
 
   const configSubjects = config?.subjects;
   const configModules = config?.modules;
-  const configMatlabPath = config?.matlabPath;
-  const configExploreAslPath = config?.exploreAslPath;
+  const configSelectedProfileId = config?.selectedProfileId;
   const configWorkers = config?.workers;
 
-  // Compute validation result
   const result = useMemo((): PreflightResult => {
     const errors: string[] = [];
     const warnings: string[] = [];
 
     const populationOnly = configModules?.length === 1 && configModules[0] === "population";
 
-    // Hard block: subjects selected (not required for population-only runs)
     if (!configSubjects?.length && !populationOnly) {
       errors.push("No subjects selected. Select at least one subject.");
     }
 
-    // Hard block: modules selected
     if (!configModules?.length) {
       errors.push("No processing modules selected. Select Structural, ASL, or Population.");
     }
 
-    // Hard block: MATLAB path
-    // Global store check takes precedence: if no MATLAB installations are
-    // registered in settings, the project config's matlabPath may be stale
-    // (e.g. from a different machine or before settings were reset). Reject
-    // regardless of whether the path exists on disk.
-    if (!settings.matlabInstallations.length) {
-      errors.push("No MATLAB installation configured. Add one in Settings.");
-    } else if (!configMatlabPath?.trim()) {
-      errors.push("No MATLAB installation configured. Add one in Settings.");
-    } else if (matlabExists === false) {
-      errors.push(`MATLAB executable not found at "${configMatlabPath}". Check Settings.`);
-    }
-
-    // Hard block: ExploreASL path
-    const explorePath = configExploreAslPath ?? settings.exploreAslPath;
-    if (!explorePath?.trim()) {
-      errors.push("No ExploreASL path configured. Set it in Settings.");
+    if (!executionProfiles.length) {
+      errors.push("No valid execution profile configured. Add one in Settings.");
+    } else if (!configSelectedProfileId?.trim()) {
+      if (!hasValidProfile()) {
+        errors.push("No valid execution profile configured. Add one in Settings.");
+      } else {
+        errors.push("No execution profile selected.");
+      }
     } else {
-      if (exploreAslExists === false) {
-        errors.push(`ExploreASL directory not found at "${explorePath}". Check Settings.`);
-      } else if (exploreAslHasM === false) {
-        errors.push(
-          `ExploreASL.m not found in "${explorePath}". Verify the ExploreASL installation.`,
-        );
+      const profile = getProfileById(configSelectedProfileId);
+      if (!profile) {
+        errors.push("Selected execution profile not found. Choose another in Settings.");
+      } else {
+        const validation = profileValidationState[profile.id];
+        if (!validation?.valid) {
+          const detail = validation?.errors?.join("; ") ?? "Profile validation failed";
+          errors.push(`Execution profile "${profile.label}" is invalid: ${detail}`);
+        }
       }
     }
 
-    // Hard block: worker count
     const workers = configWorkers ?? 0;
     if (workers < 1) {
       errors.push("Worker count must be at least 1.");
@@ -194,28 +123,24 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
       errors.push(`Worker count (${workers}) exceeds available CPU cores (${systemCores}).`);
     }
 
-    // Hard block: population + workers > 1
     if (configModules?.includes("population") && workers !== 1) {
       errors.push(
         "Population module requires exactly 1 worker (single-threaded for atlas/group statistics).",
       );
     }
 
-    // Soft warning: worker count exceeds selected subjects
     if (configSubjects?.length && workers > configSubjects.length) {
       warnings.push(
         `Spawning fewer workers (${configSubjects.length}) than configured (${workers}) because only ${configSubjects.length} subject${configSubjects.length > 1 ? "s are" : " is"} selected.`,
       );
     }
 
-    // Soft warning: dataPar.json directory
     if (dataParDirExists === false) {
       warnings.push(
         "derivatives/ExploreASL/ directory does not exist yet. It will be created during processing.",
       );
     }
 
-    // Soft warning: orphaned lock entries
     if (orphanedSubjects.length > 0) {
       warnings.push(
         `Found ${orphanedSubjects.length} orphaned lock file entr${orphanedSubjects.length === 1 ? "y" : "ies"} with no matching rawdata subject: ${orphanedSubjects.slice(0, 5).join(", ")}${orphanedSubjects.length > 5 ? ` (+${orphanedSubjects.length - 5} more)` : ""}`,
@@ -226,44 +151,27 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   }, [
     configSubjects,
     configModules,
-    configMatlabPath,
-    configExploreAslPath,
+    configSelectedProfileId,
     configWorkers,
-    settings.exploreAslPath,
-    settings.matlabInstallations,
+    executionProfiles,
+    profileValidationState,
+    hasValidProfile,
+    getProfileById,
     systemCores,
-    matlabExists,
-    exploreAslExists,
-    exploreAslHasM,
     dataParDirExists,
     orphanedSubjects,
   ]);
 
-  // Determine state: idle < checking < error < warning < ready
   const state: AlertState = useMemo(() => {
     const hasSelection = (configModules?.length ?? 0) > 0 || (configSubjects?.length ?? 0) > 0;
-    const fsPending =
-      matlabExists === null ||
-      exploreAslExists === null ||
-      exploreAslHasM === null ||
-      dataParDirExists === null;
+    const fsPending = dataParDirExists === null;
     if (fsPending && hasSelection) return "checking";
     if (!hasSelection) return "idle";
     if (result.errors.length > 0) return "error";
     if (result.warnings.length > 0) return "warning";
     return "ready";
-  }, [
-    configModules,
-    configSubjects,
-    matlabExists,
-    exploreAslExists,
-    exploreAslHasM,
-    dataParDirExists,
-    result.errors.length,
-    result.warnings.length,
-  ]);
+  }, [configModules, configSubjects, dataParDirExists, result.errors.length, result.warnings.length]);
 
-  // Report result to parent whenever state is stable (not checking)
   useEffect(() => {
     if (state === "checking") return;
     onResult?.(result);

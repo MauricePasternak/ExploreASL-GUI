@@ -10,6 +10,7 @@ import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { makeMatlabProfile } from "../../test/profileFixtures";
 
 function renderWithProviders() {
   return render(
@@ -22,16 +23,23 @@ function renderWithProviders() {
 }
 
 function configureRuntimeSettings() {
+  const profile = makeMatlabProfile({
+    id: "profile-1",
+    label: "MATLAB R2025b",
+    matlabPath: "/opt/matlab/bin/matlab",
+    exploreAslPath: "/opt/ExploreASL",
+  });
   useGlobalStore.setState({
     loaded: true,
     settings: {
       ...DEFAULT_SETTINGS,
-      matlabInstallations: [
-        { id: "matlab-1", label: "MATLAB R2025b", path: "/opt/matlab/bin/matlab", version: "" },
-      ],
-      exploreAslPath: "/opt/ExploreASL",
+      executionProfiles: [profile],
+    },
+    profileValidationState: {
+      [profile.id]: { valid: true, errors: [] },
     },
   });
+  useImportStore.getState().setSelectedProfileId(profile.id);
 }
 
 function configureSubjects() {
@@ -49,7 +57,7 @@ afterEach(() => {
   cleanup();
   document.querySelectorAll("[data-testid='confirm-reimport-dialog']").forEach((el) => el.remove());
   useImportStore.getState().resetImport();
-  useGlobalStore.setState({ settings: DEFAULT_SETTINGS, loaded: true });
+  useGlobalStore.setState({ settings: DEFAULT_SETTINGS, loaded: true, profileValidationState: {} });
   useProjectStore.setState({
     project: null,
     isDirty: false,
@@ -76,11 +84,11 @@ describe("ImportExecution", () => {
     expect(screen.queryByRole("button", { name: /retry import/i })).not.toBeInTheDocument();
   });
 
-  it("shows MATLAB select and no-matlab alert when unconfigured", () => {
+  it("shows profile selector and no-profiles alert when unconfigured", () => {
     renderWithProviders();
 
-    expect(screen.getByTestId("no-matlab-alert")).toBeInTheDocument();
-    expect(screen.getByTestId("matlab-select")).toBeInTheDocument();
+    expect(screen.getByTestId("no-profiles-alert")).toBeInTheDocument();
+    expect(screen.getByTestId("profile-selector-empty")).toBeInTheDocument();
   });
 
   it("starts import by initializing pending progress rows from subject rows", async () => {
@@ -103,6 +111,23 @@ describe("ImportExecution", () => {
     expect(screen.getByText(/stage at least one subject/i)).toBeInTheDocument();
 
     expect(useImportStore.getState().importPhase).toBe("idle");
+  });
+
+  it("disables start when selected profile is invalid", () => {
+    const profile = makeMatlabProfile({ id: "profile-invalid" });
+    useGlobalStore.setState({
+      loaded: true,
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [profile] },
+      profileValidationState: {
+        [profile.id]: { valid: false, errors: ["MATLAB not found"] },
+      },
+    });
+    useImportStore.getState().setSelectedProfileId(profile.id);
+    configureSubjects();
+    renderWithProviders();
+
+    expect(firstButton(/start import/i)).toBeDisabled();
+    expect(screen.getByTestId("profile-selector-invalid-warning")).toBeInTheDocument();
   });
 
   it("enables stop while running and cancels running subjects", async () => {
@@ -297,12 +322,13 @@ describe("ImportExecution", () => {
     });
   });
 
-  it("stores selected matlab path in import store", () => {
+  it("auto-selects first valid profile in import store", () => {
     configureRuntimeSettings();
     configureSubjects();
+    useImportStore.setState({ selectedProfileId: null });
     renderWithProviders();
 
-    expect(useImportStore.getState().selectedMatlabPath).toBe("/opt/matlab/bin/matlab");
+    expect(useImportStore.getState().selectedProfileId).toBe("profile-1");
   });
 
   it("cancel prevents import start when confirmation dialog is dismissed", async () => {
