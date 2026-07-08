@@ -9,6 +9,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import type { ProcessConfig, SubjectInfo, SubjectModuleStatus } from "../schemas/processingSchemas";
 import { modulesToBProcess, PROCESSING_MODULES } from "../schemas/processingSchemas";
+import type { ExecutionProfile } from "../schemas/executionProfile";
 import type { DataParJson } from "./assembleDataPar";
 import { useProcessingStore, clearProcessingListeners } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -239,6 +240,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
  */
 export async function runProcessingPipeline(
   config: ProcessConfig,
+  profile: ExecutionProfile,
   dataPar: DataParJson = { x: {} },
 ): Promise<number[]> {
   const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
@@ -251,8 +253,7 @@ export async function runProcessingPipeline(
 
   const pids = await invoke<number[]>("run_pipeline", {
     projectRoot,
-    matlabPath: config.matlabPath,
-    exploreAslPath: config.exploreAslPath,
+    executionProfile: profile,
     dataParJson: JSON.stringify(dataPar),
     bProcess,
     workers,

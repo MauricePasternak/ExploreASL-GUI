@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::execution_profile::get_exploreasl_version;
     use crate::processing::*;
     use std::fs;
     use std::path::{Path, PathBuf};

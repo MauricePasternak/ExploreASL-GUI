@@ -28,8 +28,7 @@ describe("processing config round-trip persistence", () => {
     const config = {
       subjects: ["sub-001", "sub-002"],
       modules: ["structural", "asl"],
-      matlabPath: "/usr/local/bin/matlab",
-      exploreAslPath: "/opt/ExploreASL",
+      selectedProfileId: "profile-1",
       workers: 4,
     } as any;
 

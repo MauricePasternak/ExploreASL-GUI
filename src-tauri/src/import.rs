@@ -1,4 +1,5 @@
 use crate::commands::{create_symlink_tree, SymlinkEntry};
+use crate::execution_profile::ExecutionProfile;
 use crate::import_parser::*;
 use crate::processing::ProcessState;
 use serde::Deserialize;
@@ -1127,14 +1128,12 @@ pub fn run_import_pipeline(
     staging_entries: Vec<StagingEntry>,
     sourcestructure_json: Value,
     studypar_json: Value,
-    matlab_path: String,
-    exploreasl_path: String,
+    execution_profile: ExecutionProfile,
     subject_list: Vec<String>,
     subjects_to_preserve: Option<Vec<String>>,
 ) -> Result<u32, String> {
     let staging_root = validate_path_input("staging_root", &staging_root)?;
     validate_staging_root(&staging_root)?;
-    let exploreasl_path = validate_string_input("exploreasl_path", &exploreasl_path)?;
     validate_non_empty_inputs(&staging_entries, &subject_list)?;
 
     if !sourcestructure_json.is_object() {
@@ -1143,7 +1142,23 @@ pub fn run_import_pipeline(
     if !studypar_json.is_object() {
         return Err("studypar_json must be a JSON object".to_string());
     }
-    let matlab_path = validate_matlab_executable(&matlab_path)?;
+
+    let validation = execution_profile.validate();
+    if !validation.valid {
+        return Err(validation.errors.join("; "));
+    }
+
+    let (matlab_path, exploreasl_path) = match execution_profile {
+        ExecutionProfile::Matlab { .. } => {
+            let matlab_path = validation
+                .matlab_path
+                .expect("validated matlab profile should include matlab path");
+            let exploreasl_path = validation
+                .explore_asl_path
+                .expect("validated matlab profile should include exploreasl path");
+            (matlab_path, exploreasl_path)
+        }
+    };
 
     let project_root = derive_project_root(&staging_root);
     let stream_subject_list = subject_list.clone();
@@ -1202,7 +1217,7 @@ pub fn run_import_pipeline(
 
     let batch = format!(
         "addpath('{}'); ExploreASL('{}', [1,1,0], 0, 0)",
-        escape_matlab_string(&exploreasl_path),
+        escape_matlab_string(&exploreasl_path.to_string_lossy()),
         escape_matlab_string(&staging_root.to_string_lossy()),
     );
     let mut child = spawn_matlab_import_process(&matlab_path, &batch).map_err(|e| {

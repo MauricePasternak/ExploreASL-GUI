@@ -1,3 +1,4 @@
+use crate::execution_profile::{get_exploreasl_version, ExecutionProfile};
 use crate::import::AppState;
 use crate::tracing::CommandTrace;
 use notify::{EventKind, RecursiveMode, Watcher};
@@ -864,39 +865,6 @@ fn process_exists(pid: u32) -> bool {
     result == WAIT_TIMEOUT
 }
 
-fn validate_matlab_path(matlab_path: &str) -> Result<String, String> {
-    use crate::import::validate_matlab_executable;
-    validate_matlab_executable(matlab_path)
-}
-
-fn validate_exploreasl_path(path: &str) -> Result<PathBuf, String> {
-    let path = PathBuf::from(path.trim());
-    if !path.exists() {
-        return Err(format!("ExploreASL path not found: {}", path.display()));
-    }
-    let main_file = path.join("ExploreASL.m");
-    if !main_file.exists() {
-        return Err(format!("ExploreASL.m not found in {}", path.display()));
-    }
-    Ok(path)
-}
-
-fn get_exploreasl_version(path: &PathBuf) -> Option<String> {
-    let entries = match fs::read_dir(path) {
-        Ok(entries) => entries,
-        Err(_) => return None,
-    };
-    for entry in entries.flatten() {
-        let file_name = entry.file_name().to_string_lossy().to_string();
-        if let Some(version) = file_name.strip_prefix("VERSION_") {
-            if !version.is_empty() {
-                return Some(version.to_string());
-            }
-        }
-    }
-    None
-}
-
 #[tauri::command]
 pub fn detect_exploreasl_version(explore_asl_path: String) -> Option<String> {
     let trace = CommandTrace::new("detect_exploreasl_version");
@@ -1219,8 +1187,7 @@ pub fn run_pipeline(
     app: AppHandle,
     state: State<'_, AppState>,
     project_root: String,
-    matlab_path: String,
-    explore_asl_path: String,
+    execution_profile: ExecutionProfile,
     data_par_json: String,
     b_process: Vec<bool>,
     workers: u32,
@@ -1228,8 +1195,7 @@ pub fn run_pipeline(
 ) -> Result<Vec<u32>, String> {
     let trace = CommandTrace::new("run_pipeline");
     trace.arg("project_root", &project_root);
-    trace.arg("matlab_path", &matlab_path);
-    trace.arg("explore_asl_path", &explore_asl_path);
+    trace.arg("execution_profile_id", execution_profile.id());
     trace.arg("workers", workers.to_string());
     trace.arg("subject_regexp", &subject_regexp);
 
@@ -1251,16 +1217,30 @@ pub fn run_pipeline(
         ));
     }
 
-    let matlab_path = validate_matlab_path(&matlab_path)?;
-    let exploreasl_path = validate_exploreasl_path(&explore_asl_path)?;
-
-    {
-        let version = get_exploreasl_version(&exploreasl_path);
-        log::info!(
-            "ExploreASL version: {}",
-            version.as_deref().unwrap_or("unknown")
-        );
+    let validation = execution_profile.validate();
+    if !validation.valid {
+        return Err(validation.errors.join("; "));
     }
+
+    let (matlab_path, exploreasl_path) = match execution_profile {
+        ExecutionProfile::Matlab {
+            explore_asl_version,
+            ..
+        } => {
+            let matlab_path = validation
+                .matlab_path
+                .expect("validated matlab profile should include matlab path");
+            let exploreasl_path = validation
+                .explore_asl_path
+                .expect("validated matlab profile should include exploreasl path");
+            let version = explore_asl_version.or(validation.explore_asl_version);
+            log::info!(
+                "ExploreASL version: {}",
+                version.as_deref().unwrap_or("unknown")
+            );
+            (matlab_path, exploreasl_path)
+        }
+    };
 
     write_data_par_json(&project_root, &data_par_json)?;
 

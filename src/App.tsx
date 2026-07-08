@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { useMantineColorScheme } from "@mantine/core";
+import { useMantineColorScheme, Center, Loader, Stack, Title } from "@mantine/core";
 import { Route, Routes, useLocation } from "react-router";
-import { invoke } from "@tauri-apps/api/core";
 
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
@@ -22,35 +21,33 @@ export default function App() {
       hash: location.hash,
     });
   }, [location]);
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const loadSettings = useGlobalStore((state) => state.loadSettings);
+  const loaded = useGlobalStore((state) => state.loaded);
   const theme = useGlobalStore((state) => state.settings.theme);
   const { setColorScheme } = useMantineColorScheme();
 
   useEffect(() => {
-    async function initialize() {
-      await loadSettings();
-
-      const state = useGlobalStore.getState();
-      const exploreAslPath = state.settings.exploreAslPath;
-      if (exploreAslPath.trim().length > 0) {
-        try {
-          const version = await invoke<string | null>("detect_exploreasl_version", {
-            exploreAslPath,
-          });
-          state.setExploreAslVersion(version);
-        } catch {
-          // path may not exist; version detection is best-effort
-        }
-      }
-    }
-
-    void initialize();
+    void loadSettings();
   }, [loadSettings]);
 
   useEffect(() => {
-    setColorScheme(theme);
-  }, [setColorScheme, theme]);
+    if (loaded) {
+      setColorScheme(theme);
+    }
+  }, [setColorScheme, theme, loaded]);
+
+  if (!loaded) {
+    return (
+      <Center style={{ height: "100vh", width: "100vw" }} data-testid="app-loading-gate">
+        <Stack align="center" gap="md">
+          <Title order={1}>ExploreASL GUI</Title>
+          <Loader size="xl" />
+        </Stack>
+      </Center>
+    );
+  }
 
   return (
     <ErrorBoundary>
@@ -63,7 +60,9 @@ export default function App() {
           </Route>
         </Routes>
 
-        <SettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        {settingsOpen && (
+          <SettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        )}
       </>
     </ErrorBoundary>
   );

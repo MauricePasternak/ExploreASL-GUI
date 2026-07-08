@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProcessConfig, SubjectInfo, SubjectModuleStatus } from "../schemas/processingSchemas";
+import type { ExecutionProfile } from "../schemas/executionProfile";
+import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import {
   loadSubjects,
   loadLockStatus,
@@ -10,12 +12,13 @@ import {
   watchLockDir,
 } from "../lib/processingEvents";
 import { invoke } from "@tauri-apps/api/core";
+import { useGlobalStore } from "./globalStore";
 import { useProcessingStore } from "./processingStore";
 
-const { mockSetPopulationCompleted, mockSetLastRunVersions, mockSetLastPopulationRunMtime } =
+const { mockSetPopulationCompleted, mockSetLastRunProfileId, mockSetLastPopulationRunMtime } =
   vi.hoisted(() => ({
     mockSetPopulationCompleted: vi.fn(),
-    mockSetLastRunVersions: vi.fn(),
+    mockSetLastRunProfileId: vi.fn(),
     mockSetLastPopulationRunMtime: vi.fn(),
   }));
 
@@ -38,7 +41,7 @@ vi.mock("./projectStore", () => ({
         mappingState: {},
       },
       setPopulationCompleted: mockSetPopulationCompleted,
-      setLastRunVersions: mockSetLastRunVersions,
+      setLastRunProfileId: mockSetLastRunProfileId,
       setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
     })),
   },
@@ -53,6 +56,21 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
+const MATLAB_PROFILE: ExecutionProfile = {
+  id: "profile-1",
+  type: "matlab",
+  label: "MATLAB R2023b",
+  matlabPath: "/usr/local/bin/matlab",
+  exploreAslPath: "/opt/ExploreASL",
+};
+
+beforeEach(() => {
+  useGlobalStore.setState({
+    settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
+    profileValidationState: { "profile-1": { valid: true, errors: [] } },
+  });
+});
+
 afterEach(() => {
   useProcessingStore.getState().resetProcessing();
   vi.clearAllMocks();
@@ -60,7 +78,7 @@ afterEach(() => {
   // (e.g. Phase 8.2 `ensure_rawdata_dir` mocks returning null for unknown
   // commands) would otherwise leak into the version-capture tests below
   // and cause capture_environment_versions to return null — making
-  // setLastRunVersions resolve to "unknown" and the test at line ~1085
+  // setLastRunProfileId resolve to "unknown" and the test at line ~1085
   // to fail. This is a TEST ISOLATION fix, not a BIDS-direct bug.
   vi.mocked(invoke).mockImplementation((cmd: string) => {
     if (cmd === "capture_environment_versions")
@@ -77,16 +95,14 @@ afterEach(() => {
 const STRUCTURAL_ASL_CONFIG: ProcessConfig = {
   subjects: ["sub-001_01", "sub-002_02"],
   modules: ["structural", "asl"],
-  matlabPath: "/usr/local/bin/matlab",
-  exploreAslPath: "/opt/ExploreASL",
+  selectedProfileId: "profile-1",
   workers: 4,
 };
 
 const POPULATION_CONFIG: ProcessConfig = {
   subjects: [],
   modules: ["population"],
-  matlabPath: "/usr/local/bin/matlab",
-  exploreAslPath: "/opt/ExploreASL",
+  selectedProfileId: "profile-1",
   workers: 8,
 };
 
@@ -160,15 +176,13 @@ describe("processingStore setConfig", () => {
     setConfig({
       subjects: [],
       modules: ["structural", "asl"],
-      matlabPath: "",
-      exploreAslPath: "",
+      selectedProfileId: "profile-1",
       workers: 4,
     });
     setConfig({
       subjects: [],
       modules: ["structural", "asl", "population"],
-      matlabPath: "",
-      exploreAslPath: "",
+      selectedProfileId: "profile-1",
       workers: 4,
     });
   });
@@ -184,7 +198,7 @@ describe("processingStore setConfig", () => {
         mappingState: {},
       },
       setPopulationCompleted: mockSetPopulationCompleted,
-      setLastRunVersions: mockSetLastRunVersions,
+      setLastRunProfileId: mockSetLastRunProfileId,
       setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
     };
 
@@ -223,7 +237,7 @@ describe("processingStore setConfig", () => {
           mappingState: {},
         },
         setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunVersions: mockSetLastRunVersions,
+        setLastRunProfileId: mockSetLastRunProfileId,
         setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
       });
 
@@ -242,7 +256,7 @@ describe("processingStore setConfig", () => {
 
       expect(runProcessingPipeline).toHaveBeenCalled();
       const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
-      const dataParJson = lastCall?.[1];
+      const dataParJson = lastCall?.[2];
       expect(dataParJson.x.opts).toEqual({ subjectFolder: "/home/user/ds000240" });
     });
 
@@ -252,7 +266,7 @@ describe("processingStore setConfig", () => {
 
       expect(runProcessingPipeline).toHaveBeenCalled();
       const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
-      const dataParJson = lastCall?.[1];
+      const dataParJson = lastCall?.[2];
       expect(dataParJson.x.opts?.subjectFolder).toBeUndefined();
     });
 
@@ -264,7 +278,7 @@ describe("processingStore setConfig", () => {
           mappingState: {},
         },
         setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunVersions: mockSetLastRunVersions,
+        setLastRunProfileId: mockSetLastRunProfileId,
         setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
       });
 
@@ -299,7 +313,7 @@ describe("processingStore setConfig", () => {
         mappingState: {},
       },
       setPopulationCompleted: mockSetPopulationCompleted,
-      setLastRunVersions: mockSetLastRunVersions,
+      setLastRunProfileId: mockSetLastRunProfileId,
       setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
     };
 
@@ -329,7 +343,7 @@ describe("processingStore setConfig", () => {
           mappingState: {},
         },
         setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunVersions: mockSetLastRunVersions,
+        setLastRunProfileId: mockSetLastRunProfileId,
         setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
       });
 
@@ -367,7 +381,7 @@ describe("processingStore setConfig", () => {
           mappingState: {},
         },
         setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunVersions: mockSetLastRunVersions,
+        setLastRunProfileId: mockSetLastRunProfileId,
         setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
       });
 
@@ -403,7 +417,7 @@ describe("processingStore setConfig", () => {
           mappingState: {},
         },
         setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunVersions: mockSetLastRunVersions,
+        setLastRunProfileId: mockSetLastRunProfileId,
         setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
       });
 
@@ -436,7 +450,7 @@ describe("processingStore setConfig", () => {
           mappingState: {},
         },
         setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunVersions: mockSetLastRunVersions,
+        setLastRunProfileId: mockSetLastRunProfileId,
         setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
       });
 
@@ -463,15 +477,13 @@ describe("processingStore setConfig", () => {
     setConfig({
       subjects: [],
       modules: ["population"],
-      matlabPath: "",
-      exploreAslPath: "",
+      selectedProfileId: "profile-1",
       workers: 1,
     });
     setConfig({
       subjects: [],
       modules: ["population", "structural"],
-      matlabPath: "",
-      exploreAslPath: "",
+      selectedProfileId: "profile-1",
       workers: 1,
     });
     expect(useProcessingStore.getState().config?.modules).toEqual(["structural"]);
@@ -482,15 +494,13 @@ describe("processingStore setConfig", () => {
     setConfig({
       subjects: [],
       modules: ["population"],
-      matlabPath: "",
-      exploreAslPath: "",
+      selectedProfileId: "profile-1",
       workers: 1,
     });
     setConfig({
       subjects: [],
       modules: ["population", "asl"],
-      matlabPath: "",
-      exploreAslPath: "",
+      selectedProfileId: "profile-1",
       workers: 1,
     });
     expect(useProcessingStore.getState().config?.modules).toEqual(["asl"]);
@@ -764,7 +774,11 @@ describe("processingStore Tauri integration: startProcessing", () => {
   it("calls runProcessingPipeline with config and dataParJson", async () => {
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
     await useProcessingStore.getState().startProcessing();
-    expect(runProcessingPipeline).toHaveBeenCalledWith(STRUCTURAL_ASL_CONFIG, expect.any(Object));
+    expect(runProcessingPipeline).toHaveBeenCalledWith(
+      STRUCTURAL_ASL_CONFIG,
+      MATLAB_PROFILE,
+      expect.any(Object),
+    );
   });
 
   it("calls watchLockDir with project root", async () => {
@@ -834,7 +848,8 @@ describe("processingStore Tauri integration: startProcessing", () => {
     expect(runProcessingPipeline).toHaveBeenCalled();
     const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
     expect(lastCall?.[0]).toEqual(STRUCTURAL_ASL_CONFIG);
-    expect(lastCall?.[1].x.dataset).toEqual({
+    expect(lastCall?.[1]).toEqual(MATLAB_PROFILE);
+    expect(lastCall?.[2].x.dataset).toEqual({
       subjectRegexp: "^(sub-001_01|sub-002_02)$",
       ForceInclusionList: STRUCTURAL_ASL_CONFIG.subjects,
     });
@@ -847,10 +862,10 @@ describe("processingStore Tauri integration: startProcessing", () => {
     const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
     const expectedConfig = { ...POPULATION_CONFIG, workers: 1 };
     expect(lastCall?.[0]).toEqual(expectedConfig);
-    expect(lastCall?.[1].x.dataset).toEqual({
+    expect(lastCall?.[2].x.dataset).toEqual({
       subjectRegexp: "^sub-.*$",
     });
-    expect(lastCall?.[1].x.dataset.ForceInclusionList).toBeUndefined();
+    expect(lastCall?.[2].x.dataset.ForceInclusionList).toBeUndefined();
   });
 
   it("throws an error when configured subjects are not present in scanned availableSubjects", async () => {
@@ -884,6 +899,83 @@ describe("processingStore Tauri integration: startProcessing", () => {
     await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
       'Subject session "sub-001" does not match BIDS syntax (sub-<subject>_<session>)',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Profile resolution + validation gating (Group 7.1)
+// ---------------------------------------------------------------------------
+
+describe("processingStore startProcessing profile gating", () => {
+  beforeEach(() => {
+    useProcessingStore.getState().setAvailableSubjects([
+      {
+        subjectSession: "sub-001_01",
+        subject: "001",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+        aslRuns: [],
+      },
+      {
+        subjectSession: "sub-002_02",
+        subject: "002",
+        session: "02",
+        hasStructural: true,
+        hasASL: true,
+        aslRuns: [],
+      },
+    ]);
+  });
+
+  it("resolves and passes the valid profile to runProcessingPipeline", async () => {
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+
+    const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
+    expect(lastCall?.[1]).toEqual(MATLAB_PROFILE);
+    expect(useProcessingStore.getState().profileError).toBeNull();
+  });
+
+  it("blocks with an inline error when the profile cannot be found (no failed transition)", async () => {
+    useGlobalStore.setState({
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [] },
+      profileValidationState: {},
+    });
+
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+
+    expect(useProcessingStore.getState().profileError).toBeTruthy();
+    expect(useProcessingStore.getState().processingPhase).not.toBe("failed");
+    expect(useProcessingStore.getState().processingPhase).toBe("idle");
+    expect(runProcessingPipeline).not.toHaveBeenCalled();
+  });
+
+  it("blocks with an inline error when the profile is invalid (no failed transition)", async () => {
+    useGlobalStore.setState({
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
+      profileValidationState: {
+        "profile-1": { valid: false, errors: ["MATLAB not found"] },
+      },
+    });
+
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+
+    expect(useProcessingStore.getState().profileError).toBeTruthy();
+    expect(useProcessingStore.getState().processingPhase).not.toBe("failed");
+    expect(useProcessingStore.getState().processingPhase).toBe("idle");
+    expect(runProcessingPipeline).not.toHaveBeenCalled();
+  });
+
+  it("clears a previous profileError once a valid profile is resolved", async () => {
+    useProcessingStore.setState({ profileError: "stale error" });
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+
+    expect(useProcessingStore.getState().profileError).toBeNull();
+    expect(useProcessingStore.getState().processingPhase).toBe("running");
   });
 });
 
@@ -1051,7 +1143,7 @@ describe("processingStore manifest version capture", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockClear();
     mockSetPopulationCompleted.mockClear();
-    mockSetLastRunVersions.mockClear();
+    mockSetLastRunProfileId.mockClear();
     mockSetLastPopulationRunMtime.mockClear();
 
     useProcessingStore.getState().setAvailableSubjects([
@@ -1092,10 +1184,12 @@ describe("processingStore manifest version capture", () => {
     expect(invoke).not.toHaveBeenCalledWith("capture_environment_versions", expect.any(Object));
   });
 
-  it("calls setLastRunVersions after version capture with mapped fields", async () => {
+  it("calls setLastRunProfileId after version capture with profileId and mapped fields", async () => {
     useProcessingStore.getState().setConfig(POPULATION_CONFIG);
     await useProcessingStore.getState().startProcessing();
-    expect(mockSetLastRunVersions).toHaveBeenCalledWith(
+    expect(mockSetLastRunProfileId).toHaveBeenCalledWith(
+      "population",
+      "profile-1",
       expect.objectContaining({
         exploreASLVersion: "1.0.0",
         matlabVersion: "R2023b",
@@ -1121,7 +1215,9 @@ describe("processingStore manifest version capture", () => {
     useProcessingStore.getState().setConfig(POPULATION_CONFIG);
     await useProcessingStore.getState().startProcessing();
 
-    expect(mockSetLastRunVersions).toHaveBeenCalledWith(
+    expect(mockSetLastRunProfileId).toHaveBeenCalledWith(
+      "population",
+      "profile-1",
       expect.objectContaining({
         exploreASLVersion: "unknown",
         matlabVersion: "unknown",

@@ -1,6 +1,7 @@
 pub mod bids;
 pub mod bids_commands;
 mod commands;
+pub mod execution_profile;
 pub mod import;
 pub mod import_parser;
 pub mod manifest;
@@ -16,6 +17,7 @@ use commands::{
     create_symlink_tree, get_available_memory_mb, get_cpu_cores, is_writable, walk_directory,
     which_matlab,
 };
+use execution_profile::{validate_all_execution_profiles, validate_execution_profile};
 use import::{
     clean_import_status, copy_lock_files, move_import_output, read_import_status,
     run_import_pipeline, stop_active_import, stop_import, stop_running_import_for_exit, AppState,
@@ -66,6 +68,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             which_matlab,
+            validate_execution_profile,
+            validate_all_execution_profiles,
             is_writable,
             walk_directory,
             create_symlink_tree,

@@ -55,11 +55,15 @@ interface ProjectState {
     opts: { reason?: ManifestFailReason; notes?: string; setAt?: number },
   ) => void;
   removeManifestVerdict: (subjectSession: string) => void;
-  setLastRunVersions: (versions: {
-    exploreASLVersion?: string;
-    matlabVersion?: string;
-    guiVersion?: string;
-  }) => void;
+  setLastRunProfileId: (
+    module: "population" | "structural" | "asl",
+    profileId: string,
+    versions: {
+      exploreASLVersion?: string;
+      matlabVersion?: string;
+      guiVersion?: string;
+    },
+  ) => void;
   setLastPopulationRunMtime: (mtime: number | null) => void;
   closeProject: () => void;
   confirmBidsReview: () => Promise<void>;
@@ -371,10 +375,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
   },
 
-  setLastRunVersions: (versions) => {
+  setLastRunProfileId: (module, profileId, versions) => {
     updateProject(set, (project) => {
-      const currentLastRun = project.uiState?.processing?.population?.lastRun;
+      const currentLastRun = project.uiState?.processing?.[module]?.lastRun;
       if (
+        currentLastRun?.profileId === profileId &&
         currentLastRun?.exploreASLVersion === versions.exploreASLVersion &&
         currentLastRun?.matlabVersion === versions.matlabVersion &&
         currentLastRun?.guiVersion === versions.guiVersion
@@ -388,10 +393,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           ...project.uiState,
           processing: {
             ...project.uiState?.processing,
-            population: {
-              ...project.uiState?.processing?.population,
+            [module]: {
+              ...project.uiState?.processing?.[module],
               lastRun: {
                 ...currentLastRun,
+                profileId,
                 exploreASLVersion: versions.exploreASLVersion,
                 matlabVersion: versions.matlabVersion,
                 guiVersion: versions.guiVersion,
@@ -418,6 +424,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             population: {
               ...project.uiState?.processing?.population,
               lastRun: {
+                profileId:
+                  project.uiState?.processing?.population?.lastRun?.profileId ??
+                  "00000000-0000-0000-0000-000000000000",
                 ...project.uiState?.processing?.population?.lastRun,
                 Mtime: mtime,
               },
@@ -430,8 +439,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   syncImportState: (importState) => {
     updateProject(set, (project) => {
-      const { activeStep, importPhase, importCompleted, mostRecentConfig, ...payload } =
-        importState;
+      const {
+        activeStep,
+        importPhase,
+        importCompleted,
+        mostRecentConfig,
+        selectedProfileId,
+        ...payload
+      } = importState;
 
       // Gate mappingState: BIDS-direct projects own mappingState after confirm;
       // DICOM sync must not clobber the 4-field mappingState written by
@@ -440,11 +455,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const mappingChanged =
         !bidsConfirmed && JSON.stringify(project.mappingState) !== JSON.stringify(payload);
 
+      const nextSelectedProfileId =
+        selectedProfileId ?? project.uiState?.import?.selectedProfileId ?? undefined;
+
       if (
         !mappingChanged &&
         project.uiState?.import?.activeStep === activeStep &&
         project.uiState?.import?.currentPhase === importPhase &&
         project.uiState?.import?.completed === importCompleted &&
+        project.uiState?.import?.selectedProfileId === nextSelectedProfileId &&
         JSON.stringify(project.uiState?.import?.mostRecentConfig) ===
           JSON.stringify(mostRecentConfig ?? project.uiState?.import?.mostRecentConfig ?? null)
       ) {
@@ -463,6 +482,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             completed: importCompleted,
             bidsReviewConfirmed: project.uiState?.import?.bidsReviewConfirmed ?? false,
             skippedSubjects: project.uiState?.import?.skippedSubjects ?? [],
+            selectedProfileId: nextSelectedProfileId,
             mostRecentConfig: mostRecentConfig ?? project.uiState?.import?.mostRecentConfig ?? null,
           },
         },
