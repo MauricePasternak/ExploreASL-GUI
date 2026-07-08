@@ -1,13 +1,17 @@
 # bids-dataset-detection Specification
 
 ## Purpose
+
 TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: check_bids_dataset command validates folder as BIDS ASL source
 
 The Rust command `check_bids_dataset(root_path: String) -> BidsCheckResult` SHALL scan the provided folder for BIDS structure and ASL content. It does NOT parse sidecar JSON; it checks directory structure and sidecar presence only.
 
 Algorithm:
+
 1. Check whether `dataset_description.json` exists at `<root_path>`. If present, parse JSON to extract `BIDSVersion`. Parse failure is non-fatal; populate `dataset_desc_error`.
 2. Call `parse_bids_structure(root_path)` to enumerate `sub-*/` subjects and their sessions.
 3. For each subject/session, verify that **every** `*_asl.nii` or `*_asl.nii.gz` file has a matching `*_asl.json` sidecar and a matching `*_aslcontext.tsv` companion file. If **all** runs in the session have matching sidecars and context files, the session is valid — increment `asl_session_count` once (not per run); if the subject has at least one valid ASL session, increment `asl_subject_count`.
@@ -93,4 +97,3 @@ After the folder picker returns a path, `LandingPage.handleNewProject()` MUST in
 
 - **WHEN** `dataset_description.json` exists with invalid JSON, 12 subjects have valid ASL sidecars
 - **THEN** corrupt warning dialog shows; `[Skip Import anyway]` creates BIDS-direct project; `[Cancel]` returns to landing
-

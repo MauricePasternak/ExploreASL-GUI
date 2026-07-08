@@ -61,6 +61,7 @@ export const ImportUiStateSchema = z.object({
   completed: z.boolean().optional(),
   bidsReviewConfirmed: z.boolean().default(false),
   skippedSubjects: z.array(z.string()).default([]),
+  selectedProfileId: z.string().optional(),
   currentPhase: z.enum(IMPORT_EXECUTION_PHASES).optional(),
   mostRecentConfig: z
     .preprocess((val) => {
@@ -89,11 +90,40 @@ export const ProjectFileSchema = z.object({
         .object({
           config: ProcessConfigSchema.optional(),
           currentPhase: ProcessingPhaseSchema.optional(),
+          structural: z
+            .object({
+              completed: z.boolean().optional(),
+              lastRun: z
+                .object({
+                  profileId: z.string(),
+                  exploreASLVersion: z.string().optional(),
+                  matlabVersion: z.string().optional(),
+                  guiVersion: z.string().optional(),
+                  Mtime: z.number().int().nullable().optional(),
+                })
+                .optional(),
+            })
+            .optional(),
+          asl: z
+            .object({
+              completed: z.boolean().optional(),
+              lastRun: z
+                .object({
+                  profileId: z.string(),
+                  exploreASLVersion: z.string().optional(),
+                  matlabVersion: z.string().optional(),
+                  guiVersion: z.string().optional(),
+                  Mtime: z.number().int().nullable().optional(),
+                })
+                .optional(),
+            })
+            .optional(),
           population: z
             .object({
               completed: z.boolean().optional(),
               lastRun: z
                 .object({
+                  profileId: z.string(),
                   exploreASLVersion: z.string().optional(),
                   matlabVersion: z.string().optional(),
                   guiVersion: z.string().optional(),
@@ -236,6 +266,7 @@ export const DEFAULT_PROJECT_FILE = (id: string, name: string, rootPath: string)
     import: {
       bidsReviewConfirmed: false,
       skippedSubjects: [],
+      selectedProfileId: undefined,
     },
     datapar: {
       advancedVisibility: {

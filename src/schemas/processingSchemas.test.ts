@@ -16,8 +16,7 @@ describe("ProcessConfigSchema", () => {
   const validConfig = {
     subjects: ["sub-01", "sub-02"],
     modules: ["structural", "asl"] as const,
-    matlabPath: "/usr/local/MATLAB/R2023b",
-    exploreAslPath: "/opt/ExploreASL",
+    selectedProfileId: "550e8400-e29b-41d4-a716-446655440000",
     workers: 4,
   };
 
@@ -54,6 +53,21 @@ describe("ProcessConfigSchema", () => {
   it("accepts empty subjects array", () => {
     const result = ProcessConfigSchema.parse({ ...validConfig, subjects: [] });
     expect(result.subjects).toEqual([]);
+  });
+
+  it("rejects missing selectedProfileId", () => {
+    expect(() =>
+      ProcessConfigSchema.parse({
+        subjects: ["sub-01"],
+        modules: ["asl"],
+        workers: 2,
+      }),
+    ).toThrow();
+  });
+
+  it("accepts valid selectedProfileId", () => {
+    const result = ProcessConfigSchema.parse(validConfig);
+    expect(result.selectedProfileId).toBe("550e8400-e29b-41d4-a716-446655440000");
   });
 });
 

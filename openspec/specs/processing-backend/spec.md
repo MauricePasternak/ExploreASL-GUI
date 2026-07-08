@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change processing-module. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: run_pipeline Command
 
 The `run_pipeline` Tauri command SHALL accept: `project_root: String`, `matlab_path: String`, `explore_asl_path: String`, `data_par_json: String`, `b_process: Vec<bool>`, `workers: u32`, `subject_regexp: String`. It SHALL return `Vec<u32>` (worker PIDs).
@@ -110,19 +112,20 @@ The `read_lock_status` Tauri command SHALL accept `project_root: String` and ret
 ### Requirement: list_subjects Command
 
 `processing.rs::list_subjects(project_root: String, data_source: Option<String>)` SHALL delegate to `bids::scan::parse_bids_structure` on:
+
 - `project_root.join("rawdata")` when `data_source` is `"dicom"` or omitted (existing DICOM-import contract)
 - `project_root` when `data_source` is `"bids"` (BIDS-direct subjects live at project root)
 
 The function maps `Vec<BidsSubject>` to `Vec<SubjectInfo>` preserving the existing frontend contract:
 
-| Old `SubjectInfo` field | Mapping from `BidsSubject`/`BidsSession` |
-|---|---|
-| `subject_session` | `format!("sub-{}_{}", subject_label, session_label)` |
-| `subject` | `subject_label` |
-| `session` | `session_label` |
-| `has_structural` | `has_anat` |
-| `has_asl` | `has_perf` |
-| `asl_runs` | parsed from `asl_files` (run_label resolved, sorted ascending, default `"1"` when run entity absent) |
+| Old `SubjectInfo` field | Mapping from `BidsSubject`/`BidsSession`                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `subject_session`       | `format!("sub-{}_{}", subject_label, session_label)`                                                 |
+| `subject`               | `subject_label`                                                                                      |
+| `session`               | `session_label`                                                                                      |
+| `has_structural`        | `has_anat`                                                                                           |
+| `has_asl`               | `has_perf`                                                                                           |
+| `asl_runs`              | parsed from `asl_files` (run_label resolved, sorted ascending, default `"1"` when run entity absent) |
 
 Cross-sectional handling: missing `ses-*` directories default to session `"1"` per D2.
 
@@ -253,6 +256,7 @@ The frontend SHALL display the detected version as colored text below the Explor
 `assembleDataPar` (or Rust `processing.rs::write_data_par_json`) SHALL include `x.opts.subjectFolder = project_root` in the resulting `dataPar.json` when `dataSource === "bids"`. For `dataSource === "dicom"`, `subjectFolder` MUST NOT be injected; `dataPar.json` matches existing behavior.
 
 Resulting `dataPar.json` for BIDS-direct:
+
 ```json
 {
   "x": {
@@ -297,4 +301,3 @@ For DICOM-import projects, existing behavior is preserved (group labels when cor
 
 - **WHEN** ds000240 (with root-level `participants.tsv` containing 16 clinical columns) is processed end-to-end as a BIDS-direct project
 - **THEN** root-level `participants.tsv` retains its original 16 columns throughout; ExploreASL-generated columns live in `derivatives/ExploreASL/participants.tsv` only
-

@@ -606,6 +606,7 @@ export const ImportSnapshotSchema = z.object({
   subjectRenames: z.array(SubjectRenameSchema),
   metadataGroups: z.array(MetadataGroupSchema),
   subjectRows: z.array(SubjectRowSchema),
+  selectedProfileId: z.string().optional(),
 });
 
 export type ImportSnapshot = z.infer<typeof ImportSnapshotSchema>;

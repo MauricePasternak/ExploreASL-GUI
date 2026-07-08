@@ -1,8 +1,11 @@
 # bids-review-panel Specification
 
 ## Purpose
+
 TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: ImportPage renders BIDSReviewPanel conditionally
 
 `ImportPage` SHALL render `BIDSReviewPanel` when `projectMeta.dataSource === "bids"` and the existing 6-step DICOM wizard when `dataSource === "dicom"`. No new route is created; the existing `currentPhase: "import"` covers both paths.
@@ -20,6 +23,7 @@ TBD - created by archiving change direct-bids-import. Update Purpose after archi
 ### Requirement: BIDSReviewPanel renders group cards with editable labels
 
 `BIDSReviewPanel` SHALL render one card per detected `DerivedMetadataGroup`. Each card shows:
+
 - Label as an inline editable input (auto-suggested value pre-filled; user may edit)
 - Subject count + session count for the group
 - Subject list (collapsible; sorted alphabetically), showing `subjectLabel` and `sessionLabels`
@@ -58,6 +62,7 @@ TBD - created by archiving change direct-bids-import. Update Purpose after archi
 ### Requirement: Skipped subjects warning block
 
 `BIDSReviewPanel` SHALL render a warning block listing skipped subjects (from `skippedSubjects`). Each entry shows the subject/session identifier in `sub-XX_<session>` form, plus the skip reason:
+
 - Missing `*_asl.json` sidecar
 - Missing or unparseable `*_aslcontext.tsv`
 
@@ -72,14 +77,14 @@ Each entry note: "This subject will be excluded from processing. To include it, 
 
 `BIDSReviewPanel` SHALL render these edge states:
 
-| State | UI |
-|---|---|
-| Scan running | Skeleton loader |
-| Scan error | Error alert with `[Retry]` and `[Back to Landing]` buttons; after 2 failed retries, additional hint: "Persistent scan failure — check directory permissions or delete project and recreate." (hint only, no counting logic) |
-| 0 groups found | Error alert with same buttons; message "No ASL metadata groups detected" |
-| 1 group only | Parameter table expanded by default |
-| 2-9 groups | Cards start collapsed by default; parameters table hidden by default (user can expand) |
-| 10+ groups | All cards collapsed by default |
+| State          | UI                                                                                                                                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scan running   | Skeleton loader                                                                                                                                                                                                             |
+| Scan error     | Error alert with `[Retry]` and `[Back to Landing]` buttons; after 2 failed retries, additional hint: "Persistent scan failure — check directory permissions or delete project and recreate." (hint only, no counting logic) |
+| 0 groups found | Error alert with same buttons; message "No ASL metadata groups detected"                                                                                                                                                    |
+| 1 group only   | Parameter table expanded by default                                                                                                                                                                                         |
+| 2-9 groups     | Cards start collapsed by default; parameters table hidden by default (user can expand)                                                                                                                                      |
+| 10+ groups     | All cards collapsed by default                                                                                                                                                                                              |
 
 `importStore` BIDS review slice provides `retryBidsScan()` (re-calls `scan_bids_sidecars`, clears `scanError`) and `backToLanding()` (navigate to `/`, abandons project).
 
@@ -96,6 +101,7 @@ Each entry note: "This subject will be excluded from processing. To include it, 
 ### Requirement: Confirmation flow
 
 On `[Confirm]` click, `BIDSReviewPanel` SHALL validate:
+
 - No group label is empty
 - No two group labels are duplicates (case-insensitive comparison)
 
@@ -121,6 +127,7 @@ If validation passes: sync to project store (write `metadataGroups`, `subjectRow
 ### Requirement: Revisit summary with re-scan/re-confirm
 
 When `uiState.import.bidsReviewConfirmed === true` and user navigates back to Import, `BIDSReviewPanel` SHALL render a persisted summary with an explicit re-scan action:
+
 - Banner: "BIDS metadata groups confirmed. Import is complete."
 - Group cards sourced from persisted `mappingState.metadataGroups` and `mappingState.subjectRows`, collapsed by default.
 - Skipped subjects warning sourced from persisted `uiState.import.skippedSubjects`.
@@ -139,4 +146,3 @@ Project deletion/editing uses the standard project list flow, not BIDSReviewPane
 
 - **WHEN** user clicks `[Re-scan BIDS]` and the scan succeeds
 - **THEN** group labels become editable and `[Confirm]` re-confirms the latest scan result
-

@@ -1,8 +1,11 @@
 # exploreasl-rawdata-compat Specification
 
 ## Purpose
+
 TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Root-level participants.tsv never modified
 
 For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/participants.tsv` (if present) is never read, written, or modified by GUI code. `ensureParticipantsFiles` operates exclusively on `<projectRoot>/derivatives/ExploreASL/participants.tsv`. ExploreASL Population module appends processing-derived columns (`gm_vol`, `motion`, etc.) to the derivatives file, not root.
@@ -18,6 +21,7 @@ The Rust command `ensure_rawdata_dir(root_path: String) -> Result<EnsureRawdataR
 
 1. Create `<root_path>/rawdata/` directory if it does not exist (idempotent — succeeds silently if already present).
 2. Write `<root_path>/rawdata/README.md` (idempotent, overwrite). Content:
+
    ```
    # rawdata/
 
@@ -29,6 +33,7 @@ The Rust command `ensure_rawdata_dir(root_path: String) -> Result<EnsureRawdataR
 
    Do not delete this directory while the project is active.
    ```
+
 3. Manage `<root_path>/.bidsignore`:
    - If `.bidsignore` does not exist → create with content `"rawdata/\n"`
    - If `.bidsignore` exists but lacks `rawdata/` line → append `"rawdata/\n"`
@@ -106,6 +111,7 @@ Cross-sectional handling: `parse_bids_structure` defaults missing `ses-*` to ses
 ### Requirement: participants.tsv site-column precedence for BIDS-direct projects
 
 In BIDS-direct projects (`dataSource === "bids"`), if the root-level `<projectRoot>/participants.tsv` exists and contains a `site` column:
+
 - The user's `site` values take precedence. The GUI reads `<projectRoot>/participants.tsv` to extract the `site` values.
 - When performing the lookup, the GUI matches the root-level `participant_id` column (e.g., `"sub-01"`) against the base subject label of the session record (e.g. `"sub-01"` matches both `"sub-01_1"` and `"sub-01_2"`), assuming root-level `participants.tsv` always lists subjects at the subject level.
 - These user-defined `site` values are preserved and written to `<projectRoot>/derivatives/ExploreASL/participants.tsv`.
@@ -116,14 +122,16 @@ In BIDS-direct projects (`dataSource === "bids"`), if the root-level `<projectRo
 For DICOM-import projects, the existing behavior is preserved (group labels written if correction enabled, stripped if disabled, no reading from root-level file). The root-level `<projectRoot>/participants.tsv` is never written or modified by GUI code for either project type.
 
 #### Scenario: BIDS-direct project with site correction enabled and pre-existing site values
+
 - **WHEN** user clicks Start Processing on a BIDS-direct project with `enableMetadataGroupingCorrection = true` and root-level `participants.tsv` defines `site = "CenterA"` for `participant_id = sub-01`, with `sub-02_1` lacking a root `site` value
 - **THEN** `<root>/derivatives/ExploreASL/participants.tsv` has `site = "CenterA"` for `sub-01_1` (user preference preserved) and group label fallback for `sub-02_1`
 
 #### Scenario: BIDS-direct project with site correction disabled and pre-existing site values
+
 - **WHEN** user clicks Start Processing on a BIDS-direct project with `enableMetadataGroupingCorrection = false`, where the root-level `participants.tsv` defines `site = "CenterA"` for `participant_id = sub-01`
 - **THEN** `<root>/derivatives/ExploreASL/participants.tsv` keeps the `site` column, containing `"CenterA"` for matching `sub-01_*` sessions (not stripped)
 
 #### Scenario: Root-level participants.tsv preserved through processing
+
 - **WHEN** ds000240 (with root-level `participants.tsv` containing 16 clinical columns) is processed end-to-end as a BIDS-direct project
 - **THEN** root-level `participants.tsv` retains its original 16 columns throughout; ExploreASL-generated columns (`site`, `gm_vol`, `motion`, etc.) live in `derivatives/ExploreASL/participants.tsv` only
-

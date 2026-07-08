@@ -1,9 +1,12 @@
 # bids-sidecar-scanning Specification
 
 ## Purpose
+
 TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+
 ## Requirements
-### Requirement: parse_bids_structure scans any path containing sub-* directories
+
+### Requirement: parse_bids_structure scans any path containing sub-\* directories
 
 `bids::scan::parse_bids_structure(bids_root: &Path) -> Result<Vec<BidsSubject>>` SHALL enumerate `sub-*/` directories at the top level of `bids_root`. It handles two layouts:
 
@@ -11,6 +14,7 @@ TBD - created by archiving change direct-bids-import. Update Purpose after archi
 - Longitudinal: `sub-XX/ses-YY/perf/`, `sub-XX/ses-YY/anat/`
 
 The function is path-agnostic — it scans whatever path it receives. Callers pass the appropriate path:
+
 - `check_bids_dataset` and `scan_bids_sidecars` pass project root (BIDS-direct, root-level scan)
 - `list_subjects` (DICOM-import path) passes `project_root.join("rawdata")`
 
@@ -62,7 +66,7 @@ Non-`sub-` top-level entries (`derivatives/`, `sourcedata/`, `.easl_staging/`, `
 - **WHEN** `parse_bids_structure` scans a subject with `perf/sub-01_run-1_asl.nii.gz` and `perf/sub-01_run-2_asl.nii.gz`
 - **THEN** two `AslFile` entries have `run_label = Some("1")` and `Some("2")`; `SubjectInfo.asl_runs = ["1", "2"]` (sorted ascending)
 
-### Requirement: find_asl_sidecars walks sub-*/ only
+### Requirement: find_asl_sidecars walks sub-\*/ only
 
 `bids::sidecar::find_asl_sidecars(bids_root: &Path) -> Vec<PathBuf>` SHALL iterate `std::fs::read_dir(bids_root)` and include only entries whose name starts with `"sub-"` and is a directory. Within each subject directory, the function walks into `perf/` directly (cross-sectional) and `ses-*/perf/` (longitudinal), collecting `*_asl.json` files.
 
@@ -90,6 +94,7 @@ Top-level directories not matching `sub-` (notably `derivatives/`, `sourcedata/`
 ### Requirement: Fingerprint number canonicalization
 
 Fingerprint numeric fields SHALL be canonicalized as:
+
 1. Extract value as `f64` regardless of int/float JSON representation
 2. Round: `(value * 1000.0).round() / 1000.0`
 3. Serialize for hashing via `format!("{:.3}", value)` — always 3 decimal places, string-form
@@ -124,6 +129,7 @@ The first subject's raw ASLContext string is stored in the group's `params.ASLCo
 ### Requirement: M0Type derived except sidecar's `"Estimate"` honored
 
 `M0Type` SHALL be derived at scan time per these rules, in order:
+
 1. If sidecar's `M0Type === "Estimate"` → return `"Estimate"` (trust sidecar; literature-derived M0 is not derivable from filesystem/ aslcontext)
 2. Else if `perf/` contains `*_m0scan.nii.gz` → `"Separate"`
 3. Else if `aslcontext.tsv` contains `m0scan` volume_type → `"Included"`
@@ -172,6 +178,7 @@ If `*_aslcontext.tsv` is missing or unparseable alongside a sidecar, or if **any
 `scan_bids_sidecars(root_path: String) -> Result<BidsSidecarScan, String>` SHALL call `parse_bids_structure` + `find_asl_sidecars` + `parse_sidecar` + `find_asl_context_for` + `parse_asl_context` + `inject_asl_context` + `extract_fingerprint` + `compute_group_hash` + `group_by_fingerprint` + `derive_vendor` + `derive_sequence` + `derive_labeling_type` + label auto-suggestion.
 
 `SidecarGroup` SHALL have typed fields (not raw `serde_json::Value`):
+
 - `fingerprint_hash: String`
 - `label: String` — auto-suggested, computed by Rust per the label algorithm
 - `vendor: String` — `derive_vendor()` output
@@ -240,6 +247,7 @@ Collision resolution: when multiple groups produce the same label, suffix `_(2)`
 ### Requirement: Vendor derivation uses substring matching with fuzzy fallback
 
 `bids::vendor::derive_vendor(manufacturer: Option<&str>) -> String` and fingerprint normalization SHALL perform case-insensitive substring matching:
+
 - Contains `"siemens"` → `"Siemens"`
 - Contains `"philips"` → `"Philips"`
 - Contains `"ge"` → `"GE_product"`
@@ -249,12 +257,14 @@ Collision resolution: when multiple groups produce the same label, suffix `_(2)`
 ### Requirement: Sequence derivation cleans duplicate prefixes
 
 `derive_sequence(acq_type: Option<&str>, pulse_seq: Option<&str>)` returns sequence name by joining present segments, defaulting to `"UnknownSequence"` if both are missing.
+
 - When both `acq_type` and `pulse_seq` are present, it SHALL strip any duplicate `acq_type` prefix from the start of `pulse_seq` (supporting both `_` and `-` separators) before joining (e.g. `3D` + `3D_SPIRAL` or `3D` + `3d-spiral` maps to `"3D_spiral"` rather than `"3D_3D_SPIRAL"`).
 - Pulse sequence type fingerprint normalization SHALL also use a Jaro-Winkler fuzzy fallback (threshold `0.8`) against target sequence keywords (`"epi"`, `"ep2d"`, `"epfid"`, `"pepolar"`, `"grase"`, `"tgse"`, `"spiral"`) to correctly identify misspelled sequences like `"3D_SPRIAL"`.
 
 ### Requirement: Labeling type derivation supports three main strategies
 
 `derive_labeling_type(asl_type: Option<&str>)` and TS `deriveInjectedFields` SHALL derive the labeling type as:
+
 - `"PCASL"` → `"PCASL"`
 - `"CASL"` → `"CASL"`
 - `"PASL"` → `"PASL"`
@@ -274,4 +284,3 @@ Collision resolution: when multiple groups produce the same label, suffix `_(2)`
 
 - **WHEN** `derive_vendor("Canon Medical Systems")` is called
 - **THEN** returns `"UnknownVendor"`
-
