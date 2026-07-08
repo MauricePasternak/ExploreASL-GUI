@@ -403,27 +403,35 @@ export default function ProfileManager() {
 
             {detectedMatlab.length > 0 ? (
               <Stack gap="xs" data-testid="profile-detected-matlab-list">
+                <Text size="xs" c="dimmed" fw={500}>
+                  Click a detected installation below to apply it to the MATLAB path:
+                </Text>
                 {detectedMatlab.map((installation, index) => (
-                  <Button
+                  <Tooltip
                     key={installation.path}
-                    variant="default"
-                    justify="flex-start"
-                    onClick={() =>
-                      setDraft((current) => ({
-                        ...current,
-                        matlabPath: installation.path,
-                        label:
-                          current.label.trim().length > 0
-                            ? current.label
-                            : installation.label || "MATLAB",
-                      }))
-                    }
-                    data-testid={`profile-detected-matlab-${index}`}
+                    label="Click to apply this MATLAB path"
+                    position="top-start"
                   >
-                    {installation.version
-                      ? `${installation.label} [${installation.version}] — ${installation.path}`
-                      : `${installation.label} (${installation.path})`}
-                  </Button>
+                    <Button
+                      variant="default"
+                      justify="flex-start"
+                      onClick={() =>
+                        setDraft((current) => ({
+                          ...current,
+                          matlabPath: installation.path,
+                          label:
+                            current.label.trim().length > 0
+                              ? current.label
+                              : installation.label || "MATLAB",
+                        }))
+                      }
+                      data-testid={`profile-detected-matlab-${index}`}
+                    >
+                      {installation.version
+                        ? `${installation.label} [${installation.version}] — ${installation.path}`
+                        : `${installation.label} (${installation.path})`}
+                    </Button>
+                  </Tooltip>
                 ))}
               </Stack>
             ) : null}
@@ -505,8 +513,8 @@ export default function ProfileManager() {
       >
         <Stack gap="sm">
           <Text size="sm">
-            Delete profile &quot;{deleteTarget?.label ?? "Unknown"}&quot;? Projects referencing
-            this profile will need a new selection.
+            Delete profile &quot;{deleteTarget?.label ?? "Unknown"}&quot;? Projects referencing this
+            profile will need a new selection.
           </Text>
           {isLastProfile ? (
             <Alert color="orange" data-testid="profile-delete-last-warning">
@@ -518,7 +526,11 @@ export default function ProfileManager() {
             <Button variant="default" onClick={() => setDeleteTargetId(null)}>
               Cancel
             </Button>
-            <Button color="red" onClick={handleConfirmDelete} data-testid="profile-delete-confirm-btn">
+            <Button
+              color="red"
+              onClick={handleConfirmDelete}
+              data-testid="profile-delete-confirm-btn"
+            >
               Delete
             </Button>
           </Group>

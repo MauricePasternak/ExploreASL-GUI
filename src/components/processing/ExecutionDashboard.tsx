@@ -127,9 +127,8 @@ function SubjectRow({
 }: SubjectRowProps) {
   const isRunning =
     status !== "complete" &&
-    (locked || status === "incomplete") &&
-    processingPhase !== "failed" &&
-    processingPhase !== "cancelled";
+    locked &&
+    (processingPhase === "running" || processingPhase === "preparing");
 
   const isCollapsible = runsCount !== undefined && runsCount > 1;
 
@@ -208,9 +207,8 @@ function RunSubRow({
 }) {
   const isRunning =
     status !== "complete" &&
-    (locked || status === "incomplete") &&
-    processingPhase !== "failed" &&
-    processingPhase !== "cancelled";
+    locked &&
+    (processingPhase === "running" || processingPhase === "preparing");
 
   return (
     <Group justify="space-between" align="center" pl={40} pr="md" py={4} data-testid="run-sub-row">

@@ -121,7 +121,12 @@ function ImportExecutionControls({
         </Alert>
       ) : null}
       {profileError ? (
-        <Alert color="red" icon={<IconAlertTriangle size={16} />} p="xs" data-testid="profile-error-alert">
+        <Alert
+          color="red"
+          icon={<IconAlertTriangle size={16} />}
+          p="xs"
+          data-testid="profile-error-alert"
+        >
           <Text size="sm">{profileError}</Text>
         </Alert>
       ) : null}

@@ -20,7 +20,11 @@ function formatProfileLabel(profile: ExecutionProfile, valid: boolean): string {
   return `${profile.label}${version}${status}`;
 }
 
-export default function ProfileSelector({ value, onChange, disabled = false }: ProfileSelectorProps) {
+export default function ProfileSelector({
+  value,
+  onChange,
+  disabled = false,
+}: ProfileSelectorProps) {
   const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
   const profileValidationState = useGlobalStore((state) => state.profileValidationState);
   const validateProfile = useGlobalStore((state) => state.validateProfile);
@@ -74,7 +78,7 @@ export default function ProfileSelector({ value, onChange, disabled = false }: P
   }
 
   return (
-    <Stack gap={4}>
+    <Stack gap={4} data-testid="profile-selector-container">
       <Select
         label="Execution profile"
         placeholder="Select execution profile"
@@ -85,32 +89,29 @@ export default function ProfileSelector({ value, onChange, disabled = false }: P
         nothingFoundMessage="No profiles found"
         data-testid="profile-selector"
         data-profile-valid={selectedValid ? "true" : "false"}
-        w={360}
+        w="100%"
+        style={{ maxWidth: 360 }}
         renderOption={({ option }) => {
           const profile = getProfileById(option.value);
           if (!profile) return <span>{option.label}</span>;
           const valid = profileValidationState[profile.id]?.valid === true;
           return (
-            <Group
-              gap="xs"
-              wrap="nowrap"
-              data-testid={`profile-selector-option-${profile.id}`}
-            >
+            <Group gap="xs" wrap="nowrap" data-testid={`profile-selector-option-${profile.id}`}>
               <Text size="sm">{profile.label}</Text>
               <Badge size="xs" variant="light">
                 MATLAB
               </Badge>
               {profile.type === "matlab" && profile.exploreAslVersion ? (
-                <Text size="xs" c="dimmed">
+                <Text size="xs" c="dimmed" data-testid="profile-selector-matlab-version">
                   v{profile.exploreAslVersion}
                 </Text>
               ) : null}
               {valid ? (
-                <Text size="xs" c="teal">
+                <Text size="xs" c="teal" data-testid="profile-selector-valid">
                   valid
                 </Text>
               ) : (
-                <Text size="xs" c="orange">
+                <Text size="xs" c="orange" data-testid="profile-selector-invalid">
                   invalid
                 </Text>
               )}

@@ -4,29 +4,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProcessingStore } from "../stores/processingStore";
 
-const { mockProject, mockSettings, mockValidationState, mockGetProfileById, mockHasValidProfile } = vi.hoisted(() => {
-  const settings = {
-    executionProfiles: [
-      {
-        id: "profile-1",
-        label: "R2024a",
-        type: "matlab" as const,
-        matlabPath: "/usr/bin/matlab",
-        exploreAslPath: "/opt/ExploreASL",
-        exploreAslVersion: "1.11.0",
+const { mockProject, mockSettings, mockValidationState, mockGetProfileById, mockHasValidProfile } =
+  vi.hoisted(() => {
+    const settings = {
+      executionProfiles: [
+        {
+          id: "profile-1",
+          label: "R2024a",
+          type: "matlab" as const,
+          matlabPath: "/usr/bin/matlab",
+          exploreAslPath: "/opt/ExploreASL",
+          exploreAslVersion: "1.11.0",
+        },
+      ],
+    };
+    return {
+      mockProject: { project: { projectMeta: { rootPath: "/test/project" } } },
+      mockSettings: settings,
+      mockValidationState: {
+        "profile-1": { valid: true, errors: [] as string[] },
       },
-    ],
-  };
-  return {
-    mockProject: { project: { projectMeta: { rootPath: "/test/project" } } },
-    mockSettings: settings,
-    mockValidationState: {
-      "profile-1": { valid: true, errors: [] as string[] },
-    },
-    mockGetProfileById: (id: string) => settings.executionProfiles.find((p) => p.id === id),
-    mockHasValidProfile: () => true,
-  };
-});
+      mockGetProfileById: (id: string) => settings.executionProfiles.find((p) => p.id === id),
+      mockHasValidProfile: () => true,
+    };
+  });
 
 vi.mock("../stores/projectStore", () => ({
   useProjectStore: (selector: (state: Record<string, unknown>) => unknown) => selector(mockProject),

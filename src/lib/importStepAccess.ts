@@ -71,10 +71,7 @@ export function isAliasResolutionComplete(state: Pick<ImportState, "modalityAlia
  * Highest import wizard step index the user may jump to via the stepper.
  * Mirrors the gates on each step's "Next" button.
  */
-export function getMaxUnlockedImportStep(
-  state: Step5State,
-  gate?: ImportExecutionGate,
-): number {
+export function getMaxUnlockedImportStep(state: Step5State, gate?: ImportExecutionGate): number {
   if (!isIngestionComplete(state)) {
     return 0;
   }

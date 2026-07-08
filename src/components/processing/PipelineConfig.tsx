@@ -99,16 +99,20 @@ export default function PipelineConfig() {
 
   return (
     <Stack gap="md" data-testid="pipeline-config">
-      <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+      <SimpleGrid
+        cols={{ base: 1, sm: 2, md: 3 }}
+        spacing="md"
+        data-testid="processing-pipeline-config-grid"
+      >
         <ProfileSelector
           value={config.selectedProfileId}
           onChange={handleProfileChange}
           disabled={executionProfiles.length === 0}
         />
 
-        <div>
+        <div data-testid="processing-pipeline-config-modules-section">
           <Group gap="xs" align="center" mb="xs" style={{ display: "inline-flex" }}>
-            <Text fw={600} size="sm" data-testid="modules-label">
+            <Text fw={600} size="sm" data-testid="processing-pipeline-config-modules-label">
               Modules
             </Text>
             <FieldInfoIcon

@@ -157,7 +157,9 @@ describe("ProfileManager", () => {
     await userEvent.click(within(form).getByTestId("profile-form-save-btn"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("profile-form-errors")).toHaveTextContent(/ExploreASL\.m not found/i);
+      expect(screen.getByTestId("profile-form-errors")).toHaveTextContent(
+        /ExploreASL\.m not found/i,
+      );
       expect(useGlobalStore.getState().settings.executionProfiles).toHaveLength(0);
     });
   });
@@ -189,7 +191,9 @@ describe("ProfileManager", () => {
     await userEvent.click(screen.getByTestId("profile-detected-matlab-0"));
 
     const form = screen.getByTestId("profile-form");
-    expect(within(form).getByTestId("profile-form-matlab-path")).toHaveValue("/usr/local/bin/matlab");
+    expect(within(form).getByTestId("profile-form-matlab-path")).toHaveValue(
+      "/usr/local/bin/matlab",
+    );
   });
 
   it("browses for MATLAB executable and ExploreASL directory", async () => {
@@ -206,7 +210,9 @@ describe("ProfileManager", () => {
     const form = screen.getByTestId("profile-form");
     await waitFor(() => {
       expect(within(form).getByTestId("profile-form-matlab-path")).toHaveValue("/picked/matlab");
-      expect(within(form).getByTestId("profile-form-exploreasl-path")).toHaveValue("/picked/ExploreASL");
+      expect(within(form).getByTestId("profile-form-exploreasl-path")).toHaveValue(
+        "/picked/ExploreASL",
+      );
     });
   });
 
