@@ -5,6 +5,7 @@ import {
   BidsAslMetadataSchema,
   DerivedMetadataGroupSchema,
   ImportProgressSchema,
+  ImportSnapshotSchema,
   MetadataGroupSchema,
   ModalityAliasSchema,
   PathPatternSchema,
@@ -1059,5 +1060,56 @@ describe("DerivedMetadataGroupSchema", () => {
       },
     };
     expect(() => DerivedMetadataGroupSchema.parse(data)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ImportSnapshotSchema
+// ---------------------------------------------------------------------------
+describe("ImportSnapshotSchema", () => {
+  const validSnapshot = {
+    sourceDataPath: "/data/sourcedata",
+    pathPatterns: [
+      {
+        signature: "SUBJECT/MODALITY",
+        samplePath: "sub-01/M0",
+        blocks: ["sub-01", "M0"],
+        uniqueNames: { 0: ["sub-01"], 1: ["M0"] },
+        count: 1,
+        depth: 2,
+      },
+    ],
+    tokenizerConfigs: {},
+    bMatchDirectories: false,
+    modalityAliases: [],
+    sessionAliases: [],
+    runAliases: [],
+    subjectRenames: [],
+    metadataGroups: [
+      {
+        id: "grp-1",
+        label: "default",
+        bidsParams: {},
+      },
+    ],
+    subjectRows: [],
+  };
+
+  it("parses a valid snapshot", () => {
+    const parsed = ImportSnapshotSchema.parse(validSnapshot);
+    expect(parsed.sourceDataPath).toBe("/data/sourcedata");
+  });
+
+  it("accepts selectedProfileId", () => {
+    const parsed = ImportSnapshotSchema.parse({
+      ...validSnapshot,
+      selectedProfileId: "abc-123",
+    });
+    expect(parsed.selectedProfileId).toBe("abc-123");
+  });
+
+  it("omits selectedProfileId when not provided", () => {
+    const parsed = ImportSnapshotSchema.parse(validSnapshot);
+    expect(parsed.selectedProfileId).toBeUndefined();
   });
 });

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change project-manifest. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Manifest Preview Accordion Layout
 
 The manifest preview SHALL render all four sections — Study Parameters, Software Manifest, QC Summary, and Pipeline Summary — inside a Mantine `Accordion` with `multiple` and `variant="separated"`. All panels SHALL default to open (`defaultValue` contains all four keys) so the full content is visible on first render. Users MAY collapse individual panels for easier scrolling.
@@ -214,4 +216,3 @@ Existing behavior for other `bidsParams` fields (conditional skipping of `Labeli
 
 - **WHEN** `ManifestPreview` renders §1 for a BIDS-direct group
 - **THEN** fields like `Manufacturer: "Siemens"`, `PulseSequenceType: "spiral"`, `MRAcquisitionType: "3D"`, `ArterialSpinLabelingType: "PCASL"`, `M0Type: "Included"` render directly from `bidsParams` (post-schema transform values). `Vendor`, `Sequence`, `LabelingType` derived fields are NOT rendered (not in `bidsParams`).
-

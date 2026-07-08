@@ -339,3 +339,134 @@ describe("canAccessPhase (BIDS processing gate)", () => {
     expect(canAccessPhase(project, "processing")).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task Group 4: execution profiles in ProjectFileSchema
+// ---------------------------------------------------------------------------
+describe("ImportUiStateSchema (selectedProfileId)", () => {
+  it("selectedProfileId is optional and defaults to undefined", () => {
+    const result = ImportUiStateSchema.parse({});
+    expect(result.selectedProfileId).toBeUndefined();
+  });
+
+  it("accepts explicit selectedProfileId", () => {
+    const result = ImportUiStateSchema.parse({
+      selectedProfileId: "550e8400-e29b-41d4-a716-446655440000",
+    });
+    expect(result.selectedProfileId).toBe("550e8400-e29b-41d4-a716-446655440000");
+  });
+});
+
+describe("ProjectFileSchema (execution profiles)", () => {
+  it("parses population.lastRun with profileId", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        processing: {
+          population: {
+            lastRun: {
+              profileId: "550e8400-e29b-41d4-a716-446655440000",
+              exploreASLVersion: "1.0.0",
+              matlabVersion: "R2023b",
+              guiVersion: "0.2.0",
+              Mtime: 1719000000000,
+            },
+          },
+        },
+      },
+    };
+    const result = ProjectFileSchema.parse(project);
+    expect(result.uiState.processing?.population?.lastRun?.profileId).toBe(
+      "550e8400-e29b-41d4-a716-446655440000",
+    );
+    expect(result.uiState.processing?.population?.lastRun?.exploreASLVersion).toBe("1.0.0");
+  });
+
+  it("rejects population.lastRun without profileId", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        processing: {
+          population: {
+            lastRun: {
+              exploreASLVersion: "1.0.0",
+              matlabVersion: "R2023b",
+            },
+          },
+        },
+      },
+    };
+    const result = ProjectFileSchema.safeParse(project);
+    expect(result.success).toBe(false);
+  });
+
+  it("parses structural.lastRun with all fields", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        processing: {
+          structural: {
+            completed: true,
+            lastRun: {
+              profileId: "550e8400-e29b-41d4-a716-446655440000",
+              exploreASLVersion: "1.0.0",
+              matlabVersion: "R2023b",
+              guiVersion: "0.2.0",
+              Mtime: 1719000000000,
+            },
+          },
+        },
+      },
+    };
+    const result = ProjectFileSchema.parse(project);
+    expect(result.uiState.processing?.structural?.lastRun?.profileId).toBe(
+      "550e8400-e29b-41d4-a716-446655440000",
+    );
+    expect(result.uiState.processing?.structural?.completed).toBe(true);
+  });
+
+  it("parses asl.lastRun with all fields", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        processing: {
+          asl: {
+            completed: true,
+            lastRun: {
+              profileId: "550e8400-e29b-41d4-a716-446655440000",
+              exploreASLVersion: "1.0.0",
+              matlabVersion: "R2023b",
+              guiVersion: "0.2.0",
+              Mtime: 1719000000000,
+            },
+          },
+        },
+      },
+    };
+    const result = ProjectFileSchema.parse(project);
+    expect(result.uiState.processing?.asl?.lastRun?.profileId).toBe(
+      "550e8400-e29b-41d4-a716-446655440000",
+    );
+    expect(result.uiState.processing?.asl?.completed).toBe(true);
+  });
+
+  it("parses processing config with selectedProfileId", () => {
+    const project = {
+      ...validProject,
+      uiState: {
+        processing: {
+          config: {
+            subjects: ["sub-01"],
+            modules: ["asl"],
+            selectedProfileId: "550e8400-e29b-41d4-a716-446655440000",
+            workers: 2,
+          },
+        },
+      },
+    };
+    const result = ProjectFileSchema.parse(project);
+    expect(result.uiState.processing?.config?.selectedProfileId).toBe(
+      "550e8400-e29b-41d4-a716-446655440000",
+    );
+  });
+});

@@ -1,4 +1,5 @@
 ## Requirements
+
 ### Requirement: Import snapshot persistence
 
 The system SHALL capture an `ImportSnapshot` at `startImport()` time and persist it in the project file at `uiState.import.mostRecentConfig`. The snapshot SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, and `subjectRows` (including `groupId` assignments). The snapshot SHALL be `null` before the first import run.
@@ -204,6 +205,7 @@ Each stale status icon overlay SHALL display a tooltip on hover with text: "Conf
 When user navigates to Import page on a BIDS-direct project where `uiState.import.bidsReviewConfirmed === true`, `BIDSReviewPanel` SHALL render a persisted summary and support an explicit re-scan/re-confirm flow.
 
 Initial revisit state:
+
 - Banner: "BIDS metadata groups confirmed. Import is complete."
 - Group cards sourced from persisted `mappingState.metadataGroups` and `mappingState.subjectRows`, collapsed by default.
 - Skipped subjects warning block sourced from persisted `uiState.import.skippedSubjects`.
@@ -213,6 +215,7 @@ Initial revisit state:
 After user clicks `[Re-scan BIDS]`, `BIDSReviewPanel` SHALL call `scan_bids_sidecars` against `mappingState.sourceDataPath` if present, otherwise project root. The panel SHALL render the normal editable review state using the new scan result: editable group labels, skipped-subject warning, validation, and `[Confirm]`.
 
 On re-confirm, the project store SHALL overwrite the BIDS-derived mapping fields exactly like first confirmation:
+
 - `mappingState.metadataGroups`
 - `mappingState.subjectRows`
 - `mappingState.ingestionComplete = true`
@@ -257,7 +260,7 @@ The re-scan flow SHALL NOT clear the previously confirmed mapping state until re
 For DICOM-import projects (`dataSource === "dicom"`), the existing `import-rerun` behavior is preserved: staleness detection, reconstruction from lock files, and re-import delta execution all work as before.
 
 For BIDS-direct projects (`dataSource === "bids"`):
+
 - Import page revisit shows persisted summary plus explicit re-scan/re-confirm capability.
 - `ImportSnapshot` and staleness (per existing `import-store` spec) are irrelevant for BIDS-direct (no DICOM source).
 - Re-confirm regenerates the BIDS-derived `mappingState` from the latest `scan_bids_sidecars` result rather than using DICOM staleness/delta import machinery.
-

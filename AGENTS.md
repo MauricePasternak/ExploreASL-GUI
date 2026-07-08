@@ -33,6 +33,7 @@ GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agen
 ## Rules
 
 - `pnpm test` for testing
+  - focus on running specific test files and test cases, not the entire test suite UNLESS it is to finish up a task set or the bug likely affects multiple test files.
 - `pnpm lint` for linting
 - `pnpm typecheck` for type-checking
 - `pnpm format` for formatting

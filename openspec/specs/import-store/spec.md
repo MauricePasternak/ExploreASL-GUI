@@ -1,4 +1,5 @@
 ## Requirements
+
 ### Requirement: ImportProgress state shape
 
 The `ImportProgress` type in the import store SHALL be extended to include: `errorStep?: "DCM2NII" | "NII2BIDS"` (which step failed), `warnings?: string[]` (collected warning messages from stdout), `duration?: number` (processing duration in seconds), and `stale?: boolean` (whether the config has changed since this subject was imported). The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`.
@@ -94,12 +95,14 @@ The `ProjectFileSchema` in `src/schemas/project.ts` SHALL replace the current `d
 ### Requirement: BIDS review slice for scan lifecycle
 
 `importStore` SHALL add a `BidsReviewState` slice with:
+
 - `scanComplete: boolean`
 - `scanError: string | null`
 - `detectedGroups: DerivedMetadataGroup[]`
 - `skippedSubjects: string[]` (session-only copy; persisted version lives in `uiState.import.skippedSubjects`)
 
 Actions:
+
 - `startBidsScan(rootPath: string)`: invokes `scan_bids_sidecars`, populates `detectedGroups` and `skippedSubjects` on success
 - `setDetectedGroups(groups)`: syncs the result of a scan
 - `retryBidsScan()`: clears `scanError` and re-invokes `scan_bids_sidecars`
@@ -133,4 +136,3 @@ Session-only state. Not persisted to `.easl`. The `confirmed` flag is NOT in thi
 
 - **WHEN** `rescanConfirmedBidsProject` fails with a scan error
 - **THEN** `scanError` is set in session state and persisted `mappingState` / `uiState.import.skippedSubjects` remain unchanged
-

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change mutually-exclusive-metadata. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Dynamic Display of Group Assignments
 
 The `MetadataGrouping` component SHALL dynamically compute the number of subjects and sessions assigned to each group by filtering the current `subjectRows` state array and SHALL display a read-friendly summary string in the "Scope / Target" column.
@@ -45,15 +47,18 @@ The component SHALL NOT build or set regex strings when creating override groups
 The existing `MetadataGroupSchema` (`{ id: string, label: string, bidsParams: BidsAslMetadataBaseSchema }`) is preserved unchanged.
 
 `DerivedMetadataGroupSchema` SHALL be added, extending `MetadataGroupSchema`:
+
 ```typescript
 export const DerivedMetadataGroupSchema = MetadataGroupSchema.extend({
   vendor: z.string(),
   sequence: z.string(),
   labelingType: z.string(),
-  subjects: z.array(z.object({
-    subjectLabel: z.string(),
-    sessionLabels: z.array(z.string()),
-  })),
+  subjects: z.array(
+    z.object({
+      subjectLabel: z.string(),
+      sessionLabels: z.array(z.string()),
+    }),
+  ),
 });
 export type DerivedMetadataGroup = z.infer<typeof DerivedMetadataGroupSchema>;
 ```
@@ -187,4 +192,3 @@ The `refineBidsMetadata` superRefine is preserved (rules reference `"Included"` 
 
 - **WHEN** schema validates `M0Type: "Included"` (ds000240 sidecar value)
 - **THEN** validation passes (matches enum)
-

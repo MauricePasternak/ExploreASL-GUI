@@ -1,8 +1,11 @@
 # bids-direct-import Specification
 
 ## Purpose
+
 TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Project data source is binary and immutable
 
 A project SHALL declare its data source at creation via `projectMeta.dataSource: "dicom" | "bids"`. The field is required (no default) and immutable for project lifetime. No runtime guard enforces immutability — JSDoc documents the constraint and callers MUST NOT mutate post-creation.
@@ -89,4 +92,3 @@ Other `mappingState` fields (`rawPaths`, `pathPatterns`, `bMatchDirectories`, `t
 
 - **WHEN** user closes app after confirming BIDS review with one skipped subject, reopens the project, navigates to Import
 - **THEN** the persisted summary renders the skipped-subjects warning block listing the persisted subject identifier (e.g., `sub-UNK001_1`)
-

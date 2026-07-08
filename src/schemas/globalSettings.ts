@@ -1,11 +1,5 @@
 import { z } from "zod";
-
-export const MatlabInstallationSchema = z.object({
-  id: z.string(),
-  label: z.string().min(1, "Label is required"),
-  path: z.string().min(1, "Path is required"),
-  version: z.string().nullable().default(""),
-});
+import { ExecutionProfileSchema } from "./executionProfile";
 
 const TokenSubDelimiterSchema = z.string().trim().min(1).max(1);
 
@@ -14,9 +8,7 @@ export const ImportSettingsSchema = z.object({
 });
 
 export const GlobalSettingsSchema = z.object({
-  matlabInstallations: z.array(MatlabInstallationSchema).default([]),
-  exploreAslPath: z.string().default(""),
-  exploreAslVersion: z.string().optional().default(""),
+  executionProfiles: z.array(ExecutionProfileSchema).default([]),
   theme: z.enum(["light", "dark"]).default("light"),
   recentProjects: z.array(z.string()).default([]),
   tokenSubDelimiters: z
@@ -30,13 +22,10 @@ export const GlobalSettingsSchema = z.object({
 });
 
 export type ImportSettings = z.infer<typeof ImportSettingsSchema>;
-export type MatlabInstallation = z.infer<typeof MatlabInstallationSchema>;
 export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>;
 
 export const DEFAULT_SETTINGS: GlobalSettings = {
-  matlabInstallations: [],
-  exploreAslPath: "",
-  exploreAslVersion: "",
+  executionProfiles: [],
   theme: "light",
   recentProjects: [],
   tokenSubDelimiters: ["_", "-"],

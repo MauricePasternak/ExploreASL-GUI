@@ -22,8 +22,7 @@ export const SUBJECT_MODULE_STATUSES = ["pending", "incomplete", "complete", "ou
 export const ProcessConfigSchema = z.object({
   subjects: z.array(z.string()),
   modules: z.array(z.enum(PROCESSING_MODULES)),
-  matlabPath: z.string(),
-  exploreAslPath: z.string(),
+  selectedProfileId: z.string(),
   workers: z.number().int().min(1),
 });
 

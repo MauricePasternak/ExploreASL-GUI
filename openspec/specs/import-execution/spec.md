@@ -1,4 +1,5 @@
 ## Requirements
+
 ### Requirement: Import execution pipeline
 
 The system SHALL provide a single Rust command `run_import_pipeline(staging_root, staging_entries, sourcestructure_json, studypar_json, matlab_path, exploreasl_path, subject_list)` that atomically performs: (1) delete `.easl_staging/` if it exists, (2) create the standardized 4-level symlink tree at `.easl_staging/sourcedata/` from `staging_entries`, (3) write clean ExploreASL `sourcestructure.json` and `studyPar.json` configs to `.easl_staging/`, (4) spawn MATLAB as `matlab -batch "addpath('exploreasl_path'); ExploreASL('staging_root', [1,1,0], 0, 0)"`, (5) return the process PID on success or an error string on failure. The `staging_entries` parameter contains the GUI staging mappings with subject, session, run, modality, and source path. The `subject_list` parameter provides known subject names for stdout pattern matching. The command SHALL emit a `ImportPrepareComplete` event after steps 1-3 succeed and before MATLAB is spawned.
@@ -239,6 +240,7 @@ During import execution, the table SHALL update in real-time as structured event
 ### Requirement: ImportPage conditional rendering
 
 `ImportPage` SHALL render based on `project.projectMeta.dataSource`:
+
 - `"bids"` → render `BIDSReviewPanel`
 - `"dicom"` → render the existing 6-step DICOM wizard
 
@@ -258,4 +260,3 @@ When `uiState.import.bidsReviewConfirmed = true` and user revisits Import on a B
 
 - **WHEN** user with `bidsReviewConfirmed = true` navigates back to Import on a BIDS-direct project
 - **THEN** `ImportPage` renders `BIDSReviewPanel` with persisted summary and `[Re-scan BIDS]`
-

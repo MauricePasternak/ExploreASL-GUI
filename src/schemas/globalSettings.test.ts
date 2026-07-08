@@ -47,11 +47,48 @@ describe("GlobalSettingsSchema", () => {
     ).toThrow();
   });
 
-  it("rejects invalid matlab installation entries", () => {
+  // Task Group 2: execution profiles replace MATLAB fields
+  it("defaults executionProfiles to empty array", () => {
+    const parsed = GlobalSettingsSchema.parse({});
+
+    expect(parsed.executionProfiles).toEqual([]);
+  });
+
+  it("accepts valid executionProfiles array", () => {
+    const parsed = GlobalSettingsSchema.parse({
+      executionProfiles: [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440000",
+          type: "matlab",
+          label: "MATLAB R2023b",
+          matlabPath: "/usr/local/MATLAB/R2023b",
+          exploreAslPath: "/opt/ExploreASL",
+          exploreAslVersion: "1.0.0",
+        },
+      ],
+    });
+
+    expect(parsed.executionProfiles).toHaveLength(1);
+    expect(parsed.executionProfiles[0].label).toBe("MATLAB R2023b");
+  });
+
+  it("rejects invalid execution profile entry", () => {
     expect(() =>
       GlobalSettingsSchema.parse({
-        matlabInstallations: [{ id: "matlab-1", label: "", path: "", version: "" }],
+        executionProfiles: [{ type: "matlab", label: "", matlabPath: "" }],
       }),
-    ).toThrow(/required/i);
+    ).toThrow();
+  });
+
+  it("strips unknown legacy fields", () => {
+    const parsed = GlobalSettingsSchema.parse({
+      matlabInstallations: [{ id: "m", label: "L", path: "/p", version: "" }],
+      exploreAslPath: "/old/path",
+      exploreAslVersion: "0.9.0",
+    });
+
+    expect(Reflect.get(parsed, "matlabInstallations")).toBeUndefined();
+    expect(Reflect.get(parsed, "exploreAslPath")).toBeUndefined();
+    expect(Reflect.get(parsed, "exploreAslVersion")).toBeUndefined();
   });
 });
