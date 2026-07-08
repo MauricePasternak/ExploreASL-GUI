@@ -32,8 +32,7 @@ vi.mock("../../stores/globalStore", () => ({
       profileValidationState: {
         [profile.id]: { valid: true, errors: [] },
       },
-      getProfileById: (id: string) =>
-        id === profile.id ? profile : undefined,
+      getProfileById: (id: string) => (id === profile.id ? profile : undefined),
       validateProfile: vi.fn(),
     }),
 }));

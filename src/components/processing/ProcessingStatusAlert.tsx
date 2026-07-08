@@ -170,7 +170,13 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     if (result.errors.length > 0) return "error";
     if (result.warnings.length > 0) return "warning";
     return "ready";
-  }, [configModules, configSubjects, dataParDirExists, result.errors.length, result.warnings.length]);
+  }, [
+    configModules,
+    configSubjects,
+    dataParDirExists,
+    result.errors.length,
+    result.warnings.length,
+  ]);
 
   useEffect(() => {
     if (state === "checking") return;

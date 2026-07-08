@@ -59,23 +59,23 @@ export function StatusIcon({
         </Tooltip>
       );
     case "incomplete":
-      if (processingPhase === "failed" || processingPhase === "cancelled") {
+      if (processingPhase === "running" || processingPhase === "preparing") {
         return (
-          <Tooltip label="Incomplete">
-            <IconExclamationMark
+          <Tooltip label="In progress">
+            <IconLoader
               size={18}
-              color="var(--mantine-color-red-6)"
-              data-testid="status-incomplete-stalled"
+              color="var(--mantine-color-orange-6)"
+              data-testid="status-incomplete"
             />
           </Tooltip>
         );
       }
       return (
-        <Tooltip label="In progress">
-          <IconLoader
+        <Tooltip label="Incomplete">
+          <IconExclamationMark
             size={18}
-            color="var(--mantine-color-orange-6)"
-            data-testid="status-incomplete"
+            color="var(--mantine-color-red-6)"
+            data-testid="status-incomplete-stalled"
           />
         </Tooltip>
       );

@@ -106,9 +106,7 @@ describe("ProcessingStatusAlert", () => {
         workers: 1,
       };
       const { exists } = await import("@tauri-apps/plugin-fs");
-      vi.mocked(exists).mockImplementationOnce(
-        () => new Promise<boolean>(() => undefined),
-      );
+      vi.mocked(exists).mockImplementationOnce(() => new Promise<boolean>(() => undefined));
       renderAlert();
       const alert = screen.getByTestId("processing-status-alert");
       expect(alert.getAttribute("data-state")).toBe("checking");
