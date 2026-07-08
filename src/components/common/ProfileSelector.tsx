@@ -9,6 +9,7 @@ interface ProfileSelectorProps {
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
+  minWidth?: number | string;
 }
 
 function formatProfileLabel(profile: ExecutionProfile, valid: boolean): string {
@@ -24,6 +25,7 @@ export default function ProfileSelector({
   value,
   onChange,
   disabled = false,
+  minWidth,
 }: ProfileSelectorProps) {
   const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
   const profileValidationState = useGlobalStore((state) => state.profileValidationState);
@@ -48,7 +50,7 @@ export default function ProfileSelector({
 
   if (executionProfiles.length === 0) {
     return (
-      <Stack gap={4} data-testid="profile-selector-empty">
+      <Stack gap={4} data-testid="profile-selector-empty" style={{ minWidth }}>
         <Text size="sm" fw={500}>
           Execution profile
         </Text>
@@ -78,7 +80,7 @@ export default function ProfileSelector({
   }
 
   return (
-    <Stack gap={4} data-testid="profile-selector-container">
+    <Stack gap={4} data-testid="profile-selector-container" style={{ minWidth }}>
       <Select
         label="Execution profile"
         placeholder="Select execution profile"
@@ -90,7 +92,7 @@ export default function ProfileSelector({
         data-testid="profile-selector"
         data-profile-valid={selectedValid ? "true" : "false"}
         w="100%"
-        style={{ maxWidth: 360 }}
+        style={{ maxWidth: 360, minWidth }}
         renderOption={({ option }) => {
           const profile = getProfileById(option.value);
           if (!profile) return <span>{option.label}</span>;

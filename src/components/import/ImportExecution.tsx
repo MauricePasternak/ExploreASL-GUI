@@ -90,6 +90,7 @@ function ImportExecutionControls({
           value={selectedProfileId}
           onChange={onProfileChange}
           disabled={phase === "running"}
+          minWidth={300}
         />
         <Button
           leftSection={<IconPlayerPlay size={16} />}

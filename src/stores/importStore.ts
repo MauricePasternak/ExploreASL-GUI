@@ -364,9 +364,14 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   addMetadataGroup: (group) => {
-    set((state) => ({
-      metadataGroups: [...state.metadataGroups, group],
-    }));
+    set((state) => {
+      if (state.metadataGroups.some((g) => g.id === group.id)) {
+        return {};
+      }
+      return {
+        metadataGroups: [...state.metadataGroups, group],
+      };
+    });
   },
 
   removeMetadataGroup: (id) => {

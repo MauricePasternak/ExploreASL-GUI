@@ -138,38 +138,29 @@ async function runPostProcessing(
 
   // 2. Determine succeeded vs failed
   const succeededSubjects = allSubjects.filter((s) => !failedSubjects.includes(s));
+  const allSucceeded = failedSubjects.length === 0 && !isExitError;
 
   // 3. Move output and update store
-  if (failedSubjects.length === 0 && !isExitError) {
-    // All succeeded
-    try {
-      await invoke("move_import_output", {
-        stagingRoot,
-        projectRoot,
-        succeededSubjects: null,
-        debugMode,
-      });
-    } catch {
-      // If move fails, treat as failure
-      failImport();
-      return;
-    }
-    completeImport();
-  } else if (succeededSubjects.length > 0) {
-    // Some succeeded, some failed
+  if (succeededSubjects.length > 0) {
     try {
       await invoke("move_import_output", {
         stagingRoot,
         projectRoot,
         succeededSubjects,
         debugMode,
+        cleanupStaging: allSucceeded,
       });
     } catch {
-      // If move fails, still report failure
+      if (allSucceeded) {
+        failImport();
+        return;
+      }
     }
-    failImport();
+  }
+
+  if (allSucceeded) {
+    completeImport();
   } else {
-    // All failed — skip move
     failImport();
   }
 }

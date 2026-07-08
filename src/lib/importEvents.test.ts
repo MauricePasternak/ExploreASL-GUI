@@ -192,9 +192,42 @@ describe("setupImportListeners", () => {
             projectRoot: "/tmp/project",
             succeededSubjects: ["GOOD"],
             debugMode: true,
+            cleanupStaging: false,
           },
         ],
       ]),
+    );
+  });
+
+  it("runs post-processing on import_complete with full success using subject-scoped merge", async () => {
+    useImportStore.getState().startImport();
+    useImportStore.getState().markSubjectCompleted("GOOD", 10);
+    useImportStore.getState().markSubjectCompleted("BADDIE", 20);
+
+    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "BADDIE"]);
+
+    vi.mocked(invoke).mockClear();
+    emitStructured({ type: "import_complete" });
+    await vi.waitFor(() => {
+      expect(useImportStore.getState().importPhase).toBe("completed");
+    });
+
+    expect(vi.mocked(invoke).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          "move_import_output",
+          {
+            stagingRoot: "/tmp/project/.easl_staging",
+            projectRoot: "/tmp/project",
+            succeededSubjects: ["GOOD", "BADDIE"],
+            debugMode: true,
+            cleanupStaging: true,
+          },
+        ],
+      ]),
+    );
+    expect(vi.mocked(invoke).mock.calls.some((call) => call[0] === "clean_import_status")).toBe(
+      false,
     );
   });
 

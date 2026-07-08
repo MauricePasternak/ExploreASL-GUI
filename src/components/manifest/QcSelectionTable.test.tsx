@@ -2,6 +2,8 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { exists } from "@tauri-apps/plugin-fs";
 
 vi.mock("mantine-datatable", () => ({
   DataTable: ({ records, columns, idAccessor = "id" }: any) => (
@@ -129,6 +131,7 @@ let mockSubjectStatuses: SubjectModuleStatus[] = [];
 let mockVerdicts: Record<string, ManifestVerdict> = {};
 let mockMetadataGroups: MetadataGroup[] = [];
 let mockSubjectRows: SubjectRow[] = [];
+let mockBids2LegacyExists = true;
 
 function buildProjectState() {
   return {
@@ -169,6 +172,7 @@ function buildProjectState() {
 function renderTable(
   props: { noInfoSubjects?: Set<string>; onNextReady?: (ready: boolean) => void } = {},
 ) {
+  vi.mocked(exists).mockResolvedValue(mockBids2LegacyExists);
   useProcessingStore.setState({
     availableSubjects: mockAvailableSubjects,
     subjectStatuses: mockSubjectStatuses,
@@ -200,6 +204,7 @@ afterEach(() => {
   mockVerdicts = {};
   mockMetadataGroups = [];
   mockSubjectRows = [];
+  mockBids2LegacyExists = true;
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
   useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
   useManifestStore.setState({ staleVerdicts: new Set(), step: 0, filter: "all" });
@@ -396,6 +401,38 @@ describe("QcSelectionTable", () => {
 
     const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
     expect(verdicts["sub-01_01"]?.status).toBe("pass");
+  });
+
+  it("marks completed Structural and ASL reports outdated when BIDS2Legacy lock is missing", async () => {
+    mockBids2LegacyExists = false;
+    mockAvailableSubjects = [subject1];
+    mockSubjectStatuses = [
+      statusComplete,
+      {
+        subjectSession: "sub-01_01",
+        module: "asl",
+        status: "complete",
+        completedSteps: [],
+        locked: false,
+      },
+    ];
+    mockMetadataGroups = [group1];
+    mockSubjectRows = [subjectRow1];
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_subject_reports") {
+        return Promise.resolve([
+          { subjectSession: "sub-01_01", module: "structural", run: null },
+          { subjectSession: "sub-01_01", module: "asl", run: null },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    renderTable();
+
+    const outdatedReports = await screen.findAllByText("View Outdated Report");
+    expect(outdatedReports).toHaveLength(2);
+    expect(screen.getAllByTestId("status-outdated")).toHaveLength(2);
   });
 
   // 13.2c — verdict control renders with Neutral/Pass/Fail when no verdict stored

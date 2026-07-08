@@ -173,14 +173,15 @@ export default function MetadataGrouping() {
   }, [derivedRows, hasDerivationContext, setSubjectRows, subjectRows]);
 
   useEffect(() => {
-    if (metadataGroups.length === 0) {
+    const hasDefault = metadataGroups.some((g) => g.id === DEFAULT_GROUP_ID);
+    if (!hasDefault) {
       addMetadataGroup({
         id: DEFAULT_GROUP_ID,
         label: "Global Defaults",
         bidsParams: {},
       });
     }
-  }, [addMetadataGroup, metadataGroups.length]);
+  }, [addMetadataGroup, metadataGroups]);
 
   const groupLabelById = useMemo(
     () => new Map(metadataGroups.map((group) => [group.id, group.label])),

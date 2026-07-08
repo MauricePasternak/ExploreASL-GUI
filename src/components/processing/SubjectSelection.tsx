@@ -217,16 +217,17 @@ function buildColumns(
             </Text>
           );
         }
+        const isOutdated = row._structuralStatus === "outdated";
         return (
           <Badge
             size="sm"
-            color="blue"
+            color={isOutdated ? "orange" : "blue"}
             variant="outline"
             style={{ cursor: "pointer" }}
             onClick={() => onViewReport(row.subjectSession, "structural")}
             data-testid="view-structural-report"
           >
-            View Report
+            {isOutdated ? "View Outdated Report" : "View Report"}
           </Badge>
         );
       },
@@ -365,6 +366,9 @@ export default function SubjectSelection() {
   const [reportModalModule, setReportModalModule] = useState<"structural" | "asl">("structural");
   const [reportModalSubjectSession, setReportModalSubjectSession] = useState("");
   const [reportModalRuns, setReportModalRuns] = useState<string[]>([]);
+  const [missingBids2LegacySubjectSessions, setMissingBids2LegacySubjectSessions] = useState<
+    Set<string>
+  >(new Set());
 
   useEffect(() => {
     if (!projectRoot) return;
@@ -400,6 +404,53 @@ export default function SubjectSelection() {
         setExistingReports(new Set());
       });
   }, [projectRoot, processingPhase]);
+
+  useEffect(() => {
+    if (!projectRoot) {
+      setMissingBids2LegacySubjectSessions(new Set());
+      return;
+    }
+
+    const completedSubjectSessions = new Set(
+      subjectStatuses
+        .filter(
+          (status) =>
+            (status.module === "structural" || status.module === "asl") &&
+            status.status === "complete",
+        )
+        .map((status) => status.subjectSession),
+    );
+
+    if (completedSubjectSessions.size === 0) {
+      setMissingBids2LegacySubjectSessions(new Set());
+      return;
+    }
+
+    let cancelled = false;
+    void import("@tauri-apps/plugin-fs")
+      .then(async ({ exists }) => {
+        const missing = new Set<string>();
+        for (const subjectSession of completedSubjectSessions) {
+          const path = `${projectRoot}/derivatives/ExploreASL/lock/xASL_module_BIDS2Legacy/${subjectSession}`;
+          if (!(await exists(path))) {
+            missing.add(subjectSession);
+          }
+        }
+        if (!cancelled) {
+          setMissingBids2LegacySubjectSessions(missing);
+        }
+      })
+      .catch((err) => {
+        console.warn("[SubjectSelection] Failed to check BIDS2Legacy lock status:", err);
+        if (!cancelled) {
+          setMissingBids2LegacySubjectSessions(new Set());
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectRoot, subjectStatuses, processingPhase]);
 
   const structuralLogInfo = useMemo(() => {
     const map = new Map<string, LogFileInfo[]>();
@@ -478,8 +529,18 @@ export default function SubjectSelection() {
       a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
     );
     return sorted.map((info) => {
-      const structural = resolveModuleDisplay(info, "structural", subjectStatuses);
-      const asl = resolveModuleDisplay(info, "asl", subjectStatuses);
+      const structural = resolveModuleDisplay(
+        info,
+        "structural",
+        subjectStatuses,
+        missingBids2LegacySubjectSessions,
+      );
+      const asl = resolveModuleDisplay(
+        info,
+        "asl",
+        subjectStatuses,
+        missingBids2LegacySubjectSessions,
+      );
       return {
         ...info,
         _selected: selectedSet.has(info.subjectSession),
@@ -490,7 +551,14 @@ export default function SubjectSelection() {
         _aslLogInfo: aslLogInfo.get(info.subjectSession),
       };
     });
-  }, [availableSubjects, subjectStatuses, selectedSet, structuralLogInfo, aslLogInfo]);
+  }, [
+    availableSubjects,
+    subjectStatuses,
+    selectedSet,
+    structuralLogInfo,
+    aslLogInfo,
+    missingBids2LegacySubjectSessions,
+  ]);
 
   const filteredRows = useMemo(() => {
     if (filter === "all") return rows;
