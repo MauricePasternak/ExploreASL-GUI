@@ -6,6 +6,15 @@ import { mapModuleName, runProcessingPipeline, setupProcessingListeners } from "
 import { useProjectStore } from "../stores/projectStore";
 import { useProcessingStore } from "../stores/processingStore";
 import type { ProcessConfig } from "../schemas/processingSchemas";
+import type { ExecutionProfile } from "../schemas/executionProfile";
+
+const MATLAB_PROFILE: ExecutionProfile = {
+  id: "profile-1",
+  type: "matlab",
+  label: "MATLAB R2023b",
+  matlabPath: "/usr/bin/matlab",
+  exploreAslPath: "/opt/ExploreASL",
+};
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockResolvedValue([1234]),
@@ -53,8 +62,7 @@ describe("runProcessingPipeline worker capping", () => {
   const baseConfig: ProcessConfig = {
     subjects: ["sub-001_01", "sub-002_01"],
     modules: ["structural"],
-    matlabPath: "/usr/bin/matlab",
-    exploreAslPath: "/opt/ExploreASL",
+    selectedProfileId: "profile-1",
     workers: 4,
   };
 
@@ -71,7 +79,20 @@ describe("runProcessingPipeline worker capping", () => {
 
   it("throws an error if no project is loaded", async () => {
     useProjectStore.setState({ project: null });
-    await expect(runProcessingPipeline(baseConfig)).rejects.toThrow("No project loaded");
+    await expect(runProcessingPipeline(baseConfig, MATLAB_PROFILE)).rejects.toThrow(
+      "No project loaded",
+    );
+  });
+
+  it("passes the typed execution profile to run_pipeline", async () => {
+    await runProcessingPipeline(baseConfig, MATLAB_PROFILE);
+
+    expect(invoke).toHaveBeenCalledWith(
+      "run_pipeline",
+      expect.objectContaining({
+        executionProfile: MATLAB_PROFILE,
+      }),
+    );
   });
 
   it("caps workers to subjects length when workers exceed selected subjects", async () => {
@@ -81,7 +102,7 @@ describe("runProcessingPipeline worker capping", () => {
       workers: 4, // 4 workers
     };
 
-    await runProcessingPipeline(config);
+    await runProcessingPipeline(config, MATLAB_PROFILE);
 
     expect(invoke).toHaveBeenCalledWith(
       "run_pipeline",
@@ -98,7 +119,7 @@ describe("runProcessingPipeline worker capping", () => {
       workers: 2, // 2 workers
     };
 
-    await runProcessingPipeline(config);
+    await runProcessingPipeline(config, MATLAB_PROFILE);
 
     expect(invoke).toHaveBeenCalledWith(
       "run_pipeline",
@@ -115,7 +136,7 @@ describe("runProcessingPipeline worker capping", () => {
       workers: 4,
     };
 
-    await runProcessingPipeline(config);
+    await runProcessingPipeline(config, MATLAB_PROFILE);
 
     expect(invoke).toHaveBeenCalledWith(
       "run_pipeline",
@@ -166,8 +187,7 @@ describe("population completion mtime capture", () => {
       config: {
         subjects: [],
         modules: ["population"],
-        matlabPath: "",
-        exploreAslPath: "",
+        selectedProfileId: "profile-1",
         workers: 1,
       } as any,
       workerPids: [] as number[],
@@ -239,8 +259,7 @@ describe("population completion mtime capture", () => {
       config: {
         subjects: [],
         modules: ["population"],
-        matlabPath: "",
-        exploreAslPath: "",
+        selectedProfileId: "profile-1",
         workers: 1,
       } as any,
       workerPids: [99],

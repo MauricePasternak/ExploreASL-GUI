@@ -171,8 +171,7 @@ describe("useProjectStore", () => {
       const config = {
         subjects: ["sub-01_01"] as string[],
         modules: ["structural"] as ("structural" | "asl" | "population")[],
-        matlabPath: "/usr/local/MATLAB",
-        exploreAslPath: "/opt/ExploreASL",
+        selectedProfileId: "profile-1",
         workers: 1,
         subjectRegexp: "^sub-.*$",
       };
@@ -225,8 +224,7 @@ describe("useProjectStore", () => {
       const config = {
         subjects: [] as string[],
         modules: [] as ("structural" | "asl" | "population")[],
-        matlabPath: "",
-        exploreAslPath: "",
+        selectedProfileId: "",
         workers: 1,
         subjectRegexp: "^sub-.*$",
       };
@@ -282,6 +280,21 @@ describe("useProjectStore", () => {
     });
     expect(project?.mappingState).not.toHaveProperty("importPhase");
     expect(project?.mappingState).not.toHaveProperty("importCompleted");
+  });
+
+  it("persists selectedProfileId into uiState.import (not mappingState)", async () => {
+    await useProjectStore
+      .getState()
+      .createProject("/tmp/profile-persist", "Profile Persist", { dataSource: "dicom" });
+
+    useProjectStore.getState().syncImportState({
+      ...useImportStore.getState(),
+      selectedProfileId: "profile-42",
+    });
+
+    const project = useProjectStore.getState().project;
+    expect(project?.uiState?.import?.selectedProfileId).toBe("profile-42");
+    expect(project?.mappingState).not.toHaveProperty("selectedProfileId");
   });
 
   describe("mostRecentConfig persistence (gzip+base64)", () => {
@@ -663,20 +676,21 @@ describe("useProjectStore", () => {
     });
   });
 
-  describe("manifest versions: setLastRunVersions", () => {
-    it("stores version strings", () => {
+  describe("manifest versions: setLastRunProfileId", () => {
+    it("stores profileId alongside version strings", () => {
       useProjectStore.setState({
         project: validProject as any,
         isDirty: false,
         loaded: true,
       });
       const store = useProjectStore.getState() as any;
-      store.setLastRunVersions({
+      store.setLastRunProfileId("population", "profile-1", {
         exploreASLVersion: "1.0.0",
         matlabVersion: "R2023b",
         guiVersion: "0.1.0",
       });
       expect(useProjectStore.getState().project?.uiState?.processing?.population?.lastRun).toEqual({
+        profileId: "profile-1",
         exploreASLVersion: "1.0.0",
         matlabVersion: "R2023b",
         guiVersion: "0.1.0",
@@ -691,16 +705,36 @@ describe("useProjectStore", () => {
         loaded: true,
       });
       const store = useProjectStore.getState() as any;
-      store.setLastRunVersions({ exploreASLVersion: "1.0.0" });
+      store.setLastRunProfileId("population", "profile-1", { exploreASLVersion: "1.0.0" });
       expect(useProjectStore.getState().project?.uiState?.processing?.population?.lastRun).toEqual({
+        profileId: "profile-1",
         exploreASLVersion: "1.0.0",
       });
+    });
+
+    it("writes to the specified module's lastRun (structural)", () => {
+      useProjectStore.setState({
+        project: validProject as any,
+        isDirty: false,
+        loaded: true,
+      });
+      const store = useProjectStore.getState() as any;
+      store.setLastRunProfileId("structural", "profile-2", { matlabVersion: "R2023b" });
+      expect(useProjectStore.getState().project?.uiState?.processing?.structural?.lastRun).toEqual({
+        profileId: "profile-2",
+        matlabVersion: "R2023b",
+      });
+      expect(
+        useProjectStore.getState().project?.uiState?.processing?.population?.lastRun,
+      ).toBeUndefined();
     });
 
     it("is a no-op when project is null", () => {
       useProjectStore.setState({ project: null });
       const store = useProjectStore.getState() as any;
-      expect(() => store.setLastRunVersions({ guiVersion: "0.1.0" })).not.toThrow();
+      expect(() =>
+        store.setLastRunProfileId("population", "profile-1", { guiVersion: "0.1.0" }),
+      ).not.toThrow();
       expect(useProjectStore.getState().project).toBeNull();
     });
   });
@@ -751,8 +785,7 @@ describe("useProjectStore", () => {
         config: {
           subjects: ["sub-01_01"],
           modules: ["structural"],
-          matlabPath: "/matlab",
-          exploreAslPath: "/eas",
+          selectedProfileId: "profile-1",
           workers: 1,
         },
         processingPhase: "idle",
@@ -780,8 +813,7 @@ describe("useProjectStore", () => {
         config: {
           subjects: [],
           modules: ["population"],
-          matlabPath: "/matlab",
-          exploreAslPath: "/eas",
+          selectedProfileId: "profile-1",
           workers: 1,
         },
         processingPhase: "running",

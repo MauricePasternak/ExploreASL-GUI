@@ -7,6 +7,7 @@ import { formatBidsScanValidationError } from "../lib/bids/errorFormatter";
 import { logAction } from "../lib/debug";
 import { type ImportSubjectStatus } from "../lib/importStatus";
 import { getMaxRestorableImportStep } from "../lib/importStepAccess";
+import { useGlobalStore } from "./globalStore";
 
 import type {
   DerivedMetadataGroup,
@@ -96,9 +97,13 @@ export interface ImportState {
   // BIDS review (session-only, not persisted)
   bidsReview: BidsReviewState;
 
-  // MATLAB selection
-  selectedMatlabPath: string;
-  setSelectedMatlabPath: (path: string) => void;
+  // Execution profile selection (persisted to .easl via uiState.import.selectedProfileId)
+  selectedProfileId: string | null;
+  /** Inline pre-run error (e.g. missing/invalid profile). Not persisted. */
+  profileError: string | null;
+  setSelectedProfileId: (id: string | null) => void;
+  autoSelectProfile: () => void;
+  clearProfileError: () => void;
 
   // Actions
   setActiveStep: (step: number) => void;
@@ -193,7 +198,8 @@ const INITIAL_STATE = {
     detectedGroups: [] as DerivedMetadataGroup[],
     skippedSubjects: [] as string[],
   },
-  selectedMatlabPath: "",
+  selectedProfileId: null as string | null,
+  profileError: null as string | null,
 };
 
 function subjectProgress(subject: string, existing?: ImportProgress): ImportProgress {
@@ -256,7 +262,7 @@ async function scanBidsSidecars(rootPath: string) {
 // Store
 // =============================================================================
 
-export const useImportStore = create<ImportState>((set) => ({
+export const useImportStore = create<ImportState>((set, get) => ({
   ...INITIAL_STATE,
 
   setActiveStep: (step) => {
@@ -391,6 +397,26 @@ export const useImportStore = create<ImportState>((set) => ({
   },
 
   startImport: () => {
+    // Pre-validate the execution profile before preparing. On failure we show
+    // an inline error and block — we do NOT transition to the `failed` phase
+    // (nothing has started yet).
+    const global = useGlobalStore.getState();
+    const selectedId = get().selectedProfileId;
+    const profile = selectedId ? global.getProfileById(selectedId) : undefined;
+    if (!profile) {
+      set({
+        profileError:
+          "No execution profile is selected. Choose a valid profile before running import.",
+      });
+      return;
+    }
+    if (!global.profileValidationState[profile.id]?.valid) {
+      set({
+        profileError: `Execution profile "${profile.label}" is invalid. Fix it in Settings before running import.`,
+      });
+      return;
+    }
+
     set((state) => {
       const snapshot: ImportSnapshot = {
         sourceDataPath: state.sourceDataPath,
@@ -403,6 +429,7 @@ export const useImportStore = create<ImportState>((set) => ({
         subjectRenames: state.subjectRenames,
         metadataGroups: state.metadataGroups,
         subjectRows: state.subjectRows,
+        selectedProfileId: profile.id,
       };
 
       const rowsBySubject = new Map<string, SubjectRow>();
@@ -442,6 +469,7 @@ export const useImportStore = create<ImportState>((set) => ({
         importRunning: false,
         importSummary: null,
         mostRecentConfig: snapshot,
+        profileError: null,
       };
     });
   },
@@ -632,8 +660,23 @@ export const useImportStore = create<ImportState>((set) => ({
     set({ mostRecentConfig: snapshot });
   },
 
-  setSelectedMatlabPath: (path) => {
-    set({ selectedMatlabPath: path });
+  setSelectedProfileId: (id) => {
+    set({ selectedProfileId: id });
+  },
+
+  autoSelectProfile: () => {
+    if (get().selectedProfileId) return;
+    const { settings, profileValidationState } = useGlobalStore.getState();
+    const firstValid = settings.executionProfiles.find(
+      (p) => profileValidationState[p.id]?.valid === true,
+    );
+    if (firstValid) {
+      set({ selectedProfileId: firstValid.id });
+    }
+  },
+
+  clearProfileError: () => {
+    set({ profileError: null });
   },
 
   applyStaleness: (staleness) => {
@@ -714,6 +757,7 @@ export const useImportStore = create<ImportState>((set) => ({
         .catch(INITIAL_STATE.importCompleted)
         .default(INITIAL_STATE.importCompleted),
       mostRecentConfig: ImportSnapshotSchema.nullable().catch(null).default(null),
+      selectedProfileId: z.string().nullable().catch(null).default(null),
     });
 
     const parsed = schema.parse(persisted);
@@ -735,6 +779,7 @@ export const useImportStore = create<ImportState>((set) => ({
       metadataGroups: parsed.metadataGroups,
       subjectRows: parsed.subjectRows,
       mostRecentConfig: parsed.mostRecentConfig,
+      selectedProfileId: parsed.selectedProfileId,
       importPhase,
       importCompleted,
       importRunning: false,

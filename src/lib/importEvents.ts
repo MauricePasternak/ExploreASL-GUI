@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import type { StagingEntry } from "../schemas/importSchemas";
+import type { ExecutionProfile } from "../schemas/executionProfile";
 import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
 
@@ -298,8 +299,7 @@ export async function runImportPipeline(params: {
   stagingEntries: StagingEntry[];
   sourcestructureJson: Record<string, unknown>;
   studyparJson: Record<string, unknown>;
-  matlabPath: string;
-  exploreaslPath: string;
+  executionProfile: ExecutionProfile;
   subjectList: string[];
   subjectsToPreserve?: string[];
 }): Promise<number> {
@@ -310,8 +310,7 @@ export async function runImportPipeline(params: {
     stagingEntries: params.stagingEntries,
     sourcestructureJson: params.sourcestructureJson,
     studyparJson: params.studyparJson,
-    matlabPath: params.matlabPath,
-    exploreaslPath: params.exploreaslPath,
+    executionProfile: params.executionProfile,
     subjectList: params.subjectList,
     subjectsToPreserve: params.subjectsToPreserve ?? null,
   });

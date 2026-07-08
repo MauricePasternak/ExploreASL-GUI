@@ -1,8 +1,29 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MetadataGroup, PathPattern, ImportSnapshot } from "../schemas/importSchemas";
+import type { ExecutionProfile } from "../schemas/executionProfile";
+import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { computeStaleness } from "../lib/importStaleness";
+import { useGlobalStore } from "./globalStore";
 import { useImportStore } from "./importStore";
+
+const MATLAB_PROFILE: ExecutionProfile = {
+  id: "profile-1",
+  type: "matlab",
+  label: "MATLAB R2023b",
+  matlabPath: "/usr/local/bin/matlab",
+  exploreAslPath: "/opt/ExploreASL",
+};
+
+// A valid, selected profile is the default precondition for import runs. Tests
+// that exercise the missing/invalid-profile blocking paths override this.
+beforeEach(() => {
+  useGlobalStore.setState({
+    settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
+    profileValidationState: { "profile-1": { valid: true, errors: [] } },
+  });
+  useImportStore.setState({ selectedProfileId: "profile-1" });
+});
 
 // Reset store state between tests
 afterEach(() => {
@@ -637,6 +658,110 @@ describe("importStore import execution actions", () => {
     });
 
     expect(useImportStore.getState().activeStep).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Execution profile selection (Group 8.1)
+// ---------------------------------------------------------------------------
+describe("importStore execution profile selection", () => {
+  it("setSelectedProfileId updates the selected profile", () => {
+    useImportStore.getState().setSelectedProfileId("profile-2");
+    expect(useImportStore.getState().selectedProfileId).toBe("profile-2");
+  });
+
+  it("autoSelectProfile selects the first valid profile, skipping invalid ones", () => {
+    const invalid: ExecutionProfile = {
+      id: "profile-0",
+      type: "matlab",
+      label: "Broken",
+      matlabPath: "/bad/matlab",
+      exploreAslPath: "/bad/ExploreASL",
+    };
+    useGlobalStore.setState({
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [invalid, MATLAB_PROFILE] },
+      profileValidationState: {
+        "profile-0": { valid: false, errors: ["MATLAB not found"] },
+        "profile-1": { valid: true, errors: [] },
+      },
+    });
+    useImportStore.setState({ selectedProfileId: null });
+
+    useImportStore.getState().autoSelectProfile();
+
+    expect(useImportStore.getState().selectedProfileId).toBe("profile-1");
+  });
+
+  it("autoSelectProfile does not override an existing selection", () => {
+    useImportStore.setState({ selectedProfileId: "profile-1" });
+    useImportStore.getState().autoSelectProfile();
+    expect(useImportStore.getState().selectedProfileId).toBe("profile-1");
+  });
+
+  it("autoSelectProfile leaves selection null when no valid profile exists", () => {
+    useGlobalStore.setState({
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
+      profileValidationState: { "profile-1": { valid: false, errors: ["bad"] } },
+    });
+    useImportStore.setState({ selectedProfileId: null });
+
+    useImportStore.getState().autoSelectProfile();
+
+    expect(useImportStore.getState().selectedProfileId).toBeNull();
+  });
+
+  it("restores selectedProfileId from persisted .easl state", () => {
+    useImportStore.setState({ selectedProfileId: null });
+    useImportStore.getState().loadPersistedState({ selectedProfileId: "profile-restored" });
+    expect(useImportStore.getState().selectedProfileId).toBe("profile-restored");
+  });
+
+  it("startImport captures selectedProfileId in the snapshot", () => {
+    const store = useImportStore.getState();
+    store.setSelectedProfileId("profile-1");
+    store.setSubjectRows([
+      { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
+    ]);
+
+    store.startImport();
+
+    expect(useImportStore.getState().mostRecentConfig?.selectedProfileId).toBe("profile-1");
+  });
+
+  it("startImport blocks with an inline error when no profile is selected (no failed transition)", () => {
+    useImportStore.setState({ selectedProfileId: null });
+    const store = useImportStore.getState();
+
+    store.startImport();
+
+    expect(useImportStore.getState().profileError).toBeTruthy();
+    expect(useImportStore.getState().importPhase).not.toBe("failed");
+    expect(useImportStore.getState().importPhase).toBe("idle");
+  });
+
+  it("startImport blocks with an inline error when the selected profile is invalid", () => {
+    useGlobalStore.setState({
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
+      profileValidationState: { "profile-1": { valid: false, errors: ["MATLAB not found"] } },
+    });
+    useImportStore.setState({ selectedProfileId: "profile-1" });
+    const store = useImportStore.getState();
+
+    store.startImport();
+
+    expect(useImportStore.getState().profileError).toBeTruthy();
+    expect(useImportStore.getState().importPhase).not.toBe("failed");
+    expect(useImportStore.getState().importPhase).toBe("idle");
+  });
+
+  it("startImport clears a stale profileError once a valid profile resolves", () => {
+    useImportStore.setState({ selectedProfileId: "profile-1", profileError: "stale" });
+    const store = useImportStore.getState();
+
+    store.startImport();
+
+    expect(useImportStore.getState().profileError).toBeNull();
+    expect(useImportStore.getState().importPhase).toBe("preparing");
   });
 });
 

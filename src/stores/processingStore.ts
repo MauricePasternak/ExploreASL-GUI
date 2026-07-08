@@ -7,6 +7,7 @@ import type {
   SubjectModuleStatus,
 } from "../schemas/processingSchemas";
 import { useProjectStore } from "./projectStore";
+import { useGlobalStore } from "./globalStore";
 import { useDataParStore } from "./dataParStore";
 import { generateSubjectRegexp } from "../lib/subjectMatching";
 
@@ -21,6 +22,7 @@ export interface ProcessingState {
   subjectStatuses: SubjectModuleStatus[];
   workerPids: number[];
   pendingRawdataWarning: string | null;
+  profileError: string | null;
 
   setConfig: (config: ProcessConfig) => void;
   startProcessing: (explicitConfirm?: boolean) => Promise<void>;
@@ -33,6 +35,7 @@ export interface ProcessingState {
   loadLockFileStatus: () => Promise<void>;
   resetProcessing: () => void;
   clearPendingRawdataWarning: () => void;
+  clearProfileError: () => void;
 }
 
 // =============================================================================
@@ -46,6 +49,7 @@ const INITIAL_STATE = {
   subjectStatuses: [] as SubjectModuleStatus[],
   workerPids: [] as number[],
   pendingRawdataWarning: null as string | null,
+  profileError: null as string | null,
 };
 
 // =============================================================================
@@ -95,6 +99,27 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     if (!config) throw new Error("No config set");
     if (config.modules.length === 0) throw new Error("No modules selected");
 
+    // Resolve + validate the execution profile before doing anything. On
+    // failure we show an inline error and block — we do NOT transition to the
+    // `failed` pipeline state (nothing has started yet).
+    const global = useGlobalStore.getState();
+    const profile = global.getProfileById(config.selectedProfileId);
+    if (!profile) {
+      set({
+        profileError:
+          "The selected execution profile could not be found. Choose a valid profile before running.",
+      });
+      return;
+    }
+    const validation = global.profileValidationState[profile.id];
+    if (!validation || !validation.valid) {
+      set({
+        profileError: `Execution profile "${profile.label}" is invalid. Fix it in Settings before running.`,
+      });
+      return;
+    }
+    set({ profileError: null });
+
     const available = useProcessingStore.getState().availableSubjects;
     for (const subj of config.subjects) {
       if (!/^sub-[^_\s]+_[^_\s]+$/.test(subj)) {
@@ -117,27 +142,30 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     if (config.modules.includes("population")) {
       useProjectStore.getState().setPopulationCompleted(false);
 
+      const matlabPath = profile.type === "matlab" ? profile.matlabPath : "";
+      const exploreAslPath = profile.type === "matlab" ? profile.exploreAslPath : "";
+
       try {
         const { invoke } = await import("@tauri-apps/api/core");
         const versions = await invoke<{ explore_asl: string; matlab: string }>(
           "capture_environment_versions",
           {
-            exploreAslPath: config.exploreAslPath,
-            matlabPath: config.matlabPath,
+            exploreAslPath,
+            matlabPath,
           },
         );
         const gui =
           import.meta.env.VITE_APP_VERSION ??
           useProjectStore.getState().project?.version ??
           "unknown";
-        useProjectStore.getState().setLastRunVersions({
+        useProjectStore.getState().setLastRunProfileId("population", profile.id, {
           exploreASLVersion: versions.explore_asl,
           matlabVersion: versions.matlab,
           guiVersion: gui,
         });
       } catch (err) {
         console.warn("[manifest] version capture failed", err);
-        useProjectStore.getState().setLastRunVersions({
+        useProjectStore.getState().setLastRunProfileId("population", profile.id, {
           exploreASLVersion: "unknown",
           matlabVersion: "unknown",
           guiVersion: useProjectStore.getState().project?.version ?? "unknown",
@@ -205,7 +233,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     };
 
     try {
-      const pids = await runProcessingPipeline(config, dataParJson);
+      const pids = await runProcessingPipeline(config, profile, dataParJson);
       set({ workerPids: pids, processingPhase: "running" });
     } catch (err) {
       clearProcessingListeners();
@@ -317,5 +345,9 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       processingPhase:
         state.processingPhase === "preparing" ? ("idle" as ProcessingPhase) : state.processingPhase,
     }));
+  },
+
+  clearProfileError: () => {
+    set({ profileError: null });
   },
 }));

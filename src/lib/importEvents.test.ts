@@ -38,8 +38,19 @@ beforeEach(() => {
     settings: {
       ...DEFAULT_SETTINGS,
       import: { preserveStagingDir: true },
+      executionProfiles: [
+        {
+          id: "profile-1",
+          type: "matlab",
+          label: "MATLAB R2023b",
+          matlabPath: "/usr/local/bin/matlab",
+          exploreAslPath: "/opt/ExploreASL",
+        },
+      ],
     },
+    profileValidationState: { "profile-1": { valid: true, errors: [] } },
   });
+  useImportStore.setState({ selectedProfileId: "profile-1" });
 
   Object.keys(handlers).forEach((key) => delete handlers[key]);
 

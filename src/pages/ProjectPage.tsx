@@ -71,7 +71,8 @@ export default function ProjectPage() {
       Object.keys(mappingState).length > 0 ||
       project.uiState?.import?.activeStep !== undefined ||
       project.uiState?.import?.currentPhase !== undefined ||
-      project.uiState?.import?.completed !== undefined;
+      project.uiState?.import?.completed !== undefined ||
+      project.uiState?.import?.selectedProfileId !== undefined;
 
     if (!hasPersistedImportState) {
       return;
@@ -83,6 +84,7 @@ export default function ProjectPage() {
       importPhase: project.uiState?.import?.currentPhase,
       importCompleted: project.uiState?.import?.completed,
       mostRecentConfig: project.uiState?.import?.mostRecentConfig,
+      selectedProfileId: project.uiState?.import?.selectedProfileId,
     };
     loadPersistedState(persistedState as Record<string, unknown>);
   }, [project?.projectMeta.id, loadPersistedState, project]);
