@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Accordion,
   Alert,
@@ -19,17 +18,18 @@ import {
   IconInfoCircle,
   IconRefresh,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router";
 import { exists } from "@tauri-apps/plugin-fs";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 
-import { summarizeAslContext } from "../../lib/bids/sidecar";
 import { sanitizeLabel } from "../../lib/bids/normalize";
+import { summarizeAslContext } from "../../lib/bids/sidecar";
 import { logAction } from "../../lib/debug";
 import type { DerivedMetadataGroup, MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import HeaderCard from "../HeaderCard";
 import BIDSIcon from "../BIDSIcon";
+import HeaderCard from "../common/HeaderCard";
 
 /** Keys from bidsParams that are not displayed in the params table. */
 const SKIP_PARAMS_KEYS = new Set(["id", "label"]);

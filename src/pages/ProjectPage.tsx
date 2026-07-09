@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState } from "react";
 import { Center, Loader, Stack, Text } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
+import DataParEditor from "../components/parameters/DataParEditor";
 import { resolveRestoredPhase, tryRestoreProjectSession } from "../lib/restoreProjectSession";
 import { syncSessionCheckpointFromProject } from "../lib/sessionCheckpoint";
 import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/project";
-import { useProjectStore } from "../stores/projectStore";
-import { useImportStore } from "../stores/importStore";
 import { useDataParStore } from "../stores/dataParStore";
+import { useImportStore } from "../stores/importStore";
+import { useProjectStore } from "../stores/projectStore";
 import ImportPage from "./ImportPage";
 import ManifestPage from "./ManifestPage";
 import ProcessingPage from "./ProcessingPage";
 import VisualizationPage from "./VisualizationPage";
-import DataParEditor from "../components/parameters/DataParEditor";
 
 function isProjectPhase(value: string | undefined): value is ProjectPhase {
   return PROJECT_PHASES.includes(value as ProjectPhase);

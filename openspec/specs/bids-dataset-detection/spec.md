@@ -69,12 +69,14 @@ Result `BidsCheckResult` fields: `is_bids: bool`, `has_dataset_description: bool
 
 ### Requirement: LandingPage shows confirmation dialog on BIDS detection
 
-After the folder picker returns a path, `LandingPage.handleNewProject()` MUST invoke `check_bids_dataset`. Based on the result:
+After the folder picker returns a path, `LandingPage.handleNewProject()` MUST invoke `check_bids_dataset`. Based on the result, a unified project import setup modal MUST always be shown:
 
-- `error == null && is_bids` → show BIDS detection dialog with two radio choices: "Skip Import — review BIDS metadata" and "Import from DICOM". Dialog displays `asl_subject_count`, `asl_session_count`, and "Cross-sectional: Yes/No" from `is_cross_sectional` (longitudinal only when at least one subject has multiple explicit sessions). When `missing_aslcontext_count > 0`, show a non-blocking warning that those sessions will be skipped during review. Dialog body mentions `rawdata/` creation requirement for upstream-compat.
-- `is_bids == false && asl_subject_count == 0 && total_subject_count == 0` → show error dialog: "No BIDS subjects found" with `[Choose Different Folder]` and `[Cancel]`.
-- `is_bids == false && asl_subject_count == 0 && total_subject_count > 0` → show error dialog: "No valid ASL BIDS data found" with same buttons.
-- `dataset_desc_error != null && asl_subject_count >= 1` → show corrupt warning dialog: "dataset_description.json is corrupt but ASL data found — proceed with BIDS import?" [Skip Import anyway] [Cancel].
+- `error == null && is_bids` → show dialog: "BIDS Dataset Detected" with both "Skip Import — review BIDS metadata" and "Import from DICOM" enabled. Dialog displays `asl_subject_count`, `asl_session_count`, and "Cross-sectional: Yes/No" from `is_cross_sectional` (longitudinal only when at least one subject has multiple explicit sessions). When `missing_aslcontext_count > 0`, show a non-blocking warning that those sessions will be skipped during review. Dialog body mentions `rawdata/` creation requirement for upstream-compat.
+- `is_bids == false && asl_subject_count == 0 && total_subject_count == 0` → show dialog: "No BIDS Subjects Found" with BIDS option disabled and "Import from DICOM" enabled/auto-selected. Display the callout: "No BIDS subjects found in the selected folder. Ensure the folder contains sub-\* directories with ASL data."
+- `is_bids == false && asl_subject_count == 0 && total_subject_count > 0` → show dialog: "No Valid ASL BIDS Data Found" with BIDS option disabled and "Import from DICOM" enabled/auto-selected. Display the callout: "The selected folder contains BIDS subjects but none have valid ASL data. Ensure at least one subject has a perf/ directory with \*\_asl.json sidecars."
+- `dataset_desc_error != null && asl_subject_count >= 1` → show dialog: "Corrupt dataset_description.json" with both options enabled. Display the callout: "dataset_description.json is corrupt, but ASL subjects were found."
+
+In all cases, the dialog features three buttons: `[Confirm]` (disabled unless an option is selected; when BIDS is disabled, DICOM is pre-selected and `[Confirm]` is enabled), `[Choose a Different Folder]`, and `[Cancel]`.
 
 `Cancel` or dismissed dialog → return to landing page (no project created, no state mutation). `Continue + Skip Import` → `createProject(path, name, { dataSource: "bids" })`, navigate to import. `Continue + DICOM` → `createProject(path, name, { dataSource: "dicom" })`, navigate to import.
 

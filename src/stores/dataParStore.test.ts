@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { seedValidProfileGate } from "../test/landingProfileGate";
 import { useProjectStore } from "./projectStore";
 import { useDataParStore } from "./dataParStore";
 
 beforeEach(() => {
+  seedValidProfileGate();
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
   useDataParStore.getState().resetDataPar();
 });

@@ -38,7 +38,7 @@ import {
   IconSettings,
   IconTags,
 } from "@tabler/icons-react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 interface TreeRowProps {

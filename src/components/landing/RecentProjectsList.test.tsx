@@ -3,8 +3,8 @@ import { exists } from "@tauri-apps/plugin-fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MantineProvider } from "@mantine/core";
 
-import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
-import { useGlobalStore } from "../stores/globalStore";
+import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
+import { useGlobalStore } from "../../stores/globalStore";
 import RecentProjectsList from "./RecentProjectsList";
 
 describe("RecentProjectsList", () => {

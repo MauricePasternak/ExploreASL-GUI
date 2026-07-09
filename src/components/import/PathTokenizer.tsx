@@ -1,6 +1,6 @@
 import { Badge, Button, Card, Code, Group, Select, Stack, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconRoute } from "@tabler/icons-react";
-import HeaderCard from "../HeaderCard";
+import HeaderCard from "../common/HeaderCard";
 
 import { isTokenizerComplete } from "../../lib/importStepAccess";
 import { splitBySubDelimiters } from "../../lib/pathUtils";

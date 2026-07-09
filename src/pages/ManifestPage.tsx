@@ -1,12 +1,12 @@
-import { Stack, Stepper, Group, Button, Tooltip, Box } from "@mantine/core";
+import { Box, Button, Group, Stack, Stepper, Tooltip } from "@mantine/core";
 import { IconFileReport } from "@tabler/icons-react";
-import HeaderCard from "../components/HeaderCard";
-import { useState, useEffect } from "react";
-import { useManifestStore } from "../stores/manifestStore";
-import { useProjectStore } from "../stores/projectStore";
-import { useProcessingStore } from "../stores/processingStore";
-import QcSelectionTable from "../components/manifest/QcSelectionTable";
+import { useEffect, useState } from "react";
+import HeaderCard from "../components/common/HeaderCard";
 import ManifestPreview from "../components/manifest/ManifestPreview";
+import QcSelectionTable from "../components/manifest/QcSelectionTable";
+import { useManifestStore } from "../stores/manifestStore";
+import { useProcessingStore } from "../stores/processingStore";
+import { useProjectStore } from "../stores/projectStore";
 
 export default function ManifestPage() {
   const step = useManifestStore((s) => s.step);

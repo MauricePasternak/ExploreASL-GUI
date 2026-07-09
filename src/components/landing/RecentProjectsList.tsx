@@ -3,8 +3,8 @@ import { Alert, Button, Group, Loader, Table, Text } from "@mantine/core";
 import { IconFolder, IconTrash } from "@tabler/icons-react";
 import { exists } from "@tauri-apps/plugin-fs";
 
-import { useGlobalStore } from "../stores/globalStore";
-import { logAction } from "../lib/debug";
+import { useGlobalStore } from "../../stores/globalStore";
+import { logAction } from "../../lib/debug";
 
 interface RecentEntry {
   path: string;
@@ -13,6 +13,7 @@ interface RecentEntry {
 
 interface RecentProjectsListProps {
   onOpen: (path: string) => void;
+  disabled?: boolean;
   "data-testid"?: string;
 }
 
@@ -29,6 +30,7 @@ function getProjectLabel(path: string) {
 
 export default function RecentProjectsList({
   onOpen,
+  disabled = false,
   "data-testid": dataTestId,
 }: RecentProjectsListProps) {
   const recentProjects = useGlobalStore((state) => state.settings.recentProjects);
@@ -75,6 +77,10 @@ export default function RecentProjectsList({
   }
 
   function handleOpen(entry: RecentEntry) {
+    if (disabled) {
+      return;
+    }
+
     if (!entry.stale) {
       logAction("recent_open", { path: entry.path });
       onOpen(entry.path);
@@ -134,6 +140,7 @@ export default function RecentProjectsList({
                   <Button
                     size="xs"
                     variant="light"
+                    disabled={disabled}
                     onClick={() => handleOpen(entry)}
                     data-testid={`recent-open-btn-${rowId}`}
                   >

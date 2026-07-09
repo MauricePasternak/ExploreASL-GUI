@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { Checkbox, NumberInput, Stack, Text, SimpleGrid, Group } from "@mantine/core";
+import { Checkbox, Group, NumberInput, SimpleGrid, Stack, Text } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useState } from "react";
 
+import { FieldInfoIcon } from "../common/FieldInfoIcon";
 import ProfileSelector from "../common/ProfileSelector";
-import { FieldInfoIcon } from "../FieldInfoIcon";
 
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
 import { useGlobalStore } from "../../stores/globalStore";

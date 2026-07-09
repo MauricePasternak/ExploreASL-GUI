@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifications } from "@mantine/notifications";
 import { Store } from "@tauri-apps/plugin-store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -615,6 +616,48 @@ describe("useGlobalStore", () => {
       expect(invoke).toHaveBeenCalledWith("validate_all_execution_profiles", {
         executionProfiles: [],
       });
+    });
+
+    it("shows a notification for each invalid profile after startup validation", async () => {
+      const profile = makeMatlabProfile({ label: "Broken MATLAB" });
+      const store = await Store.load("settings.json");
+      await store.set("executionProfiles", [profile]);
+      await store.save();
+
+      vi.mocked(invoke).mockResolvedValueOnce([
+        { id: profile.id, valid: false, errors: ["MATLAB not found"] },
+      ]);
+
+      await useGlobalStore.getState().loadSettings();
+
+      expect(notifications.show).toHaveBeenCalledWith(
+        expect.objectContaining({
+          color: "red",
+          message: expect.stringMatching(
+            /Profile 'Broken MATLAB' is invalid: MATLAB not found\. Fix it in Settings\./,
+          ),
+        }),
+      );
+    });
+
+    it("persists exploreAslVersion when startup re-detection changes it", async () => {
+      const profile = makeMatlabProfile({ exploreAslVersion: "1.14.0" });
+      const store = await Store.load("settings.json");
+      await store.set("executionProfiles", [profile]);
+      await store.save();
+
+      vi.mocked(invoke).mockResolvedValueOnce([
+        { id: profile.id, valid: true, errors: [], exploreAslVersion: "1.15.0" },
+      ]);
+
+      await useGlobalStore.getState().loadSettings();
+
+      expect(useGlobalStore.getState().settings.executionProfiles[0].exploreAslVersion).toBe(
+        "1.15.0",
+      );
+      await expect(store.get("executionProfiles")).resolves.toEqual([
+        expect.objectContaining({ id: profile.id, exploreAslVersion: "1.15.0" }),
+      ]);
     });
   });
 

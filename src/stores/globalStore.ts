@@ -1,3 +1,4 @@
+import { notifications } from "@mantine/notifications";
 import { invoke } from "@tauri-apps/api/core";
 import { Store } from "@tauri-apps/plugin-store";
 import { create } from "zustand";
@@ -97,6 +98,19 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
 
       // Validate all profiles before marking loaded
       await get().validateAllProfiles();
+
+      const { settings, profileValidationState } = get();
+      for (const profile of settings.executionProfiles) {
+        const validation = profileValidationState[profile.id];
+        if (validation && !validation.valid) {
+          const errorSummary = validation.errors.join("; ") || "Unknown error";
+          notifications.show({
+            color: "red",
+            title: "Invalid execution profile",
+            message: `Profile '${profile.label}' is invalid: ${errorSummary}. Fix it in Settings.`,
+          });
+        }
+      }
 
       set({ loaded: true });
     } catch {

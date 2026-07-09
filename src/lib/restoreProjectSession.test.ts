@@ -1,9 +1,9 @@
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
+import { seedValidProfileGate } from "../test/landingProfileGate";
 import { writeSessionCheckpoint } from "./sessionCheckpoint";
 import { resolveRestoredPhase, tryRestoreProjectSession } from "./restoreProjectSession";
 
@@ -26,8 +26,8 @@ const PROJECT_JSON = {
 describe("restoreProjectSession", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    seedValidProfileGate();
     useProjectStore.setState({ project: null, isDirty: false, loaded: false });
-    useGlobalStore.setState({ loaded: true, settings: DEFAULT_SETTINGS });
     vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(PROJECT_JSON));
   });
 
@@ -44,13 +44,17 @@ describe("restoreProjectSession", () => {
   });
 
   it("falls back to a matching recent project path", async () => {
-    useGlobalStore.setState({
+    const profile = seedValidProfileGate();
+    useGlobalStore.setState((state) => ({
       loaded: true,
       settings: {
-        ...DEFAULT_SETTINGS,
+        ...state.settings,
         recentProjects: ["/tmp/other/project.easl", "/tmp/brain-study/project.easl"],
       },
-    });
+      profileValidationState: {
+        [profile.id]: { valid: true, errors: [] },
+      },
+    }));
 
     await expect(tryRestoreProjectSession("project-1")).resolves.toBe(true);
     expect(readTextFile).toHaveBeenCalledWith("/tmp/brain-study/project.easl");

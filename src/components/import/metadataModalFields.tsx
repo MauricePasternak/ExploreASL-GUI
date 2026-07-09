@@ -10,12 +10,12 @@ import {
   type ComboboxItem,
 } from "@mantine/core";
 import { Controller, type Control, type FieldPath } from "react-hook-form";
-import { FieldInfoIcon } from "../FieldInfoIcon";
+import { FieldInfoIcon } from "../common/FieldInfoIcon";
 
+import { CommaArrayInput, CommaNumberInput } from "../CommaNumberInput";
+import { BIDS_FIELD_DESCRIPTIONS } from "./metadataFieldDescriptions";
 import { BIDS_FIELD_HINTS, type MetadataFieldHint } from "./metadataFieldHints";
 import type { MetadataGroupFormValues } from "./metadataModalTypes";
-import { CommaNumberInput, CommaArrayInput } from "../CommaNumberInput";
-import { BIDS_FIELD_DESCRIPTIONS } from "./metadataFieldDescriptions";
 
 function resolveFieldDescription(_hint?: MetadataFieldHint, extra?: string): string | undefined {
   return extra;

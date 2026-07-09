@@ -1,16 +1,17 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { MantineProvider } from "@mantine/core";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeSessionCheckpoint } from "../lib/sessionCheckpoint";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
+import { useDataParStore } from "../stores/dataParStore";
 import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
-import ProjectPage from "./ProjectPage";
 import { useProjectStore } from "../stores/projectStore";
-import { useDataParStore } from "../stores/dataParStore";
+import { seedValidProfileGate } from "../test/landingProfileGate";
+import ProjectPage from "./ProjectPage";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
@@ -42,7 +43,7 @@ const PROJECT_JSON = {
 describe("ProjectPage", () => {
   beforeEach(() => {
     sessionStorage.clear();
-    useGlobalStore.setState({ loaded: true, settings: DEFAULT_SETTINGS });
+    seedValidProfileGate();
     useImportStore.getState().resetImport();
     useDataParStore.getState().resetDataPar();
     useProjectStore.setState({
