@@ -76,23 +76,30 @@ The system SHALL provide a Rust command `clean_import_status(staging_root, subje
 
 ### Requirement: Output relocation after import
 
-The Rust command `move_import_output(staging_root, project_root, succeeded_subjects: Option<Vec<String>>, debug_mode: bool)` handles two modes:
+The Rust command `move_import_output(staging_root, project_root, succeeded_subjects: Vec<String>, debug_mode: bool, cleanup_staging: bool)` SHALL merge import output subject-by-subject without deleting unrelated project data. For each succeeded subject, it SHALL selectively copy: (1) `.easl_staging/rawdata/sub-<Subject>/` → `<project_root>/rawdata/sub-<Subject>/`, (2) `.easl_staging/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/` → `<project_root>/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/`, (3) `.easl_staging/derivatives/ExploreASL/log/*sub-<Subject>*` → `<project_root>/derivatives/ExploreASL/log/`, (4) `.easl_staging/rawdata/dataset_description.json` → `<project_root>/rawdata/dataset_description.json` (only if not exists at destination). Existing processing outputs under `<project_root>/derivatives/ExploreASL/` (Structural, ASL, Population, Stats, `dataPar.json`, `participants.tsv`, non-import lock files, etc.) SHALL be preserved.
 
-**Full success** (`succeeded_subjects` is `None`): Delete existing `<project_root>/rawdata/` and `<project_root>/derivatives/`, then `mv` `.easl_staging/rawdata/` and `.easl_staging/derivatives/` to project root. If debug mode is off: delete `.easl_staging/`. If debug mode is on: preserve `.easl_staging/` and copy `sourcestructure.json` and `studyPar.json` to `<project_root>/derivatives/ExploreASL_GUI/`.
+For each succeeded subject, `move_import_output` SHALL delete all matching `<project_root>/derivatives/ExploreASL/lock/xASL_module_BIDS2Legacy/sub-<Subject>_<Session>/` directories. This invalidates ExploreASL's BIDS2Legacy conversion cache for the re-imported subject while preserving Structural/ASL/Population lock files and unrelated subjects' BIDS2Legacy locks.
 
-**Partial success** (`succeeded_subjects` is `Some(list)`): For each succeeded subject, selectively copy: (1) `.easl_staging/rawdata/sub-<Subject>/` → `<project_root>/rawdata/sub-<Subject>/`, (2) `.easl_staging/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/` → `<project_root>/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/`, (3) `.easl_staging/derivatives/ExploreASL/log/*sub-<Subject>*` → `<project_root>/derivatives/ExploreASL/log/`, (4) `.easl_staging/rawdata/dataset_description.json` → `<project_root>/rawdata/dataset_description.json` (only if not exists at destination). Failed subjects' data remains in `.easl_staging/` for potential retry.
+When `cleanup_staging` is `true` (all subjects succeeded): if debug mode is off, delete `.easl_staging/`; if debug mode is on, preserve `.easl_staging/` and copy `sourcestructure.json` and `studyPar.json` to `<project_root>/derivatives/ExploreASL_GUI/`.
+
+When `cleanup_staging` is `false` (partial success): failed subjects' data remains in `.easl_staging/` for potential retry.
 
 **All-fail scenario**: `move_import_output` is not called at all. `.easl_staging/` remains intact for retry. No data is moved to project root.
 
 #### Scenario: Full success with debug mode off
 
 - **WHEN** all subjects succeed and debug mode is disabled
-- **THEN** `rawdata/` and `derivatives/` are replaced at project root, `.easl_staging/` is deleted, `project.easl` `currentPhase` is set to `"parameters"`
+- **THEN** succeeded subjects' rawdata, import lock files, and import logs are merged into project root, existing processing derivatives are preserved, `.easl_staging/` is deleted, `project.easl` `currentPhase` is set to `"parameters"`
 
 #### Scenario: Full success with debug mode on
 
 - **WHEN** all subjects succeed and debug mode is enabled
-- **THEN** `rawdata/` and `derivatives/` are replaced at project root, `.easl_staging/` is preserved, configs are copied to `derivatives/ExploreASL_GUI/`
+- **THEN** succeeded subjects' rawdata, import lock files, and import logs are merged into project root, existing processing derivatives are preserved, `.easl_staging/` is preserved, configs are copied to `derivatives/ExploreASL_GUI/`
+
+#### Scenario: Re-import after full processing pipeline
+
+- **WHEN** a user re-runs import for one or more subjects on a project that already has completed Structural/ASL/Population outputs
+- **THEN** only the re-imported subjects' rawdata and import lock/log artifacts are updated, matching BIDS2Legacy subject-session lock folders are removed, and all other `derivatives/ExploreASL` processing outputs remain intact
 
 #### Scenario: Partial success (GOOD succeeded, BADDIE failed)
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { resolveLogBadge } from "./SubjectSelection.helpers";
+import { resolveLogBadge, resolveModuleDisplay } from "./SubjectSelection.helpers";
 import type { LogFileInfo } from "../../lib/logViewer";
+import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
 
 function makeLog(overrides: Partial<LogFileInfo> = {}): LogFileInfo {
   return {
@@ -9,6 +10,26 @@ function makeLog(overrides: Partial<LogFileInfo> = {}): LogFileInfo {
     subjectSession: "sub-001_01",
     run: undefined,
     hasError: false,
+    ...overrides,
+  };
+}
+
+const SUBJECT_INFO: SubjectInfo = {
+  subjectSession: "sub-001_01",
+  subject: "001",
+  session: "01",
+  hasStructural: true,
+  hasASL: true,
+  aslRuns: ["1"],
+};
+
+function makeStatus(overrides: Partial<SubjectModuleStatus> = {}): SubjectModuleStatus {
+  return {
+    subjectSession: "sub-001_01",
+    module: "structural",
+    status: "complete",
+    completedSteps: ["999_ready"],
+    locked: false,
     ...overrides,
   };
 }
@@ -50,5 +71,44 @@ describe("resolveLogBadge", () => {
 
   it("outdated + no logs = no-logs", () => {
     expect(resolveLogBadge("outdated", undefined)).toBe("no-logs");
+  });
+});
+
+describe("resolveModuleDisplay", () => {
+  it("marks completed structural status outdated when BIDS2Legacy subject-session lock is missing", () => {
+    expect(
+      resolveModuleDisplay(SUBJECT_INFO, "structural", [makeStatus()], new Set(["sub-001_01"])),
+    ).toBe("outdated");
+  });
+
+  it("marks completed ASL status outdated when BIDS2Legacy subject-session lock is missing", () => {
+    expect(
+      resolveModuleDisplay(
+        SUBJECT_INFO,
+        "asl",
+        [makeStatus({ module: "asl", run: "1" })],
+        new Set(["sub-001_01"]),
+      ),
+    ).toBe("outdated");
+  });
+
+  it("keeps completed status when BIDS2Legacy subject-session lock exists", () => {
+    expect(resolveModuleDisplay(SUBJECT_INFO, "structural", [makeStatus()], new Set())).toBe(
+      "complete",
+    );
+  });
+
+  it("does not convert pending or skipped modules to outdated", () => {
+    expect(resolveModuleDisplay(SUBJECT_INFO, "structural", [], new Set(["sub-001_01"]))).toBe(
+      "pending",
+    );
+    expect(
+      resolveModuleDisplay(
+        { ...SUBJECT_INFO, hasStructural: false },
+        "structural",
+        [makeStatus()],
+        new Set(["sub-001_01"]),
+      ),
+    ).toBe("skipped");
   });
 });

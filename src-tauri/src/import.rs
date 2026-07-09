@@ -140,6 +140,13 @@ fn import_lock_dir(root: &Path, subject: &str) -> PathBuf {
         .join("xASL_module_Import")
 }
 
+fn bids2legacy_lock_base(root: &Path) -> PathBuf {
+    root.join("derivatives")
+        .join("ExploreASL")
+        .join("lock")
+        .join("xASL_module_BIDS2Legacy")
+}
+
 pub fn validate_subject_components(subjects: &[String]) -> Result<(), String> {
     for subject in subjects {
         if subject.is_empty() || subject == "." || subject == ".." {
@@ -221,19 +228,32 @@ pub fn copy_lock_files_paths(
 pub fn move_import_output_paths(
     staging_root: &Path,
     project_root: &Path,
-    succeeded_subjects: Option<&[String]>,
+    succeeded_subjects: &[String],
     debug_mode: bool,
+    cleanup_staging: bool,
 ) -> Result<(), String> {
     validate_staging_root(staging_root)?;
     validate_project_root_for_staging(staging_root, project_root)?;
+    validate_subject_components(succeeded_subjects)?;
 
-    match succeeded_subjects {
-        None => move_full_import_output(staging_root, project_root, debug_mode),
-        Some(subjects) => {
-            validate_subject_components(subjects)?;
-            move_partial_import_output(staging_root, project_root, subjects)
+    merge_import_output(staging_root, project_root, succeeded_subjects)?;
+
+    if cleanup_staging {
+        if debug_mode {
+            copy_import_configs(staging_root, project_root)?;
+            fs::create_dir_all(staging_root).map_err(|error| {
+                format!(
+                    "Failed to preserve staging directory {}: {}",
+                    staging_root.display(),
+                    error
+                )
+            })?;
+        } else {
+            cleanup_staging_root(staging_root)?;
         }
     }
+
+    Ok(())
 }
 
 pub fn validate_project_root_for_staging(
@@ -291,36 +311,7 @@ fn normalize_path_for_validation(path: &Path) -> Result<PathBuf, String> {
     Ok(parent.join(file_name))
 }
 
-fn move_full_import_output(
-    staging_root: &Path,
-    project_root: &Path,
-    debug_mode: bool,
-) -> Result<(), String> {
-    let project_rawdata = project_root.join("rawdata");
-    let project_derivatives = project_root.join("derivatives");
-    remove_dir_if_exists(&project_rawdata)?;
-    remove_dir_if_exists(&project_derivatives)?;
-
-    move_dir_if_exists(&staging_root.join("rawdata"), &project_rawdata)?;
-    move_dir_if_exists(&staging_root.join("derivatives"), &project_derivatives)?;
-
-    if debug_mode {
-        copy_import_configs(staging_root, project_root)?;
-        fs::create_dir_all(staging_root).map_err(|error| {
-            format!(
-                "Failed to preserve staging directory {}: {}",
-                staging_root.display(),
-                error
-            )
-        })?;
-    } else {
-        cleanup_staging_root(staging_root)?;
-    }
-
-    Ok(())
-}
-
-fn move_partial_import_output(
+fn merge_import_output(
     staging_root: &Path,
     project_root: &Path,
     subjects: &[String],
@@ -342,6 +333,56 @@ fn move_partial_import_output(
         }
 
         copy_matching_subject_logs(staging_root, project_root, subject)?;
+        remove_bids2legacy_locks_for_subject(project_root, subject)?;
+    }
+
+    Ok(())
+}
+
+fn remove_bids2legacy_locks_for_subject(project_root: &Path, subject: &str) -> Result<(), String> {
+    let lock_base = bids2legacy_lock_base(project_root);
+    if !lock_base.exists() {
+        return Ok(());
+    }
+
+    let subject_prefix = if subject.starts_with("sub-") {
+        format!("{subject}_")
+    } else {
+        format!("sub-{subject}_")
+    };
+
+    for entry in fs::read_dir(&lock_base).map_err(|error| {
+        format!(
+            "Failed to read BIDS2Legacy lock directory {}: {}",
+            lock_base.display(),
+            error
+        )
+    })? {
+        let entry = entry.map_err(|error| {
+            format!(
+                "Failed to read BIDS2Legacy lock entry in {}: {}",
+                lock_base.display(),
+                error
+            )
+        })?;
+        if !entry
+            .file_type()
+            .map_err(|error| {
+                format!(
+                    "Failed to inspect BIDS2Legacy lock entry {}: {}",
+                    entry.path().display(),
+                    error
+                )
+            })?
+            .is_dir()
+        {
+            continue;
+        }
+
+        let file_name = entry.file_name();
+        if file_name.to_string_lossy().starts_with(&subject_prefix) {
+            remove_dir_if_exists(&entry.path())?;
+        }
     }
 
     Ok(())
@@ -357,31 +398,6 @@ fn remove_dir_if_exists(path: &Path) -> Result<(), String> {
             error
         )),
     }
-}
-
-fn move_dir_if_exists(source: &Path, destination: &Path) -> Result<(), String> {
-    if !source.exists() {
-        return Ok(());
-    }
-
-    if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "Failed to create destination parent {}: {}",
-                parent.display(),
-                error
-            )
-        })?;
-    }
-
-    fs::rename(source, destination).map_err(|error| {
-        format!(
-            "Failed to move {} to {}: {}",
-            source.display(),
-            destination.display(),
-            error
-        )
-    })
 }
 
 fn copy_import_configs(staging_root: &Path, project_root: &Path) -> Result<(), String> {
@@ -1278,16 +1294,18 @@ pub fn clean_import_status(staging_root: String, subjects: Vec<String>) -> Resul
 pub fn move_import_output(
     staging_root: String,
     project_root: String,
-    succeeded_subjects: Option<Vec<String>>,
+    succeeded_subjects: Vec<String>,
     debug_mode: bool,
+    cleanup_staging: bool,
 ) -> Result<(), String> {
     let staging_root = validate_path_input("staging_root", &staging_root)?;
     let project_root = validate_path_input("project_root", &project_root)?;
     move_import_output_paths(
         &staging_root,
         &project_root,
-        succeeded_subjects.as_deref(),
+        &succeeded_subjects,
         debug_mode,
+        cleanup_staging,
     )
 }
 

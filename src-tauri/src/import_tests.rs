@@ -413,7 +413,7 @@ mod tests {
         fs::write(project_root.join("rawdata").join("keep.txt"), "keep")
             .expect("project marker should be written");
 
-        let error = move_import_output_paths(&staging_root, &project_root, None, false)
+        let error = move_import_output_paths(&staging_root, &project_root, &[], false, false)
             .expect_err("mismatched project root should be rejected");
 
         assert!(error.contains("project_root must be the parent of staging_root"));
@@ -479,7 +479,8 @@ mod tests {
         let error = move_import_output_paths(
             &staging_root,
             &project_root,
-            Some(&["..".to_string()]),
+            &["..".to_string()],
+            false,
             false,
         )
         .expect_err("partial move should reject traversal subjects");
@@ -550,6 +551,14 @@ mod tests {
             .join("xASL_module_Import")
     }
 
+    fn bids2legacy_lock_dir(root: &std::path::Path, subject_session: &str) -> PathBuf {
+        root.join("derivatives")
+            .join("ExploreASL")
+            .join("lock")
+            .join("xASL_module_BIDS2Legacy")
+            .join(subject_session)
+    }
+
     fn write_status_files(root: &std::path::Path, subject: &str) {
         let lock_dir = import_lock_dir(root, subject);
         fs::create_dir_all(&lock_dir).expect("lock dir should be created");
@@ -612,13 +621,44 @@ mod tests {
     }
 
     #[test]
-    fn move_import_output_full_success_replaces_project_outputs_and_removes_staging() {
+    fn move_import_output_full_success_merges_subject_output_and_preserves_processing_derivatives()
+    {
         let project_root = unique_temp_path("move-full-project");
         let staging_root = project_root.join(".easl_staging");
-        fs::create_dir_all(project_root.join("rawdata").join("old"))
-            .expect("old project rawdata should be created");
-        fs::create_dir_all(project_root.join("derivatives").join("old"))
-            .expect("old project derivatives should be created");
+        fs::create_dir_all(project_root.join("rawdata").join("sub-OTHER"))
+            .expect("other subject rawdata should exist");
+        fs::write(
+            project_root
+                .join("rawdata")
+                .join("sub-OTHER")
+                .join("keep.nii"),
+            "keep",
+        )
+        .expect("other subject rawdata file should be written");
+        fs::create_dir_all(
+            project_root
+                .join("derivatives")
+                .join("ExploreASL")
+                .join("Population")
+                .join("Stats"),
+        )
+        .expect("processing stats should exist");
+        fs::write(
+            project_root
+                .join("derivatives")
+                .join("ExploreASL")
+                .join("Population")
+                .join("Stats")
+                .join("CBF.tsv"),
+            "cbf",
+        )
+        .expect("processing stats file should be written");
+        fs::create_dir_all(bids2legacy_lock_dir(&project_root, "sub-BADDIE_01"))
+            .expect("BIDS2Legacy lock for imported subject session should exist");
+        fs::create_dir_all(bids2legacy_lock_dir(&project_root, "sub-BADDIE_02"))
+            .expect("BIDS2Legacy lock for second imported subject session should exist");
+        fs::create_dir_all(bids2legacy_lock_dir(&project_root, "sub-OTHER_01"))
+            .expect("BIDS2Legacy lock for other subject should exist");
         fs::create_dir_all(staging_root.join("rawdata").join("sub-BADDIE"))
             .expect("staging rawdata should be created");
         fs::write(
@@ -634,8 +674,14 @@ mod tests {
             .expect("sourcestructure should be written");
         fs::write(staging_root.join("studyPar.json"), "{}").expect("studyPar should be written");
 
-        move_import_output_paths(&staging_root, &project_root, None, false)
-            .expect("full move should succeed");
+        move_import_output_paths(
+            &staging_root,
+            &project_root,
+            &["BADDIE".to_string()],
+            false,
+            true,
+        )
+        .expect("full move should succeed");
 
         assert!(project_root
             .join("rawdata")
@@ -645,8 +691,31 @@ mod tests {
         assert!(import_lock_dir(&project_root, "BADDIE")
             .join("010_DCM2NII.status")
             .exists());
-        assert!(!project_root.join("rawdata").join("old").exists());
-        assert!(!project_root.join("derivatives").join("old").exists());
+        assert_eq!(
+            fs::read_to_string(
+                project_root
+                    .join("rawdata")
+                    .join("sub-OTHER")
+                    .join("keep.nii")
+            )
+            .expect("other subject rawdata should remain"),
+            "keep"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                project_root
+                    .join("derivatives")
+                    .join("ExploreASL")
+                    .join("Population")
+                    .join("Stats")
+                    .join("CBF.tsv")
+            )
+            .expect("processing stats should remain"),
+            "cbf"
+        );
+        assert!(!bids2legacy_lock_dir(&project_root, "sub-BADDIE_01").exists());
+        assert!(!bids2legacy_lock_dir(&project_root, "sub-BADDIE_02").exists());
+        assert!(bids2legacy_lock_dir(&project_root, "sub-OTHER_01").exists());
         assert!(!staging_root.exists());
 
         let _ = fs::remove_dir_all(project_root);
@@ -667,8 +736,14 @@ mod tests {
         fs::write(staging_root.join("studyPar.json"), "{\"study\":true}")
             .expect("studyPar should be written");
 
-        move_import_output_paths(&staging_root, &project_root, None, true)
-            .expect("debug full move should succeed");
+        move_import_output_paths(
+            &staging_root,
+            &project_root,
+            &["BADDIE".to_string()],
+            true,
+            true,
+        )
+        .expect("debug full move should succeed");
 
         assert!(staging_root.exists());
         assert_eq!(
@@ -731,7 +806,8 @@ mod tests {
         move_import_output_paths(
             &staging_root,
             &project_root,
-            Some(&["BADDIE".to_string()]),
+            &["BADDIE".to_string()],
+            false,
             false,
         )
         .expect("partial move should succeed");
@@ -777,8 +853,14 @@ mod tests {
         let project_root = unique_temp_path("move-safety-project");
         let unsafe_staging_root = project_root.join("not-staging");
 
-        let error = move_import_output_paths(&unsafe_staging_root, &project_root, None, false)
-            .expect_err("non .easl_staging roots should be rejected");
+        let error = move_import_output_paths(
+            &unsafe_staging_root,
+            &project_root,
+            &["BADDIE".to_string()],
+            false,
+            false,
+        )
+        .expect_err("non .easl_staging roots should be rejected");
 
         assert!(error.contains("staging_root must end with .easl_staging"));
         let _ = fs::remove_dir_all(project_root);
