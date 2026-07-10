@@ -157,16 +157,16 @@ Both are symmetric with ExploreASL's MATLAB `regexpi` pattern: case-insensitive 
 `src/lib/bids/sidecar.ts` SHALL export `summarizeAslContext(raw: string | undefined): string`:
 
 - undefined / empty → returns `""`
-- Else: parse comma-separated tokens; run-length encode identical adjacent runs; format as `"{value}×{count}, {next}×{count}, ..."`
+- Else: parse comma-separated tokens; run-length encode adjacent identical tokens, group alternating control-label/label-control pairs, and append `" x{count}"` for counts greater than 1 (omitting count suffix for count 1).
 
-Example: `"m0scan,m0scan,m0scan,...(10x),label,control,...(50x)"` → `"m0scan×10, label×50, control×50"` (assuming the 10 m0scans are first; 50 label/control pairs follow).
+Example: `"control,label,control,label,m0scan,m0scan,label,control,label,control,deltam"` → `"control-label pair x2, m0scan x2, label-control pair x2, deltam"`.
 
 Manifest §1 and `BIDSReviewPanel` parameter expansions use this summary form. Raw ASLContext persists in `mappingState.bidsParams.ASLContext` (preserves data for re-parsing / future tooling).
 
 #### Scenario: ds000240 110-volume context summarized
 
-- **WHEN** `summarizeAslContext` receives ds000240 sub-01's raw ASLContext string (`m0scan×10, label×50, control×50`)
-- **THEN** returns `"m0scan×10, label×50, control×50"` (or equivalent run-length encoded summary based on actual order)
+- **WHEN** `summarizeAslContext` receives ds000240 sub-01's raw ASLContext string (10 m0scans followed by 50 alternating label-control pairs)
+- **THEN** returns `"m0scan x10, label-control pair x50"`
 
 #### Scenario: Undefined context returns empty
 
