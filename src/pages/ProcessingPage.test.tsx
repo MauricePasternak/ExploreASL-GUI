@@ -265,4 +265,34 @@ describe("ProcessingPage", () => {
       expect(screen.getByTestId("start-btn")).toBeDisabled();
     });
   });
+
+  describe("Preparing transition state", () => {
+    it("renders PreparingTransition when phase is preparing", () => {
+      useProcessingStore.setState({
+        processingPhase: "preparing",
+        preparingMessage: "Generating participants list...",
+      });
+      renderPage();
+
+      expect(screen.getByTestId("preparing-transition")).toBeInTheDocument();
+      expect(screen.getByTestId("preparing-message")).toHaveTextContent(
+        "Generating participants list...",
+      );
+      expect(screen.queryByTestId("subject-selection")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("execution-dashboard")).not.toBeInTheDocument();
+    });
+
+    it("falls back to default text when preparingMessage is null", () => {
+      useProcessingStore.setState({
+        processingPhase: "preparing",
+        preparingMessage: null,
+      });
+      renderPage();
+
+      expect(screen.getByTestId("preparing-transition")).toBeInTheDocument();
+      expect(screen.getByTestId("preparing-message")).toHaveTextContent(
+        "Setting up execution environment...",
+      );
+    });
+  });
 });

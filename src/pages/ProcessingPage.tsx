@@ -7,6 +7,7 @@ import ControlButtons from "../components/processing/ControlButtons";
 import ExecutionDashboard from "../components/processing/ExecutionDashboard";
 import PipelineConfig from "../components/processing/PipelineConfig";
 import PopulationSection from "../components/processing/PopulationSection";
+import PreparingTransition from "../components/processing/PreparingTransition";
 import ProcessingStatusAlert, {
   type PreflightResult,
 } from "../components/processing/ProcessingStatusAlert";
@@ -18,7 +19,8 @@ export default function ProcessingPage() {
   useProcessingSync();
 
   const processingPhase = useProcessingStore((s) => s.processingPhase);
-  const isRunning = processingPhase === "running" || processingPhase === "preparing";
+  const isPreparing = processingPhase === "preparing";
+  const isRunning = processingPhase === "running";
   const showConfig =
     processingPhase === "idle" ||
     processingPhase === "completed" ||
@@ -47,6 +49,8 @@ export default function ProcessingPage() {
           <PopulationSection />
         </>
       )}
+
+      {isPreparing && <PreparingTransition />}
 
       {isRunning && <ExecutionDashboard />}
     </Stack>
