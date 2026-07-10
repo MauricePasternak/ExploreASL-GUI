@@ -21,10 +21,7 @@ export function normalizeAslRunId(raw: string | null | undefined): string {
 }
 
 /** True when two run labels refer to the same ExploreASL ASL_<N> session. */
-export function aslRunsEqual(
-  a: string | null | undefined,
-  b: string | null | undefined,
-): boolean {
+export function aslRunsEqual(a: string | null | undefined, b: string | null | undefined): boolean {
   if (a == null && b == null) return true;
   if (a == null || b == null) return false;
   return normalizeAslRunId(a) === normalizeAslRunId(b);
