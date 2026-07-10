@@ -344,6 +344,43 @@ describe("useProjectStore", () => {
 
       expect(useProjectStore.getState()).toStrictEqual(stateBefore);
     });
+
+    it("preserves existing structural, asl, and population fields", async () => {
+      await useProjectStore
+        .getState()
+        .createProject("/tmp/preserve-project", "Preserve Project", { dataSource: "dicom" });
+
+      // Manually set population/structural/asl status
+      useProjectStore.getState().setPopulationCompleted(true);
+      useProjectStore.getState().setLastRunProfileId("population", "my-profile", {
+        exploreASLVersion: "1.2.0",
+        matlabVersion: "9.9.0",
+        guiVersion: "1.0.0",
+      });
+
+      const config = {
+        subjects: ["sub-01_01"] as string[],
+        modules: ["structural"] as ("structural" | "asl" | "population")[],
+        selectedProfileId: "profile-1",
+        workers: 1,
+        subjectRegexp: "^sub-.*$",
+      };
+
+      // Sync config and phase
+      useProjectStore.getState().syncProcessingState({
+        config,
+        processingPhase: "running",
+      });
+
+      const project = useProjectStore.getState().project;
+      expect(project?.uiState.processing?.config).toEqual(config);
+      expect(project?.uiState.processing?.currentPhase).toBe("running");
+
+      // Sibling fields must still exist
+      expect(project?.uiState.processing?.population?.completed).toBe(true);
+      expect(project?.uiState.processing?.population?.lastRun?.profileId).toBe("my-profile");
+      expect(project?.uiState.processing?.population?.lastRun?.exploreASLVersion).toBe("1.2.0");
+    });
   });
 
   it("syncs import completion state into project uiState", async () => {

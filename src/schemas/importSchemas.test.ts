@@ -600,7 +600,7 @@ describe("validateBidsMetadataGroup", () => {
         PulseSequenceType: "EPI",
         MRAcquisitionType: "3D",
       }),
-    ).toContain("EPI readout with 3D acquisition is not supported by ExploreASL");
+    ).toContain("EPI readout with 3D acquisition is not supported by ExploreASL.");
 
     expect(
       validateBidsMetadataGroup({
@@ -608,7 +608,7 @@ describe("validateBidsMetadataGroup", () => {
         PulseSequenceType: "GRASE",
         MRAcquisitionType: "2D",
       }),
-    ).toContain("GRASE readout with 2D acquisition is not supported by ExploreASL");
+    ).toContain("GRASE readout with 2D acquisition is not supported by ExploreASL.");
 
     expect(
       validateBidsMetadataGroup({
@@ -616,7 +616,7 @@ describe("validateBidsMetadataGroup", () => {
         PulseSequenceType: "spiral",
         MRAcquisitionType: "2D",
       }),
-    ).toContain("spiral readout with 2D acquisition is not supported by ExploreASL");
+    ).toContain("spiral readout with 2D acquisition is not supported by ExploreASL.");
   });
 
   it("accepts supported PulseSequenceType + MRAcquisitionType combinations", () => {

@@ -201,7 +201,7 @@ export async function ensureParticipantsFiles(
   let existingRows: Record<string, string>[] = [];
 
   try {
-    const readPath = (await exists(tsvPath)) ? tsvPath : (rootExists ? rootTsvPath : null);
+    const readPath = (await exists(tsvPath)) ? tsvPath : rootExists ? rootTsvPath : null;
     if (readPath) {
       const content = await readTextFile(readPath);
       const lines = content
@@ -273,10 +273,10 @@ export async function ensureParticipantsFiles(
 
   for (const target of targetRows) {
     const baseId = participantBaseId(target.participant_id);
-    
+
     // Find if we already have an exact match (legacy ID and session)
     const exactMatch = existingRows.find(
-      (row) => row.participant_id === target.participant_id && row.session === target.session
+      (row) => row.participant_id === target.participant_id && row.session === target.session,
     );
 
     if (exactMatch) {
@@ -284,9 +284,7 @@ export async function ensureParticipantsFiles(
       mergedRows.push({ ...exactMatch, site: target.site });
     } else {
       // Find BIDS base ID match (e.g. "sub-01" matching "sub-01_1")
-      const baseMatch = existingRows.find(
-        (row) => row.participant_id === baseId
-      );
+      const baseMatch = existingRows.find((row) => row.participant_id === baseId);
 
       if (baseMatch) {
         // Copy BIDS row, rename participant_id to legacy target and set session/site
@@ -310,7 +308,7 @@ export async function ensureParticipantsFiles(
   // Preserve other existing non-target, non-base rows (if any)
   for (const row of existingRows) {
     const isTarget = targetRows.some(
-      (t) => t.participant_id === row.participant_id && t.session === row.session
+      (t) => t.participant_id === row.participant_id && t.session === row.session,
     );
     const isBase = baseIds.includes(row.participant_id);
     if (!isTarget && !isBase) {

@@ -393,7 +393,7 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
   if (unsupportedCombo) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: `${data.PulseSequenceType} readout with ${data.MRAcquisitionType} acquisition is not supported by ExploreASL`,
+      message: `${data.PulseSequenceType} readout with ${data.MRAcquisitionType} acquisition is not supported by ExploreASL.`,
       path: ["PulseSequenceType"],
     });
   }
@@ -656,145 +656,22 @@ export interface StagingMappingByPattern {
   entries: StagingEntry[];
 }
 
-/**
- * Validate a BidsAslMetadata object against BIDS / ExploreASL schema requirements and conditional rules.
- * Returns an array of user-friendly validation error messages.
- */
 export function validateBidsMetadataGroup(params: BidsAslMetadata): string[] {
-  const errors: string[] = [];
-
-  // Required fields for all ASL
-  if (!params.ArterialSpinLabelingType) {
-    errors.push("Arterial Spin Labeling Type is required.");
-  }
-  if (
-    params.PostLabelingDelay === undefined ||
-    params.PostLabelingDelay === null ||
-    (Array.isArray(params.PostLabelingDelay) && params.PostLabelingDelay.length === 0)
-  ) {
-    errors.push("Post Labeling Delay is required.");
-  }
-  if (!params.MRAcquisitionType) {
-    errors.push("MR Acquisition Type is required.");
-  }
-  if (params.MagneticFieldStrength === undefined || params.MagneticFieldStrength === null) {
-    errors.push("Magnetic Field Strength is required.");
-  }
-  if (!params.Manufacturer) {
-    errors.push("Manufacturer is required.");
-  }
-  if (!params.ASLContext) {
-    errors.push("ASL Context is required.");
-  }
-  if (params.BackgroundSuppression === undefined || params.BackgroundSuppression === null) {
-    errors.push("Background Suppression is required.");
+  const result = BidsAslMetadataSchema.safeParse(params);
+  if (result.success) {
+    return [];
   }
 
-  const aslContextTokens = params.ASLContext
-    ? params.ASLContext.split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
-  const hasM0Scan = aslContextTokens.includes("m0scan");
+  const errors = new Set<string>();
+  for (const issue of result.error.issues) {
+    let msg = issue.message;
 
-  if (hasM0Scan) {
-    if (params.M0Type && params.M0Type !== "Included") {
-      errors.push("M0 Type must be 'Included' when ASL Context contains 'm0scan'.");
+    // Add trailing period if missing to match formatting expectations
+    if (!msg.endsWith(".")) {
+      msg += ".";
     }
-  } else {
-    if (!params.M0Type) {
-      errors.push("M0 Type is required when ASL Context does not contain 'm0scan'.");
-    }
-    if (params.M0Type === "Included") {
-      errors.push("M0 Type cannot be 'Included' when ASL Context does not contain 'm0scan'.");
-    }
+    errors.add(msg);
   }
 
-  // Conditional rendering / validation rules
-  const aslType = params.ArterialSpinLabelingType;
-  if (aslType === "PCASL" || aslType === "CASL") {
-    if (
-      params.LabelingDuration === undefined ||
-      params.LabelingDuration === null ||
-      (Array.isArray(params.LabelingDuration) && params.LabelingDuration.length === 0)
-    ) {
-      errors.push(`Labeling Duration is required for ${aslType}.`);
-    }
-  }
-
-  if (aslType === "PASL") {
-    if (params.BolusCutOffFlag) {
-      if (
-        params.BolusCutOffDelayTime === undefined ||
-        params.BolusCutOffDelayTime === null ||
-        (Array.isArray(params.BolusCutOffDelayTime) && params.BolusCutOffDelayTime.length === 0)
-      ) {
-        errors.push("Bolus Cut Off Delay Time is required when Bolus Cut Off Flag is enabled.");
-      }
-      if (!params.BolusCutOffTechnique) {
-        errors.push("Bolus Cut Off Technique is required when Bolus Cut Off Flag is enabled.");
-      }
-    }
-  }
-
-  if (params.MRAcquisitionType === "2D") {
-    if (!params.SliceTiming || params.SliceTiming.length === 0) {
-      errors.push("Slice Timing is required when MR Acquisition Type is 2D.");
-    }
-  }
-
-  // PostLabelingDelay & BolusCutOffDelayTime relation checks
-  const pld = params.PostLabelingDelay;
-  const bcd = params.BolusCutOffDelayTime;
-  if (pld !== undefined && pld !== null && bcd !== undefined && bcd !== null) {
-    const pldArray = Array.isArray(pld) ? pld : [pld];
-    const bcdArray = Array.isArray(bcd) ? bcd : [bcd];
-    if (pldArray.length > 1 || bcdArray.length > 1) {
-      if (pldArray.length !== bcdArray.length) {
-        errors.push(
-          "Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements.",
-        );
-      } else {
-        for (let i = 0; i < pldArray.length; i++) {
-          if ((pldArray[i] === 0) !== (bcdArray[i] === 0)) {
-            errors.push(
-              "Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions.",
-            );
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  const validateRange = (val: unknown, label: string) => {
-    if (val === undefined || val === null) return;
-    const arr = Array.isArray(val) ? val : [val];
-    for (const v of arr) {
-      if (typeof v === "number" && !Number.isNaN(v)) {
-        if (v !== 0 && (v < 0.01 || v > 10)) {
-          errors.push(`${label} must be between 0.01 and 10 seconds.`);
-          break;
-        }
-      }
-    }
-  };
-
-  validateRange(params.PostLabelingDelay, "Post Labeling Delay");
-  validateRange(params.BolusCutOffDelayTime, "Bolus Cut Off Delay Time");
-  validateRange(params.LabelingDuration, "Labeling Duration");
-
-  // Validate supported PulseSequenceType + MRAcquisitionType combinations
-  const unsupportedCombo =
-    (params.PulseSequenceType === "EPI" && params.MRAcquisitionType === "3D") ||
-    (params.PulseSequenceType === "GRASE" && params.MRAcquisitionType === "2D") ||
-    (params.PulseSequenceType === "spiral" && params.MRAcquisitionType === "2D");
-
-  if (unsupportedCombo) {
-    errors.push(
-      `${params.PulseSequenceType} readout with ${params.MRAcquisitionType} acquisition is not supported by ExploreASL`,
-    );
-  }
-
-  return errors;
+  return Array.from(errors);
 }

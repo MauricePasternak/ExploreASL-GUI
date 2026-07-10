@@ -103,7 +103,8 @@ export default function StagingMappingTable({
                 </Table.Tr>
               )}
               itemContent={(_idx, entry) => {
-                const relative = entry.sourcePath.split("/sourcedata/").pop() ?? entry.sourcePath;
+                const relative =
+                  entry.sourcePath.split(/[/\\]sourcedata[/\\]/).pop() ?? entry.sourcePath;
                 const stagingPath = `${entry.subject}/${entry.session}/${entry.run}/${entry.modality}`;
                 return (
                   <>

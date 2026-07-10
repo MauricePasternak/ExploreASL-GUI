@@ -535,6 +535,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         uiState: {
           ...project.uiState,
           processing: {
+            ...project.uiState?.processing,
             config: persistedConfig,
             currentPhase: processingPhase,
           },

@@ -79,6 +79,32 @@ export const ImportUiStateSchema = z.object({
     .optional(),
 });
 
+export const LastRunSchema = z.object({
+  profileId: z.string(),
+  exploreASLVersion: z.string().optional(),
+  matlabVersion: z.string().optional(),
+  guiVersion: z.string().optional(),
+  Mtime: z.number().int().nullable().optional(),
+});
+
+export const DEFAULT_ADVANCED_VISIBILITY = {
+  showAdvancedSections: false,
+  showAdvancedM0Params: false,
+  showAdvancedQuantification: false,
+  showAdvancedGeneralSettings: false,
+  showAdvancedASLProcessing: false,
+  showAdvancedAtlases: false,
+};
+
+export const AdvancedVisibilitySchema = z.object({
+  showAdvancedSections: z.boolean().default(false),
+  showAdvancedM0Params: z.boolean().default(false),
+  showAdvancedQuantification: z.boolean().default(false),
+  showAdvancedGeneralSettings: z.boolean().default(false),
+  showAdvancedASLProcessing: z.boolean().default(false),
+  showAdvancedAtlases: z.boolean().default(false),
+});
+
 export const ProjectFileSchema = z.object({
   version: z.literal("0.1.0"),
   projectMeta: ProjectMetaSchema,
@@ -93,67 +119,28 @@ export const ProjectFileSchema = z.object({
           structural: z
             .object({
               completed: z.boolean().optional(),
-              lastRun: z
-                .object({
-                  profileId: z.string(),
-                  exploreASLVersion: z.string().optional(),
-                  matlabVersion: z.string().optional(),
-                  guiVersion: z.string().optional(),
-                  Mtime: z.number().int().nullable().optional(),
-                })
-                .optional(),
+              lastRun: LastRunSchema.optional(),
             })
             .optional(),
           asl: z
             .object({
               completed: z.boolean().optional(),
-              lastRun: z
-                .object({
-                  profileId: z.string(),
-                  exploreASLVersion: z.string().optional(),
-                  matlabVersion: z.string().optional(),
-                  guiVersion: z.string().optional(),
-                  Mtime: z.number().int().nullable().optional(),
-                })
-                .optional(),
+              lastRun: LastRunSchema.optional(),
             })
             .optional(),
           population: z
             .object({
               completed: z.boolean().optional(),
-              lastRun: z
-                .object({
-                  profileId: z.string(),
-                  exploreASLVersion: z.string().optional(),
-                  matlabVersion: z.string().optional(),
-                  guiVersion: z.string().optional(),
-                  Mtime: z.number().int().nullable().optional(),
-                })
-                .optional(),
+              lastRun: LastRunSchema.optional(),
             })
             .optional(),
         })
         .optional(),
       datapar: z
         .object({
-          advancedVisibility: z
-            .object({
-              showAdvancedSections: z.boolean().default(false),
-              showAdvancedM0Params: z.boolean().default(false),
-              showAdvancedQuantification: z.boolean().default(false),
-              showAdvancedGeneralSettings: z.boolean().default(false),
-              showAdvancedASLProcessing: z.boolean().default(false),
-              showAdvancedAtlases: z.boolean().default(false),
-            })
-            .default({
-              showAdvancedSections: false,
-              showAdvancedM0Params: false,
-              showAdvancedQuantification: false,
-              showAdvancedGeneralSettings: false,
-              showAdvancedASLProcessing: false,
-              showAdvancedAtlases: false,
-            })
-            .optional(),
+          advancedVisibility: AdvancedVisibilitySchema.default(
+            DEFAULT_ADVANCED_VISIBILITY,
+          ).optional(),
         })
         .optional(),
       manifest: ManifestUiStateSchema.optional(),
@@ -269,14 +256,7 @@ export const DEFAULT_PROJECT_FILE = (id: string, name: string, rootPath: string)
       selectedProfileId: undefined,
     },
     datapar: {
-      advancedVisibility: {
-        showAdvancedSections: false,
-        showAdvancedM0Params: false,
-        showAdvancedQuantification: false,
-        showAdvancedGeneralSettings: false,
-        showAdvancedASLProcessing: false,
-        showAdvancedAtlases: false,
-      },
+      advancedVisibility: DEFAULT_ADVANCED_VISIBILITY,
     },
   },
   mappingState: {},
