@@ -17,6 +17,8 @@ import type { DataParState } from "../../schemas/dataParSchema";
 import type { ManifestVerdict } from "../../schemas/project";
 import type { MetadataGroup } from "../../schemas/importSchemas";
 import { summarizeAslContext } from "../../lib/bids/sidecar";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 
 const ARRAY_PARAM_UNIQUE_THRESHOLD = 5;
 
@@ -321,8 +323,6 @@ export default function ManifestPreview() {
           variant="outline"
           size="sm"
           onClick={async () => {
-            const { save } = await import("@tauri-apps/plugin-dialog");
-            const { writeTextFile } = await import("@tauri-apps/plugin-fs");
             const projectRoot = project?.projectMeta?.rootPath;
             const defaultPath = projectRoot ? `${projectRoot}/manifest.md` : "manifest.md";
             const path = await save({
@@ -341,8 +341,6 @@ export default function ManifestPreview() {
           variant="outline"
           size="sm"
           onClick={async () => {
-            const { save } = await import("@tauri-apps/plugin-dialog");
-            const { writeTextFile } = await import("@tauri-apps/plugin-fs");
             const projectRoot = project?.projectMeta?.rootPath;
             const defaultPath = projectRoot ? `${projectRoot}/manifest.html` : "manifest.html";
             const path = await save({

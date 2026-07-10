@@ -14,6 +14,14 @@ export default defineConfig(async () => ({
   define: {
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(packageJson.version),
   },
+  build: {
+    chunkSizeWarningLimit: 3000,
+    rolldownOptions: {
+      checks: {
+        largeBarrelModules: false,
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

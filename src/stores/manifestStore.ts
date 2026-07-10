@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import type { SubjectQcOutputs } from "../lib/manifestQc";
+import { readAllSubjectQcOutputs, type SubjectQcOutputs } from "../lib/manifestQc";
+import { useProjectStore } from "./projectStore";
+import { useProcessingStore } from "./processingStore";
+import { exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 
 interface ManifestState {
   step: 0 | 1;
@@ -33,9 +37,6 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
   resetStep: () => set({ step: 0 }),
 
   recomputeStaleVerdicts: async () => {
-    const { useProjectStore } = await import("./projectStore");
-    const { invoke } = await import("@tauri-apps/api/core");
-
     const project = useProjectStore.getState().project;
     const projectRoot = project?.projectMeta.rootPath;
     if (!projectRoot) return;
@@ -69,9 +70,6 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
     if (get().qcLoading) return;
     set({ qcLoading: true });
     try {
-      const { readAllSubjectQcOutputs } = await import("../lib/manifestQc");
-      const { useProcessingStore } = await import("./processingStore");
-
       let subjects = useProcessingStore.getState().availableSubjects;
       if (subjects.length === 0) {
         await useProcessingStore
@@ -93,7 +91,6 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
   },
 
   loadDataPar: async (projectRoot) => {
-    const { exists, readTextFile } = await import("@tauri-apps/plugin-fs");
     const path = `${projectRoot}/derivatives/ExploreASL/dataPar.json`;
     try {
       if (await exists(path)) {
