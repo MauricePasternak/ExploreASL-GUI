@@ -321,8 +321,10 @@ export default function ChartPanel() {
           borderRadius: "4px",
           fontSize: "12px",
           lineHeight: "1.4",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-          zIndex: 100,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+          zIndex: 9999,
+          minWidth: "240px",
+          pointerEvents: "none",
         }}
       >
         <div>
