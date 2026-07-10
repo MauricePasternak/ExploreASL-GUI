@@ -124,6 +124,8 @@ export async function ensureParticipantsFiles(
   const tsvPath = `${derivativesDir}/participants.tsv`;
   const jsonPath = `${derivativesDir}/participants.json`;
 
+  const rootTsvPath = `${projectRoot}/participants.tsv`;
+  const rootExists = dataSource === "bids" && (await exists(rootTsvPath));
   const rootSiteMap =
     dataSource === "bids" ? await loadRootSiteMap(projectRoot) : new Map<string, string>();
   const preserveRootSite = dataSource === "bids" && rootSiteMap.size > 0;
@@ -142,7 +144,7 @@ export async function ensureParticipantsFiles(
       return;
     }
 
-    // Strip site column if files exist (DICOM path)
+    // Strip site column if files exist (DICOM path or BIDS without root site column)
     try {
       if (await exists(tsvPath)) {
         const content = await readTextFile(tsvPath);
@@ -194,13 +196,14 @@ export async function ensureParticipantsFiles(
     console.error("Failed to create derivatives directory:", err);
   }
 
-  // 2. Parse existing TSV if it exists
+  // 2. Parse existing TSV (or fallback to root TSV if derivatives doesn't exist yet)
   let existingHeaders: string[] = [];
   let existingRows: Record<string, string>[] = [];
 
   try {
-    if (await exists(tsvPath)) {
-      const content = await readTextFile(tsvPath);
+    const readPath = (await exists(tsvPath)) ? tsvPath : (rootExists ? rootTsvPath : null);
+    if (readPath) {
+      const content = await readTextFile(readPath);
       const lines = content
         .split(/\r?\n/)
         .map((l) => l.trim())
@@ -218,7 +221,7 @@ export async function ensureParticipantsFiles(
       }
     }
   } catch (err) {
-    console.warn("Failed to read existing participants.tsv (will overwrite):", err);
+    console.warn("Failed to read existing/root participants.tsv:", err);
   }
 
   // 3. Build target rows
@@ -245,7 +248,7 @@ export async function ensureParticipantsFiles(
     const rootSite = rootSiteMap.get(baseId);
     if (rootSite) {
       siteVal = rootSite;
-    } else if (rowMatch) {
+    } else if (enabled && rowMatch) {
       const groupMatch = metadataGroups.find((g) => g.id === rowMatch.groupId);
       if (groupMatch) {
         siteVal = groupMatch.label.trim().replace(/\s+/g, "_");
@@ -265,23 +268,57 @@ export async function ensureParticipantsFiles(
   }
 
   // 4. Merge target rows into existing rows
+  const mergedRows: Record<string, string>[] = [];
+  const baseIds = config.subjects.map(participantBaseId);
+
   for (const target of targetRows) {
-    let found = false;
-    for (const row of existingRows) {
-      if (row.participant_id === target.participant_id && row.session === target.session) {
-        row.site = target.site;
-        found = true;
-        break;
+    const baseId = participantBaseId(target.participant_id);
+    
+    // Find if we already have an exact match (legacy ID and session)
+    const exactMatch = existingRows.find(
+      (row) => row.participant_id === target.participant_id && row.session === target.session
+    );
+
+    if (exactMatch) {
+      // Keep exact match, update site
+      mergedRows.push({ ...exactMatch, site: target.site });
+    } else {
+      // Find BIDS base ID match (e.g. "sub-01" matching "sub-01_1")
+      const baseMatch = existingRows.find(
+        (row) => row.participant_id === baseId
+      );
+
+      if (baseMatch) {
+        // Copy BIDS row, rename participant_id to legacy target and set session/site
+        mergedRows.push({
+          ...baseMatch,
+          participant_id: target.participant_id,
+          session: target.session,
+          site: target.site,
+        });
+      } else {
+        // Fallback: create new row
+        mergedRows.push({
+          participant_id: target.participant_id,
+          session: target.session,
+          site: target.site,
+        });
       }
     }
-    if (!found) {
-      existingRows.push({
-        participant_id: target.participant_id,
-        session: target.session,
-        site: target.site,
-      });
+  }
+
+  // Preserve other existing non-target, non-base rows (if any)
+  for (const row of existingRows) {
+    const isTarget = targetRows.some(
+      (t) => t.participant_id === row.participant_id && t.session === row.session
+    );
+    const isBase = baseIds.includes(row.participant_id);
+    if (!isTarget && !isBase) {
+      mergedRows.push(row);
     }
   }
+
+  existingRows = mergedRows;
 
   // 5. Sort all rows by participant_id then session
   existingRows.sort((a, b) => {
