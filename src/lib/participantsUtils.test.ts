@@ -500,5 +500,85 @@ describe("participantsUtils", () => {
       expect(lineSiemens).toBeDefined();
       expect(lineSiemens).toContain("Siemens_Group");
     });
+
+    it("merges BIDS base rows (e.g., sub-C9ORF007Philips) into legacy target rows (e.g., sub-C9ORF007Philips_01) and removes the base rows", async () => {
+      const existingTsv =
+        "participant_id\tAge\tGender\n" +
+        "sub-C9ORF007Philips\t21\tF\n";
+
+      vi.mocked(exists).mockImplementation(async (path) => {
+        const p = path.toString();
+        if (p.endsWith("participants.tsv")) return true;
+        if (p.endsWith("ExploreASL")) return false;
+        return false;
+      });
+
+      vi.mocked(readTextFile).mockImplementation(async (path) => {
+        if (path.toString().endsWith("participants.tsv")) return existingTsv;
+        return "";
+      });
+
+      await ensureParticipantsFiles(
+        "/test/project",
+        config,
+        mappingState,
+        availableSubjects,
+        true,
+        "bids",
+      );
+
+      const tsvCall = vi
+        .mocked(writeTextFile)
+        .mock.calls.find((c) => c[0].toString().endsWith("participants.tsv"));
+      expect(tsvCall).toBeDefined();
+      const tsvContent = tsvCall![1] as string;
+      const lines = tsvContent.split("\n").filter(Boolean);
+
+      // Should contain the headers including Age and Gender
+      expect(lines[0]).toBe("participant_id\tsession\tsite\tAge\tGender");
+
+      // Should have merged sub-C9ORF007Philips demographics to sub-C9ORF007Philips_01 (since it was mapped to session 01 in availableSubjects)
+      const line01_1 = lines.find((l) => l.startsWith("sub-C9ORF007Philips_01\t"));
+      expect(line01_1).toBeDefined();
+      expect(line01_1).toBe("sub-C9ORF007Philips_01\tASL_1\tPhilips_Override\t21\tF");
+
+      // Should NOT contain the base sub-C9ORF007Philips row anymore
+      const lineBase = lines.find((l) => l.startsWith("sub-C9ORF007Philips\t"));
+      expect(lineBase).toBeUndefined();
+    });
+
+    it("BIDS-direct + correction disabled + root participants.tsv without site: does not generate or modify derivatives participants.tsv", async () => {
+      vi.mocked(exists).mockImplementation(async (path) => {
+        const p = path.toString();
+        // Root TSV exists, derivatives does not
+        if (p.endsWith("/participants.tsv") && !p.includes("derivatives")) return true;
+        if (p.endsWith("ExploreASL")) return false;
+        return false;
+      });
+
+      vi.mocked(readTextFile).mockImplementation(async (path) => {
+        if (
+          path.toString().endsWith("/participants.tsv") &&
+          !path.toString().includes("derivatives")
+        ) {
+          return "participant_id\tage\nsub-C9ORF007Philips\t21\n";
+        }
+        return "";
+      });
+
+      await ensureParticipantsFiles(
+        "/test/project",
+        config,
+        mappingState,
+        availableSubjects,
+        false,
+        "bids",
+      );
+
+      const tsvCall = vi
+        .mocked(writeTextFile)
+        .mock.calls.find((c) => c[0].toString().endsWith("participants.tsv"));
+      expect(tsvCall).toBeUndefined();
+    });
   });
 });
