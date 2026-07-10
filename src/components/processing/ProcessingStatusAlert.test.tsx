@@ -247,6 +247,30 @@ describe("ProcessingStatusAlert", () => {
       });
       expect(screen.getByText(/Population module requires exactly 1 worker/i)).toBeInTheDocument();
     });
+
+    it("shows red error when ASL module is selected and some selected subjects lack ASL data", async () => {
+      mockConfig = {
+        subjects: ["sub-001_01", "sub-002_01"],
+        modules: ["asl"],
+        selectedProfileId: validProfile.id,
+        workers: 1,
+      };
+      mockAvailableSubjects = [
+        { subjectSession: "sub-001_01", hasStructural: true, hasASL: true } as any,
+        { subjectSession: "sub-002_01", hasStructural: true, hasASL: false } as any,
+      ];
+      renderAlert();
+      await waitFor(() => {
+        expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
+          "error",
+        );
+      });
+      expect(
+        screen.getByText(
+          /Cannot run ASL module because some selected subjects lack ASL data: sub-002_01/i,
+        ),
+      ).toBeInTheDocument();
+    });
   });
 
   describe("warning state", () => {
