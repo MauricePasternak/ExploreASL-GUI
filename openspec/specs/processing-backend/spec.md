@@ -8,17 +8,18 @@ TBD - created by archiving change processing-module. Update Purpose after archiv
 
 ### Requirement: run_pipeline Command
 
-The `run_pipeline` Tauri command SHALL accept: `project_root: String`, `matlab_path: String`, `explore_asl_path: String`, `data_par_json: String`, `b_process: Vec<bool>`, `workers: u32`, `subject_regexp: String`. It SHALL return `Vec<u32>` (worker PIDs).
+The `run_pipeline` Tauri command SHALL accept: `project_root: String`, `execution_profile: ExecutionProfile`, `data_par_json: String`, `b_process: Vec<bool>`, `workers: u32`, `subject_regexp: String`. It SHALL return `Vec<u32>` (worker PIDs). Tauri handles deserialization natively from the typed object. The command SHALL dispatch on the profile `type` and construct the appropriate command. For the `matlab` type, the command SHALL construct worker invocations using the profile's `matlabPath` and `exploreAslPath`.
 
 Before spawning workers, the command SHALL:
 
-1. Write `data_par_json` to `<project_root>/derivatives/ExploreASL/dataPar.json`
-2. Create `<project_root>/derivatives/ExploreASL/lock/` if it doesn't exist
-3. Clear all stale `locked/` directories under the lock path
-4. Delete `.status` files for modules matching `b_process` on subjects matching `subject_regexp`
-5. Delete existing module log files for modules matching `b_process` on subjects matching `subject_regexp` from `<project_root>/derivatives/ExploreASL/log/`
-6. Sanity-check that no lock file watcher is already running
-7. Spawn N workers via `matlab -batch "addpath('...'); ExploreASL(root, 0, bProcess, 0, i, n)"`
+1. **Preparation-phase validation**: Call `execution_profile.validate()`. If validation fails, SHALL return an error without performing any destructive operations. This provides a final safety net even though the frontend validates profiles on selection and before calling the command.
+2. Write `data_par_json` to `<project_root>/derivatives/ExploreASL/dataPar.json`
+3. Create `<project_root>/derivatives/ExploreASL/lock/` if it doesn't exist
+4. Clear all stale `locked/` directories under the lock path
+5. Delete `.status` files for modules matching `b_process` on subjects matching `subject_regexp`
+6. Delete existing module log files for modules matching `b_process` on subjects matching `subject_regexp` from `<project_root>/derivatives/ExploreASL/log/`
+7. Sanity-check that no lock file watcher is already running
+8. Spawn N workers via `matlab -batch "addpath('...'); ExploreASL(root, 0, bProcess, 0, i, n)"`
 
 #### Scenario: Status file deletion for selected modules
 
@@ -166,12 +167,12 @@ The `b_process` vector SHALL map to ExploreASL lock directory names: index 0 →
 
 ### Requirement: Worker Invocation Pattern
 
-Each worker SHALL be invoked as: `matlab -batch "addpath('<exploreasl_path>'); ExploreASL('<project_root>', 0, [<b_process>], 0, <iWorker>, <nWorkers>)"`. Workers SHALL be spawned with PIDs tracked in `AppState.processing_state`.
+Each worker SHALL be invoked using the execution profile to determine the command. For `matlab` profiles, the invocation pattern SHALL remain: `<profile.matlabPath> -batch "addpath('<profile.exploreAslPath>'); ExploreASL('<project_root>', 0, [<b_process>], 0, <iWorker>, <nWorkers>)"`. The profile's paths SHALL be used instead of separate `matlab_path` and `explore_asl_path` command arguments. Workers SHALL be spawned with PIDs tracked in `AppState.processing_state`.
 
 #### Scenario: Three workers for Structural+ASL
 
-- **WHEN** `workers = 3` and `b_process = [true, true, false]`
-- **THEN** 3 MATLAB processes SHALL be spawned with `iWorker` values 1, 2, 3 respectively
+- **WHEN** `workers = 3`, `b_process = [true, true, false]`, and the execution profile is a `MatlabProfile`
+- **THEN** 3 MATLAB processes SHALL be spawned using `profile.matlabPath` with `iWorker` values 1, 2, 3 respectively
 
 ### Requirement: Module Ordering Handled by ExploreASL
 
@@ -202,40 +203,23 @@ Worker supervisor threads SHALL NOT stream stdout to the frontend. They SHALL on
 
 ### Requirement: ExploreASL Version Detection
 
-The system SHALL detect the ExploreASL version by scanning the ExploreASL installation directory for files named `VERSION_*`. The version string SHALL be the portion after the `VERSION_` prefix (e.g., `VERSION_1.11.0` → `"1.11.0"`, `VERSION_2.0.0_BETA` → `"2.0.0_BETA"`). If multiple `VERSION_*` files exist, the first found SHALL be used. If no such file exists, the version SHALL be `None`. If the directory does not exist, the version SHALL be `None`.
+The `detect_exploreasl_version` Tauri command SHALL remain unchanged. Its usage SHALL shift from being called with the global `exploreAslPath` to being called with the `exploreAslPath` from the selected execution profile. The version SHALL be detected:
 
-A Tauri command `detect_exploreasl_version(explore_asl_path: String) -> Option<String>` SHALL expose this detection to the frontend. The version SHALL be detected and displayed in three scenarios:
+1. **On app startup**: during `validate_all_execution_profiles`, each profile's `exploreAslVersion` SHALL be re-detected and persisted if changed. Save-time validation does NOT detect versions — it is path-existence only.
+2. **During preparation phase of `run_pipeline`**: the version SHALL be extracted from the deserialized profile's `exploreAslVersion` field (or re-detected from `exploreAslPath`) and logged.
+3. **At pipeline runtime**: `capture_environment_versions` (unchanged signature) captures actual on-disk versions. This result is stored in `lastRun` alongside the `profileId` for an accurate historical record.
 
-1. **On app startup**: after settings are loaded, if `exploreAslPath` is non-empty
-2. **When global settings are saved**: after validating the ExploreASL path, the version SHALL be re-detected and stored
-3. **During preparation phase of `run_pipeline`**: after validating the ExploreASL path and before any destructive operations, the version SHALL be logged to the Rust log
+The Settings modal SHALL display the detected version on each profile's ExploreASL path input, rather than as a single global indicator.
 
-The frontend SHALL display the detected version as colored text below the ExploreASL path input in the Settings modal. A detected version SHALL appear in teal text ("ExploreASL v{version} detected"). A missing version on a valid path SHALL appear in orange text ("ExploreASL version not detected"). No version text SHALL be shown when the path is empty.
+#### Scenario: Version detected from profile on startup validation
 
-#### Scenario: Version file found
+- **WHEN** startup validation runs and a `MatlabProfile` has `exploreAslPath` pointing to a directory containing `VERSION_1.11.0`
+- **THEN** `profile.exploreAslVersion` SHALL be set to `"1.11.0"` and persisted if changed from the stored value
 
-- **WHEN** `VERSION_1.11.0` exists in the ExploreASL directory
-- **THEN** `detect_exploreasl_version` SHALL return `Some("1.11.0")`
+#### Scenario: Version logged during preparation from profile
 
-#### Scenario: Beta version detected
-
-- **WHEN** `VERSION_2.0.0_BETA` exists in the ExploreASL directory
-- **THEN** `detect_exploreasl_version` SHALL return `Some("2.0.0_BETA")`
-
-#### Scenario: No version file
-
-- **WHEN** the ExploreASL directory exists but contains no `VERSION_*` file
-- **THEN** `detect_exploreasl_version` SHALL return `None` and the settings modal SHALL display orange "ExploreASL version not detected"
-
-#### Scenario: Directory missing
-
-- **WHEN** the ExploreASL directory does not exist
-- **THEN** `detect_exploreasl_version` SHALL return `None` without error
-
-#### Scenario: Version logged during preparation
-
-- **WHEN** `run_pipeline` is called with a valid ExploreASL path
-- **THEN** the detected version (or `"unknown"`) SHALL be logged via `log::info!` before any destructive operations
+- **WHEN** `run_pipeline` is called with a `MatlabProfile` that has `exploreAslVersion: "1.11.0"`
+- **THEN** the version `"1.11.0"` SHALL be logged via `log::info!` before any destructive operations
 
 ### Requirement: startProcessing calls ensure_rawdata_dir for BIDS projects
 

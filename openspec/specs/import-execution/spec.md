@@ -2,13 +2,15 @@
 
 ### Requirement: Import execution pipeline
 
-The system SHALL provide a single Rust command `run_import_pipeline(staging_root, staging_entries, sourcestructure_json, studypar_json, matlab_path, exploreasl_path, subject_list)` that atomically performs: (1) delete `.easl_staging/` if it exists, (2) create the standardized 4-level symlink tree at `.easl_staging/sourcedata/` from `staging_entries`, (3) write clean ExploreASL `sourcestructure.json` and `studyPar.json` configs to `.easl_staging/`, (4) spawn MATLAB as `matlab -batch "addpath('exploreasl_path'); ExploreASL('staging_root', [1,1,0], 0, 0)"`, (5) return the process PID on success or an error string on failure. The `staging_entries` parameter contains the GUI staging mappings with subject, session, run, modality, and source path. The `subject_list` parameter provides known subject names for stdout pattern matching. The command SHALL emit a `ImportPrepareComplete` event after steps 1-3 succeed and before MATLAB is spawned.
+The system SHALL provide a single Rust command `run_import_pipeline(staging_root, staging_entries, sourcestructure_json, studypar_json, execution_profile, subject_list, subjects_to_preserve)` that atomically performs: (1) call `execution_profile.validate()` — if validation fails, return an error without performing any destructive operations; (2) delete `.easl_staging/` if it exists; (3) create the standardized 4-level symlink tree at `.easl_staging/sourcedata/` from `staging_entries`; (4) write clean ExploreASL `sourcestructure.json` and `studyPar.json` configs to `.easl_staging/`; (5) dispatch on the profile `type` and spawn the appropriate command (for `matlab` type: `matlab -batch "addpath('<exploreAslPath>'); ExploreASL('<staging_root>', [1,1,0], 0, 0)"` using the profile's `matlabPath` and `exploreAslPath`); (6) return the process PID on success or an error string on failure. The `staging_entries` parameter contains the GUI staging mappings with subject, session, run, modality, and source path. The `subject_list` parameter provides known subject names for stdout pattern matching. The command SHALL emit a `ImportPrepareComplete` event after steps 2-4 succeed and before the subprocess is spawned.
 
-Prior to spawning MATLAB, lock files for selected subjects SHALL be deleted and lock files for unselected fresh subjects SHALL be preserved via `copyLockFilesForRetry`.
+**Preparation-phase validation**: Before performing any destructive operations (deleting `.easl_staging/`, creating symlinks, writing configs), the command SHALL call `execution_profile.validate()`. Only after validation passes SHALL the command proceed to staging directory setup. This provides a final safety net even though the frontend validates profiles on selection and before calling the command.
+
+Prior to spawning the subprocess, lock files for selected subjects SHALL be deleted and lock files for unselected fresh subjects SHALL be preserved via `copyLockFilesForRetry`.
 
 #### Scenario: Successful pipeline start
 
-- **WHEN** `run_import_pipeline` is called with valid paths and configured MATLAB
+- **WHEN** `run_import_pipeline` is called with valid paths and a valid execution profile
 - **THEN** the staging directory is created, configs are written, MATLAB is spawned, and the PID is returned
 
 #### Scenario: Symlink creation failure
@@ -18,7 +20,7 @@ Prior to spawning MATLAB, lock files for selected subjects SHALL be deleted and 
 
 #### Scenario: MATLAB not found
 
-- **WHEN** `run_import_pipeline` is called and the MATLAB executable cannot be found at the specified path
+- **WHEN** `run_import_pipeline` is called with an execution profile whose `matlabPath` does not exist
 - **THEN** the command returns an error string describing the missing executable
 
 ### Requirement: Real-time stdout streaming
@@ -169,29 +171,29 @@ A global setting "Preserve staging directory" SHALL be added to `globalStore.set
 
 ### Requirement: MATLAB executable selection for import
 
-The import step 5 execution view SHALL provide a MATLAB version select dropdown (matching the Processing module's `PipelineConfig` pattern). The dropdown SHALL list all configured MATLAB installations from `globalStore.settings.matlabInstallations`, displaying each installation's label, version (if available), and path. The selection SHALL default to the first installation. The selected `matlabPath` SHALL be used when calling `runImportPipeline`.
+This requirement is **replaced** by the Profile selector defined in the `execution-profiles` capability spec. The import step 5 execution view SHALL provide an Execution Profile select dropdown (replacing the MATLAB version select dropdown). The dropdown SHALL list all configured execution profiles from `globalStore.settings.executionProfiles`, displaying each profile's label and type. The selection SHALL be stored as `selectedProfileId`. The selected profile SHALL be serialized and passed to `runImportPipeline`.
 
-If no MATLAB installations are configured, the "Start Import" button SHALL be disabled and an alert message SHALL be shown.
+If no execution profiles are configured, the "Start Import" button SHALL be disabled and an alert message SHALL be shown.
 
-#### Scenario: Single MATLAB installation
+#### Scenario: Single profile
 
-- **WHEN** `matlabInstallations` has one entry
+- **WHEN** `executionProfiles` has one entry
 - **THEN** the dropdown shows that entry as the only option and it is pre-selected
 
-#### Scenario: Multiple MATLAB installations
+#### Scenario: Multiple profiles
 
-- **WHEN** `matlabInstallations` has multiple entries
+- **WHEN** `executionProfiles` has multiple entries
 - **THEN** the dropdown lists all entries and the user can select which to use for import
 
-#### Scenario: No MATLAB installation configured
+#### Scenario: No profiles configured
 
-- **WHEN** `matlabInstallations` is empty or `exploreAslPath` is empty
+- **WHEN** `executionProfiles` is empty
 - **THEN** the "Start Import" button is disabled and an alert is shown
 
-#### Scenario: Selected MATLAB path used for import
+#### Scenario: Selected profile used for import
 
-- **WHEN** the user selects "MATLAB R2024b" from the dropdown and clicks "Start Import"
-- **THEN** `runImportPipeline` is called with `matlabPath` set to the path of that installation
+- **WHEN** the user selects a profile from the dropdown and clicks "Start Import"
+- **THEN** `runImportPipeline` is called with the full typed `ExecutionProfile` object, not separate `matlabPath` / `exploreAslPath` strings
 
 ### Requirement: ImportProgress table population
 
