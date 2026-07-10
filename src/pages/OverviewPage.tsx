@@ -8,6 +8,7 @@ import {
   Grid,
   Group,
   Stack,
+  Tabs,
   Text,
   ThemeIcon,
   Title,
@@ -40,6 +41,7 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { tempDir, appDataDir, join } from "@tauri-apps/api/path";
 
 interface TreeRowProps {
   level: number;
@@ -96,7 +98,6 @@ export default function OverviewPage() {
     let active = true;
     async function fetchPaths() {
       try {
-        const { tempDir, appDataDir, join } = await import("@tauri-apps/api/path");
         const temp = await tempDir();
         const appData = await appDataDir();
         const devPath = await join(temp, "exploreasl-gui-logs", "dev.log");
@@ -438,18 +439,56 @@ export default function OverviewPage() {
               icon={<IconRoute size={16} color="var(--mantine-color-blue-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                Step 3 — Tell the GUI Where ExploreASL Is
+                Step 3 — Configure Execution Profiles
               </Title>
             </Accordion.Control>
             <Accordion.Panel>
               <Text size="sm" mb="xs">
-                When you first launch ExploreASL GUI, it will ask you to locate your ExploreASL
-                installation folder. Navigate to the folder you extracted or cloned in Step 2 — it
-                should be named <code>ExploreASL</code> (or <code>ExploreASL-develop</code>) and
-                contain a file called <code>ExploreASL.m</code> inside it.
+                ExploreASL GUI uses <strong>Execution Profiles</strong> to define how the ExploreASL
+                pipeline is executed. This design allows you to configure multiple installations or
+                backends and choose between them at runtime.
+              </Text>
+              <Text size="sm" component="div" mb="xs">
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>
+                    <strong>First-Run Onboarding:</strong> If no execution profiles are configured
+                    on startup, the landing page displays a welcome card prompting you to open
+                    Settings. Project creation/opening is blocked until at least one valid profile
+                    exists.
+                  </li>
+                  <li>
+                    <strong>MATLAB Profile Setup:</strong> Open Settings, go to{" "}
+                    <strong>Execution Profiles</strong>, and click <strong>Add Profile</strong>.
+                    Specify:
+                    <ul style={{ margin: "4px 0 0 0", paddingLeft: 20 }}>
+                      <li>
+                        <strong>MATLAB Path:</strong> The path to the MATLAB executable. Click{" "}
+                        <strong>Detect MATLAB</strong> to let the app auto-discover installations on
+                        your system, or <strong>Browse</strong> to select it.
+                      </li>
+                      <li>
+                        <strong>ExploreASL Path:</strong> The path to the folder containing{" "}
+                        <code>ExploreASL.m</code> from Step 2.
+                      </li>
+                    </ul>
+                  </li>
+                  <li>
+                    <strong>Validation:</strong> The app validates profiles on save, app startup,
+                    profile switch, and pre-execution. This checks that the MATLAB executable exists
+                    and that <code>ExploreASL.m</code> is present, and automatically extracts the
+                    ExploreASL version.
+                  </li>
+                  <li>
+                    <strong>Execution Selection:</strong> When running an Import or Processing
+                    pipeline, you can select which execution profile to run from a dropdown menu.
+                  </li>
+                </ul>
               </Text>
               <Text size="xs" c="dimmed">
-                You can change this path at any time from the GUI's global settings.
+                While currently restricted to local MATLAB and Github-based ExploreASL, the
+                profiling system is built to support future pre-compiled packages (running via the
+                free MATLAB Runtime) or containerized engines (Docker, Apptainer, etc.) to run
+                independent of a local MATLAB dependency.
               </Text>
               <Alert
                 color="yellow"
@@ -823,12 +862,12 @@ export default function OverviewPage() {
                   <IconDatabase size={14} />
                 </ThemeIcon>
                 <Text fw={700} size="sm">
-                  1. Import DICOM
+                  1. Import Dataset
                 </Text>
               </Group>
               <Text size="xs" c="dimmed">
-                Ingest directories, tokenize paths, and map metadata to create standard BIDS
-                structures.
+                Convert raw DICOM directories to BIDS, or directly import an existing BIDS-compliant
+                dataset.
               </Text>
             </Card>
           </Grid.Col>
@@ -938,220 +977,327 @@ export default function OverviewPage() {
 
       {/* DETAILED WORKFLOW BREAKDOWN */}
       <Stack gap="xl">
-        {/* STEP 1: IMPORT FROM DICOM */}
+        {/* STEP 1: IMPORT DATASET */}
         <Stack gap="md" data-testid="section-import">
           <Group gap="xs">
             <ThemeIcon color="blue" size="lg" radius="xl">
               <IconDatabase size={20} />
             </ThemeIcon>
             <Title order={2} component="h1">
-              1. Import from DICOM
+              1. Dataset Import (DICOM or BIDS-direct)
             </Title>
           </Group>
           <Text size="sm">
-            Translating raw MRI scanner outputs into structured BIDS (Brain Imaging Data Structure)
-            formats. The process breaks down into several automated and user-guided sub-steps:
+            Translating raw MRI scanner outputs or pre-existing datasets into structured BIDS (Brain
+            Imaging Data Structure) formats. The app supports two different pathways to import your
+            data:
           </Text>
 
-          <Accordion variant="separated" data-testid="import-accordion">
-            <Accordion.Item value="ingest">
-              <Accordion.Control
-                icon={<IconDatabase size={16} color="var(--mantine-color-blue-filled)" />}
+          <Tabs defaultValue="dicom" data-testid="import-tabs">
+            <Tabs.List mb="md">
+              <Tabs.Tab
+                value="dicom"
+                leftSection={<IconDatabase size={16} />}
+                data-testid="tab-dicom"
               >
-                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  1.1 Ingest DICOMs (DICOM to NIfTI)
-                </Title>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Text size="sm" mb="xs">
-                  The primary purpose of this step is to understand where the DICOM raw data is
-                  located and how it is organized. The GUI scans the raw project folders to identify
-                  all available DICOM series. ExploreASL converts raw multi-slice DICOM datasets
-                  into single or 4D NIfTI (Neuroimaging Informatics Technology Initiative) image
-                  files (`.nii` or `.nii.gz`).
-                </Text>
-                <Text size="xs" c="dimmed">
-                  This consolidates thousands of separate medical slices into individual volumes,
-                  simplifying file management and speeding up processing.
-                </Text>
-              </Accordion.Panel>
-            </Accordion.Item>
+                DICOM Import Wizard
+              </Tabs.Tab>
+              <Tabs.Tab value="bids" leftSection={<IconCheck size={16} />} data-testid="tab-bids">
+                Direct BIDS Import
+              </Tabs.Tab>
+            </Tabs.List>
 
-            <Accordion.Item value="tokenize">
-              <Accordion.Control
-                icon={<IconRoute size={16} color="var(--mantine-color-blue-filled)" />}
-              >
-                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  1.2 Tokenize Paths (NIfTI to BIDS)
-                </Title>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Text size="sm" mb="xs">
-                  Map the directory segments of your raw data paths to BIDS categories like Subject,
-                  Session, Run, and Modality.
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Since different scanners and labs organize directories differently (e.g.,
-                  `Project/Subject_01/Visit_A/ASL` vs `Project/Visit_A/Subject_01/T1`), this step
-                  tells the GUI how to parse folder names using a regular expression generator
-                  behind the scenes.
-                </Text>
-              </Accordion.Panel>
-            </Accordion.Item>
+            <Tabs.Panel value="dicom">
+              <Text size="sm" mb="md">
+                Use the <strong>DICOM Import Wizard</strong> if you have raw scanner DICOM files.
+                The wizard walks you through scanning your files, tokenizing directories to BIDS
+                nomenclature, resolving metadata/aliases, and executing dcm2niix conversion.
+              </Text>
+              <Accordion variant="separated" data-testid="import-accordion">
+                <Accordion.Item value="ingest">
+                  <Accordion.Control
+                    icon={<IconDatabase size={16} color="var(--mantine-color-blue-filled)" />}
+                  >
+                    <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                      1.1 Ingest DICOMs (DICOM to NIfTI)
+                    </Title>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Text size="sm" mb="xs">
+                      The primary purpose of this step is to understand where the DICOM raw data is
+                      located and how it is organized. The GUI scans the raw project folders to
+                      identify all available DICOM series. ExploreASL converts raw multi-slice DICOM
+                      datasets into single or 4D NIfTI (Neuroimaging Informatics Technology
+                      Initiative) image files (`.nii` or `.nii.gz`).
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      This consolidates thousands of separate medical slices into individual
+                      volumes, simplifying file management and speeding up processing.
+                    </Text>
+                  </Accordion.Panel>
+                </Accordion.Item>
 
-            <Accordion.Item value="aliases">
-              <Accordion.Control
-                icon={<IconTags size={16} color="var(--mantine-color-blue-filled)" />}
-              >
-                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  1.3 Resolve Aliases
-                </Title>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Text size="sm" mb="xs">
-                  Map irregular or non-standard subject names, visit labels, or modality strings
-                  into standardized names.
-                </Text>
-                <Text size="xs" c="dimmed">
-                  For example, if your folder contains "visit1", "V1", or "baseline", you can map
-                  them all to the standard BIDS session alias "01".
-                </Text>
-              </Accordion.Panel>
-            </Accordion.Item>
+                <Accordion.Item value="tokenize">
+                  <Accordion.Control
+                    icon={<IconRoute size={16} color="var(--mantine-color-blue-filled)" />}
+                  >
+                    <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                      1.2 Tokenize Paths (NIfTI to BIDS)
+                    </Title>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Text size="sm" mb="xs">
+                      Map the directory segments of your raw data paths to BIDS categories like
+                      Subject, Session, Run, and Modality.
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      Since different scanners and labs organize directories differently (e.g.,
+                      `Project/Subject_01/Visit_A/ASL` vs `Project/Visit_A/Subject_01/T1`), this
+                      step tells the GUI how to parse folder names using a regular expression
+                      generator behind the scenes.
+                    </Text>
+                  </Accordion.Panel>
+                </Accordion.Item>
 
-            <Accordion.Item value="metadata">
-              <Accordion.Control
-                icon={<IconFileImport size={16} color="var(--mantine-color-blue-filled)" />}
-              >
-                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  1.4 Metadata (ASL Acquisition Parameters)
-                </Title>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Text size="sm" mb="xs">
-                  The primary purpose of this step is to specify the acquisition parameters for the
-                  collection of ASL scans that were ingested in the previous step (e.g.,
-                  Post-Labeling Delay, Labeling Duration, M0 calibration type) and choose whether to
-                  apply structural defacing.
-                </Text>
-                <Text size="sm" mb="xs">
-                  By default, there is assumed to be a single acquisition scheme implemented in the
-                  project (i.e., single site, single scanner, single protocol). However, additional
-                  acquisition scheme overrides can be specified to account for multi-site,
-                  multi-scanner, or multi-protocol combinations, and subjects/sessions can be
-                  assigned to these overrides.
-                </Text>
-                <Alert
-                  color="yellow"
-                  title="Unsure about acquisition parameters?"
-                  icon={<IconHelpCircle size={16} />}
-                  mt="xs"
-                >
-                  <Text size="xs">
-                    If you are unsure about your ASL acquisition parameters, contact your local MR
-                    physicist or technician. If you cannot access one, you can use{" "}
-                    <Text
-                      component="a"
-                      href="https://dicom.offis.de/en/dcmtk/dcmtk-tools/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      c="blue"
-                      size="xs"
+                <Accordion.Item value="aliases">
+                  <Accordion.Control
+                    icon={<IconTags size={16} color="var(--mantine-color-blue-filled)" />}
+                  >
+                    <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                      1.3 Resolve Aliases
+                    </Title>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Text size="sm" mb="xs">
+                      Map irregular or non-standard subject names, visit labels, or modality strings
+                      into standardized names.
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      For example, if your folder contains "visit1", "V1", or "baseline", you can
+                      map them all to the standard BIDS session alias "01".
+                    </Text>
+                  </Accordion.Panel>
+                </Accordion.Item>
+
+                <Accordion.Item value="metadata">
+                  <Accordion.Control
+                    icon={<IconFileImport size={16} color="var(--mantine-color-blue-filled)" />}
+                  >
+                    <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                      1.4 Metadata (ASL Acquisition Parameters)
+                    </Title>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Text size="sm" mb="xs">
+                      The primary purpose of this step is to specify the acquisition parameters for
+                      the collection of ASL scans that were ingested in the previous step (e.g.,
+                      Post-Labeling Delay, Labeling Duration, M0 calibration type) and choose
+                      whether to apply structural defacing.
+                    </Text>
+                    <Text size="sm" mb="xs">
+                      By default, there is assumed to be a single acquisition scheme implemented in
+                      the project (i.e., single site, single scanner, single protocol). However,
+                      additional acquisition scheme overrides can be specified to account for
+                      multi-site, multi-scanner, or multi-protocol combinations, and
+                      subjects/sessions can be assigned to these overrides.
+                    </Text>
+                    <Alert
+                      color="yellow"
+                      title="Unsure about acquisition parameters?"
+                      icon={<IconHelpCircle size={16} />}
+                      mt="xs"
                     >
-                      DCMTK command line tools
-                    </Text>{" "}
-                    to view the DICOM headers and note down the acquisition parameters.
-                  </Text>
-                </Alert>
-              </Accordion.Panel>
-            </Accordion.Item>
+                      <Text size="xs">
+                        If you are unsure about your ASL acquisition parameters, contact your local
+                        MR physicist or technician. If you cannot access one, you can use{" "}
+                        <Text
+                          component="a"
+                          href="https://dicom.offis.de/en/dcmtk/dcmtk-tools/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          c="blue"
+                          size="xs"
+                        >
+                          DCMTK command line tools
+                        </Text>{" "}
+                        to view the DICOM headers and note down the acquisition parameters.
+                      </Text>
+                    </Alert>
+                  </Accordion.Panel>
+                </Accordion.Item>
 
-            <Accordion.Item value="preview">
-              <Accordion.Control
-                icon={<IconEye size={16} color="var(--mantine-color-blue-filled)" />}
-              >
-                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  1.5 Preview Import
-                </Title>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Text size="sm" mb="xs">
-                  Review the mapping summary. The GUI uses a pre-planned staging directory layout
-                  which will be temporarily created at{" "}
-                  <code>&lt;project_root&gt;/.easl_staging/</code>. The screen displays a grid
-                  showing each raw file path and its planned staging destination.
-                </Text>
-                <Text size="xs" c="dimmed" mb="xs">
-                  This sanity check ensures that you don't accidentally mix up subject IDs or
-                  overwrite existing scans before writing files to disk.
-                </Text>
-                <Alert
-                  color="blue"
-                  title="Tip"
-                  variant="light"
-                  icon={<IconHelpCircle size={16} />}
-                  mt="xs"
-                >
-                  <Text size="xs">
-                    While the <code>.easl_staging/</code> directory is usually automatically deleted
-                    after the import, it can be preserved by enabling the{" "}
-                    <strong>"Preserve staging directory"</strong> global setting.
-                  </Text>
-                </Alert>
-              </Accordion.Panel>
-            </Accordion.Item>
+                <Accordion.Item value="preview">
+                  <Accordion.Control
+                    icon={<IconEye size={16} color="var(--mantine-color-blue-filled)" />}
+                  >
+                    <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                      1.5 Preview Import
+                    </Title>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Text size="sm" mb="xs">
+                      Review the mapping summary. The GUI uses a pre-planned staging directory
+                      layout which will be temporarily created at{" "}
+                      <code>&lt;project_root&gt;/.easl_staging/</code>. The screen displays a grid
+                      showing each raw file path and its planned staging destination.
+                    </Text>
+                    <Text size="xs" c="dimmed" mb="xs">
+                      This sanity check ensures that you don't accidentally mix up subject IDs or
+                      overwrite existing scans before writing files to disk.
+                    </Text>
+                    <Alert
+                      color="blue"
+                      title="Tip"
+                      variant="light"
+                      icon={<IconHelpCircle size={16} />}
+                      mt="xs"
+                    >
+                      <Text size="xs">
+                        While the <code>.easl_staging/</code> directory is usually automatically
+                        deleted after the import, it can be preserved by enabling the{" "}
+                        <strong>"Preserve staging directory"</strong> global setting.
+                      </Text>
+                    </Alert>
+                  </Accordion.Panel>
+                </Accordion.Item>
 
-            <Accordion.Item value="execution">
-              <Accordion.Control
-                icon={<IconPlayerPlay size={16} color="var(--mantine-color-blue-filled)" />}
-              >
-                <Title order={3} style={{ fontSize: "1rem" }} component="h2">
-                  1.6 Run Import Module
+                <Accordion.Item value="execution">
+                  <Accordion.Control
+                    icon={<IconPlayerPlay size={16} color="var(--mantine-color-blue-filled)" />}
+                  >
+                    <Title order={3} style={{ fontSize: "1rem" }} component="h2">
+                      1.6 Run Import Module
+                    </Title>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Text size="sm" mb="xs">
+                      This executes the ExploreASL import module and provides user feedback based
+                      on:
+                    </Text>
+                    <div style={{ fontSize: "0.875rem" }}>
+                      <ul style={{ margin: 0, paddingLeft: 20 }}>
+                        <li>
+                          A table of the subjects being imported, their status (pending, running,
+                          completed, failed), and the ability to view subject-specific logs once the
+                          import is complete.
+                        </li>
+                        <li>
+                          A real-time log of the import process forwarded from the behind-the-scenes
+                          MATLAB process.
+                        </li>
+                      </ul>
+                    </div>
+                    <Text size="sm" mt="xs" mb="xs">
+                      ExploreASL will create the BIDS structure in the{" "}
+                      <code>&lt;project_root&gt;/rawdata/</code> directory.
+                    </Text>
+                    <Text size="xs" c="dimmed" mb="xs">
+                      During this, raw BIDS structure is matched with the legacy ExploreASL format
+                      (`[Subject]/[Visit]/[Session]/[Scan]`) internally to ensure complete
+                      compatibility with ExploreASL's MATLAB processing engine.
+                    </Text>
+                    <Alert
+                      color="blue"
+                      title="Tip"
+                      variant="light"
+                      icon={<IconHelpCircle size={16} />}
+                      mt="xs"
+                    >
+                      <Text size="xs">
+                        For debugging purposes, the GUI generates a{" "}
+                        <code>&lt;project_root&gt;/derivatives/ExploreASL_GUI/</code> directory that
+                        contains the <code>sourcestructure.json</code> and{" "}
+                        <code>studyPar.json</code> files used during the import.
+                      </Text>
+                    </Alert>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              </Accordion>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="bids" pt="xs">
+              <Card withBorder p="md" radius="sm" data-testid="bids-direct-panel">
+                <Title order={3} style={{ fontSize: "1.1rem" }} mb="xs">
+                  Direct BIDS Dataset Import (Skip DICOM Conversion)
                 </Title>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Text size="sm" mb="xs">
-                  This executes the ExploreASL import module and provides user feedback based on:
+                <Text size="sm" mb="md">
+                  If you already have a fully BIDS-compliant dataset (which has already been
+                  converted to NIfTI and contains sidecar <code>.json</code> and{" "}
+                  <code>_aslcontext.tsv</code> files), you do not need to go through the multi-step
+                  DICOM import wizard.
                 </Text>
-                <div style={{ fontSize: "0.875rem" }}>
-                  <ul style={{ margin: 0, paddingLeft: 20 }}>
-                    <li>
-                      A table of the subjects being imported, their status (pending, running,
-                      completed, failed), and the ability to view subject-specific logs once the
-                      import is complete.
-                    </li>
-                    <li>
-                      A real-time log of the import process forwarded from the behind-the-scenes
-                      MATLAB process.
-                    </li>
-                  </ul>
-                </div>
-                <Text size="sm" mt="xs" mb="xs">
-                  ExploreASL will create the BIDS structure in the{" "}
-                  <code>&lt;project_root&gt;/rawdata/</code> directory.
-                </Text>
-                <Text size="xs" c="dimmed" mb="xs">
-                  During this, raw BIDS structure is matched with the legacy ExploreASL format
-                  (`[Subject]/[Visit]/[Session]/[Scan]`) internally to ensure complete compatibility
-                  with ExploreASL's MATLAB processing engine.
-                </Text>
-                <Alert
-                  color="blue"
-                  title="Tip"
-                  variant="light"
-                  icon={<IconHelpCircle size={16} />}
-                  mt="xs"
-                >
-                  <Text size="xs">
-                    For debugging purposes, the GUI generates a{" "}
-                    <code>&lt;project_root&gt;/derivatives/ExploreASL_GUI/</code> directory that
-                    contains the <code>sourcestructure.json</code> and <code>studyPar.json</code>{" "}
-                    files used during the import.
+
+                <Stack gap="sm">
+                  <Alert color="teal" title="How it Works" icon={<IconCheck size={18} />}>
+                    <Text size="sm">
+                      When you create a project, select your existing BIDS dataset directory. The
+                      GUI will scan the folder, detect that it is a BIDS-compliant directory, and
+                      prompt you to <strong>"Skip Import"</strong>. This sets your project's data
+                      source to BIDS and takes you to the BIDS Review step.
+                    </Text>
+                  </Alert>
+
+                  <Group gap="xs">
+                    <ThemeIcon color="teal" size="sm" radius="xl">
+                      <IconCheck size={12} />
+                    </ThemeIcon>
+                    <Text fw={600} size="sm">
+                      The BIDS Review Panel
+                    </Text>
+                  </Group>
+                  <Text size="sm" pl="md">
+                    Instead of the multi-step tokenizer and alias wizard, you are presented with a
+                    single, unified <strong>BIDS Review Panel</strong>. The app scans all subject
+                    sidecars, groups subjects and sessions by shared parameters, and validates the
+                    required files.
                   </Text>
-                </Alert>
-              </Accordion.Panel>
-            </Accordion.Item>
-          </Accordion>
+
+                  <Group gap="xs">
+                    <ThemeIcon color="teal" size="sm" radius="xl">
+                      <IconCheck size={12} />
+                    </ThemeIcon>
+                    <Text fw={600} size="sm">
+                      Scan Grouping & Group Labels
+                    </Text>
+                  </Group>
+                  <Text size="sm" pl="md">
+                    The scanner scan metadata is automatically grouped (e.g. by labeling type, PLD,
+                    and slice dimensions). You must assign a unique, non-empty group label to each
+                    group. This maps the dataset to Metadata Groups in the project configuration.
+                  </Text>
+
+                  <Group gap="xs">
+                    <ThemeIcon color="teal" size="sm" radius="xl">
+                      <IconCheck size={12} />
+                    </ThemeIcon>
+                    <Text fw={600} size="sm">
+                      Subject Validation & Skipped Subjects
+                    </Text>
+                  </Group>
+                  <Text size="sm" pl="md">
+                    Any subjects/sessions that are missing crucial files (like{" "}
+                    <code>*_asl.json</code> or a valid <code>*_aslcontext.tsv</code>) are flagged,
+                    excluded from the import mapping, and persisted in the project's UI state as
+                    skipped subjects. These are listed on a warning panel on the summary screen.
+                  </Text>
+
+                  <Group gap="xs">
+                    <ThemeIcon color="teal" size="sm" radius="xl">
+                      <IconCheck size={12} />
+                    </ThemeIcon>
+                    <Text fw={600} size="sm">
+                      Phase Transition
+                    </Text>
+                  </Group>
+                  <Text size="sm" pl="md">
+                    Once you assign valid group labels and click <strong>Confirm</strong>, the
+                    project's mapping state is fully populated from the scanned BIDS files, and the
+                    app automatically transitions you to the <strong>Parameters</strong> phase.
+                  </Text>
+                </Stack>
+              </Card>
+            </Tabs.Panel>
+          </Tabs>
         </Stack>
 
         <Divider />
