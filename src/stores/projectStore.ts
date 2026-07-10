@@ -21,7 +21,7 @@ import {
 import { flattenBidsGroupsToSubjectRows } from "../lib/bids/subjectRows";
 import type { ImportSnapshot, MetadataGroup } from "../schemas/importSchemas";
 import type { ManifestFailReason, ManifestVerdict } from "../schemas/project";
-import type { ImportState } from "./importStore";
+import { useImportStore, type ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
 import { useGlobalStore } from "./globalStore";
 
@@ -595,8 +595,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!project) throw new Error("No project loaded");
 
     // Read from importStore (cross-store access)
-    const { useImportStore: importStore } = await import("./importStore");
-    const { detectedGroups, skippedSubjects } = importStore.getState().bidsReview;
+    const { detectedGroups, skippedSubjects } = useImportStore.getState().bidsReview;
 
     console.debug("[projectStore] confirmBidsReview:", {
       groups: detectedGroups.length,

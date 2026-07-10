@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useManifestStore } from "./manifestStore";
 
-const mockGetState = vi.fn();
+const { mockGetState } = vi.hoisted(() => ({
+  mockGetState: vi.fn(),
+}));
 
 vi.mock("./projectStore", () => ({
   useProjectStore: {
