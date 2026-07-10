@@ -588,7 +588,7 @@ describe("processingStore updateSubjectStatus", () => {
     const run1: SubjectModuleStatus = {
       subjectSession: "sub-001_01",
       module: "asl",
-      run: "01",
+      run: "1",
       status: "complete",
       completedSteps: ["ASL"],
       locked: false,
@@ -596,7 +596,7 @@ describe("processingStore updateSubjectStatus", () => {
     const run2: SubjectModuleStatus = {
       subjectSession: "sub-001_01",
       module: "asl",
-      run: "02",
+      run: "2",
       status: "incomplete",
       completedSteps: [],
       locked: true,
@@ -611,11 +611,41 @@ describe("processingStore updateSubjectStatus", () => {
     expect(statuses).toContainEqual(run2);
   });
 
+  it("normalizes padded BIDS run ids so 01 and 1 upsert the same entry", () => {
+    useProcessingStore.getState().updateSubjectStatus({
+      subjectSession: "sub-001_01",
+      module: "asl",
+      run: "01",
+      status: "incomplete",
+      completedSteps: [],
+      locked: true,
+    });
+    useProcessingStore.getState().updateSubjectStatus({
+      subjectSession: "sub-001_01",
+      module: "asl",
+      run: "1",
+      status: "complete",
+      completedSteps: ["ASL"],
+      locked: false,
+    });
+
+    const statuses = useProcessingStore.getState().subjectStatuses;
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toEqual({
+      subjectSession: "sub-001_01",
+      module: "asl",
+      run: "1",
+      status: "complete",
+      completedSteps: ["ASL"],
+      locked: false,
+    });
+  });
+
   it("updates correct run entry without clobbering sibling run", () => {
     const run1: SubjectModuleStatus = {
       subjectSession: "sub-001_01",
       module: "asl",
-      run: "01",
+      run: "1",
       status: "complete",
       completedSteps: ["ASL"],
       locked: false,
@@ -623,7 +653,7 @@ describe("processingStore updateSubjectStatus", () => {
     const run2: SubjectModuleStatus = {
       subjectSession: "sub-001_01",
       module: "asl",
-      run: "02",
+      run: "2",
       status: "incomplete",
       completedSteps: [],
       locked: true,
@@ -631,7 +661,7 @@ describe("processingStore updateSubjectStatus", () => {
     const run2Updated: SubjectModuleStatus = {
       subjectSession: "sub-001_01",
       module: "asl",
-      run: "02",
+      run: "2",
       status: "complete",
       completedSteps: ["ASL"],
       locked: false,
@@ -643,8 +673,8 @@ describe("processingStore updateSubjectStatus", () => {
 
     const statuses = useProcessingStore.getState().subjectStatuses;
     expect(statuses).toHaveLength(2);
-    expect(statuses.find((s) => s.run === "01")).toEqual(run1);
-    expect(statuses.find((s) => s.run === "02")).toEqual(run2Updated);
+    expect(statuses.find((s) => s.run === "1")).toEqual(run1);
+    expect(statuses.find((s) => s.run === "2")).toEqual(run2Updated);
   });
 });
 

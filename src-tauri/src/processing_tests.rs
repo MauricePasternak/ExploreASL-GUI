@@ -350,6 +350,52 @@ mod tests {
     }
 
     #[test]
+    fn list_subjects_normalizes_zero_padded_bids_run_to_exploreasl_legacy() {
+        let root = unique_temp_path("run-padded");
+        let rawdata = root.join("rawdata");
+        let perf = rawdata.join("sub-01").join("ses-01").join("perf");
+        fs::create_dir_all(&perf).unwrap();
+        // BIDS run-01 must become ExploreASL legacy "1" (ASL_1), not "01"
+        fs::write(perf.join("sub-01_ses-01_run-01_asl.nii.gz"), b"fake").unwrap();
+        fs::write(perf.join("sub-01_ses-01_run-01_asl.json"), b"{}").unwrap();
+
+        let subjects = list_subjects(root.to_string_lossy().to_string(), None)
+            .expect("list_subjects should succeed");
+
+        assert_eq!(subjects.len(), 1);
+        assert_eq!(subjects[0].asl_runs, vec!["1"]);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn list_subjects_normalizes_non_numeric_run_to_default() {
+        let root = unique_temp_path("run-alpha");
+        let rawdata = root.join("rawdata");
+        let perf = rawdata.join("sub-01").join("ses-01").join("perf");
+        fs::create_dir_all(&perf).unwrap();
+        fs::write(perf.join("sub-01_ses-01_run-pre_asl.nii.gz"), b"fake").unwrap();
+        fs::write(perf.join("sub-01_ses-01_run-pre_asl.json"), b"{}").unwrap();
+
+        let subjects = list_subjects(root.to_string_lossy().to_string(), None)
+            .expect("list_subjects should succeed");
+
+        assert_eq!(subjects[0].asl_runs, vec!["1"]);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn normalize_asl_run_id_matches_exploreasl_str2num() {
+        assert_eq!(normalize_asl_run_id("01"), "1");
+        assert_eq!(normalize_asl_run_id("ASL_01"), "1");
+        assert_eq!(normalize_asl_run_id("2"), "2");
+        assert_eq!(normalize_asl_run_id(""), "1");
+        assert_eq!(normalize_asl_run_id("pre"), "1");
+        assert_eq!(normalize_asl_run_id_opt(None), "1");
+    }
+
+    #[test]
     fn list_subjects_asl_run_default_when_no_run_entity() {
         let root = unique_temp_path("default-run");
         let rawdata = root.join("rawdata");
@@ -504,11 +550,11 @@ mod tests {
         fs::write(struct_sub.join("060_Segment_T1w.status"), "").unwrap();
         fs::write(struct_sub.join("999_ready.status"), "").unwrap();
 
-        // ASL: sub-001_01 run 01 incomplete, locked
+        // ASL: sub-001_01 run 1 incomplete, locked (ExploreASL legacy ASL_1)
         let asl_run = lock
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL_ASL_01");
+            .join("xASL_module_ASL_ASL_1");
         fs::create_dir_all(asl_run.join("locked")).unwrap();
         fs::write(asl_run.join("ASL.status"), "").unwrap();
 
@@ -558,7 +604,7 @@ mod tests {
         assert_eq!(asl.subject_session, "sub-001_01");
         assert_eq!(asl.status, "incomplete");
         assert!(asl.locked);
-        assert_eq!(asl.run, Some("01".to_string()));
+        assert_eq!(asl.run, Some("1".to_string()));
 
         // Population
         let pop = statuses
@@ -586,7 +632,7 @@ mod tests {
         let asl_run = lock
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL_ASL_01");
+            .join("xASL_module_ASL_ASL_1");
         fs::create_dir_all(&asl_run).unwrap();
         let asl_ready = asl_run.join("999_ready.status");
 
@@ -661,7 +707,7 @@ mod tests {
         let asl_module = lock_root
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL_ASL_01");
+            .join("xASL_module_ASL_ASL_1");
         fs::create_dir_all(asl_module.join("locked")).unwrap();
         fs::write(asl_module.join("ASL.status"), "").unwrap();
 
@@ -705,7 +751,7 @@ mod tests {
         let run_dir = lock_root
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL_ASL_01");
+            .join("xASL_module_ASL_ASL_1");
         fs::create_dir_all(run_dir.join("locked")).unwrap();
         fs::write(run_dir.join("ASL.status"), "").unwrap();
 
@@ -783,7 +829,7 @@ mod tests {
         let asl_path = lock_root
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL_ASL_01")
+            .join("xASL_module_ASL_ASL_1")
             .join("020_RealignASL.status");
         let asl_result = parse_lock_path(&lock_root, &asl_path);
         assert!(asl_result.is_some());
@@ -791,7 +837,7 @@ mod tests {
         assert_eq!(asl_event.module, "xASL_module_ASL");
         assert_eq!(asl_event.subject_session, Some("sub-001_01".to_string()));
         assert_eq!(asl_event.step_code, "020_RealignASL");
-        assert_eq!(asl_event.run, Some("01".to_string()));
+        assert_eq!(asl_event.run, Some("1".to_string()));
     }
 
     #[test]
@@ -828,7 +874,7 @@ mod tests {
         let run_dir = lock
             .join("xASL_module_ASL")
             .join("sub-001_01")
-            .join("xASL_module_ASL_ASL_01");
+            .join("xASL_module_ASL_ASL_1");
         fs::create_dir_all(&run_dir).unwrap();
         fs::write(run_dir.join("020_RealignASL.status"), "").unwrap();
         fs::write(run_dir.join("999_ready.status"), "").unwrap();

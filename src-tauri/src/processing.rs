@@ -40,6 +40,35 @@ pub fn module_index_to_name(index: usize) -> &'static str {
     }
 }
 
+/// Normalize a BIDS / ExploreASL ASL run label to ExploreASL legacy numeric form.
+///
+/// ExploreASL BIDS2Legacy uses `xASL_str2num` on the BIDS `run-` entity and writes
+/// `ASL_<N>` folders/logs. Missing or non-numeric runs default to 1.
+///
+/// Examples: `"01"` → `"1"`, `"ASL_01"` → `"1"`, `"2"` → `"2"`, `""` → `"1"`, `"pre"` → `"1"`
+pub fn normalize_asl_run_id(raw: &str) -> String {
+    let s = raw.trim();
+    let s = s
+        .strip_prefix("ASL_")
+        .or_else(|| s.strip_prefix("asl_"))
+        .unwrap_or(s);
+    if s.is_empty() {
+        return "1".to_string();
+    }
+    match s.parse::<u32>() {
+        Ok(n) if n >= 1 => n.to_string(),
+        _ => "1".to_string(),
+    }
+}
+
+/// Like [`normalize_asl_run_id`], treating `None` / absent BIDS `run-` as `"1"`.
+pub fn normalize_asl_run_id_opt(raw: Option<&str>) -> String {
+    match raw {
+        Some(s) => normalize_asl_run_id(s),
+        None => "1".to_string(),
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectInfo {
@@ -177,15 +206,20 @@ pub fn list_subjects(
             let session_label = session.session_label.clone();
             let subject_session = format!("sub-{}_{}", subject_label, session_label);
 
+            // Map BIDS run labels (or absent) to ExploreASL legacy numeric IDs ("1","2",…).
             let mut asl_runs: Vec<String> = session
                 .asl_files
                 .iter()
-                .filter_map(|f| f.run_label.clone())
+                .map(|f| normalize_asl_run_id_opt(f.run_label.as_deref()))
                 .collect();
-            asl_runs.sort();
+            asl_runs.sort_by(|a, b| {
+                a.parse::<u32>()
+                    .unwrap_or(0)
+                    .cmp(&b.parse::<u32>().unwrap_or(0))
+            });
             asl_runs.dedup();
 
-            // Fallback: if perf dir exists but no ASL files or no run labels found, default to ["1"]
+            // Fallback: if perf dir exists but no ASL files found, default to ["1"]
             if asl_runs.is_empty() && session.has_perf {
                 asl_runs.push("1".to_string());
             }
@@ -328,8 +362,9 @@ fn find_asl_runs_from_logs(project_root: &Path, subject_session: &str) -> Vec<St
                         if name.starts_with(&pattern) && name.ends_with(".log") {
                             if let Some(run_part) = name.strip_prefix(&pattern) {
                                 if let Some(run_str) = run_part.strip_suffix(".log") {
-                                    if !runs.contains(&run_str.to_string()) {
-                                        runs.push(run_str.to_string());
+                                    let run = normalize_asl_run_id(run_str);
+                                    if !runs.contains(&run) {
+                                        runs.push(run);
                                     }
                                 }
                             }
@@ -417,7 +452,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
                                 determine_status(&run_entry.path());
                             let run = run_name
                                 .strip_prefix("xASL_module_ASL_ASL_")
-                                .map(|s| s.to_string());
+                                .map(normalize_asl_run_id);
 
                             if let Some(ref r) = run {
                                 processed_runs.insert(r.clone());
@@ -528,8 +563,9 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
                     let name = entry.file_name().to_string_lossy().to_string();
                     if name.starts_with("xASL_module_ASL_ASL_") {
                         if let Some(run_str) = name.strip_prefix("xASL_module_ASL_ASL_") {
-                            if !all_runs.contains(&run_str.to_string()) {
-                                all_runs.push(run_str.to_string());
+                            let run = normalize_asl_run_id(run_str);
+                            if !all_runs.contains(&run) {
+                                all_runs.push(run);
                             }
                         }
                     }
@@ -625,7 +661,7 @@ fn parse_module_log_file(
         asl_run_re
             .captures(file_name)
             .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string())
+            .map(|m| normalize_asl_run_id(m.as_str()))
     } else {
         None
     };
@@ -1405,12 +1441,9 @@ fn parse_lock_path(
             let subject_session = Some(parts[1].to_string());
             let run_dir = parts[2].to_string();
             let run = if run_dir.starts_with("xASL_module_ASL_ASL_") {
-                Some(
-                    run_dir
-                        .strip_prefix("xASL_module_ASL_ASL_")
-                        .unwrap()
-                        .to_string(),
-                )
+                run_dir
+                    .strip_prefix("xASL_module_ASL_ASL_")
+                    .map(normalize_asl_run_id)
             } else {
                 None
             };
@@ -1465,12 +1498,9 @@ fn parse_lock_dir_path(lock_root: &std::path::Path, path: &std::path::Path) -> O
             let subject_session = Some(parts[1].to_string());
             let run_dir = parts[2].to_string();
             let run = if run_dir.starts_with("xASL_module_ASL_ASL_") {
-                Some(
-                    run_dir
-                        .strip_prefix("xASL_module_ASL_ASL_")
-                        .unwrap()
-                        .to_string(),
-                )
+                run_dir
+                    .strip_prefix("xASL_module_ASL_ASL_")
+                    .map(normalize_asl_run_id)
             } else {
                 None
             };
@@ -1896,7 +1926,7 @@ pub fn read_report_image(
                 "coronal" => "Cor_Reg_qCBF",
                 _ => return Err(format!("Unknown view type: {}", view_type)),
             };
-            let run_str = run.unwrap_or_else(|| "1".to_string());
+            let run_str = normalize_asl_run_id_opt(run.as_deref());
             format!(
                 "{}_{}_ASL_{}_PV_pWM_{}_Contour.jpg",
                 prefix, subject_session, run_str, subject_session
@@ -1908,7 +1938,7 @@ pub fn read_report_image(
                 "coronal" => "Cor_Reg_noSmooth_M0",
                 _ => return Err(format!("Unknown view type: {}", view_type)),
             };
-            let run_str = run.unwrap_or_else(|| "1".to_string());
+            let run_str = normalize_asl_run_id_opt(run.as_deref());
             format!(
                 "{}_{}_ASL_{}_PV_pGM_{}_Contour.jpg",
                 prefix, subject_session, run_str, subject_session

@@ -1,6 +1,7 @@
 import { exists, readTextFile, writeTextFile, mkdir } from "@tauri-apps/plugin-fs";
 import type { MetadataGroup, SubjectRow } from "../schemas/importSchemas";
 import type { ProcessConfig, SubjectInfo } from "../schemas/processingSchemas";
+import { normalizeAslRunId, toExploreAslSessionLabel } from "./aslRun";
 
 interface MappingState {
   subjectRows?: SubjectRow[];
@@ -229,7 +230,10 @@ export async function ensureParticipantsFiles(
   for (const subjectSession of config.subjects) {
     // Determine runs
     const avail = availableSubjects.find((s) => s.subjectSession === subjectSession);
-    const runs = avail && avail.aslRuns && avail.aslRuns.length > 0 ? avail.aslRuns : ["1"];
+    const runs =
+      avail && avail.aslRuns && avail.aslRuns.length > 0
+        ? avail.aslRuns.map(normalizeAslRunId)
+        : ["1"];
 
     // Determine subject and session from participant_id
     const { subject, session } = parseParticipantId(subjectSession);
@@ -251,7 +255,7 @@ export async function ensureParticipantsFiles(
     }
 
     for (const run of runs) {
-      const runVal = run.startsWith("ASL_") ? run : `ASL_${run}`;
+      const runVal = toExploreAslSessionLabel(run);
       targetRows.push({
         participant_id: subjectSession,
         session: runVal,
