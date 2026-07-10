@@ -608,7 +608,7 @@ describe("ManifestPreview", () => {
     const tables = screen.getAllByRole("table");
     const paramsTable = tables[0];
     expect(paramsTable).toHaveTextContent("ASLContext");
-    expect(paramsTable).toHaveTextContent("m0scan×2, label×3");
+    expect(paramsTable).toHaveTextContent("m0scan x2, label x3");
     // Should NOT contain the raw comma-separated form
     expect(paramsTable).not.toHaveTextContent("m0scan,m0scan,label,label,label");
   });

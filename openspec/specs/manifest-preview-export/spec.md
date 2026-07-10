@@ -205,7 +205,7 @@ Existing behavior for other `bidsParams` fields (conditional skipping of `Labeli
 #### Scenario: Manifest §1 shows ASLContext summary
 
 - **WHEN** `ManifestPreview` renders §1 for a group whose `bidsParams.ASLContext` is the ds000240 raw 109-token string
-- **THEN** the row displays `"m0scan×10, label×50, control×50"` (summarized form), not the raw comma-separated string
+- **THEN** the row displays `"m0scan x10, label-control pair x50"` (summarized form), not the raw comma-separated string
 
 #### Scenario: Manifest §1 hides absent ASLContext
 
