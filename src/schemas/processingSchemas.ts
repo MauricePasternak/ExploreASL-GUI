@@ -33,6 +33,7 @@ export const SubjectModuleStatusSchema = z.object({
   status: z.enum(SUBJECT_MODULE_STATUSES),
   completedSteps: z.array(z.string()),
   locked: z.boolean(),
+  bids2legacyExists: z.boolean().optional(),
 });
 
 export const ProcessingPhaseSchema = z.enum(PROCESSING_PHASES);

@@ -23,6 +23,7 @@ import type { ManifestVerdict, ManifestFailReason } from "../../schemas/project"
 import type { LogFileInfo, LogContent } from "../../lib/logViewer";
 import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
 import LogViewerModal from "../processing/LogViewerModal";
+
 import { fetchSubjectReports } from "../../lib/reportViewer";
 import ReportViewerModal from "../processing/ReportViewerModal";
 import type { ModuleDisplayStatus } from "../processing/SubjectSelection.helpers";
@@ -98,9 +99,6 @@ export default function QcSelectionTable({
   const [reportModalModule, setReportModalModule] = useState<"structural" | "asl">("structural");
   const [reportModalSubjectSession, setReportModalSubjectSession] = useState("");
   const [reportModalRuns, setReportModalRuns] = useState<string[]>([]);
-  const [missingBids2LegacySubjectSessions, setMissingBids2LegacySubjectSessions] = useState<
-    Set<string>
-  >(new Set());
 
   useEffect(() => {
     if (!projectRoot) return;
@@ -136,53 +134,6 @@ export default function QcSelectionTable({
         setExistingReports(new Set());
       });
   }, [projectRoot, processingPhase]);
-
-  useEffect(() => {
-    if (!projectRoot) {
-      setMissingBids2LegacySubjectSessions(new Set());
-      return;
-    }
-
-    const completedSubjectSessions = new Set(
-      subjectStatuses
-        .filter(
-          (status) =>
-            (status.module === "structural" || status.module === "asl") &&
-            status.status === "complete",
-        )
-        .map((status) => status.subjectSession),
-    );
-
-    if (completedSubjectSessions.size === 0) {
-      setMissingBids2LegacySubjectSessions(new Set());
-      return;
-    }
-
-    let cancelled = false;
-    void import("@tauri-apps/plugin-fs")
-      .then(async ({ exists }) => {
-        const missing = new Set<string>();
-        for (const subjectSession of completedSubjectSessions) {
-          const path = `${projectRoot}/derivatives/ExploreASL/lock/xASL_module_BIDS2Legacy/${subjectSession}`;
-          if (!(await exists(path))) {
-            missing.add(subjectSession);
-          }
-        }
-        if (!cancelled) {
-          setMissingBids2LegacySubjectSessions(missing);
-        }
-      })
-      .catch((err) => {
-        console.warn("[QcSelectionTable] Failed to check BIDS2Legacy lock status:", err);
-        if (!cancelled) {
-          setMissingBids2LegacySubjectSessions(new Set());
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectRoot, subjectStatuses, processingPhase]);
 
   const structuralLogInfo = useMemo(() => {
     const map = new Map<string, LogFileInfo[]>();
@@ -308,18 +259,8 @@ export default function QcSelectionTable({
       a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
     );
     return sorted.map((info) => {
-      const structuralStatus = resolveModuleDisplay(
-        info,
-        "structural",
-        subjectStatuses,
-        missingBids2LegacySubjectSessions,
-      );
-      const aslStatus = resolveModuleDisplay(
-        info,
-        "asl",
-        subjectStatuses,
-        missingBids2LegacySubjectSessions,
-      );
+      const structuralStatus = resolveModuleDisplay(info, "structural", subjectStatuses);
+      const aslStatus = resolveModuleDisplay(info, "asl", subjectStatuses);
       const cleanSs = info.subjectSession.replace(/^sub-/, "");
       const groupId = rowGroupMap.get(cleanSs);
       const groupLabel = groupId ? (groupMap.get(groupId)?.label ?? "Ungrouped") : "Ungrouped";
@@ -348,15 +289,7 @@ export default function QcSelectionTable({
         aslRuns: info.aslRuns || [],
       };
     });
-  }, [
-    availableSubjects,
-    subjectStatuses,
-    rowGroupMap,
-    groupMap,
-    verdicts,
-    noInfoSubjects,
-    missingBids2LegacySubjectSessions,
-  ]);
+  }, [availableSubjects, subjectStatuses, rowGroupMap, groupMap, verdicts, noInfoSubjects]);
 
   const handleViewLog = useCallback(
     async (subjectSession: string, module: "structural" | "asl") => {
