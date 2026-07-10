@@ -279,8 +279,6 @@ export default function ExecutionDashboard() {
 
   return (
     <Stack gap="sm" data-testid="execution-dashboard">
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .spin { animation: spin 1s linear infinite; }`}</style>
-
       <Accordion multiple defaultValue={enabledModules} variant="separated">
         {enabledModules.map((module) => (
           <Accordion.Item key={module} value={module}>

@@ -145,45 +145,56 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       preparingMessage: "Initializing processing...",
     });
 
-    // Yield to the event loop to ensure React has executed render and the browser has repainted
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Let React commit + the browser paint/promote the spinner animation before
+    // any heavy IPC (especially MATLAB version probing) can contend for the UI.
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(resolve, 0);
+        });
+      });
+    });
 
     try {
-      // Clear population completion flag when re-running Population
+      // Kick off version capture in parallel with the rest of prep so a slow
+      // MATLAB probe (older laptops) does not serialize behind / freeze the
+      // preparing UI. We only join before the pipeline actually starts.
+      let versionCapture: Promise<void> = Promise.resolve();
       if (config.modules.includes("population")) {
         useProjectStore.getState().setPopulationCompleted(false);
 
         const matlabPath = profile.type === "matlab" ? profile.matlabPath : "";
         const exploreAslPath = profile.type === "matlab" ? profile.exploreAslPath : "";
+        const profileId = profile.id;
 
-        set({ preparingMessage: "Checking ExploreASL version..." });
-
-        try {
-          const { invoke } = await import("@tauri-apps/api/core");
-          const versions = await invoke<{ explore_asl: string; matlab: string }>(
-            "capture_environment_versions",
-            {
-              exploreAslPath,
-              matlabPath,
-            },
-          );
-          const gui =
-            import.meta.env.VITE_APP_VERSION ??
-            useProjectStore.getState().project?.version ??
-            "unknown";
-          useProjectStore.getState().setLastRunProfileId("population", profile.id, {
-            exploreASLVersion: versions.explore_asl,
-            matlabVersion: versions.matlab,
-            guiVersion: gui,
-          });
-        } catch (err) {
-          console.warn("[manifest] version capture failed", err);
-          useProjectStore.getState().setLastRunProfileId("population", profile.id, {
-            exploreASLVersion: "unknown",
-            matlabVersion: "unknown",
-            guiVersion: useProjectStore.getState().project?.version ?? "unknown",
-          });
-        }
+        versionCapture = (async () => {
+          try {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const versions = await invoke<{ explore_asl: string; matlab: string }>(
+              "capture_environment_versions",
+              {
+                exploreAslPath,
+                matlabPath,
+              },
+            );
+            const gui =
+              import.meta.env.VITE_APP_VERSION ??
+              useProjectStore.getState().project?.version ??
+              "unknown";
+            useProjectStore.getState().setLastRunProfileId("population", profileId, {
+              exploreASLVersion: versions.explore_asl,
+              matlabVersion: versions.matlab,
+              guiVersion: gui,
+            });
+          } catch (err) {
+            console.warn("[manifest] version capture failed", err);
+            useProjectStore.getState().setLastRunProfileId("population", profileId, {
+              exploreASLVersion: "unknown",
+              matlabVersion: "unknown",
+              guiVersion: useProjectStore.getState().project?.version ?? "unknown",
+            });
+          }
+        })();
       }
 
       const { watchLockDir, setupProcessingListeners, runProcessingPipeline } =
@@ -205,6 +216,8 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
           }>("ensure_rawdata_dir", { rootPath: projectRoot });
           if (result.warning) {
             set({ pendingRawdataWarning: result.warning, preparingMessage: null });
+            // Let version capture finish in the background; do not block the warning modal.
+            void versionCapture;
             return;
           }
         } else {
@@ -247,6 +260,8 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       };
 
       set({ preparingMessage: "Starting processing pipeline..." });
+      // Join version capture before launching workers so the manifest has versions.
+      await versionCapture;
       const pids = await runProcessingPipeline(config, profile, dataParJson);
       set({ workerPids: pids, processingPhase: "running", preparingMessage: null });
     } catch (err) {

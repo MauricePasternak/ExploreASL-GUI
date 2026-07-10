@@ -1196,6 +1196,45 @@ describe("processingStore manifest version capture", () => {
     ]);
   });
 
+  it("runs version capture in parallel with other prep work", async () => {
+    let resolveVersions: ((value: { explore_asl: string; matlab: string }) => void) | undefined;
+    const versionsGate = new Promise<{ explore_asl: string; matlab: string }>((resolve) => {
+      resolveVersions = resolve;
+    });
+    let participantsStartedWhileVersionsPending = false;
+
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "capture_environment_versions") return versionsGate;
+      return Promise.resolve(null);
+    });
+
+    const participants = await import("../lib/participantsUtils");
+    const ensureSpy = vi
+      .spyOn(participants, "ensureParticipantsFiles")
+      .mockImplementation(async () => {
+        // Other prep must be able to proceed before version capture resolves.
+        expect(mockSetLastRunProfileId).not.toHaveBeenCalled();
+        participantsStartedWhileVersionsPending = true;
+      });
+
+    useProcessingStore.getState().setConfig(POPULATION_CONFIG);
+    const startPromise = useProcessingStore.getState().startProcessing();
+
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("capture_environment_versions", expect.any(Object));
+    });
+    await vi.waitFor(() => {
+      expect(participantsStartedWhileVersionsPending).toBe(true);
+    });
+
+    resolveVersions?.({ explore_asl: "1.0.0", matlab: "R2023b" });
+    await startPromise;
+
+    expect(mockSetLastRunProfileId).toHaveBeenCalled();
+    expect(runProcessingPipeline).toHaveBeenCalled();
+    ensureSpy.mockRestore();
+  });
+
   it("calls capture_environment_versions when population is in modules", async () => {
     useProcessingStore.getState().setConfig(POPULATION_CONFIG);
     await useProcessingStore.getState().startProcessing();
