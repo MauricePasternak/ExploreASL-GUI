@@ -1,11 +1,17 @@
 import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
+import { aslRunsEqual, normalizeAslRunId } from "../../lib/aslRun";
 
 export type ModuleName = (typeof PROCESSING_MODULES)[number];
 
 export interface StepStatus {
   name: string;
   status: "pending" | "running" | "complete";
+}
+
+function runMatches(entryRun: string | undefined, requestedRun: string | undefined): boolean {
+  if (requestedRun === undefined) return true;
+  return aslRunsEqual(entryRun, requestedRun);
 }
 
 export function getStepsForSubject(
@@ -18,7 +24,7 @@ export function getStepsForSubject(
     (s) =>
       s.subjectSession === subjectSession &&
       s.module === module &&
-      (run === undefined || s.run === run),
+      runMatches(s.run, run),
   );
   if (!entry) return [];
   const steps: StepStatus[] = entry.completedSteps.map((name) => ({
@@ -41,7 +47,7 @@ export function getStatusForSubject(
     (s) =>
       s.subjectSession === subjectSession &&
       s.module === module &&
-      (run === undefined || s.run === run),
+      runMatches(s.run, run),
   );
 }
 
@@ -49,18 +55,18 @@ export function getRunsForSubjectInfo(
   subject: SubjectInfo,
   statuses: SubjectModuleStatus[],
 ): string[] {
-  const fromSubject = subject.aslRuns ?? [];
+  const fromSubject = (subject.aslRuns ?? []).map(normalizeAslRunId);
   const fromLock = statuses
     .filter(
       (s) =>
         s.subjectSession === subject.subjectSession && s.module === "asl" && s.run !== undefined,
     )
-    .map((s) => s.run!);
+    .map((s) => normalizeAslRunId(s.run));
   const union = Array.from(new Set([...fromSubject, ...fromLock]));
   if (union.length === 0) {
     return ["1"];
   }
-  return union.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  return union.sort((a, b) => Number(a) - Number(b));
 }
 
 export function getSubjectOverallStatus(

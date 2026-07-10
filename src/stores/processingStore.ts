@@ -9,7 +9,9 @@ import type {
 import { useProjectStore } from "./projectStore";
 import { useGlobalStore } from "./globalStore";
 import { useDataParStore } from "./dataParStore";
+import { aslRunsEqual, normalizeAslRunId } from "../lib/aslRun";
 import { generateSubjectRegexp } from "../lib/subjectMatching";
+import { assembleDataPar } from "../lib/assembleDataPar";
 
 // =============================================================================
 // State Interface
@@ -219,7 +221,6 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     const cleanup = await setupProcessingListeners();
     processingCleanup = cleanup;
 
-    const { assembleDataPar } = await import("../lib/assembleDataPar");
     const dataParJson = assembleDataPar(dataPar);
     if (dataSource === "bids") {
       dataParJson.x.opts = {
@@ -268,18 +269,21 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
   },
 
   updateSubjectStatus: (status) => {
+    const normalizedRun = status.run != null ? normalizeAslRunId(status.run) : undefined;
+    const normalizedStatus = { ...status, run: normalizedRun };
     set((state) => {
       const idx = state.subjectStatuses.findIndex(
         (s) =>
-          s.subjectSession === status.subjectSession &&
-          s.module === status.module &&
-          (s.run ?? undefined) === (status.run ?? undefined),
+          s.subjectSession === normalizedStatus.subjectSession &&
+          s.module === normalizedStatus.module &&
+          aslRunsEqual(s.run, normalizedStatus.run),
       );
       if (idx >= 0) {
         const next = [...state.subjectStatuses];
         next[idx] = {
-          ...status,
-          run: status.run ?? undefined,
+          ...next[idx],
+          ...normalizedStatus,
+          run: normalizedRun,
         };
         return { subjectStatuses: next };
       }
@@ -287,8 +291,8 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
         subjectStatuses: [
           ...state.subjectStatuses,
           {
-            ...status,
-            run: status.run ?? undefined,
+            ...normalizedStatus,
+            run: normalizedRun,
           },
         ],
       };
@@ -306,7 +310,12 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
   },
 
   setAvailableSubjects: (subjects) => {
-    set({ availableSubjects: subjects });
+    set({
+      availableSubjects: subjects.map((s) => ({
+        ...s,
+        aslRuns: (s.aslRuns ?? []).map(normalizeAslRunId),
+      })),
+    });
   },
 
   scanAvailableSubjects: async () => {
@@ -315,7 +324,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     if (!projectRoot) throw new Error("No project loaded");
     const { loadSubjects } = await import("../lib/processingEvents");
     const subjects = await loadSubjects(projectRoot, project.projectMeta.dataSource);
-    set({ availableSubjects: subjects });
+    useProcessingStore.getState().setAvailableSubjects(subjects);
   },
 
   loadLockFileStatus: async () => {

@@ -56,12 +56,18 @@ describe("getStepsForSubject", () => {
 
   it("matches on run when specified", () => {
     const statuses: SubjectModuleStatus[] = [
-      { ...baseEntry, run: "01", locked: false },
-      { ...baseEntry, run: "02", locked: true },
+      { ...baseEntry, run: "1", locked: false },
+      { ...baseEntry, run: "2", locked: true },
     ];
-    const steps = getStepsForSubject("sub-001_01", "structural", statuses, "02");
+    const steps = getStepsForSubject("sub-001_01", "structural", statuses, "2");
     expect(steps).toHaveLength(3);
     expect(steps[2]).toEqual({ name: "Processing...", status: "running" });
+  });
+
+  it("matches padded and unpadded run ids", () => {
+    const statuses: SubjectModuleStatus[] = [{ ...baseEntry, run: "1", locked: false }];
+    const steps = getStepsForSubject("sub-001_01", "structural", statuses, "01");
+    expect(steps).toHaveLength(2);
   });
 
   it("does not append running step when locked but status is complete", () => {
@@ -97,6 +103,21 @@ describe("getRunsForSubjectInfo", () => {
     ];
     const runs = getRunsForSubjectInfo(baseSubject, statuses);
     expect(runs).toEqual(["1", "2", "3"]);
+  });
+
+  it("collapses BIDS padded run-01 with ExploreASL lock run 1", () => {
+    const subject: SubjectInfo = { ...baseSubject, aslRuns: ["01"] };
+    const statuses: SubjectModuleStatus[] = [
+      {
+        subjectSession: "sub-001_01",
+        module: "asl",
+        run: "1",
+        status: "incomplete",
+        completedSteps: [],
+        locked: true,
+      },
+    ];
+    expect(getRunsForSubjectInfo(subject, statuses)).toEqual(["1"]);
   });
 
   it("defaults to ['1'] when no runs are defined", () => {

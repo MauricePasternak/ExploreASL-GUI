@@ -11,6 +11,7 @@ import type { ProcessConfig, SubjectInfo, SubjectModuleStatus } from "../schemas
 import { modulesToBProcess, PROCESSING_MODULES } from "../schemas/processingSchemas";
 import type { ExecutionProfile } from "../schemas/executionProfile";
 import type { DataParJson } from "./assembleDataPar";
+import { aslRunsEqual, normalizeAslRunId } from "./aslRun";
 import { useProcessingStore, clearProcessingListeners } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { generateSubjectRegexp } from "./subjectMatching";
@@ -87,12 +88,13 @@ export async function setupProcessingListeners(): Promise<() => void> {
     const isComplete = stepCode === "999_ready";
 
     const store = useProcessingStore.getState();
+    const normalizedRun = run != null ? normalizeAslRunId(run) : undefined;
 
     const existing = store.subjectStatuses.find(
       (s) =>
         s.subjectSession === (subjectSession ?? "") &&
         s.module === module &&
-        s.run === (run ?? undefined),
+        aslRunsEqual(s.run, normalizedRun),
     );
 
     if (existing?.status === "complete" && !isComplete) return;
@@ -107,7 +109,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
     updateSubjectStatus({
       subjectSession: subjectSession ?? "",
       module,
-      run: run ?? undefined,
+      run: normalizedRun,
       status: isComplete ? "complete" : "incomplete",
       completedSteps,
       locked: isComplete ? false : (existing?.locked ?? false),
@@ -124,12 +126,13 @@ export async function setupProcessingListeners(): Promise<() => void> {
     if (!module) return;
 
     const store = useProcessingStore.getState();
+    const normalizedRun = run != null ? normalizeAslRunId(run) : undefined;
 
     const existing = store.subjectStatuses.find(
       (s) =>
         s.subjectSession === (subjectSession ?? "") &&
         s.module === module &&
-        s.run === (run ?? undefined),
+        aslRunsEqual(s.run, normalizedRun),
     );
 
     // ExploreASL's population QC pass re-creates lock directories for subjects
@@ -140,7 +143,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
     updateSubjectStatus({
       subjectSession: subjectSession ?? "",
       module,
-      run: run ?? undefined,
+      run: normalizedRun,
       status: existing?.status ?? "pending",
       completedSteps: existing?.completedSteps ?? [],
       locked: true,
@@ -157,12 +160,13 @@ export async function setupProcessingListeners(): Promise<() => void> {
     if (!module) return;
 
     const store = useProcessingStore.getState();
+    const normalizedRun = run != null ? normalizeAslRunId(run) : undefined;
 
     const existing = store.subjectStatuses.find(
       (s) =>
         s.subjectSession === (subjectSession ?? "") &&
         s.module === module &&
-        s.run === (run ?? undefined),
+        aslRunsEqual(s.run, normalizedRun),
     );
 
     if (existing) {
@@ -304,7 +308,7 @@ export async function loadLockStatus(projectRoot: string): Promise<SubjectModule
         ...entry,
         subjectSession: entry.subjectSession ?? "",
         module,
-        run: entry.run ?? undefined,
+        run: entry.run != null ? normalizeAslRunId(entry.run) : undefined,
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
