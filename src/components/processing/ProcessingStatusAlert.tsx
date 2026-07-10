@@ -129,6 +129,19 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
       );
     }
 
+    if (configModules?.includes("asl") && configSubjects?.length) {
+      const subjectsLackingASL = configSubjects.filter((subjSession) => {
+        const found = availableSubjects.find((s) => s.subjectSession === subjSession);
+        return found ? found.hasASL === false : false;
+      });
+
+      if (subjectsLackingASL.length > 0) {
+        errors.push(
+          `Cannot run ASL module because some selected subjects lack ASL data: ${subjectsLackingASL.join(", ")}`,
+        );
+      }
+    }
+
     if (configSubjects?.length && workers > configSubjects.length) {
       warnings.push(
         `Spawning fewer workers (${configSubjects.length}) than configured (${workers}) because only ${configSubjects.length} subject${configSubjects.length > 1 ? "s are" : " is"} selected.`,
@@ -160,6 +173,7 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     systemCores,
     dataParDirExists,
     orphanedSubjects,
+    availableSubjects,
   ]);
 
   const state: AlertState = useMemo(() => {
