@@ -36,7 +36,7 @@ describe("OverviewPage", () => {
 
     // Verify major headings (H1 structure represented by Titles)
     expect(screen.getByRole("heading", { name: /Project Management/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /1. Import from DICOM/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /1. Dataset Import/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /2. Define Data Parameters/i })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /3. Process Images & Population Module/i }),
@@ -44,6 +44,12 @@ describe("OverviewPage", () => {
     expect(
       screen.getByRole("heading", { name: /4. Interactive Dataset Visualization/i }),
     ).toBeInTheDocument();
+
+    // Verify tabs are present in the DOM
+    expect(screen.getByTestId("import-tabs")).toBeInTheDocument();
+    expect(screen.getByTestId("tab-dicom")).toBeInTheDocument();
+    expect(screen.getByTestId("tab-bids")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-direct-panel")).toBeInTheDocument();
 
     // Verify accordions/sub-steps are present in the DOM
     expect(screen.getByTestId("project-management-accordion")).toBeInTheDocument();

@@ -101,7 +101,7 @@ Before running ExploreASL GUI you will need two dependencies installed separatel
 | **ExploreASL** | v11.1.0 or later (v2+ / `develop` branch preferred) | [github.com/ExploreASL/ExploreASL](https://github.com/ExploreASL/ExploreASL) |
 
 > [!NOTE]
-> Future releases will also support **MATLAB Runtime** with a pre-compiled ExploreASL package and an **ExploreASL Docker image** ([hub.docker.com/r/exploreasl/xasl](https://hub.docker.com/r/exploreasl/xasl)). These are not yet available in the current version.
+> The app manages execution using **Execution Profiles**, which support running ExploreASL via different backends. While currently restricted to MATLAB + GitHub-based ExploreASL (installed via Git or ZIP), the profiling system is built to support future pre-compiled packages (running via the free MATLAB Runtime) or containerized engines (Docker, Apptainer, etc.) to run independent of a local MATLAB dependency.
 
 ### Platform Dependencies (for running from source only)
 
@@ -192,11 +192,18 @@ git clone --branch develop https://github.com/ExploreASL/ExploreASL.git
 
 This clones the latest `develop` branch (v2+), which is the recommended version.
 
-### Step 3 — Tell the GUI Where ExploreASL Is
+### Step 3 — Configure Execution Profiles
 
-When you first launch ExploreASL GUI, it will ask you to locate your ExploreASL installation folder. Navigate to the folder you extracted or cloned in Step 2 — it should be named `ExploreASL` (or `ExploreASL-develop`) and contain a file called `ExploreASL.m` inside it.
+Instead of a single global path, ExploreASL GUI uses **Execution Profiles** to manage how the ExploreASL pipeline is run. This allows you to configure multiple installations or execution methods and switch between them.
 
-You can change this path at any time from the GUI's settings.
+1. **Onboarding:** When launching the app with no configured profiles, a welcome card is shown blocking project actions. Click **Open Settings** to set up your first profile.
+2. **Add Profile:** In global Settings under **Execution Profiles**, click **Add Profile** and choose a profile type (currently **MATLAB**).
+3. **Paths Configuration:**
+   - **MATLAB Path:** Enter the path to the MATLAB executable (e.g. `/usr/local/MATLAB/R2024b/bin/matlab` on Linux/macOS or `C:\Program Files\MATLAB\R2024b\bin\matlab.exe` on Windows). You can click **Detect MATLAB** to search your system automatically or **Browse** to choose it manually.
+   - **ExploreASL Path:** Browse to the folder where you extracted or cloned ExploreASL in Step 2 (containing `ExploreASL.m`).
+4. **Validation:** Click **Save**. The GUI runs a validation command to ensure the MATLAB executable works, `ExploreASL.m` exists, and detects the ExploreASL version automatically.
+
+You can add multiple profiles and switch between them from the dropdown selectors on the Import and Processing pages.
 
 > [!NOTE]
 > If you are in a hospital or institutional environment, your IT department may restrict running unsigned software or limit MATLAB network licensing. Contact your IT support if you encounter permission or licensing errors.
@@ -246,13 +253,26 @@ Raw DICOM / NIfTI
 
 ### Import Dataset
 
-The import module walks you through five sub-steps:
+ExploreASL GUI supports two different pathways to import your dataset, depending on the format of your raw files:
+
+#### Pathway A: DICOM Import Wizard (default)
+
+Use this if you have raw scanner DICOM files. The wizard walks you through five sub-steps:
 
 1. **Ingest DICOMs** — Select your source directory and scan for DICOM files, with optional subfolder grouping
 2. **Tokenize Paths** — Map folder hierarchy levels to BIDS identifiers (Subject / Session / Run / Modality)
 3. **Resolve Aliases** — Rename subjects, order sessions/runs, and map raw scan labels to BIDS modality types
 4. **Acquisition Metadata** — Configure ASL-specific parameters (labelling type, PLD, labelling duration) with per-scan overrides
 5. **Preview & Run** — Review the staging layout and `dataPar.json`, then execute the import via dcm2niix
+
+#### Pathway B: Direct BIDS Import (Skip Import)
+
+Use this if you already have a BIDS-compliant dataset (containing NIfTI images, sidecar `.json` metadata, and `_aslcontext.tsv` files).
+
+1. Select the BIDS folder during project creation.
+2. The landing detection dialog will detect the existing BIDS structure and prompt you to **Skip Import**.
+3. This opens the **BIDS Review Panel**, which automatically scans all subject sidecars, groups scans with matching acquisition parameters, and flags any skipped subjects (e.g. subjects with missing/unparseable files).
+4. Assign group labels and click **Confirm** to populate project mappings and transition directly to pipeline parameters configuration.
 
 ### Configure Global Project Data Parameters
 
@@ -350,8 +370,8 @@ Unit tests cover schemas, Zustand stores, and utility functions. Component tests
 - [x] Processing parameter configuration (`dataPar.json`)
 - [x] Pipeline execution with real-time progress tracking
 - [x] Results visualization (population stats + NIfTI viewer)
-- [ ] Project manifest export
-- [ ] Import BIDS-ready datasets
+- [x] Project manifest export
+- [x] Import BIDS-ready datasets
 - [ ] Auto-update support
 - [ ] Documentation site
 
@@ -366,10 +386,11 @@ See [open issues](https://github.com/MauricePasternak/ExploreASL-GUI/issues) for
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes using [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `feat: add CBF viewer`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Switch to the develop branch (`git checkout develop`)
+3. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+4. Commit your changes using [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `feat: add CBF viewer`)
+5. Push to the branch (`git push origin feature/AmazingFeature`)
+6. Open a Pull Request
 
 Please read the [AGENTS.md](AGENTS.md) file for coding conventions, testing requirements, and agent guidelines before contributing.
 
