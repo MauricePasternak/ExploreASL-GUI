@@ -340,17 +340,21 @@ pub fn probe_matlab_version(matlab_path: &Path) -> Result<String, String> {
     // Last resort: launching MATLAB is slow and CPU-heavy; keep a short timeout.
     let (tx, rx) = mpsc::channel();
     let binary = matlab_path.to_path_buf();
-    let timeout = Duration::from_secs(8);
+    let timeout = Duration::from_secs(20);
 
     thread::spawn(move || {
         let result = run_matlab_full_version(&binary);
         let _ = tx.send(result);
     });
 
-    rx.recv_timeout(timeout)
-        .ok()
-        .flatten()
-        .ok_or_else(|| "matlab probe timed out or failed".to_string())
+    match rx.recv_timeout(timeout) {
+        Ok(Some(version)) => Ok(version),
+        Ok(None) => Err("matlab probe failed to execute or returned empty output".to_string()),
+        Err(mpsc::RecvTimeoutError::Timeout) => Err("matlab probe timed out".to_string()),
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err("matlab probe thread disconnected".to_string())
+        }
+    }
 }
 
 fn run_matlab_full_version(binary: &Path) -> Option<String> {

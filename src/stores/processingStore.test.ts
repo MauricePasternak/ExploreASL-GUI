@@ -104,6 +104,7 @@ const POPULATION_CONFIG: ProcessConfig = {
   modules: ["population"],
   selectedProfileId: "profile-1",
   workers: 8,
+  rerunBids2Legacy: false,
 };
 
 const STATUS_A: SubjectModuleStatus = {
@@ -185,6 +186,27 @@ describe("processingStore setConfig", () => {
       selectedProfileId: "profile-1",
       workers: 4,
     });
+  });
+
+  it("forces rerunBids2Legacy=false when neither structural nor asl is selected", () => {
+    const { setConfig } = useProcessingStore.getState();
+    setConfig({
+      subjects: [],
+      modules: ["structural"],
+      selectedProfileId: "profile-1",
+      workers: 2,
+      rerunBids2Legacy: true,
+    });
+    expect(useProcessingStore.getState().config?.rerunBids2Legacy).toBe(true);
+
+    setConfig({
+      subjects: [],
+      modules: ["population"],
+      selectedProfileId: "profile-1",
+      workers: 1,
+      rerunBids2Legacy: true,
+    });
+    expect(useProcessingStore.getState().config?.rerunBids2Legacy).toBe(false);
   });
 
   // ---------------------------------------------------------------------------

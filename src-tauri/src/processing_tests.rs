@@ -912,6 +912,33 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn delete_bids2legacy_locks_removes_only_matching_subjects() {
+        let root = unique_temp_path("del-bids2legacy");
+        let bids2legacy_dir = root
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("lock")
+            .join("xASL_module_BIDS2Legacy");
+
+        let sub1_dir = bids2legacy_dir.join("sub-001_01");
+        let sub2_dir = bids2legacy_dir.join("sub-002_01");
+
+        fs::create_dir_all(&sub1_dir).unwrap();
+        fs::create_dir_all(&sub2_dir).unwrap();
+
+        fs::write(sub1_dir.join("010_BIDS2LEGACY.status"), "").unwrap();
+        fs::write(sub2_dir.join("010_BIDS2LEGACY.status"), "").unwrap();
+
+        delete_bids2legacy_locks(&root, "^(sub-001_01)$").unwrap();
+
+        assert!(!sub1_dir.exists());
+        assert!(sub2_dir.exists());
+        assert!(sub2_dir.join("010_BIDS2LEGACY.status").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
     // -------------------------------------------------------------------------
     // delete_module_log_files
     // -------------------------------------------------------------------------

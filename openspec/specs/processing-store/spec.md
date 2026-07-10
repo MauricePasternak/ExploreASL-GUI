@@ -89,6 +89,7 @@ After `processingPhase` transitions to `"completed"` and `modules` includes `"po
 The store SHALL hold a `ProcessConfig` object containing: `subjects` (array of selected SubjectSession strings), `modules` (array of `structural`, `asl`, `population` — at least one required), `selectedProfileId` (string), `workers` (integer, 1–available cores), and `subjectRegexp` (string generated from subject selection). If Population is selected, `workers` SHALL be forced to 1. The frontend SHALL translate `modules` string array to `bProcess` boolean vector (`[true, false, false]` → Structural only, `[true, true, false]` → Structural+ASL, etc.) before passing to `run_pipeline`.
 
 The `ProcessConfigSchema` SHALL be:
+
 ```
 z.object({
   subjects: z.array(z.string()),
@@ -101,6 +102,7 @@ z.object({
 `setConfig` SHALL enforce mutual exclusivity between Population and Structural/ASL. If `modules` contains `"population"`, it SHALL NOT contain `"structural"` or `"asl"`. If `modules` contains `"structural"` or `"asl"`, it SHALL NOT contain `"population"`. When a conflicting module is added, the opposite module(s) SHALL be removed automatically.
 
 Before calling `run_pipeline`, `startProcessing` SHALL:
+
 1. Resolve the profile via `globalStore.getProfileById(selectedProfileId)`. If not found, show an inline error ("Selected profile was deleted or is invalid") and block execution. Do NOT transition to `failed` pipeline state — this is a config error, not a pipeline failure.
 2. Check `globalStore.profileValidationState[selectedProfileId]`. If not valid, show an inline error with the validation errors and block execution. Do NOT transition to `failed`.
 3. If the population module is selected, call `capture_environment_versions` with the resolved profile's `exploreAslPath` and `matlabPath`, and store the result alongside `profileId` via `setLastRunProfileId("population", profileId, { exploreASLVersion, matlabVersion, guiVersion })`.

@@ -3,14 +3,18 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
+fn get_test_temp_dir() -> tempfile::TempDir {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let target_dir = manifest_dir.join("target");
+    let _ = fs::create_dir_all(&target_dir);
+    tempfile::tempdir_in(&target_dir).unwrap()
+}
+
 // From manifest.rs tests:
 #[test]
 fn reads_matlab_version_from_version_info_xml() {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("easl-gui-matlab-xml-{}", ts));
+    let temp = get_test_temp_dir();
+    let root = temp.path();
     let bin = root.join("R2022b").join("bin");
     fs::create_dir_all(&bin).unwrap();
     fs::write(
@@ -23,8 +27,6 @@ fn reads_matlab_version_from_version_info_xml() {
 
     let version = probe_matlab_version(&matlab).unwrap();
     assert_eq!(version, "R2022b");
-
-    let _ = fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -42,12 +44,8 @@ fn reads_matlab_release_from_macos_app_bundle_path() {
 #[test]
 #[cfg(unix)]
 fn probes_matlab_version() {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let dir = std::env::temp_dir().join(format!("easl-gui-matlab-probe-{}", ts));
-    fs::create_dir_all(&dir).unwrap();
+    let temp = get_test_temp_dir();
+    let dir = temp.path();
 
     let fake_matlab = dir.join("matlab");
     {
@@ -61,20 +59,14 @@ fn probes_matlab_version() {
 
     let version = probe_matlab_version(&fake_matlab).unwrap();
     assert_eq!(version, "9.13.0.2126072 (R2022b)");
-
-    let _ = fs::remove_dir_all(&dir);
 }
 
 // From commands.rs tests:
 #[cfg(unix)]
 #[test]
 fn detect_matlab_version_from_fake_binary() {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let dir = std::env::temp_dir().join(format!("easl-gui-matlab-test-{}", ts));
-    fs::create_dir_all(&dir).unwrap();
+    let temp = get_test_temp_dir();
+    let dir = temp.path();
 
     let fake_matlab = dir.join("matlab");
     {
@@ -91,19 +83,13 @@ fn detect_matlab_version_from_fake_binary() {
 
     let version = run_matlab_release(&fake_matlab);
     assert_eq!(version, Some("R2022b".to_string()));
-
-    let _ = fs::remove_dir_all(&dir);
 }
 
 #[cfg(unix)]
 #[test]
 fn run_matlab_release_rejects_failure() {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let dir = std::env::temp_dir().join(format!("easl-gui-matlab-fail-{}", ts));
-    fs::create_dir_all(&dir).unwrap();
+    let temp = get_test_temp_dir();
+    let dir = temp.path();
 
     let fake_matlab = dir.join("matlab");
     {
@@ -121,6 +107,4 @@ fn run_matlab_release_rejects_failure() {
 
     let version = run_matlab_release(&fake_matlab);
     assert_eq!(version, None);
-
-    let _ = fs::remove_dir_all(&dir);
 }
