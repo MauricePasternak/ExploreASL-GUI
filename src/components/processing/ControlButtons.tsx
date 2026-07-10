@@ -1,5 +1,5 @@
 import { Button, Group, Modal, Stack, Text } from "@mantine/core";
-import { useCallback, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 
 import { useProcessingStore } from "../../stores/processingStore";
@@ -73,7 +73,7 @@ interface ControlButtonsProps {
   startDisabled?: boolean;
 }
 
-export default function ControlButtons({ startDisabled = false }: ControlButtonsProps = {}) {
+const ControlButtons = memo(function ControlButtons({ startDisabled = false }: ControlButtonsProps = {}) {
   const phase = useProcessingStore((s) => s.processingPhase);
   const startProcessing = useProcessingStore((s) => s.startProcessing);
   const killProcessing = useProcessingStore((s) => s.killProcessing);
@@ -234,4 +234,6 @@ export default function ControlButtons({ startDisabled = false }: ControlButtons
       </Modal>
     </>
   );
-}
+});
+
+export default ControlButtons;

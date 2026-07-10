@@ -25,6 +25,7 @@ export interface ProcessingState {
   workerPids: number[];
   pendingRawdataWarning: string | null;
   profileError: string | null;
+  preparingMessage: string | null;
 
   setConfig: (config: ProcessConfig) => void;
   startProcessing: (explicitConfirm?: boolean) => Promise<void>;
@@ -52,6 +53,7 @@ const INITIAL_STATE = {
   workerPids: [] as number[],
   pendingRawdataWarning: null as string | null,
   profileError: null as string | null,
+  preparingMessage: null as string | null,
 };
 
 // =============================================================================
@@ -101,9 +103,6 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     if (!config) throw new Error("No config set");
     if (config.modules.length === 0) throw new Error("No modules selected");
 
-    // Resolve + validate the execution profile before doing anything. On
-    // failure we show an inline error and block — we do NOT transition to the
-    // `failed` pipeline state (nothing has started yet).
     const global = useGlobalStore.getState();
     const profile = global.getProfileById(config.selectedProfileId);
     if (!profile) {
@@ -140,106 +139,124 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       }
     }
 
-    // Clear population completion flag when re-running Population
-    if (config.modules.includes("population")) {
-      useProjectStore.getState().setPopulationCompleted(false);
+    set({
+      processingPhase: "preparing",
+      subjectStatuses: [],
+      preparingMessage: "Initializing processing...",
+    });
 
-      const matlabPath = profile.type === "matlab" ? profile.matlabPath : "";
-      const exploreAslPath = profile.type === "matlab" ? profile.exploreAslPath : "";
-
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const versions = await invoke<{ explore_asl: string; matlab: string }>(
-          "capture_environment_versions",
-          {
-            exploreAslPath,
-            matlabPath,
-          },
-        );
-        const gui =
-          import.meta.env.VITE_APP_VERSION ??
-          useProjectStore.getState().project?.version ??
-          "unknown";
-        useProjectStore.getState().setLastRunProfileId("population", profile.id, {
-          exploreASLVersion: versions.explore_asl,
-          matlabVersion: versions.matlab,
-          guiVersion: gui,
-        });
-      } catch (err) {
-        console.warn("[manifest] version capture failed", err);
-        useProjectStore.getState().setLastRunProfileId("population", profile.id, {
-          exploreASLVersion: "unknown",
-          matlabVersion: "unknown",
-          guiVersion: useProjectStore.getState().project?.version ?? "unknown",
-        });
-      }
-    }
-
-    set({ processingPhase: "preparing", subjectStatuses: [] });
-
-    const { watchLockDir, setupProcessingListeners, runProcessingPipeline } =
-      await import("../lib/processingEvents");
-
-    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
-    if (!projectRoot) throw new Error("No project loaded");
-
-    const dataSource = useProjectStore.getState().project?.projectMeta.dataSource ?? "dicom";
-
-    if (dataSource === "bids") {
-      const { invoke } = await import("@tauri-apps/api/core");
-      if (!explicitConfirm) {
-        const result = await invoke<{
-          warning: string | null;
-          created: boolean;
-          bidsignoreUpdated: boolean;
-        }>("ensure_rawdata_dir", { rootPath: projectRoot });
-        if (result.warning) {
-          set({ pendingRawdataWarning: result.warning });
-          return;
-        }
-      } else {
-        // Clear warning state when proceeding after confirmation
-        set({ pendingRawdataWarning: null });
-      }
-    }
-
-    // Generate/update participants.tsv (always call to either add or strip the 'site' column)
-    const dataPar = useDataParStore.getState().dataPar;
-    const mappingState = useProjectStore.getState().project?.mappingState;
-    const { ensureParticipantsFiles } = await import("../lib/participantsUtils");
-    await ensureParticipantsFiles(
-      projectRoot,
-      config,
-      mappingState,
-      available,
-      dataPar.enableMetadataGroupingCorrection ?? false,
-      dataSource,
-    );
-
-    await watchLockDir(projectRoot);
-
-    const cleanup = await setupProcessingListeners();
-    processingCleanup = cleanup;
-
-    const dataParJson = assembleDataPar(dataPar);
-    if (dataSource === "bids") {
-      dataParJson.x.opts = {
-        ...(dataParJson.x.opts ?? {}),
-        subjectFolder: projectRoot,
-      };
-    }
-    dataParJson.x.dataset = {
-      subjectRegexp: generateSubjectRegexp(config.subjects),
-      ...(config.subjects.length > 0 && { ForceInclusionList: config.subjects }),
-    };
+    // Yield to the event loop to ensure React has executed render and the browser has repainted
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
+      // Clear population completion flag when re-running Population
+      if (config.modules.includes("population")) {
+        useProjectStore.getState().setPopulationCompleted(false);
+
+        const matlabPath = profile.type === "matlab" ? profile.matlabPath : "";
+        const exploreAslPath = profile.type === "matlab" ? profile.exploreAslPath : "";
+
+        set({ preparingMessage: "Checking ExploreASL version..." });
+
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          const versions = await invoke<{ explore_asl: string; matlab: string }>(
+            "capture_environment_versions",
+            {
+              exploreAslPath,
+              matlabPath,
+            },
+          );
+          const gui =
+            import.meta.env.VITE_APP_VERSION ??
+            useProjectStore.getState().project?.version ??
+            "unknown";
+          useProjectStore.getState().setLastRunProfileId("population", profile.id, {
+            exploreASLVersion: versions.explore_asl,
+            matlabVersion: versions.matlab,
+            guiVersion: gui,
+          });
+        } catch (err) {
+          console.warn("[manifest] version capture failed", err);
+          useProjectStore.getState().setLastRunProfileId("population", profile.id, {
+            exploreASLVersion: "unknown",
+            matlabVersion: "unknown",
+            guiVersion: useProjectStore.getState().project?.version ?? "unknown",
+          });
+        }
+      }
+
+      const { watchLockDir, setupProcessingListeners, runProcessingPipeline } =
+        await import("../lib/processingEvents");
+
+      const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
+      if (!projectRoot) throw new Error("No project loaded");
+
+      const dataSource = useProjectStore.getState().project?.projectMeta.dataSource ?? "dicom";
+
+      if (dataSource === "bids") {
+        set({ preparingMessage: "Checking dataset rawdata..." });
+        const { invoke } = await import("@tauri-apps/api/core");
+        if (!explicitConfirm) {
+          const result = await invoke<{
+            warning: string | null;
+            created: boolean;
+            bidsignoreUpdated: boolean;
+          }>("ensure_rawdata_dir", { rootPath: projectRoot });
+          if (result.warning) {
+            set({ pendingRawdataWarning: result.warning, preparingMessage: null });
+            return;
+          }
+        } else {
+          // Clear warning state when proceeding after confirmation
+          set({ pendingRawdataWarning: null });
+        }
+      }
+
+      // Generate/update participants.tsv (always call to either add or strip the 'site' column)
+      set({ preparingMessage: "Generating participants list..." });
+      const dataPar = useDataParStore.getState().dataPar;
+      const mappingState = useProjectStore.getState().project?.mappingState;
+      const { ensureParticipantsFiles } = await import("../lib/participantsUtils");
+      await ensureParticipantsFiles(
+        projectRoot,
+        config,
+        mappingState,
+        available,
+        dataPar.enableMetadataGroupingCorrection ?? false,
+        dataSource,
+      );
+
+      set({ preparingMessage: "Configuring file watcher..." });
+      await watchLockDir(projectRoot);
+
+      set({ preparingMessage: "Setting up event listeners..." });
+      const cleanup = await setupProcessingListeners();
+      processingCleanup = cleanup;
+
+      const dataParJson = assembleDataPar(dataPar);
+      if (dataSource === "bids") {
+        dataParJson.x.opts = {
+          ...(dataParJson.x.opts ?? {}),
+          subjectFolder: projectRoot,
+        };
+      }
+      dataParJson.x.dataset = {
+        subjectRegexp: generateSubjectRegexp(config.subjects),
+        ...(config.subjects.length > 0 && { ForceInclusionList: config.subjects }),
+      };
+
+      set({ preparingMessage: "Starting processing pipeline..." });
       const pids = await runProcessingPipeline(config, profile, dataParJson);
-      set({ workerPids: pids, processingPhase: "running" });
+      set({ workerPids: pids, processingPhase: "running", preparingMessage: null });
     } catch (err) {
       clearProcessingListeners();
-      const { stopWatcher: stopW } = await import("../lib/processingEvents");
-      await stopW();
+      try {
+        const { stopWatcher: stopW } = await import("../lib/processingEvents");
+        await stopW();
+      } catch (watchErr) {
+        console.warn("[processingStore] stopWatcher failed in catch:", watchErr);
+      }
       set({ ...INITIAL_STATE });
       throw err;
     }
@@ -351,6 +368,7 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
     // would remain permanently disabled after the user cancels the warning.
     set((state) => ({
       pendingRawdataWarning: null,
+      preparingMessage: null,
       processingPhase:
         state.processingPhase === "preparing" ? ("idle" as ProcessingPhase) : state.processingPhase,
     }));
