@@ -91,6 +91,7 @@ pub struct SubjectModuleStatus {
     pub status: String,
     pub completed_steps: Vec<String>,
     pub locked: bool,
+    pub bids2legacy_exists: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -408,6 +409,10 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
             let module_lock = entry.path().join("xASL_module_Structural");
             if module_lock.exists() {
                 let (status, completed_steps, locked) = determine_status(&module_lock);
+                let bids2legacy_exists = lock_root
+                    .join("xASL_module_BIDS2Legacy")
+                    .join(&subject_session)
+                    .exists();
                 statuses.push(SubjectModuleStatus {
                     subject_session,
                     module_name: "xASL_module_Structural".to_string(),
@@ -415,6 +420,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
                     status,
                     completed_steps,
                     locked,
+                    bids2legacy_exists: Some(bids2legacy_exists),
                 });
             }
         }
@@ -467,6 +473,10 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
                                 }
                             }
 
+                            let bids2legacy_exists = lock_root
+                                .join("xASL_module_BIDS2Legacy")
+                                .join(subject_session)
+                                .exists();
                             statuses.push(SubjectModuleStatus {
                                 subject_session: subject_session.clone(),
                                 module_name: "xASL_module_ASL".to_string(),
@@ -474,6 +484,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
                                 status,
                                 completed_steps,
                                 locked,
+                                bids2legacy_exists: Some(bids2legacy_exists),
                             });
                         }
                     }
@@ -490,6 +501,10 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
             if let Some(st) = structural_time {
                 if let Some(at) = get_asl_completion_time(&root, subject_session, &run) {
                     if st > at {
+                        let bids2legacy_exists = lock_root
+                            .join("xASL_module_BIDS2Legacy")
+                            .join(subject_session)
+                            .exists();
                         statuses.push(SubjectModuleStatus {
                             subject_session: subject_session.clone(),
                             module_name: "xASL_module_ASL".to_string(),
@@ -497,6 +512,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
                             status: "outdated".to_string(),
                             completed_steps: Vec::new(),
                             locked: false,
+                            bids2legacy_exists: Some(bids2legacy_exists),
                         });
                     }
                 }
@@ -596,6 +612,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
             status: pop_status,
             completed_steps: pop_completed_steps,
             locked: pop_locked,
+            bids2legacy_exists: None,
         });
     }
 

@@ -175,7 +175,10 @@ function renderTable(
   vi.mocked(exists).mockResolvedValue(mockBids2LegacyExists);
   useProcessingStore.setState({
     availableSubjects: mockAvailableSubjects,
-    subjectStatuses: mockSubjectStatuses,
+    subjectStatuses: mockSubjectStatuses.map((s) => ({
+      bids2legacyExists: mockBids2LegacyExists,
+      ...s,
+    })),
   });
   useProjectStore.setState({
     project: buildProjectState() as any,

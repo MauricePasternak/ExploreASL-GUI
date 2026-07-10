@@ -30,6 +30,7 @@ function makeStatus(overrides: Partial<SubjectModuleStatus> = {}): SubjectModule
     status: "complete",
     completedSteps: ["999_ready"],
     locked: false,
+    bids2legacyExists: true,
     ...overrides,
   };
 }
@@ -77,38 +78,30 @@ describe("resolveLogBadge", () => {
 describe("resolveModuleDisplay", () => {
   it("marks completed structural status outdated when BIDS2Legacy subject-session lock is missing", () => {
     expect(
-      resolveModuleDisplay(SUBJECT_INFO, "structural", [makeStatus()], new Set(["sub-001_01"])),
+      resolveModuleDisplay(SUBJECT_INFO, "structural", [makeStatus({ bids2legacyExists: false })]),
     ).toBe("outdated");
   });
 
   it("marks completed ASL status outdated when BIDS2Legacy subject-session lock is missing", () => {
     expect(
-      resolveModuleDisplay(
-        SUBJECT_INFO,
-        "asl",
-        [makeStatus({ module: "asl", run: "1" })],
-        new Set(["sub-001_01"]),
-      ),
+      resolveModuleDisplay(SUBJECT_INFO, "asl", [
+        makeStatus({ module: "asl", run: "1", bids2legacyExists: false }),
+      ]),
     ).toBe("outdated");
   });
 
   it("keeps completed status when BIDS2Legacy subject-session lock exists", () => {
-    expect(resolveModuleDisplay(SUBJECT_INFO, "structural", [makeStatus()], new Set())).toBe(
-      "complete",
-    );
+    expect(
+      resolveModuleDisplay(SUBJECT_INFO, "structural", [makeStatus({ bids2legacyExists: true })]),
+    ).toBe("complete");
   });
 
   it("does not convert pending or skipped modules to outdated", () => {
-    expect(resolveModuleDisplay(SUBJECT_INFO, "structural", [], new Set(["sub-001_01"]))).toBe(
-      "pending",
-    );
+    expect(resolveModuleDisplay(SUBJECT_INFO, "structural", [])).toBe("pending");
     expect(
-      resolveModuleDisplay(
-        { ...SUBJECT_INFO, hasStructural: false },
-        "structural",
-        [makeStatus()],
-        new Set(["sub-001_01"]),
-      ),
+      resolveModuleDisplay({ ...SUBJECT_INFO, hasStructural: false }, "structural", [
+        makeStatus({ bids2legacyExists: false }),
+      ]),
     ).toBe("skipped");
   });
 });

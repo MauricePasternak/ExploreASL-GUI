@@ -19,7 +19,6 @@ export function resolveModuleDisplay(
   subjectInfo: SubjectInfo,
   module: "structural" | "asl",
   statuses: SubjectModuleStatus[],
-  missingBids2LegacySubjectSessions: ReadonlySet<string> = new Set(),
 ): ModuleDisplayStatus {
   if (module === "structural" && !subjectInfo.hasStructural) return "skipped";
   if (module === "asl" && !subjectInfo.hasASL) return "skipped";
@@ -29,9 +28,7 @@ export function resolveModuleDisplay(
   );
   if (!entry) return "pending";
   if (entry.status === "complete") {
-    return missingBids2LegacySubjectSessions.has(subjectInfo.subjectSession)
-      ? "outdated"
-      : "complete";
+    return entry.bids2legacyExists === false ? "outdated" : "complete";
   }
   if (entry.status === "incomplete") return "incomplete";
   if (entry.status === "outdated") return "outdated";
