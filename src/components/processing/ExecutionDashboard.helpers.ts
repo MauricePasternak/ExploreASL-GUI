@@ -21,10 +21,7 @@ export function getStepsForSubject(
   run?: string,
 ): StepStatus[] {
   const entry = statuses.find(
-    (s) =>
-      s.subjectSession === subjectSession &&
-      s.module === module &&
-      runMatches(s.run, run),
+    (s) => s.subjectSession === subjectSession && s.module === module && runMatches(s.run, run),
   );
   if (!entry) return [];
   const steps: StepStatus[] = entry.completedSteps.map((name) => ({
@@ -44,10 +41,7 @@ export function getStatusForSubject(
   run?: string,
 ): SubjectModuleStatus | undefined {
   return statuses.find(
-    (s) =>
-      s.subjectSession === subjectSession &&
-      s.module === module &&
-      runMatches(s.run, run),
+    (s) => s.subjectSession === subjectSession && s.module === module && runMatches(s.run, run),
   );
 }
 
