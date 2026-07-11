@@ -391,6 +391,7 @@ Contributions are what make the open-source community such an amazing place to l
 4. Commit your changes using [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `feat: add CBF viewer`)
 5. Push to the branch (`git push origin feature/AmazingFeature`)
 6. Open a Pull Request
+7. Apply appropriate labels to your Pull Request (e.g., `enhancement`, `bug`, `documentation`) so that the automated release notes classify the changes correctly.
 
 Please read the [AGENTS.md](AGENTS.md) file for coding conventions, testing requirements, and agent guidelines before contributing.
 

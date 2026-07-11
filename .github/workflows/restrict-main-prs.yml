@@ -1,0 +1,25 @@
+name: Restrict PRs to Main
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce git-flow branching rule
+        run: |
+          echo "PR Base Branch: ${{ github.base_ref }}"
+          echo "PR Source Branch: ${{ github.head_ref }}"
+
+          # Allow PRs targeting main only if they originate from 'develop' or a 'hotfix/' branch
+          if [[ "${{ github.head_ref }}" == "develop" || "${{ github.head_ref }}" =~ ^hotfix/ ]]; then
+            echo "Success: PR targets main from an allowed branch (${{ github.head_ref }})."
+            exit 0
+          else
+            echo "::error::PRs targeting the 'main' branch are restricted. They must originate from 'develop' or a 'hotfix/*' branch."
+            echo "Please edit your pull request to target the 'develop' branch instead."
+            exit 1
+          fi

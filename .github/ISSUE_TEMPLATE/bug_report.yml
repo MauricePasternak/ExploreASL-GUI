@@ -1,0 +1,112 @@
+name: "🐛 Bug Report"
+description: File a bug report using ExploreASL GUI's diagnostic tools to help us diagnose and fix the issue.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+
+        To help us solve your issue quickly, please use the built-in diagnostic features of ExploreASL GUI:
+        * **App State Snapshot**: Press **`Ctrl+Shift+D`** anywhere in the GUI to copy a diagnostic JSON snapshot to your clipboard.
+        * **Crash Reports**: If the app crashed and showed a fallback screen, use the **"Copy error report"** button.
+        * **Log Files**: In dev mode, logs are at `<OS_TEMP_DIR>/exploreasl-gui-logs/dev.log`. In release mode, logs are under `<APP_DATA_DIR>/logs/`.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: |
+        Provide a detailed, step-by-step list of instructions to reproduce the bug.
+      placeholder: |
+        1. Open the ExploreASL GUI app
+        2. Load project at path '...'
+        3. Click on the '...' tab
+        4. See error: '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+      placeholder: What should have happened...
+    validations:
+      required: true
+
+  - type: textarea
+    id: state-snapshot
+    attributes:
+      label: 📋 State Snapshot (Ctrl+Shift+D)
+      description: |
+        Press **`Ctrl+Shift+D`** anywhere in the ExploreASL GUI (or run `window.__DEBUG__.snapshot()` in dev console) and paste the copied JSON here.
+        *This contains your current route, settings, and action history, which helps us reproduce the issue.*
+      placeholder: |
+        {
+          "timestamp": "...",
+          "route": "...",
+          ...
+        }
+      render: json
+    validations:
+      required: false
+
+  - type: textarea
+    id: crash-report
+    attributes:
+      label: 💥 Crash Report / Stack Trace
+      description: |
+        If the app crashed and showed a fallback screen, please click the **"Copy error report"** button and paste the stack trace here.
+      placeholder: Paste the error report/stack trace here...
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Info
+      description: |
+        Specify your operating system, GUI version, and ExploreASL version.
+        *(You can skip this if you pasted the State Snapshot above as it already contains these details)*
+      placeholder: |
+        - OS: Windows 11 / macOS Sequoia / Ubuntu 24.04
+        - ExploreASL GUI Version: (e.g., v0.1.0 or main branch commit)
+        - ExploreASL (MATLAB) Version: (e.g., v1.11.0)
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs-and-files
+    attributes:
+      label: 📁 Log Files or project.easl
+      description: |
+        Please drag and drop or attach relevant files:
+        * Your project's `project.easl` configuration file (not necessary if you pasted the State Snapshot above)
+        * `dev.log` (from `<OS_TEMP_DIR>/exploreasl-gui-logs/dev.log`)
+        * App logs (from `<APP_DATA_DIR>/logs/`)
+      placeholder: Drag and drop files here...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklists
+    attributes:
+      label: Checklist
+      description: Before submitting, please verify the following.
+      options:
+        - label: I have searched the existing issues to make sure this bug has not been reported already.
+          required: true
+        - label: I have updated to the latest version of the ExploreASL GUI and checked if the bug still persists.
+          required: false

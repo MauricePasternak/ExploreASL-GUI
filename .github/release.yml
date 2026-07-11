@@ -1,0 +1,31 @@
+# Configures GitHub's native "Generate release notes" behavior
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - question
+      - invalid
+      - wontfix
+      - ignore-in-release
+  categories:
+    - title: "🚀 Features & Enhancements"
+      labels:
+        - enhancement
+        - feature
+        - feat
+    - title: "🐛 Bug Fixes"
+      labels:
+        - bug
+        - bugfix
+        - fix
+    - title: "📖 Documentation"
+      labels:
+        - documentation
+        - docs
+    - title: "🧰 Maintenance & CI/CD"
+      labels:
+        - chore
+        - ci
+        - refactor
+        - build
+        - dependency

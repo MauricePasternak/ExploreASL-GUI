@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "📖 ExploreASL Documentation"
+    url: "https://exploreasl.github.io/Documentation/"
+    about: "Read the official ExploreASL documentation for information on processing, pipelines, and configuration."
