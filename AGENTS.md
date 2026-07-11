@@ -15,12 +15,13 @@ Tauri v2 desktop GUI wrapping ExploreASL (MATLAB ASL MRI pipeline).
 - ExploreASL invoked: `ExploreASL(root, importModules, processModules, ...)`.
 
 **Terminology (GUI ↔ ExploreASL):**
+
 | GUI/BIDS | ExploreASL | `tokenOrdering` |
 | -------- | ---------- | --------------- |
-| Subject | Subject | 1 |
-| Session | Visit | 2 |
-| Run | Session | 3 |
-| Modality | Scan | 4 |
+| Subject  | Subject    | 1               |
+| Session  | Visit      | 2               |
+| Run      | Session    | 3               |
+| Modality | Scan       | 4               |
 
 GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agents MUST translate.
 

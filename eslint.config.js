@@ -12,6 +12,7 @@ export default tseslint.config(
       "**/src-tauri/**",
       "**/node_modules/**",
       "**/e2e-tests/node_modules/**",
+      "**/.worktrees/**",
     ],
   },
   {
