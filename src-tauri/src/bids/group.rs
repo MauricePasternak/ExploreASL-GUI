@@ -364,7 +364,7 @@ pub fn group_by_fingerprint(
     }
 
     // Merge duplicate GroupSubject entries by subject_label
-    for (_hash, accum) in groups_map.iter_mut() {
+    for accum in groups_map.values_mut() {
         merge_group_subjects(&mut accum.subjects);
     }
 
