@@ -1,0 +1,41 @@
+name: "❓ Question / Support"
+description: Ask a question or request support regarding ExploreASL GUI.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need help or have questions about how to use ExploreASL GUI? Ask here!
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: A clear and concise explanation of what you are trying to understand or achieve.
+      placeholder: Ask your question here...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context / What you have tried
+      description: |
+        Please describe the context of your question.
+        What settings, files, or actions have you explored so far?
+      placeholder: Describe the context or steps taken...
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Info (if relevant)
+      description: If your question is related to a specific environment, please provide details (OS, app version, MATLAB version).
+      placeholder: |
+        - OS: Windows 11 / macOS Sequoia / Ubuntu 24.04
+        - ExploreASL GUI Version: (e.g. v1.0.0)
+        - ExploreASL (MATLAB) Version: (e.g. v1.11.0)
+    validations:
+      required: false

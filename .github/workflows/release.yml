@@ -1,15 +1,62 @@
 name: "Release"
 
-on:
-  push:
-    tags:
-      - "v*"
+# Manual release, modeled on cjpais/Handy.
+#
+# HOW TO CUT A RELEASE:
+#   1. Bump "version" in src-tauri/tauri.conf.json (and package.json to match) on main.
+#   2. Actions tab -> "Release" -> "Run workflow".
+#   3. A DRAFT GitHub Release is created with auto-generated, categorized notes
+#      (categories come from .github/release.yml). All platforms build and upload.
+#   4. Review the draft, edit notes if desired, then click "Publish release".
+#
+# SIGNING (optional, auto-enables once configured):
+#   Signing turns on automatically when the repo VARIABLE `TAURI_UPDATER_PUBKEY`
+#   is set. Until then, builds are unsigned and this workflow still works.
+#   See setup steps in the chat/README.
 
-permissions:
-  contents: write
+on:
+  workflow_dispatch:
 
 jobs:
-  release:
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tauri.conf.json
+        id: get-version
+        shell: bash
+        run: |
+          VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          echo "Application version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = "${{ steps.get-version.outputs.version }}";
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${version}`,
+              name: `v${version}`,
+              draft: true,
+              prerelease: false,
+              generate_release_notes: true,
+            });
+            return data.id;
+
+  build:
+    needs: create-release
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -48,14 +95,27 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build with Tauri
+      - name: Enable updater signing (only when a public key is configured)
+        if: ${{ vars.TAURI_UPDATER_PUBKEY != '' }}
+        shell: bash
+        run: |
+          tmp=$(mktemp)
+          jq \
+            --arg pubkey "${{ vars.TAURI_UPDATER_PUBKEY }}" \
+            '.bundle.createUpdaterArtifacts = true
+             | .plugins.updater.pubkey = $pubkey' \
+            src-tauri/tauri.conf.json > "$tmp"
+          mv "$tmp" src-tauri/tauri.conf.json
+          echo "Updater artifacts + signing enabled for this build."
+
+      - name: Build with Tauri and upload to draft release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: ${{ github.ref_name }}
-          releaseBody: "See the assets below to download and install."
-          releaseDraft: true
-          prerelease: false
+          tagName: v${{ needs.create-release.outputs.version }}
+          releaseName: v${{ needs.create-release.outputs.version }}
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
