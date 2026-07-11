@@ -5,7 +5,7 @@ import HeaderCard from "../common/HeaderCard";
 
 import { notifications } from "@mantine/notifications";
 
-import { splitBySubDelimiters } from "../../lib/pathUtils";
+import { getRelativePath, splitBySubDelimiters } from "../../lib/pathUtils";
 import {
   type BidsAslMetadata,
   type MetadataGroup,
@@ -77,11 +77,16 @@ function deriveSubjectRows({
     const sessionAssignment = assignments.find((assignment) => assignment.tag === "Session");
 
     for (const fullPath of rawPaths) {
-      if (!fullPath.startsWith(sourceDataPath)) {
+      const normFullPath = fullPath.replace(/\\/g, "/");
+      const normSourceDataPath = sourceDataPath.replace(/\\/g, "/");
+      const normalizedRoot = normSourceDataPath.endsWith("/")
+        ? normSourceDataPath
+        : `${normSourceDataPath}/`;
+      if (!normFullPath.startsWith(normalizedRoot)) {
         continue;
       }
 
-      const relativePath = fullPath.slice(sourceDataPath.length).replace(/^\/+/, "");
+      const relativePath = getRelativePath(fullPath, sourceDataPath);
       const segments = relativePath.split("/").filter(Boolean);
       if (!pathMatchesPattern(segments, pattern)) {
         continue;

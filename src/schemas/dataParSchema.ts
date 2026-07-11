@@ -112,6 +112,8 @@ export const DataParSchema = z
   .extend(AtlasesSectionSchema.shape)
   .extend(StructuralSectionSchema.shape)
   .extend(EnvironmentSectionSchema.shape)
+  // Zod v4 deprecated `.passthrough()` in favor of `.loose()` (or `z.looseObject()`).
+  // This allows additional unvalidated properties to pass through cleanly.
   .loose();
 
 export type DataParState = z.infer<typeof DataParSchema>;

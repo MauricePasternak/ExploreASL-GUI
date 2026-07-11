@@ -502,9 +502,7 @@ describe("participantsUtils", () => {
     });
 
     it("merges BIDS base rows (e.g., sub-C9ORF007Philips) into legacy target rows (e.g., sub-C9ORF007Philips_01) and removes the base rows", async () => {
-      const existingTsv =
-        "participant_id\tAge\tGender\n" +
-        "sub-C9ORF007Philips\t21\tF\n";
+      const existingTsv = "participant_id\tAge\tGender\n" + "sub-C9ORF007Philips\t21\tF\n";
 
       vi.mocked(exists).mockImplementation(async (path) => {
         const p = path.toString();

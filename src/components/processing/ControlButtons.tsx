@@ -73,7 +73,9 @@ interface ControlButtonsProps {
   startDisabled?: boolean;
 }
 
-const ControlButtons = memo(function ControlButtons({ startDisabled = false }: ControlButtonsProps = {}) {
+const ControlButtons = memo(function ControlButtons({
+  startDisabled = false,
+}: ControlButtonsProps = {}) {
   const phase = useProcessingStore((s) => s.processingPhase);
   const startProcessing = useProcessingStore((s) => s.startProcessing);
   const killProcessing = useProcessingStore((s) => s.killProcessing);
