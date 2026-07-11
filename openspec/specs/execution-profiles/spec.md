@@ -19,6 +19,7 @@ MatlabProfileSchema = ExecutionProfileBaseSchema.extend({
 ```
 
 The discriminated union SHALL be defined as:
+
 ```
 ExecutionProfileSchema = z.discriminatedUnion("type", [MatlabProfileSchema])
 ```
@@ -436,11 +437,11 @@ The Rust backend SHALL expose two validation commands that reuse the same intern
 
 ```rust
 #[tauri::command]
-fn validate_execution_profile(execution_profile: ExecutionProfile) 
+fn validate_execution_profile(execution_profile: ExecutionProfile)
   -> Result<ProfileValidationResult, String>;
 
 #[tauri::command]
-fn validate_all_execution_profiles(execution_profiles: Vec<ExecutionProfile>) 
+fn validate_all_execution_profiles(execution_profiles: Vec<ExecutionProfile>)
   -> Result<Vec<ProfileValidationResult>, String>;
 ```
 
@@ -458,6 +459,7 @@ struct ProfileValidationResult {
 ```
 
 The `validate()` method SHALL dispatch on profile type. For `matlab` profiles it SHALL:
+
 1. Check that `matlab_path` exists on disk and is executable (reuse existing `validate_matlab_executable`).
 2. Check that `explore_asl_path` exists on disk and contains `ExploreASL.m` (reuse existing `validate_exploreasl_path`).
 3. Detect `explore_asl_version` from the ExploreASL directory and return it in the result.

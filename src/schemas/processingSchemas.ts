@@ -24,6 +24,7 @@ export const ProcessConfigSchema = z.object({
   modules: z.array(z.enum(PROCESSING_MODULES)),
   selectedProfileId: z.string(),
   workers: z.number().int().min(1),
+  rerunBids2Legacy: z.boolean().optional(),
 });
 
 export const SubjectModuleStatusSchema = z.object({

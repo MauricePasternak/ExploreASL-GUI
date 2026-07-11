@@ -73,7 +73,7 @@ lastRun: z.object({
   matlabVersion: z.string().optional(),
   guiVersion: z.string().optional(),
   Mtime: z.number().int().nullable().optional(),
-}).optional()
+}).optional();
 ```
 
 The `profileId` SHALL reference an `ExecutionProfile.id` from the global store. At display time, the profile is resolved to show `profile.label`, and the stored version strings provide an accurate historical record of what was on disk when the pipeline ran. If the profile was deleted, a "(Profile deleted)" indicator is shown with the raw `profileId` for reference.
@@ -102,6 +102,7 @@ The `setLastRunVersions` store action SHALL be replaced by `setLastRunProfileId(
 The project store's `createProject` and `loadProject` actions SHALL check that at least one valid execution profile exists before proceeding. Validity SHALL be determined from the global store's `profileValidationState`.
 
 If no valid profiles exist:
+
 - `createProject` SHALL throw an error / show a notification directing the user to Settings.
 - `loadProject` SHALL throw an error / show a notification directing the user to Settings.
 - The landing page SHALL disable the "New Project" and "Open Project" buttons and recent project links.

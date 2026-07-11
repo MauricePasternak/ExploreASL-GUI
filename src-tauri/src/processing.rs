@@ -1025,6 +1025,61 @@ pub fn clear_stale_locks(project_root: String) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn delete_bids2legacy_locks(
+    project_root: &Path,
+    subject_regexp: &str,
+) -> Result<(), String> {
+    let lock_root = project_root
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("lock");
+    let bids2legacy_dir = lock_root.join("xASL_module_BIDS2Legacy");
+    if !bids2legacy_dir.exists() {
+        return Ok(());
+    }
+
+    let subject_re = if subject_regexp.is_empty() {
+        None
+    } else {
+        Some(
+            regex::Regex::new(subject_regexp)
+                .map_err(|e| format!("Invalid subject regexp '{}': {}", subject_regexp, e))?,
+        )
+    };
+
+    for entry in fs::read_dir(&bids2legacy_dir).map_err(|e| {
+        format!(
+            "Failed to read BIDS2Legacy lock dir {}: {}",
+            bids2legacy_dir.display(),
+            e
+        )
+    })? {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let subject_session_name = entry.file_name().to_string_lossy().to_string();
+
+        if let Some(ref re) = subject_re {
+            if !re.is_match(&subject_session_name) {
+                continue;
+            }
+        }
+
+        if let Err(e) = fs::remove_dir_all(entry.path()) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(format!(
+                    "Failed to delete BIDS2Legacy lock dir {}: {}",
+                    entry.path().display(),
+                    e
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub(crate) fn delete_status_files_for_modules(
     project_root: &Path,
     b_process: &[bool],
@@ -1245,12 +1300,14 @@ pub fn run_pipeline(
     b_process: Vec<bool>,
     workers: u32,
     subject_regexp: String,
+    rerun_bids2legacy: bool,
 ) -> Result<Vec<u32>, String> {
     let trace = CommandTrace::new("run_pipeline");
     trace.arg("project_root", &project_root);
     trace.arg("execution_profile_id", execution_profile.id());
     trace.arg("workers", workers.to_string());
     trace.arg("subject_regexp", &subject_regexp);
+    trace.arg("rerun_bids2legacy", rerun_bids2legacy.to_string());
 
     if workers == 0 {
         return Err("workers must be at least 1".to_string());
@@ -1299,6 +1356,9 @@ pub fn run_pipeline(
 
     let lock_root = ensure_lock_dir(&project_root)?;
     clear_stale_lock_dirs(&lock_root, &b_process)?;
+    if rerun_bids2legacy {
+        delete_bids2legacy_locks(&project_root, &subject_regexp)?;
+    }
     delete_status_files_for_modules(&project_root, &b_process, &subject_regexp)?;
     delete_module_log_files(&project_root, &b_process, &subject_regexp)?;
 

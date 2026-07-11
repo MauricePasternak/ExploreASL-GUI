@@ -267,7 +267,7 @@ mod tests {
     fn test_resolve_niivue_request_with_real_data() {
         let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let real_nii_gz_path = workspace_dir.join(
-            "../test/test_GENFI/derivatives/ExploreASL/Population/qCBF_sub-C9ORF007Philips_01_ASL_1.nii.gz",
+            "../test/fixtures/derivatives/ExploreASL/Population/qCBF_sub-mock_1_ASL_1.nii.gz",
         );
 
         assert!(

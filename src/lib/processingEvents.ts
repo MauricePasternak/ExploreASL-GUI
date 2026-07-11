@@ -262,6 +262,7 @@ export async function runProcessingPipeline(
     bProcess,
     workers,
     subjectRegexp: generateSubjectRegexp(config.subjects),
+    rerunBids2legacy: config.rerunBids2Legacy ?? false,
   });
 
   return pids;

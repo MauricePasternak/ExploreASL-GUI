@@ -95,6 +95,14 @@ export default function PipelineConfig() {
     [config, setConfig],
   );
 
+  const handleRerunBids2LegacyToggle = useCallback(
+    (checked: boolean) => {
+      if (!config) return;
+      setConfig({ ...config, rerunBids2Legacy: checked });
+    },
+    [config, setConfig],
+  );
+
   if (!config) return null;
 
   return (
@@ -142,6 +150,31 @@ export default function PipelineConfig() {
                 />
               );
             })}
+
+            <Group gap="xs" align="flex-start" mt="xs" wrap="nowrap">
+              <Checkbox
+                label="Force re-sync between imported/BIDS data and preliminary ExploreASL derivatives"
+                styles={{ label: { whiteSpace: "normal", wordBreak: "break-word" } }}
+                checked={config.rerunBids2Legacy ?? false}
+                onChange={(e) => handleRerunBids2LegacyToggle(e.currentTarget.checked)}
+                disabled={!config.modules.includes("structural") && !config.modules.includes("asl")}
+                data-testid="rerun-bids2legacy-checkbox"
+              />
+              <span style={{ marginTop: 2, display: "inline-flex" }}>
+                <FieldInfoIcon
+                  tooltipLabel="If checked, the app will force a re-synchronization of the raw imported/BIDS data with the initial ExploreASL derivatives. This is necessary if the raw source files (i.e. BIDS folders) have been altered after the initial import."
+                  aria-label="Info for rerun BIDS2Legacy"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                />
+              </span>
+            </Group>
           </Stack>
         </div>
 

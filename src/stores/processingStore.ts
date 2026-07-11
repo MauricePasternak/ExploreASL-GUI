@@ -92,9 +92,13 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
       }
     }
 
-    const patched = modules.includes("population")
-      ? { ...config, modules, workers: 1 }
-      : { ...config, modules };
+    const needsBids2LegacyRerun = modules.includes("structural") || modules.includes("asl");
+    const patched = {
+      ...config,
+      modules,
+      ...(modules.includes("population") && { workers: 1 }),
+      ...(!needsBids2LegacyRerun && { rerunBids2Legacy: false }),
+    };
     set({ config: patched });
   },
 

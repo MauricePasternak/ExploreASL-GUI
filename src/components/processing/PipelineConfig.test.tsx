@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeMatlabProfile } from "../../test/profileFixtures";
@@ -116,6 +116,55 @@ describe("PipelineConfig", () => {
       const calledConfig = mockSetConfig.mock.calls[0][0];
       expect(calledConfig.modules).toContain("asl");
       expect(calledConfig.modules).not.toContain("population");
+    });
+  });
+
+  describe("BIDS2Legacy rerun toggle", () => {
+    beforeEach(() => {
+      mockConfig = {
+        subjects: [],
+        modules: ["structural"],
+        selectedProfileId: "profile-1",
+        workers: 2,
+        rerunBids2Legacy: false,
+      };
+      mockSetConfig.mockClear();
+    });
+
+    it("renders rerun BIDS2Legacy checkbox", () => {
+      renderConfig();
+      expect(
+        screen.getByLabelText(
+          "Force re-sync between imported/BIDS data and preliminary ExploreASL derivatives",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("calls setConfig when checkbox is clicked", () => {
+      renderConfig();
+      const checkbox = screen.getByLabelText(
+        "Force re-sync between imported/BIDS data and preliminary ExploreASL derivatives",
+      );
+      fireEvent.click(checkbox);
+
+      expect(mockSetConfig).toHaveBeenCalled();
+      const calledConfig = mockSetConfig.mock.calls[0][0];
+      expect(calledConfig.rerunBids2Legacy).toBe(true);
+    });
+
+    it("disables checkbox if neither structural nor ASL is selected", () => {
+      mockConfig = {
+        subjects: [],
+        modules: ["population"],
+        selectedProfileId: "profile-1",
+        workers: 1,
+        rerunBids2Legacy: false,
+      };
+      renderConfig();
+      const checkbox = screen.getByLabelText(
+        "Force re-sync between imported/BIDS data and preliminary ExploreASL derivatives",
+      );
+      expect(checkbox).toBeDisabled();
     });
   });
 });
