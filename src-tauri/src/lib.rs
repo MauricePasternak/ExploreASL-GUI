@@ -5,6 +5,7 @@ pub mod execution_profile;
 pub mod import;
 pub mod import_parser;
 pub mod manifest;
+pub mod matlab;
 mod niivue_protocol;
 pub mod processing;
 pub mod qc;
@@ -15,7 +16,6 @@ mod visualization_tests;
 use bids_commands::{check_bids_dataset, ensure_rawdata_dir, scan_bids_sidecars};
 use commands::{
     create_symlink_tree, get_available_memory_mb, get_cpu_cores, is_writable, walk_directory,
-    which_matlab,
 };
 use execution_profile::{validate_all_execution_profiles, validate_execution_profile};
 use import::{
@@ -23,6 +23,7 @@ use import::{
     run_import_pipeline, stop_active_import, stop_import, stop_running_import_for_exit, AppState,
 };
 use manifest::{capture_environment_versions, read_population_ready_mtime};
+use matlab::which_matlab;
 use processing::{
     clear_stale_locks, detect_exploreasl_version, kill_pipeline, list_module_logs,
     list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,

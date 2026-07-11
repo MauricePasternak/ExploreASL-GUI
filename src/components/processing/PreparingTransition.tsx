@@ -8,25 +8,6 @@ export default function PreparingTransition() {
 
   return (
     <Center style={{ flex: 1, minHeight: 400 }} data-testid="preparing-transition">
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); opacity: 0.8; }
-          50% { transform: scale(1.12); opacity: 1; }
-        }
-        .spin-forward {
-          animation: spin 2s linear infinite;
-        }
-        .spin-reverse {
-          animation: spin 2s linear infinite reverse;
-        }
-        .pulse-icon {
-          animation: pulse 2s ease-in-out infinite;
-        }
-      `}</style>
       <Card
         shadow="md"
         padding="xl"
