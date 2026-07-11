@@ -10,7 +10,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  format:
+  # ── TypeScript pipeline ────────────────────────────────────────────────
+
+  format-ts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,16 +30,8 @@ jobs:
       - name: Prettier
         run: pnpm format:check
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Rustfmt
-        run: pnpm format:rust
-
-  lint:
-    # Formatting must pass first — lint failures are often just formatting noise.
-    needs: format
+  lint-ts:
+    needs: format-ts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,33 +46,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install E2E dependencies
-        run: pnpm --dir e2e-tests install --frozen-lockfile
-
       - name: ESLint
         run: pnpm lint:eslint
 
       - name: Type-check
         run: pnpm typecheck
 
-      - name: Install Tauri system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libssl-dev
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-
-      - name: Clippy
-        working-directory: src-tauri
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-  test:
+  test-ts:
+    needs: format-ts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,7 +71,44 @@ jobs:
       - name: Run frontend tests
         run: pnpm test
 
+  # ── Rust pipeline ──────────────────────────────────────────────────────
+
+  format-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Rustfmt
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+  lint-rust:
+    needs: format-rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+
   test-rust:
+    needs: format-rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -114,3 +126,26 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  # ── E2E ────────────────────────────────────────────────────────────────
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: e2e-tests/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: e2e-tests
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        working-directory: e2e-tests
+        run: pnpm typecheck
