@@ -14,13 +14,7 @@ export type SectionId =
 export type Tier = "basic" | "advanced";
 
 export type WidgetType =
-  | "toggle"
-  | "number"
-  | "select"
-  | "checkboxGroup"
-  | "tags"
-  | "numberTuple"
-  | "selectWithCustom";
+  "toggle" | "number" | "select" | "checkboxGroup" | "tags" | "numberTuple" | "selectWithCustom";
 
 export interface FieldMeta {
   label: string;

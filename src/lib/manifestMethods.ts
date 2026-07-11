@@ -89,8 +89,7 @@ export function flattenRunDataPar(
   mergeSections(
     flat,
     (x.modules as Record<string, unknown> | undefined)?.structural as
-      | Record<string, unknown>
-      | undefined,
+      Record<string, unknown> | undefined,
   );
   mergeSections(flat, x.settings as Record<string, unknown> | undefined);
   mergeSections(flat, x.S as Record<string, unknown> | undefined);

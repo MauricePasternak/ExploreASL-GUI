@@ -35,8 +35,8 @@ openspec/changes/
 notes/
 
 # Large test data
-!test/fixtures/
-test/
+!/test/fixtures/
+/test/
 
 # Worktrees
 .worktrees/

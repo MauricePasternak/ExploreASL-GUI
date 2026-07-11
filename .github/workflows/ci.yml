@@ -110,4 +110,4 @@ jobs:
           workspaces: "./src-tauri -> target"
 
       - name: Run Rust tests
-        run: pnpm test:rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml

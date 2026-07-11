@@ -9,10 +9,7 @@ import type { BidsAslMetadata } from "../../schemas/importSchemas";
  * - conditionalRecommended: recommended when the parent condition applies — omitted when blank
  */
 export type MetadataFieldHint =
-  | "important"
-  | "dicomLikely"
-  | "optionalOmitted"
-  | "conditionalRecommended";
+  "important" | "dicomLikely" | "optionalOmitted" | "conditionalRecommended";
 
 export const METADATA_FIELD_HINT_TEXT: Record<MetadataFieldHint, string> = {
   important: "Important for ExploreASL — set when headers are incomplete",

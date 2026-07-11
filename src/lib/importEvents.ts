@@ -75,11 +75,7 @@ function createLogBatcher(flusher: LogFlusher) {
 
 export interface ImportStructuredEventPayload {
   type:
-    | "subject_start"
-    | "subject_complete"
-    | "import_failed"
-    | "import_complete"
-    | "dcm2nii_status";
+    "subject_start" | "subject_complete" | "import_failed" | "import_complete" | "dcm2nii_status";
   subject?: string;
   duration_secs?: number;
   step?: string;
