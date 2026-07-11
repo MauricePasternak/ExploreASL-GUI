@@ -68,17 +68,17 @@ The two new columns SHALL render as follows:
 
 ### Requirement: Pipeline Configuration Panel
 
-The pipeline configuration panel SHALL include: MATLAB version dropdown (populated from global settings `matlabInstallations`), module checkboxes (Structural, ASL — at least one required unless Population is selected), and worker count number input with default `Math.min(ceil(availableMemory / 4GB), cpuCores, 4)` and hard cap at `cpuCores`.
+The pipeline configuration panel SHALL include: Profile selector dropdown (populated from global settings `executionProfiles`), module checkboxes (Structural, ASL — at least one required unless Population is selected), and worker count number input with default `Math.min(ceil(availableMemory / 4GB), cpuCores, 4)` and hard cap at `cpuCores`.
 
 #### Scenario: Population module not shown
 
 - **WHEN** the Pipeline Configuration Panel renders
 - **THEN** no Population checkbox SHALL appear
 
-#### Scenario: No MATLAB path configured
+#### Scenario: No valid profiles configured
 
-- **WHEN** global settings has no MATLAB installations
-- **THEN** the MATLAB version dropdown SHALL show an error state and the Start button SHALL be disabled
+- **WHEN** global settings has no valid execution profiles
+- **THEN** the profile selector dropdown SHALL show an error state and the Start button SHALL be disabled
 
 #### Scenario: Worker count not forced by Population
 
@@ -93,10 +93,9 @@ Before transitioning from `idle` to `preparing`, the store SHALL validate the fo
 
 1. At least one SubjectSession selected (relaxed when the only selected module is Population — group-level module)
 2. At least one module selected
-3. MATLAB path configured and executable exists
-4. ExploreASL path exists and contains `ExploreASL.m`
-5. Worker count > 0 and ≤ available cores
-6. If Population selected, worker count must be 1
+3. Selected profile is valid (resolved from `executionProfiles`, checked in `profileValidationState`)
+4. Worker count > 0 and ≤ available cores
+5. If Population selected, worker count must be 1
 
 **Soft warnings (can proceed):**
 
@@ -106,10 +105,10 @@ Before transitioning from `idle` to `preparing`, the store SHALL validate the fo
 
 - Modules marked "skipped" per SubjectSession based on BIDS data availability (`perf/` for ASL, `anat/` for Structural)
 
-#### Scenario: Missing ExploreASL path
+#### Scenario: Missing valid profile
 
-- **WHEN** the global ExploreASL path does not exist or lacks `ExploreASL.m`
-- **THEN** a hard block error SHALL be displayed: "ExploreASL not found at [path]. Check Settings."
+- **WHEN** no valid execution profiles exist or the selected profile is invalid
+- **THEN** a hard block error SHALL be displayed directing the user to configure a valid profile in Settings
 
 #### Scenario: Zero subjects selected
 
