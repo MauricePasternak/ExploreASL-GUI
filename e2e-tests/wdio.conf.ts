@@ -1,11 +1,11 @@
 import os from "os";
 import path from "path";
-import { spawn, spawnSync } from "child_process";
+import { spawn, spawnSync, type ChildProcess } from "child_process";
 import { fileURLToPath } from "url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-let tauriDriver;
+let tauriDriver: ChildProcess | undefined;
 let exit = false;
 
 export const config = {

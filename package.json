@@ -19,7 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && pnpm --dir e2e-tests typecheck"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
