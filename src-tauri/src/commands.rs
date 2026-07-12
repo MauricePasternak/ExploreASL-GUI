@@ -66,8 +66,8 @@ fn available_memory_mb_impl() -> u64 {
 
 #[cfg(target_os = "windows")]
 fn available_memory_mb_impl() -> u64 {
-    use windows_sys::Win32::System::Memory::GlobalMemoryStatusEx;
-    use windows_sys::Win32::System::Memory::MEMORYSTATUSEX;
+    use windows_sys::Win32::System::SystemInformation::GlobalMemoryStatusEx;
+    use windows_sys::Win32::System::SystemInformation::MEMORYSTATUSEX;
 
     let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
     status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
