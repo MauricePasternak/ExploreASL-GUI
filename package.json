@@ -13,8 +13,8 @@
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:watch": "vitest",
     "test:e2e": "pnpm --filter exploreasl-gui-e2e test",
-    "lint": "pnpm lint:eslint && pnpm lint:rust",
-    "lint:eslint": "eslint .",
+    "lint": "pnpm lint:oxlint && pnpm lint:rust",
+    "lint:oxlint": "oxlint --deny-warnings",
     "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings && cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "format:check": "prettier --check .",
@@ -51,7 +51,6 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2.11.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -60,15 +59,10 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
-    "eslint": "^10.7.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "globals": "^17.7.0",
     "jsdom": "^29.1.1",
+    "oxlint": "^1.73.0",
     "prettier": "^3.9.5",
-    "typescript": "~6.0.3",
-    "typescript-eslint": "^8.63.0",
+    "typescript": "~7.0.2",
     "vite": "^8.1.4",
     "vitest": "^4.1.10"
   }

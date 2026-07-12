@@ -14,7 +14,10 @@
 :root[data-mantine-color-scheme="light"] [contenteditable] {
   color-scheme: light !important;
   caret-color: #000000 !important;
-  cursor: url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='24'%20viewBox='0%200%2024%2024'%20shape-rendering='crispEdges'%3E%3Cpath%20d='M8%204h7v1h-3v14h3v1H8v-1h3V5H8V4z'%20fill='black'/%3E%3C/svg%3E") 11 12, text !important;
+  cursor:
+    url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='24'%20viewBox='0%200%2024%2024'%20shape-rendering='crispEdges'%3E%3Cpath%20d='M8%204h7v1h-3v14h3v1H8v-1h3V5H8V4z'%20fill='black'/%3E%3C/svg%3E")
+      11 12,
+    text !important;
 }
 
 :root[data-mantine-color-scheme="dark"] input,

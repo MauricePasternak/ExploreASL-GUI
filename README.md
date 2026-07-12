@@ -17,7 +17,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8D8?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 <br /><br />
 
@@ -77,7 +77,7 @@
 | Layer                 | Technology                                                                        |
 | --------------------- | --------------------------------------------------------------------------------- |
 | **Desktop shell**     | [Tauri v2](https://v2.tauri.app/) (Rust backend, WebView2 / WebKit frontend)      |
-| **UI Framework**      | [React 19](https://react.dev/) + [TypeScript 6](https://www.typescriptlang.org/)  |
+| **UI Framework**      | [React 19](https://react.dev/) + [TypeScript 7](https://www.typescriptlang.org/)  |
 | **Component Library** | [Mantine 9](https://mantine.dev/)                                                 |
 | **State Management**  | [Zustand 5](https://zustand-demo.pmnd.rs/)                                        |
 | **Schema Validation** | [Zod 4](https://zod.dev/)                                                         |

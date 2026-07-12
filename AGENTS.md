@@ -2,7 +2,7 @@
 
 Tauri v2 desktop GUI wrapping ExploreASL (MATLAB ASL MRI pipeline).
 
-**Stack:** Tauri v2 + React 19 + TS 6 + Mantine 9 + Zustand 5 + Zod 4 + React Router 7
+**Stack:** Tauri v2 + React 19 + TS 7 + Mantine 9 + Zustand 5 + Zod 4 + React Router 7
 **Dev (Frontend):** `pnpm dev` → `http://localhost:1420`
 **Specs:** `openspec/specs/` (authoritative), `openspec/changes/` (in-progress)
 
