@@ -13,7 +13,6 @@
 
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/MauricePasternak/ExploreASL-GUI?style=for-the-badge&label=Release&color=2d6a9f)](https://github.com/MauricePasternak/ExploreASL-GUI/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI/ci.yml?style=for-the-badge&label=CI&logo=github-actions&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI/actions)
-[![Tests](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI/test.yml?style=for-the-badge&label=Tests&logo=vitest&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI/actions)
 [![Issues](https://img.shields.io/github/issues/MauricePasternak/ExploreASL-GUI?style=for-the-badge&logo=github&color=e05d44)](https://github.com/MauricePasternak/ExploreASL-GUI/issues)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8D8?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
