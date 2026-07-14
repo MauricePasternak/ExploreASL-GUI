@@ -14,7 +14,7 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/MauricePasternak/ExploreASL-GUI?style=for-the-badge&label=Release&color=2d6a9f)](https://github.com/MauricePasternak/ExploreASL-GUI/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/MauricePasternak/ExploreASL-GUI/ci.yml?style=for-the-badge&label=CI&logo=github-actions&logoColor=white)](https://github.com/MauricePasternak/ExploreASL-GUI/actions)
 [![Issues](https://img.shields.io/github/issues/MauricePasternak/ExploreASL-GUI?style=for-the-badge&logo=github&color=e05d44)](https://github.com/MauricePasternak/ExploreASL-GUI/issues)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8D8?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -372,6 +372,8 @@ Unit tests cover schemas, Zustand stores, and utility functions. Component tests
 - [x] Project manifest export
 - [x] Import BIDS-ready datasets
 - [ ] Auto-update support
+- [ ] Validated execution profiles for Apptainer
+- [ ] Multi-reviewer manifest review workflow
 - [ ] Documentation site
 
 See [open issues](https://github.com/MauricePasternak/ExploreASL-GUI/issues) for a full list of planned features and known bugs.
