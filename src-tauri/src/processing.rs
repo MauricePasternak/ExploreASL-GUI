@@ -1,3 +1,4 @@
+use crate::apptainer::{ensure_mcr_cache, CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH};
 use crate::execution_profile::{get_exploreasl_version, ExecutionProfile};
 use crate::import::AppState;
 use crate::tracing::CommandTrace;
@@ -849,6 +850,57 @@ fn spawn_matlab_processing_process(matlab_path: &str, batch: &str) -> std::io::R
     command.spawn()
 }
 
+pub(crate) fn build_apptainer_processing_args(
+    project_root: &Path,
+    sif_path: &Path,
+    b_process_str: &str,
+    worker: usize,
+    total_workers: usize,
+) -> Vec<String> {
+    vec![
+        "exec".to_string(),
+        "--cleanenv".to_string(),
+        "--writable-tmpfs".to_string(),
+        "--bind".to_string(),
+        format!("{}:{CONTAINER_DATA_ROOT}", project_root.display()),
+        sif_path.to_string_lossy().to_string(),
+        "/bin/bash".to_string(),
+        EXPLOREASL_SCRIPT.to_string(),
+        MCR_PATH.to_string(),
+        CONTAINER_DATA_ROOT.to_string(),
+        "0".to_string(),
+        b_process_str.to_string(),
+        "0".to_string(),
+        worker.to_string(),
+        total_workers.to_string(),
+    ]
+}
+
+fn spawn_apptainer_processing_process(
+    apptainer_path: &str,
+    args: &[String],
+) -> std::io::Result<Child> {
+    let mut command = Command::new(apptainer_path);
+    command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            command.pre_exec(|| {
+                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+                Ok(())
+            });
+        }
+    }
+
+    command.spawn()
+}
+
 #[cfg(unix)]
 fn send_termination_signal(pid: u32) -> Result<(), String> {
     use nix::sys::signal::{kill, Signal};
@@ -1333,23 +1385,55 @@ pub fn run_pipeline(
         return Err(validation.errors.join("; "));
     }
 
-    let (matlab_path, exploreasl_path) = match execution_profile {
+    enum ProcessingExecution {
+        Matlab {
+            matlab_path: String,
+            exploreasl_path: PathBuf,
+        },
+        Apptainer {
+            apptainer_path: String,
+            sif_path: PathBuf,
+        },
+    }
+
+    let execution = match execution_profile {
         ExecutionProfile::Matlab {
             explore_asl_version,
             ..
         } => {
-            let matlab_path = validation
-                .matlab_path
-                .expect("validated matlab profile should include matlab path");
-            let exploreasl_path = validation
-                .explore_asl_path
-                .expect("validated matlab profile should include exploreasl path");
             let version = explore_asl_version.or(validation.explore_asl_version);
             log::info!(
                 "ExploreASL version: {}",
                 version.as_deref().unwrap_or("unknown")
             );
-            (matlab_path, exploreasl_path)
+            ProcessingExecution::Matlab {
+                matlab_path: validation
+                    .matlab_path
+                    .expect("validated matlab profile should include matlab path"),
+                exploreasl_path: validation
+                    .explore_asl_path
+                    .expect("validated matlab profile should include exploreasl path"),
+            }
+        }
+        ExecutionProfile::Apptainer { .. } => {
+            log::info!(
+                "ExploreASL version: {}",
+                validation
+                    .explore_asl_version
+                    .as_deref()
+                    .unwrap_or("unknown")
+            );
+            let apptainer_path = validation
+                .apptainer_path
+                .expect("validated Apptainer profile should include executable path");
+            let sif_path = validation
+                .sif_path
+                .expect("validated Apptainer profile should include SIF path");
+            ensure_mcr_cache(&apptainer_path, &sif_path, &project_root)?;
+            ProcessingExecution::Apptainer {
+                apptainer_path,
+                sif_path,
+            }
         }
     };
 
@@ -1382,7 +1466,6 @@ pub fn run_pipeline(
         .map(|&b| if b { "1" } else { "0" })
         .collect::<Vec<_>>()
         .join(",");
-    let exploreasl_str = escape_matlab_string(&exploreasl_path.to_string_lossy());
     let project_root_str = escape_matlab_string(&project_root.to_string_lossy());
 
     let mut pids = Vec::new();
@@ -1392,21 +1475,47 @@ pub fn run_pipeline(
         // Stagger worker launches to avoid ExploreASL initialization races
         // that can cause early worker exits (exitCode 1).
         if i_worker > 1 {
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            std::thread::sleep(std::time::Duration::from_secs(2));
         }
 
-        let batch = format!(
-            "addpath('{}'); ExploreASL('{}', 0, [{}], 0, {}, {})",
-            exploreasl_str, project_root_str, b_process_str, i_worker, n_workers,
-        );
-
-        let child = spawn_matlab_processing_process(&matlab_path, &batch).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                format!("MATLAB executable not found: {}", matlab_path)
-            } else {
-                format!("Failed to spawn MATLAB worker {}: {}", i_worker, e)
+        let child = match &execution {
+            ProcessingExecution::Matlab {
+                matlab_path,
+                exploreasl_path,
+            } => {
+                let exploreasl_str = escape_matlab_string(&exploreasl_path.to_string_lossy());
+                let batch = format!(
+                    "addpath('{}'); ExploreASL('{}', 0, [{}], 0, {}, {})",
+                    exploreasl_str, project_root_str, b_process_str, i_worker, n_workers,
+                );
+                spawn_matlab_processing_process(matlab_path, &batch).map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        format!("MATLAB executable not found: {}", matlab_path)
+                    } else {
+                        format!("Failed to spawn MATLAB worker {}: {}", i_worker, e)
+                    }
+                })?
             }
-        })?;
+            ProcessingExecution::Apptainer {
+                apptainer_path,
+                sif_path,
+            } => {
+                let args = build_apptainer_processing_args(
+                    &project_root,
+                    sif_path,
+                    &b_process_str,
+                    i_worker,
+                    n_workers,
+                );
+                spawn_apptainer_processing_process(apptainer_path, &args).map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        format!("Apptainer executable not found: {}", apptainer_path)
+                    } else {
+                        format!("Failed to spawn Apptainer worker {}: {}", i_worker, e)
+                    }
+                })?
+            }
+        };
 
         let child_pid = child.id();
 

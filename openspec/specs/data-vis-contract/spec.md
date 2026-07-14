@@ -36,8 +36,8 @@ A Rust command `load_qcbf_data` SHALL accept `projectRoot: String` and `relative
 
 #### Scenario: participant_id split into Subject and Session
 
-- **WHEN** a TSV row has `participant_id` = `"sub-C9ORF007Philips_01"`
-- **THEN** the inspection SHALL produce a `subject` column with value `"sub-C9ORF007Philips"` and a `session` column with value `"01"`
+- **WHEN** a TSV row has `participant_id` = `"sub-001Philips_01"`
+- **THEN** the inspection SHALL produce a `subject` column with value `"sub-001Philips"` and a `session` column with value `"01"`
 
 #### Scenario: qCBF hash returned
 

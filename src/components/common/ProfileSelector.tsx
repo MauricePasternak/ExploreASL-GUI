@@ -13,10 +13,7 @@ interface ProfileSelectorProps {
 }
 
 function formatProfileLabel(profile: ExecutionProfile, valid: boolean): string {
-  const version =
-    profile.type === "matlab" && profile.exploreAslVersion
-      ? ` · v${profile.exploreAslVersion}`
-      : "";
+  const version = profile.exploreAslVersion ? ` · v${profile.exploreAslVersion}` : "";
   const status = valid ? "" : " (invalid)";
   return `${profile.label}${version}${status}`;
 }
@@ -55,7 +52,7 @@ export default function ProfileSelector({
           Execution profile
         </Text>
         <Text size="sm" c="dimmed">
-          No profiles configured. Open Settings to add a MATLAB execution profile.
+          No profiles configured. Open Settings to add an execution profile.
         </Text>
       </Stack>
     );
@@ -101,10 +98,10 @@ export default function ProfileSelector({
             <Group gap="xs" wrap="nowrap" data-testid={`profile-selector-option-${profile.id}`}>
               <Text size="sm">{profile.label}</Text>
               <Badge size="xs" variant="light">
-                MATLAB
+                {profile.type === "matlab" ? "MATLAB" : "Apptainer"}
               </Badge>
-              {profile.type === "matlab" && profile.exploreAslVersion ? (
-                <Text size="xs" c="dimmed" data-testid="profile-selector-matlab-version">
+              {profile.exploreAslVersion ? (
+                <Text size="xs" c="dimmed" data-testid="profile-selector-version">
                   v{profile.exploreAslVersion}
                 </Text>
               ) : null}

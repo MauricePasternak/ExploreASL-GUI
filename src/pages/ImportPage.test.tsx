@@ -1,14 +1,14 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen, waitFor, within, cleanup } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { afterEach, describe, expect, it } from "vitest";
 
-import ImportPage from "./ImportPage";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
-import { makeMatlabProfile } from "../test/profileFixtures";
-import { useImportStore } from "../stores/importStore";
 import { useGlobalStore } from "../stores/globalStore";
+import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
+import { makeMatlabProfile } from "../test/profileFixtures";
+import ImportPage from "./ImportPage";
 
 function renderWithProviders() {
   return render(
@@ -34,14 +34,14 @@ describe("ImportPage metadata step", () => {
     const store = useImportStore.getState();
     store.setActiveStep(1);
     store.setIngestionResults(
-      ["/data/C9ORF059.12/ASL"],
+      ["/data/002.12/ASL"],
       [
         {
           signature: "VARYING/ASL",
-          samplePath: "C9ORF059.12/ASL",
-          blocks: ["C9ORF059.12", "ASL"],
+          samplePath: "002.12/ASL",
+          blocks: ["002.12", "ASL"],
           uniqueNames: {
-            0: ["C9ORF059.12"],
+            0: ["002.12"],
             1: ["ASL"],
           },
           count: 1,
@@ -74,14 +74,14 @@ describe("ImportPage metadata step", () => {
     const store = useImportStore.getState();
     store.setActiveStep(1);
     store.setIngestionResults(
-      ["/data/C9ORF059-12-R1/ASL"],
+      ["/data/002-12-R1/ASL"],
       [
         {
           signature: "VARYING/ASL",
-          samplePath: "C9ORF059-12-R1/ASL",
-          blocks: ["C9ORF059-12-R1", "ASL"],
+          samplePath: "002-12-R1/ASL",
+          blocks: ["002-12-R1", "ASL"],
           uniqueNames: {
-            0: ["C9ORF059-12-R1"],
+            0: ["002-12-R1"],
             1: ["ASL"],
           },
           count: 1,
@@ -101,8 +101,8 @@ describe("ImportPage metadata step", () => {
 
     const patternCards = screen.getAllByTestId("pattern-card-VARYING/ASL");
     const patternCard = patternCards[patternCards.length - 1];
-    expect(within(patternCard).queryByText("C9ORF059-12-R1")).not.toBeInTheDocument();
-    expect(within(patternCard).getAllByText("C9ORF059").length).toBeGreaterThan(0);
+    expect(within(patternCard).queryByText("002-12-R1")).not.toBeInTheDocument();
+    expect(within(patternCard).getAllByText("002").length).toBeGreaterThan(0);
     expect(within(patternCard).getAllByText("12").length).toBeGreaterThan(0);
     expect(within(patternCard).getAllByText("R1").length).toBeGreaterThan(0);
   });
@@ -249,14 +249,14 @@ describe("ImportPage metadata step", () => {
     store.setActiveStep(3);
     store.setSourceDataPath("/data");
     store.setIngestionResults(
-      ["/data/C9ORF059.12.R1/ASL"],
+      ["/data/002.12.R1/ASL"],
       [
         {
           signature: "VARYING/ASL",
-          samplePath: "C9ORF059.12.R1/ASL",
-          blocks: ["C9ORF059.12.R1", "ASL"],
+          samplePath: "002.12.R1/ASL",
+          blocks: ["002.12.R1", "ASL"],
           uniqueNames: {
-            0: ["C9ORF059.12.R1"],
+            0: ["002.12.R1"],
             1: ["ASL"],
           },
           count: 1,
@@ -282,8 +282,8 @@ describe("ImportPage metadata step", () => {
 
     expect(useImportStore.getState().subjectRows).toEqual([
       {
-        id: "C9ORF059/12",
-        subject: "C9ORF059",
+        id: "002/12",
+        subject: "002",
         session: "12",
         groupId: "global-defaults",
       },
@@ -345,14 +345,14 @@ describe("ImportPage metadata step", () => {
     store.setActiveStep(3);
     store.setSourceDataPath("/data");
     store.setIngestionResults(
-      ["/data/C9ORF059.12.R1/ASL"],
+      ["/data/002.12.R1/ASL"],
       [
         {
           signature: "VARYING/ASL",
-          samplePath: "C9ORF059.12.R1/ASL",
-          blocks: ["C9ORF059.12.R1", "ASL"],
+          samplePath: "002.12.R1/ASL",
+          blocks: ["002.12.R1", "ASL"],
           uniqueNames: {
-            0: ["C9ORF059.12.R1"],
+            0: ["002.12.R1"],
             1: ["ASL"],
           },
           count: 1,
@@ -487,14 +487,14 @@ describe("ImportPage alias resolution step", () => {
     store.setActiveStep(2);
     store.setSourceDataPath("/data");
     store.setIngestionResults(
-      ["/data/C9ORF059.12/ASL"],
+      ["/data/002.12/ASL"],
       [
         {
           signature: "VARYING/ASL",
-          samplePath: "C9ORF059.12/ASL",
-          blocks: ["C9ORF059.12", "ASL"],
+          samplePath: "002.12/ASL",
+          blocks: ["002.12", "ASL"],
           uniqueNames: {
-            0: ["C9ORF059.12"],
+            0: ["002.12"],
             1: ["ASL"],
           },
           count: 1,
@@ -519,8 +519,8 @@ describe("ImportPage alias resolution step", () => {
 
     expect(useImportStore.getState().subjectRenames).toEqual([
       {
-        original: "C9ORF059",
-        target: "C9ORF059",
+        original: "002",
+        target: "002",
       },
     ]);
     expect(useImportStore.getState().sessionAliases).toEqual([
@@ -544,14 +544,14 @@ describe("ImportPage alias resolution step", () => {
     store.setActiveStep(2);
     store.setSourceDataPath("/data");
     store.setIngestionResults(
-      ["/data/C9ORF059.12/ASL"],
+      ["/data/002.12/ASL"],
       [
         {
           signature: "VARYING/ASL",
-          samplePath: "C9ORF059.12/ASL",
-          blocks: ["C9ORF059.12", "ASL"],
+          samplePath: "002.12/ASL",
+          blocks: ["002.12", "ASL"],
           uniqueNames: {
-            0: ["C9ORF059.12"],
+            0: ["002.12"],
             1: ["ASL"],
           },
           count: 1,

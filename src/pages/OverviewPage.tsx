@@ -39,9 +39,9 @@ import {
   IconSettings,
   IconTags,
 } from "@tabler/icons-react";
+import { appDataDir, join, tempDir } from "@tauri-apps/api/path";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { tempDir, appDataDir, join } from "@tauri-apps/api/path";
 
 interface TreeRowProps {
   level: number;
@@ -570,7 +570,7 @@ export default function OverviewPage() {
                     badge="Raw scans (symlinks or copies)"
                     badgeColor="blue"
                   />
-                  <TreeRow level={2} label="sub-C9ORF007Philips/" isFolder />
+                  <TreeRow level={2} label="sub-001Philips/" isFolder />
                   <TreeRow level={3} label="ses-01/" isFolder />
                   <TreeRow level={4} label="T1w/" isFolder />
                   <TreeRow level={4} label="ASL/" isFolder />
@@ -582,15 +582,15 @@ export default function OverviewPage() {
                     badgeColor="teal"
                   />
                   <TreeRow level={2} label="dataset_description.json" />
-                  <TreeRow level={2} label="sub-C9ORF007Philips/" isFolder />
+                  <TreeRow level={2} label="sub-001Philips/" isFolder />
                   <TreeRow level={3} label="ses-01/" isFolder />
                   <TreeRow level={4} label="anat/" isFolder />
-                  <TreeRow level={5} label="sub-C9ORF007Philips_ses-01_T1w.nii.gz" />
-                  <TreeRow level={5} label="sub-C9ORF007Philips_ses-01_T1w.json" />
+                  <TreeRow level={5} label="sub-001Philips_ses-01_T1w.nii.gz" />
+                  <TreeRow level={5} label="sub-001Philips_ses-01_T1w.json" />
                   <TreeRow level={4} label="perf/" isFolder />
-                  <TreeRow level={5} label="sub-C9ORF007Philips_ses-01_asl.nii.gz" />
-                  <TreeRow level={5} label="sub-C9ORF007Philips_ses-01_asl.json" />
-                  <TreeRow level={5} label="sub-C9ORF007Philips_ses-01_aslcontext.tsv" />
+                  <TreeRow level={5} label="sub-001Philips_ses-01_asl.nii.gz" />
+                  <TreeRow level={5} label="sub-001Philips_ses-01_asl.json" />
+                  <TreeRow level={5} label="sub-001Philips_ses-01_aslcontext.tsv" />
                   <TreeRow
                     level={1}
                     label="derivatives/"
@@ -605,7 +605,7 @@ export default function OverviewPage() {
                     badge="Parameters sent to MATLAB"
                     badgeColor="grape"
                   />
-                  <TreeRow level={3} label="sub-C9ORF007Philips/" isFolder />
+                  <TreeRow level={3} label="sub-001Philips/" isFolder />
                   <TreeRow level={4} label="QC/" isFolder />
                   <TreeRow level={5} label="Structural_QC.json" />
                   <TreeRow level={3} label="Population/" isFolder />

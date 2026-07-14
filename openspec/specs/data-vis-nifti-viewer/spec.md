@@ -8,12 +8,12 @@ A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. The
 
 #### Scenario: qCBF volume served with run
 
-- **WHEN** NiiVue fetches `niivue://localhost/qCBF/sub-C9ORF007Philips_01/ASL_1`
-- **THEN** Rust SHALL resolve `<root>/derivatives/ExploreASL/Population/qCBF_sub-C9ORF007Philips_01_ASL_1.nii` and return raw bytes
+- **WHEN** NiiVue fetches `niivue://localhost/qCBF/sub-001Philips_01/ASL_1`
+- **THEN** Rust SHALL resolve `<root>/derivatives/ExploreASL/Population/qCBF_sub-001Philips_01_ASL_1.nii` and return raw bytes
 
 #### Scenario: Gzip fallback
 
-- **WHEN** the `.nii` file does not exist but `qCBF_sub-C9ORF007Philips_01_ASL_1.nii.gz` does
+- **WHEN** the `.nii` file does not exist but `qCBF_sub-001Philips_01_ASL_1.nii.gz` does
 - **THEN** Rust SHALL serve the `.nii.gz` file
 
 #### Scenario: Unknown volume type returns 404
@@ -128,18 +128,18 @@ The qCBF filename SHALL be constructed as `qCBF_{participant_id}_{run}.nii` usin
 
 #### Scenario: NIfTI file found
 
-- **WHEN** the clicked point has participant_id="sub-C9ORF007Philips_01" and run="ASL_1"
-- **THEN** the protocol SHALL serve `qCBF_sub-C9ORF007Philips_01_ASL_1.nii`
+- **WHEN** the clicked point has participant_id="sub-001Philips_01" and run="ASL_1"
+- **THEN** the protocol SHALL serve `qCBF_sub-001Philips_01_ASL_1.nii`
 
 #### Scenario: Gzip fallback
 
-- **WHEN** `qCBF_sub-C9ORF007Philips_01_ASL_1.nii` does not exist but `.nii.gz` does
+- **WHEN** `qCBF_sub-001Philips_01_ASL_1.nii` does not exist but `.nii.gz` does
 - **THEN** the protocol SHALL serve the `.nii.gz` file
 
 #### Scenario: Both formats missing
 
 - **WHEN** neither `.nii` nor `.nii.gz` exists for the clicked point
-- **THEN** the viewer panel SHALL show "qCBF image not found for sub-C9ORF007Philips_01_ASL_1." and the previous image (if any) SHALL remain visible
+- **THEN** the viewer panel SHALL show "qCBF image not found for sub-001Philips_01_ASL_1." and the previous image (if any) SHALL remain visible
 
 #### Scenario: Image file exists but fails to load
 

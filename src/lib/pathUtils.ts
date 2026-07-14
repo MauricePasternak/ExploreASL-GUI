@@ -184,8 +184,8 @@ export function discoverPathPatterns(
  * names produce the same number of sub-blocks when split by the configured
  * delimiters. This correctly distinguishes structural patterns:
  *
- * e.g. "C9ORF059-01-MR00" (3 sub-blocks by "-") vs "C9ORF059-11" (2 sub-blocks)
- * are different shapes, while "C9ORF059-01-MR00" and "C9ORF007-02-MR00" (both
+ * e.g. "002-01-MR00" (3 sub-blocks by "-") vs "002-11" (2 sub-blocks)
+ * are different shapes, while "002-01-MR00" and "001-02-MR00" (both
  * 3 sub-blocks) are the same shape.
  */
 function groupByShape(

@@ -217,29 +217,29 @@ describe("ExecutionDashboard component", () => {
   it("renders subjects in alphanumeric order", () => {
     mockAvailableSubjects = [
       {
-        subjectSession: "sub-C9ORF007Philips_11",
-        subject: "C9ORF007Philips",
+        subjectSession: "sub-001Philips_11",
+        subject: "001Philips",
         session: "11",
         hasStructural: true,
         hasASL: true,
       },
       {
-        subjectSession: "sub-C9ORF007Philips_01",
-        subject: "C9ORF007Philips",
+        subjectSession: "sub-001Philips_01",
+        subject: "001Philips",
         session: "01",
         hasStructural: true,
         hasASL: true,
       },
       {
-        subjectSession: "sub-C9ORF007Philips_02",
-        subject: "C9ORF007Philips",
+        subjectSession: "sub-001Philips_02",
+        subject: "001Philips",
         session: "02",
         hasStructural: true,
         hasASL: true,
       },
       {
-        subjectSession: "sub-C9ORF059Siemens_01",
-        subject: "C9ORF059Siemens",
+        subjectSession: "sub-002Siemens_01",
+        subject: "002Siemens",
         session: "01",
         hasStructural: true,
         hasASL: true,
@@ -247,10 +247,10 @@ describe("ExecutionDashboard component", () => {
     ];
     mockConfig = {
       subjects: [
-        "sub-C9ORF007Philips_11",
-        "sub-C9ORF007Philips_01",
-        "sub-C9ORF007Philips_02",
-        "sub-C9ORF059Siemens_01",
+        "sub-001Philips_11",
+        "sub-001Philips_01",
+        "sub-001Philips_02",
+        "sub-002Siemens_01",
       ],
       modules: ["structural"],
     };
@@ -260,10 +260,10 @@ describe("ExecutionDashboard component", () => {
     expect(rows).toHaveLength(4);
     const labels = rows.map((r) => within(r).getByText(/sub-/).textContent);
     expect(labels).toEqual([
-      "sub-C9ORF007Philips_01",
-      "sub-C9ORF007Philips_02",
-      "sub-C9ORF007Philips_11",
-      "sub-C9ORF059Siemens_01",
+      "sub-001Philips_01",
+      "sub-001Philips_02",
+      "sub-001Philips_11",
+      "sub-002Siemens_01",
     ]);
   });
 

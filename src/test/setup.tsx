@@ -161,6 +161,8 @@ vi.mock("@tauri-apps/api/core", () => ({
         return Promise.resolve(null);
       case "which_matlab":
         return Promise.resolve([]);
+      case "which_apptainer":
+        return Promise.resolve([]);
       case "is_writable":
         return Promise.resolve(true);
       case "run_import_pipeline":

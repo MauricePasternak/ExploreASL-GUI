@@ -29,7 +29,7 @@
 
 ## Processing Module
 
-- **SubjectSession**: The concatenated ExploreASL string (e.g. `sub-C9ORF007Philips_01`). Primary tracking key for processing progress. Parsed for display into subject/session columns. Matches lock directory naming verbatim — no separate mapping layer.
+- **SubjectSession**: The concatenated ExploreASL string (e.g. `sub-001Philips_01`). Primary tracking key for processing progress. Parsed for display into subject/session columns. Matches lock directory naming verbatim — no separate mapping layer.
 - **Module vector (bProcess)**: 3-element boolean vector `[Structural, ASL, Population]` passed directly to ExploreASL. GUI maps module checkboxes to this vector.
 - **SubjectRegexp**: Regex filter for ExploreASL subject selection. All subjects → `^sub-.*$`. Subset → alternation e.g. `^(sub-X_Y|sub-Z_W)$`. Written to `x.dataset.subjectRegexp` in dataPar.json at launch.
 - **Step code**: Numeric-prefix status file name (e.g. `010_LinearReg_T1w2MNI`). Part of ExploreASL's contract. Hardcoded in the frontend as step code mappings per module.

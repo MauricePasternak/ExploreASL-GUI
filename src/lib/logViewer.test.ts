@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  LogFileInfoSchema,
   LogContentSchema,
+  LogFileInfoSchema,
   importLogSubjectFromSession,
   importLogSubjectKey,
 } from "./logViewer";
@@ -71,12 +71,12 @@ describe("LogContentSchema", () => {
 
 describe("import log subject helpers", () => {
   it("adds sub- prefix for GUI subject names", () => {
-    expect(importLogSubjectKey("C9ORF007Philips")).toBe("sub-C9ORF007Philips");
-    expect(importLogSubjectKey("sub-C9ORF007Philips")).toBe("sub-C9ORF007Philips");
+    expect(importLogSubjectKey("001Philips")).toBe("sub-001Philips");
+    expect(importLogSubjectKey("sub-001Philips")).toBe("sub-001Philips");
   });
 
   it("strips sub- prefix from log subject sessions", () => {
-    expect(importLogSubjectFromSession("sub-C9ORF007Philips")).toBe("C9ORF007Philips");
-    expect(importLogSubjectFromSession("C9ORF007Philips")).toBe("C9ORF007Philips");
+    expect(importLogSubjectFromSession("sub-001Philips")).toBe("001Philips");
+    expect(importLogSubjectFromSession("001Philips")).toBe("001Philips");
   });
 });

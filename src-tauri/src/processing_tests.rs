@@ -1079,6 +1079,38 @@ mod tests {
     }
 
     #[test]
+    fn apptainer_processing_args_bind_project_root_to_data() {
+        let args = build_apptainer_processing_args(
+            PathBuf::from("/data/project").as_path(),
+            PathBuf::from("/images/exploreasl.sif").as_path(),
+            "[1,0,1]",
+            2,
+            4,
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "--cleanenv",
+                "--writable-tmpfs",
+                "--bind",
+                "/data/project:/data",
+                "/images/exploreasl.sif",
+                "/bin/bash",
+                "/opt/xasl/xASL_latest/run_xASL_latest.sh",
+                "/opt/mcr/v97/",
+                "/data",
+                "0",
+                "[1,0,1]",
+                "0",
+                "2",
+                "4",
+            ]
+        );
+    }
+
+    #[test]
     fn delete_module_log_files_deletes_population_log() {
         let root = unique_temp_path("del-log-pop");
         let log_dir = root.join("derivatives").join("ExploreASL").join("log");
@@ -1177,7 +1209,7 @@ mod tests {
             .join("log");
         fs::create_dir_all(&staging_log).unwrap();
         fs::write(
-            staging_log.join("xASL_module_Import_sub-C9ORF007Philips.log"),
+            staging_log.join("xASL_module_Import_sub-001Philips.log"),
             "ExploreASL import output",
         )
         .unwrap();
@@ -1187,7 +1219,7 @@ mod tests {
 
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].module, "import");
-        assert_eq!(logs[0].subject_session, "sub-C9ORF007Philips");
+        assert_eq!(logs[0].subject_session, "sub-001Philips");
 
         let _ = fs::remove_dir_all(root);
     }
@@ -1202,20 +1234,20 @@ mod tests {
             .join("log");
         fs::create_dir_all(&staging_log).unwrap();
         fs::write(
-            staging_log.join("xASL_module_Import_sub-C9ORF007Philips.log"),
+            staging_log.join("xASL_module_Import_sub-001Philips.log"),
             "import log body",
         )
         .unwrap();
 
         let content = read_module_logs(
             root.to_string_lossy().to_string(),
-            "sub-C9ORF007Philips".to_string(),
+            "sub-001Philips".to_string(),
             "import".to_string(),
         )
         .expect("read_module_logs should succeed");
 
         assert_eq!(
-            content["xASL_module_Import_sub-C9ORF007Philips.log"],
+            content["xASL_module_Import_sub-001Philips.log"],
             "import log body"
         );
 
@@ -1241,13 +1273,13 @@ mod tests {
         // 1. Write mock structural report files
         // Axial
         fs::write(
-            t1_dir.join("Tra_Seg_rT1_sub-C9ORF007Philips_01_rc2T1_sub-C9ORF007Philips_01.jpg"),
+            t1_dir.join("Tra_Seg_rT1_sub-001Philips_01_rc2T1_sub-001Philips_01.jpg"),
             b"structural_axial_bytes",
         )
         .unwrap();
         // Coronal
         fs::write(
-            t1_dir.join("Cor_Seg_rT1_sub-C9ORF007Philips_01_rc2T1_sub-C9ORF007Philips_01.jpg"),
+            t1_dir.join("Cor_Seg_rT1_sub-001Philips_01_rc2T1_sub-001Philips_01.jpg"),
             b"structural_coronal_bytes",
         )
         .unwrap();
@@ -1255,13 +1287,15 @@ mod tests {
         // 2. Write mock ASL report files (Run 1)
         // Axial
         fs::write(
-            asl_dir.join("Tra_Reg_qCBF_sub-C9ORF007Philips_01_ASL_1_PV_pWM_sub-C9ORF007Philips_01_Contour.jpg"),
+            asl_dir
+                .join("Tra_Reg_qCBF_sub-001Philips_01_ASL_1_PV_pWM_sub-001Philips_01_Contour.jpg"),
             b"asl_run1_axial_bytes",
         )
         .unwrap();
         // Coronal
         fs::write(
-            asl_dir.join("Cor_Reg_qCBF_sub-C9ORF007Philips_01_ASL_1_PV_pWM_sub-C9ORF007Philips_01_Contour.jpg"),
+            asl_dir
+                .join("Cor_Reg_qCBF_sub-001Philips_01_ASL_1_PV_pWM_sub-001Philips_01_Contour.jpg"),
             b"asl_run1_coronal_bytes",
         )
         .unwrap();
@@ -1269,13 +1303,17 @@ mod tests {
         // 3. Write mock M0 report files (Run 1)
         // Axial
         fs::write(
-            m0_dir.join("Tra_Reg_noSmooth_M0_sub-C9ORF007Philips_01_ASL_1_PV_pGM_sub-C9ORF007Philips_01_Contour.jpg"),
+            m0_dir.join(
+                "Tra_Reg_noSmooth_M0_sub-001Philips_01_ASL_1_PV_pGM_sub-001Philips_01_Contour.jpg",
+            ),
             b"m0_run1_axial_bytes",
         )
         .unwrap();
         // Coronal
         fs::write(
-            m0_dir.join("Cor_Reg_noSmooth_M0_sub-C9ORF007Philips_01_ASL_1_PV_pGM_sub-C9ORF007Philips_01_Contour.jpg"),
+            m0_dir.join(
+                "Cor_Reg_noSmooth_M0_sub-001Philips_01_ASL_1_PV_pGM_sub-001Philips_01_Contour.jpg",
+            ),
             b"m0_run1_coronal_bytes",
         )
         .unwrap();
@@ -1288,22 +1326,22 @@ mod tests {
         assert_eq!(list.len(), 3);
 
         let struct_entry = list.iter().find(|x| x.module == "structural").unwrap();
-        assert_eq!(struct_entry.subject_session, "sub-C9ORF007Philips_01");
+        assert_eq!(struct_entry.subject_session, "sub-001Philips_01");
         assert_eq!(struct_entry.run, None);
 
         let asl_entry = list.iter().find(|x| x.module == "asl").unwrap();
-        assert_eq!(asl_entry.subject_session, "sub-C9ORF007Philips_01");
+        assert_eq!(asl_entry.subject_session, "sub-001Philips_01");
         assert_eq!(asl_entry.run, Some("1".to_string()));
 
         let m0_entry = list.iter().find(|x| x.module == "m0").unwrap();
-        assert_eq!(m0_entry.subject_session, "sub-C9ORF007Philips_01");
+        assert_eq!(m0_entry.subject_session, "sub-001Philips_01");
         assert_eq!(m0_entry.run, Some("1".to_string()));
 
         // 5. Test read_report_image
         // Structural Axial
         let img_bytes = read_report_image(
             root.to_string_lossy().to_string(),
-            "sub-C9ORF007Philips_01".to_string(),
+            "sub-001Philips_01".to_string(),
             "structural".to_string(),
             None,
             "axial".to_string(),
@@ -1314,7 +1352,7 @@ mod tests {
         // Structural Coronal
         let img_bytes_cor = read_report_image(
             root.to_string_lossy().to_string(),
-            "sub-C9ORF007Philips_01".to_string(),
+            "sub-001Philips_01".to_string(),
             "structural".to_string(),
             None,
             "coronal".to_string(),
@@ -1325,7 +1363,7 @@ mod tests {
         // ASL Axial Run 1
         let asl_bytes = read_report_image(
             root.to_string_lossy().to_string(),
-            "sub-C9ORF007Philips_01".to_string(),
+            "sub-001Philips_01".to_string(),
             "asl".to_string(),
             Some("1".to_string()),
             "axial".to_string(),
@@ -1336,7 +1374,7 @@ mod tests {
         // ASL Coronal Run 1
         let asl_bytes_cor = read_report_image(
             root.to_string_lossy().to_string(),
-            "sub-C9ORF007Philips_01".to_string(),
+            "sub-001Philips_01".to_string(),
             "asl".to_string(),
             Some("1".to_string()),
             "coronal".to_string(),
@@ -1347,7 +1385,7 @@ mod tests {
         // M0 Axial Run 1
         let m0_bytes = read_report_image(
             root.to_string_lossy().to_string(),
-            "sub-C9ORF007Philips_01".to_string(),
+            "sub-001Philips_01".to_string(),
             "m0".to_string(),
             Some("1".to_string()),
             "axial".to_string(),
@@ -1358,7 +1396,7 @@ mod tests {
         // M0 Coronal Run 1
         let m0_bytes_cor = read_report_image(
             root.to_string_lossy().to_string(),
-            "sub-C9ORF007Philips_01".to_string(),
+            "sub-001Philips_01".to_string(),
             "m0".to_string(),
             Some("1".to_string()),
             "coronal".to_string(),
@@ -1381,7 +1419,7 @@ mod tests {
         // Invalid view type
         let err_view = read_report_image(
             root.to_string_lossy().to_string(),
-            "sub-C9ORF007Philips_01".to_string(),
+            "sub-001Philips_01".to_string(),
             "structural".to_string(),
             None,
             "sagittal".to_string(),

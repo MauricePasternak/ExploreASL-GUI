@@ -1,3 +1,6 @@
+use crate::apptainer::{
+    detect_apptainer_version, resolve_apptainer_executable, validate_apptainer_executable,
+};
 use crate::import::validate_matlab_executable;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -21,6 +24,25 @@ pub enum ExecutionProfile {
         )]
         explore_asl_version: Option<String>,
     },
+    #[serde(rename = "apptainer")]
+    Apptainer {
+        id: String,
+        label: String,
+        #[serde(rename = "sifPath")]
+        sif_path: String,
+        #[serde(rename = "apptainerPath", default = "default_apptainer_path")]
+        apptainer_path: String,
+        #[serde(
+            rename = "exploreAslVersion",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        explore_asl_version: Option<String>,
+    },
+}
+
+fn default_apptainer_path() -> String {
+    "apptainer".to_string()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -40,12 +62,15 @@ pub struct InternalValidation {
     pub explore_asl_version: Option<String>,
     pub matlab_path: Option<String>,
     pub explore_asl_path: Option<PathBuf>,
+    pub apptainer_path: Option<String>,
+    pub sif_path: Option<PathBuf>,
 }
 
 impl ExecutionProfile {
     pub fn id(&self) -> &str {
         match self {
             ExecutionProfile::Matlab { id, .. } => id,
+            ExecutionProfile::Apptainer { id, .. } => id,
         }
     }
 
@@ -56,6 +81,11 @@ impl ExecutionProfile {
                 explore_asl_path,
                 ..
             } => validate_matlab_profile(matlab_path, explore_asl_path),
+            ExecutionProfile::Apptainer {
+                sif_path,
+                apptainer_path,
+                ..
+            } => validate_apptainer_profile(sif_path, apptainer_path),
         }
     }
 
@@ -122,6 +152,66 @@ fn validate_matlab_profile(matlab_path: &str, explore_asl_path: &str) -> Interna
         explore_asl_version,
         matlab_path: validated_matlab_path,
         explore_asl_path: validated_explore_asl_path,
+        apptainer_path: None,
+        sif_path: None,
+    }
+}
+
+fn validate_apptainer_profile(sif_path: &str, apptainer_path: &str) -> InternalValidation {
+    let mut errors = Vec::new();
+    let sif_value = sif_path.trim();
+    let validated_sif_path = if sif_value.is_empty() {
+        errors.push("SIF path must not be empty".to_string());
+        None
+    } else {
+        let sif = PathBuf::from(sif_value);
+        if !sif.exists() {
+            errors.push(format!(
+                "SIF image not found at this path: {}",
+                sif.display()
+            ));
+            None
+        } else if !sif.is_file() {
+            errors.push(format!("SIF image path is not a file: {}", sif.display()));
+            None
+        } else {
+            Some(sif)
+        }
+    };
+
+    let validated_apptainer_path = match resolve_apptainer_executable(apptainer_path) {
+        Ok(path) => match validate_apptainer_executable(&path) {
+            Ok(()) => Some(path),
+            Err(error) => {
+                errors.push(error);
+                None
+            }
+        },
+        Err(error) => {
+            errors.push(error);
+            None
+        }
+    };
+
+    let explore_asl_version = match (&validated_apptainer_path, &validated_sif_path) {
+        (Some(apptainer), Some(sif)) => match detect_apptainer_version(apptainer, sif) {
+            Ok(version) => Some(version),
+            Err(error) => {
+                errors.push(error);
+                None
+            }
+        },
+        _ => None,
+    };
+
+    InternalValidation {
+        valid: errors.is_empty(),
+        errors,
+        explore_asl_version,
+        matlab_path: None,
+        explore_asl_path: None,
+        apptainer_path: validated_apptainer_path,
+        sif_path: validated_sif_path,
     }
 }
 
@@ -147,142 +237,5 @@ pub fn validate_all_execution_profiles(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn unique_temp_path(name: &str) -> PathBuf {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-
-        std::env::temp_dir().join(format!("exploreasl-gui-profile-{name}-{suffix}"))
-    }
-
-    fn make_matlab_profile(matlab_path: &str, explore_asl_path: &str) -> ExecutionProfile {
-        ExecutionProfile::Matlab {
-            id: "00000000-0000-4000-8000-000000000001".to_string(),
-            label: "Test Profile".to_string(),
-            matlab_path: matlab_path.to_string(),
-            explore_asl_path: explore_asl_path.to_string(),
-            explore_asl_version: None,
-        }
-    }
-
-    fn create_executable(path: &Path) {
-        fs::write(path, "#!/bin/sh\n").expect("executable file should be written");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o755))
-                .expect("executable permissions should be set");
-        }
-    }
-
-    fn create_exploreasl_root(path: &Path, with_version: bool) {
-        fs::create_dir_all(path).expect("exploreasl root should be created");
-        fs::write(path.join("ExploreASL.m"), "").expect("ExploreASL.m should be created");
-        if with_version {
-            fs::write(path.join("VERSION_1.11.0"), "").expect("version file should be created");
-        }
-    }
-
-    #[test]
-    fn execution_profile_id_returns_profile_id() {
-        let profile = make_matlab_profile("/tmp/matlab", "/tmp/exploreasl");
-
-        assert_eq!(profile.id(), "00000000-0000-4000-8000-000000000001");
-    }
-
-    #[test]
-    fn validate_accepts_valid_matlab_profile_paths() {
-        let matlab = unique_temp_path("valid-matlab");
-        let exploreasl = unique_temp_path("valid-exploreasl");
-        create_executable(&matlab);
-        create_exploreasl_root(&exploreasl, true);
-
-        let profile = make_matlab_profile(&matlab.to_string_lossy(), &exploreasl.to_string_lossy());
-        let validation = profile.validate();
-
-        assert!(validation.valid);
-        assert!(validation.errors.is_empty());
-        assert_eq!(validation.explore_asl_version, Some("1.11.0".to_string()));
-        assert_eq!(
-            validation.matlab_path,
-            Some(matlab.to_string_lossy().to_string())
-        );
-        assert_eq!(validation.explore_asl_path, Some(exploreasl.clone()));
-
-        let _ = fs::remove_file(matlab);
-        let _ = fs::remove_dir_all(exploreasl);
-    }
-
-    #[test]
-    fn validate_rejects_missing_matlab_executable() {
-        let missing_matlab = unique_temp_path("missing-matlab").join("matlab");
-        let exploreasl = unique_temp_path("exploreasl-for-missing-matlab");
-        create_exploreasl_root(&exploreasl, false);
-
-        let profile = make_matlab_profile(
-            &missing_matlab.to_string_lossy(),
-            &exploreasl.to_string_lossy(),
-        );
-        let validation = profile.validate();
-
-        assert!(!validation.valid);
-        assert_eq!(validation.errors.len(), 1);
-        assert!(validation.errors[0].contains("MATLAB executable not found"));
-        assert!(validation.matlab_path.is_none());
-        assert_eq!(validation.explore_asl_path, Some(exploreasl.clone()));
-
-        let _ = fs::remove_dir_all(exploreasl);
-    }
-
-    #[test]
-    fn validate_rejects_missing_exploreasl_main_file() {
-        let matlab = unique_temp_path("matlab-for-missing-exploreasl");
-        let exploreasl = unique_temp_path("missing-exploreasl-main");
-        create_executable(&matlab);
-        fs::create_dir_all(&exploreasl).expect("exploreasl dir should be created");
-
-        let profile = make_matlab_profile(&matlab.to_string_lossy(), &exploreasl.to_string_lossy());
-        let validation = profile.validate();
-
-        assert!(!validation.valid);
-        assert_eq!(validation.errors.len(), 1);
-        assert!(validation.errors[0].contains("ExploreASL.m not found"));
-        assert_eq!(
-            validation.matlab_path,
-            Some(matlab.to_string_lossy().to_string())
-        );
-        assert!(validation.explore_asl_path.is_none());
-
-        let _ = fs::remove_file(matlab);
-        let _ = fs::remove_dir_all(exploreasl);
-    }
-
-    #[test]
-    fn validate_all_execution_profiles_returns_one_result_per_profile() {
-        let matlab = unique_temp_path("valid-matlab-batch");
-        let exploreasl = unique_temp_path("valid-exploreasl-batch");
-        create_executable(&matlab);
-        create_exploreasl_root(&exploreasl, true);
-
-        let valid = make_matlab_profile(&matlab.to_string_lossy(), &exploreasl.to_string_lossy());
-        let invalid =
-            make_matlab_profile("/definitely/missing/matlab", &exploreasl.to_string_lossy());
-
-        let results = validate_all_execution_profiles(vec![valid.clone(), invalid])
-            .expect("batch validation should succeed");
-
-        assert_eq!(results.len(), 2);
-        assert!(results[0].valid);
-        assert!(!results[1].valid);
-        assert_eq!(results[0].id, valid.id());
-        assert_eq!(results[1].errors.len(), 1);
-
-        let _ = fs::remove_file(matlab);
-        let _ = fs::remove_dir_all(exploreasl);
-    }
-}
+#[path = "execution_profile_tests.rs"]
+mod execution_profile_tests;

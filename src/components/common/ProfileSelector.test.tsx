@@ -7,6 +7,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
+import type { ApptainerProfile } from "../../schemas/executionProfile";
 import { useGlobalStore } from "../../stores/globalStore";
 import { makeMatlabProfile } from "../../test/profileFixtures";
 import ProfileSelector from "./ProfileSelector";
@@ -56,6 +57,30 @@ describe("ProfileSelector", () => {
 
     expect(screen.getByTestId("profile-selector")).toBeInTheDocument();
     expect(screen.getByText("Lab Profile")).toBeInTheDocument();
+  });
+
+  it("labels Apptainer profiles and displays their detected version", async () => {
+    const profile: ApptainerProfile = {
+      id: "33333333-3333-4333-8333-333333333333",
+      label: "Container profile",
+      type: "apptainer",
+      sifPath: "/opt/exploreasl.sif",
+      apptainerPath: "apptainer",
+      exploreAslVersion: "1.11.0",
+    };
+    useGlobalStore.setState({
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [profile] },
+      profileValidationState: { [profile.id]: { valid: true, errors: [] } },
+    });
+
+    renderSelector({ value: profile.id, onChange: vi.fn() });
+
+    const combobox = screen.getByRole("combobox", { name: /execution profile/i });
+    await userEvent.click(combobox);
+
+    const option = await screen.findByTestId(`profile-selector-option-${profile.id}`);
+    expect(option).toHaveTextContent("Apptainer");
+    expect(option).toHaveTextContent("v1.11.0");
   });
 
   it("shows profile not found when value does not match any profile", () => {

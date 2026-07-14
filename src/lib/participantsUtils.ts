@@ -1,4 +1,4 @@
-import { exists, readTextFile, writeTextFile, mkdir } from "@tauri-apps/plugin-fs";
+import { exists, mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import type { MetadataGroup, SubjectRow } from "../schemas/importSchemas";
 import type { ProcessConfig, SubjectInfo } from "../schemas/processingSchemas";
 import { normalizeAslRunId, toExploreAslSessionLabel } from "./aslRun";
@@ -9,7 +9,7 @@ interface MappingState {
 }
 
 /**
- * Parses a participant_id (e.g. sub-C9ORF007Philips_01) into subject and session.
+ * Parses a participant_id (e.g. sub-001Philips_01) into subject and session.
  * The session is assumed to be the last part of the string after the last underscore.
  */
 export function parseParticipantId(participantId: string): { subject: string; session: string } {

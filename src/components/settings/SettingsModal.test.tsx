@@ -88,9 +88,11 @@ describe("SettingsModal", () => {
 
     await waitFor(() => {
       expect(useGlobalStore.getState().settings.executionProfiles).toHaveLength(1);
-      expect(useGlobalStore.getState().settings.executionProfiles[0].matlabPath).toBe(
-        "/usr/local/bin/matlab",
-      );
+      const savedProfile = useGlobalStore.getState().settings.executionProfiles[0];
+      expect(savedProfile.type).toBe("matlab");
+      if (savedProfile.type === "matlab") {
+        expect(savedProfile.matlabPath).toBe("/usr/local/bin/matlab");
+      }
     });
   });
 

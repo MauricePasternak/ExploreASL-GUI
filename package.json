@@ -16,9 +16,9 @@
     "lint": "pnpm lint:oxlint && pnpm lint:rust",
     "lint:oxlint": "oxlint --deny-warnings",
     "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings && cargo fmt --manifest-path src-tauri/Cargo.toml --check",
-    "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+    "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "format:check": "prettier --check .",
-    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

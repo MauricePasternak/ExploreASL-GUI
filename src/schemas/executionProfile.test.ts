@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { ExecutionProfileSchema, MatlabProfileSchema } from "./executionProfile";
+import {
+  ApptainerProfileSchema,
+  ExecutionProfileSchema,
+  MatlabProfileSchema,
+} from "./executionProfile";
 
 const validMatlabProfile = {
   id: "550e8400-e29b-41d4-a716-446655440000",
@@ -8,6 +12,14 @@ const validMatlabProfile = {
   type: "matlab" as const,
   matlabPath: "/usr/local/MATLAB/R2024b/bin/matlab",
   exploreAslPath: "/home/user/ExploreASL",
+};
+
+const validApptainerProfile = {
+  id: "550e8400-e29b-41d4-a716-446655440001",
+  label: "ExploreASL container",
+  type: "apptainer" as const,
+  sifPath: "/opt/containers/exploreasl.sif",
+  apptainerPath: "apptainer",
 };
 
 describe("MatlabProfileSchema", () => {
@@ -126,5 +138,31 @@ describe("ExecutionProfileSchema", () => {
         exploreAslPath: "/path/exploreasl",
       }),
     ).toThrow();
+  });
+
+  it("parses a valid Apptainer profile and defaults its executable", () => {
+    const parsed = ApptainerProfileSchema.parse({
+      ...validApptainerProfile,
+      apptainerPath: undefined,
+    });
+
+    expect(parsed.type).toBe("apptainer");
+    expect(parsed.sifPath).toBe(validApptainerProfile.sifPath);
+    expect(parsed.apptainerPath).toBe("apptainer");
+  });
+
+  it("parses an Apptainer profile through the discriminated union", () => {
+    const parsed = ExecutionProfileSchema.parse(validApptainerProfile);
+
+    expect(parsed).toEqual(validApptainerProfile);
+  });
+
+  it("requires a SIF path for Apptainer profiles", () => {
+    expect(() =>
+      ApptainerProfileSchema.parse({
+        ...validApptainerProfile,
+        sifPath: "",
+      }),
+    ).toThrow(/SIF path is required/i);
   });
 });

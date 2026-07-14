@@ -1,7 +1,7 @@
+import { exists, mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { exists, readTextFile, writeTextFile, mkdir } from "@tauri-apps/plugin-fs";
-import { parseParticipantId, ensureParticipantsFiles } from "./participantsUtils";
 import type { ProcessConfig, SubjectInfo } from "../schemas/processingSchemas";
+import { ensureParticipantsFiles, parseParticipantId } from "./participantsUtils";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   exists: vi.fn(),
@@ -17,15 +17,15 @@ describe("participantsUtils", () => {
 
   describe("parseParticipantId", () => {
     it("parses BIDS-compliant participant ID with prefix and visit session", () => {
-      expect(parseParticipantId("sub-C9ORF007Philips_01")).toEqual({
-        subject: "C9ORF007Philips",
+      expect(parseParticipantId("sub-001Philips_01")).toEqual({
+        subject: "001Philips",
         session: "01",
       });
     });
 
     it("parses participant ID without sub- prefix", () => {
-      expect(parseParticipantId("C9ORF059Siemens_12")).toEqual({
-        subject: "C9ORF059Siemens",
+      expect(parseParticipantId("002Siemens_12")).toEqual({
+        subject: "002Siemens",
         session: "12",
       });
     });
@@ -38,8 +38,8 @@ describe("participantsUtils", () => {
     });
 
     it("falls back to default session if no session suffix exists", () => {
-      expect(parseParticipantId("sub-C9ORF007")).toEqual({
-        subject: "C9ORF007",
+      expect(parseParticipantId("sub-001")).toEqual({
+        subject: "001",
         session: "01",
       });
     });
@@ -47,7 +47,7 @@ describe("participantsUtils", () => {
 
   describe("ensureParticipantsFiles", () => {
     const config: ProcessConfig = {
-      subjects: ["sub-C9ORF007Philips_01", "sub-C9ORF059Siemens_02"],
+      subjects: ["sub-001Philips_01", "sub-002Siemens_02"],
       modules: ["structural", "asl"],
       selectedProfileId: "profile-1",
       workers: 4,
@@ -56,14 +56,14 @@ describe("participantsUtils", () => {
     const mappingState = {
       subjectRows: [
         {
-          id: "C9ORF007Philips/01",
-          subject: "C9ORF007Philips",
+          id: "001Philips/01",
+          subject: "001Philips",
           session: "01",
           groupId: "group-philips",
         },
         {
-          id: "C9ORF059Siemens/02",
-          subject: "C9ORF059Siemens",
+          id: "002Siemens/02",
+          subject: "002Siemens",
           session: "02",
           groupId: "global-defaults",
         },
@@ -84,16 +84,16 @@ describe("participantsUtils", () => {
 
     const availableSubjects: SubjectInfo[] = [
       {
-        subjectSession: "sub-C9ORF007Philips_01",
-        subject: "C9ORF007Philips",
+        subjectSession: "sub-001Philips_01",
+        subject: "001Philips",
         session: "01",
         hasStructural: true,
         hasASL: true,
         aslRuns: ["1", "2"],
       },
       {
-        subjectSession: "sub-C9ORF059Siemens_02",
-        subject: "C9ORF059Siemens",
+        subjectSession: "sub-002Siemens_02",
+        subject: "002Siemens",
         session: "02",
         hasStructural: true,
         hasASL: true,
@@ -116,9 +116,9 @@ describe("participantsUtils", () => {
       expect(writeTextFile).toHaveBeenCalledWith(
         "/test/project/derivatives/ExploreASL/participants.tsv",
         "participant_id\tsession\tsite\n" +
-          "sub-C9ORF007Philips_01\tASL_1\tPhilips_Override\n" +
-          "sub-C9ORF007Philips_01\tASL_2\tPhilips_Override\n" +
-          "sub-C9ORF059Siemens_02\tASL_1\tGlobal_Defaults\n",
+          "sub-001Philips_01\tASL_1\tPhilips_Override\n" +
+          "sub-001Philips_01\tASL_2\tPhilips_Override\n" +
+          "sub-002Siemens_02\tASL_1\tGlobal_Defaults\n",
       );
 
       // Verify JSON content
@@ -136,8 +136,8 @@ describe("participantsUtils", () => {
       // Setup: TSV exists and has custom columns and mixed-up rows
       const existingTsv =
         "participant_id\tsession\tGM_vol\tWM_vol\n" +
-        "sub-C9ORF059Siemens_02\tASL_1\t0.67894\t0.5418\n" +
-        "sub-C9ORF007Philips_01\tASL_1\t0.63988\t0.48649\n";
+        "sub-002Siemens_02\tASL_1\t0.67894\t0.5418\n" +
+        "sub-001Philips_01\tASL_1\t0.63988\t0.48649\n";
 
       const existingJson = JSON.stringify({
         participant_id: { Description: "custom id desc" },
@@ -163,9 +163,9 @@ describe("participantsUtils", () => {
       expect(writeTextFile).toHaveBeenCalledWith(
         "/test/project/derivatives/ExploreASL/participants.tsv",
         "participant_id\tsession\tsite\tGM_vol\tWM_vol\n" +
-          "sub-C9ORF007Philips_01\tASL_1\tPhilips_Override\t0.63988\t0.48649\n" +
-          "sub-C9ORF007Philips_01\tASL_2\tPhilips_Override\t\t\n" +
-          "sub-C9ORF059Siemens_02\tASL_1\tGlobal_Defaults\t0.67894\t0.5418\n",
+          "sub-001Philips_01\tASL_1\tPhilips_Override\t0.63988\t0.48649\n" +
+          "sub-001Philips_01\tASL_2\tPhilips_Override\t\t\n" +
+          "sub-002Siemens_02\tASL_1\tGlobal_Defaults\t0.67894\t0.5418\n",
       );
 
       // Verify JSON content is merged, custom fields preserved, standard ones added
@@ -193,7 +193,7 @@ describe("participantsUtils", () => {
           path.toString().endsWith("/participants.tsv") &&
           !path.toString().includes("derivatives")
         ) {
-          return "participant_id\tsite\nsub-C9ORF007Philips\tCenterA\n";
+          return "participant_id\tsite\nsub-001Philips\tCenterA\n";
         }
         return "";
       });
@@ -216,8 +216,8 @@ describe("participantsUtils", () => {
     it("strips site column from TSV and JSON when enabled is false and files exist", async () => {
       const existingTsv =
         "participant_id\tsession\tsite\tGM_vol\tWM_vol\n" +
-        "sub-C9ORF059Siemens_02\tASL_1\tGlobal_Defaults\t0.67894\t0.5418\n" +
-        "sub-C9ORF007Philips_01\tASL_1\tPhilips_Override\t0.63988\t0.48649\n";
+        "sub-002Siemens_02\tASL_1\tGlobal_Defaults\t0.67894\t0.5418\n" +
+        "sub-001Philips_01\tASL_1\tPhilips_Override\t0.63988\t0.48649\n";
 
       const existingJson = JSON.stringify({
         participant_id: { Description: "custom id desc" },
@@ -249,8 +249,8 @@ describe("participantsUtils", () => {
       expect(writeTextFile).toHaveBeenCalledWith(
         "/test/project/derivatives/ExploreASL/participants.tsv",
         "participant_id\tsession\tGM_vol\tWM_vol\n" +
-          "sub-C9ORF059Siemens_02\tASL_1\t0.67894\t0.5418\n" +
-          "sub-C9ORF007Philips_01\tASL_1\t0.63988\t0.48649\n",
+          "sub-002Siemens_02\tASL_1\t0.67894\t0.5418\n" +
+          "sub-001Philips_01\tASL_1\t0.63988\t0.48649\n",
       );
 
       // Verify site was deleted from JSON
@@ -267,8 +267,8 @@ describe("participantsUtils", () => {
     // --- Phase 8.3: site-precedence tests ---
 
     it("BIDS-direct + correction enabled + root site present: preserves user site, fills group label for unmatched", async () => {
-      // Root participants.tsv has site for sub-C9ORF007Philips only
-      // sub-C9ORF059Siemens has no root site → should get group label fallback
+      // Root participants.tsv has site for sub-001Philips only
+      // sub-002Siemens has no root site → should get group label fallback
       vi.mocked(exists).mockImplementation(async (path) => {
         const p = path.toString();
         if (p.endsWith("/participants.tsv") && !p.includes("derivatives")) return true;
@@ -281,7 +281,7 @@ describe("participantsUtils", () => {
           path.toString().endsWith("/participants.tsv") &&
           !path.toString().includes("derivatives")
         ) {
-          return "participant_id\tsite\nsub-C9ORF007Philips\tCenterA\nsub-C9ORF059Siemens\tCenterB\n";
+          return "participant_id\tsite\nsub-001Philips\tCenterA\nsub-002Siemens\tCenterB\n";
         }
         return "";
       });
@@ -328,7 +328,7 @@ describe("participantsUtils", () => {
           path.toString().endsWith("/participants.tsv") &&
           !path.toString().includes("derivatives")
         ) {
-          return "participant_id\tsite\nsub-C9ORF007Philips\tCenterA\n";
+          return "participant_id\tsite\nsub-001Philips\tCenterA\n";
         }
         return "";
       });
@@ -366,7 +366,7 @@ describe("participantsUtils", () => {
           path.toString().endsWith("/participants.tsv") &&
           !path.toString().includes("derivatives")
         ) {
-          return "participant_id\tage\nsub-C9ORF007Philips\t55\n";
+          return "participant_id\tage\nsub-001Philips\t55\n";
         }
         return "";
       });
@@ -391,9 +391,9 @@ describe("participantsUtils", () => {
     });
 
     it("Root lookup matching: participant_id sub-XX matches sessions sub-XX_1 and sub-XX_2", async () => {
-      // Multi-session config: sub-C9ORF007Philips with sessions 01 and 03
+      // Multi-session config: sub-001Philips with sessions 01 and 03
       const multiSessionConfig: ProcessConfig = {
-        subjects: ["sub-C9ORF007Philips_01", "sub-C9ORF007Philips_03", "sub-C9ORF059Siemens_02"],
+        subjects: ["sub-001Philips_01", "sub-001Philips_03", "sub-002Siemens_02"],
         modules: ["structural", "asl"],
         selectedProfileId: "profile-1",
         workers: 4,
@@ -401,24 +401,24 @@ describe("participantsUtils", () => {
 
       const multiSessionSubjects: SubjectInfo[] = [
         {
-          subjectSession: "sub-C9ORF007Philips_01",
-          subject: "C9ORF007Philips",
+          subjectSession: "sub-001Philips_01",
+          subject: "001Philips",
           session: "01",
           hasStructural: true,
           hasASL: true,
           aslRuns: ["1"],
         },
         {
-          subjectSession: "sub-C9ORF007Philips_03",
-          subject: "C9ORF007Philips",
+          subjectSession: "sub-001Philips_03",
+          subject: "001Philips",
           session: "03",
           hasStructural: true,
           hasASL: true,
           aslRuns: ["1"],
         },
         {
-          subjectSession: "sub-C9ORF059Siemens_02",
-          subject: "C9ORF059Siemens",
+          subjectSession: "sub-002Siemens_02",
+          subject: "002Siemens",
           session: "02",
           hasStructural: true,
           hasASL: true,
@@ -429,20 +429,20 @@ describe("participantsUtils", () => {
       const multiSessionMappingState = {
         subjectRows: [
           {
-            id: "C9ORF007Philips/01",
-            subject: "C9ORF007Philips",
+            id: "001Philips/01",
+            subject: "001Philips",
             session: "01",
             groupId: "group-philips",
           },
           {
-            id: "C9ORF007Philips/03",
-            subject: "C9ORF007Philips",
+            id: "001Philips/03",
+            subject: "001Philips",
             session: "03",
             groupId: "group-philips",
           },
           {
-            id: "C9ORF059Siemens/02",
-            subject: "C9ORF059Siemens",
+            id: "002Siemens/02",
+            subject: "002Siemens",
             session: "02",
             groupId: "group-siemens",
           },
@@ -466,7 +466,7 @@ describe("participantsUtils", () => {
           path.toString().endsWith("/participants.tsv") &&
           !path.toString().includes("derivatives")
         ) {
-          return "participant_id\tsite\nsub-C9ORF007Philips\tCenterA\n";
+          return "participant_id\tsite\nsub-001Philips\tCenterA\n";
         }
         return "";
       });
@@ -487,22 +487,22 @@ describe("participantsUtils", () => {
       const tsvContent = tsvCall![1] as string;
       const lines = tsvContent.split("\n").filter(Boolean);
 
-      // sub-C9ORF007Philips_01 and sub-C9ORF007Philips_03 should both get CenterA
-      const line01 = lines.find((l) => l.includes("sub-C9ORF007Philips_01"));
-      const line03 = lines.find((l) => l.includes("sub-C9ORF007Philips_03"));
+      // sub-001Philips_01 and sub-001Philips_03 should both get CenterA
+      const line01 = lines.find((l) => l.includes("sub-001Philips_01"));
+      const line03 = lines.find((l) => l.includes("sub-001Philips_03"));
       expect(line01).toBeDefined();
       expect(line03).toBeDefined();
       expect(line01).toContain("CenterA");
       expect(line03).toContain("CenterA");
 
-      // sub-C9ORF059Siemens_02 has no root site → gets group label fallback
-      const lineSiemens = lines.find((l) => l.includes("sub-C9ORF059Siemens_02"));
+      // sub-002Siemens_02 has no root site → gets group label fallback
+      const lineSiemens = lines.find((l) => l.includes("sub-002Siemens_02"));
       expect(lineSiemens).toBeDefined();
       expect(lineSiemens).toContain("Siemens_Group");
     });
 
-    it("merges BIDS base rows (e.g., sub-C9ORF007Philips) into legacy target rows (e.g., sub-C9ORF007Philips_01) and removes the base rows", async () => {
-      const existingTsv = "participant_id\tAge\tGender\n" + "sub-C9ORF007Philips\t21\tF\n";
+    it("merges BIDS base rows (e.g., sub-001Philips) into legacy target rows (e.g., sub-001Philips_01) and removes the base rows", async () => {
+      const existingTsv = "participant_id\tAge\tGender\n" + "sub-001Philips\t21\tF\n";
 
       vi.mocked(exists).mockImplementation(async (path) => {
         const p = path.toString();
@@ -535,13 +535,13 @@ describe("participantsUtils", () => {
       // Should contain the headers including Age and Gender
       expect(lines[0]).toBe("participant_id\tsession\tsite\tAge\tGender");
 
-      // Should have merged sub-C9ORF007Philips demographics to sub-C9ORF007Philips_01 (since it was mapped to session 01 in availableSubjects)
-      const line01_1 = lines.find((l) => l.startsWith("sub-C9ORF007Philips_01\t"));
+      // Should have merged sub-001Philips demographics to sub-001Philips_01 (since it was mapped to session 01 in availableSubjects)
+      const line01_1 = lines.find((l) => l.startsWith("sub-001Philips_01\t"));
       expect(line01_1).toBeDefined();
-      expect(line01_1).toBe("sub-C9ORF007Philips_01\tASL_1\tPhilips_Override\t21\tF");
+      expect(line01_1).toBe("sub-001Philips_01\tASL_1\tPhilips_Override\t21\tF");
 
-      // Should NOT contain the base sub-C9ORF007Philips row anymore
-      const lineBase = lines.find((l) => l.startsWith("sub-C9ORF007Philips\t"));
+      // Should NOT contain the base sub-001Philips row anymore
+      const lineBase = lines.find((l) => l.startsWith("sub-001Philips\t"));
       expect(lineBase).toBeUndefined();
     });
 
@@ -559,7 +559,7 @@ describe("participantsUtils", () => {
           path.toString().endsWith("/participants.tsv") &&
           !path.toString().includes("derivatives")
         ) {
-          return "participant_id\tage\nsub-C9ORF007Philips\t21\n";
+          return "participant_id\tage\nsub-001Philips\t21\n";
         }
         return "";
       });

@@ -107,7 +107,7 @@ Hovering over a datapoint SHALL display a tooltip containing: Subject, Session, 
 
 #### Scenario: Tooltip shows identifiers and values
 
-- **WHEN** the user hovers over a datapoint with Subject="sub-C9ORF007Philips", Session="01", Run="ASL_1", X=258.76, Y=0.64
+- **WHEN** the user hovers over a datapoint with Subject="sub-001Philips", Session="01", Run="ASL_1", X=258.76, Y=0.64
 - **THEN** the tooltip SHALL display all five values
 
 #### Scenario: Tooltip includes color-by value
@@ -126,7 +126,7 @@ Clicking a datapoint SHALL highlight the clicked point with a border/halo and di
 
 #### Scenario: Click passes identifiers to viewer
 
-- **WHEN** the user clicks a datapoint with participant_id="sub-C9ORF007Philips_01" and session="ASL_1"
+- **WHEN** the user clicks a datapoint with participant_id="sub-001Philips_01" and session="ASL_1"
 - **THEN** the viewer SHALL receive these identifiers to construct the qCBF file request
 
 #### Scenario: Highlight persists on image failure
@@ -241,17 +241,17 @@ Chart colors SHALL adapt to the active Mantine color scheme (light/dark). A shar
 
 ### Requirement: Chart Data Transformation
 
-The `visualizationStore.chartData` SHALL store transformed nivo-ready data points, not raw TSV rows. Each point SHALL be an object with: `x` (X column value), `y` (Y column value, number), `id` (composite `participantId + "_" + run`), `colorBy` (categorical value or undefined), `participantId` (raw TSV `participant_id` value, e.g. `"sub-C9ORF007Philips_01"`), `subject` (parsed from `participant_id`, e.g. `"sub-C9ORF007Philips"`), `session` (parsed from `participant_id`, e.g. `"01"` — GUI Session), `run` (TSV `session` column value, e.g. `"ASL_1"` — GUI Run, used for qCBF filename and protocol URL). The transformation SHALL parse numeric values according to column types from the contract.
+The `visualizationStore.chartData` SHALL store transformed nivo-ready data points, not raw TSV rows. Each point SHALL be an object with: `x` (X column value), `y` (Y column value, number), `id` (composite `participantId + "_" + run`), `colorBy` (categorical value or undefined), `participantId` (raw TSV `participant_id` value, e.g. `"sub-001Philips_01"`), `subject` (parsed from `participant_id`, e.g. `"sub-001Philips"`), `session` (parsed from `participant_id`, e.g. `"01"` — GUI Session), `run` (TSV `session` column value, e.g. `"ASL_1"` — GUI Run, used for qCBF filename and protocol URL). The transformation SHALL parse numeric values according to column types from the contract.
 
 #### Scenario: Data point structure
 
-- **WHEN** chart data is transformed from TSV rows with participant_id="sub-C9ORF007Philips_01" and TSV session="ASL_1"
-- **THEN** each point SHALL have `id` = `"sub-C9ORF007Philips_01_ASL_1"` (participantId + "\_" + run), `subject` = `"sub-C9ORF007Philips"`, `session` = `"01"`, `run` = `"ASL_1"`
+- **WHEN** chart data is transformed from TSV rows with participant_id="sub-001Philips_01" and TSV session="ASL_1"
+- **THEN** each point SHALL have `id` = `"sub-001Philips_01_ASL_1"` (participantId + "\_" + run), `subject` = `"sub-001Philips"`, `session` = `"01"`, `run` = `"ASL_1"`
 
 #### Scenario: Tooltip fields map to correct values
 
-- **WHEN** a tooltip displays for a point with participant_id="sub-C9ORF007Philips_01" and TSV session="ASL_1"
-- **THEN** the tooltip SHALL show Subject = `subject` field (`"sub-C9ORF007Philips"`), Session = `session` field (`"01"`), Run = `run` field (`"ASL_1"`)
+- **WHEN** a tooltip displays for a point with participant_id="sub-001Philips_01" and TSV session="ASL_1"
+- **THEN** the tooltip SHALL show Subject = `subject` field (`"sub-001Philips"`), Session = `session` field (`"01"`), Run = `run` field (`"ASL_1"`)
 
 #### Scenario: Numeric values parsed for continuous columns
 

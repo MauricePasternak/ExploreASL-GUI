@@ -6,11 +6,11 @@ const ROOT = "/data/sourcedata";
 
 const PATTERN_3DASH: PathPattern = {
   signature: "VARYING/VARYING-VARYING-VARYING/VARYING/DICOM",
-  samplePath: "C9ORF007/C9ORF007-01-MR00/ASL/DICOM",
-  blocks: ["C9ORF007", "C9ORF007-01-MR00", "ASL", "DICOM"],
+  samplePath: "001/001-01-MR00/ASL/DICOM",
+  blocks: ["001", "001-01-MR00", "ASL", "DICOM"],
   uniqueNames: {
-    0: ["C9ORF007", "C9ORF059"],
-    1: ["C9ORF007-01-MR00", "C9ORF007-02-MR00", "C9ORF059-01-MR00"],
+    0: ["001", "002"],
+    1: ["001-01-MR00", "001-02-MR00", "002-01-MR00"],
     2: ["ASL", "M0", "T1"],
     3: ["DICOM"],
   },
@@ -20,11 +20,11 @@ const PATTERN_3DASH: PathPattern = {
 
 const PATTERN_2DASH: PathPattern = {
   signature: "VARYING/VARYING-VARYING/VARYING/DICOM",
-  samplePath: "C9ORF007/C9ORF007-11/ASL/DICOM",
-  blocks: ["C9ORF007", "C9ORF007-11", "ASL", "DICOM"],
+  samplePath: "001/001-11/ASL/DICOM",
+  blocks: ["001", "001-11", "ASL", "DICOM"],
   uniqueNames: {
-    0: ["C9ORF007", "C9ORF059"],
-    1: ["C9ORF007-11", "C9ORF059-11"],
+    0: ["001", "002"],
+    1: ["001-11", "002-11"],
     2: ["ASL", "T1"],
     3: ["DICOM"],
   },
@@ -33,13 +33,13 @@ const PATTERN_2DASH: PathPattern = {
 };
 
 const RAW_PATHS = [
-  `${ROOT}/C9ORF007/C9ORF007-01-MR00/ASL/DICOM`,
-  `${ROOT}/C9ORF007/C9ORF007-01-MR00/T1/DICOM`,
-  `${ROOT}/C9ORF007/C9ORF007-02-MR00/ASL/DICOM`,
-  `${ROOT}/C9ORF059/C9ORF059-01-MR00/M0/DICOM`,
-  `${ROOT}/C9ORF007/C9ORF007-11/ASL/DICOM`,
-  `${ROOT}/C9ORF007/C9ORF007-11/T1/DICOM`,
-  `${ROOT}/C9ORF059/C9ORF059-11/ASL/DICOM`,
+  `${ROOT}/001/001-01-MR00/ASL/DICOM`,
+  `${ROOT}/001/001-01-MR00/T1/DICOM`,
+  `${ROOT}/001/001-02-MR00/ASL/DICOM`,
+  `${ROOT}/002/002-01-MR00/M0/DICOM`,
+  `${ROOT}/001/001-11/ASL/DICOM`,
+  `${ROOT}/001/001-11/T1/DICOM`,
+  `${ROOT}/002/002-11/ASL/DICOM`,
 ];
 
 const CONFIGS_3DASH: TokenAssignment[] = [
@@ -93,9 +93,9 @@ describe("buildAllStagingMappings", () => {
 
     const threeDash = results[0];
     expect(threeDash.entries.length).toBeGreaterThan(0);
-    const aslEntry = threeDash.entries.find((e) => e.sourcePath.includes("C9ORF007-01-MR00/ASL"));
+    const aslEntry = threeDash.entries.find((e) => e.sourcePath.includes("001-01-MR00/ASL"));
     expect(aslEntry).toMatchObject({
-      subject: "C9ORF007",
+      subject: "001",
       session: "01",
       run: "01",
       modality: "ASL4D",
@@ -115,9 +115,9 @@ describe("buildAllStagingMappings", () => {
     );
 
     const twoDash = results[0];
-    const aslEntry = twoDash.entries.find((e) => e.sourcePath.includes("C9ORF007-11/ASL"));
+    const aslEntry = twoDash.entries.find((e) => e.sourcePath.includes("001-11/ASL"));
     expect(aslEntry).toMatchObject({
-      subject: "C9ORF007",
+      subject: "001",
       session: "11",
       run: "01",
       modality: "ASL4D",
@@ -178,7 +178,7 @@ describe("buildAllStagingMappings", () => {
 
   it("applies BIDS session aliases renaming to staging entry session field", () => {
     const results = buildAllStagingMappings(
-      RAW_PATHS.slice(4, 5), // C9ORF007-11
+      RAW_PATHS.slice(4, 5), // 001-11
       ROOT,
       [PATTERN_2DASH],
       { [PATTERN_2DASH.signature]: CONFIGS_2DASH },

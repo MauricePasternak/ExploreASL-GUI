@@ -174,8 +174,8 @@ The store SHALL provide `availableSubjects` populated by calling `list_subjects`
 
 #### Scenario: Session detection from BIDS
 
-- **WHEN** `rawdata/sub-C9ORF007Philips/ses-01/` exists with an `anat/` subdirectory
-- **THEN** the subject list SHALL include `{ subjectSession: "sub-C9ORF007Philips_01", hasStructural: true, hasASl: false }`
+- **WHEN** `rawdata/sub-001Philips/ses-01/` exists with an `anat/` subdirectory
+- **THEN** the subject list SHALL include `{ subjectSession: "sub-001Philips_01", hasStructural: true, hasASl: false }`
 
 ### Requirement: Per-Subject Progress Tracking
 

@@ -1,8 +1,8 @@
-import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import ReportViewerModal from "./ReportViewerModal";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as reportViewer from "../../lib/reportViewer";
+import ReportViewerModal from "./ReportViewerModal";
 
 // Mock reportViewer API module
 vi.mock("../../lib/reportViewer", () => ({
@@ -43,7 +43,7 @@ describe("ReportViewerModal", () => {
       opened: false,
       onClose: vi.fn(),
       projectRoot: "/mock-project",
-      subjectSession: "sub-C9ORF007Philips_01",
+      subjectSession: "sub-001Philips_01",
       module: "structural",
     });
 
@@ -59,7 +59,7 @@ describe("ReportViewerModal", () => {
       opened: true,
       onClose: vi.fn(),
       projectRoot: "/mock-project",
-      subjectSession: "sub-C9ORF007Philips_01",
+      subjectSession: "sub-001Philips_01",
       module: "structural",
     });
 
@@ -74,7 +74,7 @@ describe("ReportViewerModal", () => {
 
     // Verify title and heading text
     expect(screen.getByTestId("report-heading")).toHaveTextContent(
-      "Registration to standard space and white matter segmentation for Subject C9ORF007Philips Session 01",
+      "Registration to standard space and white matter segmentation for Subject 001Philips Session 01",
     );
 
     // Verify descriptions
@@ -90,14 +90,14 @@ describe("ReportViewerModal", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(fetchSpy).toHaveBeenCalledWith(
       "/mock-project",
-      "sub-C9ORF007Philips_01",
+      "sub-001Philips_01",
       "structural",
       undefined,
       "axial",
     );
     expect(fetchSpy).toHaveBeenCalledWith(
       "/mock-project",
-      "sub-C9ORF007Philips_01",
+      "sub-001Philips_01",
       "structural",
       undefined,
       "coronal",
@@ -115,7 +115,7 @@ describe("ReportViewerModal", () => {
       opened: true,
       onClose: vi.fn(),
       projectRoot: "/mock-project",
-      subjectSession: "sub-C9ORF007Philips_01",
+      subjectSession: "sub-001Philips_01",
       module: "asl",
       runs: ["1", "2"],
     });
@@ -130,10 +130,10 @@ describe("ReportViewerModal", () => {
 
     // Verify headings
     expect(screen.getByTestId("asl-struct-heading")).toHaveTextContent(
-      "ASL-Structural Registration for Subject C9ORF007Philips Session 01 [Run 1]",
+      "ASL-Structural Registration for Subject 001Philips Session 01 [Run 1]",
     );
     expect(screen.getByTestId("m0-asl-heading")).toHaveTextContent(
-      "M0-ASL Registration for Subject C9ORF007Philips Session 01 [Run 1]",
+      "M0-ASL Registration for Subject 001Philips Session 01 [Run 1]",
     );
 
     // Verify all 4 images are displayed
@@ -149,28 +149,22 @@ describe("ReportViewerModal", () => {
     // Expect initial fetches for Run 1
     expect(fetchSpy).toHaveBeenCalledWith(
       "/mock-project",
-      "sub-C9ORF007Philips_01",
+      "sub-001Philips_01",
       "asl",
       "1",
       "axial",
     );
     expect(fetchSpy).toHaveBeenCalledWith(
       "/mock-project",
-      "sub-C9ORF007Philips_01",
+      "sub-001Philips_01",
       "asl",
       "1",
       "coronal",
     );
+    expect(fetchSpy).toHaveBeenCalledWith("/mock-project", "sub-001Philips_01", "m0", "1", "axial");
     expect(fetchSpy).toHaveBeenCalledWith(
       "/mock-project",
-      "sub-C9ORF007Philips_01",
-      "m0",
-      "1",
-      "axial",
-    );
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "/mock-project",
-      "sub-C9ORF007Philips_01",
+      "sub-001Philips_01",
       "m0",
       "1",
       "coronal",
@@ -188,7 +182,7 @@ describe("ReportViewerModal", () => {
       expect(mockRevokeObjectURL).toHaveBeenCalled();
       expect(fetchSpy).toHaveBeenCalledWith(
         "/mock-project",
-        "sub-C9ORF007Philips_01",
+        "sub-001Philips_01",
         "asl",
         "2",
         "axial",
@@ -211,7 +205,7 @@ describe("ReportViewerModal", () => {
       opened: true,
       onClose: vi.fn(),
       projectRoot: "/mock-project",
-      subjectSession: "sub-C9ORF007Philips_01",
+      subjectSession: "sub-001Philips_01",
       module: "asl",
       runs: ["1"],
     });
@@ -246,7 +240,7 @@ describe("ReportViewerModal", () => {
       opened: true,
       onClose: vi.fn(),
       projectRoot: "/mock-project",
-      subjectSession: "sub-C9ORF007Philips_01",
+      subjectSession: "sub-001Philips_01",
       module: "structural",
     });
 
@@ -283,7 +277,7 @@ describe("ReportViewerModal", () => {
       opened: true,
       onClose: vi.fn(),
       projectRoot: "/mock-project",
-      subjectSession: "sub-C9ORF007Philips_01",
+      subjectSession: "sub-001Philips_01",
       module: "structural",
     });
 
@@ -305,7 +299,7 @@ describe("ReportViewerModal", () => {
 
     expect(qcSpy).toHaveBeenCalledWith(
       "/mock-project",
-      "sub-C9ORF007Philips_01",
+      "sub-001Philips_01",
       "structural",
       undefined,
     );
@@ -319,7 +313,7 @@ describe("ReportViewerModal", () => {
       opened: true,
       onClose: vi.fn(),
       projectRoot: "/mock-project",
-      subjectSession: "sub-C9ORF007Philips_01",
+      subjectSession: "sub-001Philips_01",
       module: "structural",
     });
 

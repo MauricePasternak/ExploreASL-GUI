@@ -1,3 +1,4 @@
+use crate::apptainer::{ensure_mcr_cache, CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH};
 use crate::commands::{create_symlink_tree, SymlinkEntry};
 use crate::execution_profile::ExecutionProfile;
 use crate::import_parser::*;
@@ -937,6 +938,44 @@ fn spawn_matlab_import_process(matlab_path: &str, batch: &str) -> std::io::Resul
     command.spawn()
 }
 
+pub(crate) fn build_apptainer_import_args(staging_root: &Path, sif_path: &Path) -> Vec<String> {
+    vec![
+        "exec".to_string(),
+        "--cleanenv".to_string(),
+        "--writable-tmpfs".to_string(),
+        "--bind".to_string(),
+        format!("{}:{CONTAINER_DATA_ROOT}", staging_root.display()),
+        sif_path.to_string_lossy().to_string(),
+        "/bin/bash".to_string(),
+        EXPLOREASL_SCRIPT.to_string(),
+        MCR_PATH.to_string(),
+        CONTAINER_DATA_ROOT.to_string(),
+        "[1,1,0]".to_string(),
+        "0".to_string(),
+    ]
+}
+
+fn spawn_apptainer_import_process(apptainer_path: &str, args: &[String]) -> std::io::Result<Child> {
+    let mut command = Command::new(apptainer_path);
+    command
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            command.pre_exec(|| {
+                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+                Ok(())
+            });
+        }
+    }
+
+    command.spawn()
+}
+
 #[cfg(unix)]
 fn send_termination_signal(pid: u32) -> Result<(), String> {
     use nix::sys::signal::{kill, Signal};
@@ -1165,16 +1204,34 @@ pub fn run_import_pipeline(
         return Err(validation.errors.join("; "));
     }
 
-    let (matlab_path, exploreasl_path) = match execution_profile {
-        ExecutionProfile::Matlab { .. } => {
-            let matlab_path = validation
+    enum ImportExecution {
+        Matlab {
+            matlab_path: String,
+            exploreasl_path: PathBuf,
+        },
+        Apptainer {
+            apptainer_path: String,
+            sif_path: PathBuf,
+        },
+    }
+
+    let execution = match execution_profile {
+        ExecutionProfile::Matlab { .. } => ImportExecution::Matlab {
+            matlab_path: validation
                 .matlab_path
-                .expect("validated matlab profile should include matlab path");
-            let exploreasl_path = validation
+                .expect("validated matlab profile should include matlab path"),
+            exploreasl_path: validation
                 .explore_asl_path
-                .expect("validated matlab profile should include exploreasl path");
-            (matlab_path, exploreasl_path)
-        }
+                .expect("validated matlab profile should include exploreasl path"),
+        },
+        ExecutionProfile::Apptainer { .. } => ImportExecution::Apptainer {
+            apptainer_path: validation
+                .apptainer_path
+                .expect("validated Apptainer profile should include executable path"),
+            sif_path: validation
+                .sif_path
+                .expect("validated Apptainer profile should include SIF path"),
+        },
     };
 
     let project_root = derive_project_root(&staging_root);
@@ -1232,19 +1289,44 @@ pub fn run_import_pipeline(
             )
         })?;
 
-    let batch = format!(
-        "addpath('{}'); ExploreASL('{}', [1,1,0], 0, 0)",
-        escape_matlab_string(&exploreasl_path.to_string_lossy()),
-        escape_matlab_string(&staging_root.to_string_lossy()),
-    );
-    let mut child = spawn_matlab_import_process(&matlab_path, &batch).map_err(|e| {
-        clear_reserved_import(&state);
-        if e.kind() == std::io::ErrorKind::NotFound {
-            format!("MATLAB executable not found: {}", matlab_path)
-        } else {
-            format!("Failed to spawn MATLAB import process: {}", e)
+    let mut child = match execution {
+        ImportExecution::Matlab {
+            matlab_path,
+            exploreasl_path,
+        } => {
+            let batch = format!(
+                "addpath('{}'); ExploreASL('{}', [1,1,0], 0, 0)",
+                escape_matlab_string(&exploreasl_path.to_string_lossy()),
+                escape_matlab_string(&staging_root.to_string_lossy()),
+            );
+            spawn_matlab_import_process(&matlab_path, &batch).map_err(|e| {
+                clear_reserved_import(&state);
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    format!("MATLAB executable not found: {}", matlab_path)
+                } else {
+                    format!("Failed to spawn MATLAB import process: {}", e)
+                }
+            })?
         }
-    })?;
+        ImportExecution::Apptainer {
+            apptainer_path,
+            sif_path,
+        } => {
+            ensure_mcr_cache(&apptainer_path, &sif_path, &staging_root).inspect_err(|_| {
+                clear_reserved_import(&state);
+                let _ = cleanup_staging_root(&staging_root);
+            })?;
+            let args = build_apptainer_import_args(&staging_root, &sif_path);
+            spawn_apptainer_import_process(&apptainer_path, &args).map_err(|e| {
+                clear_reserved_import(&state);
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    format!("Apptainer executable not found: {}", apptainer_path)
+                } else {
+                    format!("Failed to spawn Apptainer import process: {}", e)
+                }
+            })?
+        }
+    };
     let child_pid = child.id();
 
     if let Err(err) = set_reserved_import_pid(&state, child_pid) {

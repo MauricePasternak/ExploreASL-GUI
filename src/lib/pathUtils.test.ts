@@ -131,12 +131,12 @@ describe("computePatternSignature", () => {
 
   it("shows VARYING for single-block varying positions", () => {
     const uniqueNames: Record<number, string[]> = {
-      0: ["C9ORF007", "C9ORF059"],
-      1: ["C9ORF007-01-MR00", "C9ORF007-11"],
+      0: ["001", "002"],
+      1: ["001-01-MR00", "001-11"],
       2: ["ASL", "T1", "T2"],
       3: ["DICOM"],
     };
-    const sampleBlocks = ["C9ORF007", "C9ORF007-01-MR00", "ASL", "DICOM"];
+    const sampleBlocks = ["001", "001-01-MR00", "ASL", "DICOM"];
     expect(computePatternSignature(uniqueNames, 4, sampleBlocks, ["_", "-"])).toBe(
       "<TOKEN>/<TOKEN>-<TOKEN>-<TOKEN>/<TOKEN>/DICOM",
     );
@@ -235,10 +235,10 @@ describe("discoverPathPatterns", () => {
     // GENFI-style: paths with 3-sub-block vs 2-sub-block session names
     // should be separate patterns when delimiters include "-"
     const paths = [
-      `${ROOT}/C9ORF007/C9ORF007-01-MR00/ASL/DICOM`,
-      `${ROOT}/C9ORF007/C9ORF007-01-MR00/T1/DICOM`,
-      `${ROOT}/C9ORF007/C9ORF007-11/ASL/DICOM`,
-      `${ROOT}/C9ORF007/C9ORF007-11/T1/DICOM`,
+      `${ROOT}/001/001-01-MR00/ASL/DICOM`,
+      `${ROOT}/001/001-01-MR00/T1/DICOM`,
+      `${ROOT}/001/001-11/ASL/DICOM`,
+      `${ROOT}/001/001-11/T1/DICOM`,
     ];
 
     const patterns = discoverPathPatterns(paths, ROOT, ["_", "-"]);
@@ -259,32 +259,32 @@ describe("discoverPathPatterns", () => {
   it("groups all GENFI paths into correct 2 patterns by sub-block shape", () => {
     const genfiRoot = "/test/GENFI/sourcedata";
     const paths = [
-      `${genfiRoot}/C9ORF007/C9ORF007-01-MR00/ASL/DICOM`,
-      `${genfiRoot}/C9ORF007/C9ORF007-01-MR00/T1/DICOM`,
-      `${genfiRoot}/C9ORF007/C9ORF007-01-MR00/T2/DICOM`,
-      `${genfiRoot}/C9ORF007/C9ORF007-02-MR00/ASL/DICOM`,
-      `${genfiRoot}/C9ORF007/C9ORF007-02-MR00/T1/DICOM`,
-      `${genfiRoot}/C9ORF007/C9ORF007-02-MR00/T2/DICOM`,
-      `${genfiRoot}/C9ORF007/C9ORF007-11/ASL/DICOM`,
-      `${genfiRoot}/C9ORF007/C9ORF007-11/T1/DICOM`,
-      `${genfiRoot}/C9ORF007/C9ORF007-11/T2/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-01-MR00/ASL/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-01-MR00/M0/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-01-MR00/T1/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-01-MR00/T2/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-02-MR00/ASL/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-02-MR00/M0/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-02-MR00/T1/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-02-MR00/T2/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-11/ASL/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-11/T1/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-11/T2/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-12-R1/ASL/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-12-R1/T1/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-12-R1/T2/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-13/ASL/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-13/T1/DICOM`,
-      `${genfiRoot}/C9ORF059/C9ORF059-13/T2/DICOM`,
+      `${genfiRoot}/001/001-01-MR00/ASL/DICOM`,
+      `${genfiRoot}/001/001-01-MR00/T1/DICOM`,
+      `${genfiRoot}/001/001-01-MR00/T2/DICOM`,
+      `${genfiRoot}/001/001-02-MR00/ASL/DICOM`,
+      `${genfiRoot}/001/001-02-MR00/T1/DICOM`,
+      `${genfiRoot}/001/001-02-MR00/T2/DICOM`,
+      `${genfiRoot}/001/001-11/ASL/DICOM`,
+      `${genfiRoot}/001/001-11/T1/DICOM`,
+      `${genfiRoot}/001/001-11/T2/DICOM`,
+      `${genfiRoot}/002/002-01-MR00/ASL/DICOM`,
+      `${genfiRoot}/002/002-01-MR00/M0/DICOM`,
+      `${genfiRoot}/002/002-01-MR00/T1/DICOM`,
+      `${genfiRoot}/002/002-01-MR00/T2/DICOM`,
+      `${genfiRoot}/002/002-02-MR00/ASL/DICOM`,
+      `${genfiRoot}/002/002-02-MR00/M0/DICOM`,
+      `${genfiRoot}/002/002-02-MR00/T1/DICOM`,
+      `${genfiRoot}/002/002-02-MR00/T2/DICOM`,
+      `${genfiRoot}/002/002-11/ASL/DICOM`,
+      `${genfiRoot}/002/002-11/T1/DICOM`,
+      `${genfiRoot}/002/002-11/T2/DICOM`,
+      `${genfiRoot}/002/002-12-R1/ASL/DICOM`,
+      `${genfiRoot}/002/002-12-R1/T1/DICOM`,
+      `${genfiRoot}/002/002-12-R1/T2/DICOM`,
+      `${genfiRoot}/002/002-13/ASL/DICOM`,
+      `${genfiRoot}/002/002-13/T1/DICOM`,
+      `${genfiRoot}/002/002-13/T2/DICOM`,
     ];
 
     const patterns = discoverPathPatterns(paths, genfiRoot, ["_", "-"]);
@@ -301,7 +301,7 @@ describe("discoverPathPatterns", () => {
     expect(twoSubBlock!.depth).toBe(4);
 
     // Check unique names are correct
-    expect(threeSubBlock!.uniqueNames[0]).toEqual(["C9ORF007", "C9ORF059"]);
+    expect(threeSubBlock!.uniqueNames[0]).toEqual(["001", "002"]);
     expect(threeSubBlock!.uniqueNames[3]).toEqual(["DICOM"]);
     expect(twoSubBlock!.uniqueNames[3]).toEqual(["DICOM"]);
   });
@@ -333,12 +333,9 @@ describe("discoverPathPatterns", () => {
   });
 
   it("uses underscore-only delimiters when specified", () => {
-    // When only "_" is used as delimiter, "C9ORF007-01-MR00" has 1 sub-block
+    // When only "_" is used as delimiter, "001-01-MR00" has 1 sub-block
     // (no "-" splitting), so all paths have the same shape
-    const paths = [
-      `${ROOT}/C9ORF007/C9ORF007-01-MR00/ASL/DICOM`,
-      `${ROOT}/C9ORF007/C9ORF007-11/ASL/DICOM`,
-    ];
+    const paths = [`${ROOT}/001/001-01-MR00/ASL/DICOM`, `${ROOT}/001/001-11/ASL/DICOM`];
 
     const patterns = discoverPathPatterns(paths, ROOT, ["_"]);
     expect(patterns).toHaveLength(1);
@@ -381,8 +378,8 @@ describe("splitBySubDelimiters", () => {
   });
 
   it("supports explicit delimiter arrays", () => {
-    const result = splitBySubDelimiters("C9ORF059-12-R1", ["_", "-"]);
-    expect(result.subBlocks).toEqual(["C9ORF059", "12", "R1"]);
+    const result = splitBySubDelimiters("002-12-R1", ["_", "-"]);
+    expect(result.subBlocks).toEqual(["002", "12", "R1"]);
     expect(result.delimiters).toEqual(["-", "-"]);
   });
 });
@@ -422,10 +419,10 @@ describe("analyzeSubBlocks", () => {
   });
 
   it("uses custom delimiters at the target block depth", () => {
-    const paths = ["study/C9ORF059-12-R1/scan", "study/C9ORF059-13-R2/scan"];
+    const paths = ["study/002-12-R1/scan", "study/002-13-R2/scan"];
 
     const result = analyzeSubBlocks(paths, 1, ["_", "-"]);
-    expect(result[0]).toEqual(["C9ORF059"]);
+    expect(result[0]).toEqual(["002"]);
     expect(result[1]).toEqual(["12", "13"]);
     expect(result[2]).toEqual(["R1", "R2"]);
   });

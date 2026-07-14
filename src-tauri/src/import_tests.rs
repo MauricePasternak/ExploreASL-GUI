@@ -1,10 +1,11 @@
 #[cfg(test)]
 mod tests {
     use crate::import::{
-        authorize_stop_import_pid, clean_import_status_paths, cleanup_after_prepare_event_failure,
-        cleanup_staging_root, clear_import_child_pid_if_matches, copy_lock_files_paths,
-        find_executable_on_path, mark_import_termination_requested, move_import_output_paths,
-        reserve_import_state, rollback_preparation_failure, should_emit_matlab_exit_error,
+        authorize_stop_import_pid, build_apptainer_import_args, clean_import_status_paths,
+        cleanup_after_prepare_event_failure, cleanup_staging_root,
+        clear_import_child_pid_if_matches, copy_lock_files_paths, find_executable_on_path,
+        mark_import_termination_requested, move_import_output_paths, reserve_import_state,
+        rollback_preparation_failure, should_emit_matlab_exit_error,
         take_matching_supervisor_handle, validate_import_not_running, validate_matlab_executable,
         validate_non_empty_inputs, validate_project_root_for_staging, validate_staging_root,
         validate_subject_components, AppState, ImportState, MatlabExitError, StagingEntry,
@@ -872,5 +873,31 @@ mod tests {
             .expect("MatlabExitError should serialize");
 
         assert_eq!(value, serde_json::json!({ "exitCode": 42 }));
+    }
+
+    #[test]
+    fn apptainer_import_args_bind_staging_root_to_data() {
+        let args = build_apptainer_import_args(
+            PathBuf::from("/data/project/.easl_staging").as_path(),
+            PathBuf::from("/images/exploreasl.sif").as_path(),
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "--cleanenv",
+                "--writable-tmpfs",
+                "--bind",
+                "/data/project/.easl_staging:/data",
+                "/images/exploreasl.sif",
+                "/bin/bash",
+                "/opt/xasl/xASL_latest/run_xASL_latest.sh",
+                "/opt/mcr/v97/",
+                "/data",
+                "[1,1,0]",
+                "0",
+            ]
+        );
     }
 }

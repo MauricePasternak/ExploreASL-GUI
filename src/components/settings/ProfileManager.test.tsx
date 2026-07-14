@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
+import type { ApptainerProfile } from "../../schemas/executionProfile";
 import { useGlobalStore } from "../../stores/globalStore";
 import { makeMatlabProfile } from "../../test/profileFixtures";
 import ProfileManager from "./ProfileManager";
@@ -29,6 +30,9 @@ beforeEach(() => {
       return { id: "new-id", valid: true, errors: [], exploreAslVersion: "1.15.0" };
     }
     if (cmd === "which_matlab") {
+      return [];
+    }
+    if (cmd === "which_apptainer") {
       return [];
     }
     if (cmd === "detect_exploreasl_version") {
@@ -129,6 +133,126 @@ describe("ProfileManager", () => {
       expect(useGlobalStore.getState().settings.executionProfiles[0].exploreAslVersion).toBe(
         "1.15.0",
       );
+    });
+  });
+
+  it("creates an Apptainer profile with SIF and executable paths", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "validate_execution_profile") {
+        const profile = (args as any)?.executionProfile as { id: string };
+        return { id: profile.id, valid: true, errors: [], exploreAslVersion: "1.11.0" };
+      }
+      if (cmd === "which_apptainer") {
+        return [];
+      }
+      return null;
+    });
+    vi.mocked(open).mockResolvedValueOnce("/picked/exploreasl.sif" as never);
+
+    renderManager();
+    await userEvent.click(screen.getByTestId("profile-manager-add-btn"));
+
+    const form = screen.getByTestId("profile-form");
+    await userEvent.click(within(form).getByRole("combobox", { name: "Type" }));
+    fireEvent.click(screen.getByText("Apptainer"));
+
+    expect(within(form).queryByTestId("profile-form-matlab-path")).not.toBeInTheDocument();
+    expect(within(form).queryByTestId("profile-form-exploreasl-path")).not.toBeInTheDocument();
+    expect(within(form).getByTestId("profile-form-sif-path")).toBeInTheDocument();
+    expect(within(form).getByTestId("profile-form-apptainer-path")).toHaveValue("apptainer");
+
+    await userEvent.click(within(form).getByTestId("profile-browse-sif-btn"));
+    fireEvent.change(within(form).getByTestId("profile-form-label"), {
+      target: { value: "Container profile" },
+    });
+    await userEvent.click(within(form).getByTestId("profile-form-save-btn"));
+
+    await waitFor(() => {
+      const saved = useGlobalStore.getState().settings.executionProfiles[0] as ApptainerProfile;
+      expect(saved.type).toBe("apptainer");
+      expect(saved.sifPath).toBe("/picked/exploreasl.sif");
+      expect(saved.apptainerPath).toBe("apptainer");
+      expect(saved.exploreAslVersion).toBe("1.11.0");
+    });
+    expect(open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.arrayContaining([
+          { name: "Apptainer image", extensions: ["sif"] },
+          { name: "All files", extensions: ["*.*"] },
+        ]),
+      }),
+    );
+  });
+
+  it("auto-detects multiple Apptainer executables and allows selecting one", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "which_apptainer") {
+        return [
+          {
+            id: "apptainer-1",
+            label: "Apptainer 1.5.2",
+            path: "/usr/bin/apptainer",
+            version: "1.5.2",
+          },
+          {
+            id: "apptainer-2",
+            label: "Singularity 4.1.0",
+            path: "/opt/singularity/bin/singularity",
+            version: "4.1.0",
+          },
+        ];
+      }
+      return null;
+    });
+
+    renderManager();
+    await userEvent.click(screen.getByTestId("profile-manager-add-btn"));
+    const form = screen.getByTestId("profile-form");
+    await userEvent.click(within(form).getByRole("combobox", { name: "Type" }));
+    fireEvent.click(screen.getByText("Apptainer"));
+
+    await waitFor(() => {
+      expect(within(form).getByTestId("profile-form-apptainer-path")).toHaveValue(
+        "/usr/bin/apptainer",
+      );
+      expect(within(form).getByTestId("profile-form-label")).toHaveValue("Apptainer 1.5.2");
+      expect(within(form).getByTestId("profile-detected-apptainer-list")).toBeInTheDocument();
+    });
+    expect(within(form).getByTestId("profile-detected-apptainer-0")).toHaveTextContent(
+      "Apptainer 1.5.2",
+    );
+    expect(within(form).getByTestId("profile-detected-apptainer-1")).toHaveTextContent(
+      "Singularity 4.1.0",
+    );
+
+    await userEvent.click(within(form).getByTestId("profile-detected-apptainer-1"));
+    expect(within(form).getByTestId("profile-form-apptainer-path")).toHaveValue(
+      "/opt/singularity/bin/singularity",
+    );
+  });
+
+  it("browses for an Apptainer executable", async () => {
+    vi.mocked(open).mockResolvedValueOnce("/picked/apptainer" as never);
+
+    renderManager();
+    await userEvent.click(screen.getByTestId("profile-manager-add-btn"));
+    const form = screen.getByTestId("profile-form");
+    await userEvent.click(within(form).getByRole("combobox", { name: "Type" }));
+    fireEvent.click(screen.getByText("Apptainer"));
+    await userEvent.click(within(form).getByTestId("profile-browse-apptainer-btn"));
+
+    expect(within(form).getByTestId("profile-form-apptainer-path")).toHaveValue(
+      "/picked/apptainer",
+    );
+    expect(open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Select Apptainer executable",
+        directory: false,
+        multiple: false,
+      }),
+    );
+    expect(invoke).toHaveBeenCalledWith("which_apptainer", {
+      customPaths: ["/picked/apptainer"],
     });
   });
 

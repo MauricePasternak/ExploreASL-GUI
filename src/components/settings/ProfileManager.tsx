@@ -26,7 +26,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
 
-import type { MatlabProfile } from "../../schemas/executionProfile";
+import type { ExecutionProfile } from "../../schemas/executionProfile";
 import { useGlobalStore } from "../../stores/globalStore";
 
 interface MatlabDetectionResult {
@@ -36,11 +36,20 @@ interface MatlabDetectionResult {
   version: string;
 }
 
+interface ApptainerDetectionResult {
+  id: string;
+  label: string;
+  path: string;
+  version?: string | null;
+}
+
 interface ProfileDraft {
   label: string;
-  type: "matlab";
+  type: "matlab" | "apptainer";
   matlabPath: string;
   exploreAslPath: string;
+  sifPath: string;
+  apptainerPath: string;
 }
 
 const EMPTY_DRAFT: ProfileDraft = {
@@ -48,6 +57,8 @@ const EMPTY_DRAFT: ProfileDraft = {
   type: "matlab",
   matlabPath: "",
   exploreAslPath: "",
+  sifPath: "",
+  apptainerPath: "apptainer",
 };
 
 async function fetchExploreAslVersion(exploreAslPath: string): Promise<string | null> {
@@ -78,6 +89,8 @@ export default function ProfileManager() {
   const [saving, setSaving] = useState(false);
   const [detectingMatlab, setDetectingMatlab] = useState(false);
   const [detectedMatlab, setDetectedMatlab] = useState<MatlabDetectionResult[]>([]);
+  const [detectingApptainer, setDetectingApptainer] = useState(false);
+  const [detectedApptainer, setDetectedApptainer] = useState<ApptainerDetectionResult[]>([]);
   const [detectedVersion, setDetectedVersion] = useState<string | null>(null);
   const [detectingVersion, setDetectingVersion] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -87,6 +100,7 @@ export default function ProfileManager() {
     setDraft(EMPTY_DRAFT);
     setSaveErrors([]);
     setDetectedMatlab([]);
+    setDetectedApptainer([]);
     setDetectedVersion(null);
   }, []);
 
@@ -95,21 +109,41 @@ export default function ProfileManager() {
     setEditingId("new");
   };
 
-  const startEdit = (profile: MatlabProfile) => {
+  const startEdit = (profile: ExecutionProfile) => {
     setEditingId(profile.id);
-    setDraft({
-      label: profile.label,
-      type: "matlab",
-      matlabPath: profile.matlabPath,
-      exploreAslPath: profile.exploreAslPath,
-    });
+    setDraft(
+      profile.type === "matlab"
+        ? {
+            label: profile.label,
+            type: "matlab",
+            matlabPath: profile.matlabPath,
+            exploreAslPath: profile.exploreAslPath,
+            sifPath: "",
+            apptainerPath: "apptainer",
+          }
+        : {
+            label: profile.label,
+            type: "apptainer",
+            matlabPath: "",
+            exploreAslPath: "",
+            sifPath: profile.sifPath,
+            apptainerPath: profile.apptainerPath,
+          },
+    );
     setSaveErrors([]);
     setDetectedMatlab([]);
+    setDetectedApptainer([]);
     setDetectedVersion(profile.exploreAslVersion ?? null);
+    if (profile.type === "apptainer" && profile.apptainerPath === "apptainer") {
+      void handleDetectApptainer(undefined, true);
+    }
   };
 
   useEffect(() => {
     if (!editingId) return;
+    if (draft.type !== "matlab") {
+      return;
+    }
     const path = draft.exploreAslPath.trim();
     let cancelled = false;
 
@@ -139,7 +173,7 @@ export default function ProfileManager() {
     return () => {
       cancelled = true;
     };
-  }, [draft.exploreAslPath, editingId]);
+  }, [draft.exploreAslPath, draft.type, editingId]);
 
   async function handleDetectMatlab() {
     setDetectingMatlab(true);
@@ -182,36 +216,95 @@ export default function ProfileManager() {
     }
   }
 
+  async function handleBrowseSif() {
+    const selected = await open({
+      directory: false,
+      multiple: false,
+      title: "Select ExploreASL SIF image",
+      filters: [
+        { name: "Apptainer image", extensions: ["sif"] },
+        { name: "All files", extensions: ["*.*"] },
+      ],
+    });
+    if (selected) {
+      setDraft((current) => ({ ...current, sifPath: selected as string }));
+    }
+  }
+
+  async function handleBrowseApptainer() {
+    const selected = await open({
+      directory: false,
+      multiple: false,
+      title: "Select Apptainer executable",
+    });
+    if (selected) {
+      setDraft((current) => ({ ...current, apptainerPath: selected as string }));
+      void handleDetectApptainer([selected as string], true);
+    }
+  }
+
+  async function handleDetectApptainer(customPaths?: string[], applyFirst = false) {
+    setDetectingApptainer(true);
+    try {
+      const found = await invoke<ApptainerDetectionResult[]>(
+        "which_apptainer",
+        customPaths ? { customPaths } : undefined,
+      );
+      setDetectedApptainer(found);
+      if (applyFirst && found.length > 0) {
+        const first = found[0];
+        setDraft((current) => ({
+          ...current,
+          apptainerPath:
+            current.apptainerPath.trim() === "" || current.apptainerPath === "apptainer"
+              ? first.path
+              : current.apptainerPath,
+          label: current.label.trim().length > 0 ? current.label : first.label,
+        }));
+      }
+    } finally {
+      setDetectingApptainer(false);
+    }
+  }
+
   async function handleSave() {
     if (!editingId) return;
 
     const label = draft.label.trim();
-    const matlabPath = draft.matlabPath.trim();
-    const exploreAslPath = draft.exploreAslPath.trim();
+    const profileId = editingId === "new" ? crypto.randomUUID() : editingId;
+    let profile: ExecutionProfile;
 
-    if (!label || !matlabPath || !exploreAslPath) {
-      setSaveErrors(["Label, MATLAB path, and ExploreASL path are required."]);
-      return;
+    if (draft.type === "matlab") {
+      const matlabPath = draft.matlabPath.trim();
+      const exploreAslPath = draft.exploreAslPath.trim();
+      if (!label || !matlabPath || !exploreAslPath) {
+        setSaveErrors(["Label, MATLAB path, and ExploreASL path are required."]);
+        return;
+      }
+      profile = {
+        id: profileId,
+        label,
+        type: "matlab",
+        matlabPath,
+        exploreAslPath,
+        exploreAslVersion: detectedVersion ?? undefined,
+      };
+    } else {
+      const sifPath = draft.sifPath.trim();
+      const apptainerPath = draft.apptainerPath.trim() || "apptainer";
+      if (!label || !sifPath) {
+        setSaveErrors(["Label and SIF path are required."]);
+        return;
+      }
+      profile = {
+        id: profileId,
+        label,
+        type: "apptainer",
+        sifPath,
+        apptainerPath,
+        exploreAslVersion: undefined,
+      };
     }
-
-    const profile: MatlabProfile =
-      editingId === "new"
-        ? {
-            id: crypto.randomUUID(),
-            label,
-            type: "matlab",
-            matlabPath,
-            exploreAslPath,
-            exploreAslVersion: detectedVersion ?? undefined,
-          }
-        : {
-            id: editingId,
-            label,
-            type: "matlab",
-            matlabPath,
-            exploreAslPath,
-            exploreAslVersion: detectedVersion ?? undefined,
-          };
 
     setSaving(true);
     setSaveErrors([]);
@@ -231,7 +324,7 @@ export default function ProfileManager() {
         return;
       }
 
-      const persistedProfile: MatlabProfile = {
+      const persistedProfile: ExecutionProfile = {
         ...profile,
         exploreAslVersion: result.exploreAslVersion ?? profile.exploreAslVersion,
       };
@@ -283,7 +376,7 @@ export default function ProfileManager() {
                 <Group gap="xs">
                   <Text fw={600}>{profile.label}</Text>
                   <Badge size="sm" variant="light">
-                    MATLAB
+                    {profile.type === "matlab" ? "MATLAB" : "Apptainer"}
                   </Badge>
                   {isValid ? (
                     <Tooltip label="Profile validated">
@@ -308,9 +401,9 @@ export default function ProfileManager() {
                 <Text size="xs" c="dimmed" truncate>
                   {profile.type === "matlab"
                     ? `${summarizePath(profile.matlabPath)} · ${summarizePath(profile.exploreAslPath)}`
-                    : null}
+                    : `${summarizePath(profile.sifPath)} · ${summarizePath(profile.apptainerPath)}`}
                 </Text>
-                {profile.type === "matlab" && profile.exploreAslVersion ? (
+                {profile.exploreAslVersion ? (
                   <Text size="xs" c="teal">
                     ExploreASL v{profile.exploreAslVersion}
                   </Text>
@@ -320,7 +413,7 @@ export default function ProfileManager() {
                 <ActionIcon
                   variant="subtle"
                   aria-label={`Edit ${profile.label}`}
-                  onClick={() => startEdit(profile as MatlabProfile)}
+                  onClick={() => startEdit(profile)}
                   data-testid={`profile-edit-${profile.id}`}
                 >
                   <IconPencil size={16} />
@@ -345,6 +438,29 @@ export default function ProfileManager() {
           <Stack gap="sm">
             <Text fw={600}>{editingId === "new" ? "Add Profile" : "Edit Profile"}</Text>
 
+            <Select
+              label="Type"
+              data={[
+                { value: "matlab", label: "MATLAB" },
+                { value: "apptainer", label: "Apptainer" },
+              ]}
+              value={draft.type}
+              onChange={(value) => {
+                if (value === "matlab") {
+                  setDraft((current) => ({ ...current, type: "matlab" }));
+                } else if (value === "apptainer") {
+                  setDraft((current) => ({
+                    ...current,
+                    type: "apptainer",
+                    apptainerPath: current.apptainerPath || "apptainer",
+                  }));
+                  void handleDetectApptainer(undefined, true);
+                }
+              }}
+              allowDeselect={false}
+              data-testid="profile-form-type"
+            />
+
             <TextInput
               label="Label"
               value={draft.label}
@@ -355,124 +471,195 @@ export default function ProfileManager() {
               data-testid="profile-form-label"
             />
 
-            <Select
-              label="Type"
-              data={[{ value: "matlab", label: "MATLAB" }]}
-              value={draft.type}
-              onChange={(value) => {
-                if (value === "matlab") {
-                  setDraft((current) => ({ ...current, type: "matlab" }));
-                }
-              }}
-              allowDeselect={false}
-              data-testid="profile-form-type"
-            />
-
-            <Group align="flex-end" wrap="nowrap">
-              <TextInput
-                label="MATLAB path"
-                value={draft.matlabPath}
-                onChange={(event) => {
-                  const nextValue = event.currentTarget?.value ?? "";
-                  setDraft((current) => ({ ...current, matlabPath: nextValue }));
-                }}
-                style={{ flex: 1 }}
-                data-testid="profile-form-matlab-path"
-              />
-              <Button
-                variant="light"
-                leftSection={<IconFolderSearch size={16} />}
-                onClick={() => void handleBrowseMatlab()}
-                data-testid="profile-browse-matlab-btn"
-              >
-                Browse
-              </Button>
-            </Group>
-
-            <Group>
-              <Button
-                variant="light"
-                leftSection={detectingMatlab ? <Loader size={14} /> : <IconSearch size={16} />}
-                onClick={() => void handleDetectMatlab()}
-                disabled={detectingMatlab}
-                data-testid="profile-detect-matlab-btn"
-              >
-                {detectingMatlab ? "Detecting..." : "Detect MATLAB"}
-              </Button>
-            </Group>
-
-            {detectedMatlab.length > 0 ? (
-              <Stack gap="xs" data-testid="profile-detected-matlab-list">
-                <Text size="xs" c="dimmed" fw={500}>
-                  Click a detected installation below to apply it to the MATLAB path:
-                </Text>
-                {detectedMatlab.map((installation, index) => (
-                  <Tooltip
-                    key={installation.path}
-                    label="Click to apply this MATLAB path"
-                    position="top-start"
+            {draft.type === "matlab" ? (
+              <>
+                <Group align="flex-end" wrap="nowrap">
+                  <TextInput
+                    label="MATLAB path"
+                    value={draft.matlabPath}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget?.value ?? "";
+                      setDraft((current) => ({ ...current, matlabPath: nextValue }));
+                    }}
+                    style={{ flex: 1 }}
+                    data-testid="profile-form-matlab-path"
+                  />
+                  <Button
+                    variant="light"
+                    leftSection={<IconFolderSearch size={16} />}
+                    onClick={() => void handleBrowseMatlab()}
+                    data-testid="profile-browse-matlab-btn"
                   >
-                    <Button
-                      variant="default"
-                      justify="flex-start"
-                      onClick={() =>
-                        setDraft((current) => ({
-                          ...current,
-                          matlabPath: installation.path,
-                          label:
-                            current.label.trim().length > 0
-                              ? current.label
-                              : installation.label || "MATLAB",
-                        }))
-                      }
-                      data-testid={`profile-detected-matlab-${index}`}
-                    >
-                      {installation.version
-                        ? `${installation.label} [${installation.version}] — ${installation.path}`
-                        : `${installation.label} (${installation.path})`}
-                    </Button>
-                  </Tooltip>
-                ))}
-              </Stack>
-            ) : null}
+                    Browse
+                  </Button>
+                </Group>
 
-            <Group align="flex-end" wrap="nowrap">
-              <TextInput
-                label="ExploreASL path"
-                value={draft.exploreAslPath}
-                onChange={(event) => {
-                  const nextValue = event.currentTarget?.value ?? "";
-                  setDraft((current) => ({ ...current, exploreAslPath: nextValue }));
-                }}
-                style={{ flex: 1 }}
-                data-testid="profile-form-exploreasl-path"
-              />
-              <Button
-                variant="light"
-                leftSection={<IconFolderSearch size={16} />}
-                onClick={() => void handleBrowseExploreAsl()}
-                data-testid="profile-browse-exploreasl-btn"
-              >
-                Browse
-              </Button>
-            </Group>
+                <Group>
+                  <Button
+                    variant="light"
+                    leftSection={detectingMatlab ? <Loader size={14} /> : <IconSearch size={16} />}
+                    onClick={() => void handleDetectMatlab()}
+                    disabled={detectingMatlab}
+                    data-testid="profile-detect-matlab-btn"
+                  >
+                    {detectingMatlab ? "Detecting..." : "Detect MATLAB"}
+                  </Button>
+                </Group>
 
-            {draft.exploreAslPath.trim().length > 0 ? (
-              <Text
-                size="sm"
-                c={detectedVersion ? "teal" : "orange"}
-                data-testid="profile-exploreasl-version"
-                data-detected={detectedVersion ? "true" : "false"}
-              >
-                {detectingVersion ? (
-                  <Loader size={12} />
-                ) : detectedVersion ? (
-                  `ExploreASL v${detectedVersion} detected`
-                ) : (
-                  "ExploreASL version not detected"
-                )}
-              </Text>
-            ) : null}
+                {detectedMatlab.length > 0 ? (
+                  <Stack gap="xs" data-testid="profile-detected-matlab-list">
+                    <Text size="xs" c="dimmed" fw={500}>
+                      Click a detected installation below to apply it to the MATLAB path:
+                    </Text>
+                    {detectedMatlab.map((installation, index) => (
+                      <Tooltip
+                        key={installation.path}
+                        label="Click to apply this MATLAB path"
+                        position="top-start"
+                      >
+                        <Button
+                          variant="default"
+                          justify="flex-start"
+                          onClick={() =>
+                            setDraft((current) => ({
+                              ...current,
+                              matlabPath: installation.path,
+                              label:
+                                current.label.trim().length > 0
+                                  ? current.label
+                                  : installation.label || "MATLAB",
+                            }))
+                          }
+                          data-testid={`profile-detected-matlab-${index}`}
+                        >
+                          {installation.version
+                            ? `${installation.label} [${installation.version}] — ${installation.path}`
+                            : `${installation.label} (${installation.path})`}
+                        </Button>
+                      </Tooltip>
+                    ))}
+                  </Stack>
+                ) : null}
+
+                <Group align="flex-end" wrap="nowrap">
+                  <TextInput
+                    label="ExploreASL path"
+                    value={draft.exploreAslPath}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget?.value ?? "";
+                      setDraft((current) => ({ ...current, exploreAslPath: nextValue }));
+                    }}
+                    style={{ flex: 1 }}
+                    data-testid="profile-form-exploreasl-path"
+                  />
+                  <Button
+                    variant="light"
+                    leftSection={<IconFolderSearch size={16} />}
+                    onClick={() => void handleBrowseExploreAsl()}
+                    data-testid="profile-browse-exploreasl-btn"
+                  >
+                    Browse
+                  </Button>
+                </Group>
+
+                {draft.exploreAslPath.trim().length > 0 ? (
+                  <Text
+                    size="sm"
+                    c={detectedVersion ? "teal" : "orange"}
+                    data-testid="profile-exploreasl-version"
+                    data-detected={detectedVersion ? "true" : "false"}
+                  >
+                    {detectingVersion ? (
+                      <Loader size={12} />
+                    ) : detectedVersion ? (
+                      `ExploreASL v${detectedVersion} detected`
+                    ) : (
+                      "ExploreASL version not detected"
+                    )}
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <Group align="flex-end" wrap="nowrap">
+                  <TextInput
+                    label="SIF path"
+                    value={draft.sifPath}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget?.value ?? "";
+                      setDraft((current) => ({ ...current, sifPath: nextValue }));
+                    }}
+                    style={{ flex: 1 }}
+                    data-testid="profile-form-sif-path"
+                  />
+                  <Button
+                    variant="light"
+                    leftSection={<IconFolderSearch size={16} />}
+                    onClick={() => void handleBrowseSif()}
+                    data-testid="profile-browse-sif-btn"
+                  >
+                    Browse
+                  </Button>
+                </Group>
+
+                <Group align="flex-end" wrap="nowrap">
+                  <TextInput
+                    label="Apptainer path"
+                    value={draft.apptainerPath}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget?.value ?? "";
+                      setDraft((current) => ({ ...current, apptainerPath: nextValue }));
+                    }}
+                    style={{ flex: 1 }}
+                    data-testid="profile-form-apptainer-path"
+                  />
+                  <Button
+                    variant="light"
+                    leftSection={<IconFolderSearch size={16} />}
+                    onClick={() => void handleBrowseApptainer()}
+                    data-testid="profile-browse-apptainer-btn"
+                  >
+                    Browse
+                  </Button>
+                </Group>
+
+                <Button
+                  variant="light"
+                  leftSection={detectingApptainer ? <Loader size={14} /> : <IconSearch size={16} />}
+                  onClick={() => void handleDetectApptainer()}
+                  disabled={detectingApptainer}
+                  data-testid="profile-detect-apptainer-btn"
+                >
+                  {detectingApptainer ? "Detecting..." : "Detect Apptainer"}
+                </Button>
+
+                {detectedApptainer.length > 0 ? (
+                  <Stack gap="xs" data-testid="profile-detected-apptainer-list">
+                    <Text size="xs" c="dimmed" fw={500}>
+                      Select a detected Apptainer executable:
+                    </Text>
+                    {detectedApptainer.map((installation, index) => (
+                      <Button
+                        key={installation.path}
+                        variant="default"
+                        justify="flex-start"
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            apptainerPath: installation.path,
+                            label:
+                              current.label.trim().length > 0 ? current.label : installation.label,
+                          }))
+                        }
+                        data-testid={`profile-detected-apptainer-${index}`}
+                      >
+                        {`${installation.label} — ${installation.path}`}
+                      </Button>
+                    ))}
+                  </Stack>
+                ) : null}
+              </>
+            )}
 
             {saveErrors.length > 0 ? (
               <Alert color="red" data-testid="profile-form-errors">

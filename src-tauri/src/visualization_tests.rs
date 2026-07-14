@@ -163,7 +163,8 @@ mod tests {
 
     #[test]
     fn test_read_data_columns_from_cache() {
-        let tsv = "participant_id\tsession\tGM_vol\tSite\nStudyID\t...\tLiter\tint\nsub-X_01\tASL_1\t0.64\t1\n";
+        let tsv =
+      "participant_id\tsession\tGM_vol\tSite\nStudyID\t...\tLiter\tint\nsub-X_01\tASL_1\t0.64\t1\n";
         let (_temp, root) = setup_stats_dir(tsv);
         let state = AppState::default();
         load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
@@ -450,14 +451,14 @@ mod tests {
         fs::create_dir_all(&stats_dir).unwrap();
         fs::write(
             stats_dir.join("test.tsv"),
-            "participant_id\tsession\tGM_vol\nsub-C9ORF007Philips_01\tASL_1\t0.64\nsub-C9ORF059Siemens_01\tASL_1\t0.70\n",
+            "participant_id\tsession\tGM_vol\nsub-001Philips_01\tASL_1\t0.64\nsub-002Siemens_01\tASL_1\t0.70\n",
         )
         .unwrap();
 
         let ext_path = temp.path().join("covariates.csv");
         fs::write(
             &ext_path,
-            "Subject,Diagnosis\nC9ORF007Philips,AD\nc9orf059siemens,Control\n",
+            "Subject,Diagnosis\n001Philips,AD\n002siemens,Control\n",
         )
         .unwrap();
 

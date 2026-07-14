@@ -153,9 +153,9 @@ describe("generateFolderHierarchy", () => {
   it("defaults to underscore-only splitting when delimiters are omitted", () => {
     const pattern: PathPattern = {
       signature: "VARYING/VARYING",
-      samplePath: "C9ORF059.12/scan",
-      blocks: ["C9ORF059.12", "scan"],
-      uniqueNames: { 0: ["C9ORF059.12"], 1: ["scan"] },
+      samplePath: "002.12/scan",
+      blocks: ["002.12", "scan"],
+      uniqueNames: { 0: ["002.12"], 1: ["scan"] },
       count: 1,
       depth: 2,
     };
@@ -375,18 +375,18 @@ describe("buildStagingMapping", () => {
   it("extracts sub-block tokens using hyphen delimiter", () => {
     const pattern: PathPattern = {
       signature: "VARYING/VARYING-VARYING/VARYING",
-      samplePath: "C9ORF007/C9ORF007-01-MR00/ASL",
-      blocks: ["C9ORF007", "C9ORF007-01-MR00", "ASL"],
+      samplePath: "001/001-01-MR00/ASL",
+      blocks: ["001", "001-01-MR00", "ASL"],
       uniqueNames: {
-        0: ["C9ORF007", "C9ORF059"],
-        1: ["C9ORF007-01-MR00", "C9ORF059-11"],
+        0: ["001", "002"],
+        1: ["001-01-MR00", "002-11"],
         2: ["ASL", "T1"],
       },
       count: 4,
       depth: 3,
     };
 
-    const paths = ["/data/C9ORF007/C9ORF007-01-MR00/ASL", "/data/C9ORF059/C9ORF059-11/T1"];
+    const paths = ["/data/001/001-01-MR00/ASL", "/data/002/002-11/T1"];
 
     const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
@@ -406,8 +406,8 @@ describe("buildStagingMapping", () => {
     );
 
     expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ subject: "C9ORF007", session: "01", modality: "ASL4D" });
-    expect(result[1]).toMatchObject({ subject: "C9ORF059", session: "11", modality: "T1w" });
+    expect(result[0]).toMatchObject({ subject: "001", session: "01", modality: "ASL4D" });
+    expect(result[1]).toMatchObject({ subject: "002", session: "11", modality: "T1w" });
   });
 });
 
@@ -643,13 +643,13 @@ describe("assembleStudyPar", () => {
       },
     ];
     const rows: SubjectRow[] = [
-      { id: "C9ORF059.12/01", subject: "C9ORF059.12", session: "01", groupId: "global" },
+      { id: "002.12/01", subject: "002.12", session: "01", groupId: "global" },
       { id: "FOO+BAR/01", subject: "FOO+BAR", session: "01", groupId: "global" },
     ];
 
     const result = assembleStudyPar(groups, rows);
     expect(result.StudyPars).toHaveLength(1);
-    expect(result.StudyPars[0].SubjectRegExp).toBe("^(C9ORF059\\.12|FOO\\+BAR)$");
+    expect(result.StudyPars[0].SubjectRegExp).toBe("^(002\\.12|FOO\\+BAR)$");
     expect(result.StudyPars[0].VisitRegExp).toBe("^(01)$");
   });
 

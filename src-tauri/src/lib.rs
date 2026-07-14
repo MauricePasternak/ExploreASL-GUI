@@ -1,3 +1,4 @@
+mod apptainer;
 pub mod bids;
 pub mod bids_commands;
 mod commands;
@@ -13,6 +14,7 @@ mod tracing;
 pub mod visualization;
 mod visualization_tests;
 
+use apptainer::which_apptainer;
 use bids_commands::{check_bids_dataset, ensure_rawdata_dir, scan_bids_sidecars};
 use commands::{
     create_symlink_tree, get_available_memory_mb, get_cpu_cores, is_writable, walk_directory,
@@ -69,6 +71,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             which_matlab,
+            which_apptainer,
             validate_execution_profile,
             validate_all_execution_profiles,
             is_writable,
