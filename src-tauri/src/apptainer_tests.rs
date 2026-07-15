@@ -31,13 +31,19 @@ mod tests {
     fn mcr_cache_path_prefers_explicit_environment_variable() {
         let cache = unique_temp_path("mcr-cache");
         let previous = env::var_os("MCR_CACHE_ROOT");
-        env::set_var("MCR_CACHE_ROOT", &cache);
+        unsafe {
+            env::set_var("MCR_CACHE_ROOT", &cache);
+        }
 
         assert_eq!(mcr_cache_path(), cache);
 
         match previous {
-            Some(value) => env::set_var("MCR_CACHE_ROOT", value),
-            None => env::remove_var("MCR_CACHE_ROOT"),
+            Some(value) => unsafe {
+                env::set_var("MCR_CACHE_ROOT", value);
+            },
+            None => unsafe {
+                env::remove_var("MCR_CACHE_ROOT");
+            },
         }
     }
 

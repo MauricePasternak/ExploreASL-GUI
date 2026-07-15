@@ -1,6 +1,6 @@
 use std::path::PathBuf;
-use tauri::http;
 use tauri::Manager;
+use tauri::http;
 
 fn bad_request(body: &'static [u8]) -> http::Response<Vec<u8>> {
     http::Response::builder()

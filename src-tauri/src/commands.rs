@@ -120,16 +120,13 @@ pub fn walk_directory(
         let mut dcm_dirs = std::collections::HashSet::new();
 
         for entry in walker.into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file() {
-                if let Some(ext) = entry.path().extension() {
-                    if ext.eq_ignore_ascii_case("dcm") {
-                        if let Some(parent) = entry.path().parent() {
-                            if let Ok(relative) = parent.strip_prefix(&root) {
-                                dcm_dirs.insert(relative.to_string_lossy().to_string());
-                            }
-                        }
-                    }
-                }
+            if entry.file_type().is_file()
+                && let Some(ext) = entry.path().extension()
+                && ext.eq_ignore_ascii_case("dcm")
+                && let Some(parent) = entry.path().parent()
+                && let Ok(relative) = parent.strip_prefix(&root)
+            {
+                dcm_dirs.insert(relative.to_string_lossy().to_string());
             }
         }
 
@@ -140,14 +137,12 @@ pub fn walk_directory(
         let mut dcm_files = Vec::new();
 
         for entry in walker.into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file() {
-                if let Some(ext) = entry.path().extension() {
-                    if ext.eq_ignore_ascii_case("dcm") {
-                        if let Ok(relative) = entry.path().strip_prefix(&root) {
-                            dcm_files.push(relative.to_string_lossy().to_string());
-                        }
-                    }
-                }
+            if entry.file_type().is_file()
+                && let Some(ext) = entry.path().extension()
+                && ext.eq_ignore_ascii_case("dcm")
+                && let Ok(relative) = entry.path().strip_prefix(&root)
+            {
+                dcm_files.push(relative.to_string_lossy().to_string());
             }
         }
 

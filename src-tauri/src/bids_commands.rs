@@ -1,4 +1,4 @@
-use crate::bids::group::{group_by_fingerprint, BidsSidecarScan};
+use crate::bids::group::{BidsSidecarScan, group_by_fingerprint};
 use crate::bids::scan::{asl_json_path_for, parse_bids_structure};
 use crate::bids::sidecar::find_asl_sidecars;
 use crate::tracing::CommandTrace;
@@ -143,8 +143,11 @@ fn check_bids_dataset_impl(root: &Path) -> Result<BidsCheckResult, String> {
 
     log::debug!(
         "check_bids_dataset: is_bids={} asl_subjects={} asl_sessions={} missing_sidecars={} missing_aslcontext={}",
-        is_bids, asl_subject_count, asl_session_count,
-        missing_sidecars.len(), missing_aslcontext_count
+        is_bids,
+        asl_subject_count,
+        asl_session_count,
+        missing_sidecars.len(),
+        missing_aslcontext_count
     );
 
     // Step 6: error if not BIDS

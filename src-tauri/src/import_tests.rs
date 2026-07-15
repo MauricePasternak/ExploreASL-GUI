@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::import::{
+        AppState, ImportState, MatlabExitError, RESERVED_IMPORT_PID, StagingEntry,
         authorize_stop_import_pid, build_apptainer_import_args, clean_import_status_paths,
         cleanup_after_prepare_event_failure, cleanup_staging_root,
         clear_import_child_pid_if_matches, copy_lock_files_paths, find_executable_on_path,
@@ -8,8 +9,7 @@ mod tests {
         rollback_preparation_failure, should_emit_matlab_exit_error,
         take_matching_supervisor_handle, validate_import_not_running, validate_matlab_executable,
         validate_non_empty_inputs, validate_project_root_for_staging, validate_staging_root,
-        validate_subject_components, AppState, ImportState, MatlabExitError, StagingEntry,
-        RESERVED_IMPORT_PID,
+        validate_subject_components,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -684,14 +684,18 @@ mod tests {
         )
         .expect("full move should succeed");
 
-        assert!(project_root
-            .join("rawdata")
-            .join("sub-BADDIE")
-            .join("asl.nii")
-            .exists());
-        assert!(import_lock_dir(&project_root, "BADDIE")
-            .join("010_DCM2NII.status")
-            .exists());
+        assert!(
+            project_root
+                .join("rawdata")
+                .join("sub-BADDIE")
+                .join("asl.nii")
+                .exists()
+        );
+        assert!(
+            import_lock_dir(&project_root, "BADDIE")
+                .join("010_DCM2NII.status")
+                .exists()
+        );
         assert_eq!(
             fs::read_to_string(
                 project_root
@@ -814,11 +818,13 @@ mod tests {
         .expect("partial move should succeed");
 
         assert!(staging_root.exists());
-        assert!(project_root
-            .join("rawdata")
-            .join("sub-BADDIE")
-            .join("asl.nii")
-            .exists());
+        assert!(
+            project_root
+                .join("rawdata")
+                .join("sub-BADDIE")
+                .join("asl.nii")
+                .exists()
+        );
         assert!(!project_root.join("rawdata").join("sub-FAILED").exists());
         assert_eq!(
             fs::read_to_string(
@@ -829,22 +835,28 @@ mod tests {
             .expect("dataset description should be copied"),
             "{\"Name\":\"Study\"}"
         );
-        assert!(import_lock_dir(&project_root, "BADDIE")
-            .join("999_ready.status")
-            .exists());
+        assert!(
+            import_lock_dir(&project_root, "BADDIE")
+                .join("999_ready.status")
+                .exists()
+        );
         assert!(!import_lock_dir(&project_root, "FAILED").exists());
-        assert!(project_root
-            .join("derivatives")
-            .join("ExploreASL")
-            .join("log")
-            .join("import_sub-BADDIE.log")
-            .exists());
-        assert!(!project_root
-            .join("derivatives")
-            .join("ExploreASL")
-            .join("log")
-            .join("import_sub-FAILED.log")
-            .exists());
+        assert!(
+            project_root
+                .join("derivatives")
+                .join("ExploreASL")
+                .join("log")
+                .join("import_sub-BADDIE.log")
+                .exists()
+        );
+        assert!(
+            !project_root
+                .join("derivatives")
+                .join("ExploreASL")
+                .join("log")
+                .join("import_sub-FAILED.log")
+                .exists()
+        );
 
         let _ = fs::remove_dir_all(project_root);
     }

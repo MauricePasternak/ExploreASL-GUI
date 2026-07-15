@@ -367,23 +367,23 @@ pub fn load_qcbf_data_impl(
     for line in &lines[data_start..] {
         let cells: Vec<&str> = line.split('\t').map(|s| s.trim()).collect();
         let mut row = HashMap::new();
-        if let Some(idx) = pid_idx {
-            if idx < cells.len() {
-                let pid_val = cells[idx].to_string();
-                row.insert("participant_id".to_string(), pid_val.clone());
-                if let Some(pos) = pid_val.rfind('_') {
-                    row.insert("subject".to_string(), pid_val[..pos].to_string());
-                    row.insert("session".to_string(), pid_val[pos + 1..].to_string());
-                } else {
-                    row.insert("subject".to_string(), pid_val.clone());
-                    row.insert("session".to_string(), String::new());
-                }
+        if let Some(idx) = pid_idx
+            && idx < cells.len()
+        {
+            let pid_val = cells[idx].to_string();
+            row.insert("participant_id".to_string(), pid_val.clone());
+            if let Some(pos) = pid_val.rfind('_') {
+                row.insert("subject".to_string(), pid_val[..pos].to_string());
+                row.insert("session".to_string(), pid_val[pos + 1..].to_string());
+            } else {
+                row.insert("subject".to_string(), pid_val.clone());
+                row.insert("session".to_string(), String::new());
             }
         }
-        if let Some(idx) = session_idx {
-            if idx < cells.len() {
-                row.insert("run".to_string(), cells[idx].to_string());
-            }
+        if let Some(idx) = session_idx
+            && idx < cells.len()
+        {
+            row.insert("run".to_string(), cells[idx].to_string());
         }
         for (i, header) in headers.iter().enumerate() {
             if header == "session"
@@ -448,10 +448,10 @@ pub fn read_data_columns_impl(
             }
         }
         for name in &column_names {
-            if !id_cols.contains(&name.as_str()) {
-                if let Some(val) = row.get(name) {
-                    filtered.insert(name.clone(), val.clone());
-                }
+            if !id_cols.contains(&name.as_str())
+                && let Some(val) = row.get(name)
+            {
+                filtered.insert(name.clone(), val.clone());
             }
         }
         rows.push(filtered);
@@ -669,7 +669,7 @@ fn parse_external_xlsx(
     sheet_name: Option<String>,
     file_hash: String,
 ) -> Result<ExternalDataInspection, String> {
-    use calamine::{open_workbook, Reader, Xlsx};
+    use calamine::{Reader, Xlsx, open_workbook};
 
     let mut workbook: Xlsx<_> =
         open_workbook(path).map_err(|e: calamine::XlsxError| e.to_string())?;
@@ -977,7 +977,7 @@ fn parse_external_xlsx_rows(
     sheet_name: Option<String>,
     na_tokens: &[String],
 ) -> Result<Vec<HashMap<String, String>>, String> {
-    use calamine::{open_workbook, Reader, Xlsx};
+    use calamine::{Reader, Xlsx, open_workbook};
 
     let mut workbook: Xlsx<_> =
         open_workbook(path).map_err(|e: calamine::XlsxError| e.to_string())?;

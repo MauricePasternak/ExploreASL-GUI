@@ -274,14 +274,14 @@ pub fn get_subject_session_qc(
         let mut found = false;
         if let Ok(entries) = fs::read_dir(&session_dir) {
             for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        if name.starts_with("QC_collection_") && name.ends_with(".json") {
-                            file_path = entry.path();
-                            found = true;
-                            break;
-                        }
+                if let Ok(file_type) = entry.file_type()
+                    && file_type.is_file()
+                {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with("QC_collection_") && name.ends_with(".json") {
+                        file_path = entry.path();
+                        found = true;
+                        break;
                     }
                 }
             }
@@ -343,12 +343,12 @@ pub fn find_qc_collection_file(project_root: &str, subject_session: &str) -> Opt
     // Fallback: search for any QC_collection_*.json in the directory
     if let Ok(entries) = fs::read_dir(&session_dir) {
         for entry in entries.flatten() {
-            if let Ok(file_type) = entry.file_type() {
-                if file_type.is_file() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with("QC_collection_") && name.ends_with(".json") {
-                        return Some(entry.path());
-                    }
+            if let Ok(file_type) = entry.file_type()
+                && file_type.is_file()
+            {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("QC_collection_") && name.ends_with(".json") {
+                    return Some(entry.path());
                 }
             }
         }
@@ -377,28 +377,28 @@ pub fn extract_subject_qc_outputs(file_path: &Path) -> Result<SubjectQcOutputs, 
     let mut motion_exclusions = Vec::new();
 
     for (key, val) in asl_obj {
-        if key.starts_with("ASL_") {
-            if let Some(run_obj) = val.as_object() {
-                if let Some(cov_val) = run_obj.get("ASL_Coverage_Perc") {
-                    if let Some(cov) = val_to_f64(cov_val) {
-                        coverages.push(cov);
-                    }
-                }
-                if let Some(sc_val) = run_obj.get("SpatialCoV_GM_Perc") {
-                    if let Some(sc) = val_to_f64(sc_val) {
-                        spatial_covs.push(sc);
-                    }
-                }
-                if let Some(mot_val) = run_obj.get("MotionMean_mm") {
-                    if let Some(mot) = val_to_f64(mot_val) {
-                        motions.push(mot);
-                    }
-                }
-                if let Some(excl_val) = run_obj.get("MotionExcl_Perc") {
-                    if let Some(excl) = val_to_f64(excl_val) {
-                        motion_exclusions.push(excl);
-                    }
-                }
+        if key.starts_with("ASL_")
+            && let Some(run_obj) = val.as_object()
+        {
+            if let Some(cov_val) = run_obj.get("ASL_Coverage_Perc")
+                && let Some(cov) = val_to_f64(cov_val)
+            {
+                coverages.push(cov);
+            }
+            if let Some(sc_val) = run_obj.get("SpatialCoV_GM_Perc")
+                && let Some(sc) = val_to_f64(sc_val)
+            {
+                spatial_covs.push(sc);
+            }
+            if let Some(mot_val) = run_obj.get("MotionMean_mm")
+                && let Some(mot) = val_to_f64(mot_val)
+            {
+                motions.push(mot);
+            }
+            if let Some(excl_val) = run_obj.get("MotionExcl_Perc")
+                && let Some(excl) = val_to_f64(excl_val)
+            {
+                motion_exclusions.push(excl);
             }
         }
     }

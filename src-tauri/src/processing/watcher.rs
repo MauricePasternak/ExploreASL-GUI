@@ -78,18 +78,17 @@ pub fn watch_lock_dir(
                                         Some(name) => name,
                                         None => continue,
                                     };
-                                    if last == "locked" {
-                                        if let Some(lock_event) =
+                                    if last == "locked"
+                                        && let Some(lock_event) =
                                             parse_lock_dir_path(&lock_root_clone, path)
-                                        {
-                                            log::info!(
-                                                "[WATCHER] LockCreated: module={} subject={:?} run={:?}",
-                                                lock_event.module,
-                                                lock_event.subject_session,
-                                                lock_event.run
-                                            );
-                                            let _ = app_clone.emit("LockCreated", lock_event);
-                                        }
+                                    {
+                                        log::info!(
+                                            "[WATCHER] LockCreated: module={} subject={:?} run={:?}",
+                                            lock_event.module,
+                                            lock_event.subject_session,
+                                            lock_event.run
+                                        );
+                                        let _ = app_clone.emit("LockCreated", lock_event);
                                     }
                                 } else if let Some(status_event) =
                                     parse_lock_path(&lock_root_clone, path)
@@ -107,19 +106,18 @@ pub fn watch_lock_dir(
                         }
                         EventKind::Modify(_) => {
                             for path in &event.paths {
-                                if !path.is_dir() {
-                                    if let Some(status_event) =
+                                if !path.is_dir()
+                                    && let Some(status_event) =
                                         parse_lock_path(&lock_root_clone, path)
-                                    {
-                                        log::info!(
-                                            "[WATCHER] StatusFileModified: module={} subject={:?} step={} run={:?}",
-                                            status_event.module,
-                                            status_event.subject_session,
-                                            status_event.step_code,
-                                            status_event.run
-                                        );
-                                        let _ = app_clone.emit("StatusFileCreated", status_event);
-                                    }
+                                {
+                                    log::info!(
+                                        "[WATCHER] StatusFileModified: module={} subject={:?} step={} run={:?}",
+                                        status_event.module,
+                                        status_event.subject_session,
+                                        status_event.step_code,
+                                        status_event.run
+                                    );
+                                    let _ = app_clone.emit("StatusFileCreated", status_event);
                                 }
                             }
                         }
@@ -134,18 +132,17 @@ pub fn watch_lock_dir(
                                         Some(name) => name,
                                         None => continue,
                                     };
-                                    if last == "locked" {
-                                        if let Some(lock_event) =
+                                    if last == "locked"
+                                        && let Some(lock_event) =
                                             parse_lock_dir_path(&lock_root_clone, path)
-                                        {
-                                            log::info!(
-                                                "[WATCHER] LockRemoved: module={} subject={:?} run={:?}",
-                                                lock_event.module,
-                                                lock_event.subject_session,
-                                                lock_event.run
-                                            );
-                                            let _ = app_clone.emit("LockRemoved", lock_event);
-                                        }
+                                    {
+                                        log::info!(
+                                            "[WATCHER] LockRemoved: module={} subject={:?} run={:?}",
+                                            lock_event.module,
+                                            lock_event.subject_session,
+                                            lock_event.run
+                                        );
+                                        let _ = app_clone.emit("LockRemoved", lock_event);
                                     }
                                 }
                             }

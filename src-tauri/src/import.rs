@@ -1,5 +1,5 @@
-use crate::apptainer::{ensure_mcr_cache, CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH};
-use crate::commands::{create_symlink_tree, SymlinkEntry};
+use crate::apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH, ensure_mcr_cache};
+use crate::commands::{SymlinkEntry, create_symlink_tree};
 use crate::execution_profile::ExecutionProfile;
 use crate::import_parser::*;
 use crate::processing::ProcessState;
@@ -10,7 +10,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{mpsc, Mutex};
+use std::sync::{Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -769,8 +769,8 @@ fn set_import_supervisor_handle(
 
     if import_state.child_pid.is_some() && import_state.child_pid != Some(child_pid) {
         return Err(format!(
-      "Import state changed before supervisor tracking could be established for PID {child_pid}"
-    ));
+            "Import state changed before supervisor tracking could be established for PID {child_pid}"
+        ));
     }
 
     import_state.supervisor_handle = Some(supervisor_handle);
@@ -978,7 +978,7 @@ fn spawn_apptainer_import_process(apptainer_path: &str, args: &[String]) -> std:
 
 #[cfg(unix)]
 fn send_termination_signal(pid: u32) -> Result<(), String> {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     kill(Pid::from_raw(pid as i32), Signal::SIGTERM)
@@ -999,7 +999,7 @@ fn send_termination_signal(pid: u32) -> Result<(), String> {
 
 #[cfg(unix)]
 fn force_kill_process(pid: u32) -> Result<(), String> {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     kill(Pid::from_raw(pid as i32), Signal::SIGKILL)
@@ -1009,7 +1009,7 @@ fn force_kill_process(pid: u32) -> Result<(), String> {
 #[cfg(windows)]
 fn force_kill_process(pid: u32) -> Result<(), String> {
     use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
 
     let handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
     if handle.is_null() {
@@ -1065,7 +1065,7 @@ fn process_exists(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
     use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, WaitForSingleObject,
     };
 
     let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid) };
@@ -1165,11 +1165,11 @@ pub fn stop_running_import_for_exit(app: &AppHandle) -> Result<bool, String> {
         .map_err(|_| "Import state lock was poisoned".to_string())?
         .child_pid;
 
-    if let Some(pid) = pid {
-        if pid != RESERVED_IMPORT_PID {
-            stop_import_pid_for_exit(&state, pid)?;
-            return Ok(true);
-        }
+    if let Some(pid) = pid
+        && pid != RESERVED_IMPORT_PID
+    {
+        stop_import_pid_for_exit(&state, pid)?;
+        return Ok(true);
     }
 
     Ok(false)
@@ -1273,11 +1273,11 @@ pub fn run_import_pipeline(
     write_config_json(&staging_root.join("studyPar.json"), &studypar_json)
         .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
 
-    if let Some(ref subjects) = subjects_to_preserve {
-        if !subjects.is_empty() {
-            copy_lock_files_paths(&project_root, &staging_root, subjects)
-                .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
-        }
+    if let Some(ref subjects) = subjects_to_preserve
+        && !subjects.is_empty()
+    {
+        copy_lock_files_paths(&project_root, &staging_root, subjects)
+            .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
     }
 
     app.emit("ImportPrepareComplete", ImportPrepareComplete)
@@ -1358,10 +1358,10 @@ pub fn stop_active_import(state: State<'_, AppState>) -> Result<(), String> {
         .map_err(|_| "Import state lock was poisoned".to_string())?
         .child_pid;
 
-    if let Some(pid) = pid {
-        if pid != RESERVED_IMPORT_PID {
-            stop_import_pid(&state, pid)?;
-        }
+    if let Some(pid) = pid
+        && pid != RESERVED_IMPORT_PID
+    {
+        stop_import_pid(&state, pid)?;
     }
     Ok(())
 }

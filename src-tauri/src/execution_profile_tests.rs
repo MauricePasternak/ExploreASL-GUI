@@ -173,10 +173,12 @@ mod tests {
         let validation = profile.validate();
 
         assert!(!validation.valid);
-        assert!(validation
-            .errors
-            .iter()
-            .any(|error| error.contains("SIF image not found")));
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| error.contains("SIF image not found"))
+        );
         assert!(validation.sif_path.is_none());
     }
 

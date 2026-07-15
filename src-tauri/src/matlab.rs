@@ -30,12 +30,12 @@ pub async fn which_matlab(custom_paths: Option<Vec<String>>) -> Vec<serde_json::
                 continue;
             }
             let p = PathBuf::from(&path_str);
-            if p.is_file() && is_matlab_executable(&p) {
-                if let Ok(canonical) = fs::canonicalize(&p) {
-                    if seen.insert(canonical) {
-                        paths.push(p);
-                    }
-                }
+            if p.is_file()
+                && is_matlab_executable(&p)
+                && let Ok(canonical) = fs::canonicalize(&p)
+                && seen.insert(canonical)
+            {
+                paths.push(p);
             }
         }
     }
@@ -90,12 +90,12 @@ fn find_matlab_on_path(paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
 
     for dir in env::split_paths(&path_var) {
         for candidate in matlab_executable_candidates(&dir) {
-            if candidate.is_file() && is_matlab_executable(&candidate) {
-                if let Ok(canonical) = fs::canonicalize(&candidate) {
-                    if seen.insert(canonical) {
-                        paths.push(candidate);
-                    }
-                }
+            if candidate.is_file()
+                && is_matlab_executable(&candidate)
+                && let Ok(canonical) = fs::canonicalize(&candidate)
+                && seen.insert(canonical)
+            {
+                paths.push(candidate);
             }
         }
     }
@@ -111,12 +111,12 @@ fn find_matlab_standard_dirs(paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBu
                 }
                 let bin_dir = dir.join("bin");
                 for candidate in matlab_executable_candidates(&bin_dir) {
-                    if candidate.is_file() && is_matlab_executable(&candidate) {
-                        if let Ok(canonical) = fs::canonicalize(&candidate) {
-                            if seen.insert(canonical) {
-                                paths.push(candidate);
-                            }
-                        }
+                    if candidate.is_file()
+                        && is_matlab_executable(&candidate)
+                        && let Ok(canonical) = fs::canonicalize(&candidate)
+                        && seen.insert(canonical)
+                    {
+                        paths.push(candidate);
                     }
                 }
             }
@@ -269,23 +269,23 @@ fn read_matlab_version_info_xml(start: &Path) -> Option<String> {
 
     for _ in 0..8 {
         let candidate = current.join("VersionInfo.xml");
-        if candidate.is_file() {
-            if let Ok(contents) = fs::read_to_string(&candidate) {
-                if let Some(release) = extract_xml_tag(&contents, "release") {
-                    let release = release.trim();
-                    if !release.is_empty() {
-                        return Some(if release.starts_with('R') {
-                            release.to_string()
-                        } else {
-                            format!("R{release}")
-                        });
-                    }
+        if candidate.is_file()
+            && let Ok(contents) = fs::read_to_string(&candidate)
+        {
+            if let Some(release) = extract_xml_tag(&contents, "release") {
+                let release = release.trim();
+                if !release.is_empty() {
+                    return Some(if release.starts_with('R') {
+                        release.to_string()
+                    } else {
+                        format!("R{release}")
+                    });
                 }
-                if let Some(version) = extract_xml_tag(&contents, "version") {
-                    let version = version.trim();
-                    if !version.is_empty() {
-                        return Some(version.to_string());
-                    }
+            }
+            if let Some(version) = extract_xml_tag(&contents, "version") {
+                let version = version.trim();
+                if !version.is_empty() {
+                    return Some(version.to_string());
                 }
             }
         }

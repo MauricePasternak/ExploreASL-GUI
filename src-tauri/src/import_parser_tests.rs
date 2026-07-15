@@ -134,12 +134,16 @@ mod tests {
             &["BADDIE".to_string()],
         );
 
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, ImportStructuredEvent::ImportFailed { .. })));
-        assert!(!events
-            .iter()
-            .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportFailed { .. }))
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. }))
+        );
     }
 
     #[test]
@@ -164,13 +168,15 @@ mod tests {
         );
 
         assert!(events.iter().any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
-            ref subject,
-            ref step,
-            ref message,
+            subject,
+            step,
+            message,
         } if subject == "002Siemens" && step == "NII2BIDS" && message.contains("Unknown value in BIDS fields M0Type"))));
-        assert!(!events
-            .iter()
-            .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })));
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. }))
+        );
     }
 
     #[test]
@@ -312,9 +318,9 @@ mod tests {
             events
                 .iter()
                 .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
-                ref subject,
-                ref step,
-                ref message,
+                subject,
+                step,
+                message,
             } if subject == "001Philips"
                 && step == "NII2BIDS"
                 && message.contains("Session name cannot be identified"))),
@@ -326,7 +332,7 @@ mod tests {
             !events
                 .iter()
                 .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
-                ref subject, ..
+                subject, ..
             } if subject == "001Philips")),
             "SubjectComplete must not fire for a module-terminated subject"
         );
@@ -379,7 +385,7 @@ mod tests {
             events
                 .iter()
                 .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
-                ref subject, ..
+                subject, ..
             } if subject == "001Philips")),
             "001Philips must be marked failed"
         );
@@ -387,7 +393,7 @@ mod tests {
             events
                 .iter()
                 .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
-                ref subject, ..
+                subject, ..
             } if subject == "002Siemens")),
             "002Siemens must be marked failed"
         );
@@ -397,9 +403,11 @@ mod tests {
                 .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete { .. })),
             "No SubjectComplete must be emitted"
         );
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, ImportStructuredEvent::ImportComplete)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportComplete))
+        );
     }
 
     /// First subject fails via module terminated, second succeeds normally.
@@ -430,16 +438,18 @@ mod tests {
             &["001Philips".to_string(), "002Siemens".to_string()],
         );
 
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
-                ref subject, ..
-            } if subject == "001Philips")));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
+                subject, ..
+            } if subject == "001Philips"))
+        );
         assert!(
             events
                 .iter()
                 .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
-                ref subject, ..
+                subject, ..
             } if subject == "002Siemens")),
             "002Siemens must still complete successfully"
         );
@@ -447,7 +457,7 @@ mod tests {
             !events
                 .iter()
                 .any(|e| matches!(e, ImportStructuredEvent::SubjectComplete {
-                ref subject, ..
+                subject, ..
             } if subject == "001Philips")),
             "001Philips must not produce SubjectComplete"
         );
@@ -479,8 +489,8 @@ mod tests {
             events
                 .iter()
                 .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
-                ref subject,
-                ref step,
+                subject,
+                step,
                 ..
             } if subject == "BADDIE" && step == "NII2BIDS")),
             "Step must be NII2BIDS, got: {events:?}"
@@ -508,8 +518,8 @@ mod tests {
             events
                 .iter()
                 .any(|e| matches!(e, ImportStructuredEvent::ImportFailed {
-                ref subject,
-                ref message,
+                subject,
+                message,
                 ..
             } if subject == "BADDIE" && message.contains("Error: something unexpected happened"))),
             "finish() must flush the pending module error; got: {events:?}"

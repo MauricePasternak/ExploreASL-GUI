@@ -81,17 +81,16 @@ pub(crate) fn determine_status(dir: &Path) -> (String, Vec<String>, bool) {
     for entry in WalkDir::new(dir).min_depth(1) {
         let entry = entry.unwrap();
         let path = entry.path();
-        if path.is_file() {
-            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                if file_name.ends_with(".status") {
-                    has_status = true;
-                    let step_name = file_name.trim_end_matches(".status").to_string();
-                    if step_name == "999_ready" {
-                        has_ready = true;
-                    } else {
-                        completed_steps.push(step_name);
-                    }
-                }
+        if path.is_file()
+            && let Some(file_name) = path.file_name().and_then(|f| f.to_str())
+            && file_name.ends_with(".status")
+        {
+            has_status = true;
+            let step_name = file_name.trim_end_matches(".status").to_string();
+            if step_name == "999_ready" {
+                has_ready = true;
+            } else {
+                completed_steps.push(step_name);
             }
         }
     }
@@ -124,20 +123,20 @@ pub(crate) fn get_structural_completion_time(
         .join(subject_session)
         .join("xASL_module_Structural")
         .join("999_ready.status");
-    if let Ok(metadata) = std::fs::metadata(&ready_file) {
-        if let Ok(mtime) = metadata.modified() {
-            return Some(mtime);
-        }
+    if let Ok(metadata) = std::fs::metadata(&ready_file)
+        && let Ok(mtime) = metadata.modified()
+    {
+        return Some(mtime);
     }
     let log_dirs = exploreasl_log_dirs(project_root);
     for log_dir in log_dirs {
         let log_file = log_dir.join(format!("xASL_module_Structural_{}.log", subject_session));
-        if log_file.is_file() && !check_log_for_error(&log_file) {
-            if let Ok(metadata) = std::fs::metadata(&log_file) {
-                if let Ok(mtime) = metadata.modified() {
-                    return Some(mtime);
-                }
-            }
+        if log_file.is_file()
+            && !check_log_for_error(&log_file)
+            && let Ok(metadata) = std::fs::metadata(&log_file)
+            && let Ok(mtime) = metadata.modified()
+        {
+            return Some(mtime);
         }
     }
     None
@@ -156,10 +155,10 @@ pub(crate) fn get_asl_completion_time(
         .join(subject_session)
         .join(format!("xASL_module_ASL_ASL_{}", run))
         .join("999_ready.status");
-    if let Ok(metadata) = std::fs::metadata(&ready_file) {
-        if let Ok(mtime) = metadata.modified() {
-            return Some(mtime);
-        }
+    if let Ok(metadata) = std::fs::metadata(&ready_file)
+        && let Ok(mtime) = metadata.modified()
+    {
+        return Some(mtime);
     }
     let log_dirs = exploreasl_log_dirs(project_root);
     for log_dir in log_dirs {
@@ -167,12 +166,12 @@ pub(crate) fn get_asl_completion_time(
             "xASL_module_ASL_{}_ASL_{}.log",
             subject_session, run
         ));
-        if log_file.is_file() && !check_log_for_error(&log_file) {
-            if let Ok(metadata) = std::fs::metadata(&log_file) {
-                if let Ok(mtime) = metadata.modified() {
-                    return Some(mtime);
-                }
-            }
+        if log_file.is_file()
+            && !check_log_for_error(&log_file)
+            && let Ok(metadata) = std::fs::metadata(&log_file)
+            && let Ok(mtime) = metadata.modified()
+        {
+            return Some(mtime);
         }
     }
     None
@@ -185,18 +184,18 @@ pub(crate) fn find_asl_runs_from_logs(project_root: &Path, subject_session: &str
     for log_dir in log_dirs {
         if let Ok(entries) = std::fs::read_dir(log_dir) {
             for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        if name.starts_with(&pattern) && name.ends_with(".log") {
-                            if let Some(run_part) = name.strip_prefix(&pattern) {
-                                if let Some(run_str) = run_part.strip_suffix(".log") {
-                                    let run = normalize_asl_run_id(run_str);
-                                    if !runs.contains(&run) {
-                                        runs.push(run);
-                                    }
-                                }
-                            }
+                if let Ok(file_type) = entry.file_type()
+                    && file_type.is_file()
+                {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with(&pattern)
+                        && name.ends_with(".log")
+                        && let Some(run_part) = name.strip_prefix(&pattern)
+                        && let Some(run_str) = run_part.strip_suffix(".log")
+                    {
+                        let run = normalize_asl_run_id(run_str);
+                        if !runs.contains(&run) {
+                            runs.push(run);
                         }
                     }
                 }

@@ -330,10 +330,8 @@ impl ImportOutputParser {
             || trimmed == "ans"
             || trimmed.starts_with("CONT:");
 
-        if !is_skip_line {
-            if let Some(ref mut pending) = self.pending_module_error {
-                pending.lines.push(line.to_string());
-            }
+        if !is_skip_line && let Some(ref mut pending) = self.pending_module_error {
+            pending.lines.push(line.to_string());
         }
 
         Vec::new()
@@ -411,32 +409,32 @@ impl ImportOutputParser {
                 }
             }
 
-            if let Some(captures) = subject_start_re().captures(line) {
-                if let Some(subject) = captures.get(1).map(|value| value.as_str().to_string()) {
-                    self.current_subject = Some(subject.clone());
-                    self.current_step = "DCM2NII".to_string();
-                    return vec![ImportStructuredEvent::SubjectStart {
-                        subject,
-                        step: self.current_step.clone(),
-                    }];
-                }
+            if let Some(captures) = subject_start_re().captures(line)
+                && let Some(subject) = captures.get(1).map(|value| value.as_str().to_string())
+            {
+                self.current_subject = Some(subject.clone());
+                self.current_step = "DCM2NII".to_string();
+                return vec![ImportStructuredEvent::SubjectStart {
+                    subject,
+                    step: self.current_step.clone(),
+                }];
             }
 
-            if let Some(captures) = job_iteration_re().captures(line) {
-                if let (Some(subject), Some(duration)) = (
+            if let Some(captures) = job_iteration_re().captures(line)
+                && let (Some(subject), Some(duration)) = (
                     self.current_subject.clone(),
                     captures
                         .get(2)
                         .and_then(|value| value.as_str().parse::<u64>().ok()),
-                ) {
-                    if !self.failed_subjects.contains(&subject) {
-                        return vec![ImportStructuredEvent::SubjectComplete {
-                            subject,
-                            duration_secs: duration,
-                        }];
-                    } else {
-                        return Vec::new();
-                    }
+                )
+            {
+                if !self.failed_subjects.contains(&subject) {
+                    return vec![ImportStructuredEvent::SubjectComplete {
+                        subject,
+                        duration_secs: duration,
+                    }];
+                } else {
+                    return Vec::new();
                 }
             }
 
@@ -444,15 +442,15 @@ impl ImportOutputParser {
                 return vec![ImportStructuredEvent::ImportComplete];
             }
 
-            if let Some(captures) = status_code_re().captures(line) {
-                if let (Some(subject), Some(exit_code)) = (
+            if let Some(captures) = status_code_re().captures(line)
+                && let (Some(subject), Some(exit_code)) = (
                     self.current_subject.clone(),
                     captures
                         .get(1)
                         .and_then(|value| value.as_str().parse::<i32>().ok()),
-                ) {
-                    return vec![ImportStructuredEvent::Dcm2NiiStatus { subject, exit_code }];
-                }
+                )
+            {
+                return vec![ImportStructuredEvent::Dcm2NiiStatus { subject, exit_code }];
             }
 
             // ── New: ERROR: Import module terminated ─────────────────────────
@@ -520,17 +518,17 @@ fn build_module_terminated_message(lines: &[String]) -> String {
     let mut result: Vec<String> = lines.iter().map(|line| line.trim().to_string()).collect();
 
     // Strip the leading ' from the first content line.
-    if let Some(first) = result.first_mut() {
-        if first.starts_with('\'') {
-            *first = first[1..].to_string();
-        }
+    if let Some(first) = result.first_mut()
+        && first.starts_with('\'')
+    {
+        *first = first[1..].to_string();
     }
 
     // Strip the trailing ' from the last content line.
-    if let Some(last) = result.last_mut() {
-        if last.ends_with('\'') {
-            *last = last[..last.len() - 1].to_string();
-        }
+    if let Some(last) = result.last_mut()
+        && last.ends_with('\'')
+    {
+        *last = last[..last.len() - 1].to_string();
     }
 
     // Drop lines that became empty after stripping.

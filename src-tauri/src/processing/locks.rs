@@ -31,7 +31,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
             .map_err(|e| format!("Failed to read structural lock: {}", e))?
         {
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-            if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
                 continue;
             }
             let subject_session = entry.file_name().to_string_lossy().to_string();
@@ -64,7 +64,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
             std::fs::read_dir(&asl_lock).map_err(|e| format!("Failed to read ASL lock: {}", e))?
         {
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-            if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
                 continue;
             }
             let subject_session = entry.file_name().to_string_lossy().to_string();
@@ -79,45 +79,38 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
 
         let mut processed_runs = std::collections::HashSet::new();
 
-        if asl_subject_dir.exists() {
-            if let Ok(entries) = std::fs::read_dir(&asl_subject_dir) {
-                for run_entry in entries.flatten() {
-                    if run_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                        let run_name = run_entry.file_name().to_string_lossy().to_string();
-                        if run_name.starts_with("xASL_module_ASL_ASL_") {
-                            let (mut status, completed_steps, locked) =
-                                determine_status(&run_entry.path());
-                            let run = run_name
-                                .strip_prefix("xASL_module_ASL_ASL_")
-                                .map(normalize_asl_run_id);
+        if let Ok(entries) = std::fs::read_dir(&asl_subject_dir) {
+            for run_entry in entries.flatten() {
+                if run_entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+                    let run_name = run_entry.file_name().to_string_lossy().to_string();
+                    if let Some(run_str) = run_name.strip_prefix("xASL_module_ASL_ASL_") {
+                        let (mut status, completed_steps, locked) =
+                            determine_status(&run_entry.path());
+                        let run = Some(normalize_asl_run_id(run_str));
 
-                            if let Some(ref r) = run {
-                                processed_runs.insert(r.clone());
-                                if let Some(st) = structural_time {
-                                    if let Some(at) =
-                                        get_asl_completion_time(&root, subject_session, r)
-                                    {
-                                        if st > at {
-                                            status = "outdated".to_string();
-                                        }
-                                    }
-                                }
+                        if let Some(ref r) = run {
+                            processed_runs.insert(r.clone());
+                            if let Some(st) = structural_time
+                                && let Some(at) = get_asl_completion_time(&root, subject_session, r)
+                                && st > at
+                            {
+                                status = "outdated".to_string();
                             }
-
-                            let bids2legacy_exists = lock_root
-                                .join("xASL_module_BIDS2Legacy")
-                                .join(subject_session)
-                                .exists();
-                            statuses.push(SubjectModuleStatus {
-                                subject_session: subject_session.clone(),
-                                module_name: "xASL_module_ASL".to_string(),
-                                run,
-                                status,
-                                completed_steps,
-                                locked,
-                                bids2legacy_exists: Some(bids2legacy_exists),
-                            });
                         }
+
+                        let bids2legacy_exists = lock_root
+                            .join("xASL_module_BIDS2Legacy")
+                            .join(subject_session)
+                            .exists();
+                        statuses.push(SubjectModuleStatus {
+                            subject_session: subject_session.clone(),
+                            module_name: "xASL_module_ASL".to_string(),
+                            run,
+                            status,
+                            completed_steps,
+                            locked,
+                            bids2legacy_exists: Some(bids2legacy_exists),
+                        });
                     }
                 }
             }
@@ -129,24 +122,23 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
             if processed_runs.contains(&run) {
                 continue;
             }
-            if let Some(st) = structural_time {
-                if let Some(at) = get_asl_completion_time(&root, subject_session, &run) {
-                    if st > at {
-                        let bids2legacy_exists = lock_root
-                            .join("xASL_module_BIDS2Legacy")
-                            .join(subject_session)
-                            .exists();
-                        statuses.push(SubjectModuleStatus {
-                            subject_session: subject_session.clone(),
-                            module_name: "xASL_module_ASL".to_string(),
-                            run: Some(run),
-                            status: "outdated".to_string(),
-                            completed_steps: Vec::new(),
-                            locked: false,
-                            bids2legacy_exists: Some(bids2legacy_exists),
-                        });
-                    }
-                }
+            if let Some(st) = structural_time
+                && let Some(at) = get_asl_completion_time(&root, subject_session, &run)
+                && st > at
+            {
+                let bids2legacy_exists = lock_root
+                    .join("xASL_module_BIDS2Legacy")
+                    .join(subject_session)
+                    .exists();
+                statuses.push(SubjectModuleStatus {
+                    subject_session: subject_session.clone(),
+                    module_name: "xASL_module_ASL".to_string(),
+                    run: Some(run),
+                    status: "outdated".to_string(),
+                    completed_steps: Vec::new(),
+                    locked: false,
+                    bids2legacy_exists: Some(bids2legacy_exists),
+                });
             }
         }
     }
@@ -173,22 +165,22 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
         .join("xASL_module_Population")
         .join("xASL_module_Population")
         .join("999_ready.status");
-    if let Ok(metadata) = std::fs::metadata(&pop_ready_file) {
-        if let Ok(mtime) = metadata.modified() {
-            pop_time = Some(mtime);
-        }
+    if let Ok(metadata) = std::fs::metadata(&pop_ready_file)
+        && let Ok(mtime) = metadata.modified()
+    {
+        pop_time = Some(mtime);
     }
     if pop_time.is_none() {
         let log_dirs = exploreasl_log_dirs(&root);
         for log_dir in log_dirs {
             let log_file = log_dir.join("xASL_module_Population.log");
-            if log_file.is_file() && !check_log_for_error(&log_file) {
-                if let Ok(metadata) = std::fs::metadata(&log_file) {
-                    if let Ok(mtime) = metadata.modified() {
-                        pop_time = Some(mtime);
-                        break;
-                    }
-                }
+            if log_file.is_file()
+                && !check_log_for_error(&log_file)
+                && let Ok(metadata) = std::fs::metadata(&log_file)
+                && let Ok(mtime) = metadata.modified()
+            {
+                pop_time = Some(mtime);
+                break;
             }
         }
     }
@@ -196,11 +188,11 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
     if let Some(pt) = pop_time {
         let mut is_outdated = false;
         for ss in &subject_sessions {
-            if let Some(st) = get_structural_completion_time(&root, ss) {
-                if st > pt {
-                    is_outdated = true;
-                    break;
-                }
+            if let Some(st) = get_structural_completion_time(&root, ss)
+                && st > pt
+            {
+                is_outdated = true;
+                break;
             }
             let runs = find_asl_runs_from_logs(&root, ss);
             let mut all_runs = runs;
@@ -208,22 +200,20 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
             if let Ok(entries) = std::fs::read_dir(&asl_subject_dir) {
                 for entry in entries.flatten() {
                     let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with("xASL_module_ASL_ASL_") {
-                        if let Some(run_str) = name.strip_prefix("xASL_module_ASL_ASL_") {
-                            let run = normalize_asl_run_id(run_str);
-                            if !all_runs.contains(&run) {
-                                all_runs.push(run);
-                            }
+                    if let Some(run_str) = name.strip_prefix("xASL_module_ASL_ASL_") {
+                        let run = normalize_asl_run_id(run_str);
+                        if !all_runs.contains(&run) {
+                            all_runs.push(run);
                         }
                     }
                 }
             }
             for run in all_runs {
-                if let Some(at) = get_asl_completion_time(&root, ss, &run) {
-                    if at > pt {
-                        is_outdated = true;
-                        break;
-                    }
+                if let Some(at) = get_asl_completion_time(&root, ss, &run)
+                    && at > pt
+                {
+                    is_outdated = true;
+                    break;
                 }
             }
             if is_outdated {
@@ -273,21 +263,15 @@ fn clear_module_locked_dirs(lock_root: &Path, module_name: &str) -> Result<(), S
         };
         if entry.file_type().is_dir() {
             let path = entry.path();
-            if path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map(|n| n == "locked")
-                .unwrap_or(false)
+            if path.file_name().and_then(|n| n.to_str()) == Some("locked")
+                && let Err(e) = fs::remove_dir_all(path)
+                && e.kind() != std::io::ErrorKind::NotFound
             {
-                if let Err(e) = fs::remove_dir_all(path) {
-                    if e.kind() != std::io::ErrorKind::NotFound {
-                        return Err(format!(
-                            "Failed to clear stale locked dir {}: {}",
-                            path.display(),
-                            e
-                        ));
-                    }
-                }
+                return Err(format!(
+                    "Failed to clear stale locked dir {}: {}",
+                    path.display(),
+                    e
+                ));
             }
         }
     }
@@ -343,25 +327,25 @@ pub(crate) fn delete_bids2legacy_locks(
         )
     })? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+        if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
             continue;
         }
         let subject_session_name = entry.file_name().to_string_lossy().to_string();
 
-        if let Some(ref re) = subject_re {
-            if !re.is_match(&subject_session_name) {
-                continue;
-            }
+        if let Some(ref re) = subject_re
+            && !re.is_match(&subject_session_name)
+        {
+            continue;
         }
 
-        if let Err(e) = fs::remove_dir_all(entry.path()) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                return Err(format!(
-                    "Failed to delete BIDS2Legacy lock dir {}: {}",
-                    entry.path().display(),
-                    e
-                ));
-            }
+        if let Err(e) = fs::remove_dir_all(entry.path())
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(format!(
+                "Failed to delete BIDS2Legacy lock dir {}: {}",
+                entry.path().display(),
+                e
+            ));
         }
     }
 
@@ -416,15 +400,15 @@ pub(crate) fn delete_status_files_for_modules(
             )
         })? {
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-            if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
                 continue;
             }
             let subject_name = entry.file_name().to_string_lossy().to_string();
 
-            if let Some(ref re) = subject_re {
-                if !re.is_match(&subject_name) {
-                    continue;
-                }
+            if let Some(ref re) = subject_re
+                && !re.is_match(&subject_name)
+            {
+                continue;
             }
 
             if module_name == "xASL_module_ASL" {
@@ -433,7 +417,7 @@ pub(crate) fn delete_status_files_for_modules(
                 {
                     let run_entry =
                         run_entry.map_err(|e| format!("Failed to read run entry: {}", e))?;
-                    if !run_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                    if !run_entry.file_type().is_ok_and(|ft| ft.is_dir()) {
                         continue;
                     }
                     let run_name = run_entry.file_name().to_string_lossy().to_string();
@@ -457,20 +441,19 @@ fn delete_status_files_in_dir(dir: &Path) -> Result<(), String> {
     for entry in WalkDir::new(dir).min_depth(1) {
         let entry = entry.map_err(|e| format!("WalkDir error: {}", e))?;
         let path = entry.path();
-        if path.is_file() {
-            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                if file_name.ends_with(".status") {
-                    match fs::remove_file(path) {
-                        Ok(()) => {}
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(e) => {
-                            return Err(format!(
-                                "Failed to delete status file {}: {}",
-                                path.display(),
-                                e
-                            ));
-                        }
-                    }
+        if path.is_file()
+            && let Some(file_name) = path.file_name().and_then(|f| f.to_str())
+            && file_name.ends_with(".status")
+        {
+            match fs::remove_file(path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to delete status file {}: {}",
+                        path.display(),
+                        e
+                    ));
                 }
             }
         }

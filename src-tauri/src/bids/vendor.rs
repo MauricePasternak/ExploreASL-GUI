@@ -156,14 +156,14 @@ pub fn derive_m0_type(
     sidecar_m0type: Option<&str>,
 ) -> String {
     // Rule 1: Trust sidecar's "Estimate"
-    if let Some(m0type) = sidecar_m0type {
-        if m0type == "Estimate" {
-            log::debug!(
-                "derive_m0_type: sidecar=Estimate for {}",
-                perf_path.display()
-            );
-            return "Estimate".to_string();
-        }
+    if let Some(m0type) = sidecar_m0type
+        && m0type == "Estimate"
+    {
+        log::debug!(
+            "derive_m0_type: sidecar=Estimate for {}",
+            perf_path.display()
+        );
+        return "Estimate".to_string();
     }
 
     // Rule 2: Check for *_m0scan.nii.gz in perf_path
@@ -181,14 +181,14 @@ pub fn derive_m0_type(
     }
 
     // Rule 3: Check aslcontext for "m0scan" token
-    if let Some(ctx) = aslcontext {
-        if ctx.split(',').any(|t| t.trim() == "m0scan") {
-            log::debug!(
-                "derive_m0_type: aslcontext has m0scan → Included for {}",
-                perf_path.display()
-            );
-            return "Included".to_string();
-        }
+    if let Some(ctx) = aslcontext
+        && ctx.split(',').any(|t| t.trim() == "m0scan")
+    {
+        log::debug!(
+            "derive_m0_type: aslcontext has m0scan → Included for {}",
+            perf_path.display()
+        );
+        return "Included".to_string();
     }
 
     // Rule 4: Default

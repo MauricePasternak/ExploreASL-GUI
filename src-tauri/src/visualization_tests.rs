@@ -41,22 +41,30 @@ mod tests {
         let result = load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
         assert_eq!(result.row_count, 1);
         assert!(result.external_hash.is_none());
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "participant_id" && c.is_identifier));
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "subject" && c.is_identifier));
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "session" && c.is_identifier));
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "run" && c.is_identifier));
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "participant_id" && c.is_identifier)
+        );
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "subject" && c.is_identifier)
+        );
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "session" && c.is_identifier)
+        );
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "run" && c.is_identifier)
+        );
         let gm = result.columns.iter().find(|c| c.name == "GM_vol").unwrap();
         assert_eq!(gm.inferred_type, "continuous");
         assert_eq!(gm.units, "Liter");
@@ -163,8 +171,7 @@ mod tests {
 
     #[test]
     fn test_read_data_columns_from_cache() {
-        let tsv =
-      "participant_id\tsession\tGM_vol\tSite\nStudyID\t...\tLiter\tint\nsub-X_01\tASL_1\t0.64\t1\n";
+        let tsv = "participant_id\tsession\tGM_vol\tSite\nStudyID\t...\tLiter\tint\nsub-X_01\tASL_1\t0.64\t1\n";
         let (_temp, root) = setup_stats_dir(tsv);
         let state = AppState::default();
         load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
@@ -198,18 +205,24 @@ mod tests {
         let result =
             inspect_external_data_impl(csv_path.to_string_lossy().to_string(), None, None).unwrap();
         assert_eq!(result.row_count, 2);
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "SubjectID" && !c.is_identifier));
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "Age" && c.inferred_type == "continuous"));
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "Diagnosis" && c.inferred_type == "nominal"));
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "SubjectID" && !c.is_identifier)
+        );
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "Age" && c.inferred_type == "continuous")
+        );
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "Diagnosis" && c.inferred_type == "nominal")
+        );
         assert!(result.sheet_name.is_none());
         assert!(!result.file_hash.is_empty());
     }
@@ -311,10 +324,12 @@ mod tests {
 
         assert_eq!(result.row_count, 2);
         assert!(result.external_hash.is_some());
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "Diagnosis" && c.source == ColumnSource::External));
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "Diagnosis" && c.source == ColumnSource::External)
+        );
         assert!(!result.columns.iter().any(|c| c.name == "SubjectID"));
         let cached = state.active_data.lock().unwrap();
         assert!(cached.is_some());
@@ -393,14 +408,18 @@ mod tests {
         )
         .unwrap();
 
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "MeanMotion_x" && c.source == ColumnSource::Qcbf));
-        assert!(result
-            .columns
-            .iter()
-            .any(|c| c.name == "MeanMotion_y" && c.source == ColumnSource::External));
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "MeanMotion_x" && c.source == ColumnSource::Qcbf)
+        );
+        assert!(
+            result
+                .columns
+                .iter()
+                .any(|c| c.name == "MeanMotion_y" && c.source == ColumnSource::External)
+        );
     }
 
     #[test]

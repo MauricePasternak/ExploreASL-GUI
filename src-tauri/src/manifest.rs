@@ -15,10 +15,10 @@ fn read_exploreasl_version_file(explore_asl_path: &Path) -> Result<String, Strin
     let entries = fs::read_dir(explore_asl_path).map_err(|e| e.to_string())?;
     for entry in entries.flatten() {
         let file_name = entry.file_name().to_string_lossy().to_string();
-        if let Some(version) = file_name.strip_prefix("VERSION_") {
-            if !version.is_empty() {
-                return Ok(version.to_string());
-            }
+        if let Some(version) = file_name.strip_prefix("VERSION_")
+            && !version.is_empty()
+        {
+            return Ok(version.to_string());
         }
     }
     Err("no VERSION_* file found".to_string())

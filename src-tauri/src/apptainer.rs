@@ -33,10 +33,10 @@ pub(crate) fn resolve_apptainer_executable_with_path(
         return Ok(path.to_string_lossy().to_string());
     }
 
-    if command == "apptainer" {
-        if let Some(path) = find_executable_on_path("singularity", path_var) {
-            return Ok(path.to_string_lossy().to_string());
-        }
+    if command == "apptainer"
+        && let Some(path) = find_executable_on_path("singularity", path_var)
+    {
+        return Ok(path.to_string_lossy().to_string());
     }
 
     Err(format!(
@@ -101,12 +101,13 @@ fn add_apptainer_candidate(
     paths: &mut Vec<PathBuf>,
     seen: &mut HashSet<PathBuf>,
 ) {
-    if !candidate.as_os_str().is_empty() && candidate.is_file() && is_executable(candidate) {
-        if let Ok(canonical) = fs::canonicalize(candidate) {
-            if seen.insert(canonical) {
-                paths.push(candidate.to_path_buf());
-            }
-        }
+    if !candidate.as_os_str().is_empty()
+        && candidate.is_file()
+        && is_executable(candidate)
+        && let Ok(canonical) = fs::canonicalize(candidate)
+        && seen.insert(canonical)
+    {
+        paths.push(candidate.to_path_buf());
     }
 }
 

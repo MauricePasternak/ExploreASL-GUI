@@ -923,10 +923,12 @@ mod tests {
                         acquisition_label: None,
                     },
                 ],
-                asl_sidecars: vec![perf1
-                    .join("sub-01_run-1_asl.json")
-                    .to_string_lossy()
-                    .to_string()],
+                asl_sidecars: vec![
+                    perf1
+                        .join("sub-01_run-1_asl.json")
+                        .to_string_lossy()
+                        .to_string(),
+                ],
                 has_m0: false,
                 anat_files: vec![],
             }],
@@ -1009,10 +1011,9 @@ mod tests {
                         run_label: None,
                         acquisition_label: None,
                     }],
-                    asl_sidecars: vec![perf_a
-                        .join("sub-01_asl.json")
-                        .to_string_lossy()
-                        .to_string()],
+                    asl_sidecars: vec![
+                        perf_a.join("sub-01_asl.json").to_string_lossy().to_string(),
+                    ],
                     has_m0: true,
                     anat_files: vec![],
                 }],
@@ -1034,10 +1035,9 @@ mod tests {
                         run_label: None,
                         acquisition_label: None,
                     }],
-                    asl_sidecars: vec![perf_b
-                        .join("sub-02_asl.json")
-                        .to_string_lossy()
-                        .to_string()],
+                    asl_sidecars: vec![
+                        perf_b.join("sub-02_asl.json").to_string_lossy().to_string(),
+                    ],
                     has_m0: true,
                     anat_files: vec![],
                 }],

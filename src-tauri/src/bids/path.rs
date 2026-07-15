@@ -122,16 +122,16 @@ pub fn resolve_sessions(subject_dir: &Path) -> Vec<ResolvedSession> {
 
     if let Ok(entries) = std::fs::read_dir(subject_dir) {
         for entry in entries.flatten() {
-            if let Ok(ft) = entry.file_type() {
-                if ft.is_dir() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if is_session_dir(&name) {
-                        has_ses_dirs = true;
-                        sessions.push(ResolvedSession {
-                            session_label: name.strip_prefix("ses-").unwrap().to_string(),
-                            has_explicit_session: true,
-                        });
-                    }
+            if let Ok(ft) = entry.file_type()
+                && ft.is_dir()
+            {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if is_session_dir(&name) {
+                    has_ses_dirs = true;
+                    sessions.push(ResolvedSession {
+                        session_label: name.strip_prefix("ses-").unwrap().to_string(),
+                        has_explicit_session: true,
+                    });
                 }
             }
         }

@@ -53,6 +53,7 @@ fn detect_matlab_version_from_fake_binary() {
         let mut f = fs::File::create(&fake_matlab).unwrap();
         writeln!(f, "#!/bin/sh").unwrap();
         writeln!(f, "echo '2022b'").unwrap();
+        f.sync_all().unwrap();
     }
 
     #[cfg(unix)]
@@ -61,8 +62,17 @@ fn detect_matlab_version_from_fake_binary() {
         fs::set_permissions(&fake_matlab, PermissionsExt::from_mode(0o755)).unwrap();
     }
 
+    let debug_output = Command::new(&fake_matlab)
+        .args(["-batch", "disp(version('-release'))"])
+        .output();
+
     let version = run_matlab_release(&fake_matlab);
-    assert_eq!(version, Some("R2022b".to_string()));
+    assert_eq!(
+        version,
+        Some("R2022b".to_string()),
+        "Failed to get version. Debug output: {:?}",
+        debug_output
+    );
 }
 
 #[cfg(unix)]

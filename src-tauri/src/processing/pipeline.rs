@@ -4,8 +4,8 @@ use super::locks::{
 use super::logs::delete_module_log_files;
 use super::types::WorkerExited;
 use super::utils::{ensure_lock_dir, escape_matlab_string};
-use crate::apptainer::{ensure_mcr_cache, CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH};
-use crate::execution_profile::{get_exploreasl_version, ExecutionProfile};
+use crate::apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH, ensure_mcr_cache};
+use crate::execution_profile::{ExecutionProfile, get_exploreasl_version};
 use crate::import::AppState;
 use crate::tracing::CommandTrace;
 use std::fs;
@@ -112,7 +112,7 @@ fn spawn_apptainer_processing_process(
 
 #[cfg(unix)]
 fn send_termination_signal(pid: u32) -> Result<(), String> {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
     kill(Pid::from_raw(pid as i32), Signal::SIGTERM)
         .map_err(|error| format!("Failed to send SIGTERM to PID {pid}: {error}"))
@@ -130,7 +130,7 @@ fn send_termination_signal(pid: u32) -> Result<(), String> {
 
 #[cfg(unix)]
 fn force_kill_process(pid: u32) -> Result<(), String> {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
     kill(Pid::from_raw(pid as i32), Signal::SIGKILL)
         .map_err(|error| format!("Failed to send SIGKILL to PID {pid}: {error}"))
@@ -139,7 +139,7 @@ fn force_kill_process(pid: u32) -> Result<(), String> {
 #[cfg(windows)]
 fn force_kill_process(pid: u32) -> Result<(), String> {
     use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
     let handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
     if handle.is_null() {
         return Err(format!("Failed to open PID {pid} for termination"));
@@ -169,7 +169,7 @@ fn process_exists(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
     use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, WaitForSingleObject,
     };
     let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid) };
     if handle.is_null() {

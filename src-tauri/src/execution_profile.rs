@@ -118,10 +118,10 @@ pub(crate) fn get_exploreasl_version(path: &Path) -> Option<String> {
     };
     for entry in entries.flatten() {
         let file_name = entry.file_name().to_string_lossy().to_string();
-        if let Some(version) = file_name.strip_prefix("VERSION_") {
-            if !version.is_empty() {
-                return Some(version.to_string());
-            }
+        if let Some(version) = file_name.strip_prefix("VERSION_")
+            && !version.is_empty()
+        {
+            return Some(version.to_string());
         }
     }
     None
