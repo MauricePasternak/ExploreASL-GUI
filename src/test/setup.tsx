@@ -221,7 +221,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
   writeTextFile: vi.fn(),
-  exists: vi.fn(),
+  exists: vi.fn(() => Promise.resolve(false)),
   mkdir: vi.fn(),
 }));
 

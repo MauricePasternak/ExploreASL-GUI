@@ -602,4 +602,87 @@ describe("LandingPage BIDS detection dialogs", () => {
       });
     });
   });
+
+  it("opens file pickers in OS home directory when there are no recent projects", async () => {
+    useGlobalStore.setState({
+      settings: {
+        ...useGlobalStore.getState().settings,
+        recentProjects: [],
+      },
+    });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    // Trigger New Project
+    fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.objectContaining({
+          directory: true,
+          defaultPath: "/home/testuser",
+        }),
+      );
+    });
+
+    // Trigger Open Project
+    fireEvent.click(screen.getAllByRole("button", { name: /open project/i })[0]);
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: [{ name: "ExploreASL Project", extensions: ["easl"] }],
+          defaultPath: "/home/testuser",
+        }),
+      );
+    });
+  });
+
+  it("opens file pickers in the most recent project location when recent projects are configured", async () => {
+    useGlobalStore.setState({
+      settings: {
+        ...useGlobalStore.getState().settings,
+        recentProjects: ["/tmp/brain-study/project.easl"],
+      },
+    });
+
+    // Mock exists to return true for the recent project path and directory
+    vi.mocked(exists).mockImplementation(async (path) => {
+      return path === "/tmp/brain-study/project.easl" || path === "/tmp/brain-study";
+    });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    // Trigger New Project (uses parent directory)
+    fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.objectContaining({
+          directory: true,
+          defaultPath: "/tmp/brain-study",
+        }),
+      );
+    });
+
+    // Trigger Open Project (uses full path if exists)
+    fireEvent.click(screen.getAllByRole("button", { name: /open project/i })[0]);
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: [{ name: "ExploreASL Project", extensions: ["easl"] }],
+          defaultPath: "/tmp/brain-study/project.easl",
+        }),
+      );
+    });
+  });
 });

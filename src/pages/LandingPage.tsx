@@ -53,6 +53,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const addRecentProject = useGlobalStore((state) => state.addRecentProject);
   const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
   const hasValidProfile = useGlobalStore((state) => state.hasValidProfile());
+  const recentProjects = useGlobalStore((state) => state.settings.recentProjects);
 
   const showWelcomeCard = executionProfiles.length === 0;
   const projectActionsDisabled = executionProfiles.length > 0 && !hasValidProfile;
@@ -92,10 +93,28 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     logAction("landing_new_project_start");
 
     try {
+      let defaultPath: string | undefined;
+      if (recentProjects && recentProjects.length > 0) {
+        const mostRecent = recentProjects[0];
+        const parentDir = mostRecent.replace(/[/\\][^/\\]+$/, "");
+        if (await exists(parentDir)) {
+          defaultPath = parentDir;
+        }
+      }
+      if (!defaultPath) {
+        try {
+          const { homeDir } = await import("@tauri-apps/api/path");
+          defaultPath = await homeDir();
+        } catch (err) {
+          console.error("Failed to get home directory:", err);
+        }
+      }
+
       const selected = await open({
         directory: true,
         multiple: false,
         title: "Select Project Root Directory",
+        defaultPath,
       });
 
       if (typeof selected !== "string") {
@@ -306,10 +325,32 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     logAction("landing_open_project_start");
 
     try {
+      let defaultPath: string | undefined;
+      if (recentProjects && recentProjects.length > 0) {
+        const mostRecent = recentProjects[0];
+        if (await exists(mostRecent)) {
+          defaultPath = mostRecent;
+        } else {
+          const parentDir = mostRecent.replace(/[/\\][^/\\]+$/, "");
+          if (await exists(parentDir)) {
+            defaultPath = parentDir;
+          }
+        }
+      }
+      if (!defaultPath) {
+        try {
+          const { homeDir } = await import("@tauri-apps/api/path");
+          defaultPath = await homeDir();
+        } catch (err) {
+          console.error("Failed to get home directory:", err);
+        }
+      }
+
       const selected = await open({
         filters: [{ name: "ExploreASL Project", extensions: ["easl"] }],
         multiple: false,
         title: "Open Project File",
+        defaultPath,
       });
 
       if (typeof selected !== "string") {

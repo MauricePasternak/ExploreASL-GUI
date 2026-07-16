@@ -234,3 +234,24 @@ When BIDS review confirms, the store action `confirmBidsReview()` SHALL:
 
 - **WHEN** `confirmBidsReview()` is called for a 25-subject dataset with 2 detected groups and 1 skipped subject
 - **THEN** `mappingState.metadataGroups.length = 2`, `mappingState.subjectRows.length = 24`, `mappingState.ingestionComplete = true`, `uiState.import.skippedSubjects = ["sub-UNK001_1"]`, `uiState.import.bidsReviewConfirmed = true`, `projectMeta.currentPhase = "parameters"`, project file is saved, navigation goes to Parameters page
+
+---
+
+### Requirement: Project Dialog Default Directory Paths
+
+The "New Project" and "Open Project" dialogs on the landing page SHALL use the following logic to determine their initial opening directory (`defaultPath`):
+
+1. **Priority**: Open in the most recent location:
+   - For "New Project" (directory dialog): use the parent directory containing the most recent project file (`settings.recentProjects[0]`), if it exists on disk.
+   - For "Open Project" (file dialog): use the path of the most recent project file (`settings.recentProjects[0]`) if it exists on disk, or fall back to its parent directory if it exists on disk.
+2. **Fallback**: Open in the user's OS home directory (`$HOME`).
+
+#### Scenario: Open pickers with no recent projects
+
+- **WHEN** `recentProjects` is empty
+- **THEN** the New Project and Open Project dialogs SHALL be initialized with the user's OS home directory as the `defaultPath`
+
+#### Scenario: Open pickers with a valid recent project
+
+- **WHEN** `recentProjects` contains a valid project file path (e.g. `/tmp/brain-study/project.easl`)
+- **THEN** the New Project directory dialog SHALL use `/tmp/brain-study` as `defaultPath`, and the Open Project file dialog SHALL use `/tmp/brain-study/project.easl` as `defaultPath`
