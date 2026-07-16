@@ -108,6 +108,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const importRunning = useImportStore((state) => state.importRunning);
   const isProcessRunning =
     processingPhase === "running" || importPhase === "running" || importRunning;
+  const isProcessingActive = processingPhase === "running" || processingPhase === "preparing";
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -152,7 +153,11 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const navbarCollapsed = project?.uiState.navbarCollapsed ?? true;
 
   async function handlePhaseNavigation(phase: ProjectPhase) {
-    if (!project || !canAccessPhase(project, phase)) {
+    if (
+      !project ||
+      !canAccessPhase(project, phase) ||
+      (isProcessingActive && (phase === "visualization" || phase === "manifest"))
+    ) {
       return;
     }
 
@@ -349,7 +354,10 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
             <div style={{ width: "100%" }} data-testid="layout-navbar-phases">
               {PHASE_NAV.map(({ phase, label, icon: Icon }) => {
                 const active = project.projectMeta.currentPhase === phase;
-                const disabled = !canAccessPhase(project, phase);
+                const disabled =
+                  !canAccessPhase(project, phase) ||
+                  (isProcessingActive && (phase === "visualization" || phase === "manifest"));
+
                 const iconElement = (
                   <NavLink
                     key={phase}

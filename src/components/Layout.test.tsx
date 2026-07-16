@@ -491,6 +491,62 @@ describe("Layout", () => {
     expect(screen.getByTestId("manifest-page")).toBeInTheDocument();
   });
 
+  it("disables visualization and manifest NavLinks when processing is active (running or preparing)", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "processing",
+          dataSource: "dicom" as const,
+        },
+        uiState: { navbarCollapsed: false, processing: { population: { completed: true } } },
+        mappingState: {},
+        dataPar: {},
+      },
+      isDirty: false,
+      loaded: true,
+    });
+
+    // Check with phase = running
+    useProcessingStore.setState({
+      processingPhase: "running",
+    });
+    const { unmount } = renderLayout("/project/project-1/processing");
+
+    expect(screen.getByTestId("layout-nav-visualization")).toHaveAttribute("data-disabled", "true");
+    expect(screen.getByTestId("layout-nav-manifest")).toHaveAttribute("data-disabled", "true");
+
+    unmount();
+
+    // Check with phase = preparing
+    useProcessingStore.setState({
+      processingPhase: "preparing",
+    });
+    const { unmount: unmountPrep } = renderLayout("/project/project-1/processing");
+
+    expect(screen.getByTestId("layout-nav-visualization")).toHaveAttribute("data-disabled", "true");
+    expect(screen.getByTestId("layout-nav-manifest")).toHaveAttribute("data-disabled", "true");
+
+    unmountPrep();
+
+    // Check with phase = idle (should be enabled since population is completed)
+    useProcessingStore.setState({
+      processingPhase: "idle",
+    });
+    renderLayout("/project/project-1/processing");
+
+    expect(screen.getByTestId("layout-nav-visualization")).not.toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+    expect(screen.getByTestId("layout-nav-manifest")).not.toHaveAttribute("data-disabled", "true");
+  });
+
   it("does not intercept close request when project is clean", async () => {
     useProjectStore.setState({
       project: {

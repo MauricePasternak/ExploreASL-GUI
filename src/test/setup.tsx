@@ -178,6 +178,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "read_report_image":
       case "read_lock_status":
       case "list_subjects":
+      case "list_stats_files":
         return Promise.resolve([]);
       case "scan_bids_sidecars":
         return Promise.resolve({ groups: [], skipped: [] });

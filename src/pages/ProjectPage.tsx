@@ -10,6 +10,7 @@ import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/pr
 import { useDataParStore } from "../stores/dataParStore";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
+import { useProcessingStore } from "../stores/processingStore";
 import ImportPage from "./ImportPage";
 import ManifestPage from "./ManifestPage";
 import ProcessingPage from "./ProcessingPage";
@@ -26,6 +27,8 @@ export default function ProjectPage() {
   const setPhase = useProjectStore((state) => state.setPhase);
   const saveProject = useProjectStore((state) => state.saveProject);
   const loadPersistedState = useImportStore((state) => state.loadPersistedState);
+  const processingPhase = useProcessingStore((state) => state.processingPhase);
+  const isProcessingActive = processingPhase === "running" || processingPhase === "preparing";
   const [restoring, setRestoring] = useState(() => !useProjectStore.getState().project);
   const restoreInFlight = useRef(false);
   const hadProjectRef = useRef(Boolean(useProjectStore.getState().project));
@@ -168,8 +171,18 @@ export default function ProjectPage() {
       return;
     }
 
-    if (!canAccessPhase(project, params.phase)) {
-      navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`, {
+    const isVisualizationOrManifest =
+      params.phase === "visualization" || params.phase === "manifest";
+    if (
+      !canAccessPhase(project, params.phase) ||
+      (isProcessingActive && isVisualizationOrManifest)
+    ) {
+      const fallbackPhase =
+        project.projectMeta.currentPhase === "visualization" ||
+        project.projectMeta.currentPhase === "manifest"
+          ? "processing"
+          : project.projectMeta.currentPhase;
+      navigate(`/project/${project.projectMeta.id}/${fallbackPhase}`, {
         replace: true,
       });
       return;
@@ -179,7 +192,7 @@ export default function ProjectPage() {
       setPhase(params.phase);
       void saveProject();
     }
-  }, [navigate, params.phase, project, saveProject, setPhase]);
+  }, [navigate, params.phase, project, saveProject, setPhase, isProcessingActive]);
 
   // Register active project root for niivue:// protocol
   const rootPath = project?.projectMeta.rootPath;

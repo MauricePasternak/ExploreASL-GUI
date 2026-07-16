@@ -10,13 +10,14 @@ import { useDataParStore } from "../stores/dataParStore";
 import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
+import { useProcessingStore } from "../stores/processingStore";
 import { seedValidProfileGate } from "../test/landingProfileGate";
 import ProjectPage from "./ProjectPage";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
   writeTextFile: vi.fn().mockResolvedValue(undefined),
-  exists: vi.fn(),
+  exists: vi.fn(() => Promise.resolve(false)),
   mkdir: vi.fn(),
 }));
 
@@ -64,6 +65,10 @@ describe("ProjectPage", () => {
       },
       isDirty: false,
       loaded: true,
+    });
+    useProcessingStore.setState({
+      processingPhase: "idle",
+      workerPids: [],
     });
     vi.mocked(writeTextFile).mockResolvedValue(undefined);
   });
@@ -116,6 +121,78 @@ describe("ProjectPage", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("visualization-page")).toBeInTheDocument();
+    });
+  });
+
+  it("redirects from visualization and manifest pages to fallback phase when processing is active", async () => {
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            projectMeta: { ...state.project.projectMeta, currentPhase: "processing" },
+            uiState: {
+              ...state.project.uiState,
+              processing: {
+                ...state.project.uiState?.processing,
+                population: { completed: true },
+              },
+            },
+          }
+        : null,
+    }));
+
+    useProcessingStore.setState({
+      processingPhase: "running",
+    });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={["/project/project-1/visualization"]}>
+          <Routes>
+            <Route path="/project/:id/:phase" element={<ProjectPage />} />
+          </Routes>
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().project?.projectMeta.currentPhase).toBe("processing");
+    });
+  });
+
+  it("redirects from manifest to processing when currentPhase is manifest and processing starts", async () => {
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            projectMeta: { ...state.project.projectMeta, currentPhase: "manifest" },
+            uiState: {
+              ...state.project.uiState,
+              processing: {
+                ...state.project.uiState?.processing,
+                population: { completed: true },
+              },
+            },
+          }
+        : null,
+    }));
+
+    useProcessingStore.setState({
+      processingPhase: "preparing",
+    });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={["/project/project-1/manifest"]}>
+          <Routes>
+            <Route path="/project/:id/:phase" element={<ProjectPage />} />
+          </Routes>
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().project?.projectMeta.currentPhase).toBe("processing");
     });
   });
 
