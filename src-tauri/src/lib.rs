@@ -24,7 +24,9 @@ use import::{
     AppState, clean_import_status, copy_lock_files, move_import_output, read_import_status,
     run_import_pipeline, stop_active_import, stop_import, stop_running_import_for_exit,
 };
-use manifest::{capture_environment_versions, read_population_ready_mtime};
+use manifest::{
+    capture_environment_versions, read_population_ready_mtime, read_prior_modules_mtimes,
+};
 use matlab::which_matlab;
 use processing::{
     clear_stale_locks, detect_exploreasl_version, kill_pipeline, list_module_logs,
@@ -98,6 +100,7 @@ pub fn run() {
             list_module_logs,
             read_module_logs,
             read_population_ready_mtime,
+            read_prior_modules_mtimes,
             list_subject_reports,
             read_report_image,
             list_stats_files,

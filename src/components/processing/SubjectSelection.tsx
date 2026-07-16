@@ -633,12 +633,14 @@ export default function SubjectSelection() {
           data={FILTER_OPTIONS.map((opt) => ({
             ...opt,
             label: (
-              <Group gap={4}>
-                <Text size="xs">{opt.label}</Text>
-                <Badge size="xs" variant="light" circle>
+              <Stack gap={2} align="center" style={{ minWidth: 70, padding: "2px 0" }}>
+                <Text size="xs" style={{ whiteSpace: "nowrap" }}>
+                  {opt.label}
+                </Text>
+                <Badge size="xs" variant="light">
                   {statusCounts[opt.value]}
                 </Badge>
-              </Group>
+              </Stack>
             ),
           }))}
           data-testid="subject-filter"

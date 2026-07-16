@@ -82,8 +82,7 @@ export default function QcSelectionTable({
   const staleVerdicts = useManifestStore((s) => s.staleVerdicts);
   const qcData = useManifestStore((s) => s.qcData);
   const qcLoaded = useManifestStore((s) => s.qcLoaded);
-  const lastPopulationRunMtime =
-    useProjectStore((s) => s.project?.uiState?.processing?.population?.lastRun?.Mtime) ?? undefined;
+  const priorModulesMtimes = useManifestStore((s) => s.priorModulesMtimes);
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
 
   const [logFiles, setLogFiles] = useState<Map<string, LogFileInfo[]>>(new Map());
@@ -204,8 +203,9 @@ export default function QcSelectionTable({
           next.delete(subjectSession);
           return next;
         });
+        const mtime = priorModulesMtimes[subjectSession] ?? 0;
         useProjectStore.getState().setManifestVerdict(subjectSession, "pass", {
-          setAt: lastPopulationRunMtime,
+          setAt: mtime,
         });
       } else if (value === "fail") {
         setPendingFails((prev) => {
@@ -222,7 +222,7 @@ export default function QcSelectionTable({
         useProjectStore.getState().removeManifestVerdict(subjectSession);
       }
     },
-    [lastPopulationRunMtime],
+    [priorModulesMtimes],
   );
 
   const handleReasonChange = useCallback(
@@ -233,12 +233,13 @@ export default function QcSelectionTable({
         next.set(subjectSession, reason);
         return next;
       });
+      const mtime = priorModulesMtimes[subjectSession] ?? 0;
       useProjectStore.getState().setManifestVerdict(subjectSession, "fail", {
         reason: reason as ManifestFailReason,
-        setAt: lastPopulationRunMtime,
+        setAt: mtime,
       });
     },
-    [lastPopulationRunMtime],
+    [priorModulesMtimes],
   );
 
   const handleNotesBlur = useCallback(
@@ -683,12 +684,13 @@ export default function QcSelectionTable({
   const handleBulkMarkPass = useCallback(() => {
     for (const row of rows) {
       if (row.structuralStatus === "complete" && row.aslStatus === "complete" && !row.noInfo) {
+        const mtime = priorModulesMtimes[row.subjectSession] ?? 0;
         useProjectStore.getState().setManifestVerdict(row.subjectSession, "pass", {
-          setAt: lastPopulationRunMtime,
+          setAt: mtime,
         });
       }
     }
-  }, [rows, lastPopulationRunMtime]);
+  }, [rows, priorModulesMtimes]);
 
   const hasNeutral = useMemo(() => {
     const visible = filter === "all" ? rows : filteredRows;
@@ -740,17 +742,14 @@ export default function QcSelectionTable({
           data={FILTER_OPTIONS.map((opt) => ({
             ...opt,
             label: (
-              <Group gap={4}>
-                <Text size="xs">{opt.label}</Text>
-                <Badge
-                  size="xs"
-                  variant="light"
-                  circle
-                  data-testid={`qc-filter-count-${opt.value}`}
-                >
+              <Stack gap={2} align="center" style={{ minWidth: 70, padding: "2px 0" }}>
+                <Text size="xs" style={{ whiteSpace: "nowrap" }}>
+                  {opt.label}
+                </Text>
+                <Badge size="xs" variant="light" data-testid={`qc-filter-count-${opt.value}`}>
                   {filterCounts[opt.value]}
                 </Badge>
-              </Group>
+              </Stack>
             ),
           }))}
           data-testid="qc-filter"

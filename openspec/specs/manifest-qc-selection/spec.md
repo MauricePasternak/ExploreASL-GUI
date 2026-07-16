@@ -84,14 +84,14 @@ The QC Selection step SHALL provide a bulk action labeled "Mark all complete→P
 
 ### Requirement: Stale Verdict Indicator
 
-Rows whose stored verdict's `setAt` mtime does not match the current `999_ready.status` mtime SHALL render a "Stale" pill next to the SegmentedControl. Toggling the SegmentedControl on a stale row SHALL update the verdict AND set its `setAt` to the current `999_ready.status` mtime, clearing staleness for that row.
+Rows whose stored verdict's `setAt` mtime does not match the current completion mtime of the prior modules (Structural, ASL) SHALL render a "Stale" pill next to the SegmentedControl. Toggling the SegmentedControl on a stale row SHALL update the verdict AND set its `setAt` to the current prior modules' completion mtime, clearing staleness for that row.
 
 #### Scenario: Stale pill shown for mismatched mtime
 
-- **WHEN** the current `999_ready.status` mtime is `1700000060000` and a row's stored verdict has `setAt: 1700000000000`
+- **WHEN** the current prior modules' completion mtime is `1700000060000` and a row's stored verdict has `setAt: 1700000000000`
 - **THEN** the row SHALL render a pill labeled "Stale" adjacent to the Verdict SegmentedControl
 
 #### Scenario: Toggling stale verdict clears staleness
 
 - **WHEN** the user toggles a stale row from Pass to Fail
-- **THEN** the stored verdict SHALL become `{ status: "fail", setAt: <current 999_ready status mtime> }` and the Stale pill SHALL disappear
+- **THEN** the stored verdict SHALL become `{ status: "fail", setAt: <current prior modules' completion mtime> }` and the Stale pill SHALL disappear

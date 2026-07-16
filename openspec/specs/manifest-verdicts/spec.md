@@ -52,16 +52,16 @@ The `verdicts` record SHALL be keyed by SubjectSession string (e.g. `"sub-A_01"`
 
 ### Requirement: Verdict Staleness Reference
 
-A verdict's `setAt` field SHALL equal the integer mtime (milliseconds since epoch) of `derivatives/ExploreASL/.../xASL_module_Population/xASL_module_Population/999_ready.status` at the time of capture. A verdict SHALL be considered stale iff its `setAt` differs from the current mtime of that file. The store SHALL expose a computed `staleVerdicts: Set<subjectSession>` value derived from this comparison.
+A verdict's `setAt` field SHALL equal the integer maximum completion mtime (milliseconds since epoch) of its prior modules (Structural, ASL) at the time of capture. A verdict SHALL be considered stale iff its `setAt` differs from the current maximum completion mtime of these modules. The store SHALL expose a computed `staleVerdicts: Set<subjectSession>` value derived from this comparison.
 
-#### Scenario: Verdict flagged stale after Population re-run
+#### Scenario: Verdict flagged stale after prior module re-run
 
-- **WHEN** a verdict exists with `setAt: 1700000000000`, the user runs Population again, and the new `999_ready.status` mtime becomes `1700000060000`
+- **WHEN** a verdict exists with `setAt: 1700000000000`, the user runs Structural or ASL again, and the new prior completion mtime becomes `1700000060000`
 - **THEN** `staleVerdicts` SHALL include the corresponding SubjectSession
 
-#### Scenario: Verdict remains fresh across import-only session
+#### Scenario: Verdict remains fresh after Population-only re-run
 
-- **WHEN** a verdict exists with `setAt` equal to the current `999_ready.status` mtime and the GUI is restarted without any Population re-run having occurred
+- **WHEN** a verdict exists with `setAt: 1700000000000`, the user re-runs the Population module (updating Population's `999_ready.status` mtime to `1700000060000`), but does not re-run prior modules (prior completion mtime remains `1700000000000`)
 - **THEN** `staleVerdicts` SHALL NOT include the corresponding SubjectSession
 
 ### Requirement: Verdict Persistence To .easl

@@ -20,5 +20,6 @@ pub use pipeline::{
 pub use reports::{list_subject_reports, read_report_image};
 pub use subjects::list_subjects;
 pub use types::*;
+pub(crate) use utils::{check_log_for_error, exploreasl_log_dirs};
 pub use utils::{module_index_to_name, normalize_asl_run_id, normalize_asl_run_id_opt};
 pub use watcher::{stop_watch_lock_dir, watch_lock_dir};

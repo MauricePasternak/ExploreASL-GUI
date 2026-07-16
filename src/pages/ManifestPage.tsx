@@ -11,7 +11,8 @@ import { useProjectStore } from "../stores/projectStore";
 export default function ManifestPage() {
   const step = useManifestStore((s) => s.step);
   const setStep = useManifestStore((s) => s.setStep);
-  const recomputeStaleVerdicts = useManifestStore((s) => s.recomputeStaleVerdicts);
+  const loadPriorModulesMtimes = useManifestStore((s) => s.loadPriorModulesMtimes);
+  const computeStaleVerdicts = useManifestStore((s) => s.computeStaleVerdicts);
   const loadQcData = useManifestStore((s) => s.loadQcData);
   const loadDataPar = useManifestStore((s) => s.loadDataPar);
 
@@ -43,8 +44,14 @@ export default function ManifestPage() {
   }, [projectRoot, loadQcData, loadDataPar]);
 
   useEffect(() => {
-    recomputeStaleVerdicts();
-  }, [recomputeStaleVerdicts, verdicts]);
+    if (projectRoot) {
+      loadPriorModulesMtimes();
+    }
+  }, [projectRoot, loadPriorModulesMtimes]);
+
+  useEffect(() => {
+    computeStaleVerdicts();
+  }, [computeStaleVerdicts, verdicts]);
 
   const handleStepClick = (s: number) => {
     if (s === 1 && !nextReady) return;

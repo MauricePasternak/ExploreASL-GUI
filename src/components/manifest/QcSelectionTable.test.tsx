@@ -458,4 +458,173 @@ describe("QcSelectionTable", () => {
     expect(within(control).getByText("Pass")).toBeTruthy();
     expect(within(control).getByText("Fail")).toBeTruthy();
   });
+
+  describe("verdict setAt validation", () => {
+    it("sets correct setAt from priorModulesMtimes when marking Pass", async () => {
+      const user = userEvent.setup();
+      mockAvailableSubjects = [subject1];
+      mockSubjectStatuses = [
+        statusComplete,
+        {
+          subjectSession: "sub-01_01",
+          module: "asl",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+      ];
+      mockMetadataGroups = [group1];
+      mockSubjectRows = [subjectRow1];
+
+      renderTable();
+      useManifestStore.setState({
+        priorModulesMtimes: {
+          "sub-01_01": 1700000000000,
+        },
+      });
+
+      const control = await screen.findByTestId("verdict-control-sub-01_01");
+      const passBtn = within(control).getByText("Pass");
+      await user.click(passBtn);
+
+      const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
+      expect(verdicts["sub-01_01"]).toEqual({
+        status: "pass",
+        setAt: 1700000000000,
+      });
+    });
+
+    it("falls back to 0 when subject session not found in priorModulesMtimes", async () => {
+      const user = userEvent.setup();
+      mockAvailableSubjects = [subject1];
+      mockSubjectStatuses = [
+        statusComplete,
+        {
+          subjectSession: "sub-01_01",
+          module: "asl",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+      ];
+      mockMetadataGroups = [group1];
+      mockSubjectRows = [subjectRow1];
+
+      renderTable();
+      useManifestStore.setState({
+        priorModulesMtimes: {}, // Empty
+      });
+
+      const control = await screen.findByTestId("verdict-control-sub-01_01");
+      const passBtn = within(control).getByText("Pass");
+      await user.click(passBtn);
+
+      const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
+      expect(verdicts["sub-01_01"]).toEqual({
+        status: "pass",
+        setAt: 0,
+      });
+    });
+
+    it("sets correct setAt from priorModulesMtimes when marking Fail with a reason", async () => {
+      const user = userEvent.setup();
+      mockAvailableSubjects = [subject1];
+      mockSubjectStatuses = [
+        statusComplete,
+        {
+          subjectSession: "sub-01_01",
+          module: "asl",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+      ];
+      mockMetadataGroups = [group1];
+      mockSubjectRows = [subjectRow1];
+
+      renderTable();
+      useManifestStore.setState({
+        priorModulesMtimes: {
+          "sub-01_01": 1700000000000,
+        },
+      });
+
+      const control = await screen.findByTestId("verdict-control-sub-01_01");
+      const failBtn = within(control).getByText("Fail");
+      await user.click(failBtn);
+
+      // Select a reason
+      const reasonSelect = await screen.findByTestId("verdict-reason-sub-01_01");
+      await user.click(reasonSelect);
+      const option = await screen.findByText("Motion");
+      await user.click(option);
+
+      const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
+      expect(verdicts["sub-01_01"]).toEqual({
+        status: "fail",
+        reason: "motion",
+        setAt: 1700000000000,
+      });
+    });
+
+    it("sets correct mtimes for each subject respectively during bulk Pass", async () => {
+      const user = userEvent.setup();
+      const customSubject2: SubjectInfo = {
+        subjectSession: "sub-02_01",
+        subject: "sub-02",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+        aslRuns: [],
+      };
+      mockAvailableSubjects = [subject1, customSubject2];
+      mockSubjectStatuses = [
+        statusComplete,
+        {
+          subjectSession: "sub-01_01",
+          module: "asl",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-02_01",
+          module: "structural",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-02_01",
+          module: "asl",
+          status: "complete",
+          completedSteps: [],
+          locked: false,
+        },
+      ];
+      mockMetadataGroups = [group1];
+      mockSubjectRows = [subjectRow1, subjectRow2];
+
+      renderTable();
+      useManifestStore.setState({
+        priorModulesMtimes: {
+          "sub-01_01": 1700000000000,
+          "sub-02_01": 1700000060000,
+        },
+      });
+
+      const bulkBtn = await screen.findByTestId("bulk-mark-pass");
+      await user.click(bulkBtn);
+
+      const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
+      expect(verdicts["sub-01_01"]).toEqual({
+        status: "pass",
+        setAt: 1700000000000,
+      });
+      expect(verdicts["sub-02_01"]).toEqual({
+        status: "pass",
+        setAt: 1700000060000,
+      });
+    });
+  });
 });

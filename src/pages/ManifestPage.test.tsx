@@ -5,7 +5,8 @@ import ManifestPage from "./ManifestPage";
 
 let mockStep = 0;
 const mockSetStep = vi.fn();
-const mockRecomputeStaleVerdicts = vi.fn();
+const mockLoadPriorModulesMtimes = vi.fn();
+const mockComputeStaleVerdicts = vi.fn();
 const mockLoadQcData = vi.fn();
 const mockLoadDataPar = vi.fn();
 
@@ -16,7 +17,8 @@ vi.mock("../stores/manifestStore", () => ({
       setStep: mockSetStep,
       filter: "all",
       staleVerdicts: new Set(),
-      recomputeStaleVerdicts: mockRecomputeStaleVerdicts,
+      loadPriorModulesMtimes: mockLoadPriorModulesMtimes,
+      computeStaleVerdicts: mockComputeStaleVerdicts,
       loadQcData: mockLoadQcData,
       loadDataPar: mockLoadDataPar,
     };

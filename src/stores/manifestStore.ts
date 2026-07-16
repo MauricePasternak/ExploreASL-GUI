@@ -9,13 +9,15 @@ interface ManifestState {
   step: 0 | 1;
   filter: "all" | "neutral" | "pass" | "fail" | "no-info";
   staleVerdicts: Set<string>;
+  priorModulesMtimes: Record<string, number | null>;
   qcData: Record<string, SubjectQcOutputs> | null;
   qcLoaded: boolean;
   qcLoading: boolean;
   dataPar: Record<string, string | number | boolean> | null;
   setStep: (step: 0 | 1) => void;
   setFilter: (filter: ManifestState["filter"]) => void;
-  recomputeStaleVerdicts: () => Promise<void>;
+  loadPriorModulesMtimes: () => Promise<void>;
+  computeStaleVerdicts: () => void;
   resetStep: () => void;
   loadQcData: (projectRoot: string) => Promise<void>;
   loadDataPar: (projectRoot: string) => Promise<void>;
@@ -25,6 +27,7 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
   step: 0,
   filter: "all",
   staleVerdicts: new Set(),
+  priorModulesMtimes: {},
   qcData: null,
   qcLoaded: false,
   qcLoading: false,
@@ -36,34 +39,63 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
 
   resetStep: () => set({ step: 0 }),
 
-  recomputeStaleVerdicts: async () => {
+  loadPriorModulesMtimes: async () => {
     const project = useProjectStore.getState().project;
     const projectRoot = project?.projectMeta.rootPath;
     if (!projectRoot) return;
 
     const verdicts = project?.uiState?.manifest?.verdicts ?? {};
-    if (Object.keys(verdicts).length === 0) {
-      set({ staleVerdicts: new Set() });
+
+    let subjects = useProcessingStore.getState().availableSubjects;
+    if (subjects.length === 0) {
+      await useProcessingStore
+        .getState()
+        .scanAvailableSubjects()
+        .catch((err) => {
+          console.warn("[manifestStore] scanAvailableSubjects failed during mtime load:", err);
+        });
+      subjects = useProcessingStore.getState().availableSubjects;
+    }
+
+    const subjectSessions = Array.from(
+      new Set([...subjects.map((s) => s.subjectSession), ...Object.keys(verdicts)]),
+    );
+
+    if (subjectSessions.length === 0) {
+      set({ staleVerdicts: new Set(), priorModulesMtimes: {} });
       return;
     }
 
     try {
-      const current = await invoke<number | null>("read_population_ready_mtime", {
+      const mtimes = await invoke<Record<string, number | null>>("read_prior_modules_mtimes", {
         projectRoot,
+        subjectSessions,
       });
-      // If current is null (ready status file missing unexpectedly post-Population),
-      // we treat the verdicts as fresh (no file -> fresh is intentional).
-      const stale = new Set<string>();
-      for (const [ss, v] of Object.entries(verdicts)) {
-        if (current !== null && v.setAt !== current) {
-          stale.add(ss);
-        }
-      }
-      set({ staleVerdicts: new Set(stale) });
+      set({ priorModulesMtimes: mtimes });
+      get().computeStaleVerdicts();
     } catch (err) {
-      console.warn("[manifestStore] failed to read population mtime for staleness", err);
+      console.warn("[manifestStore] failed to read prior modules mtimes for staleness", err);
       set({ staleVerdicts: new Set() });
     }
+  },
+
+  computeStaleVerdicts: () => {
+    const project = useProjectStore.getState().project;
+    const verdicts = project?.uiState?.manifest?.verdicts ?? {};
+    const priorModulesMtimes = get().priorModulesMtimes;
+
+    const stale = new Set<string>();
+    for (const [ss, v] of Object.entries(verdicts)) {
+      // setAt: 0 means the mtime was unknown at capture time (race / missing
+      // subject). Treat as unset rather than stale so the user's freshly-clicked
+      // verdict isn't immediately flagged.
+      if (v.setAt === 0) continue;
+      const current = priorModulesMtimes[ss];
+      if (current !== undefined && current !== null && v.setAt !== current) {
+        stale.add(ss);
+      }
+    }
+    set({ staleVerdicts: new Set(stale) });
   },
 
   loadQcData: async (projectRoot) => {
