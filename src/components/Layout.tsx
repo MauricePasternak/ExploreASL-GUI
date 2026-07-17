@@ -477,7 +477,13 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
             </Group>
           </Stack>
         </Modal>
-        <Outlet context={{ onOpenSettings } satisfies LayoutOutletContext} />
+        <div
+          key={location.pathname}
+          className="page-fade-container"
+          data-testid="page-fade-container"
+        >
+          <Outlet context={{ onOpenSettings } satisfies LayoutOutletContext} />
+        </div>
       </AppShell.Main>
     </AppShell>
   );

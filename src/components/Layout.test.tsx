@@ -66,6 +66,7 @@ describe("Layout", () => {
 
     expect(screen.getByAltText("ExploreASL GUI")).toBeInTheDocument();
     expect(screen.getByText("Landing content")).toBeInTheDocument();
+    expect(screen.getByTestId("page-fade-container")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /import/i })).not.toBeInTheDocument();
   });
 
