@@ -1,4 +1,5 @@
-import { Group, NumberInput, Select, Stack, Switch, Text } from "@mantine/core";
+import { Group, NumberInput, Paper, Select, SimpleGrid, Stack, Switch, Text } from "@mantine/core";
+import { IconMathFunction, IconAtom, IconCpu } from "@tabler/icons-react";
 
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
 import type { DataParState } from "../../schemas/dataParSchema";
@@ -42,121 +43,168 @@ export function QuantificationSection({
 
   return (
     <Stack gap="md">
-      <Select
-        label={<DataParFieldLabel fieldKey="nCompartments" />}
-        data={[
-          { value: "1", label: "Single-compartment model" },
-          { value: "2", label: "Two-compartment model" },
-        ]}
-        value={dataPar.nCompartments != null ? String(dataPar.nCompartments) : null}
-        onChange={(v) => onFieldChange("nCompartments", v ? Number(v) : undefined)}
-        placeholder={FIELD_METADATA.nCompartments.defaultHint}
-        data-testid="field-nCompartments"
-      />
+      <Paper p="md" radius="md" withBorder>
+        <Stack gap="sm">
+          <Group gap="xs">
+            <IconMathFunction size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+            <Text fw={600} size="sm">
+              Compartment Model Selection
+            </Text>
+          </Group>
+
+          <Select
+            label={<DataParFieldLabel fieldKey="nCompartments" />}
+            data={[
+              { value: "1", label: "Single-compartment model" },
+              { value: "2", label: "Two-compartment model" },
+            ]}
+            value={dataPar.nCompartments != null ? String(dataPar.nCompartments) : null}
+            onChange={(v) => onFieldChange("nCompartments", v ? Number(v) : undefined)}
+            placeholder={FIELD_METADATA.nCompartments.defaultHint}
+            data-testid="field-nCompartments"
+          />
+        </Stack>
+      </Paper>
 
       <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
 
       {showAdvanced && (
-        <>
-          {NUMBER_FIELDS.map((key) => (
-            <NumberInput
-              key={key}
-              label={<DataParFieldLabel fieldKey={key} />}
-              placeholder={FIELD_METADATA[key].defaultHint}
-              value={dataPar[key]}
-              onChange={(v) => onFieldChange(key, v === "" ? undefined : v)}
-              data-testid={`field-${key}`}
-            />
-          ))}
-
-          <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
-            <Switch
-              id="switch-bUseExternalQuantification"
-              checked={externalEnabled}
-              onChange={(e) => onFieldChange("bUseExternalQuantification", e.currentTarget.checked)}
-              data-testid="field-bUseExternalQuantification"
-            />
-            <DataParFieldLabel
-              fieldKey="bUseExternalQuantification"
-              htmlFor="switch-bUseExternalQuantification"
-            />
-          </Group>
-
-          {externalEnabled && (
-            <>
-              <Select
-                label={<DataParFieldLabel fieldKey="ExternalQuantificationType" />}
-                data={["BASIL", "FABBER", "VABY"]}
-                value={dataPar.ExternalQuantificationType ?? null}
-                onChange={(v) => onFieldChange("ExternalQuantificationType", v)}
-                placeholder={FIELD_METADATA.ExternalQuantificationType.defaultHint}
-                data-testid="field-ExternalQuantificationType"
-              />
-
-              <Stack gap={4}>
-                <Text size="sm" fw={500}>
-                  <DataParFieldLabel fieldKey="ExternalQuantificationSmoothGaussianMM" />
+        <Stack gap="md">
+          <Paper p="md" radius="md" withBorder>
+            <Stack gap="sm">
+              <Group gap="xs">
+                <IconAtom size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+                <Text fw={600} size="sm">
+                  Physical Tissue & Blood Relaxation Constants
                 </Text>
-                <NumberTupleInput
-                  value={dataPar.ExternalQuantificationSmoothGaussianMM}
-                  onChange={(v) => onFieldChange("ExternalQuantificationSmoothGaussianMM", v)}
-                  labels={["LR", "AP", "IS"]}
-                  testId="field-ExternalQuantificationSmoothGaussianMM"
-                  integerOnly
-                  placeholder={[5, 5, 1]}
-                />
-              </Stack>
+              </Group>
 
-              {EXTERNAL_TOGGLE_FIELDS.map((key) => (
-                <Group key={key} gap="xs" align="center" style={{ minHeight: "32px" }}>
-                  <Switch
-                    id={`switch-${key}`}
-                    checked={dataPar[key] ?? false}
-                    onChange={(e) => onFieldChange(key, e.currentTarget.checked)}
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                {NUMBER_FIELDS.map((key) => (
+                  <NumberInput
+                    key={key}
+                    label={<DataParFieldLabel fieldKey={key} />}
+                    placeholder={FIELD_METADATA[key].defaultHint}
+                    value={dataPar[key]}
+                    onChange={(v) => onFieldChange(key, v === "" ? undefined : v)}
                     data-testid={`field-${key}`}
                   />
-                  <DataParFieldLabel fieldKey={key} htmlFor={`switch-${key}`} />
-                </Group>
-              ))}
+                ))}
+              </SimpleGrid>
+            </Stack>
+          </Paper>
 
-              <Select
-                label={<DataParFieldLabel fieldKey="ExchBASIL" />}
-                data={[
-                  { value: "mix", label: "Well-mixed single compartment" },
-                  { value: "simple", label: "Simple single-compartment model with T1 of blood" },
-                  { value: "2cpt", label: "Two-compartment model following Parkes & Tofts (2002)" },
-                  { value: "spa", label: "Single-pass approximation from St. Lawrence" },
-                ]}
-                value={dataPar.ExchBASIL ?? null}
-                onChange={(v) => onFieldChange("ExchBASIL", v)}
-                placeholder={FIELD_METADATA.ExchBASIL.defaultHint}
-                data-testid="field-ExchBASIL"
-              />
+          <Paper p="md" radius="md" withBorder>
+            <Stack gap="sm">
+              <Group gap="xs">
+                <IconCpu size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+                <Text fw={600} size="sm">
+                  External Quantification Engine (BASIL / FABBER / VABY)
+                </Text>
+              </Group>
 
-              <Select
-                label={<DataParFieldLabel fieldKey="DispBASIL" />}
-                data={[
-                  { value: "none", label: "None" },
-                  { value: "gamma", label: "Gamma distribution" },
-                  { value: "gauss", label: "Gaussian distribution" },
-                  { value: "sgauss", label: "Spatially-derived Gaussian distribution" },
-                ]}
-                value={dataPar.DispBASIL ?? null}
-                onChange={(v) => onFieldChange("DispBASIL", v)}
-                placeholder={FIELD_METADATA.DispBASIL.defaultHint}
-                data-testid="field-DispBASIL"
-              />
+              <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
+                <Switch
+                  id="switch-bUseExternalQuantification"
+                  checked={externalEnabled}
+                  onChange={(e) =>
+                    onFieldChange("bUseExternalQuantification", e.currentTarget.checked)
+                  }
+                  data-testid="field-bUseExternalQuantification"
+                />
+                <DataParFieldLabel
+                  fieldKey="bUseExternalQuantification"
+                  htmlFor="switch-bUseExternalQuantification"
+                />
+              </Group>
 
-              <NumberInput
-                label={<DataParFieldLabel fieldKey="ATTSDBASIL" />}
-                placeholder={FIELD_METADATA.ATTSDBASIL.defaultHint}
-                value={dataPar.ATTSDBASIL}
-                onChange={(v) => onFieldChange("ATTSDBASIL", v === "" ? undefined : v)}
-                data-testid="field-ATTSDBASIL"
-              />
-            </>
-          )}
-        </>
+              {externalEnabled && (
+                <Stack gap="md" mt="xs">
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                    <Select
+                      label={<DataParFieldLabel fieldKey="ExternalQuantificationType" />}
+                      data={["BASIL", "FABBER", "VABY"]}
+                      value={dataPar.ExternalQuantificationType ?? null}
+                      onChange={(v) => onFieldChange("ExternalQuantificationType", v)}
+                      placeholder={FIELD_METADATA.ExternalQuantificationType.defaultHint}
+                      data-testid="field-ExternalQuantificationType"
+                    />
+
+                    <Stack gap={4}>
+                      <Text size="sm" fw={500}>
+                        <DataParFieldLabel fieldKey="ExternalQuantificationSmoothGaussianMM" />
+                      </Text>
+                      <NumberTupleInput
+                        value={dataPar.ExternalQuantificationSmoothGaussianMM}
+                        onChange={(v) => onFieldChange("ExternalQuantificationSmoothGaussianMM", v)}
+                        labels={["LR", "AP", "IS"]}
+                        testId="field-ExternalQuantificationSmoothGaussianMM"
+                        integerOnly
+                        placeholder={[5, 5, 1]}
+                      />
+                    </Stack>
+
+                    <Select
+                      label={<DataParFieldLabel fieldKey="ExchBASIL" />}
+                      data={[
+                        { value: "mix", label: "Well-mixed single compartment" },
+                        {
+                          value: "simple",
+                          label: "Simple single-compartment model with T1 of blood",
+                        },
+                        {
+                          value: "2cpt",
+                          label: "Two-compartment model following Parkes & Tofts (2002)",
+                        },
+                        { value: "spa", label: "Single-pass approximation from St. Lawrence" },
+                      ]}
+                      value={dataPar.ExchBASIL ?? null}
+                      onChange={(v) => onFieldChange("ExchBASIL", v)}
+                      placeholder={FIELD_METADATA.ExchBASIL.defaultHint}
+                      data-testid="field-ExchBASIL"
+                    />
+
+                    <Select
+                      label={<DataParFieldLabel fieldKey="DispBASIL" />}
+                      data={[
+                        { value: "none", label: "None" },
+                        { value: "gamma", label: "Gamma distribution" },
+                        { value: "gauss", label: "Gaussian distribution" },
+                        { value: "sgauss", label: "Spatially-derived Gaussian distribution" },
+                      ]}
+                      value={dataPar.DispBASIL ?? null}
+                      onChange={(v) => onFieldChange("DispBASIL", v)}
+                      placeholder={FIELD_METADATA.DispBASIL.defaultHint}
+                      data-testid="field-DispBASIL"
+                    />
+
+                    <NumberInput
+                      label={<DataParFieldLabel fieldKey="ATTSDBASIL" />}
+                      placeholder={FIELD_METADATA.ATTSDBASIL.defaultHint}
+                      value={dataPar.ATTSDBASIL}
+                      onChange={(v) => onFieldChange("ATTSDBASIL", v === "" ? undefined : v)}
+                      data-testid="field-ATTSDBASIL"
+                    />
+                  </SimpleGrid>
+
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                    {EXTERNAL_TOGGLE_FIELDS.map((key) => (
+                      <Group key={key} gap="xs" align="center" style={{ minHeight: "32px" }}>
+                        <Switch
+                          id={`switch-${key}`}
+                          checked={dataPar[key] ?? false}
+                          onChange={(e) => onFieldChange(key, e.currentTarget.checked)}
+                          data-testid={`field-${key}`}
+                        />
+                        <DataParFieldLabel fieldKey={key} htmlFor={`switch-${key}`} />
+                      </Group>
+                    ))}
+                  </SimpleGrid>
+                </Stack>
+              )}
+            </Stack>
+          </Paper>
+        </Stack>
       )}
     </Stack>
   );

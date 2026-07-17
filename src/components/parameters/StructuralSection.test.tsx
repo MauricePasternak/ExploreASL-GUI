@@ -42,7 +42,7 @@ describe("StructuralSection", () => {
 
   it("renders bRunDARTEL toggle", () => {
     renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/dartel registration/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/dartel/i).length).toBeGreaterThan(0);
   });
 
   it("renders WMHsegmAlg select", () => {

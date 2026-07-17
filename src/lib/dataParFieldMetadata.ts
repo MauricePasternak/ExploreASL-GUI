@@ -96,7 +96,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   M0_conventionalProcessing: {
-    label: "Conventional M0 processing",
+    label: "Legacy / Conventional M0 calibration",
     description:
       "Enable legacy (conventional) processing of the M0 calibration scan instead of the newer standard pipeline.",
     default: 0,
@@ -106,7 +106,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   RepetitionTimePreparationM0: {
-    label: "TR of M0 preparation",
+    label: "M0 repetition time (TR)",
     description:
       "The repetition time (TR) of the M0 preparation scan (in seconds), which is used to correct for T1 relaxation effects.",
     default: [],
@@ -118,7 +118,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
 
   // === quantification ===
   nCompartments: {
-    label: "Number of compartments",
+    label: "Tissue compartment kinetic model",
     description:
       "The number of physical/tissue compartments modeled in the kinetic quantification. Usually set to 1 (single-compartment model).",
     default: 1,
@@ -128,7 +128,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "select",
   },
   Lambda: {
-    label: "Blood-brain partition coefficient",
+    label: "Blood-brain partition coefficient (λ)",
     description:
       "The blood-brain partition coefficient (water solubility ratio between brain tissue and blood). Standard value is 0.9 mL/g.",
     default: 0.9,
@@ -250,7 +250,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     condition: isExternalQuant,
   },
   bSpatialBASIL: {
-    label: "Spatial BASIL",
+    label: "Spatial regularization (BASIL)",
     description:
       "Enable spatial regularization/smoothing in the BASIL model to improve signal coherence across neighboring voxels.",
     default: false,
@@ -418,7 +418,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   bTopUp: {
-    label: "FSL TopUp",
+    label: "FSL Topup distortion correction",
     description:
       "Enable FSL TopUp distortion correction if a calibration scan with reversed phase encoding direction is available.",
     default: false,
@@ -428,7 +428,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   bPVCNativeSpace: {
-    label: "Partial volume correction (native)",
+    label: "Native-space partial volume correction (PVC)",
     description:
       "Correct for partial volume effects (mixing of grey matter, white matter, and CSF within a voxel) in native space before standardizing the images.",
     default: 0,
@@ -438,7 +438,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   bPVCGaussianMM: {
-    label: "PVC kernel type",
+    label: "PVC smoothing kernel shape",
     description: "Select the type of kernel used for partial volume correction.",
     default: 0,
     defaultHint: "0",
@@ -489,7 +489,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "number",
   },
   bRegistrationContrast: {
-    label: "Registration contrast source",
+    label: "ASL-to-Structural registration contrast",
     description:
       "Select the image contrast type for aligning the ASL scans to structural anatomical scans.",
     default: 2,
@@ -529,19 +529,19 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   bHct2BloodT1: {
-    label: "Hct to blood T1 conversion",
+    label: "Blood T1 relaxation estimation method",
     description:
-      "Choose the formula/relationship used to calculate arterial blood T1 from hematocrit values (0 = Standard literature assumption, 1 = Alternative/custom clinical formula).",
+      'Configure hematocrit estimation and its influence on blood T1:\n• Default: Disable hematocrit estimation and any subsequent influence on blood T1.\n• Provided Hct: To use provided hematocrit data per subject present as the column "hematocrit" (case-sensitive) in participants.tsv and subsequently calculate the influence on blood T1.\n• Age & Sex: To derive hematocrit data using age and sex information from "age" and "sex" (values "male" or "female" within) columns (case-sensitive) in participants.tsv, and subsequently calculate the influence on blood T1.',
     default: 0,
-    defaultHint: "0",
+    defaultHint: "Disabled (use fixed blood T1)",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
   },
   ApplyQuantification: {
-    label: "Apply quantification",
+    label: "Apply quantification steps",
     description:
-      "Determine which scaling, calibration, and division steps to execute during the quantification of cerebral blood flow maps.",
+      "Select which scaling, calibration, and division steps to execute during CBF quantification:\n• 1) Apply pixel intensity scaling to ASL timeseries\n• 2) Apply pixel intensity scaling to M0 image\n• 3) Convert perfusion-weighted signal to label volume\n• 4) Calibrate M0 intensity (correct T1 relaxation)\n• 5) Divide perfusion signal by M0\n• 6) Apply global scaling factors to final CBF map",
     default: [1, 1, 1, 1, 1, 1],
     defaultHint: "1, 1, 1, 1, 1, 1",
     section: "aslProcessing",
@@ -563,7 +563,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   TissueMasking: {
     label: "Tissue masking",
     description:
-      "The target tissue type (Grey Matter, White Matter, CSF, or combined) to mask regional analysis to for each selected atlas.",
+      "Atlas ROI regions are typically imperfect in covering their tissues of interest. Therefore, ExploreASL employs an additional filter criteria where ROI values will be derived from the intersection of the atlas ROI and a tissue mask (GM, WM, CSF, or combined) defined by the tissue value(s) summing to the indicated threshold.",
     default: ["GM", "WM"],
     defaultHint: "GM, WM",
     section: "atlases",
@@ -573,7 +573,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   TissueThreshold: {
     label: "Tissue probability threshold",
     description:
-      "The minimum probability threshold (0.0 to 1.0) required for a voxel to be classified as grey matter, white matter, or CSF in the atlas mask.",
+      "Minimum tissue probability threshold (0.0 to 1.0) for atlas ROI masking. Voxels are included if the summed probabilities of the specified tissue type(s) meet or exceed this value (e.g., selecting GM+WM with 0.7 means all voxels where the summed probabilities of grey or white matter add up to 70% or more are considered).",
     default: [0.7, 0.7],
     defaultHint: "0.7, 0.7",
     section: "atlases",
@@ -581,7 +581,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "number",
   },
   bMasking: {
-    label: "ROI masking",
+    label: "Subject-specific ROI exclusion masks",
     description:
       "Select which subject-specific masks to apply to regional analyses: Susceptibility masking (removes artifacts/signal dropouts), Vascular masking (removes large blood vessels), Tissue-masking (limits ROIs to GM/WM/CSF tissue), or WholeBrain masking (reduces memory usage).",
     default: [1, 1, 1, 1],
@@ -601,7 +601,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "number",
   },
   bWMH: {
-    label: "White-matter hyperintensity analysis",
+    label: "WMH lesion detection & regional analysis",
     description:
       "Enable automated detection, segmentation, and regional analysis of white-matter hyperintensities (lesions).",
     default: false,
@@ -623,7 +623,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
 
   // === structural ===
   bRunLongReg: {
-    label: "Longitudinal registration",
+    label: "Multi-visit longitudinal registration",
     description:
       "Enable specialized longitudinal registration to register and track anatomical changes across multiple timepoints/scans per subject.",
     default: 0,
@@ -633,7 +633,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   bRunDARTEL: {
-    label: "DARTEL registration",
+    label: "DARTEL high-dimensional MNI normalization",
     description:
       "Enable DARTEL (SPM's high-dimensional diffeomorphic registration) to align brains more accurately to standard MNI space.",
     default: 0,

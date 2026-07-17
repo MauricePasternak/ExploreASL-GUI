@@ -47,7 +47,7 @@ describe("AtlasSelect", () => {
     expect(screen.getByTestId("mock-multiselect")).toBeInTheDocument();
   });
 
-  it("shows paired rows for selected atlases", () => {
+  it("shows paired rows with info tooltips for selected atlases", () => {
     renderWithMantine(
       <AtlasSelect
         atlases={["Total"]}
@@ -60,6 +60,8 @@ describe("AtlasSelect", () => {
     );
 
     expect(screen.getAllByText(/whole brain grey and white/i).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Info for Tissue Masking (Total)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Info for Tissue Threshold (Total)")).toBeInTheDocument();
   });
 
   it("adds default masking and threshold when atlas is added", () => {

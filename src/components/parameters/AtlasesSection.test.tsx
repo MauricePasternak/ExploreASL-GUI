@@ -72,14 +72,14 @@ describe("AtlasesSection", () => {
     renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/minimal roi volume/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/white-matter hyperintensity/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/wmh lesion detection/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/data types/i).length).toBeGreaterThan(0);
   });
 
   it("renders bMasking checkboxes when advanced is on", () => {
     renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     clickSwitch(/show advanced/i);
-    expect(screen.getAllByText(/roi masking/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/roi exclusion masks/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/susceptibility mask/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/vascular mask/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/wholebrain/i).length).toBeGreaterThan(0);
@@ -99,7 +99,7 @@ describe("AtlasesSection", () => {
     const onFieldChange = vi.fn();
     renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />);
     clickSwitch(/show advanced/i);
-    clickSwitch(/white-matter hyperintensity/i);
+    clickSwitch(/wmh lesion detection/i);
     expect(onFieldChange).toHaveBeenCalledWith("bWMH", expect.any(Boolean));
   });
 

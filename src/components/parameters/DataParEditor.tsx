@@ -82,7 +82,17 @@ export default function DataParEditor() {
         </Alert>
       )}
 
-      <Accordion multiple defaultValue={[]} variant="separated">
+      <Accordion
+        multiple
+        defaultValue={[]}
+        variant="separated"
+        styles={{
+          item: {
+            boxShadow: "var(--mantine-shadow-xs)",
+            borderRadius: "var(--mantine-radius-md)",
+          },
+        }}
+      >
         <Accordion.Item value="generalSettings" data-testid="accordion-item-generalSettings">
           <Accordion.Control>
             <Text fw={500} size="md">

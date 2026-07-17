@@ -253,12 +253,14 @@ describe("dataPar flow: PVC conditional logic", () => {
   it("PVC toggle renders in ASL Processing section", () => {
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
-    expect(w.getAllByText(/partial volume correction/i).length).toBeGreaterThanOrEqual(1);
+    expect(w.getAllByText(/native-space partial volume correction/i).length).toBeGreaterThanOrEqual(
+      1,
+    );
   });
 
   it("bPVCNativeSpace field is set in store via toggle", () => {
     const { container } = renderWithMantine(<DataParEditor />);
-    clickSwitchByLabel(container, /partial volume correction/i);
+    clickSwitchByLabel(container, /native-space partial volume correction/i);
     expect(useDataParStore.getState().dataPar.bPVCNativeSpace).toBeDefined();
   });
 });

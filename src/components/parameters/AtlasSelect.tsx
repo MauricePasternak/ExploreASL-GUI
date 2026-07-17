@@ -1,6 +1,11 @@
 import { MultiSelect, Select, NumberInput, Group, Text, Stack } from "@mantine/core";
 
-import { ATLAS_OPTIONS, ATLAS_DISPLAY_LABELS } from "../../lib/dataParFieldMetadata";
+import {
+  ATLAS_OPTIONS,
+  ATLAS_DISPLAY_LABELS,
+  FIELD_METADATA,
+} from "../../lib/dataParFieldMetadata";
+import { FieldInfoIcon } from "../common/FieldInfoIcon";
 
 const TISSUE_MASKING_OPTIONS = [
   { value: "GM", label: "GM" },
@@ -92,31 +97,43 @@ export function AtlasSelect({
         <Group key={atlas} gap="xs" align="center" wrap="nowrap">
           <Text
             size="sm"
-            w={260}
+            w={240}
             fw={500}
             style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}
           >
             {ATLAS_DISPLAY_LABELS[atlas] ?? atlas}
           </Text>
-          <Select
-            data={TISSUE_MASKING_OPTIONS}
-            value={tissueMasking[idx] ?? (atlas === "DeepWM" ? "WM" : "GM")}
-            onChange={(v) => v && updateMasking(idx, v)}
-            placeholder="Tissue masking"
-            size="xs"
-            w={130}
-            data-testid={`field-TissueMasking-${atlas}`}
-          />
-          <NumberInput
-            value={tissueThreshold[idx] ?? 0.7}
-            onChange={(v) => updateThreshold(idx, v ?? 0.7)}
-            step={0.1}
-            min={0}
-            max={1}
-            size="xs"
-            w={110}
-            data-testid={`field-TissueThreshold-${atlas}`}
-          />
+          <Group gap={4} align="center" wrap="nowrap">
+            <Select
+              data={TISSUE_MASKING_OPTIONS}
+              value={tissueMasking[idx] ?? (atlas === "DeepWM" ? "WM" : "GM")}
+              onChange={(v) => v && updateMasking(idx, v)}
+              placeholder="Tissue masking"
+              size="xs"
+              w={120}
+              data-testid={`field-TissueMasking-${atlas}`}
+            />
+            <FieldInfoIcon
+              tooltipLabel={FIELD_METADATA.TissueMasking.description}
+              aria-label={`Info for Tissue Masking (${atlas})`}
+            />
+          </Group>
+          <Group gap={4} align="center" wrap="nowrap">
+            <NumberInput
+              value={tissueThreshold[idx] ?? 0.7}
+              onChange={(v) => updateThreshold(idx, v ?? 0.7)}
+              step={0.1}
+              min={0}
+              max={1}
+              size="xs"
+              w={100}
+              data-testid={`field-TissueThreshold-${atlas}`}
+            />
+            <FieldInfoIcon
+              tooltipLabel={FIELD_METADATA.TissueThreshold.description}
+              aria-label={`Info for Tissue Threshold (${atlas})`}
+            />
+          </Group>
         </Group>
       ))}
     </Stack>

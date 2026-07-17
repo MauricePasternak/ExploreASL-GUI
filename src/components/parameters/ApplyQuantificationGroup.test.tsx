@@ -61,7 +61,9 @@ describe("ApplyQuantificationGroup", () => {
   it("renders correct labels", () => {
     renderWithMantine(<ApplyQuantificationGroup value={[1, 1, 1, 1, 1, 1]} onChange={() => {}} />);
 
-    expect(screen.getAllByText("Apply ScaleSlopes ASL4D").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Perform division by M0").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Apply pixel intensity scaling to ASL timeseries").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Divide perfusion signal by M0").length).toBeGreaterThan(0);
   });
 });

@@ -36,6 +36,6 @@ describe("DataParFieldLabel", () => {
       </MantineProvider>,
     );
 
-    expect(screen.getByText("Blood-brain partition coefficient")).toBeInTheDocument();
+    expect(screen.getByText("Blood-brain partition coefficient (λ)")).toBeInTheDocument();
   });
 });

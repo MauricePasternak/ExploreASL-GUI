@@ -124,8 +124,8 @@ describe("M0Section", () => {
   it("shows advanced fields when advanced is toggled on", () => {
     renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     clickSwitch(/show advanced/i);
-    expect(screen.getAllByText(/conventional m0 processing/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/tr of m0 preparation/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/conventional m0/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/m0 repetition time/i).length).toBeGreaterThan(0);
   });
 
   it("calls onFieldChange when bRegisterM02ASL is toggled", () => {

@@ -30,7 +30,14 @@ export function PremiumTooltip({
   const tooltipContent = hasIcon ? (
     <Group gap="xs" align="flex-start" wrap="nowrap" style={{ display: "inline-flex" }}>
       <IconInfoCircle size={16} color={infoIconColor} style={{ marginTop: 2, flexShrink: 0 }} />
-      <div style={{ flex: 1, fontSize: "var(--mantine-font-size-xs)", lineHeight: 1.4 }}>
+      <div
+        style={{
+          flex: 1,
+          fontSize: "var(--mantine-font-size-xs)",
+          lineHeight: 1.4,
+          whiteSpace: "pre-line",
+        }}
+      >
         {label}
       </div>
     </Group>

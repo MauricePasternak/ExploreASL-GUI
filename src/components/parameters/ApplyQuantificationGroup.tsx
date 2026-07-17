@@ -2,13 +2,13 @@ import { Checkbox, Group, Stack, Text } from "@mantine/core";
 
 import { DataParFieldLabel } from "./DataParFieldLabel";
 
-const LABELS = [
-  "Apply ScaleSlopes ASL4D",
-  "Apply ScaleSlopes M0",
-  "Convert PWI a.u. to label",
-  "Quantify M0 a.u.",
-  "Perform division by M0",
-  "Apply all scaling",
+const QUANTIFICATION_STEP_LABELS = [
+  "Apply pixel intensity scaling to ASL timeseries",
+  "Apply pixel intensity scaling to M0 image",
+  "Convert perfusion-weighted signal to label volume",
+  "Calibrate M0 intensity (correct T1 relaxation)",
+  "Divide perfusion signal by M0",
+  "Apply global scaling factors to final CBF map",
 ];
 
 interface ApplyQuantificationGroupProps {
@@ -44,13 +44,13 @@ export function ApplyQuantificationGroup({ value, onChange }: ApplyQuantificatio
           data-testid="toggle-all-apply-quantification"
         />
       </Group>
-      {LABELS.map((label, i) => (
+      {QUANTIFICATION_STEP_LABELS.map((label, i) => (
         <Checkbox
           key={label}
           label={label}
           checked={effective[i] === 1}
           onChange={() => toggle(i)}
-          data-testid={`checkbox-applyQuantification-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+          data-testid={`checkbox-applyQuantification-${i}`}
         />
       ))}
     </Stack>

@@ -62,7 +62,7 @@ describe("QuantificationSection", () => {
     renderWithMantine(
       <QuantificationSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
     );
-    expect(screen.getAllByText(/number of compartments/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/tissue compartment/i).length).toBeGreaterThan(0);
   });
 
   it("renders Show advanced toggle", () => {
@@ -91,7 +91,7 @@ describe("QuantificationSection", () => {
     );
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/external quantification type/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/spatial basil/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/spatial regularization/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/basil exchange/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/bolus dispersion/i).length).toBeGreaterThan(0);
   });
