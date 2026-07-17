@@ -180,11 +180,21 @@ describe("generateMethodsParagraph", () => {
     expect(text).toContain("prior standard deviation assumption of 1.5");
   });
 
-  it("includes native quantification hematocrit modifier", () => {
+  it("includes native quantification hematocrit modifier for provided Hct (option 1)", () => {
     const result = generateMethodsParagraph(fullState({ bHct2BloodT1: 1 }));
-    expect(result.paragraphs.join(" ")).toContain("individual hematocrit values");
-    expect(result.references).toContain(REFERENCE_DICTIONARY["Hales 2016"]);
-    expect(result.references).toContain(REFERENCE_DICTIONARY["Vaclavu 2016"]);
+    expect(result.paragraphs.join(" ")).toContain(
+      "individual hematocrit values present in the participants.tsv file",
+    );
+    expect(result.references).toContain(REFERENCE_DICTIONARY["Hales 2015"]);
+  });
+
+  it("includes native quantification hematocrit modifier for derived age and sex Hct (option 2)", () => {
+    const result = generateMethodsParagraph(fullState({ bHct2BloodT1: 2 }));
+    expect(result.paragraphs.join(" ")).toContain(
+      "derived from age and sex data present in the participants.tsv file",
+    );
+    expect(result.references).toContain(REFERENCE_DICTIONARY["Hales 2015"]);
+    expect(result.references).toContain(REFERENCE_DICTIONARY["NCHS 1967"]);
   });
 
   it("includes PVC paragraph when enabled", () => {

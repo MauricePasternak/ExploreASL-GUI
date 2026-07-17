@@ -23,8 +23,10 @@ export const REFERENCE_DICTIONARY: Record<string, string> = {
     "Gaser, C. (2009). Partial volume segmentation with adaptive maximum a posteriori (MAP) approach. NeuroImage, 47(1), S39–S41.",
   "Gorgolewski 2016":
     "Gorgolewski, K. J., Auer, T., Calhoun, V. D., Craddock, R. C., Das, S., Duff, E. P., Flandin, G., et al. (2016). The brain imaging data structure, a format for organizing and describing outputs of neuroimaging experiments. Scientific Data, 3, 160044.",
+  "Hales 2015":
+    "Hales, P. W., Kirkham, F. J., & Clark, C. A. (2015). A general model to calculate the spin-lattice (T1) relaxation time of blood, accounting for haematocrit, oxygen saturation and magnetic field strength. Journal of Cerebral Blood Flow & Metabolism, 36(2), 370–374.",
   "Hales 2016":
-    "Hales, P. W., tissue, F. J., & Clark, C. A. (2016). A general model to calculate the spin-lattice (T1) relaxation time of blood, accounting for haematocrit, oxygen saturation and magnetic field strength. J. Cereb. Blood Flow Metab. 36(2), 370–374.",
+    "Hales, P. W., Kirkham, F. J., & Clark, C. A. (2015). A general model to calculate the spin-lattice (T1) relaxation time of blood, accounting for haematocrit, oxygen saturation and magnetic field strength. Journal of Cerebral Blood Flow & Metabolism, 36(2), 370–374.",
   "Li 2016":
     "Li, X., Morgan, P. S., Ashburner, J., Smith, J., & Rorden, C. (2016). The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods, 264, 47–56.",
   "Maumet 2012":
@@ -33,6 +35,8 @@ export const REFERENCE_DICTIONARY: Record<string, string> = {
     "Mutsaerts, H. J. M. M., Petr, J., Thomas, D. L., De Vita, E., Cash, D. M., van Osch, M. J. P., Golay, X., et al. (2018). Comparison of arterial spin labeling registration strategies in the multi-center GENetic frontotemporal Dementia initiative (GENFI). Journal of Magnetic Resonance Imaging, 47(1), 131–140.",
   "Mutsaerts 2020":
     "Mutsaerts, H. J. M. M., Petr, J., Groot, P., Vandemaele, P., Ingala, S., Robertson, A. D., ... & Barkhof, F. (2020). ExploreASL: An image processing pipeline for multi-center ASL perfusion MRI studies. NeuroImage, 219, 117031.",
+  "NCHS 1967":
+    "National Center for Health Statistics (U.S.). (1967). Mean blood hematocrit of adults; United States, 1960-1962. Vital and Health Statistics, Series 11, No. 24.",
   "Oliver 2015":
     "Oliver, R. A. (2015). Improved Quantification of Arterial Spin Labelling Images Using Partial Volume Correction Techniques. UCL (University College London).",
   "Petr 2018a":
@@ -364,11 +368,19 @@ function generateArtifact4(state: DataParState, refs: Set<string>): string {
     refs.add("Alsop 2015");
     let quantText = `Cerebral blood flow (CBF) was quantified using ExploreASL's native implementation of the recommended ${compartments} model (Alsop et al., 2015). Assumed physiological parameters included a blood-brain partition coefficient of ${lambda} mL/g, arterial blood T1 of ${t1blood} ms, and gray matter T1 of ${t1gm} ms.`;
 
-    if ((state.bHct2BloodT1 ?? 0) > 0) {
-      refs.add("Hales 2016");
-      refs.add("Vaclavu 2016");
+    if (state.bHct2BloodT1 === 1) {
+      refs.add("Hales 2015");
       quantText +=
-        " To avoid CBF overestimation, arterial blood T1 was dynamically computed based on individual hematocrit values rather than assuming a fixed literature baseline (Hales et al., 2016; Vaclavu et al., 2016).";
+        " Arterial blood T1 was dynamically adjusted for each subject based on individual hematocrit values present in the participants.tsv file (Hales et al., 2015).";
+    } else if (state.bHct2BloodT1 === 2) {
+      refs.add("Hales 2015");
+      refs.add("NCHS 1967");
+      quantText +=
+        " Arterial blood T1 was dynamically adjusted for each subject based on hematocrit values derived from age and sex data present in the participants.tsv file (National Center for Health Statistics, 1967; Hales et al., 2015).";
+    } else if ((state.bHct2BloodT1 ?? 0) > 0) {
+      refs.add("Hales 2015");
+      quantText +=
+        " Arterial blood T1 was dynamically adjusted for each subject based on individual hematocrit values present in the participants.tsv file (Hales et al., 2015).";
     }
     sentences.push(quantText);
   }
