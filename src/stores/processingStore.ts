@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { invoke } from "@tauri-apps/api/core";
 
 import type {
   ProcessConfig,
@@ -173,7 +174,6 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
 
         versionCapture = (async () => {
           try {
-            const { invoke } = await import("@tauri-apps/api/core");
             const versions = await invoke<{ explore_asl: string; matlab: string }>(
               "capture_environment_versions",
               {
@@ -211,7 +211,6 @@ export const useProcessingStore = create<ProcessingState>((set) => ({
 
       if (dataSource === "bids") {
         set({ preparingMessage: "Checking dataset rawdata..." });
-        const { invoke } = await import("@tauri-apps/api/core");
         if (!explicitConfirm) {
           const result = await invoke<{
             warning: string | null;

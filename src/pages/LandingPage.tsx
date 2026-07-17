@@ -5,6 +5,7 @@ import { Button, Divider, Group, Image, Modal, Radio, Stack, Text, Alert } from 
 import { IconAlertTriangle, IconFolderOpen, IconPlus } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
+import { homeDir } from "@tauri-apps/api/path";
 import { useNavigate, useOutletContext } from "react-router";
 
 import { PROJECT_FILE_NAME } from "../schemas/project";
@@ -103,7 +104,6 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       }
       if (!defaultPath) {
         try {
-          const { homeDir } = await import("@tauri-apps/api/path");
           defaultPath = await homeDir();
         } catch (err) {
           console.error("Failed to get home directory:", err);
@@ -339,7 +339,6 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       }
       if (!defaultPath) {
         try {
-          const { homeDir } = await import("@tauri-apps/api/path");
           defaultPath = await homeDir();
         } catch (err) {
           console.error("Failed to get home directory:", err);
