@@ -10,7 +10,7 @@ use crate::import::AppState;
 use crate::tracing::CommandTrace;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -30,7 +30,12 @@ fn write_data_par_json(project_root: &Path, data_par_json: &str) -> Result<(), S
 }
 
 fn spawn_matlab_processing_process(matlab_path: &str, batch: &str) -> std::io::Result<Child> {
-    let mut command = Command::new(matlab_path);
+    log::info!(
+        "[PIPELINE] Spawning MATLAB process: {} with batch: {}",
+        matlab_path,
+        batch
+    );
+    let mut command = crate::apptainer::create_system_command(matlab_path);
     command
         .arg("-batch")
         .arg(batch)
@@ -89,7 +94,12 @@ fn spawn_apptainer_processing_process(
     apptainer_path: &str,
     args: &[String],
 ) -> std::io::Result<Child> {
-    let mut command = Command::new(apptainer_path);
+    log::info!(
+        "[PIPELINE] Spawning Apptainer processing process: {} args: {:?}",
+        apptainer_path,
+        args
+    );
+    let mut command = crate::apptainer::create_system_command(apptainer_path);
     command
         .args(args)
         .stdin(Stdio::null())

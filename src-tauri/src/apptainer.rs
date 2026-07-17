@@ -195,54 +195,189 @@ pub(crate) fn format_apptainer_label(binary: &Path, version: Option<&str>) -> St
     }
 }
 
+fn is_appimage_path(path: &str) -> bool {
+    path.contains("/.mount_") || path.contains("/tmp/.mount_")
+}
+
+pub(crate) fn sanitize_ld_library_path(ld_path: &str, appdir: Option<&str>) -> Vec<String> {
+    env::split_paths(ld_path)
+        .filter_map(|p| p.to_str().map(String::from))
+        .filter(|p| {
+            if is_appimage_path(p) {
+                return false;
+            }
+            if let Some(ad) = appdir
+                && p.starts_with(ad)
+            {
+                return false;
+            }
+            true
+        })
+        .collect()
+}
+
+pub(crate) fn should_redirect_cwd(cwd: &str, appdir: Option<&str>) -> bool {
+    is_appimage_path(cwd) || appdir.is_some_and(|ad| cwd.starts_with(ad))
+}
+
+pub(crate) fn sanitize_command_env(command: &mut Command) {
+    if let Ok(ld_path) = env::var("LD_LIBRARY_PATH") {
+        let appdir = env::var("APPDIR").ok();
+        let sanitized = sanitize_ld_library_path(&ld_path, appdir.as_deref());
+
+        if sanitized.is_empty() {
+            log::debug!("[AppImage] Stripped AppImage paths from LD_LIBRARY_PATH (now empty)");
+            command.env_remove("LD_LIBRARY_PATH");
+        } else {
+            match env::join_paths(sanitized.iter().map(Path::new)) {
+                Ok(new_ld) => {
+                    log::debug!("[AppImage] Sanitized LD_LIBRARY_PATH: {:?}", new_ld);
+                    command.env("LD_LIBRARY_PATH", new_ld);
+                }
+                Err(_) => {
+                    log::warn!(
+                        "[AppImage] join_paths failed for sanitized LD_LIBRARY_PATH; removing variable"
+                    );
+                    command.env_remove("LD_LIBRARY_PATH");
+                }
+            }
+        }
+    }
+
+    if let Ok(ld_preload) = env::var("LD_PRELOAD")
+        && is_appimage_path(&ld_preload)
+    {
+        log::debug!("[AppImage] Removed AppImage LD_PRELOAD");
+        command.env_remove("LD_PRELOAD");
+    }
+}
+
+pub(crate) fn create_system_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    let mut command = Command::new(program);
+    sanitize_command_env(&mut command);
+
+    if let Ok(cwd) = env::current_dir() {
+        let cwd_str = cwd.to_string_lossy();
+        let appdir = env::var("APPDIR").ok();
+        if should_redirect_cwd(&cwd_str, appdir.as_deref()) {
+            log::debug!(
+                "[AppImage] Changing command working directory from AppImage mount {:?} to temp_dir {:?}",
+                cwd,
+                env::temp_dir()
+            );
+            command.current_dir(env::temp_dir());
+        }
+    } else {
+        command.current_dir(env::temp_dir());
+    }
+
+    command
+}
+
 pub(crate) fn detect_apptainer_version(
     apptainer_path: &str,
     sif_path: &Path,
 ) -> Result<String, String> {
-    let mut command = Command::new(apptainer_path);
+    log::info!(
+        "[APPTAINER] Detecting ExploreASL version for SIF: {} using executable: {}",
+        sif_path.display(),
+        apptainer_path
+    );
+
+    let mut command = create_system_command(apptainer_path);
+    command.current_dir(env::temp_dir());
     command.args([
         "exec",
+        "--cleanenv",
         &sif_path.to_string_lossy(),
         "ls",
         "/opt/xasl/xASL_latest/",
     ]);
 
-    let output = run_command_with_timeout(command, Duration::from_secs(5))
-        .map_err(|error| format!("Version detection timed out or failed: {error}"))?;
+    let output = run_command_with_timeout(command, Duration::from_secs(5)).map_err(|error| {
+        let msg = format!("Version detection timed out or failed: {error}");
+        log::error!("[APPTAINER] {msg}");
+        msg
+    })?;
+
     if !output.status.success() {
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
+        log::error!(
+            "[APPTAINER] exec failed inside SIF. Exit status: {}. stdout: {:?}, stderr: {:?}",
+            output.status,
+            stdout_str,
+            stderr_str
+        );
+        let detail = if stderr_str.trim().is_empty() {
+            format!("{}", output.status)
+        } else {
+            format!("{}: {}", output.status, stderr_str.trim())
+        };
         return Err(format!(
-            "Failed to run apptainer exec inside SIF: exit status {}",
-            output.status
+            "Failed to run apptainer exec inside SIF ({detail})"
         ));
     }
 
-    output
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let version = output
         .stdout
         .split(|byte| *byte == b'\n')
         .filter_map(|line| std::str::from_utf8(line).ok())
         .filter_map(|line| line.trim().strip_prefix("VERSION_"))
         .find(|version| !version.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| {
-            "Could not find VERSION_* file in container /opt/xasl/xASL_latest/".to_string()
-        })
+        .map(str::to_string);
+
+    match version {
+        Some(v) => {
+            log::info!("[APPTAINER] Successfully detected ExploreASL version: {v}");
+            Ok(v)
+        }
+        None => {
+            let msg = format!(
+                "Could not find VERSION_* file in container /opt/xasl/xASL_latest/. Container output was: {:?}",
+                stdout_str
+            );
+            log::error!("[APPTAINER] {msg}");
+            Err("Could not find VERSION_* file in container /opt/xasl/xASL_latest/".to_string())
+        }
+    }
 }
 
 pub(crate) fn validate_apptainer_executable(apptainer_path: &str) -> Result<(), String> {
-    let output = run_apptainer_version_command(Path::new(apptainer_path))
-        .map_err(|error| format!("Failed to run Apptainer executable: {error}"))?;
+    log::info!(
+        "[APPTAINER] Validating Apptainer executable: {}",
+        apptainer_path
+    );
+    let output = run_apptainer_version_command(Path::new(apptainer_path)).map_err(|error| {
+        let msg = format!("Failed to run Apptainer executable: {error}");
+        log::error!("[APPTAINER] {msg}");
+        msg
+    })?;
     if output.status.success() {
+        let version_str = String::from_utf8_lossy(&output.stdout);
+        log::info!(
+            "[APPTAINER] Executable validated successfully: {}",
+            version_str.trim()
+        );
         Ok(())
     } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::error!(
+            "[APPTAINER] Executable validation failed: status={}, stderr={:?}",
+            output.status,
+            stderr
+        );
         Err(format!(
-            "Apptainer executable failed --version with exit status {}",
+            "Apptainer executable failed --version with status {}",
             output.status
         ))
     }
 }
 
 fn run_apptainer_version_command(binary: &Path) -> Result<Output, String> {
-    let mut command = Command::new(binary);
+    let mut command = create_system_command(binary);
+    command.current_dir(env::temp_dir());
     command.arg("--version");
     run_command_with_timeout(command, Duration::from_secs(5))
 }
@@ -269,7 +404,7 @@ pub(crate) fn ensure_mcr_cache(
         cache_dir.display()
     );
 
-    let mut command = Command::new(apptainer_path);
+    let mut command = create_system_command(apptainer_path);
     command.args([
         "exec",
         "--cleanenv",

@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Component, Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::{Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -908,7 +908,12 @@ fn supervise_import_process(
 }
 
 fn spawn_matlab_import_process(matlab_path: &str, batch: &str) -> std::io::Result<Child> {
-    let mut command = Command::new(matlab_path);
+    log::info!(
+        "[IMPORT] Spawning MATLAB process: {} with batch: {}",
+        matlab_path,
+        batch
+    );
+    let mut command = crate::apptainer::create_system_command(matlab_path);
     command
         .arg("-batch")
         .arg(batch)
@@ -956,7 +961,12 @@ pub(crate) fn build_apptainer_import_args(staging_root: &Path, sif_path: &Path) 
 }
 
 fn spawn_apptainer_import_process(apptainer_path: &str, args: &[String]) -> std::io::Result<Child> {
-    let mut command = Command::new(apptainer_path);
+    log::info!(
+        "[IMPORT] Spawning Apptainer import process: {} args: {:?}",
+        apptainer_path,
+        args
+    );
+    let mut command = crate::apptainer::create_system_command(apptainer_path);
     command
         .args(args)
         .stdout(Stdio::piped())

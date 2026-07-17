@@ -70,6 +70,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       color: "red",
       title,
       message,
+      autoClose: 10000,
     });
   }
 

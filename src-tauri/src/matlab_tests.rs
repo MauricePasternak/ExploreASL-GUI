@@ -2,6 +2,7 @@ use super::*;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn get_test_temp_dir() -> tempfile::TempDir {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

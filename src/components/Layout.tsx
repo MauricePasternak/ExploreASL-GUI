@@ -84,6 +84,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         color: "red",
         title: "Failed to save project",
         message: err instanceof Error ? err.message : "ExploreASL GUI could not save your project.",
+        autoClose: 10000,
       });
     }
   }, [isDirty, project, saveProject]);
@@ -202,6 +203,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
             error instanceof Error
               ? error.message
               : "ExploreASL GUI could not save your project before leaving.",
+          autoClose: 10000,
         });
         return;
       }

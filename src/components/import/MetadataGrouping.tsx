@@ -207,6 +207,7 @@ export default function MetadataGrouping() {
           color: "red",
           title: `Validation Error in Group "${group.label}"`,
           message: errors.join(" "),
+          autoClose: 10000,
         });
         return;
       }

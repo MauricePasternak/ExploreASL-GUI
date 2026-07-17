@@ -108,6 +108,7 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
             color: "red",
             title: "Invalid execution profile",
             message: `Profile '${profile.label}' is invalid: ${errorSummary}. Fix it in Settings.`,
+            autoClose: 10000,
           });
         }
       }

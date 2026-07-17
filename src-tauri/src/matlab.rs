@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -201,7 +201,7 @@ fn detect_matlab_version_impl(binary: &Path) -> Option<String> {
 
 fn run_matlab_release(binary: &Path) -> Option<String> {
     log::info!("[COMMAND] which_matlab — executing {:?}", binary);
-    let output = match Command::new(binary)
+    let output = match crate::apptainer::create_system_command(binary)
         .args(["-batch", "disp(version('-release'))"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -358,7 +358,7 @@ pub fn probe_matlab_version(matlab_path: &Path) -> Result<String, String> {
 }
 
 fn run_matlab_full_version(binary: &Path) -> Option<String> {
-    let output = match Command::new(binary)
+    let output = match crate::apptainer::create_system_command(binary)
         .args(["-batch", "disp(version)"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

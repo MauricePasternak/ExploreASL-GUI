@@ -122,4 +122,62 @@ mod tests {
         assert_eq!(paths, vec![candidate]);
         let _ = fs::remove_dir_all(root);
     }
+
+    #[test]
+    fn sanitize_ld_library_path_strips_appimage_mounts() {
+        let appdir = "/tmp/.mount_TestAppImage123";
+        let ld = format!("{appdir}/usr/lib:/usr/local/lib:/opt/other/lib");
+
+        let result = sanitize_ld_library_path(&ld, Some(appdir));
+
+        assert_eq!(result, vec!["/usr/local/lib", "/opt/other/lib"]);
+    }
+
+    #[test]
+    fn sanitize_ld_library_path_strips_tmp_mount_prefixes() {
+        let ld = "/tmp/.mount_ABC/usr/lib:/usr/lib:/tmp/.mount_XYZ/lib";
+
+        let result = sanitize_ld_library_path(ld, None);
+
+        assert_eq!(result, vec!["/usr/lib"]);
+    }
+
+    #[test]
+    fn sanitize_ld_library_path_preserves_non_appimage_paths() {
+        let ld = "/usr/local/lib:/opt/cuda/lib64";
+
+        let result = sanitize_ld_library_path(ld, Some("/tmp/.mount_Foo"));
+
+        assert_eq!(result, vec!["/usr/local/lib", "/opt/cuda/lib64"]);
+    }
+
+    #[test]
+    fn sanitize_ld_library_path_returns_empty_when_all_stripped() {
+        let appdir = "/tmp/.mount_Only";
+        let ld = format!("{appdir}/lib:{appdir}/usr/lib");
+
+        let result = sanitize_ld_library_path(&ld, Some(appdir));
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn should_redirect_cwd_detects_appimage_mount() {
+        assert!(should_redirect_cwd("/tmp/.mount_Foo/app", None));
+        assert!(should_redirect_cwd("/home/user/.mount_Bar/bin", None));
+    }
+
+    #[test]
+    fn should_redirect_cwd_detects_appdir_prefix() {
+        assert!(should_redirect_cwd(
+            "/tmp/.mount_AppDir/subdir",
+            Some("/tmp/.mount_AppDir")
+        ));
+    }
+
+    #[test]
+    fn should_redirect_cwd_rejects_normal_paths() {
+        assert!(!should_redirect_cwd("/home/user/projects", None));
+        assert!(!should_redirect_cwd("/opt/bin", Some("/tmp/.mount_App")));
+    }
 }
