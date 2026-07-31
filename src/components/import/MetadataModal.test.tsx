@@ -218,7 +218,7 @@ describe("MetadataModal", () => {
         bidsParams: {
           ...validBidsParams,
           BackgroundSuppression: true,
-          BackgroundSuppressionNumberPulses: 4,
+          BackgroundSuppressionNumberPulses: 3,
         },
       },
     });
@@ -236,6 +236,55 @@ describe("MetadataModal", () => {
       },
     });
     expect(onSubmit.mock.calls[0][0].bidsParams).not.toHaveProperty("EchoTime");
+  });
+
+  it("supports completely clearing comma-delimited fields back to empty", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderModal({
+      initialValues: {
+        label: "Test Clear",
+        bidsParams: {
+          ...validBidsParams,
+          BackgroundSuppression: true,
+          BackgroundSuppressionNumberPulses: 3,
+          BackgroundSuppressionPulseTime: [1.465, 2.1, 2.6],
+        },
+      },
+    });
+
+    const input = testId("field-bg-suppression-pulse-time");
+    expect(input).toHaveValue("1.465, 2.1, 2.6");
+
+    fireEvent.change(input, { target: { value: "" } });
+    expect(input).toHaveValue("");
+
+    await user.click(testId("modal-save-btn"));
+    expect(onSubmit).toHaveBeenCalled();
+    expect(onSubmit.mock.calls[0][0].bidsParams).not.toHaveProperty(
+      "BackgroundSuppressionPulseTime",
+    );
+  });
+
+  it("displays validation error when background suppression pulse time count does not match number of pulses", async () => {
+    const user = userEvent.setup();
+    renderModal({
+      initialValues: {
+        label: "Test Mismatch",
+        bidsParams: {
+          ...validBidsParams,
+          BackgroundSuppression: true,
+          BackgroundSuppressionNumberPulses: 2,
+          BackgroundSuppressionPulseTime: [1.465, 2.1, 2.6],
+        },
+      },
+    });
+
+    await user.click(testId("modal-save-btn"));
+    expect(
+      screen.getByText(
+        /Background Suppression Pulse Time count \(3\) must match Background Suppression Number Pulses \(2\)/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("strips empty bidsParams keys on save", async () => {

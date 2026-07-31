@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button, Group, Modal, Stack, TextInput } from "@mantine/core";
+import { useEffect, useRef } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 
 import { BIDS_FIELD_HINTS, stripEmptyBidsParams } from "./metadataFieldHints";
@@ -33,10 +34,23 @@ export default function MetadataModal({
   const form = useForm<MetadataGroupFormValues>({
     resolver: zodResolver(MetadataGroupFormSchema) as Resolver<MetadataGroupFormValues>,
     defaultValues: initialValues,
-    values: initialValues,
   });
 
+  const prevOpenedRef = useRef(opened);
+  const prevInitialValuesRef = useRef(initialValues);
+
+  useEffect(() => {
+    const justOpened = opened && !prevOpenedRef.current;
+    const initialValuesChanged = opened && prevInitialValuesRef.current !== initialValues;
+    if (justOpened || initialValuesChanged) {
+      form.reset(initialValues);
+    }
+    prevOpenedRef.current = opened;
+    prevInitialValuesRef.current = initialValues;
+  }, [opened, initialValues, form]);
+
   const { control, register, handleSubmit, formState } = form;
+
   const aslType = useWatch({ control, name: "bidsParams.ArterialSpinLabelingType" });
   const mrAcquisitionType = useWatch({ control, name: "bidsParams.MRAcquisitionType" });
   const hasBackgroundSuppression = useWatch({

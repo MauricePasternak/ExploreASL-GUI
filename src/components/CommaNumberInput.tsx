@@ -7,6 +7,11 @@ import {
   parseNumberOrArray,
 } from "../lib/commaNumbers";
 
+function valueKey(v: unknown): string {
+  if (v === undefined) return "undefined";
+  return JSON.stringify(v);
+}
+
 export interface CommaNumberInputProps {
   label: React.ReactNode;
   description?: string;
@@ -30,17 +35,22 @@ export function CommaNumberInput({
     if (typeof value === "string") return value;
     return formatNumberOrArray(value);
   });
-  const [prevValue, setPrevValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+  const [prevValueKey, setPrevValueKey] = useState(() => valueKey(value));
 
-  if (value !== prevValue) {
-    setPrevValue(value);
-    const currentTextFormatted = typeof value === "string" ? value : formatNumberOrArray(value);
-    const parsedLocal = parseNumberOrArray(localText);
-    const parsedValue = typeof value === "string" ? parseNumberOrArray(value) : { ok: true, value };
-    const localValStr = parsedLocal.ok ? JSON.stringify(parsedLocal.value) : null;
-    const valueValStr = parsedValue.ok ? JSON.stringify(parsedValue.value) : null;
-    if (localValStr !== valueValStr) {
-      setLocalText(currentTextFormatted);
+  const currentKey = valueKey(value);
+  if (currentKey !== prevValueKey) {
+    setPrevValueKey(currentKey);
+    if (!isFocused) {
+      const currentTextFormatted = typeof value === "string" ? value : formatNumberOrArray(value);
+      const parsedLocal = parseNumberOrArray(localText);
+      const parsedValue =
+        typeof value === "string" ? parseNumberOrArray(value) : { ok: true, value };
+      const localValStr = parsedLocal.ok ? valueKey(parsedLocal.value) : "invalid";
+      const valueValStr = parsedValue.ok ? valueKey(parsedValue.value) : "invalid";
+      if (localValStr !== valueValStr) {
+        setLocalText(currentTextFormatted);
+      }
     }
   }
 
@@ -61,6 +71,14 @@ export function CommaNumberInput({
     }
   };
 
+  const handleFocus = () => {
+    setIsFocused(true);
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+  };
+
   return (
     <TextInput
       label={label}
@@ -68,6 +86,8 @@ export function CommaNumberInput({
       placeholder={placeholder}
       value={localText}
       onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
       error={error}
       data-testid={testId}
     />
@@ -97,18 +117,22 @@ export function CommaArrayInput({
     if (typeof value === "string") return value;
     return formatNumberArray(value);
   });
-  const [prevValue, setPrevValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+  const [prevValueKey, setPrevValueKey] = useState(() => valueKey(value));
 
-  if (value !== prevValue) {
-    setPrevValue(value);
-    const currentTextFormatted = typeof value === "string" ? value : formatNumberArray(value);
-    const parsedLocal = parseCommaSeparatedNumbers(localText);
-    const parsedValue =
-      typeof value === "string" ? parseCommaSeparatedNumbers(value) : { ok: true, value };
-    const localValStr = parsedLocal.ok ? JSON.stringify(parsedLocal.value) : null;
-    const valueValStr = parsedValue.ok ? JSON.stringify(parsedValue.value) : null;
-    if (localValStr !== valueValStr) {
-      setLocalText(currentTextFormatted);
+  const currentKey = valueKey(value);
+  if (currentKey !== prevValueKey) {
+    setPrevValueKey(currentKey);
+    if (!isFocused) {
+      const currentTextFormatted = typeof value === "string" ? value : formatNumberArray(value);
+      const parsedLocal = parseCommaSeparatedNumbers(localText);
+      const parsedValue =
+        typeof value === "string" ? parseCommaSeparatedNumbers(value) : { ok: true, value };
+      const localValStr = parsedLocal.ok ? valueKey(parsedLocal.value) : "invalid";
+      const valueValStr = parsedValue.ok ? valueKey(parsedValue.value) : "invalid";
+      if (localValStr !== valueValStr) {
+        setLocalText(currentTextFormatted);
+      }
     }
   }
 
@@ -129,6 +153,14 @@ export function CommaArrayInput({
     }
   };
 
+  const handleFocus = () => {
+    setIsFocused(true);
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+  };
+
   return (
     <TextInput
       label={label}
@@ -136,6 +168,8 @@ export function CommaArrayInput({
       placeholder={placeholder}
       value={localText}
       onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
       error={error}
       data-testid={testId}
     />

@@ -63,4 +63,39 @@ describe("CommaArrayInput", () => {
     fireEvent.change(input, { target: { value: "1, 2, 3" } });
     expect(handleChange).toHaveBeenCalledWith([1, 2, 3]);
   });
+
+  it("does not revert local text while input is focused during editing", () => {
+    const handleChange = vi.fn();
+    const { rerender } = renderWithMantine(
+      <CommaArrayInput label="Test Label" value={[2, 4]} onChange={handleChange} />,
+    );
+
+    const input = screen.getByRole("textbox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "4" } });
+    expect(handleChange).toHaveBeenCalledWith([4]);
+
+    // Rerender with initial prop value while focused (simulating form validation state fallback)
+    rerender(
+      <MantineProvider>
+        <CommaArrayInput label="Test Label" value={[2, 4]} onChange={handleChange} />
+      </MantineProvider>,
+    );
+    expect((input as HTMLInputElement).value).toBe("4");
+  });
+
+  it("does not revert local text on blur after clearing input", () => {
+    const handleChange = vi.fn();
+    renderWithMantine(
+      <CommaArrayInput label="Test Label" value={[2, 4]} onChange={handleChange} />,
+    );
+
+    const input = screen.getByRole("textbox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "" } });
+    expect(handleChange).toHaveBeenCalledWith(undefined);
+
+    fireEvent.blur(input);
+    expect((input as HTMLInputElement).value).toBe("");
+  });
 });

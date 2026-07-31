@@ -195,6 +195,20 @@ export default function MetadataGrouping() {
 
   const defaultGroup = metadataGroups.find((group) => group.id === DEFAULT_GROUP_ID) ?? null;
 
+  const modalInitialValues = useMemo(() => {
+    if (modalMode === "edit" && editingGroupId) {
+      const group = metadataGroups.find((g) => g.id === editingGroupId);
+      return {
+        label: group?.label ?? "",
+        bidsParams: group?.bidsParams ?? {},
+      };
+    }
+    return {
+      label: `Override ${metadataGroups.length}`,
+      bidsParams: {},
+    };
+  }, [modalMode, editingGroupId, metadataGroups]);
+
   function handleBack() {
     setActiveStep(2);
   }
@@ -436,19 +450,7 @@ export default function MetadataGrouping() {
         title={
           modalMode === "override" ? "Apply Override Metadata" : "Configure Default BIDS Metadata"
         }
-        initialValues={(() => {
-          if (modalMode === "edit" && editingGroupId) {
-            const group = metadataGroups.find((g) => g.id === editingGroupId);
-            return {
-              label: group?.label ?? "",
-              bidsParams: group?.bidsParams ?? {},
-            };
-          }
-          return {
-            label: `Override ${metadataGroups.length}`,
-            bidsParams: {},
-          };
-        })()}
+        initialValues={modalInitialValues}
         onClose={() => {
           setModalMode(null);
           setEditingGroupId(null);
