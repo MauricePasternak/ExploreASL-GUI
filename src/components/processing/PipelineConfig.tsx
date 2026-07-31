@@ -1,6 +1,5 @@
 import { Checkbox, Group, NumberInput, SimpleGrid, Stack, Text } from "@mantine/core";
-import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 
 import { FieldInfoIcon } from "../common/FieldInfoIcon";
 import ProfileSelector from "../common/ProfileSelector";
@@ -8,15 +7,7 @@ import ProfileSelector from "../common/ProfileSelector";
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useProcessingStore } from "../../stores/processingStore";
-
-const GB_PER_WORKER = 4;
-const MAX_DEFAULT_WORKERS = 4;
-
-function calcDefaultWorkers(cores: number, memMb: number): number {
-  const memGB = memMb / 1024;
-  const workersByMemory = Math.floor(memGB / GB_PER_WORKER);
-  return Math.min(workersByMemory, cores, MAX_DEFAULT_WORKERS);
-}
+import { useProcessingEnvironment } from "../../hooks/useProcessingEnvironment";
 
 export default function PipelineConfig() {
   const executionProfiles = useGlobalStore((s) => s.settings.executionProfiles);
@@ -24,22 +15,11 @@ export default function PipelineConfig() {
   const config = useProcessingStore((s) => s.config);
   const setConfig = useProcessingStore((s) => s.setConfig);
 
-  const [systemCores, setSystemCores] = useState(4);
-  const [defaultWorkers, setDefaultWorkers] = useState(4);
-
-  useEffect(() => {
-    Promise.all([invoke<number>("get_cpu_cores"), invoke<number>("get_available_memory_mb")])
-      .then(([cores, memMb]) => {
-        setSystemCores(cores);
-        setDefaultWorkers(calcDefaultWorkers(cores, memMb));
-      })
-      .catch((err) => {
-        console.warn("[PipelineConfig] Failed to query CPU/Memory, keeping defaults:", err);
-      });
-  }, []);
+  const { systemCores, defaultWorkers } = useProcessingEnvironment();
 
   useEffect(() => {
     if (config) return;
+    if (defaultWorkers === 0) return;
     const firstValid = executionProfiles.find(
       (profile) => profileValidationState[profile.id]?.valid === true,
     );
@@ -204,7 +184,7 @@ export default function PipelineConfig() {
           value={config.workers}
           onChange={handleWorkersChange}
           min={1}
-          max={systemCores}
+          max={systemCores || 4}
           clampBehavior="strict"
           data-testid="worker-count-input"
         />

@@ -12,7 +12,7 @@ import {
   IconSquareX,
 } from "@tabler/icons-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LogContent, LogFileInfo } from "../../lib/logViewer";
 import { fetchLogContent, fetchModuleLogs } from "../../lib/logViewer";
@@ -24,7 +24,8 @@ import LogViewerModal from "./LogViewerModal";
 import { fetchSubjectReports } from "../../lib/reportViewer";
 import ReportViewerModal from "./ReportViewerModal";
 import type { ModuleDisplayStatus } from "./SubjectSelection.helpers";
-import { resolveLogBadge, resolveModuleDisplay } from "./SubjectSelection.helpers";
+import { resolveLogBadge, resolveModuleDisplayFromIndex } from "./SubjectSelection.helpers";
+import { indexSubjectStatuses } from "./subjectStatusIndex";
 
 type FilterValue = "all" | "pending" | "incomplete" | "complete";
 
@@ -385,7 +386,7 @@ export default function SubjectSelection() {
         console.warn("[SubjectSelection] Failed to fetch module logs:", err);
         setLogFiles(new Map());
       });
-  }, [projectRoot, processingPhase]);
+  }, [projectRoot]);
 
   useEffect(() => {
     if (!projectRoot) return;
@@ -401,7 +402,7 @@ export default function SubjectSelection() {
         console.error("Failed to fetch reports list:", err);
         setExistingReports(new Set());
       });
-  }, [projectRoot, processingPhase]);
+  }, [projectRoot]);
 
   const structuralLogInfo = useMemo(() => {
     const map = new Map<string, LogFileInfo[]>();
@@ -475,13 +476,21 @@ export default function SubjectSelection() {
 
   const selectedSet = useMemo(() => new Set(config?.subjects ?? []), [config?.subjects]);
 
+  const statusIndex = useMemo(() => indexSubjectStatuses(subjectStatuses), [subjectStatuses]);
+
+  // Sort only when the subject roster changes — independent of status churn.
+  const sortedSubjects = useMemo(
+    () =>
+      [...availableSubjects].sort((a, b) =>
+        a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
+      ),
+    [availableSubjects],
+  );
+
   const rows: SubjectRow[] = useMemo(() => {
-    const sorted = [...availableSubjects].sort((a, b) =>
-      a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
-    );
-    return sorted.map((info) => {
-      const structural = resolveModuleDisplay(info, "structural", subjectStatuses);
-      const asl = resolveModuleDisplay(info, "asl", subjectStatuses);
+    return sortedSubjects.map((info) => {
+      const structural = resolveModuleDisplayFromIndex(info, "structural", statusIndex);
+      const asl = resolveModuleDisplayFromIndex(info, "asl", statusIndex);
       return {
         ...info,
         _selected: selectedSet.has(info.subjectSession),
@@ -492,7 +501,13 @@ export default function SubjectSelection() {
         _aslLogInfo: aslLogInfo.get(info.subjectSession),
       };
     });
-  }, [availableSubjects, subjectStatuses, selectedSet, structuralLogInfo, aslLogInfo]);
+  }, [sortedSubjects, statusIndex, selectedSet, structuralLogInfo, aslLogInfo]);
+
+  // Ref-sync: latest rows without putting rows in callback deps.
+  const rowsRef = useRef(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
 
   const filteredRows = useMemo(() => {
     if (filter === "all") return rows;
@@ -517,37 +532,34 @@ export default function SubjectSelection() {
   const handleSelectedRecordsChange = useCallback(
     (selected: SubjectRow[]) => {
       const selectedSessions = new Set(selected.map((r) => r.subjectSession));
-      const next = rows
+      const next = rowsRef.current
         .filter((r) => selectedSessions.has(r.subjectSession))
         .map((r) => r.subjectSession);
       updateSubjects(next);
     },
-    [rows, updateSubjects],
+    [updateSubjects],
   );
 
   const handleSelectAll = useCallback(() => {
-    const allSessions = rows.map((r) => r.subjectSession);
+    const allSessions = rowsRef.current.map((r) => r.subjectSession);
     updateSubjects(allSessions);
-  }, [rows, updateSubjects]);
+  }, [updateSubjects]);
 
   const handleDeselectAll = useCallback(() => {
     updateSubjects([]);
   }, [updateSubjects]);
 
-  const handleViewReport = useCallback(
-    (subjectSession: string, module: "structural" | "asl") => {
-      console.log(
-        `[SubjectSelection] Viewing reports for subjectSession: ${subjectSession}, module: ${module}`,
-      );
-      const row = rows.find((r) => r.subjectSession === subjectSession);
-      const runs = row?.aslRuns || [];
-      setReportModalSubjectSession(subjectSession);
-      setReportModalModule(module);
-      setReportModalRuns(runs);
-      setReportModalOpened(true);
-    },
-    [rows],
-  );
+  const handleViewReport = useCallback((subjectSession: string, module: "structural" | "asl") => {
+    console.log(
+      `[SubjectSelection] Viewing reports for subjectSession: ${subjectSession}, module: ${module}`,
+    );
+    const row = rowsRef.current.find((r) => r.subjectSession === subjectSession);
+    const runs = row?.aslRuns || [];
+    setReportModalSubjectSession(subjectSession);
+    setReportModalModule(module);
+    setReportModalRuns(runs);
+    setReportModalOpened(true);
+  }, []);
 
   const columns = useMemo(
     () =>
@@ -574,7 +586,7 @@ export default function SubjectSelection() {
       modalModule === "structural"
         ? structuralLogInfo.get(modalSubjectSession)
         : aslLogInfo.get(modalSubjectSession);
-    const row = rows.find((r) => r.subjectSession === modalSubjectSession);
+    const row = rowsRef.current.find((r) => r.subjectSession === modalSubjectSession);
     const moduleIncomplete =
       modalModule === "structural"
         ? row?._structuralStatus === "incomplete"
@@ -585,7 +597,7 @@ export default function SubjectSelection() {
       map[f.filename] = f.hasError || !!moduleIncomplete;
     }
     return map;
-  }, [modalModule, modalSubjectSession, structuralLogInfo, aslLogInfo, rows]);
+  }, [modalModule, modalSubjectSession, structuralLogInfo, aslLogInfo]);
 
   const statusCounts = useMemo(() => {
     const counts = { all: rows.length, pending: 0, incomplete: 0, complete: 0 };

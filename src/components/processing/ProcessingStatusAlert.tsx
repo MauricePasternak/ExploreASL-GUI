@@ -7,12 +7,12 @@ import {
   IconLoader,
   IconCircleMinus,
 } from "@tabler/icons-react";
-import { invoke } from "@tauri-apps/api/core";
 import { exists } from "@tauri-apps/plugin-fs";
 
 import { useGlobalStore } from "../../stores/globalStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { useProcessingEnvironment } from "../../hooks/useProcessingEnvironment";
 
 export interface PreflightResult {
   errors: string[];
@@ -32,30 +32,21 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   const profileValidationState = useGlobalStore((s) => s.profileValidationState);
   const hasValidProfile = useGlobalStore((s) => s.hasValidProfile);
   const getProfileById = useGlobalStore((s) => s.getProfileById);
-  const project = useProjectStore((s) => s.project);
+  const projectRootPath = useProjectStore((s) => s.project?.projectMeta.rootPath);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
 
-  const [systemCores, setSystemCores] = useState(0);
   const [dataParDirExists, setDataParDirExists] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    invoke<number>("get_cpu_cores")
-      .then(setSystemCores)
-      .catch((err) => {
-        console.warn("[ProcessingStatusAlert] Failed to get CPU cores:", err);
-        setSystemCores(0);
-      });
-  }, []);
+  const { systemCores } = useProcessingEnvironment();
 
   useEffect(() => {
-    const rootPath = project?.projectMeta.rootPath;
-    if (!rootPath) {
+    if (!projectRootPath) {
       Promise.resolve().then(() => setDataParDirExists(false));
       return;
     }
     Promise.resolve().then(() => setDataParDirExists(null));
-    const dataParDir = `${rootPath}/derivatives/ExploreASL`;
+    const dataParDir = `${projectRootPath}/derivatives/ExploreASL`;
     exists(dataParDir)
       .then(setDataParDirExists)
       .catch((err) => {
@@ -65,14 +56,20 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
         );
         setDataParDirExists(false);
       });
-  }, [project?.projectMeta.rootPath]);
+  }, [projectRootPath]);
 
   const orphanedSubjects = useMemo(() => {
     const subjectSet = new Set(availableSubjects.map((s) => s.subjectSession));
-    return subjectStatuses
-      .filter((s) => s.module !== "population" && !subjectSet.has(s.subjectSession))
-      .map((s) => s.subjectSession)
-      .filter((v, i, a) => a.indexOf(v) === i);
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const s of subjectStatuses) {
+      if (s.module === "population") continue;
+      if (subjectSet.has(s.subjectSession)) continue;
+      if (seen.has(s.subjectSession)) continue;
+      seen.add(s.subjectSession);
+      out.push(s.subjectSession);
+    }
+    return out;
   }, [availableSubjects, subjectStatuses]);
 
   const configSubjects = config?.subjects;

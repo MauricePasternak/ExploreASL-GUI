@@ -16,7 +16,7 @@ import {
   IconLoader,
   IconMinus,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 
 import type {
   ProcessingPhase,
@@ -26,12 +26,13 @@ import type {
 import { useProcessingStore } from "../../stores/processingStore";
 import type { ModuleName, StepStatus } from "./ExecutionDashboard.helpers";
 import {
-  calcModuleProgress,
-  getRunsForSubjectInfo,
-  getStatusForSubject,
-  getStepsForSubject,
-  getSubjectOverallStatus,
+  calcModuleProgressFromIndex,
+  getRunsForSubjectInfoFromIndex,
+  getStatusForSubjectFromIndex,
+  getStepsForSubjectFromIndex,
+  getSubjectOverallStatusFromIndex,
 } from "./ExecutionDashboard.helpers";
+import { indexSubjectStatuses } from "./subjectStatusIndex";
 
 // ---------------------------------------------------------------------------
 // Step icon
@@ -188,6 +189,8 @@ function SubjectRow({
   );
 }
 
+const MemoizedSubjectRow = memo(SubjectRow);
+
 // ---------------------------------------------------------------------------
 // Run sub-row (for ASL with multiple runs)
 // ---------------------------------------------------------------------------
@@ -235,6 +238,8 @@ function RunSubRow({
   );
 }
 
+const MemoizedRunSubRow = memo(RunSubRow);
+
 // ---------------------------------------------------------------------------
 // Module section labels
 // ---------------------------------------------------------------------------
@@ -254,6 +259,8 @@ export default function ExecutionDashboard() {
   const config = useProcessingStore((s) => s.config);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
+
+  const statusIndex = useMemo(() => indexSubjectStatuses(subjectStatuses), [subjectStatuses]);
 
   const selectedSubjects = useMemo(() => {
     if (!config) return [];
@@ -283,11 +290,7 @@ export default function ExecutionDashboard() {
         {enabledModules.map((module) => (
           <Accordion.Item key={module} value={module}>
             <Accordion.Control>
-              <ModuleHeader
-                module={module}
-                subjects={selectedSubjects}
-                statuses={subjectStatuses}
-              />
+              <ModuleHeader module={module} subjects={selectedSubjects} statusIndex={statusIndex} />
             </Accordion.Control>
             <Accordion.Panel>
               {module === "population" ? (
@@ -296,7 +299,7 @@ export default function ExecutionDashboard() {
                 <SubjectModuleSection
                   module={module}
                   subjects={selectedSubjects}
-                  statuses={subjectStatuses}
+                  statusIndex={statusIndex}
                   processingPhase={processingPhase}
                 />
               )}
@@ -312,16 +315,19 @@ export default function ExecutionDashboard() {
 // Module header (in accordion control)
 // ---------------------------------------------------------------------------
 
-function ModuleHeader({
+const ModuleHeader = memo(function ModuleHeader({
   module,
   subjects,
-  statuses,
+  statusIndex,
 }: {
   module: ModuleName;
   subjects: SubjectInfo[];
-  statuses: SubjectModuleStatus[];
+  statusIndex: ReturnType<typeof indexSubjectStatuses>;
 }) {
-  const { complete, total } = calcModuleProgress(subjects, module, statuses);
+  const { complete, total } = useMemo(
+    () => calcModuleProgressFromIndex(subjects, module, statusIndex),
+    [subjects, module, statusIndex],
+  );
   const pct = total === 0 ? 0 : Math.round((complete / total) * 100);
 
   return (
@@ -342,7 +348,7 @@ function ModuleHeader({
       />
     </Group>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Structural / ASL section
@@ -351,12 +357,12 @@ function ModuleHeader({
 function SubjectModuleSection({
   module,
   subjects,
-  statuses,
+  statusIndex,
   processingPhase,
 }: {
   module: "structural" | "asl";
   subjects: SubjectInfo[];
-  statuses: SubjectModuleStatus[];
+  statusIndex: ReturnType<typeof indexSubjectStatuses>;
   processingPhase: ProcessingPhase;
 }) {
   const eligible = useMemo(
@@ -384,23 +390,28 @@ function SubjectModuleSection({
   return (
     <Stack gap={0} data-testid={`${module}-section`}>
       {eligible.map((subject) => {
-        const runs = module === "asl" ? getRunsForSubjectInfo(subject, statuses) : [];
+        const runs = module === "asl" ? getRunsForSubjectInfoFromIndex(subject, statusIndex) : [];
         const hasMultipleRuns = module === "asl" && runs.length > 1;
 
         const {
           status: overallStatus,
           locked: overallLocked,
           completedRunsCount,
-        } = getSubjectOverallStatus(subject.subjectSession, module, statuses);
+        } = getSubjectOverallStatusFromIndex(statusIndex, subject.subjectSession, module);
 
         const singleRun = module === "asl" && runs.length === 1 ? runs[0] : undefined;
-        const steps = getStepsForSubject(subject.subjectSession, module, statuses, singleRun);
+        const steps = getStepsForSubjectFromIndex(
+          statusIndex,
+          subject.subjectSession,
+          module,
+          singleRun,
+        );
 
         const isExpanded = !!expandedSubjects[subject.subjectSession];
 
         return (
           <div key={subject.subjectSession}>
-            <SubjectRow
+            <MemoizedSubjectRow
               subjectSession={subject.subjectSession}
               steps={hasMultipleRuns ? [] : steps}
               status={overallStatus}
@@ -418,20 +429,20 @@ function SubjectModuleSection({
               <Collapse expanded={isExpanded}>
                 <Stack gap={0} pb="xs">
                   {runs.map((run) => {
-                    const runEntry = getStatusForSubject(
+                    const runEntry = getStatusForSubjectFromIndex(
+                      statusIndex,
                       subject.subjectSession,
                       "asl",
-                      statuses,
                       run,
                     );
-                    const runSteps = getStepsForSubject(
+                    const runSteps = getStepsForSubjectFromIndex(
+                      statusIndex,
                       subject.subjectSession,
                       "asl",
-                      statuses,
                       run,
                     );
                     return (
-                      <RunSubRow
+                      <MemoizedRunSubRow
                         key={`${subject.subjectSession}-${run}`}
                         run={run}
                         steps={runSteps}
@@ -456,7 +467,7 @@ function SubjectModuleSection({
 // Population section (single row)
 // ---------------------------------------------------------------------------
 
-function PopulationSection({
+const PopulationSection = memo(function PopulationSection({
   statuses,
   processingPhase,
 }: {
@@ -485,4 +496,4 @@ function PopulationSection({
       <Divider />
     </Stack>
   );
-}
+});
