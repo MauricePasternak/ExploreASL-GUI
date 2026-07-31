@@ -539,6 +539,64 @@ describe("validateBidsMetadataGroup", () => {
     expect(errors).toEqual([]);
   });
 
+  it("allows BackgroundSuppressionPulseTime to be omitted even when BackgroundSuppressionNumberPulses is set", () => {
+    const data = {
+      ...validData,
+      BackgroundSuppression: true,
+      BackgroundSuppressionNumberPulses: 2,
+      BackgroundSuppressionPulseTime: undefined,
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toEqual([]);
+  });
+
+  it("flags mismatch between BackgroundSuppressionNumberPulses and BackgroundSuppressionPulseTime count", () => {
+    const data = {
+      ...validData,
+      BackgroundSuppression: true,
+      BackgroundSuppressionNumberPulses: 2,
+      BackgroundSuppressionPulseTime: [1.465, 2.1, 2.6],
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain(
+      "Background Suppression Pulse Time count (3) must match Background Suppression Number Pulses (2).",
+    );
+  });
+
+  it("flags non-positive BackgroundSuppressionPulseTime values (zero or negative)", () => {
+    const dataWithNegative = {
+      ...validData,
+      BackgroundSuppression: true,
+      BackgroundSuppressionNumberPulses: 2,
+      BackgroundSuppressionPulseTime: [-0.5, 2.1],
+    };
+    expect(validateBidsMetadataGroup(dataWithNegative)).toContain(
+      "Background Suppression Pulse Time values must be positive numbers.",
+    );
+
+    const dataWithZero = {
+      ...validData,
+      BackgroundSuppression: true,
+      BackgroundSuppressionNumberPulses: 2,
+      BackgroundSuppressionPulseTime: [0, 2.1],
+    };
+    expect(validateBidsMetadataGroup(dataWithZero)).toContain(
+      "Background Suppression Pulse Time values must be positive numbers.",
+    );
+  });
+
+  it("flags BackgroundSuppressionPulseTime set when BackgroundSuppression is false", () => {
+    const data = {
+      ...validData,
+      BackgroundSuppression: false,
+      BackgroundSuppressionPulseTime: [1.465, 2.1],
+    };
+    const errors = validateBidsMetadataGroup(data);
+    expect(errors).toContain(
+      "Background Suppression Pulse Time should not be set when Background Suppression is disabled or Number of Pulses is 0.",
+    );
+  });
+
   it("flags missing BackgroundSuppression", () => {
     const data = {
       ...validData,

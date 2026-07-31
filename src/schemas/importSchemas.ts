@@ -363,6 +363,52 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
     }
   }
 
+  // Background Suppression validations
+  const bgSuppression = data.BackgroundSuppression;
+  const bgPulses = data.BackgroundSuppressionNumberPulses;
+  const bgTimes = data.BackgroundSuppressionPulseTime;
+
+  if (bgSuppression === true && bgPulses !== undefined && bgPulses <= 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Background Suppression Number Pulses must be greater than 0 when Background Suppression is enabled",
+      path: ["BackgroundSuppressionNumberPulses"],
+    });
+  }
+
+  if ((bgSuppression === false || bgPulses === 0) && bgTimes !== undefined && bgTimes.length > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Background Suppression Pulse Time should not be set when Background Suppression is disabled or Number of Pulses is 0",
+      path: ["BackgroundSuppressionPulseTime"],
+    });
+  }
+
+  if (bgPulses !== undefined && bgPulses > 0 && bgTimes !== undefined && bgTimes.length > 0) {
+    if (bgTimes.length !== bgPulses) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Background Suppression Pulse Time count (${bgTimes.length}) must match Background Suppression Number Pulses (${bgPulses})`,
+        path: ["BackgroundSuppressionPulseTime"],
+      });
+    }
+  }
+
+  if (bgTimes !== undefined && bgTimes.length > 0) {
+    for (const v of bgTimes) {
+      if (typeof v === "number" && !Number.isNaN(v) && v <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Background Suppression Pulse Time values must be positive numbers",
+          path: ["BackgroundSuppressionPulseTime"],
+        });
+        break;
+      }
+    }
+  }
+
   const validateRange = (val: unknown, fieldName: string, label: string) => {
     if (val === undefined || val === null) return;
     const arr = Array.isArray(val) ? val : [val];
