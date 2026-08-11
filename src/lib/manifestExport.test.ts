@@ -113,6 +113,38 @@ describe("renderMarkdown", () => {
     const out2 = renderMarkdown(manifest);
     expect(out1).toBe(out2);
   });
+
+  it("inserts multi-reviewer agreement between QC and pipeline while single payloads remain unchanged", () => {
+    const manifest = {
+      ...makeFixtureManifest(),
+      agreement: {
+        numberOfReviewers: 2,
+        overall: { agreementRate: 0.86, kappa: 0.82, ci95Lower: 0.71, ci95Upper: 0.9, n: 50 },
+        numberOfDisagreements: 7,
+        perGroup: [
+          {
+            label: "Group A",
+            result: { agreementRate: 1, kappa: null, ci95Lower: null, ci95Upper: null, n: 1 },
+          },
+        ],
+      },
+    } as unknown as ManifestPayload;
+
+    const markdown = renderMarkdown(manifest);
+    expect(markdown).toContain("## Section 4: Inter-Rater Agreement");
+    expect(markdown).toContain("| Overall Initial Agreement Rate | 86% (43/50) |");
+    expect(markdown).toContain("| Kappa Value | κ = 0.82 [0.71, 0.90] |");
+    expect(markdown).toContain("| Group A | 1 | 100% | N/A |");
+    expect(markdown).toContain(
+      "Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.",
+    );
+    expect(markdown.indexOf("## Section 3: QC Summary")).toBeLessThan(
+      markdown.indexOf("## Section 4: Inter-Rater Agreement"),
+    );
+    expect(markdown.indexOf("## Section 4: Inter-Rater Agreement")).toBeLessThan(
+      markdown.indexOf("## Section 5: Pipeline Summary"),
+    );
+  });
 });
 
 describe("renderHtml", () => {
@@ -127,5 +159,25 @@ describe("renderHtml", () => {
     const out1 = renderHtml(manifest);
     const out2 = renderHtml(manifest);
     expect(out1).toBe(out2);
+  });
+
+  it("renders multi-reviewer agreement in self-contained HTML", () => {
+    const html = renderHtml({
+      ...makeFixtureManifest(),
+      agreement: {
+        numberOfReviewers: 2,
+        overall: { agreementRate: 1, kappa: null, ci95Lower: null, ci95Upper: null, n: 2 },
+        numberOfDisagreements: 0,
+        perGroup: [],
+      },
+    } as unknown as ManifestPayload);
+
+    expect(html).toContain("Inter-Rater Agreement");
+    expect(html).toContain("Overall Initial Agreement Rate");
+    expect(html).toContain(
+      "Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.",
+    );
+    expect(html).toContain("<style>");
+    expect(html).not.toContain("stylesheet");
   });
 });

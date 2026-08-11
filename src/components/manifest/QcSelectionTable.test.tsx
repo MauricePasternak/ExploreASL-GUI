@@ -129,6 +129,10 @@ const subjectRow2: SubjectRow = {
 let mockAvailableSubjects: SubjectInfo[] = [];
 let mockSubjectStatuses: SubjectModuleStatus[] = [];
 let mockVerdicts: Record<string, ManifestVerdict> = {};
+let mockNestedVerdicts: Record<string, Record<string, ManifestVerdict>> | undefined;
+let mockReviewers: { id: string; label: string; createdAt: string }[] | undefined;
+let mockActiveReviewerId: string | undefined;
+let mockStaleVerdicts: Set<string> | Record<string, Set<string>> = new Set();
 let mockMetadataGroups: MetadataGroup[] = [];
 let mockSubjectRows: SubjectRow[] = [];
 let mockBids2LegacyExists = true;
@@ -158,7 +162,10 @@ function buildProjectState() {
         },
       },
       manifest: {
-        verdicts: mockVerdicts,
+        ...(mockReviewers
+          ? { reviewers: mockReviewers, activeReviewerId: mockActiveReviewerId }
+          : {}),
+        verdicts: mockNestedVerdicts ?? mockVerdicts,
       },
     },
     dataPar: {},
@@ -170,7 +177,11 @@ function buildProjectState() {
 // ---------------------------------------------------------------------------
 
 function renderTable(
-  props: { noInfoSubjects?: Set<string>; onNextReady?: (ready: boolean) => void } = {},
+  props: {
+    noInfoSubjects?: Set<string>;
+    onNextReady?: (ready: boolean) => void;
+    reviewerId?: string;
+  } = {},
 ) {
   vi.mocked(exists).mockResolvedValue(mockBids2LegacyExists);
   useProcessingStore.setState({
@@ -185,7 +196,7 @@ function renderTable(
     loaded: true,
   });
   useManifestStore.setState({
-    staleVerdicts: new Set(),
+    staleVerdicts: mockStaleVerdicts,
     step: 0,
     filter: "all",
   });
@@ -194,6 +205,7 @@ function renderTable(
       <QcSelectionTable
         noInfoSubjects={props.noInfoSubjects ?? new Set()}
         onNextReady={props.onNextReady}
+        reviewerId={props.reviewerId}
       />
     </MantineProvider>,
   );
@@ -205,6 +217,10 @@ afterEach(() => {
   mockAvailableSubjects = [];
   mockSubjectStatuses = [];
   mockVerdicts = {};
+  mockNestedVerdicts = undefined;
+  mockReviewers = undefined;
+  mockActiveReviewerId = undefined;
+  mockStaleVerdicts = new Set();
   mockMetadataGroups = [];
   mockSubjectRows = [];
   mockBids2LegacyExists = true;
@@ -218,6 +234,181 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("QcSelectionTable", () => {
+  const reviewer1 = {
+    id: "11111111-1111-4111-8111-111111111111",
+    label: "Reviewer 1",
+    createdAt: "2026-08-08T00:00:00.000Z",
+  };
+  const reviewer2 = {
+    id: "22222222-2222-4222-8222-222222222222",
+    label: "Reviewer 2",
+    createdAt: "2026-08-08T00:00:00.000Z",
+  };
+
+  function setupMultiReviewerVerdicts() {
+    mockAvailableSubjects = [subject1, subject2];
+    mockSubjectStatuses = [
+      statusComplete,
+      { ...statusComplete, module: "asl" },
+      { ...statusComplete, subjectSession: "sub-02_01" },
+      { ...statusComplete, subjectSession: "sub-02_01", module: "asl" },
+    ];
+    mockReviewers = [reviewer1, reviewer2];
+    mockActiveReviewerId = reviewer1.id;
+  }
+
+  it("uses only the supplied reviewer verdict slice in multi-reviewer mode", () => {
+    setupMultiReviewerVerdicts();
+    mockActiveReviewerId = reviewer2.id;
+    mockNestedVerdicts = {
+      [reviewer1.id]: {},
+      [reviewer2.id]: { "sub-01_01": { status: "pass", setAt: 1 } },
+    };
+
+    renderTable({ reviewerId: reviewer1.id });
+
+    expect(
+      within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Neutral"),
+    ).toBeTruthy();
+    expect(screen.getByTestId("qc-filter-count-neutral")).toHaveTextContent("2");
+    expect(screen.getByTestId("qc-filter-count-pass")).toHaveTextContent("0");
+  });
+
+  it("does not read a verdict slice for an unregistered reviewer", () => {
+    setupMultiReviewerVerdicts();
+    mockNestedVerdicts = {
+      [reviewer1.id]: {},
+      [reviewer2.id]: {},
+      "33333333-3333-4333-8333-333333333333": {
+        "sub-01_01": { status: "pass", setAt: 1 },
+      },
+    };
+
+    renderTable({ reviewerId: "33333333-3333-4333-8333-333333333333" });
+
+    expect(
+      within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Neutral"),
+    ).toBeTruthy();
+    expect(screen.getByTestId("qc-filter-count-pass")).toHaveTextContent("0");
+  });
+
+  it("writes and removes verdicts only for the supplied reviewer", async () => {
+    const user = userEvent.setup();
+    setupMultiReviewerVerdicts();
+    mockActiveReviewerId = reviewer2.id;
+    mockNestedVerdicts = {
+      [reviewer1.id]: {},
+      [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
+    };
+
+    renderTable({ reviewerId: reviewer1.id });
+    await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Pass"));
+    expect(useProjectStore.getState().project?.uiState.manifest?.verdicts).toEqual({
+      [reviewer1.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
+      [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
+    });
+
+    await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Neutral"));
+    expect(useProjectStore.getState().project?.uiState.manifest?.verdicts).toEqual({
+      [reviewer1.id]: {},
+      [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
+    });
+  });
+
+  it("does not retain another reviewer's unsaved notes after switching reviewer", () => {
+    setupMultiReviewerVerdicts();
+    mockNestedVerdicts = {
+      [reviewer1.id]: { "sub-01_01": { status: "pass", notes: "Reviewer 1 note", setAt: 1 } },
+      [reviewer2.id]: { "sub-01_01": { status: "pass", notes: "Reviewer 2 note", setAt: 1 } },
+    };
+
+    const view = renderTable({ reviewerId: reviewer1.id });
+    expect(screen.getByTestId("verdict-notes-sub-01_01")).toHaveValue("Reviewer 1 note");
+
+    view.rerender(
+      <MantineProvider>
+        <QcSelectionTable reviewerId={reviewer2.id} />
+      </MantineProvider>,
+    );
+
+    expect(screen.getByTestId("verdict-notes-sub-01_01")).toHaveValue("Reviewer 2 note");
+  });
+
+  it("keeps a pending fail selection scoped to its reviewer after switching reviewer", async () => {
+    const user = userEvent.setup();
+    setupMultiReviewerVerdicts();
+    mockNestedVerdicts = { [reviewer1.id]: {}, [reviewer2.id]: {} };
+
+    const view = renderTable({ reviewerId: reviewer1.id });
+    await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Fail"));
+    expect(screen.getByTestId("verdict-reason-sub-01_01")).toBeInTheDocument();
+
+    view.rerender(
+      <MantineProvider>
+        <QcSelectionTable reviewerId={reviewer2.id} />
+      </MantineProvider>,
+    );
+
+    expect(screen.queryByTestId("verdict-reason-sub-01_01")).not.toBeInTheDocument();
+  });
+
+  it("uses the active store reviewer when reviewerId is omitted", async () => {
+    const user = userEvent.setup();
+    setupMultiReviewerVerdicts();
+    mockActiveReviewerId = reviewer2.id;
+    mockNestedVerdicts = { [reviewer1.id]: {}, [reviewer2.id]: {} };
+
+    renderTable();
+    await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Pass"));
+
+    expect(useProjectStore.getState().project?.uiState.manifest?.verdicts).toEqual({
+      [reviewer1.id]: {},
+      [reviewer2.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
+    });
+  });
+
+  it("bulk marks complete rows only for its reviewer and skips No Info", async () => {
+    const user = userEvent.setup();
+    setupMultiReviewerVerdicts();
+    mockActiveReviewerId = reviewer2.id;
+    mockNestedVerdicts = {
+      [reviewer1.id]: {},
+      [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
+    };
+
+    renderTable({ reviewerId: reviewer1.id, noInfoSubjects: new Set(["sub-02_01"]) });
+    await user.click(screen.getByTestId("bulk-mark-pass"));
+
+    expect(useProjectStore.getState().project?.uiState.manifest?.verdicts).toEqual({
+      [reviewer1.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
+      [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
+    });
+  });
+
+  it("shows stale status only from its reviewer slice", () => {
+    setupMultiReviewerVerdicts();
+    mockActiveReviewerId = reviewer2.id;
+    mockNestedVerdicts = { [reviewer1.id]: {}, [reviewer2.id]: {} };
+    mockStaleVerdicts = { [reviewer1.id]: new Set(), [reviewer2.id]: new Set(["sub-01_01"]) };
+
+    renderTable({ reviewerId: reviewer1.id });
+
+    expect(screen.queryByTestId("stale-badge-sub-01_01")).not.toBeInTheDocument();
+  });
+
+  it("ignores reviewerId and retains flat storage in single-reviewer mode", async () => {
+    const user = userEvent.setup();
+    mockAvailableSubjects = [subject1];
+    mockReviewers = [reviewer1];
+
+    renderTable({ reviewerId: reviewer2.id });
+    await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Pass"));
+
+    expect(useProjectStore.getState().project?.uiState.manifest?.verdicts).toEqual({
+      "sub-01_01": { status: "pass", setAt: 0 },
+    });
+  });
+
   // 12.1 — container and table structure
   it("renders container, table, filter, and bulk button", () => {
     mockAvailableSubjects = [subject1, subject2];
@@ -625,6 +816,17 @@ describe("QcSelectionTable", () => {
         status: "pass",
         setAt: 1700000060000,
       });
+    });
+
+    it("renders the Add Reviewer button in the header to the left of Mark all complete Pass button", async () => {
+      renderTable();
+      const addReviewerBtn = screen.getByTestId("add-reviewer");
+      const bulkBtn = screen.getByTestId("bulk-mark-pass");
+      expect(addReviewerBtn).toBeInTheDocument();
+      expect(bulkBtn).toBeInTheDocument();
+      expect(
+        addReviewerBtn.compareDocumentPosition(bulkBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
   });
 });

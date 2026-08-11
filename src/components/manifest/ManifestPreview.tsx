@@ -13,6 +13,9 @@ import { getDefaultDataPar } from "../../lib/dataParDefaults";
 import { flattenRunDataPar, generateMethodsParagraph } from "../../lib/manifestMethods";
 import { renderHtml, renderMarkdown } from "../../lib/manifestExport";
 import type { ManifestPayload } from "../../lib/manifestExport";
+import { generateVerdictsCsv } from "../../lib/manifestCsvExport";
+import { cohensKappa, fleissKappa, type KappaResult } from "../../lib/interRaterAgreement";
+import AgreementSummary from "./AgreementSummary";
 import type { DataParState } from "../../schemas/dataParSchema";
 import type { ManifestVerdict } from "../../schemas/project";
 import type { MetadataGroup } from "../../schemas/importSchemas";
@@ -21,6 +24,108 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 
 const ARRAY_PARAM_UNIQUE_THRESHOLD = 5;
+type NestedVerdicts = Record<string, Record<string, ManifestVerdict>>;
+type Reviewer = { id: string; label: string; createdAt: string };
+
+function normaliseSubjectSession(subjectSession: string): string {
+  return subjectSession.replace(/^sub-/, "");
+}
+
+function isMultiReviewerMode(
+  reviewers: readonly Reviewer[] | undefined,
+): reviewers is readonly Reviewer[] {
+  return (reviewers?.length ?? 0) >= 2;
+}
+
+function resolveFinalVerdict(
+  subjectSession: string,
+  reviewers: readonly Reviewer[] | undefined,
+  verdicts: Record<string, ManifestVerdict> | NestedVerdicts,
+  resolvedVerdicts: Record<string, ManifestVerdict> | undefined,
+): ManifestVerdict | undefined {
+  const resolved = resolvedVerdicts?.[subjectSession];
+  if (resolved) return resolved;
+  if (!isMultiReviewerMode(reviewers)) {
+    return (verdicts as Record<string, ManifestVerdict>)[subjectSession];
+  }
+  const reviewerVerdicts = verdicts as NestedVerdicts;
+  const entries = reviewers.map((reviewer) => reviewerVerdicts[reviewer.id]?.[subjectSession]);
+  if (entries.some((verdict) => verdict === undefined)) return undefined;
+  return entries.every((verdict) => verdict?.status === entries[0]?.status)
+    ? entries[0]
+    : undefined;
+}
+
+function agreementFor(
+  reviewers: readonly Reviewer[],
+  verdicts: NestedVerdicts,
+  groupLabels: readonly string[],
+  groupForSubjectSession: ReadonlyMap<string, string>,
+  eligibleSubjectSessions: ReadonlySet<string>,
+) {
+  const statusesByReviewer = Object.fromEntries(
+    reviewers.map((reviewer) => [
+      reviewer.id,
+      Object.fromEntries(
+        Object.entries(verdicts[reviewer.id] ?? {}).map(([subjectSession, verdict]) => [
+          subjectSession,
+          verdict.status,
+        ]),
+      ),
+    ]),
+  ) as Record<string, Record<string, "pass" | "fail">>;
+  const calculate = (selected: ReadonlySet<string>): KappaResult => {
+    const input = Object.fromEntries(
+      reviewers.map((reviewer) => [
+        reviewer.id,
+        Object.fromEntries(
+          Object.entries(statusesByReviewer[reviewer.id]).filter(([subjectSession]) =>
+            selected.has(subjectSession),
+          ),
+        ),
+      ]),
+    );
+    return reviewers.length === 2
+      ? cohensKappa(input[reviewers[0].id], input[reviewers[1].id])
+      : fleissKappa(input);
+  };
+  const allSubjects = new Set(Object.values(statusesByReviewer).flatMap(Object.keys));
+  const completeSubjects = [...allSubjects].filter((subjectSession) =>
+    reviewers.every((reviewer) => statusesByReviewer[reviewer.id][subjectSession] !== undefined),
+  );
+  const eligibleCompleteSubjects = completeSubjects.filter((subjectSession) =>
+    eligibleSubjectSessions.has(subjectSession),
+  );
+  const completeSet = new Set(eligibleCompleteSubjects);
+  const perGroup = groupLabels.map((label) => ({
+    label,
+    result: calculate(
+      new Set(
+        eligibleCompleteSubjects.filter(
+          (subjectSession) =>
+            (groupForSubjectSession.get(normaliseSubjectSession(subjectSession)) ?? "Ungrouped") ===
+            label,
+        ),
+      ),
+    ),
+  }));
+  const disagreementCount = eligibleCompleteSubjects.filter((subjectSession) => {
+    const statuses = reviewers.map((reviewer) => statusesByReviewer[reviewer.id][subjectSession]);
+    return !statuses.every((status) => status === statuses[0]);
+  }).length;
+  return { overall: calculate(completeSet), perGroup, disagreementCount };
+}
+
+function hasVerdictEntries(
+  reviewers: readonly Reviewer[] | undefined,
+  verdicts: Record<string, ManifestVerdict> | NestedVerdicts | undefined,
+): boolean {
+  if (!verdicts) return false;
+  if (!isMultiReviewerMode(reviewers)) return Object.keys(verdicts).length > 0;
+  return reviewers.some(
+    (reviewer) => Object.keys((verdicts as NestedVerdicts)[reviewer.id] ?? {}).length > 0,
+  );
+}
 
 /**
  * Formats an array parameter value for display.
@@ -63,8 +168,11 @@ function useBuildManifestPayload(): ManifestPayload {
     executionProfiles.find((p) => profileValidationState[p.id]?.valid);
   const exploreAslGlobalVersion = activeProfile?.exploreAslVersion;
 
-  const verdicts: Record<string, ManifestVerdict> =
-    (project?.uiState?.manifest?.verdicts as Record<string, ManifestVerdict> | undefined) ?? {};
+  const reviewers = project?.uiState?.manifest?.reviewers as Reviewer[] | undefined;
+  const multiReviewers = isMultiReviewerMode(reviewers) ? reviewers : undefined;
+  const verdicts = (project?.uiState?.manifest?.verdicts ?? {}) as
+    Record<string, ManifestVerdict> | NestedVerdicts;
+  const resolvedVerdicts = project?.uiState?.manifest?.resolvedVerdicts;
   const lastRun = project?.uiState?.processing?.population?.lastRun;
   const versions = {
     exploreASL: lastRun?.exploreASLVersion || exploreAslGlobalVersion || undefined,
@@ -137,6 +245,32 @@ function useBuildManifestPayload(): ManifestPayload {
     });
   }
 
+  const groupLabelsById = new Map(metadataGroups.map((group) => [group.id, group.label]));
+  const groupForSubjectSession = new Map(
+    [...subjectSessionGroups].map(([subjectSession, groupId]) => [
+      normaliseSubjectSession(subjectSession),
+      groupLabelsById.get(groupId) ?? "Ungrouped",
+    ]),
+  );
+  const agreement = multiReviewers
+    ? agreementFor(
+        multiReviewers,
+        verdicts as NestedVerdicts,
+        [
+          ...metadataGroups.map((group) => group.label),
+          ...(ungroupedMembers.length > 0 ? ["Ungrouped"] : []),
+        ],
+        groupForSubjectSession,
+        new Set(
+          availableSubjects
+            .filter(
+              (subject) => !(qcLoaded && qcData != null && !(subject.subjectSession in qcData)),
+            )
+            .map((subject) => subject.subjectSession),
+        ),
+      )
+    : undefined;
+
   const qcGroups: ManifestPayload["qcGroups"] = [];
 
   // Aggregate metadata groups
@@ -156,7 +290,7 @@ function useBuildManifestPayload(): ManifestPayload {
     for (const s of availableSubjects) {
       const cleanSs = s.subjectSession.replace(/^sub-/, "");
       if (!memberSs.has(cleanSs)) continue;
-      const v = verdicts[s.subjectSession];
+      const v = resolveFinalVerdict(s.subjectSession, reviewers, verdicts, resolvedVerdicts);
       if (!v) continue;
 
       const isNoInfo = qcLoaded && qcData != null && !(s.subjectSession in qcData);
@@ -199,6 +333,9 @@ function useBuildManifestPayload(): ManifestPayload {
       motion: formatMeanSd(motionStats),
       motionExclusion: formatMeanSd(motionExclusionStats),
       failReasons,
+      agreementRate: agreement
+        ? `${Math.round((agreement.perGroup.find((entry) => entry.label === group.label)?.result.agreementRate ?? 0) * 100)}%`
+        : undefined,
     });
   }
 
@@ -215,7 +352,7 @@ function useBuildManifestPayload(): ManifestPayload {
     }> = [];
     for (const s of availableSubjects) {
       if (!ungroupedSs.has(s.subjectSession)) continue;
-      const v = verdicts[s.subjectSession];
+      const v = resolveFinalVerdict(s.subjectSession, reviewers, verdicts, resolvedVerdicts);
       if (!v) continue;
 
       const isNoInfo = qcLoaded && qcData != null && !(s.subjectSession in qcData);
@@ -257,6 +394,9 @@ function useBuildManifestPayload(): ManifestPayload {
         motion: formatMeanSd(motionStats),
         motionExclusion: formatMeanSd(motionExclusionStats),
         failReasons,
+        agreementRate: agreement
+          ? `${Math.round((agreement.perGroup.find((entry) => entry.label === "Ungrouped")?.result.agreementRate ?? 0) * 100)}%`
+          : undefined,
       });
     }
   }
@@ -285,6 +425,15 @@ function useBuildManifestPayload(): ManifestPayload {
     methodsParagraphs,
     methodsReferences,
     dataPar: dataPar ?? {},
+    agreement:
+      agreement && multiReviewers
+        ? {
+            numberOfReviewers: multiReviewers.length,
+            overall: agreement.overall,
+            numberOfDisagreements: agreement.disagreementCount,
+            perGroup: agreement.perGroup,
+          }
+        : undefined,
   };
 }
 
@@ -309,8 +458,10 @@ function sanitiseDataPar(dataPar: Record<string, unknown>): Record<string, unkno
 export default function ManifestPreview() {
   const payload = useBuildManifestPayload();
   const project = useProjectStore((s) => s.project);
-  const verdictCount = Object.keys(project?.uiState?.manifest?.verdicts ?? {}).length;
-  const exportDisabled = verdictCount === 0;
+  const reviewers = project?.uiState?.manifest?.reviewers as Reviewer[] | undefined;
+  const rawVerdicts = project?.uiState?.manifest?.verdicts as
+    Record<string, ManifestVerdict> | NestedVerdicts | undefined;
+  const exportDisabled = !hasVerdictEntries(reviewers, rawVerdicts);
 
   const sanitisedDataPar = sanitiseDataPar(payload.dataPar as Record<string, unknown>);
   const dataParJson = JSON.stringify(sanitisedDataPar, null, 2);
@@ -355,11 +506,58 @@ export default function ManifestPreview() {
         >
           Export HTML
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            const projectRoot = project?.projectMeta?.rootPath;
+            const path = await save({
+              defaultPath: projectRoot
+                ? `${projectRoot}/manifest_export.csv`
+                : "manifest_export.csv",
+              filters: [{ name: "CSV", extensions: ["csv"] }],
+            });
+            if (!path) return;
+            await writeTextFile(
+              path,
+              generateVerdictsCsv({
+                reviewers,
+                subjectSessions: useProcessingStore
+                  .getState()
+                  .availableSubjects.map((subject) => subject.subjectSession),
+                verdicts: rawVerdicts ?? {},
+                resolvedVerdicts: project?.uiState?.manifest?.resolvedVerdicts,
+                qcMetrics: useManifestStore.getState().qcData ?? undefined,
+                agreement: payload.agreement
+                  ? {
+                      numberOfReviewers: payload.agreement.numberOfReviewers,
+                      overall: payload.agreement.overall,
+                      numberOfDisagreements: payload.agreement.numberOfDisagreements,
+                      perGroup: payload.agreement.perGroup.map(({ label, result }) => ({
+                        group: label,
+                        result,
+                      })),
+                    }
+                  : undefined,
+              }),
+            );
+          }}
+          disabled={exportDisabled}
+          data-testid="export-csv-btn"
+        >
+          Export CSV
+        </Button>
       </Group>
 
       <Accordion
         multiple
-        defaultValue={["study-parameters", "software-manifest", "qc-summary", "pipeline-summary"]}
+        defaultValue={[
+          "study-parameters",
+          "software-manifest",
+          "qc-summary",
+          ...(payload.agreement ? ["inter-rater-agreement"] : []),
+          "pipeline-summary",
+        ]}
         variant="separated"
         data-testid="manifest-accordion"
       >
@@ -489,39 +687,51 @@ export default function ManifestPreview() {
                   <colgroup>
                     <col style={{ width: "33%" }} />
                     <col style={{ width: "67%" }} />
+                    {payload.agreement && <col style={{ width: "20%" }} />}
                   </colgroup>
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>Metric</Table.Th>
                       <Table.Th>Value</Table.Th>
+                      {payload.agreement && <Table.Th>Initial Agreement Rate</Table.Th>}
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
                     <Table.Tr>
                       <Table.Td>Pass / Total</Table.Td>
                       <Table.Td data-testid={`pass-total-${g.label}`}>{g.passTotal}</Table.Td>
+                      {payload.agreement && (
+                        <Table.Td data-testid={`agreement-rate-${g.label}`}>
+                          {g.agreementRate}
+                        </Table.Td>
+                      )}
                     </Table.Tr>
                     <Table.Tr>
                       <Table.Td>Mean ASL Coverage % (SD)</Table.Td>
                       <Table.Td data-testid={`${g.label}-coverage`}>{g.coverage}</Table.Td>
+                      {payload.agreement && <Table.Td />}
                     </Table.Tr>
                     <Table.Tr>
                       <Table.Td>Mean Spatial CoV % (SD)</Table.Td>
                       <Table.Td data-testid={`${g.label}-spatialCov`}>{g.spatialCov}</Table.Td>
+                      {payload.agreement && <Table.Td />}
                     </Table.Tr>
                     <Table.Tr>
                       <Table.Td>Mean Motion (mm RMS) (SD)</Table.Td>
                       <Table.Td data-testid={`${g.label}-motion`}>{g.motion}</Table.Td>
+                      {payload.agreement && <Table.Td />}
                     </Table.Tr>
                     <Table.Tr>
                       <Table.Td>Mean Motion Exclusion % (SD)</Table.Td>
                       <Table.Td data-testid={`${g.label}-motionExclusion`}>
                         {g.motionExclusion}
                       </Table.Td>
+                      {payload.agreement && <Table.Td />}
                     </Table.Tr>
                     <Table.Tr>
                       <Table.Td>Fail Reasons</Table.Td>
                       <Table.Td data-testid={`${g.label}-failReasons`}>{g.failReasons}</Table.Td>
+                      {payload.agreement && <Table.Td />}
                     </Table.Tr>
                   </Table.Tbody>
                 </Table>
@@ -534,6 +744,25 @@ export default function ManifestPreview() {
             )}
           </Accordion.Panel>
         </Accordion.Item>
+
+        {payload.agreement && (
+          <Accordion.Item
+            value="inter-rater-agreement"
+            data-testid="manifest-section-inter-rater-agreement"
+          >
+            <Accordion.Control>
+              <Title order={3}>Inter-Rater Agreement</Title>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <AgreementSummary
+                reviewerCount={payload.agreement.numberOfReviewers}
+                overall={payload.agreement.overall}
+                disagreementCount={payload.agreement.numberOfDisagreements}
+                perGroup={payload.agreement.perGroup}
+              />
+            </Accordion.Panel>
+          </Accordion.Item>
+        )}
 
         {/* Section 4: Pipeline Summary */}
         <Accordion.Item value="pipeline-summary" data-testid="manifest-section-pipeline-summary">

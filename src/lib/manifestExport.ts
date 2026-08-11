@@ -1,3 +1,5 @@
+import { formatKappa, KAPPA_GUIDANCE } from "./interRaterAgreement";
+
 export interface ManifestPayload {
   metadataGroups: Array<{
     label: string;
@@ -14,7 +16,29 @@ export interface ManifestPayload {
     motion: string;
     motionExclusion: string;
     failReasons: string;
+    agreementRate?: string;
   }>;
+  agreement?: {
+    numberOfReviewers: number;
+    overall: {
+      kappa: number | null;
+      ci95Lower: number | null;
+      ci95Upper: number | null;
+      n: number;
+      agreementRate: number;
+    };
+    numberOfDisagreements: number;
+    perGroup: Array<{
+      label: string;
+      result: {
+        kappa: number | null;
+        ci95Lower: number | null;
+        ci95Upper: number | null;
+        n: number;
+        agreementRate: number;
+      };
+    }>;
+  };
   pipelineParagraph: string;
   methodsParagraphs: string[];
   methodsReferences: string[];
@@ -82,18 +106,65 @@ export function renderMarkdown(m: ManifestPayload): string {
   for (const g of m.qcGroups) {
     lines.push(`### ${g.label}`);
     lines.push("");
-    lines.push("| Metric | Value |");
-    lines.push("|--------|-------|");
-    lines.push(`| Pass / Total | ${g.passTotal} |`);
-    lines.push(`| Mean ASL Coverage % (SD) | ${g.coverage} |`);
-    lines.push(`| Mean Spatial CoV % (SD) | ${g.spatialCov} |`);
-    lines.push(`| Mean Motion (mm RMS) (SD) | ${g.motion} |`);
-    lines.push(`| Mean Motion Exclusion % (SD) | ${g.motionExclusion} |`);
-    lines.push(`| Fail Reasons | ${g.failReasons} |`);
+    if (g.agreementRate === undefined) {
+      lines.push("| Metric | Value |");
+      lines.push("|--------|-------|");
+      lines.push(`| Pass / Total | ${g.passTotal} |`);
+      lines.push(`| Mean ASL Coverage % (SD) | ${g.coverage} |`);
+      lines.push(`| Mean Spatial CoV % (SD) | ${g.spatialCov} |`);
+      lines.push(`| Mean Motion (mm RMS) (SD) | ${g.motion} |`);
+      lines.push(`| Mean Motion Exclusion % (SD) | ${g.motionExclusion} |`);
+      lines.push(`| Fail Reasons | ${g.failReasons} |`);
+    } else {
+      lines.push("| Metric | Value | Initial Agreement Rate |");
+      lines.push("|--------|-------|----------------|");
+      lines.push(`| Pass / Total | ${g.passTotal} | ${g.agreementRate} |`);
+      lines.push(`| Mean ASL Coverage % (SD) | ${g.coverage} | |`);
+      lines.push(`| Mean Spatial CoV % (SD) | ${g.spatialCov} | |`);
+      lines.push(`| Mean Motion (mm RMS) (SD) | ${g.motion} | |`);
+      lines.push(`| Mean Motion Exclusion % (SD) | ${g.motionExclusion} | |`);
+      lines.push(`| Fail Reasons | ${g.failReasons} | |`);
+    }
     lines.push("");
   }
 
-  lines.push("## Section 4: Pipeline Summary");
+  if (m.agreement) {
+    const { overall } = m.agreement;
+    const agreed = Math.round(overall.agreementRate * overall.n);
+    const kappa =
+      overall.kappa === null
+        ? "N/A"
+        : `κ = ${formatKappa(overall.kappa, overall.ci95Lower, overall.ci95Upper)}`;
+    lines.push("## Section 4: Inter-Rater Agreement");
+    lines.push("");
+    lines.push("| Metric | Value |");
+    lines.push("|--------|-------|");
+    lines.push(`| Number of Reviewers | ${m.agreement.numberOfReviewers} |`);
+    lines.push(
+      `| Overall Initial Agreement Rate | ${Math.round(overall.agreementRate * 100)}% (${agreed}/${overall.n}) |`,
+    );
+    lines.push(`| Kappa Value | ${kappa} |`);
+    lines.push(`| Number of Subjects | ${overall.n} |`);
+    lines.push(`| Subjects Requiring Resolution | ${m.agreement.numberOfDisagreements} |`);
+    lines.push("");
+    lines.push(KAPPA_GUIDANCE);
+    lines.push("");
+    lines.push("| Group | n | Initial Agreement Rate | Kappa Value |");
+    lines.push("|-------|---|----------------|-------------|");
+    for (const group of m.agreement.perGroup) {
+      const result = group.result;
+      const groupKappa =
+        result.kappa === null
+          ? "N/A"
+          : formatKappa(result.kappa, result.ci95Lower, result.ci95Upper);
+      lines.push(
+        `| ${group.label} | ${result.n} | ${Math.round(result.agreementRate * 100)}% | ${groupKappa} |`,
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push(`## Section ${m.agreement ? 5 : 4}: Pipeline Summary`);
   lines.push("");
   lines.push(m.pipelineParagraph);
   lines.push("");

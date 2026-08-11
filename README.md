@@ -373,7 +373,7 @@ Unit tests cover schemas, Zustand stores, and utility functions. Component tests
 - [x] Import BIDS-ready datasets
 - [ ] Auto-update support
 - [ ] Validated execution profiles for Apptainer
-- [ ] Multi-reviewer manifest review workflow
+- [x] Multi-reviewer manifest review workflow
 - [ ] Documentation site
 
 See [open issues](https://github.com/MauricePasternak/ExploreASL-GUI/issues) for a full list of planned features and known bugs.

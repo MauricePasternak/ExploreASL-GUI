@@ -28,6 +28,7 @@ dist-ssr
 
 # Agent-related
 openspec/changes/
+.superpowers/
 .cursor/
 .opencode/
 

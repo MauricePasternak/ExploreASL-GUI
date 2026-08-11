@@ -48,12 +48,64 @@ export const ManifestVerdictSchema = z
     }
   });
 
-export const ManifestUiStateSchema = z.object({
-  verdicts: z.record(z.string(), ManifestVerdictSchema).optional(),
+export const ReviewerSchema = z.object({
+  id: z.string().uuid(),
+  label: z.string().min(1).max(100),
+  createdAt: z.string().datetime(),
 });
+
+const FlatManifestVerdictsSchema = z.record(z.string(), ManifestVerdictSchema);
+const NestedManifestVerdictsSchema = z.record(z.string(), FlatManifestVerdictsSchema);
+
+export const ManifestUiStateSchema = z
+  .object({
+    reviewers: z.array(ReviewerSchema).max(5).optional(),
+    activeReviewerId: z.string().uuid().optional(),
+    verdicts: z.union([FlatManifestVerdictsSchema, NestedManifestVerdictsSchema]).optional(),
+    resolvedVerdicts: FlatManifestVerdictsSchema.optional(),
+    lastRunVersions: z
+      .object({
+        exploreASL: z.string().optional(),
+        matlab: z.string().optional(),
+        gui: z.string().optional(),
+      })
+      .optional(),
+    lastPopulationRunMtime: z.number().nullable().optional(),
+  })
+  .superRefine((state, ctx) => {
+    if (!state.verdicts || Object.keys(state.verdicts).length === 0) return;
+
+    const multiReviewerMode = (state.reviewers?.length ?? 0) >= 2;
+    const nestedVerdicts = NestedManifestVerdictsSchema.safeParse(state.verdicts).success;
+
+    if (multiReviewerMode !== nestedVerdicts) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: multiReviewerMode
+          ? "multi-reviewer mode requires reviewer-indexed verdicts"
+          : "single-reviewer mode requires flat verdicts",
+        path: ["verdicts"],
+      });
+      return;
+    }
+
+    if (!multiReviewerMode) return;
+
+    const reviewerIds = new Set(state.reviewers?.map(({ id }) => id));
+    for (const reviewerId of Object.keys(state.verdicts)) {
+      if (!reviewerIds.has(reviewerId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "multi-reviewer verdicts must be indexed by a registered reviewer ID",
+          path: ["verdicts", reviewerId],
+        });
+      }
+    }
+  });
 
 export type ManifestFailReason = (typeof MANIFEST_FAIL_REASONS)[number];
 export type ManifestVerdict = z.infer<typeof ManifestVerdictSchema>;
+export type Reviewer = z.infer<typeof ReviewerSchema>;
 export type ManifestUiState = z.infer<typeof ManifestUiStateSchema>;
 
 export const ImportUiStateSchema = z.object({

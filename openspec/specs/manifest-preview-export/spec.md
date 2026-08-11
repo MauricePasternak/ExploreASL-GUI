@@ -8,12 +8,47 @@ TBD - created by archiving change project-manifest. Update Purpose after archive
 
 ### Requirement: Manifest Preview Accordion Layout
 
-The manifest preview SHALL render all four sections — Study Parameters, Software Manifest, QC Summary, and Pipeline Summary — inside a Mantine `Accordion` with `multiple` and `variant="separated"`. All panels SHALL default to open (`defaultValue` contains all four keys) so the full content is visible on first render. Users MAY collapse individual panels for easier scrolling.
+The manifest preview SHALL render all sections inside a Mantine `Accordion` with `multiple` and `variant="separated"`. Single-reviewer mode SHALL contain four panels: Study Parameters, Software Manifest, QC Summary, and Pipeline Summary. Multi-reviewer mode SHALL contain five panels: Study Parameters, Software Manifest, QC Summary, Inter-Rater Agreement, and Pipeline Summary. Inter-Rater Agreement SHALL appear between QC Summary and Pipeline Summary. All rendered panels SHALL default open so full content is visible on first render; users MAY collapse individual panels.
 
 #### Scenario: Accordion layout defaults to all open
 
 - **WHEN** the Manifest Preview page is loaded
-- **THEN** all four accordion panels (Study Parameters, Software Manifest, QC Summary, Pipeline Summary) SHALL be visible and expanded by default
+- **THEN** every rendered accordion panel SHALL be visible and expanded by default
+
+#### Scenario: Single-reviewer mode shows four panels
+
+- **WHEN** `reviewers` contains at most one entry or is undefined
+- **THEN** exactly four panels SHALL render, with no Inter-Rater Agreement panel
+
+#### Scenario: Multi-reviewer mode shows five panels
+
+- **WHEN** `reviewers` contains at least two entries
+- **THEN** five panels SHALL render in order: Study Parameters, Software Manifest, QC Summary, Inter-Rater Agreement, Pipeline Summary
+
+### Requirement: Final Verdict Computation
+
+For each SubjectSession, the final verdict used in preview aggregation and export SHALL be computed in this order:
+
+1. Use `resolvedVerdicts[subjectSession]` when present.
+2. Otherwise, when all reviewers have identical `status`, use the unanimous verdict.
+3. Otherwise, treat the SubjectSession as an unresolved disagreement. Preview & Export SHALL be unreachable until such disagreements are resolved.
+
+In single-reviewer mode, the final verdict SHALL be the sole flat-map verdict. QC Summary Pass/Total counts and all metric aggregation SHALL use final verdicts exclusively.
+
+#### Scenario: Resolved verdict takes precedence
+
+- **WHEN** reviewers disagree on `sub-01_01` and its resolved verdict is Pass
+- **THEN** the final verdict SHALL be Pass
+
+#### Scenario: Unanimous verdict used without resolution
+
+- **WHEN** all reviewers set `sub-02_01` to Fail and no resolved verdict exists
+- **THEN** the final verdict SHALL be Fail
+
+#### Scenario: Single-reviewer mode uses sole verdict
+
+- **WHEN** a single-reviewer project has a Pass verdict for `sub-01_01`
+- **THEN** the final verdict SHALL be Pass, preserving pre-multi-reviewer behavior
 
 ### Requirement: Manifest Section 1 Study Parameters
 
@@ -91,35 +126,68 @@ A spec-level reservation SHALL note that human-readable label translation of `da
 The preview SHALL render a "QC Summary" section. For each `MetadataGroup`, the section SHALL render a subheading and a table with rows:
 
 - Metadata group name (group `label`)
-- Pass / Total (count of SubjectSessions with `status: "pass"` / count of SubjectSessions with `status: "pass"` or `status: "fail"` in the group, displayed as `"N / Total"`)
-- Mean ASL Coverage Percentage & SD (mean and standard deviation across group members' `Coverage.tsv`, excluding No Info and Fail rows; cell formatted as `"mean (SD)"`)
-- Mean Spatial Coefficient of Variation in Gray Matter & SD (mean and standard deviation across group members' `SpatialCoV.tsv`, excluding No Info and Fail rows; cell formatted as `"mean (SD)"`)
-- Mean Motion in mm RMS & SD (max across each SubjectSession's ASL runs, then mean and standard deviation across group members, excluding No Info and Fail rows; cell formatted as `"mean (SD)"`)
-- Mean Motion Exclusion Percentage & SD (as emitted by ExploreASL; mean and standard deviation across group, excluding No Info and Fail rows; cell formatted as `"mean (SD)"`)
+- Pass / Total (count with final verdict Pass / count with final verdict Pass or Fail, displayed as `"N / Total"`)
+- Mean ASL Coverage Percentage & SD (mean and sample standard deviation across final-Pass group members' `Coverage.tsv`, formatted as `"mean (SD)"`)
+- Mean Spatial Coefficient of Variation in Gray Matter & SD (mean and sample standard deviation across final-Pass group members' `SpatialCoV.tsv`, formatted as `"mean (SD)"`)
+- Mean Motion in mm RMS & SD (maximum across each final-Pass SubjectSession's ASL runs, then mean and sample standard deviation across group members, formatted as `"mean (SD)"`)
+- Mean Motion Exclusion Percentage & SD (as emitted by ExploreASL; mean and sample standard deviation across final-Pass group members, formatted as `"mean (SD)"`)
 
-Rows with `status: "fail"` SHALL be excluded from all QC Summary aggregations but SHALL still count toward the "Total" denominator. No Info rows SHALL be excluded from both numerator and denominator. The "Pass / Total" cell SHALL therefore render as `"<passCount> / <passCount + failCount>"` (No Info excluded from denominator).
+Rows with final verdict Fail SHALL be excluded from all QC metric aggregations but SHALL count toward the Total denominator. No Info rows SHALL be excluded from numerator and denominator. Pass / Total SHALL therefore render `"<passCount> / <passCount + failCount>"`.
 
-When a group has fewer than 2 SubjectSessions in the aggregation (e.g. only one Pass row after exclusion), the SD component SHALL be rendered as the literal `"N/A"` (population SD undefined for n < 2), with the mean component rendered normally.
+When a group has fewer than 2 SubjectSessions in the aggregation (e.g. only one Pass row after exclusion), the SD component SHALL be rendered as the literal `"N/A"` (sample SD undefined for n < 2), with the mean component rendered normally.
+
+In multi-reviewer mode, each per-group QC Summary table SHALL include an Initial Agreement Rate column showing the percentage of eligible SubjectSessions where all reviewers' statuses were unanimous before resolution, formatted as `"N%"`. This column SHALL be omitted in single-reviewer mode.
 
 #### Scenario: Pass / Total with mixed verdicts
 
-- **WHEN** a metadata group has 10 SubjectSessions: 7 Pass, 2 Fail, 1 No Info
+- **WHEN** a metadata group has 10 SubjectSessions: 7 final Pass, 2 final Fail, 1 No Info
 - **THEN** Section 3's "Pass / Total" cell for that group SHALL render `"7 / 9"` (No Info row excluded from both numerator and denominator)
 
 #### Scenario: Fail rows excluded from coverage mean and SD
 
-- **WHEN** a metadata group has 3 SubjectSessions: 2 Pass (coverage 95%, 90%) and 1 Fail (coverage 50%)
+- **WHEN** a metadata group has 3 SubjectSessions: 2 final Pass (coverage 95%, 90%) and 1 final Fail (coverage 50%)
 - **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"92.5 (3.54)"` (mean and sample standard deviation of 95 and 90, Fail excluded)
 
 #### Scenario: SD renders N/A for single-subject group
 
-- **WHEN** a metadata group has 1 SubjectSession with `status: "pass"` and coverage 88%
+- **WHEN** a metadata group has 1 SubjectSession with final verdict Pass and coverage 88%
 - **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"88.0 (N/A)"`
 
 #### Scenario: Motion aggregation uses worst run per subject
 
-- **WHEN** a SubjectSession has 3 ASL runs with motion RMS values `[0.4, 0.7, 0.5]` mm, and the SubjectSession's verdict is Pass
+- **WHEN** a SubjectSession has 3 ASL runs with motion RMS values `[0.4, 0.7, 0.5]` mm, and its final verdict is Pass
 - **THEN** the SubjectSession's contribution to the group's Mean Motion aggregation SHALL be `0.7` (max across runs)
+
+#### Scenario: Initial agreement rate shown in multi-reviewer mode
+
+- **WHEN** a group has 20 eligible SubjectSessions and all reviewers initially agreed on 16
+- **THEN** the group's Initial Agreement Rate column SHALL display `"80%"`
+
+#### Scenario: Initial agreement rate hidden in single-reviewer mode
+
+- **WHEN** the project has at most one reviewer
+- **THEN** QC Summary tables SHALL omit the Initial Agreement Rate column
+
+### Requirement: Inter-Rater Agreement Section
+
+In multi-reviewer mode, preview SHALL render an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. Its overall table SHALL show Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Cohen's Kappa for exactly two reviewers or Fleiss' Kappa for more reviewers with unclamped 95% confidence interval formatted as `"κ = 0.82 [0.71, 0.90]"`, Number of Subjects, and Subjects Requiring Resolution. A per-group table SHALL show group label, n, Initial Agreement Rate, and Kappa with CI or `"N/A"` when undefined.
+
+Below the tables, the section SHALL display: `Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.` The entire section SHALL be omitted in single-reviewer mode.
+
+#### Scenario: Agreement section displayed in multi-reviewer mode
+
+- **WHEN** two reviewers rate 50 eligible SubjectSessions, agree initially on 43, and disagree on 7
+- **THEN** the section SHALL show 2 reviewers, `"86% (43/50)"`, Kappa with 95% CI, 50 subjects, 7 requiring resolution, and small-sample guidance
+
+#### Scenario: Agreement section omitted in single-reviewer mode
+
+- **WHEN** the project has at most one reviewer
+- **THEN** no Inter-Rater Agreement panel SHALL render
+
+#### Scenario: Kappa method depends on reviewer count
+
+- **WHEN** exactly two reviewers exist
+- **THEN** Cohen's Kappa SHALL be used; with three or more reviewers, Fleiss' Kappa SHALL be used
 
 ### Requirement: Manifest Section 4 Pipeline Summary Paragraph
 
@@ -154,21 +222,26 @@ The preview and exported manifest formats SHALL contain "Methods" and "Reference
 
 ### Requirement: Live Preview Updates On Verdict Changes
 
-The preview SHALL update live when the user navigates back to Step 1, toggles one or more verdicts, and returns to Step 2. No manifestEXPORT SHALL be needed to see updated counts.
+The preview SHALL update live when the user navigates back to QC Selection, changes verdicts for any reviewer, and returns to Preview & Export. Final verdicts SHALL be recomputed from current reviewer and resolved verdicts on each render. No manual refresh or export SHALL be needed.
 
 #### Scenario: Counts update after toggling Fail to Pass
 
-- **WHEN** the user navigates back to Step 1, flips a SubjectSession from Fail to Pass, returns to Step 2
-- **THEN** the Pass / Total cell for that SubjectSession's group SHALL reflect the new count by the time the preview is rendered
+- **WHEN** the user navigates back to QC Selection, flips a reviewer verdict from Fail to Pass, and returns to Preview & Export
+- **THEN** the Pass / Total cell SHALL reflect the recomputed final verdict count
+
+#### Scenario: Agreement stats update after verdict change
+
+- **WHEN** changing a reviewer verdict changes initial agreement or introduces a disagreement
+- **THEN** the Inter-Rater Agreement section SHALL reflect updated agreement and Kappa values on return
 
 ### Requirement: Markdown And HTML Export
 
-The preview SHALL expose two export buttons: "Export Markdown" and "Export HTML". Clicking either SHALL open a Tauri save dialog (via `@tauri-apps/plugin-dialog`) and write the formatted manifest file at the chosen path. Both formats SHALL be byte-identical across Windows 11, macOS, and Linux for the same input state.
+The preview SHALL expose "Export Markdown" and "Export HTML" buttons. Clicking either SHALL open a Tauri save dialog and write the formatted manifest file at the chosen path. Both formats SHALL be byte-identical across Windows 11, macOS, and Linux for the same input state.
 
 - Markdown: produced by a TS template literal; written via `@tauri-apps/plugin-fs` `writeTextFile`.
 - HTML: produced by templating the same Markdown payload into an inline-CSS single-file wrapper. The wrapper SHALL include all CSS inline; SHALL NOT reference external stylesheets; SHALL NOT invoke the WebView rendering pipeline (no `webview.printToPdf`).
 
-Both buttons SHALL be disabled when no verdicts exist (i.e., when `Object.keys(uiState.manifest.verdicts).length === 0`).
+Both buttons SHALL be disabled when no reviewer has any stored verdict entry. In multi-reviewer mode, Markdown and HTML SHALL include Inter-Rater Agreement between QC Summary and Pipeline Summary with the preview's reviewer count, overall and per-group Initial Agreement Rate, Kappa and unclamped CI, subjects requiring resolution, and Kappa guidance. Single-reviewer exports SHALL omit this section.
 
 In the exported formats, the "ExploreASL Data Parameter Configuration" sub-section SHALL be rendered as a fenced JSON code block (` ```json ``` ` in Markdown; `<pre><code>…</code></pre>` in HTML), using the same sanitisation rules (subjectRegexp canonical shorthand, ForceInclusionList omitted) as the preview. The HTML wrapper SHALL include `pre` / `pre code` CSS rules for legible monospace rendering.
 
@@ -191,8 +264,39 @@ A spec-level reservation SHALL note that a "Export PDF" button is a future expan
 
 #### Scenario: Export disabled with no verdicts
 
-- **WHEN** `uiState.manifest.verdicts` is `{}`
+- **WHEN** no reviewer has any stored verdict entry
 - **THEN** both export buttons SHALL render in a disabled state
+
+#### Scenario: Multi-reviewer exports include agreement section
+
+- **WHEN** a multi-reviewer project exports Markdown or HTML
+- **THEN** output SHALL include Inter-Rater Agreement data and Kappa guidance between QC Summary and Pipeline Summary
+
+#### Scenario: Single-reviewer exports omit agreement section
+
+- **WHEN** a single-reviewer project exports Markdown or HTML
+- **THEN** output SHALL omit Inter-Rater Agreement
+
+### Requirement: CSV Export
+
+The preview SHALL expose an "Export CSV" button after "Export Markdown" and "Export HTML". Clicking it SHALL open a Tauri save dialog and write UTF-8 CSV. The `manifest-csv-export` capability is authoritative for exact content, mode-specific columns, QC metric names, agreement statistics, escaping, and `\n` line endings.
+
+Multi-reviewer columns SHALL be `SubjectSession`; registry-ordered `Reviewer_N_Verdict`, `Reviewer_N_Reason`, and `Reviewer_N_Notes` triplets; `Final_Verdict`; `Resolution_Notes`; `Coverage_Pct`; `SpatialCoV`; `Motion_mm`; and `Motion_Exclusion_Pct`. Single-reviewer columns SHALL be `SubjectSession`, `Verdict`, `Reason`, `Notes`, `Coverage_Pct`, `SpatialCoV`, `Motion_mm`, and `Motion_Exclusion_Pct`. Single-reviewer CSV SHALL contain no final/resolution/per-reviewer columns or agreement section. The button SHALL be disabled when no verdict exists.
+
+#### Scenario: Multi-reviewer CSV uses numbered reviewer columns
+
+- **WHEN** a two-reviewer project exports CSV
+- **THEN** output SHALL contain two registry-ordered reviewer triplets, final and resolution fields, and exact QC metric columns
+
+#### Scenario: CSV export disabled with no verdicts
+
+- **WHEN** no reviewer has any stored verdict entry
+- **THEN** Export CSV SHALL be disabled
+
+#### Scenario: Single-reviewer CSV uses simplified columns
+
+- **WHEN** a single-reviewer project exports CSV
+- **THEN** its header SHALL be `SubjectSession,Verdict,Reason,Notes,Coverage_Pct,SpatialCoV,Motion_mm,Motion_Exclusion_Pct` and no agreement section SHALL appear
 
 ### Requirement: ManifestPreview uses summarizeAslContext for ASLContext display
 

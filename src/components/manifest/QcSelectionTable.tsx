@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Badge,
   Box,
@@ -9,16 +9,22 @@ import {
   Stack,
   Text,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
-import { IconSquareCheck, IconBook } from "@tabler/icons-react";
+import { IconSquareCheck, IconBook, IconPlus } from "@tabler/icons-react";
 
 import { useManifestStore } from "../../stores/manifestStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
-import { FAIL_REASON_LABELS } from "../../schemas/manifestSchemas";
-import type { ManifestVerdict, ManifestFailReason } from "../../schemas/project";
+import { FAIL_REASON_LABELS, MAX_REVIEWERS } from "../../schemas/manifestSchemas";
+import {
+  MANIFEST_FAIL_REASONS,
+  ManifestVerdictSchema,
+  type ManifestVerdict,
+  type ManifestFailReason,
+} from "../../schemas/project";
 
 import type { LogFileInfo, LogContent } from "../../lib/logViewer";
 import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
@@ -55,6 +61,53 @@ interface QcRow {
 interface QcSelectionTableProps {
   noInfoSubjects?: Set<string>;
   onNextReady?: (ready: boolean) => void;
+  reviewerId?: string;
+  addControl?: ReactNode;
+}
+
+type FlatManifestVerdicts = Record<string, ManifestVerdict>;
+type PendingFails = Map<string, string | undefined>;
+type PendingFailsByScope = Map<string, PendingFails>;
+
+const EMPTY_VERDICTS: FlatManifestVerdicts = {};
+const EMPTY_STALE_VERDICTS = new Set<string>();
+const EMPTY_PENDING_FAILS: PendingFails = new Map();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFlatManifestVerdicts(value: unknown): value is FlatManifestVerdicts {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((verdict) => ManifestVerdictSchema.safeParse(verdict).success)
+  );
+}
+
+function isManifestFailReason(value: string): value is ManifestFailReason {
+  return MANIFEST_FAIL_REASONS.some((reason) => reason === value);
+}
+
+function verdictSlice(
+  value: unknown,
+  multiReviewerMode: boolean,
+  reviewerId: string | undefined,
+): FlatManifestVerdicts {
+  if (!multiReviewerMode) return isFlatManifestVerdicts(value) ? value : EMPTY_VERDICTS;
+  if (!reviewerId || !isRecord(value)) return EMPTY_VERDICTS;
+  const reviewerVerdicts = value[reviewerId];
+  return isFlatManifestVerdicts(reviewerVerdicts) ? reviewerVerdicts : EMPTY_VERDICTS;
+}
+
+function staleVerdictSlice(
+  value: unknown,
+  multiReviewerMode: boolean,
+  reviewerId: string | undefined,
+): Set<string> {
+  if (!multiReviewerMode) return value instanceof Set ? value : EMPTY_STALE_VERDICTS;
+  if (!reviewerId || !isRecord(value)) return EMPTY_STALE_VERDICTS;
+  const reviewerStaleVerdicts = value[reviewerId];
+  return reviewerStaleVerdicts instanceof Set ? reviewerStaleVerdicts : EMPTY_STALE_VERDICTS;
 }
 
 const FILTER_OPTIONS: { label: string; value: FilterValue }[] = [
@@ -72,14 +125,30 @@ const FILTER_OPTIONS: { label: string; value: FilterValue }[] = [
 export default function QcSelectionTable({
   noInfoSubjects: propNoInfoSubjects = new Set(),
   onNextReady,
+  reviewerId,
+  addControl,
 }: QcSelectionTableProps) {
+  const addReviewer = useProjectStore((s) => s.addReviewer);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
   const mappingState = useProjectStore((s) => s.project?.mappingState);
-  const rawVerdicts = useProjectStore((s) => s.project?.uiState?.manifest?.verdicts);
-  const verdicts = useMemo(() => rawVerdicts ?? {}, [rawVerdicts]);
-  const staleVerdicts = useManifestStore((s) => s.staleVerdicts);
+  const reviewers = useProjectStore((s) => s.project?.uiState?.manifest?.reviewers);
+  const reviewerCount = reviewers?.length ?? 0;
+  const activeReviewerId = useProjectStore((s) => s.project?.uiState?.manifest?.activeReviewerId);
+  const multiReviewerMode = reviewerCount > 1;
+  const selectedReviewerId = reviewerId ?? activeReviewerId;
+  const scopedReviewerId =
+    multiReviewerMode && reviewers?.some((reviewer) => reviewer.id === selectedReviewerId)
+      ? selectedReviewerId
+      : undefined;
+  const verdictScopeKey = multiReviewerMode ? (scopedReviewerId ?? "unselected") : "single";
+  const verdicts = useProjectStore((s) =>
+    verdictSlice(s.project?.uiState?.manifest?.verdicts, multiReviewerMode, scopedReviewerId),
+  );
+  const staleVerdicts = useManifestStore((s) =>
+    staleVerdictSlice(s.staleVerdicts, multiReviewerMode, scopedReviewerId),
+  );
   const qcData = useManifestStore((s) => s.qcData);
   const qcLoaded = useManifestStore((s) => s.qcLoaded);
   const priorModulesMtimes = useManifestStore((s) => s.priorModulesMtimes);
@@ -170,7 +239,25 @@ export default function QcSelectionTable({
 
   const [filter, setFilter] = useState<FilterValue>("all");
   const [page, setPage] = useState(1);
-  const [pendingFails, setPendingFails] = useState<Map<string, string | undefined>>(new Map());
+  const [pendingFailsByScope, setPendingFailsByScope] = useState<PendingFailsByScope>(new Map());
+  const pendingFails = pendingFailsByScope.get(verdictScopeKey) ?? EMPTY_PENDING_FAILS;
+
+  const updatePendingFails = useCallback(
+    (update: (pendingFails: PendingFails) => void) => {
+      setPendingFailsByScope((previous) => {
+        const next = new Map(previous);
+        const pendingFailsForScope = new Map(next.get(verdictScopeKey));
+        update(pendingFailsForScope);
+        if (pendingFailsForScope.size === 0) {
+          next.delete(verdictScopeKey);
+        } else {
+          next.set(verdictScopeKey, pendingFailsForScope);
+        }
+        return next;
+      });
+    },
+    [verdictScopeKey],
+  );
 
   const groupMap = useMemo(() => {
     const groups: MetadataGroup[] = (mappingState as Record<string, unknown> | null)?.metadataGroups
@@ -198,61 +285,52 @@ export default function QcSelectionTable({
   const handleVerdictChange = useCallback(
     (subjectSession: string, value: string) => {
       if (value === "pass") {
-        setPendingFails((prev) => {
-          const next = new Map(prev);
-          next.delete(subjectSession);
-          return next;
-        });
+        updatePendingFails((pendingFailsForScope) => pendingFailsForScope.delete(subjectSession));
         const mtime = priorModulesMtimes[subjectSession] ?? 0;
-        useProjectStore.getState().setManifestVerdict(subjectSession, "pass", {
-          setAt: mtime,
-        });
+        useProjectStore
+          .getState()
+          .setManifestVerdict(subjectSession, "pass", { setAt: mtime }, scopedReviewerId);
       } else if (value === "fail") {
-        setPendingFails((prev) => {
-          const next = new Map(prev);
-          next.set(subjectSession, undefined);
-          return next;
-        });
+        updatePendingFails((pendingFailsForScope) =>
+          pendingFailsForScope.set(subjectSession, undefined),
+        );
       } else if (value === "neutral") {
-        setPendingFails((prev) => {
-          const next = new Map(prev);
-          next.delete(subjectSession);
-          return next;
-        });
-        useProjectStore.getState().removeManifestVerdict(subjectSession);
+        updatePendingFails((pendingFailsForScope) => pendingFailsForScope.delete(subjectSession));
+        useProjectStore.getState().removeManifestVerdict(subjectSession, scopedReviewerId);
       }
     },
-    [priorModulesMtimes],
+    [priorModulesMtimes, scopedReviewerId, updatePendingFails],
   );
 
   const handleReasonChange = useCallback(
     (subjectSession: string, reason: string | null) => {
       if (!reason) return;
-      setPendingFails((prev) => {
-        const next = new Map(prev);
-        next.set(subjectSession, reason);
-        return next;
-      });
+      if (!isManifestFailReason(reason)) return;
+      updatePendingFails((pendingFailsForScope) =>
+        pendingFailsForScope.set(subjectSession, reason),
+      );
       const mtime = priorModulesMtimes[subjectSession] ?? 0;
-      useProjectStore.getState().setManifestVerdict(subjectSession, "fail", {
-        reason: reason as ManifestFailReason,
-        setAt: mtime,
-      });
+      useProjectStore
+        .getState()
+        .setManifestVerdict(subjectSession, "fail", { reason, setAt: mtime }, scopedReviewerId);
     },
-    [priorModulesMtimes],
+    [priorModulesMtimes, scopedReviewerId, updatePendingFails],
   );
 
   const handleNotesBlur = useCallback(
     (subjectSession: string, notes: string) => {
       const current = verdicts[subjectSession];
       if (!current) return;
-      useProjectStore.getState().setManifestVerdict(subjectSession, current.status, {
-        reason: current.reason,
-        notes: notes || undefined,
-        setAt: current.setAt,
-      });
+      useProjectStore
+        .getState()
+        .setManifestVerdict(
+          subjectSession,
+          current.status,
+          { reason: current.reason, notes: notes || undefined, setAt: current.setAt },
+          scopedReviewerId,
+        );
     },
-    [verdicts],
+    [verdicts, scopedReviewerId],
   );
 
   const rows: QcRow[] = useMemo(() => {
@@ -642,6 +720,7 @@ export default function QcSelectionTable({
               )}
               {effectiveVerdict !== "neutral" && !isPendingFail && (
                 <TextInput
+                  key={`${verdictScopeKey}-${row.subjectSession}-${row.notes ?? ""}`}
                   size="xs"
                   style={{ flexShrink: 1, minWidth: 120 }}
                   placeholder="Notes (optional)"
@@ -671,6 +750,7 @@ export default function QcSelectionTable({
       handleVerdictChange,
       handleReasonChange,
       handleNotesBlur,
+      verdictScopeKey,
       staleVerdicts,
       processingPhase,
       structuralLogInfo,
@@ -685,12 +765,12 @@ export default function QcSelectionTable({
     for (const row of rows) {
       if (row.structuralStatus === "complete" && row.aslStatus === "complete" && !row.noInfo) {
         const mtime = priorModulesMtimes[row.subjectSession] ?? 0;
-        useProjectStore.getState().setManifestVerdict(row.subjectSession, "pass", {
-          setAt: mtime,
-        });
+        useProjectStore
+          .getState()
+          .setManifestVerdict(row.subjectSession, "pass", { setAt: mtime }, scopedReviewerId);
       }
     }
-  }, [rows, priorModulesMtimes]);
+  }, [rows, priorModulesMtimes, scopedReviewerId]);
 
   const hasNeutral = useMemo(() => {
     const visible = filter === "all" ? rows : filteredRows;
@@ -714,21 +794,43 @@ export default function QcSelectionTable({
     onNextReady?.(nextReady);
   }, [nextReady, onNextReady]);
 
+  const defaultAddControl = (
+    <Tooltip label="Maximum of 5 reviewers reached" disabled={reviewerCount < MAX_REVIEWERS}>
+      <Box component="span">
+        <Button
+          size="xs"
+          variant="light"
+          leftSection={<IconPlus size={14} />}
+          disabled={reviewerCount >= MAX_REVIEWERS}
+          onClick={addReviewer}
+          data-testid="add-reviewer"
+        >
+          Add Reviewer
+        </Button>
+      </Box>
+    </Tooltip>
+  );
+
+  const effectiveAddControl = addControl !== undefined ? addControl : defaultAddControl;
+
   return (
     <Stack gap="sm" data-testid="qc-selection-table">
       <Group justify="space-between" align="center">
         <Text fw={600} size="sm">
           QC Verdicts
         </Text>
-        <Button
-          size="xs"
-          variant="light"
-          leftSection={<IconSquareCheck size={14} />}
-          onClick={handleBulkMarkPass}
-          data-testid="bulk-mark-pass"
-        >
-          Mark all complete→Pass
-        </Button>
+        <Group gap="xs" align="center">
+          {effectiveAddControl}
+          <Button
+            size="xs"
+            variant="light"
+            leftSection={<IconSquareCheck size={14} />}
+            onClick={handleBulkMarkPass}
+            data-testid="bulk-mark-pass"
+          >
+            Mark all complete→Pass
+          </Button>
+        </Group>
       </Group>
 
       <Group gap="xs" align="center">

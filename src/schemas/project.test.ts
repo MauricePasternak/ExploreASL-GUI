@@ -470,3 +470,59 @@ describe("ProjectFileSchema (execution profiles)", () => {
     );
   });
 });
+
+describe("ProjectFileSchema (multi-reviewer manifest compatibility)", () => {
+  const reviewerOne = {
+    id: "11111111-1111-4111-8111-111111111111",
+    label: "Reviewer 1",
+    createdAt: "2026-08-08T12:00:00.000Z",
+  };
+  const reviewerTwo = {
+    id: "22222222-2222-4222-8222-222222222222",
+    label: "Reviewer 2",
+    createdAt: "2026-08-08T12:00:00.000Z",
+  };
+
+  it("parses a legacy manifest with no reviewer registry", () => {
+    const parsed = ProjectFileSchema.parse({
+      ...validProject,
+      uiState: { manifest: { verdicts: { "sub-01_01": { status: "pass", setAt: 1 } } } },
+    });
+
+    expect(parsed.uiState.manifest?.reviewers).toBeUndefined();
+    expect(parsed.uiState.manifest?.verdicts).toEqual({
+      "sub-01_01": { status: "pass", setAt: 1 },
+    });
+  });
+
+  it("parses flat verdicts with an explicit single-reviewer registry", () => {
+    const parsed = ProjectFileSchema.parse({
+      ...validProject,
+      uiState: {
+        manifest: {
+          reviewers: [reviewerOne],
+          verdicts: { "sub-01_01": { status: "pass", setAt: 1 } },
+        },
+      },
+    });
+
+    expect(parsed.uiState.manifest?.reviewers).toEqual([reviewerOne]);
+    expect(parsed.uiState.manifest?.verdicts).toEqual({
+      "sub-01_01": { status: "pass", setAt: 1 },
+    });
+  });
+
+  it("parses nested verdicts with a multi-reviewer registry", () => {
+    const verdicts = {
+      [reviewerOne.id]: { "sub-01_01": { status: "pass", setAt: 1 } },
+      [reviewerTwo.id]: {},
+    };
+    const parsed = ProjectFileSchema.parse({
+      ...validProject,
+      uiState: { manifest: { reviewers: [reviewerOne, reviewerTwo], verdicts } },
+    });
+
+    expect(parsed.uiState.manifest?.reviewers).toEqual([reviewerOne, reviewerTwo]);
+    expect(parsed.uiState.manifest?.verdicts).toEqual(verdicts);
+  });
+});

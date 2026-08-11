@@ -13,14 +13,18 @@ import type { DataParState } from "../schemas/dataParSchema";
 import {
   canAccessPhase,
   DEFAULT_PROJECT_FILE,
+  ManifestVerdictSchema,
   PROJECT_FILE_NAME,
   ProjectFileSchema,
+  type ManifestUiState,
   type ProjectFile,
   type ProjectMeta,
+  type Reviewer,
 } from "../schemas/project";
 import { flattenBidsGroupsToSubjectRows } from "../lib/bids/subjectRows";
 import type { ImportSnapshot, MetadataGroup } from "../schemas/importSchemas";
 import type { ManifestFailReason, ManifestVerdict } from "../schemas/project";
+import { MAX_REVIEWERS } from "../schemas/manifestSchemas";
 import { useImportStore, type ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
 import { useGlobalStore } from "./globalStore";
@@ -29,6 +33,13 @@ type DataVisState = NonNullable<ProjectFile["uiState"]["dataVis"]>;
 type DataParAdvancedVisibility = NonNullable<
   NonNullable<ProjectFile["uiState"]["datapar"]>["advancedVisibility"]
 >;
+type ManifestVerdictOptions = {
+  reason?: ManifestFailReason;
+  notes?: string;
+  setAt?: number;
+};
+type FlatManifestVerdicts = Record<string, ManifestVerdict>;
+type NestedManifestVerdicts = Record<string, FlatManifestVerdicts>;
 
 interface ProjectState {
   project: ProjectFile | null;
@@ -53,9 +64,20 @@ interface ProjectState {
   setManifestVerdict: (
     subjectSession: string,
     status: "pass" | "fail",
-    opts: { reason?: ManifestFailReason; notes?: string; setAt?: number },
+    opts?: ManifestVerdictOptions,
+    reviewerId?: string,
   ) => void;
-  removeManifestVerdict: (subjectSession: string) => void;
+  removeManifestVerdict: (subjectSession: string, reviewerId?: string) => void;
+  addReviewer: () => void;
+  removeReviewer: (id: string) => void;
+  renameReviewer: (id: string, label: string) => void;
+  setActiveReviewerId: (id: string) => void;
+  setResolvedVerdict: (
+    subjectSession: string,
+    status: "pass" | "fail",
+    opts?: ManifestVerdictOptions,
+  ) => void;
+  removeResolvedVerdict: (subjectSession: string) => void;
   setLastRunProfileId: (
     module: "population" | "structural" | "asl",
     profileId: string,
@@ -82,6 +104,68 @@ function getProjectFilePath(rootPath: string) {
 
 function isProjectFilePath(easlPath: string) {
   return easlPath.split(/[/\\]/).filter(Boolean).pop() === PROJECT_FILE_NAME;
+}
+
+function isManifestVerdict(value: unknown): value is ManifestVerdict {
+  return ManifestVerdictSchema.safeParse(value).success;
+}
+
+function isManifestVerdictRecord(value: unknown): value is FlatManifestVerdicts {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isManifestVerdict)
+  );
+}
+
+function isMultiReviewerMode(manifest: ManifestUiState | undefined) {
+  return (manifest?.reviewers?.length ?? 0) > 1;
+}
+
+function flatManifestVerdicts(manifest: ManifestUiState | undefined): FlatManifestVerdicts {
+  return isManifestVerdictRecord(manifest?.verdicts) ? { ...manifest.verdicts } : {};
+}
+
+function manifestResolvedVerdicts(manifest: ManifestUiState | undefined): FlatManifestVerdicts {
+  return isManifestVerdictRecord(manifest?.resolvedVerdicts)
+    ? { ...manifest.resolvedVerdicts }
+    : {};
+}
+
+function nestedManifestVerdicts(manifest: ManifestUiState | undefined): NestedManifestVerdicts {
+  const verdicts = manifest?.verdicts;
+  if (typeof verdicts !== "object" || verdicts === null || Array.isArray(verdicts)) return {};
+
+  return Object.entries(verdicts).reduce<NestedManifestVerdicts>((slices, [reviewerId, slice]) => {
+    if (isManifestVerdictRecord(slice)) slices[reviewerId] = { ...slice };
+    return slices;
+  }, {});
+}
+
+function currentManifestMtime(project: ProjectFile) {
+  return project.uiState?.processing?.population?.lastRun?.Mtime ?? Date.now();
+}
+
+function createManifestVerdict(
+  status: "pass" | "fail",
+  opts: ManifestVerdictOptions,
+  fallbackMtime: number,
+): ManifestVerdict {
+  return ManifestVerdictSchema.parse({
+    status,
+    ...(opts.reason === undefined ? {} : { reason: opts.reason }),
+    ...(opts.notes === undefined ? {} : { notes: opts.notes }),
+    setAt: opts.setAt ?? fallbackMtime,
+  });
+}
+
+function createReviewer(label: string): Reviewer {
+  return {
+    id: crypto.randomUUID(),
+    label,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 function serializeProject(project: ProjectFile): string {
@@ -345,30 +429,145 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
   },
 
-  setManifestVerdict: (subjectSession, status, opts) => {
-    if (status === "fail" && !opts.reason) {
-      throw new Error("reason is required when status is fail");
-    }
-
+  addReviewer: () => {
     updateProject(set, (project) => {
-      const fallbackMtime = project.uiState?.processing?.population?.lastRun?.Mtime ?? Date.now();
-      const verdict: ManifestVerdict = {
-        status,
-        reason: opts.reason as ManifestFailReason | undefined,
-        notes: opts.notes,
-        setAt: opts.setAt ?? fallbackMtime,
-      };
-      const prev = project.uiState?.manifest?.verdicts?.[subjectSession];
-      if (prev?.status === "pass" && status === "fail" && opts.notes === undefined) {
-        verdict.notes = undefined;
+      const manifest = project.uiState?.manifest;
+      const currentReviewers = manifest?.reviewers;
+
+      if (!currentReviewers || currentReviewers.length === 0) {
+        const firstReviewer = createReviewer("Reviewer 1");
+        const secondReviewer = createReviewer("Reviewer 2");
+        return {
+          ...project,
+          uiState: {
+            ...project.uiState,
+            manifest: {
+              ...manifest,
+              reviewers: [firstReviewer, secondReviewer],
+              activeReviewerId: firstReviewer.id,
+              verdicts: { [firstReviewer.id]: flatManifestVerdicts(manifest) },
+            },
+          },
+        };
       }
 
-      const nextVerdicts = {
-        ...(project.uiState?.manifest?.verdicts ?? {}),
-        [subjectSession]: verdict,
-      };
+      if (currentReviewers.length >= MAX_REVIEWERS) return null;
 
-      if (JSON.stringify(prev) === JSON.stringify(verdict)) {
+      const nextReviewer = createReviewer(`Reviewer ${currentReviewers.length + 1}`);
+      const nextReviewers = [...currentReviewers, nextReviewer];
+
+      if (currentReviewers.length === 1) {
+        const firstReviewer = currentReviewers[0];
+        return {
+          ...project,
+          uiState: {
+            ...project.uiState,
+            manifest: {
+              ...manifest,
+              reviewers: nextReviewers,
+              activeReviewerId: firstReviewer.id,
+              verdicts: { [firstReviewer.id]: flatManifestVerdicts(manifest) },
+            },
+          },
+        };
+      }
+
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            ...manifest,
+            reviewers: nextReviewers,
+            verdicts: nestedManifestVerdicts(manifest),
+          },
+        },
+      };
+    });
+  },
+
+  removeReviewer: (id) => {
+    updateProject(set, (project) => {
+      const manifest = project.uiState?.manifest;
+      const currentReviewers = manifest?.reviewers;
+      if (!currentReviewers || currentReviewers.length <= 1) return null;
+
+      const remainingReviewers = currentReviewers.filter((reviewer) => reviewer.id !== id);
+      if (remainingReviewers.length === currentReviewers.length) return null;
+
+      const verdicts = nestedManifestVerdicts(manifest);
+      const { [id]: _, ...remainingVerdicts } = verdicts;
+
+      if (remainingReviewers.length === 1) {
+        const remainingReviewer = remainingReviewers[0];
+        const {
+          reviewers: _reviewers,
+          activeReviewerId: _activeReviewerId,
+          resolvedVerdicts: _resolvedVerdicts,
+          ...singleReviewerManifest
+        } = manifest ?? {};
+        return {
+          ...project,
+          uiState: {
+            ...project.uiState,
+            manifest: {
+              ...singleReviewerManifest,
+              verdicts: remainingVerdicts[remainingReviewer.id] ?? {},
+            },
+          },
+        };
+      }
+
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            ...manifest,
+            reviewers: remainingReviewers,
+            activeReviewerId:
+              manifest?.activeReviewerId === id
+                ? remainingReviewers[0].id
+                : manifest?.activeReviewerId,
+            verdicts: remainingVerdicts,
+          },
+        },
+      };
+    });
+  },
+
+  renameReviewer: (id, label) => {
+    updateProject(set, (project) => {
+      const manifest = project.uiState?.manifest;
+      const reviewers = manifest?.reviewers;
+      if (!reviewers || label.length === 0 || label.length > 100) return null;
+
+      const reviewerIndex = reviewers.findIndex((reviewer) => reviewer.id === id);
+      if (reviewerIndex === -1 || reviewers[reviewerIndex].label === label) return null;
+
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            ...manifest,
+            reviewers: reviewers.map((reviewer) =>
+              reviewer.id === id ? { ...reviewer, label } : reviewer,
+            ),
+          },
+        },
+      };
+    });
+  },
+
+  setActiveReviewerId: (id) => {
+    updateProject(set, (project) => {
+      const manifest = project.uiState?.manifest;
+      if (
+        !isMultiReviewerMode(manifest) ||
+        manifest?.activeReviewerId === id ||
+        !manifest?.reviewers?.some((reviewer) => reviewer.id === id)
+      ) {
         return null;
       }
 
@@ -377,19 +576,121 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         uiState: {
           ...project.uiState,
           manifest: {
-            ...project.uiState?.manifest,
-            verdicts: nextVerdicts,
+            ...manifest,
+            activeReviewerId: id,
           },
         },
       };
     });
   },
 
-  removeManifestVerdict: (subjectSession) => {
+  setManifestVerdict: (subjectSession, status, opts = {}, reviewerId) => {
     updateProject(set, (project) => {
-      const prev = project.uiState?.manifest?.verdicts ?? {};
-      if (!(subjectSession in prev)) return null;
-      const { [subjectSession]: _, ...remaining } = prev;
+      const manifest = project.uiState?.manifest;
+      const verdict = createManifestVerdict(status, opts, currentManifestMtime(project));
+
+      if (!isMultiReviewerMode(manifest)) {
+        const verdicts = flatManifestVerdicts(manifest);
+        const previous = verdicts[subjectSession];
+        if (JSON.stringify(previous) === JSON.stringify(verdict)) return null;
+
+        return {
+          ...project,
+          uiState: {
+            ...project.uiState,
+            manifest: {
+              ...manifest,
+              verdicts: { ...verdicts, [subjectSession]: verdict },
+            },
+          },
+        };
+      }
+
+      const targetReviewerId = reviewerId ?? manifest?.activeReviewerId;
+      if (
+        !targetReviewerId ||
+        !manifest?.reviewers?.some((reviewer) => reviewer.id === targetReviewerId)
+      ) {
+        return null;
+      }
+
+      const verdicts = nestedManifestVerdicts(manifest);
+      const reviewerVerdicts = verdicts[targetReviewerId] ?? {};
+      if (JSON.stringify(reviewerVerdicts[subjectSession]) === JSON.stringify(verdict)) return null;
+      const resolvedVerdicts = manifestResolvedVerdicts(manifest);
+      const { [subjectSession]: _, ...remainingResolvedVerdicts } = resolvedVerdicts;
+
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            ...manifest,
+            verdicts: {
+              ...verdicts,
+              [targetReviewerId]: { ...reviewerVerdicts, [subjectSession]: verdict },
+            },
+            ...(subjectSession in resolvedVerdicts
+              ? { resolvedVerdicts: remainingResolvedVerdicts }
+              : {}),
+          },
+        },
+      };
+    });
+  },
+
+  removeManifestVerdict: (subjectSession, reviewerId) => {
+    updateProject(set, (project) => {
+      const manifest = project.uiState?.manifest;
+
+      if (!isMultiReviewerMode(manifest)) {
+        const verdicts = flatManifestVerdicts(manifest);
+        if (!(subjectSession in verdicts)) return null;
+        const { [subjectSession]: _, ...remaining } = verdicts;
+        return {
+          ...project,
+          uiState: {
+            ...project.uiState,
+            manifest: { ...manifest, verdicts: remaining },
+          },
+        };
+      }
+
+      const targetReviewerId = reviewerId ?? manifest?.activeReviewerId;
+      if (
+        !targetReviewerId ||
+        !manifest?.reviewers?.some((reviewer) => reviewer.id === targetReviewerId)
+      ) {
+        return null;
+      }
+
+      const verdicts = nestedManifestVerdicts(manifest);
+      const reviewerVerdicts = verdicts[targetReviewerId];
+      if (!reviewerVerdicts || !(subjectSession in reviewerVerdicts)) return null;
+      const { [subjectSession]: _, ...remainingReviewerVerdicts } = reviewerVerdicts;
+      const resolvedVerdicts = manifestResolvedVerdicts(manifest);
+      const { [subjectSession]: _resolved, ...remainingResolvedVerdicts } = resolvedVerdicts;
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            ...manifest,
+            verdicts: { ...verdicts, [targetReviewerId]: remainingReviewerVerdicts },
+            ...(subjectSession in resolvedVerdicts
+              ? { resolvedVerdicts: remainingResolvedVerdicts }
+              : {}),
+          },
+        },
+      };
+    });
+  },
+
+  setResolvedVerdict: (subjectSession, status, opts = {}) => {
+    updateProject(set, (project) => {
+      const resolvedVerdicts = manifestResolvedVerdicts(project.uiState?.manifest);
+      const verdict = createManifestVerdict(status, opts, currentManifestMtime(project));
+      if (JSON.stringify(resolvedVerdicts[subjectSession]) === JSON.stringify(verdict)) return null;
 
       return {
         ...project,
@@ -397,7 +698,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           ...project.uiState,
           manifest: {
             ...project.uiState?.manifest,
-            verdicts: remaining,
+            resolvedVerdicts: { ...resolvedVerdicts, [subjectSession]: verdict },
+          },
+        },
+      };
+    });
+  },
+
+  removeResolvedVerdict: (subjectSession) => {
+    updateProject(set, (project) => {
+      const resolvedVerdicts = manifestResolvedVerdicts(project.uiState?.manifest);
+      if (!(subjectSession in resolvedVerdicts)) return null;
+      const { [subjectSession]: _, ...remaining } = resolvedVerdicts;
+      return {
+        ...project,
+        uiState: {
+          ...project.uiState,
+          manifest: {
+            ...project.uiState?.manifest,
+            resolvedVerdicts: remaining,
           },
         },
       };

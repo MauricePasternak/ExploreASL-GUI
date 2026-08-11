@@ -10,6 +10,7 @@ import { useManifestStore } from "../../stores/manifestStore";
 import type { SubjectInfo } from "../../schemas/processingSchemas";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import type { ManifestVerdict } from "../../schemas/project";
+import { generateVerdictsCsv } from "../../lib/manifestCsvExport";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(),
@@ -110,6 +111,8 @@ let mockMetadataGroups: MetadataGroup[] = [];
 let mockSubjectRows: SubjectRow[] = [];
 let mockAvailableSubjects: SubjectInfo[] = [];
 let mockVerdicts: Record<string, ManifestVerdict> = {};
+let mockReviewers: Array<{ id: string; label: string; createdAt: string }> | undefined;
+let mockResolvedVerdicts: Record<string, ManifestVerdict> | undefined;
 let mockVersions: { exploreASLVersion?: string; matlabVersion?: string; guiVersion?: string } = {};
 
 function buildProjectState() {
@@ -136,6 +139,8 @@ function buildProjectState() {
       },
       manifest: {
         verdicts: mockVerdicts,
+        reviewers: mockReviewers,
+        resolvedVerdicts: mockResolvedVerdicts,
       },
     },
     dataPar: {},
@@ -164,6 +169,8 @@ afterEach(() => {
   mockSubjectRows = [];
   mockAvailableSubjects = [];
   mockVerdicts = {};
+  mockReviewers = undefined;
+  mockResolvedVerdicts = undefined;
   mockVersions = {};
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
   useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
@@ -585,6 +592,222 @@ describe("ManifestPreview", () => {
 
     expect(screen.getByTestId("export-markdown-btn")).toBeDisabled();
     expect(screen.getByTestId("export-html-btn")).toBeDisabled();
+  });
+
+  it("keeps the single-reviewer preview to four open panels without agreement data", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1];
+    mockAvailableSubjects = [subj1];
+    mockVerdicts = { SUB_01: { status: "pass", setAt: 1 } };
+
+    renderPreview();
+
+    expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(4);
+    expect(screen.queryByTestId("agreement-summary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("manifest-section-inter-rater-agreement")).not.toBeInTheDocument();
+    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("1 / 1");
+  });
+
+  it("renders resolved final verdicts and agreement data in an ordered multi-reviewer preview", () => {
+    mockMetadataGroups = [groupPcasl, groupPasl];
+    mockSubjectRows = [subjectRow1, subjectRow2, subjectRow3];
+    mockAvailableSubjects = [subj1, subj2, subj3];
+    mockReviewers = [
+      { id: "reviewer-1", label: "First", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "reviewer-2", label: "Second", createdAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    mockVerdicts = {
+      "reviewer-1": {
+        SUB_01: { status: "pass", setAt: 1 },
+        SUB2_01: { status: "pass", setAt: 1 },
+        SUB3_01: { status: "fail", setAt: 1 },
+      },
+      "reviewer-2": {
+        SUB_01: { status: "pass", setAt: 1 },
+        SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
+        SUB3_01: { status: "fail", setAt: 1 },
+      },
+    } as any;
+    mockResolvedVerdicts = { SUB2_01: { status: "pass", setAt: 1 } };
+    useManifestStore.setState({
+      qcData: {
+        SUB_01: { coverage: 95, spatialCov: 8, motion: [0.4], motionExclusionPct: 5 },
+        SUB2_01: { coverage: 90, spatialCov: 9, motion: [0.5], motionExclusionPct: 3 },
+        SUB3_01: { coverage: 10, spatialCov: 20, motion: [2], motionExclusionPct: 50 },
+      },
+      qcLoaded: true,
+    });
+
+    renderPreview();
+
+    expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(5);
+    expect(
+      screen.getAllByRole("button", { expanded: true }).map((button) => button.textContent),
+    ).toEqual([
+      "Study Parameters",
+      "Software Manifest",
+      "QC Summary",
+      "Inter-Rater Agreement",
+      "Pipeline Summary",
+    ]);
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent("Number of Reviewers2");
+    expect(screen.getByTestId("agreement-overall-table")).toHaveTextContent(
+      "Overall Initial Agreement Rate",
+    );
+    expect(screen.getByTestId("agreement-per-group-table")).toHaveTextContent(
+      "Initial Agreement Rate",
+    );
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent(
+      "Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.",
+    );
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent("67% (2/3)");
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent(
+      "Subjects Requiring Resolution1",
+    );
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent("Group A (PCASL)");
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent("N/A");
+    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("2 / 2");
+    expect(screen.getByTestId("Group A (PCASL)-coverage")).toHaveTextContent("92.50 (3.54)");
+    expect(screen.getByTestId("pass-total-Group B (PASL)")).toHaveTextContent("0 / 1");
+    expect(screen.getByTestId("Group B (PASL)-coverage")).toHaveTextContent("N/A");
+    expect(screen.getByTestId("manifest-section-qc-summary")).toHaveTextContent(
+      "Initial Agreement Rate",
+    );
+  });
+
+  it("disables every export button for empty nested reviewer slices", () => {
+    mockReviewers = [
+      { id: "reviewer-1", label: "First", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "reviewer-2", label: "Second", createdAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    mockVerdicts = { "reviewer-1": {}, "reviewer-2": {} } as any;
+
+    renderPreview();
+
+    expect(screen.getByTestId("export-markdown-btn")).toBeDisabled();
+    expect(screen.getByTestId("export-html-btn")).toBeDisabled();
+    expect(screen.getByTestId("export-csv-btn")).toBeDisabled();
+  });
+
+  it("excludes No Info subject sessions from multi-reviewer agreement", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [subjectRow1, subjectRow2];
+    mockAvailableSubjects = [subj1, subj2];
+    mockReviewers = [
+      { id: "reviewer-1", label: "First", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "reviewer-2", label: "Second", createdAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    mockVerdicts = {
+      "reviewer-1": { SUB_01: { status: "pass", setAt: 1 }, SUB2_01: { status: "pass", setAt: 1 } },
+      "reviewer-2": { SUB_01: { status: "pass", setAt: 1 }, SUB2_01: { status: "fail", setAt: 1 } },
+    } as any;
+    useManifestStore.setState({
+      qcData: { SUB_01: { coverage: 95, spatialCov: 8, motion: [0.4], motionExclusionPct: 5 } },
+      qcLoaded: true,
+    });
+
+    renderPreview();
+
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent("100% (1/1)");
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent(
+      "Subjects Requiring Resolution0",
+    );
+  });
+
+  it("assigns BIDS-prefixed subject sessions to their metadata group for agreement", () => {
+    mockMetadataGroups = [groupPcasl];
+    mockSubjectRows = [{ id: "01/01", subject: "01", session: "01", groupId: "g1" }];
+    mockAvailableSubjects = [
+      {
+        subjectSession: "sub-01_01",
+        subject: "sub-01",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+        aslRuns: ["01"],
+      },
+    ];
+    mockReviewers = [
+      { id: "reviewer-1", label: "First", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "reviewer-2", label: "Second", createdAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    mockVerdicts = {
+      "reviewer-1": { "sub-01_01": { status: "pass", setAt: 1 } },
+      "reviewer-2": { "sub-01_01": { status: "pass", setAt: 1 } },
+    } as any;
+    useManifestStore.setState({
+      qcData: {
+        "sub-01_01": { coverage: 95, spatialCov: 8, motion: [0.4], motionExclusionPct: 5 },
+      },
+      qcLoaded: true,
+    });
+
+    renderPreview();
+
+    expect(screen.getByTestId("agreement-rate-Group A (PCASL)")).toHaveTextContent("100%");
+    expect(screen.getByTestId("agreement-per-group-table")).toHaveTextContent(
+      "Group A (PCASL)1100% (1/1)N/A",
+    );
+  });
+
+  it("exports authoritative CSV after confirmation and does not write after cancellation", async () => {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    mockReviewers = [
+      { id: "reviewer-1", label: "First", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "reviewer-2", label: "Second", createdAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    mockVerdicts = {
+      "reviewer-1": { SUB_01: { status: "pass", setAt: 1 } },
+      "reviewer-2": { SUB_01: { status: "pass", notes: "looks good", setAt: 1 } },
+    } as any;
+    mockAvailableSubjects = [subj1];
+    useManifestStore.setState({
+      qcData: { SUB_01: { coverage: 95, spatialCov: 8, motion: [0.4], motionExclusionPct: 5 } },
+      qcLoaded: true,
+    });
+    vi.mocked(save)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("/chosen/manifest_export.csv");
+
+    renderPreview();
+    const writesBeforeCancel = vi.mocked(writeTextFile).mock.calls.length;
+    const buttons = screen
+      .getAllByRole("button")
+      .filter((button) => button.textContent?.startsWith("Export"));
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      "Export Markdown",
+      "Export HTML",
+      "Export CSV",
+    ]);
+    await userEvent.click(screen.getByTestId("export-csv-btn"));
+    expect(save).toHaveBeenLastCalledWith({
+      defaultPath: "/test/project/manifest_export.csv",
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+    expect(writeTextFile).toHaveBeenCalledTimes(writesBeforeCancel);
+
+    await userEvent.click(screen.getByTestId("export-csv-btn"));
+    expect(writeTextFile).toHaveBeenLastCalledWith(
+      "/chosen/manifest_export.csv",
+      generateVerdictsCsv({
+        reviewers: mockReviewers,
+        subjectSessions: ["SUB_01"],
+        verdicts: mockVerdicts as any,
+        qcMetrics: useManifestStore.getState().qcData ?? undefined,
+        agreement: {
+          numberOfReviewers: 2,
+          overall: { agreementRate: 1, kappa: null, ci95Lower: null, ci95Upper: null, n: 1 },
+          numberOfDisagreements: 0,
+          perGroup: [
+            {
+              group: "Ungrouped",
+              result: { agreementRate: 1, kappa: null, ci95Lower: null, ci95Upper: null, n: 1 },
+            },
+          ],
+        },
+      }),
+    );
   });
 
   // Phase 9 — ASLContext summarized display

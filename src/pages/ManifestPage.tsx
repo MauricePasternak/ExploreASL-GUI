@@ -1,12 +1,18 @@
 import { Box, Button, Group, Stack, Stepper, Tooltip } from "@mantine/core";
 import { IconFileReport } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import HeaderCard from "../components/common/HeaderCard";
 import ManifestPreview from "../components/manifest/ManifestPreview";
 import QcSelectionTable from "../components/manifest/QcSelectionTable";
-import { useManifestStore } from "../stores/manifestStore";
+import ReviewerTabs from "../components/manifest/ReviewerTabs";
+import VerdictResolution from "../components/manifest/VerdictResolution";
+import { areDisagreementsResolved } from "../components/manifest/VerdictResolution.helpers";
+import { deriveDisagreements, useManifestStore } from "../stores/manifestStore";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
+import type { Reviewer } from "../schemas/project";
+
+const EMPTY_REVIEWERS: Reviewer[] = [];
 
 export default function ManifestPage() {
   const step = useManifestStore((s) => s.step);
@@ -15,11 +21,48 @@ export default function ManifestPage() {
   const computeStaleVerdicts = useManifestStore((s) => s.computeStaleVerdicts);
   const loadQcData = useManifestStore((s) => s.loadQcData);
   const loadDataPar = useManifestStore((s) => s.loadDataPar);
+  const qcData = useManifestStore((s) => s.qcData);
+  const qcLoaded = useManifestStore((s) => s.qcLoaded);
 
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
+  const manifest = useProjectStore((s) => s.project?.uiState?.manifest);
   const verdicts = useProjectStore((s) => s.project?.uiState?.manifest?.verdicts);
+  const resolvedVerdicts = useProjectStore((s) => s.project?.uiState?.manifest?.resolvedVerdicts);
+  const reviewers = useProjectStore(
+    (s) => s.project?.uiState?.manifest?.reviewers ?? EMPTY_REVIEWERS,
+  );
+  const multiReviewer = reviewers.length > 1;
 
-  const [nextReady, setNextReady] = useState(false);
+  const [singleReviewerNextReady, setSingleReviewerNextReady] = useState(false);
+  const availableSubjects = useProcessingStore((s) => s.availableSubjects);
+  const eligibleSubjectSessions = useMemo(
+    () =>
+      availableSubjects
+        .filter(({ subjectSession }) => !qcLoaded || !qcData || subjectSession in qcData)
+        .map(({ subjectSession }) => subjectSession),
+    [availableSubjects, qcData, qcLoaded],
+  );
+  const multiReviewerNextReady = useMemo(() => {
+    if (!multiReviewer) return false;
+    if (typeof verdicts !== "object" || verdicts === null || Array.isArray(verdicts)) return false;
+
+    const verdictSlices = verdicts as Record<string, Record<string, unknown>>;
+    return reviewers.every((reviewer) => {
+      const reviewerVerdicts = verdictSlices[reviewer.id];
+      return (
+        typeof reviewerVerdicts === "object" &&
+        reviewerVerdicts !== null &&
+        eligibleSubjectSessions.every((subjectSession) => subjectSession in reviewerVerdicts)
+      );
+    });
+  }, [eligibleSubjectSessions, multiReviewer, reviewers, verdicts]);
+  const disagreements = useMemo(() => deriveDisagreements(manifest), [manifest]);
+  const qcNextReady = multiReviewer ? multiReviewerNextReady : singleReviewerNextReady;
+  const hasResolutionStep = multiReviewer && disagreements.length > 0;
+  const resolutionsReady = areDisagreementsResolved(disagreements, resolvedVerdicts);
+  const previewStep = hasResolutionStep ? 2 : 1;
+  const activeStep =
+    hasResolutionStep && step === 2 && !resolutionsReady ? 1 : Math.min(step, previewStep);
 
   // Trigger loading and mtime/staleness recomputation
   useEffect(() => {
@@ -54,8 +97,9 @@ export default function ManifestPage() {
   }, [computeStaleVerdicts, verdicts]);
 
   const handleStepClick = (s: number) => {
-    if (s === 1 && !nextReady) return;
-    setStep(s as 0 | 1);
+    if (s > 0 && !qcNextReady) return;
+    if (hasResolutionStep && s === previewStep && !resolutionsReady) return;
+    setStep(s as 0 | 1 | 2);
   };
 
   return (
@@ -67,16 +111,39 @@ export default function ManifestPage() {
         color="teal"
         dataTestId="manifest-header"
       />
-      <Stepper active={step} onStepClick={handleStepClick} data-testid="manifest-stepper">
-        <Stepper.Step label="QC Selection" description="Review and triage subjects" />
-        <Stepper.Step label="Preview & Export" description="Review manifest and export" />
+      <Stepper active={activeStep} onStepClick={handleStepClick} data-testid="manifest-stepper">
+        <Stepper.Step
+          label="QC Selection"
+          description="Review and triage subjects"
+          data-testid="manifest-step-qc"
+        />
+        {hasResolutionStep && (
+          <Stepper.Step
+            label={`Verdict Resolution (${disagreements.length})`}
+            description="Resolve reviewer disagreements"
+            data-testid="manifest-step-resolution"
+          />
+        )}
+        <Stepper.Step
+          label="Preview & Export"
+          description="Review manifest and export"
+          data-testid="manifest-step-preview"
+        />
       </Stepper>
 
-      {step === 0 ? (
+      {activeStep === 0 ? (
         <Stack gap="md">
-          <QcSelectionTable onNextReady={setNextReady} />
+          <ReviewerTabs eligibleSubjectSessions={eligibleSubjectSessions}>
+            {(reviewerId, addControl) => (
+              <QcSelectionTable
+                reviewerId={reviewerId}
+                onNextReady={multiReviewer ? undefined : setSingleReviewerNextReady}
+                addControl={addControl}
+              />
+            )}
+          </ReviewerTabs>
           <Group justify="flex-end" mt="md">
-            {nextReady ? (
+            {qcNextReady ? (
               <Button data-testid="next-button" onClick={() => setStep(1)}>
                 Next
               </Button>
@@ -91,16 +158,44 @@ export default function ManifestPage() {
             )}
           </Group>
         </Stack>
-      ) : (
+      ) : hasResolutionStep && activeStep === 1 ? (
+        <Stack gap="md">
+          <VerdictResolution disagreements={disagreements} />
+          <Group justify="space-between">
+            <Button
+              variant="default"
+              data-testid="resolution-back-button"
+              onClick={() => setStep(0)}
+            >
+              Back
+            </Button>
+            <Tooltip label="Resolve every current reviewer disagreement before previewing the manifest">
+              <Box style={{ display: "inline-block" }}>
+                <Button
+                  data-testid="resolution-next-button"
+                  disabled={!resolutionsReady}
+                  onClick={() => setStep(2)}
+                >
+                  Next
+                </Button>
+              </Box>
+            </Tooltip>
+          </Group>
+        </Stack>
+      ) : activeStep === previewStep ? (
         <Stack gap="md">
           <Group justify="flex-start">
-            <Button variant="default" data-testid="back-button" onClick={() => setStep(0)}>
+            <Button
+              variant="default"
+              data-testid="back-button"
+              onClick={() => setStep(hasResolutionStep ? 1 : 0)}
+            >
               Back
             </Button>
           </Group>
           <ManifestPreview />
         </Stack>
-      )}
+      ) : null}
     </Stack>
   );
 }
