@@ -22,7 +22,13 @@ The function signature SHALL be:
 function cohensKappa(
   verdicts1: Record<string, "pass" | "fail">,
   verdicts2: Record<string, "pass" | "fail">,
-): { kappa: number | null; ci95Lower: number | null; ci95Upper: number | null; n: number; agreementRate: number }
+): {
+  kappa: number | null;
+  ci95Lower: number | null;
+  ci95Upper: number | null;
+  n: number;
+  agreementRate: number;
+};
 ```
 
 #### Scenario: Identical ratings with category variation yield κ = 1.0
@@ -72,9 +78,13 @@ When more than 2 reviewers exist, the manifest store SHALL compute Fleiss' Kappa
 The function signature SHALL be:
 
 ```typescript
-function fleissKappa(
-  verdictsByReviewer: Record<string, Record<string, "pass" | "fail">>,
-): { kappa: number | null; ci95Lower: number | null; ci95Upper: number | null; n: number; agreementRate: number }
+function fleissKappa(verdictsByReviewer: Record<string, Record<string, "pass" | "fail">>): {
+  kappa: number | null;
+  ci95Lower: number | null;
+  ci95Upper: number | null;
+  n: number;
+  agreementRate: number;
+};
 ```
 
 Only subjectSessions where ALL reviewers have a verdict SHALL be included in the computation.
@@ -145,13 +155,16 @@ interface AgreementResults {
     n: number;
     agreementRate: number;
   };
-  perGroup: Record<string, {
-    kappa: number | null;
-    ci95Lower: number | null;
-    ci95Upper: number | null;
-    n: number;
-    agreementRate: number;
-  }>;
+  perGroup: Record<
+    string,
+    {
+      kappa: number | null;
+      ci95Lower: number | null;
+      ci95Upper: number | null;
+      n: number;
+      agreementRate: number;
+    }
+  >;
 }
 ```
 

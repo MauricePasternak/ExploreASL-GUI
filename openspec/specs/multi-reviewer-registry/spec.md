@@ -11,11 +11,15 @@ Defines the reviewer registry data model and management actions for multi-review
 `ManifestUiStateSchema` in `src/schemas/project.ts` SHALL include an optional `reviewers` field with Zod shape:
 
 ```typescript
-reviewers: z.array(z.object({
-  id: z.string().uuid(),
-  label: z.string().min(1).max(100),
-  createdAt: z.string().datetime(),
-})).max(5).optional()
+reviewers: z.array(
+  z.object({
+    id: z.string().uuid(),
+    label: z.string().min(1).max(100),
+    createdAt: z.string().datetime(),
+  }),
+)
+  .max(5)
+  .optional();
 ```
 
 When `reviewers` is `undefined` or contains at most one entry, the manifest operates in single-reviewer mode. When `reviewers` contains 2–5 entries, the manifest operates in multi-reviewer mode. More than five entries SHALL be rejected at schema validation. The field SHALL default to `undefined` for new projects and for pre-existing `.easl` files that lack it.

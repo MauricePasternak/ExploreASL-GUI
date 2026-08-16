@@ -118,7 +118,7 @@ Each row in the Resolution DataTable SHALL provide three quick-access action but
 Resolutions SHALL be stored in a new `resolvedVerdicts` field on `ManifestUiStateSchema` with Zod shape:
 
 ```typescript
-resolvedVerdicts: z.record(z.string(), ManifestVerdictSchema).optional()
+resolvedVerdicts: z.record(z.string(), ManifestVerdictSchema).optional();
 ```
 
 The record SHALL be keyed by subjectSession string. Each entry SHALL be a standard `ManifestVerdict` object (`{ status, reason?, notes?, setAt }`). No resolver identity SHALL be tracked — the resolution simply records the final verdict per subjectSession.
