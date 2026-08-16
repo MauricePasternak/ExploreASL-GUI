@@ -1,7 +1,9 @@
 use super::*;
 use std::fs;
+#[cfg(unix)]
 use std::io::Write;
 use std::path::PathBuf;
+#[cfg(unix)]
 use std::process::Command;
 
 fn get_test_temp_dir() -> tempfile::TempDir {

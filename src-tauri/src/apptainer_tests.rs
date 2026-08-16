@@ -3,6 +3,7 @@ use super::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -123,6 +124,7 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[cfg(unix)]
     #[test]
     fn sanitize_ld_library_path_strips_appimage_mounts() {
         let appdir = "/tmp/.mount_TestAppImage123";
@@ -133,6 +135,7 @@ mod tests {
         assert_eq!(result, vec!["/usr/local/lib", "/opt/other/lib"]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn sanitize_ld_library_path_strips_tmp_mount_prefixes() {
         let ld = "/tmp/.mount_ABC/usr/lib:/usr/lib:/tmp/.mount_XYZ/lib";
@@ -142,6 +145,7 @@ mod tests {
         assert_eq!(result, vec!["/usr/lib"]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn sanitize_ld_library_path_preserves_non_appimage_paths() {
         let ld = "/usr/local/lib:/opt/cuda/lib64";
@@ -151,6 +155,7 @@ mod tests {
         assert_eq!(result, vec!["/usr/local/lib", "/opt/cuda/lib64"]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn sanitize_ld_library_path_returns_empty_when_all_stripped() {
         let appdir = "/tmp/.mount_Only";

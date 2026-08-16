@@ -9,7 +9,7 @@ import { getDefaultDataPar } from "./dataParDefaults";
 import { generateMethodsParagraph } from "./manifestMethods";
 
 function readGolden(filename: string): string {
-  return readFileSync(resolve(__dirname, "__fixtures__", filename), "utf-8");
+  return readFileSync(resolve(__dirname, "__fixtures__", filename), "utf-8").replace(/\r\n/g, "\n");
 }
 
 function makeFixtureManifest(): ManifestPayload {
