@@ -34,6 +34,6 @@ describe("HelpTooltip", () => {
     await userEvent.hover(screen.getByRole("button", { name: /tooltip width/i }));
 
     const tooltips = screen.getAllByRole("tooltip");
-    expect(tooltips[tooltips.length - 1]).toHaveStyle({ width: "22rem" });
+    expect(tooltips[tooltips.length - 1]).toHaveStyle({ width: "352px" });
   });
 });
