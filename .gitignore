@@ -41,3 +41,6 @@ notes/
 
 # Worktrees
 .worktrees/
+
+# Native E2E failure diagnostics
+/e2e-tests/artifacts/

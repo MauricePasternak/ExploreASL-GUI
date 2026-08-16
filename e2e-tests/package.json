@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "wdio run wdio.conf.ts",
+    "test:unit": "tsx --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

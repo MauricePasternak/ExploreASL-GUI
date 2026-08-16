@@ -11,7 +11,16 @@ import OverviewPage from "./pages/OverviewPage";
 import { useGlobalStore } from "./stores/globalStore";
 import { logAction } from "./lib/debug";
 
-export default function App() {
+export interface AppE2EOptions {
+  enabled: true;
+  onReady: (location: ReturnType<typeof useLocation>) => void;
+}
+
+export interface AppProps {
+  e2e?: AppE2EOptions;
+}
+
+export default function App({ e2e }: AppProps) {
   const location = useLocation();
 
   useEffect(() => {
@@ -29,14 +38,21 @@ export default function App() {
   const { setColorScheme } = useMantineColorScheme();
 
   useEffect(() => {
+    if (e2e?.enabled) return;
     void loadSettings();
-  }, [loadSettings]);
+  }, [e2e?.enabled, loadSettings]);
 
   useEffect(() => {
     if (loaded) {
       setColorScheme(theme);
     }
   }, [setColorScheme, theme, loaded]);
+
+  useEffect(() => {
+    if (loaded && e2e?.enabled) {
+      e2e.onReady(location);
+    }
+  }, [e2e, loaded, location]);
 
   if (!loaded) {
     return (
@@ -51,7 +67,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <>
+      <div data-testid="app-ready">
         <Routes>
           <Route element={<Layout onOpenSettings={() => setSettingsOpen(true)} />}>
             <Route path="/" element={<LandingPage />} />
@@ -63,7 +79,7 @@ export default function App() {
         {settingsOpen && (
           <SettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
         )}
-      </>
+      </div>
     </ErrorBoundary>
   );
 }

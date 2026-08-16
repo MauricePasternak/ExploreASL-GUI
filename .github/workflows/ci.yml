@@ -140,12 +140,46 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: e2e-tests/pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            e2e-tests/pnpm-lock.yaml
 
-      - name: Install dependencies
-        working-directory: e2e-tests
+      - name: Install Tauri and WebKit dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libssl-dev webkit2gtk-driver xvfb
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Install root dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type-check
-        working-directory: e2e-tests
-        run: pnpm typecheck
+      - name: Install E2E dependencies
+        run: pnpm --dir e2e-tests install --frozen-lockfile
+
+      - name: Run E2E helper tests
+        run: pnpm test:e2e:unit
+
+      - name: Type-check E2E tests
+        run: pnpm typecheck:e2e
+
+      - name: Build E2E application
+        run: VITE_E2E=1 pnpm tauri build --debug --no-bundle
+
+      - name: Run native E2E tests
+        run: xvfb-run -a env E2E_SKIP_BUILD=1 pnpm test:e2e
+
+      - name: Upload E2E failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-artifacts
+          path: e2e-tests/artifacts/
+          if-no-files-found: ignore

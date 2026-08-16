@@ -2,14 +2,16 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { MantineProvider, createTheme } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
-import { createHashRouter, RouterProvider } from "react-router";
+import { RouterProvider } from "react-router";
 
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 import "mantine-datatable/styles.css";
 import "./App.css";
 
-import App from "./App";
+import { createAppRouter } from "./app/router";
+import { renderBootstrapError } from "./app/bootstrapError";
+import type { E2EBridgeControl } from "./e2e/bridge";
 import {
   captureSnapshot,
   copySnapshotToClipboard,
@@ -118,13 +120,53 @@ window.__DEBUG__ = {
   decompressSnapshot,
 };
 
-const router = createHashRouter([{ path: "*", element: <App /> }]);
-
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="light">
-      <Notifications />
-      <RouterProvider router={router} />
-    </MantineProvider>
-  </React.StrictMode>,
+const e2eControlRef: { current: E2EBridgeControl | undefined } = { current: undefined };
+const router = createAppRouter(
+  import.meta.env.VITE_E2E === "1"
+    ? {
+        e2e: {
+          enabled: true,
+          onReady: (location) => e2eControlRef.current?.onAppReady(location),
+        },
+      }
+    : undefined,
 );
+
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("Missing root element");
+const root: HTMLElement = rootElement;
+
+function renderApp() {
+  ReactDOM.createRoot(root).render(
+    <React.StrictMode>
+      <MantineProvider theme={theme} defaultColorScheme="light">
+        <Notifications />
+        <RouterProvider router={router} />
+      </MantineProvider>
+    </React.StrictMode>,
+  );
+}
+
+async function bootstrap() {
+  if (import.meta.env.VITE_E2E === "1") {
+    const { installE2EBridge, isE2EScenario } = await import("./e2e/bridge");
+    const e2eControl = installE2EBridge({ enabled: true, router });
+    if (!e2eControl) {
+      throw new Error("E2E bridge installation failed");
+    }
+    e2eControlRef.current = e2eControl;
+    const scenario = new URLSearchParams(window.location.search).get("e2eScenario");
+    if (scenario) {
+      if (isE2EScenario(scenario)) {
+        await e2eControl.bridge.seed(scenario);
+      } else {
+        console.error(`[E2E] Unsupported e2eScenario: ${scenario}`);
+      }
+    }
+  }
+  renderApp();
+}
+
+void bootstrap().catch((error: unknown) => {
+  renderBootstrapError(root, error);
+});

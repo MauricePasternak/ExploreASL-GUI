@@ -1,8 +1,10 @@
 import { browser, expect } from "@wdio/globals";
 
+import { resetToLanding } from "../support/application";
+
 describe("Landing Page", () => {
   beforeEach(async () => {
-    await browser.url("/");
+    await resetToLanding();
   });
 
   it("should display the app title", async () => {
@@ -11,17 +13,14 @@ describe("Landing Page", () => {
     expect(text).toContain("ExploreASL");
   });
 
-  it("should show New Project button", async () => {
-    const btn = await $('[data-testid="landing-new-project-btn"]');
+  it("should show first-run guidance", async () => {
+    const btn = await $('[data-testid="welcome-open-settings-btn"]');
     await btn.waitForExist({ timeout: 10000 });
-    const text = await btn.getText();
-    expect(text).toContain("New Project");
-  });
-
-  it("should show Open Project button", async () => {
-    const btn = await $('[data-testid="landing-open-project-btn"]');
-    await btn.waitForExist({ timeout: 10000 });
-    const text = await btn.getText();
-    expect(text).toContain("Open Project");
+    const label = await browser.execute(
+      () =>
+        document.querySelector('[data-testid="welcome-open-settings-btn"]')?.textContent?.trim() ??
+        "",
+    );
+    expect(label).toContain("Open Settings");
   });
 });

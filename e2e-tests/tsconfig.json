@@ -6,8 +6,8 @@
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
-    "types": ["@wdio/globals/types", "@wdio/mocha-framework"],
+    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework"],
     "outDir": "dist"
   },
-  "include": ["test/**/*.ts", "wdio.conf.ts"]
+  "include": ["test/**/*.ts", "wdio.conf.ts", "wdio.config.helpers.ts"]
 }

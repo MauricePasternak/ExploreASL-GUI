@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
@@ -56,5 +56,39 @@ describe("App", () => {
     expect(
       screen.queryByRole("heading", { name: /welcome to exploreasl/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("loads settings without E2E options", async () => {
+    const loadSettings = vi.fn(() => Promise.resolve());
+    useGlobalStore.setState({ loadSettings });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <App />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    await waitFor(() => expect(loadSettings).toHaveBeenCalledOnce());
+  });
+
+  it("skips settings loading and reports ready location with E2E options", async () => {
+    const loadSettings = vi.fn(() => Promise.resolve());
+    const onReady = vi.fn();
+    useGlobalStore.setState({ loadSettings });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <App e2e={{ enabled: true, onReady }} />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    expect(loadSettings).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/" })),
+    );
   });
 });
