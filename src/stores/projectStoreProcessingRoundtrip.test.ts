@@ -6,7 +6,7 @@ import { useProcessingStore } from "./processingStore";
 import { useProjectStore } from "./projectStore";
 
 describe("processing config round-trip persistence", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     sessionStorage.clear();
     seedValidProfileGate();
     useProjectStore.setState({
@@ -14,7 +14,7 @@ describe("processing config round-trip persistence", () => {
       isDirty: false,
       loaded: false,
     });
-    useProcessingStore.getState().resetProcessing();
+    await useProcessingStore.getState().resetProcessing();
 
     vi.mocked(writeTextFile).mockResolvedValue(undefined);
     vi.mocked(readTextFile).mockResolvedValue("");

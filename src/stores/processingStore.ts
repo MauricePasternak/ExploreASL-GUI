@@ -38,7 +38,7 @@ export interface ProcessingState {
   setAvailableSubjects: (subjects: SubjectInfo[]) => void;
   scanAvailableSubjects: () => Promise<void>;
   loadLockFileStatus: () => Promise<void>;
-  resetProcessing: () => void;
+  resetProcessing: () => Promise<void>;
   clearPendingRawdataWarning: () => void;
   clearProfileError: () => void;
 }
@@ -372,13 +372,16 @@ export const useProcessingStore = create<ProcessingState>()(
       set({ subjectStatuses: statuses });
     },
 
-    resetProcessing: () => {
+    resetProcessing: async () => {
       clearProcessingListeners();
-      import("../lib/processingEvents").then(({ stopWatcher }) => {
-        stopWatcher().catch((err) => {
-          console.warn("[processingStore] stopWatcher failed:", err);
-        });
-      });
+      try {
+        const { stopWatcher } = await import("../lib/processingEvents");
+        await stopWatcher();
+      } catch (err) {
+        console.warn("[processingStore] stopWatcher failed:", err);
+      }
+      // A lock watcher can emit while its asynchronous shutdown is pending.
+      // Reset after it has stopped so no status survives into the next project.
       set({ ...INITIAL_STATE });
     },
 

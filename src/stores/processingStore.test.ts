@@ -8,6 +8,7 @@ import {
   loadLockStatus,
   runProcessingPipeline,
   setupProcessingListeners,
+  stopWatcher,
   stopProcessingPipeline,
   watchLockDir,
 } from "../lib/processingEvents";
@@ -71,8 +72,8 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
-  useProcessingStore.getState().resetProcessing();
+afterEach(async () => {
+  await useProcessingStore.getState().resetProcessing();
   vi.clearAllMocks();
   // Restore the default invoke mock implementation. Per-test overrides
   // (e.g. Phase 8.2 `ensure_rawdata_dir` mocks returning null for unknown
@@ -570,7 +571,7 @@ describe("processingStore phase transitions", () => {
   it("resetProcessing resets to idle", async () => {
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
     await useProcessingStore.getState().startProcessing();
-    useProcessingStore.getState().resetProcessing();
+    await useProcessingStore.getState().resetProcessing();
     expect(useProcessingStore.getState().processingPhase).toBe("idle");
     expect(useProcessingStore.getState().config).toBeNull();
     expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
@@ -1177,13 +1178,44 @@ describe("processingStore Tauri integration: event listener cleanup", () => {
 
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
     await useProcessingStore.getState().startProcessing();
-    useProcessingStore.getState().resetProcessing();
+    await useProcessingStore.getState().resetProcessing();
 
     expect(cleanupFn).toHaveBeenCalled();
   });
 
   it("resetProcessing is safe to call without prior startProcessing", () => {
     expect(() => useProcessingStore.getState().resetProcessing()).not.toThrow();
+  });
+
+  it("resets after the watcher stops and preserves store actions", async () => {
+    let finishStopping: (() => void) | undefined;
+    vi.mocked(stopWatcher).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStopping = resolve;
+        }),
+    );
+    const resetProcessing = useProcessingStore.getState().resetProcessing;
+    useProcessingStore.getState().setAvailableSubjects([
+      {
+        subjectSession: "sub-001_01",
+        subject: "001",
+        session: "01",
+        hasStructural: true,
+        hasASL: true,
+        aslRuns: [],
+      },
+    ]);
+
+    const reset = resetProcessing();
+    useProcessingStore.getState().updateSubjectStatus(STATUS_A);
+    await vi.waitFor(() => expect(stopWatcher).toHaveBeenCalledOnce());
+    finishStopping?.();
+    await reset;
+
+    expect(useProcessingStore.getState().availableSubjects).toEqual([]);
+    expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
+    expect(useProcessingStore.getState().resetProcessing).toBe(resetProcessing);
   });
 });
 

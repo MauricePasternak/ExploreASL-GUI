@@ -46,6 +46,7 @@ interface ManifestState {
   computeAgreement: () => void;
   computeStaleVerdicts: () => void;
   resetStep: () => void;
+  resetManifest: () => void;
   loadQcData: (projectRoot: string) => Promise<void>;
   loadDataPar: (projectRoot: string) => Promise<void>;
 }
@@ -207,6 +208,21 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
   setFilter: (filter) => set({ filter }),
 
   resetStep: () => set({ step: 0 }),
+
+  resetManifest: () =>
+    set({
+      step: 0,
+      filter: "all",
+      reviewerMode: "single",
+      disagreements: [],
+      agreementResults: null,
+      staleVerdicts: new Set(),
+      priorModulesMtimes: {},
+      qcData: null,
+      qcLoaded: false,
+      qcLoading: false,
+      dataPar: null,
+    }),
 
   loadPriorModulesMtimes: async () => {
     const project = useProjectStore.getState().project;
