@@ -25,7 +25,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.9.0",
+    "@hookform/resolvers": "^5.9.1",
     "@mantine/core": "^9.5.1",
     "@mantine/dropzone": "^9.5.1",
     "@mantine/hooks": "^9.5.1",
@@ -39,17 +39,19 @@
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-fs": "^2.5.1",
-    "@tauri-apps/plugin-log": "2.8.0",
+    "@tauri-apps/plugin-log": "2.9.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-os": "^2.3.2",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-store": "^2.4.4",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "fflate": "^0.8.3",
     "mantine-datatable": "^9.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-hook-form": "^7.85.0",
+    "react-hook-form": "^7.86.0",
     "react-router": "^8.3.0",
-    "react-virtuoso": "^4.18.11",
+    "react-virtuoso": "^4.18.12",
     "zod": "^4.4.3",
     "zustand": "^5.0.15"
   },
@@ -57,16 +59,16 @@
     "@tauri-apps/cli": "^2.11.4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.4",
+    "@testing-library/user-event": "^14.6.6",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^6.0.5",
+    "@vitejs/plugin-react": "^6.1.0",
     "jsdom": "^30.0.1",
-    "oxlint": "^1.78.0",
+    "oxlint": "^1.79.0",
     "prettier": "^3.9.6",
     "typescript": "~7.0.2",
-    "vite": "^8.2.1",
-    "vitest": "^4.1.10"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   }
 }
