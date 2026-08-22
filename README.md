@@ -47,9 +47,10 @@
 6. [Developer Setup](#-developer-setup)
 7. [Testing](#-testing)
 8. [Roadmap](#-roadmap)
-9. [Contributing](#-contributing)
-10. [License](#-license)
-11. [Acknowledgments](#-acknowledgments)
+9. [Releases and Updates](#-releases-and-updates)
+10. [Contributing](#-contributing)
+11. [License](#-license)
+12. [Acknowledgments](#-acknowledgments)
 
 </details>
 
@@ -371,12 +372,29 @@ Unit tests cover schemas, Zustand stores, and utility functions. Component tests
 - [x] Results visualization (population stats + NIfTI viewer)
 - [x] Project manifest export
 - [x] Import BIDS-ready datasets
-- [ ] Auto-update support
+- [x] Auto-update support
 - [ ] Validated execution profiles for Apptainer
 - [x] Multi-reviewer manifest review workflow
 - [ ] Documentation site
 
 See [open issues](https://github.com/MauricePasternak/ExploreASL-GUI/issues) for a full list of planned features and known bugs.
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+---
+
+## 📦 Releases and Updates
+
+Published releases provide signed auto-updates for Linux x64 (AppImage), Windows x64 (NSIS), and macOS aarch64/x86_64. The app checks once at production startup and verifies each updater artifact with the embedded Tauri public key.
+
+### Release procedure
+
+1. Set the same valid semver in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
+2. Confirm GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, plus repository variable `TAURI_UPDATER_PUBKEY`, exist. Never commit or print the private key.
+3. Run the manual **Release** workflow. It creates a draft, or reuses an unpublished draft from a failed run, builds Linux x64 `.deb` + AppImage, Windows x64 MSI + NSIS, and macOS arm64 + Intel artifacts, then uploads signed updater metadata.
+4. Review and publish the draft. For the first updater-enabled baseline release, install each platform artifact manually. For the next version, smoke-test an in-app update from that baseline before publishing broadly.
+
+Tauri updater signatures prove artifact integrity; they do not replace OS distribution signing. macOS bundles use ad-hoc signing (`-`), so Gatekeeper still shows an unidentified-developer warning without an Apple Developer certificate/notarization. Windows has no Authenticode signing configured.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
