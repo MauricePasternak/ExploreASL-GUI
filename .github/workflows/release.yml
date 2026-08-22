@@ -58,30 +58,28 @@ jobs:
           script: |
             const version = "${{ steps.release-inputs.outputs.version }}";
             const tag = `v${version}`;
-            try {
-              const { data } = await github.rest.repos.createRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag_name: tag,
-                name: tag,
-                draft: true,
-                prerelease: false,
-                generate_release_notes: true,
-              });
-              return data.id;
-            } catch (error) {
-              if (error.status !== 422) throw error;
-              const releases = await github.paginate(github.rest.repos.listReleases, {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                per_page: 100,
-              });
-              const existing = releases.find((release) => release.tag_name === tag);
-              if (!existing) throw error;
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+            const existing = releases.find((release) => release.tag_name === tag);
+            if (existing) {
               if (!existing.draft) throw new Error(`Release ${tag} already exists and is published.`);
               core.info(`Reusing failed-run draft release ${tag}.`);
               return existing.id;
             }
+
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: tag,
+              draft: true,
+              prerelease: false,
+              generate_release_notes: true,
+            });
+            return data.id;
 
   build:
     needs: create-release
