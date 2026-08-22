@@ -177,7 +177,7 @@ function useBuildManifestPayload(): ManifestPayload {
   const versions = {
     exploreASL: lastRun?.exploreASLVersion || exploreAslGlobalVersion || undefined,
     matlab: lastRun?.matlabVersion,
-    gui: lastRun?.guiVersion ?? project?.version ?? import.meta.env.VITE_APP_VERSION,
+    gui: lastRun?.guiVersion ?? import.meta.env.VITE_APP_VERSION,
   };
 
   const subjectSessionGroups = new Map<string, string>();
