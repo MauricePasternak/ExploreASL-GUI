@@ -1,7 +1,7 @@
 {
   "name": "exploreasl_gui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "packageManager": "pnpm@11.11.0",
   "scripts": {
