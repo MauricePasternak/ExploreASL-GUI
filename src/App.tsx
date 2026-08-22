@@ -4,6 +4,7 @@ import { Route, Routes, useLocation } from "react-router";
 
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
+import UpdateManager from "./components/UpdateManager";
 import SettingsModal from "./components/settings/SettingsModal";
 import LandingPage from "./pages/LandingPage";
 import ProjectPage from "./pages/ProjectPage";
@@ -75,6 +76,8 @@ export default function App({ e2e }: AppProps) {
             <Route path="/overview" element={<OverviewPage />} />
           </Route>
         </Routes>
+
+        <UpdateManager enabled={e2e?.enabled ? false : undefined} />
 
         {settingsOpen && (
           <SettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />

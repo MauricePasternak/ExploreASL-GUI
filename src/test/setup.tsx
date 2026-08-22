@@ -259,10 +259,20 @@ vi.mock("@tauri-apps/plugin-os", () => ({
   platform: vi.fn(() => Promise.resolve("linux")),
 }));
 
+vi.mock("@tauri-apps/plugin-process", () => ({
+  relaunch: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn(() => Promise.resolve(null)),
+}));
+
 vi.mock("@mantine/notifications", () => ({
   Notifications: () => null,
   notifications: {
     show: vi.fn(),
+    update: vi.fn(),
+    hide: vi.fn(),
   },
 }));
 

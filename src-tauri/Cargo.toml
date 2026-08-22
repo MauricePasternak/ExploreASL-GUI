@@ -24,7 +24,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-os = "2"
 tauri-plugin-store = "2"
-tauri-plugin-log = "2"
+tauri-plugin-log = "2.9.0"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -39,11 +39,12 @@ csv = "1.4.0"
 calamine = "0.35.0"
 libc = "0.2"
 strsim = "0.11.1"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.3", features = ["signal"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Threading", "Win32_Foundation", "Win32_System_Console", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_Storage_FileSystem"] }
-
 

@@ -67,6 +67,8 @@
     "os:default",
     "store:default",
     "log:default",
-    "clipboard-manager:default"
+    "clipboard-manager:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }
