@@ -39,6 +39,7 @@ import { useProcessingStore } from "../stores/processingStore";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { logAction } from "../lib/debug";
+import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import ProcessingStatusBar from "./processing/ProcessingStatusBar";
 
 const PHASE_NAV = [
@@ -83,7 +84,12 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       notifications.show({
         color: "red",
         title: "Failed to save project",
-        message: err instanceof Error ? err.message : "ExploreASL GUI could not save your project.",
+        message:
+          err instanceof ProjectStorageError
+            ? projectStorageErrorMessage(err)
+            : err instanceof Error
+              ? err.message
+              : "ExploreASL GUI could not save your project.",
         autoClose: 10000,
       });
     }
@@ -200,9 +206,11 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           color: "red",
           title: "Failed to save project",
           message:
-            error instanceof Error
-              ? error.message
-              : "ExploreASL GUI could not save your project before leaving.",
+            error instanceof ProjectStorageError
+              ? projectStorageErrorMessage(error)
+              : error instanceof Error
+                ? error.message
+                : "ExploreASL GUI could not save your project before leaving.",
           autoClose: 10000,
         });
         return;

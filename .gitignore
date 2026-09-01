@@ -27,7 +27,6 @@ dist-ssr
 *.sw?
 
 # Agent-related
-openspec/changes/
 .superpowers/
 .cursor/
 .opencode/

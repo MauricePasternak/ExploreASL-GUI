@@ -658,18 +658,18 @@ export const ImportSnapshotSchema = z.object({
 export type ImportSnapshot = z.infer<typeof ImportSnapshotSchema>;
 
 export const MappingStateSchema = z.object({
-  sourceDataPath: z.string().catch("").optional(),
-  rawPaths: z.array(z.string()).catch([]).optional(),
-  pathPatterns: z.array(PathPatternSchema).catch([]).optional(),
-  bMatchDirectories: z.boolean().catch(true).optional(),
-  ingestionComplete: z.boolean().catch(false).optional(),
-  tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)).catch({}).optional(),
-  modalityAliases: z.array(ModalityAliasSchema).catch([]).optional(),
-  sessionAliases: z.array(SessionAliasSchema).catch([]).optional(),
-  runAliases: z.array(SessionAliasSchema).catch([]).optional(),
-  subjectRenames: z.array(SubjectRenameSchema).catch([]).optional(),
-  metadataGroups: z.array(MetadataGroupSchema).catch([]).optional(),
-  subjectRows: z.array(SubjectRowSchema).catch([]).optional(),
+  sourceDataPath: z.string().optional(),
+  rawPaths: z.array(z.string()).optional(),
+  pathPatterns: z.array(PathPatternSchema).optional(),
+  bMatchDirectories: z.boolean().optional(),
+  ingestionComplete: z.boolean().optional(),
+  tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)).optional(),
+  modalityAliases: z.array(ModalityAliasSchema).optional(),
+  sessionAliases: z.array(SessionAliasSchema).optional(),
+  runAliases: z.array(SessionAliasSchema).optional(),
+  subjectRenames: z.array(SubjectRenameSchema).optional(),
+  metadataGroups: z.array(MetadataGroupSchema).optional(),
+  subjectRows: z.array(SubjectRowSchema).optional(),
 });
 
 export type MappingState = z.infer<typeof MappingStateSchema>;

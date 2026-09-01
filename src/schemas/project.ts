@@ -1,8 +1,12 @@
 import { z } from "zod";
 import { DataParSchema } from "./dataParSchema";
 import { ProcessConfigSchema, ProcessingPhaseSchema } from "./processingSchemas";
-import { decompressSnapshot } from "../lib/snapshotCompression";
-import { MappingStateSchema, IMPORT_EXECUTION_PHASES } from "./importSchemas";
+import {
+  compressSnapshot,
+  decompressSnapshot,
+  stableJsonStringify,
+} from "../lib/snapshotCompression";
+import { ImportSnapshotSchema, MappingStateSchema, IMPORT_EXECUTION_PHASES } from "./importSchemas";
 
 export const PROJECT_PHASES = [
   "import",
@@ -119,12 +123,7 @@ export const ImportUiStateSchema = z.object({
     .preprocess((val) => {
       if (val === null || val === undefined) return null;
       if (typeof val === "string") return val;
-      // Legacy form: full object. v0 accepts breaking change — drop + warn.
-      console.warn(
-        "[projectSchema] legacy object-form mostRecentConfig encountered; dropping (v0 breaking change). Re-import to capture a new snapshot.",
-        val,
-      );
-      return null;
+      return val;
     }, z.string().nullable())
     .transform((v) => (v === null ? null : decompressSnapshot(v)))
     .nullable()
@@ -284,12 +283,22 @@ export const ProjectFileSchema = z.object({
   dataPar: DataParSchema.default({}),
 });
 
+/** Schema v1 persisted envelope. Runtime root path and legacy app version are absent. */
+export const ProjectV1PersistedSchema = z.object({
+  schemaVersion: z.literal(1),
+  projectMeta: ProjectMetaSchema.omit({ rootPath: true }),
+  uiState: ProjectFileSchema.shape.uiState,
+  mappingState: MappingStateSchema.default({}),
+  dataPar: DataParSchema.default({}),
+});
+
 export type ImportUiState = z.infer<typeof ImportUiStateSchema>;
 export type ProjectMeta = z.infer<typeof ProjectMetaSchema>;
-export type ProjectFile = z.infer<typeof ProjectFileSchema>;
+export type ProjectFile = z.infer<typeof ProjectFileSchema> & { schemaVersion?: 1 };
 export type ProjectPhase = (typeof PROJECT_PHASES)[number];
 
 export const DEFAULT_PROJECT_FILE = (id: string, name: string, rootPath: string): ProjectFile => ({
+  schemaVersion: 1,
   version: "0.1.0",
   projectMeta: {
     id,
@@ -314,6 +323,127 @@ export const DEFAULT_PROJECT_FILE = (id: string, name: string, rootPath: string)
   mappingState: {},
   dataPar: {},
 });
+
+export class ProjectMalformedError extends Error {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "ProjectMalformedError";
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+export class ProjectUnsupportedVersionError extends Error {
+  constructor(readonly schemaVersion: number) {
+    super(`Project schema version ${schemaVersion} is not supported by this application.`);
+    this.name = "ProjectUnsupportedVersionError";
+  }
+}
+
+export type VersionedProjectFile = ProjectFile & { schemaVersion: 1 };
+
+function persistedProjectMeta(projectMeta: ProjectMeta) {
+  return {
+    id: projectMeta.id,
+    name: projectMeta.name,
+    createdAt: projectMeta.createdAt,
+    lastOpened: projectMeta.lastOpened,
+    currentPhase: projectMeta.currentPhase,
+    dataSource: projectMeta.dataSource,
+  };
+}
+
+function persistedProjectDto(project: ProjectFile) {
+  return {
+    schemaVersion: 1 as const,
+    projectMeta: persistedProjectMeta(project.projectMeta),
+    uiState: project.uiState,
+    mappingState: project.mappingState,
+    dataPar: project.dataPar,
+  };
+}
+
+function encodeRuntimeSnapshots(dto: ReturnType<typeof persistedProjectDto>) {
+  return JSON.parse(
+    JSON.stringify(dto, (key, value) => {
+      if (key === "mostRecentConfig" && value && typeof value === "object") {
+        const snapshot = ImportSnapshotSchema.safeParse(value);
+        if (snapshot.success) return compressSnapshot(snapshot.data);
+      }
+      return value;
+    }),
+  ) as unknown;
+}
+
+function hydrateV1Project(project: z.infer<typeof ProjectV1PersistedSchema>): VersionedProjectFile {
+  return {
+    ...project,
+    version: "0.1.0",
+    projectMeta: { ...project.projectMeta, rootPath: "" },
+  };
+}
+
+function normalizeSnapshot(input: unknown, allowObject: boolean): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const project = structuredClone(input) as Record<string, unknown>;
+  const uiState = project.uiState;
+  if (!uiState || typeof uiState !== "object" || Array.isArray(uiState)) return project;
+  const importState = (uiState as Record<string, unknown>).import;
+  if (!importState || typeof importState !== "object" || Array.isArray(importState)) return project;
+  const snapshot = (importState as Record<string, unknown>).mostRecentConfig;
+  if (snapshot && typeof snapshot === "object") {
+    if (!allowObject)
+      throw new ProjectMalformedError("Schema v1 snapshots must be compressed strings.");
+    (importState as Record<string, unknown>).mostRecentConfig = compressSnapshot(
+      ImportSnapshotSchema.parse(snapshot),
+    );
+  }
+  return project;
+}
+
+/** Parses supported persisted formats into the runtime v1 representation. */
+export function parseProject(raw: string): VersionedProjectFile {
+  let input: unknown;
+  try {
+    input = JSON.parse(raw);
+  } catch (error) {
+    throw new ProjectMalformedError("Project file is not valid JSON.", error);
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new ProjectMalformedError("Project file envelope must be an object.");
+  }
+  const envelope = input as Record<string, unknown>;
+  if (Number.isInteger(envelope.schemaVersion) && (envelope.schemaVersion as number) > 1) {
+    throw new ProjectUnsupportedVersionError(envelope.schemaVersion as number);
+  }
+  const isV1 = envelope.schemaVersion === 1;
+  const isLegacy = envelope.schemaVersion === undefined && envelope.version === "0.1.0";
+  if (!isV1 && !isLegacy) {
+    throw new ProjectMalformedError("Project file has no supported schema envelope.");
+  }
+  try {
+    const normalized = normalizeSnapshot(input, isLegacy);
+    if (isLegacy) {
+      const legacy = ProjectFileSchema.parse(normalized);
+      const migrated = ProjectV1PersistedSchema.parse(
+        encodeRuntimeSnapshots(persistedProjectDto(legacy)),
+      );
+      return hydrateV1Project(migrated);
+    }
+    return hydrateV1Project(ProjectV1PersistedSchema.parse(normalized));
+  } catch (error) {
+    if (error instanceof ProjectMalformedError) throw error;
+    throw new ProjectMalformedError("Project file has invalid supported data.", error);
+  }
+}
+
+/** Canonical persisted v1 DTO. Runtime root and legacy version never cross this boundary. */
+export function serializeProject(project: VersionedProjectFile): string {
+  const serialized = stableJsonStringify(encodeRuntimeSnapshots(persistedProjectDto(project)), 2);
+  parseProject(serialized);
+  return serialized;
+}
 
 export const PROJECT_FILE_NAME = "project.easl";
 

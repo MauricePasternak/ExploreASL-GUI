@@ -1,4 +1,5 @@
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PROJECT_FILE_NAME } from "../schemas/project";
@@ -33,6 +34,7 @@ function seedValidProfileGate() {
 
 describe("useProjectStore", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     sessionStorage.clear();
     __resetProjectRevisionForTests();
     seedValidProfileGate();
@@ -40,9 +42,10 @@ describe("useProjectStore", () => {
       project: null,
       isDirty: false,
       loaded: false,
+      recovery: null,
+      recoveredFromBackup: false,
     });
 
-    vi.mocked(writeTextFile).mockResolvedValue(undefined);
     vi.mocked(readTextFile).mockResolvedValue("");
     vi.mocked(isBidsProject).mockReset();
     vi.mocked(ensureBidsIgnore).mockReset();
@@ -53,9 +56,13 @@ describe("useProjectStore", () => {
       .getState()
       .createProject("/tmp/demo-project", "Demo Project", { dataSource: "dicom" });
 
-    expect(writeTextFile).toHaveBeenCalledWith(
-      `/tmp/demo-project/${PROJECT_FILE_NAME}`,
-      expect.stringContaining('"name": "Demo Project"'),
+    expect(invoke).toHaveBeenCalledWith(
+      "atomic_write_project",
+      expect.objectContaining({
+        projectPath: `/tmp/demo-project/${PROJECT_FILE_NAME}`,
+        canonicalBytes: expect.stringContaining('"name": "Demo Project"'),
+        preserveBackup: false,
+      }),
     );
     expect(useProjectStore.getState().project?.projectMeta.currentPhase).toBe("import");
     expect(useProjectStore.getState().project?.projectMeta.dataSource).toBe("dicom");
@@ -83,9 +90,12 @@ describe("useProjectStore", () => {
       .createProject("/tmp/profile-default", "Profile Default", { dataSource: "dicom" });
 
     expect(useProjectStore.getState().project?.uiState.import?.selectedProfileId).toBe(valid.id);
-    expect(writeTextFile).toHaveBeenCalledWith(
-      `/tmp/profile-default/${PROJECT_FILE_NAME}`,
-      expect.stringContaining(`"selectedProfileId": "${valid.id}"`),
+    expect(invoke).toHaveBeenCalledWith(
+      "atomic_write_project",
+      expect.objectContaining({
+        projectPath: `/tmp/profile-default/${PROJECT_FILE_NAME}`,
+        canonicalBytes: expect.stringContaining(`"selectedProfileId": "${valid.id}"`),
+      }),
     );
   });
 
@@ -200,6 +210,250 @@ describe("useProjectStore", () => {
     });
   });
 
+  it("opens v1 and legacy projects read-only with root derived from the selected file", async () => {
+    const legacy = {
+      version: "0.1.0",
+      projectMeta: {
+        id: "project-1",
+        name: "Loaded Project",
+        rootPath: "/stale/root",
+        createdAt: "2026-05-03T00:00:00.000Z",
+        lastOpened: "2026-05-03T00:00:00.000Z",
+        currentPhase: "parameters",
+        dataSource: "dicom",
+      },
+      uiState: {},
+      mappingState: {},
+      dataPar: {},
+    };
+    const v1 = { ...legacy, projectMeta: { ...legacy.projectMeta }, schemaVersion: 1 };
+    delete (v1 as { version?: string }).version;
+    delete (v1.projectMeta as { rootPath?: string }).rootPath;
+
+    for (const fixture of [legacy, v1]) {
+      vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(fixture));
+      vi.mocked(invoke).mockClear();
+      await useProjectStore.getState().loadProject("/chosen/root/project.easl");
+      expect(useProjectStore.getState().project?.projectMeta.rootPath).toBe("/chosen/root");
+      expect(useProjectStore.getState().project?.projectMeta.lastOpened).toBe(
+        "2026-05-03T00:00:00.000Z",
+      );
+      expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
+    }
+  });
+
+  it("derives POSIX and Windows filesystem roots without corrupting root directories", async () => {
+    const v1 = {
+      schemaVersion: 1,
+      projectMeta: {
+        id: "project-1",
+        name: "Loaded Project",
+        createdAt: "2026-05-03T00:00:00.000Z",
+        lastOpened: "2026-05-03T00:00:00.000Z",
+        currentPhase: "parameters",
+        dataSource: "dicom",
+      },
+      uiState: {},
+      mappingState: {},
+      dataPar: {},
+    };
+    vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(v1));
+
+    for (const [easlPath, rootPath] of [
+      ["project.easl", "."],
+      ["/project.easl", "/"],
+      ["C:\\project.easl", "C:\\"],
+      ["C:\\chosen\\root\\project.easl", "C:\\chosen\\root"],
+    ]) {
+      await useProjectStore.getState().loadProject(easlPath);
+      expect(useProjectStore.getState().project?.projectMeta.rootPath).toBe(rootPath);
+    }
+  });
+
+  it("does not write malformed or future project files", async () => {
+    for (const raw of ["{", JSON.stringify({ schemaVersion: 2 })]) {
+      vi.mocked(readTextFile).mockResolvedValue(raw);
+      vi.mocked(invoke).mockClear();
+      await expect(
+        useProjectStore.getState().loadProject("/chosen/root/project.easl"),
+      ).rejects.toThrow();
+      expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
+    }
+  });
+
+  it("reports invalid serialization before invoking the native writer", async () => {
+    useProjectStore.setState({
+      project: { projectMeta: {} } as any,
+      isDirty: true,
+      loaded: true,
+    });
+    vi.mocked(invoke).mockClear();
+
+    await expect(useProjectStore.getState().saveProject()).rejects.toMatchObject({
+      category: "invalid_serialization",
+    });
+
+    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
+    expect(useProjectStore.getState().isDirty).toBe(true);
+  });
+
+  describe("backup recovery", () => {
+    const validProject = JSON.stringify({
+      schemaVersion: 1,
+      projectMeta: {
+        id: "recovered-project",
+        name: "Recovered Project",
+        createdAt: "2026-05-03T00:00:00.000Z",
+        lastOpened: "2026-05-03T00:00:00.000Z",
+        currentPhase: "parameters",
+        dataSource: "dicom",
+      },
+      uiState: {},
+      mappingState: {},
+      dataPar: {},
+    });
+
+    it("prefers a valid primary over its backup", async () => {
+      vi.mocked(readTextFile).mockClear();
+      vi.mocked(readTextFile).mockImplementation(async (path) =>
+        String(path).endsWith(".bak") ? validProject.replace("Recovered", "Backup") : validProject,
+      );
+
+      await useProjectStore.getState().loadProject("/tmp/recovery/project.easl");
+
+      expect(useProjectStore.getState().project?.projectMeta.name).toBe("Recovered Project");
+      expect(useProjectStore.getState().recovery).toBeNull();
+      expect(readTextFile).not.toHaveBeenCalledWith("/tmp/recovery/project.easl.bak");
+      expect(invoke).toHaveBeenCalledWith("cleanup_project_temps", {
+        projectPath: "/tmp/recovery/project.easl",
+      });
+    });
+
+    it("offers a valid backup after a malformed primary and confirms without writing", async () => {
+      vi.mocked(invoke).mockClear();
+      vi.mocked(readTextFile).mockImplementation(async (path) =>
+        String(path).endsWith(".bak") ? validProject : "{",
+      );
+
+      await useProjectStore.getState().loadProject("/tmp/recovery/project.easl");
+      expect(useProjectStore.getState().recovery).toEqual({
+        easlPath: "/tmp/recovery/project.easl",
+        backupPath: "/tmp/recovery/project.easl.bak",
+        projectId: "recovered-project",
+      });
+      expect(useProjectStore.getState().project).toBeNull();
+      expect(invoke).not.toHaveBeenCalledWith("cleanup_project_temps", expect.any(Object));
+
+      await useProjectStore.getState().confirmRecovery();
+      expect(useProjectStore.getState().project?.projectMeta.rootPath).toBe("/tmp/recovery");
+      expect(useProjectStore.getState().isDirty).toBe(true);
+      expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
+      expect(invoke).toHaveBeenCalledWith("cleanup_project_temps", {
+        projectPath: "/tmp/recovery/project.easl",
+      });
+
+      await useProjectStore.getState().saveProject();
+      expect(invoke).toHaveBeenLastCalledWith(
+        "atomic_write_project",
+        expect.objectContaining({ preserveBackup: true }),
+      );
+    });
+
+    it("unloads any prior project while waiting for recovery confirmation or decline", async () => {
+      await useProjectStore
+        .getState()
+        .createProject("/tmp/prior-project", "Prior Project", { dataSource: "dicom" });
+      vi.mocked(readTextFile).mockImplementation(async (path) =>
+        String(path).endsWith(".bak") ? validProject : "{",
+      );
+
+      await useProjectStore.getState().loadProject("/tmp/recovery/project.easl");
+      expect(useProjectStore.getState()).toMatchObject({
+        project: null,
+        isDirty: false,
+        loaded: false,
+        recovery: { easlPath: "/tmp/recovery/project.easl" },
+      });
+
+      useProjectStore.getState().declineRecovery();
+      expect(useProjectStore.getState()).toMatchObject({
+        project: null,
+        isDirty: false,
+        loaded: false,
+        recovery: null,
+      });
+    });
+
+    it("does not fall back after a future version or permission error", async () => {
+      vi.mocked(readTextFile).mockClear();
+      vi.mocked(readTextFile).mockResolvedValueOnce(JSON.stringify({ schemaVersion: 2 }));
+      await expect(
+        useProjectStore.getState().loadProject("/tmp/recovery/project.easl"),
+      ).rejects.toThrow(/not supported/i);
+      expect(readTextFile).not.toHaveBeenCalledWith("/tmp/recovery/project.easl.bak");
+
+      vi.mocked(readTextFile).mockClear();
+      const permissionError = Object.assign(new Error("permission denied"), { code: "EACCES" });
+      vi.mocked(readTextFile).mockRejectedValueOnce(permissionError);
+      await expect(
+        useProjectStore.getState().loadProject("/tmp/recovery/project.easl"),
+      ).rejects.toMatchObject({ category: "permission_denied" });
+      expect(readTextFile).not.toHaveBeenCalledWith("/tmp/recovery/project.easl.bak");
+    });
+
+    it("classifies object-shaped native permission failures without falling back", async () => {
+      vi.mocked(readTextFile).mockRejectedValueOnce({
+        message: "Permission denied",
+        code: "EACCES",
+      });
+
+      await expect(
+        useProjectStore.getState().loadProject("/tmp/recovery/project.easl"),
+      ).rejects.toMatchObject({ category: "permission_denied" });
+      expect(readTextFile).not.toHaveBeenCalledWith("/tmp/recovery/project.easl.bak");
+    });
+
+    it("recognizes native missing-file strings and offers the valid backup", async () => {
+      vi.mocked(readTextFile)
+        .mockRejectedValueOnce("No such file or directory (os error 2)")
+        .mockResolvedValueOnce(validProject);
+
+      await useProjectStore.getState().loadProject("/tmp/recovery/project.easl");
+
+      expect(useProjectStore.getState().recovery).toEqual({
+        easlPath: "/tmp/recovery/project.easl",
+        backupPath: "/tmp/recovery/project.easl.bak",
+        projectId: "recovered-project",
+      });
+    });
+
+    it("logs stale-temp cleanup failure and still opens validated primary", async () => {
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      vi.mocked(readTextFile).mockResolvedValue(validProject);
+      vi.mocked(invoke).mockRejectedValueOnce(new Error("cleanup denied"));
+
+      await useProjectStore.getState().loadProject("/tmp/recovery/project.easl");
+
+      expect(useProjectStore.getState().loaded).toBe(true);
+      expect(warning).toHaveBeenCalledWith(
+        "Failed to clean stale project temporary files:",
+        expect.any(Error),
+      );
+      warning.mockRestore();
+    });
+
+    it("rejects malformed backups", async () => {
+      vi.mocked(readTextFile).mockImplementation(async (path) =>
+        String(path).endsWith(".bak") ? "{" : "{",
+      );
+
+      await expect(
+        useProjectStore.getState().loadProject("/tmp/recovery/project.easl"),
+      ).rejects.toThrow(/recovery failed/i);
+      expect(useProjectStore.getState().recovery).toBeNull();
+    });
+  });
+
   it("rejects project files that are not named project.easl", async () => {
     await expect(
       useProjectStore.getState().loadProject("/tmp/loaded/custom-name.easl"),
@@ -228,9 +482,12 @@ describe("useProjectStore", () => {
 
     await useProjectStore.getState().saveProject();
 
-    expect(writeTextFile).toHaveBeenLastCalledWith(
-      `/tmp/save-project/${PROJECT_FILE_NAME}`,
-      expect.stringContaining('"currentPhase": "parameters"'),
+    expect(invoke).toHaveBeenLastCalledWith(
+      "atomic_write_project",
+      expect.objectContaining({
+        projectPath: `/tmp/save-project/${PROJECT_FILE_NAME}`,
+        canonicalBytes: expect.stringContaining('"currentPhase": "parameters"'),
+      }),
     );
     expect(useProjectStore.getState().isDirty).toBe(false);
   });
@@ -453,8 +710,8 @@ describe("useProjectStore", () => {
 
       await useProjectStore.getState().saveProject();
 
-      const calls = vi.mocked(writeTextFile).mock.calls;
-      const savedJson = calls[calls.length - 1][1] as string;
+      const calls = vi.mocked(invoke).mock.calls;
+      const savedJson = (calls[calls.length - 1][1] as { canonicalBytes: string }).canonicalBytes;
       const saved = JSON.parse(savedJson);
 
       // Persisted form MUST be a string, not an object
@@ -470,8 +727,7 @@ describe("useProjectStore", () => {
       expect(restored).toEqual(SAMPLE_SNAPSHOT);
     });
 
-    it("legacy object-form mostRecentConfig is dropped with a warning on load", async () => {
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    it("legacy object-form mostRecentConfig is preserved on load", async () => {
       const legacyJson = JSON.stringify({
         version: "0.1.0",
         projectMeta: {
@@ -501,12 +757,7 @@ describe("useProjectStore", () => {
       await useProjectStore.getState().loadProject("/tmp/legacy-snapshot/project.easl");
 
       const restored = useProjectStore.getState().project?.uiState.import?.mostRecentConfig;
-      expect(restored).toBeNull();
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("legacy object-form mostRecentConfig"),
-        expect.any(Object),
-      );
-      warnSpy.mockRestore();
+      expect(restored).toEqual(SAMPLE_SNAPSHOT);
     });
 
     it("null mostRecentConfig round-trips as null", async () => {
@@ -524,8 +775,8 @@ describe("useProjectStore", () => {
 
       await useProjectStore.getState().saveProject();
 
-      const calls = vi.mocked(writeTextFile).mock.calls;
-      const savedJson = calls[calls.length - 1][1] as string;
+      const calls = vi.mocked(invoke).mock.calls;
+      const savedJson = (calls[calls.length - 1][1] as { canonicalBytes: string }).canonicalBytes;
       const saved = JSON.parse(savedJson);
       expect(saved.uiState.import.mostRecentConfig).toBeNull();
 
@@ -964,15 +1215,34 @@ describe("useProjectStore", () => {
   });
 
   describe("queued saveProject", () => {
+    it("retains dirty state after durability uncertainty and retries the latest revision", async () => {
+      await useProjectStore
+        .getState()
+        .createProject("/tmp/retry-save", "Retry Save", { dataSource: "dicom" });
+      useProjectStore.getState().toggleNavbar();
+      vi.mocked(invoke).mockRejectedValueOnce({
+        category: "durability_uncertain",
+        message: "Directory flush failed after replacement.",
+      });
+
+      await expect(useProjectStore.getState().saveProject()).rejects.toMatchObject({
+        category: "durability_uncertain",
+      });
+      expect(useProjectStore.getState().isDirty).toBe(true);
+
+      await useProjectStore.getState().saveProject();
+      expect(useProjectStore.getState().isDirty).toBe(false);
+    });
+
     it("does not write when the project is clean", async () => {
       await useProjectStore
         .getState()
         .createProject("/tmp/clean-save", "Clean Save", { dataSource: "dicom" });
-      vi.mocked(writeTextFile).mockClear();
+      vi.mocked(invoke).mockClear();
 
       await useProjectStore.getState().saveProject();
 
-      expect(writeTextFile).not.toHaveBeenCalled();
+      expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
       expect(useProjectStore.getState().isDirty).toBe(false);
     });
 
@@ -987,7 +1257,7 @@ describe("useProjectStore", () => {
         resolveFirstWrite = resolve;
       });
 
-      vi.mocked(writeTextFile).mockImplementationOnce(async () => {
+      vi.mocked(invoke).mockImplementationOnce(async () => {
         await firstWriteGate;
       });
 
@@ -1004,9 +1274,9 @@ describe("useProjectStore", () => {
       await secondSave;
       expect(useProjectStore.getState().isDirty).toBe(false);
 
-      const writes = vi.mocked(writeTextFile).mock.calls.slice(-2);
-      const firstSaved = JSON.parse(writes[0][1] as string);
-      const secondSaved = JSON.parse(writes[1][1] as string);
+      const writes = vi.mocked(invoke).mock.calls.slice(-2);
+      const firstSaved = JSON.parse((writes[0][1] as { canonicalBytes: string }).canonicalBytes);
+      const secondSaved = JSON.parse((writes[1][1] as { canonicalBytes: string }).canonicalBytes);
 
       expect(firstSaved.uiState.navbarCollapsed).toBe(false);
       expect(firstSaved.uiState.dataVis).toBeUndefined();
@@ -1027,7 +1297,7 @@ describe("useProjectStore", () => {
         resolveSlowWrite = resolve;
       });
 
-      vi.mocked(writeTextFile).mockImplementationOnce(async () => {
+      vi.mocked(invoke).mockImplementationOnce(async () => {
         await slowWriteGate;
       });
 
@@ -1052,7 +1322,7 @@ describe("useProjectStore", () => {
         resolveSlowWrite = resolve;
       });
 
-      vi.mocked(writeTextFile).mockImplementationOnce(async () => {
+      vi.mocked(invoke).mockImplementationOnce(async () => {
         await slowWriteGate;
       });
 
@@ -1069,6 +1339,35 @@ describe("useProjectStore", () => {
 
       expect(useProjectStore.getState().project?.projectMeta.name).toBe("Project B");
       expect(useProjectStore.getState().isDirty).toBe(true);
+    });
+
+    it("keeps a reopened same-ID project dirty until its own queued save completes", async () => {
+      await useProjectStore
+        .getState()
+        .createProject("/tmp/reopen-project", "Reopen Project", { dataSource: "dicom" });
+      const reopenedProject = useProjectStore.getState().project!;
+      useProjectStore.getState().toggleNavbar();
+
+      let resolveSlowWrite: (() => void) | undefined;
+      const slowWrite = new Promise<void>((resolve) => {
+        resolveSlowWrite = resolve;
+      });
+      vi.mocked(invoke).mockImplementationOnce(async () => {
+        await slowWrite;
+      });
+
+      const oldSave = useProjectStore.getState().saveProject();
+      await Promise.resolve();
+      useProjectStore.getState().closeProject();
+      useProjectStore.setState({ project: reopenedProject, isDirty: true, loaded: true });
+      useProjectStore.getState().toggleNavbar();
+      const reopenedSave = useProjectStore.getState().saveProject();
+
+      resolveSlowWrite?.();
+      await oldSave;
+      expect(useProjectStore.getState().isDirty).toBe(true);
+      await reopenedSave;
+      expect(useProjectStore.getState().isDirty).toBe(false);
     });
   });
 
@@ -1164,7 +1463,7 @@ describe("useProjectStore", () => {
       expect(project.projectMeta.currentPhase).toBe("parameters");
 
       // project was saved
-      expect(writeTextFile).toHaveBeenCalled();
+      expect(invoke).toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
       expect(useProjectStore.getState().isDirty).toBe(false);
     });
 

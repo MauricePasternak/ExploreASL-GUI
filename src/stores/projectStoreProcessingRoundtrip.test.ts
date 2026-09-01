@@ -1,13 +1,26 @@
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { seedValidProfileGate } from "../test/landingProfileGate";
 import { useProcessingStore } from "./processingStore";
-import { useProjectStore } from "./projectStore";
+import { __resetProjectRevisionForTests, useProjectStore } from "./projectStore";
+
+function lastAtomicProjectBytes() {
+  const writes = vi
+    .mocked(invoke)
+    .mock.calls.filter(([command]) => command === "atomic_write_project");
+  const write = writes[writes.length - 1];
+  const bytes = (write?.[1] as { canonicalBytes?: string } | undefined)?.canonicalBytes;
+  if (typeof bytes !== "string") throw new Error("atomic project write was not invoked");
+  return bytes;
+}
 
 describe("processing config round-trip persistence", () => {
   beforeEach(async () => {
+    vi.clearAllMocks();
     sessionStorage.clear();
+    __resetProjectRevisionForTests();
     seedValidProfileGate();
     useProjectStore.setState({
       project: null,
@@ -16,7 +29,6 @@ describe("processing config round-trip persistence", () => {
     });
     await useProcessingStore.getState().resetProcessing();
 
-    vi.mocked(writeTextFile).mockResolvedValue(undefined);
     vi.mocked(readTextFile).mockResolvedValue("");
   });
 
@@ -42,9 +54,7 @@ describe("processing config round-trip persistence", () => {
     // Save project — this serializes processingConfig into the .easl JSON
     await useProjectStore.getState().saveProject();
 
-    // Capture the serialized JSON (last writeTextFile call = saveProject)
-    const calls = vi.mocked(writeTextFile).mock.calls;
-    const savedJson = calls[calls.length - 1][1] as string;
+    const savedJson = lastAtomicProjectBytes();
     const saved = JSON.parse(savedJson);
 
     expect(saved.uiState.processing?.config).toEqual(config);
@@ -73,8 +83,7 @@ describe("processing config round-trip persistence", () => {
 
     await useProjectStore.getState().saveProject();
 
-    const calls = vi.mocked(writeTextFile).mock.calls;
-    const reloadJson = calls[calls.length - 1][1] as string;
+    const reloadJson = lastAtomicProjectBytes();
     const saved = JSON.parse(reloadJson);
     expect(saved.uiState.processing?.currentPhase).toBe("running");
 
@@ -94,7 +103,7 @@ describe("processing config round-trip persistence", () => {
     // Don't sync any processing state — processingConfig should be undefined
     await useProjectStore.getState().saveProject();
 
-    const savedJson = vi.mocked(writeTextFile).mock.calls[0][1] as string;
+    const savedJson = lastAtomicProjectBytes();
     const saved = JSON.parse(savedJson);
 
     // processingConfig should not be present or be undefined

@@ -128,8 +128,8 @@ export default function ProjectPage() {
       restoreInFlight.current = false;
       setRestoring(false);
 
-      if (!restored) {
-        // Project failed to load / doesn't exist
+      if (!restored || useProjectStore.getState().recovery) {
+        // Project failed to load, does not exist, or needs recovery confirmation.
         navigate("/", { replace: true });
       }
     }

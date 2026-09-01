@@ -16,6 +16,7 @@ import {
   seedZeroProfilesGate,
 } from "../test/landingProfileGate";
 import { makeMatlabProfile } from "../test/profileFixtures";
+import { ProjectStorageError } from "../lib/projectPersistence";
 import LandingPage from "./LandingPage";
 
 describe("LandingPage", () => {
@@ -24,6 +25,7 @@ describe("LandingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     seedValidProfileGate();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
     useProjectStore.setState({
       project: null,
       isDirty: false,
@@ -136,6 +138,96 @@ describe("LandingPage", () => {
         }),
       );
     });
+  });
+
+  it("shows actionable storage guidance when project creation runs out of space", async () => {
+    const createProject = vi
+      .fn()
+      .mockRejectedValue(new ProjectStorageError("insufficient_space", "temporary write failed"));
+    useProjectStore.setState({ createProject });
+    vi.mocked(open).mockResolvedValue("/tmp/full-volume");
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+
+    await waitFor(() =>
+      expect(notifications.show).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringMatching(/free space/i) }),
+      ),
+    );
+  });
+
+  it("requires confirmation before opening a recovered backup and leaves it unwritten on decline", async () => {
+    const confirmRecovery = vi.fn();
+    const declineRecovery = vi.fn();
+    useProjectStore.setState({
+      loadProject: vi.fn(async () => {
+        useProjectStore.setState({
+          recovery: {
+            easlPath: "/tmp/recovery/project.easl",
+            backupPath: "/tmp/recovery/project.easl.bak",
+            projectId: "recovered-project",
+          },
+        });
+      }),
+      confirmRecovery,
+      declineRecovery,
+    });
+    vi.mocked(open).mockResolvedValue("/tmp/recovery/project.easl");
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("landing-open-project-btn"));
+    await waitFor(() => expect(screen.getByTestId("project-recovery-dialog")).toBeInTheDocument());
+    expect(confirmRecovery).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("project-recovery-decline-btn"));
+    expect(declineRecovery).toHaveBeenCalledOnce();
+    expect(confirmRecovery).not.toHaveBeenCalled();
+  });
+
+  it("opens a recovered backup only after explicit confirmation", async () => {
+    const confirmRecovery = vi.fn().mockResolvedValue(undefined);
+    useProjectStore.setState({
+      loadProject: vi.fn(async () => {
+        useProjectStore.setState({
+          recovery: {
+            easlPath: "/tmp/recovery/project.easl",
+            backupPath: "/tmp/recovery/project.easl.bak",
+            projectId: "recovered-project",
+          },
+        });
+      }),
+      confirmRecovery,
+    });
+    vi.mocked(open).mockResolvedValue("/tmp/recovery/project.easl");
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("landing-open-project-btn"));
+    await screen.findByTestId("project-recovery-dialog");
+    fireEvent.click(screen.getByTestId("project-recovery-confirm-btn"));
+
+    await waitFor(() => expect(confirmRecovery).toHaveBeenCalledOnce());
   });
 
   it("shows WelcomeCard when no execution profiles are configured", () => {

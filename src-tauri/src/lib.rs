@@ -9,10 +9,14 @@ pub mod manifest;
 pub mod matlab;
 mod niivue_protocol;
 pub mod processing;
+mod project_writer;
 pub mod qc;
 mod tracing;
 pub mod visualization;
 mod visualization_tests;
+
+#[cfg(test)]
+mod project_writer_tests;
 
 use apptainer::which_apptainer;
 use bids_commands::{check_bids_dataset, ensure_rawdata_dir, scan_bids_sidecars};
@@ -33,6 +37,7 @@ use processing::{
     list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,
     run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir,
 };
+use project_writer::{atomic_write_project, cleanup_project_temps};
 use qc::{get_all_subjects_qc, get_subject_session_qc};
 use tauri::Manager;
 #[cfg(debug_assertions)]
@@ -119,6 +124,8 @@ pub fn run() {
             check_bids_dataset,
             scan_bids_sidecars,
             ensure_rawdata_dir,
+            atomic_write_project,
+            cleanup_project_temps,
         ])
         .register_uri_scheme_protocol("niivue", niivue_protocol::handle_niivue_protocol)
         .setup(|app| {

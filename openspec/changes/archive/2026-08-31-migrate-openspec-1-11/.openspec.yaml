@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-08-31
+goal: Establish a tracked, strictly valid OpenSpec 1.11 baseline without
+  changing application behavior
+skip_specs: true
