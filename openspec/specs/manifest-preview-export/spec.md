@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change project-manifest. Update Purpose after archive.
+Define manifest preview presentation and export behavior.
 
 ## Requirements
 

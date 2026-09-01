@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change processing-module. Update Purpose after archive.
+Define processing lifecycle state, progress, and persistence behavior.
 
 ## Requirements
 

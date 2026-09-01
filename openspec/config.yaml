@@ -1,5 +1,6 @@
-# 1. Activate your custom schema by name (matching the 'name' field in your schema.yaml)
-schema: spec-driven-super-grill
+# Use OpenSpec's stock artifact workflow. Agent execution policy lives in
+# AGENTS.md and change tasks rather than tool-specific schema instructions.
+schema: spec-driven
 
 # 2. Provide global development context for the AI agents running your pipeline
 context: |
@@ -24,4 +25,4 @@ rules:
   tasks:
     - "Break down items so no individual task takes more than 2 hours to complete."
     - "Ensure tasks strictly map to the requirements defined in the specs phase."
-    - "Strictly follow the superpowers:writing-plans TDD structure."
+    - "For code changes, include explicit RED, GREEN, and verification steps."

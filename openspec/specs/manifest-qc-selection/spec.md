@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change project-manifest. Update Purpose after archive.
+Define QC verdict selection for manifest subjects and reviewers.
 
 ## Requirements
 

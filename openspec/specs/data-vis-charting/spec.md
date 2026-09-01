@@ -1,6 +1,10 @@
 # data-vis-charting Specification
 
-## ADDED Requirements
+## Purpose
+
+Define chart configuration and rendering for population analysis data.
+
+## Requirements
 
 ### Requirement: Axis Assignment UI
 

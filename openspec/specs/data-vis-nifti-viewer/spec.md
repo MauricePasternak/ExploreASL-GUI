@@ -1,6 +1,10 @@
 # data-vis-nifti-viewer Specification
 
-## ADDED Requirements
+## Purpose
+
+Define NIfTI volume delivery and viewing for population analysis data.
+
+## Requirements
 
 ### Requirement: Custom NiiVue Tauri Protocol
 

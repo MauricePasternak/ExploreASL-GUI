@@ -1,3 +1,7 @@
+## Purpose
+
+Define the responsive collapsible desktop navigation rail.
+
 ## Requirements
 
 ### Requirement: Desktop Rail UI

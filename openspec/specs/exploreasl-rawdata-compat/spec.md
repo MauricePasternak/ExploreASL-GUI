@@ -2,13 +2,13 @@
 
 ## Purpose
 
-TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+Preserve raw BIDS and DICOM source data compatibility while ExploreASL processing runs.
 
 ## Requirements
 
 ### Requirement: Root-level participants.tsv never modified
 
-For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/participants.tsv` (if present) is never read, written, or modified by GUI code. `ensureParticipantsFiles` operates exclusively on `<projectRoot>/derivatives/ExploreASL/participants.tsv`. ExploreASL Population module appends processing-derived columns (`gm_vol`, `motion`, etc.) to the derivatives file, not root.
+For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/participants.tsv` (if present) SHALL never be read, written, or modified by GUI code. `ensureParticipantsFiles` operates exclusively on `<projectRoot>/derivatives/ExploreASL/participants.tsv`. ExploreASL Population module appends processing-derived columns (`gm_vol`, `motion`, etc.) to the derivatives file, not root.
 
 #### Scenario: User-authored participants.tsv preserved
 
@@ -110,7 +110,7 @@ Cross-sectional handling: `parse_bids_structure` defaults missing `ses-*` to ses
 
 ### Requirement: participants.tsv site-column precedence for BIDS-direct projects
 
-In BIDS-direct projects (`dataSource === "bids"`), if the root-level `<projectRoot>/participants.tsv` exists and contains a `site` column:
+In BIDS-direct projects (`dataSource === "bids"`), if the root-level `<projectRoot>/participants.tsv` exists and contains a `site` column, its values SHALL take precedence:
 
 - The user's `site` values take precedence. The GUI reads `<projectRoot>/participants.tsv` to extract the `site` values.
 - When performing the lookup, the GUI matches the root-level `participant_id` column (e.g., `"sub-01"`) against the base subject label of the session record (e.g. `"sub-01"` matches both `"sub-01_1"` and `"sub-01_2"`), assuming root-level `participants.tsv` always lists subjects at the subject level.

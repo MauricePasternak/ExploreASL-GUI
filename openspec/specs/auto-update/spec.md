@@ -1,5 +1,9 @@
 # auto-update Specification
 
+## Purpose
+
+Define safe production update checks and user-directed installation behavior.
+
 ## Requirements
 
 ### Requirement: Production startup check
@@ -45,6 +49,16 @@ On confirmation the application SHALL stop processing through `killProcessing`, 
 
 The application SHALL maintain one persistent progress notification from updater Started, Progress, and Finished events. Download/install failures SHALL show a red ten-second error and SHALL NOT relaunch. After successful installation, Linux and macOS SHALL relaunch through the process plugin. Windows SHALL not explicitly relaunch because its installer exits/restarts the app.
 
+#### Scenario: Installation succeeds on Windows
+
+- **WHEN** updater installation finishes successfully on Windows
+- **THEN** the persistent progress notification completes and the application does not explicitly relaunch
+
 ### Requirement: Signed release artifacts
 
 Release builds SHALL require updater private key, private-key password, and public key configuration before creating a draft release. The workflow SHALL generate signed updater artifacts and public GitHub Release `latest.json` for Linux x64 AppImage (plus deb), Windows x64 installers, and macOS arm64/Intel. The public updater key SHALL be embedded only by release build configuration; updater signature verification SHALL have no unsigned fallback.
+
+#### Scenario: Release build creates signed updater artifacts
+
+- **WHEN** a release build has the required updater key configuration
+- **THEN** it generates signed platform updater artifacts and a public GitHub Release `latest.json`

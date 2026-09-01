@@ -1,3 +1,7 @@
+## Purpose
+
+Define execution of the ExploreASL import pipeline from staged source data.
+
 ## Requirements
 
 ### Requirement: Import execution pipeline

@@ -1,3 +1,7 @@
+## Purpose
+
+Define import progress state, parsing, and persistence behavior.
+
 ## Requirements
 
 ### Requirement: ImportProgress state shape
@@ -44,6 +48,11 @@ The `startImport()` action SHALL capture the current import configuration as an 
 The store SHALL provide a `reconstructProgressFromLockFiles(progress: Record<string, ImportProgress>)` action that replaces `importProgress` with lock file scan results and preserves real-time events if an import is currently running.
 
 The store SHALL provide a `computeStaleness(currentConfig: ImportState, snapshot: ImportSnapshot | null): Record<string, boolean>` function that returns per-subject staleness. This function SHALL be called on entering step 5 and the results stored in each subject's `stale` field in `importProgress`.
+
+#### Scenario: Starting import captures configuration
+
+- **WHEN** `startImport()` begins an import
+- **THEN** it stores the current configuration in `mostRecentConfig` before entering the `"preparing"` phase
 
 ### Requirement: Subject error detail matching
 

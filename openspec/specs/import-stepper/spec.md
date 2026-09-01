@@ -1,3 +1,7 @@
+## Purpose
+
+Define the import workflow steps, validation gates, and navigation.
+
 ## Requirements
 
 ### Requirement: Stepper step count and gating

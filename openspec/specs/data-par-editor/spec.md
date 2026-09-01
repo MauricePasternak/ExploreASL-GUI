@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define editing and serialization of ExploreASL dataPar configuration.
+
+## Requirements
 
 ### Requirement: DataPar parameter state schema
 

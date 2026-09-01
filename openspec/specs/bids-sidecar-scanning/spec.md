@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+Define scanning and interpretation of BIDS ASL sidecar metadata.
 
 ## Requirements
 
@@ -254,12 +254,22 @@ Collision resolution: when multiple groups produce the same label, suffix `_(2)`
 - **Fallback:** If substring matching fails, a token-based Jaro-Winkler fuzzy match (threshold `0.8`) is performed against the target names.
 - No match → `"UnknownVendor"` / `None`
 
+#### Scenario: Misspelled manufacturer uses fuzzy fallback
+
+- **WHEN** a manufacturer value does not contain a target name but fuzzy-matches one at threshold `0.8`
+- **THEN** vendor derivation returns that target vendor name
+
 ### Requirement: Sequence derivation cleans duplicate prefixes
 
 `derive_sequence(acq_type: Option<&str>, pulse_seq: Option<&str>)` returns sequence name by joining present segments, defaulting to `"UnknownSequence"` if both are missing.
 
 - When both `acq_type` and `pulse_seq` are present, it SHALL strip any duplicate `acq_type` prefix from the start of `pulse_seq` (supporting both `_` and `-` separators) before joining (e.g. `3D` + `3D_SPIRAL` or `3D` + `3d-spiral` maps to `"3D_spiral"` rather than `"3D_3D_SPIRAL"`).
 - Pulse sequence type fingerprint normalization SHALL also use a Jaro-Winkler fuzzy fallback (threshold `0.8`) against target sequence keywords (`"epi"`, `"ep2d"`, `"epfid"`, `"pepolar"`, `"grase"`, `"tgse"`, `"spiral"`) to correctly identify misspelled sequences like `"3D_SPRIAL"`.
+
+#### Scenario: Duplicate acquisition prefix is removed
+
+- **WHEN** `derive_sequence` receives `acq_type` `"3D"` and `pulse_seq` `"3D_SPIRAL"`
+- **THEN** it returns `"3D_spiral"` without a duplicate prefix
 
 ### Requirement: Labeling type derivation supports three main strategies
 

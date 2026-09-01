@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change processing-module. Update Purpose after archive.
+Define application-shell layout behavior, including navigation and processing status visibility.
 
 ## Requirements
 

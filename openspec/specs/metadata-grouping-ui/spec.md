@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change mutually-exclusive-metadata. Update Purpose after archive.
+Define metadata grouping display and assignment behavior during import.
 
 ## Requirements
 

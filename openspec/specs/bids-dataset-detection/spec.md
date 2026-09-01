@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+Define detection and validation of BIDS ASL datasets before direct import.
 
 ## Requirements
 

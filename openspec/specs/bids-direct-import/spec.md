@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change direct-bids-import. Update Purpose after archive.
+Define project creation and import behavior for BIDS-direct data sources.
 
 ## Requirements
 
