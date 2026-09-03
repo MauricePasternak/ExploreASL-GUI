@@ -4,7 +4,7 @@ import {
   PROJECT_PHASES,
   type ProjectPhase,
   type ProjectFile,
-  ProjectFileSchema,
+  parseProject,
 } from "../schemas/project";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -27,7 +27,7 @@ export function resolveRestoredPhase(
 
 /**
  * Reloads in-memory project state after a full page refresh.
- * Returns true when the route project id is loaded; false when recovery failed.
+ * Returns true when the route project id loaded or matching recovery is pending.
  */
 export async function tryRestoreProjectSession(routeProjectId: string): Promise<boolean> {
   const { loadProject, closeProject } = useProjectStore.getState();
@@ -35,25 +35,34 @@ export async function tryRestoreProjectSession(routeProjectId: string): Promise<
   async function tryLoadFromPath(easlPath: string): Promise<boolean> {
     try {
       const raw = await readTextFile(easlPath);
-      const parsed = ProjectFileSchema.parse(JSON.parse(raw));
+      const parsed = parseProject(raw);
       if (parsed.projectMeta.id === routeProjectId) {
         await loadProject(easlPath);
         return true;
       }
     } catch {
-      // ignore errors reading/parsing
+      // Let the store classify missing/malformed primary data and validate a
+      // backup. A matched recovery remains pending for LandingPage to confirm.
+      try {
+        await loadProject(easlPath);
+        const recovery = useProjectStore.getState().recovery;
+        if (recovery?.projectId === routeProjectId) return true;
+        if (recovery) useProjectStore.getState().declineRecovery();
+      } catch {
+        // Ignore unavailable, malformed, future-version, and permission failures.
+      }
     }
     return false;
-  }
-
-  const checkpoint = readSessionCheckpoint();
-  if (checkpoint?.projectId === routeProjectId && (await tryLoadFromPath(checkpoint.easlPath))) {
-    return true;
   }
 
   const globalState = useGlobalStore.getState();
   if (!globalState.loaded) {
     await globalState.loadSettings();
+  }
+
+  const checkpoint = readSessionCheckpoint();
+  if (checkpoint?.projectId === routeProjectId && (await tryLoadFromPath(checkpoint.easlPath))) {
+    return true;
   }
 
   for (const easlPath of useGlobalStore.getState().settings.recentProjects) {

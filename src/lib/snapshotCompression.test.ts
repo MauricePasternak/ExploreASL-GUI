@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { gzipSync, strToU8 } from "fflate";
 
 import type { ImportSnapshot } from "../schemas/importSchemas";
 import { compressSnapshot, decompressSnapshot } from "./snapshotCompression";
@@ -24,6 +25,13 @@ function makeSyntheticSnapshot(subjectCount: number): ImportSnapshot {
     groupId: "global-defaults",
   }));
   return { ...BASE_SNAPSHOT, subjectRows };
+}
+
+function gzipBase64(value: string) {
+  const bytes = gzipSync(strToU8(value), { level: 9 });
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 describe("snapshotCompression round-trip", () => {
@@ -54,6 +62,19 @@ describe("snapshotCompression round-trip", () => {
     expect(decoded).toEqual(snapshot);
   });
 
+  it("produces identical bytes for equivalent records with different key insertion order", () => {
+    const first = {
+      ...BASE_SNAPSHOT,
+      tokenizerConfigs: { beta: [], alpha: [] },
+    };
+    const second = {
+      ...BASE_SNAPSHOT,
+      tokenizerConfigs: { alpha: [], beta: [] },
+    };
+
+    expect(compressSnapshot(first)).toBe(compressSnapshot(second));
+  });
+
   it("handles 10000-subject payload without corruption", () => {
     const snapshot = makeSyntheticSnapshot(10_000);
     const encoded = compressSnapshot(snapshot);
@@ -73,30 +94,20 @@ describe("snapshotCompression round-trip", () => {
 });
 
 describe("snapshotCompression error handling", () => {
-  it("returns null for corrupted base64", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = decompressSnapshot("!!!not-valid-base64!!!");
-    expect(result).toBeNull();
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+  it("rejects corrupted base64", () => {
+    expect(() => decompressSnapshot("!!!not-valid-base64!!!")).toThrow();
   });
 
-  it("returns null for valid base64 but invalid gzip payload", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("rejects valid base64 but invalid gzip payload", () => {
     const invalidGzip = btoa("this is not gzip data");
-    const result = decompressSnapshot(invalidGzip);
-    expect(result).toBeNull();
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(() => decompressSnapshot(invalidGzip)).toThrow();
   });
 
-  it("returns null for valid gzip but missing required snapshot keys", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    // Compress a payload that's valid JSON but not an ImportSnapshot
-    const encoded = compressSnapshot({ sourceDataPath: "/x" } as unknown as ImportSnapshot);
-    const result = decompressSnapshot(encoded);
-    expect(result).toBeNull();
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+  it("rejects valid gzip with invalid JSON", () => {
+    expect(() => decompressSnapshot(gzipBase64("not JSON"))).toThrow();
+  });
+
+  it("rejects valid gzip JSON with an invalid snapshot shape", () => {
+    expect(() => decompressSnapshot(gzipBase64('{"sourceDataPath":"/x"}'))).toThrow();
   });
 });

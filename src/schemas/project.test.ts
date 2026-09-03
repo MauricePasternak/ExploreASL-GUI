@@ -6,6 +6,10 @@ import {
   ProjectFileSchema,
   ProjectMetaSchema,
   ImportUiStateSchema,
+  parseProject,
+  ProjectMalformedError,
+  ProjectUnsupportedVersionError,
+  serializeProject,
 } from "./project";
 
 const validProject = DEFAULT_PROJECT_FILE("test-id", "Test", "/tmp/test");
@@ -17,6 +21,122 @@ describe("PROJECT_PHASES", () => {
 
   it("includes manifest", () => {
     expect(PROJECT_PHASES).toContain("manifest");
+  });
+});
+
+describe("project version boundary", () => {
+  it("accepts schema v1 and supported legacy envelopes", () => {
+    const v1 = {
+      schemaVersion: 1,
+      ...validProject,
+      projectMeta: { ...validProject.projectMeta, rootPath: undefined },
+    };
+    delete (v1 as { version?: string }).version;
+    const legacy = { ...validProject };
+    delete (legacy as { schemaVersion?: number }).schemaVersion;
+
+    expect(parseProject(JSON.stringify(v1))).toMatchObject({ schemaVersion: 1 });
+    expect(parseProject(JSON.stringify(legacy))).toMatchObject({ schemaVersion: 1 });
+  });
+
+  it("classifies malformed JSON and supported payloads as malformed projects", () => {
+    expect(() => parseProject("{")).toThrow(ProjectMalformedError);
+    expect(() => parseProject(JSON.stringify({ schemaVersion: 1 }))).toThrow(ProjectMalformedError);
+  });
+
+  it("classifies future schema versions as unsupported before payload validation", () => {
+    expect(() => parseProject(JSON.stringify({ schemaVersion: 2 }))).toThrow(
+      ProjectUnsupportedVersionError,
+    );
+  });
+});
+
+describe("legacy migration and canonical serialization", () => {
+  it("preserves valid persisted state and emits the v1 DTO deterministically", () => {
+    const legacy = {
+      ...validProject,
+      mappingState: { sourceDataPath: "/source", ingestionComplete: true },
+      dataPar: { Atlases: ["Total"] },
+      uiState: {
+        import: { completed: true },
+        processing: { population: { completed: true, lastRun: { profileId: "profile" } } },
+        dataVis: { stage: "visualize" },
+        manifest: {
+          reviewers: [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              label: "Reviewer",
+              createdAt: "2026-08-08T12:00:00.000Z",
+            },
+          ],
+          verdicts: { "sub-01_01": { status: "pass", setAt: 1 } },
+        },
+      },
+    };
+    delete (legacy as { schemaVersion?: number }).schemaVersion;
+    const migrated = parseProject(JSON.stringify(legacy));
+    const first = serializeProject(migrated);
+    const output = JSON.parse(first);
+
+    expect(migrated).toMatchObject({ schemaVersion: 1, mappingState: legacy.mappingState });
+    expect(migrated.dataPar).toEqual(legacy.dataPar);
+    expect(migrated.uiState).toMatchObject(legacy.uiState);
+    expect(output).toMatchObject({ schemaVersion: 1, mappingState: legacy.mappingState });
+    expect(output).not.toHaveProperty("version");
+    expect(output.projectMeta).not.toHaveProperty("rootPath");
+    expect(serializeProject(parseProject(JSON.stringify(legacy)))).toBe(first);
+  });
+
+  it("rejects invalid valuable legacy mapping values", () => {
+    const legacy = { ...validProject, mappingState: { sourceDataPath: 3 } };
+    delete (legacy as { schemaVersion?: number }).schemaVersion;
+    expect(() => parseProject(JSON.stringify(legacy))).toThrow(ProjectMalformedError);
+  });
+
+  it("serializes equivalent runtime records identically and excludes runtime metadata", () => {
+    const first = parseProject(JSON.stringify(validProject));
+    const second = {
+      ...first,
+      projectMeta: { ...first.projectMeta, transient: "must not persist" },
+      mappingState: { tokenizerConfigs: { beta: [], alpha: [] } },
+    } as typeof first;
+    const reordered = {
+      ...first,
+      mappingState: { tokenizerConfigs: { alpha: [], beta: [] } },
+    };
+
+    const serialized = serializeProject(second);
+    expect(serialized).toBe(serializeProject(reordered));
+    expect(JSON.parse(serialized).projectMeta).not.toHaveProperty("transient");
+  });
+
+  it("rejects object-form snapshots in schema v1 while preserving valid legacy objects", () => {
+    const snapshot = {
+      sourceDataPath: "/source",
+      pathPatterns: [],
+      tokenizerConfigs: {},
+      bMatchDirectories: true,
+      modalityAliases: [],
+      sessionAliases: [],
+      runAliases: [],
+      subjectRenames: [],
+      metadataGroups: [],
+      subjectRows: [],
+    };
+    const v1 = {
+      schemaVersion: 1,
+      projectMeta: Object.fromEntries(
+        Object.entries(validProject.projectMeta).filter(([key]) => key !== "rootPath"),
+      ),
+      uiState: { import: { mostRecentConfig: snapshot } },
+      mappingState: {},
+      dataPar: {},
+    };
+
+    expect(() => parseProject(JSON.stringify(v1))).toThrow(ProjectMalformedError);
+    const legacy = { ...validProject, uiState: { import: { mostRecentConfig: snapshot } } };
+    delete (legacy as { schemaVersion?: number }).schemaVersion;
+    expect(parseProject(JSON.stringify(legacy)).uiState.import?.mostRecentConfig).toEqual(snapshot);
   });
 });
 
@@ -184,7 +304,7 @@ describe("ProjectFileSchema", () => {
     expect(Reflect.get(parsed.uiState.manifest ?? {}, "lastPopulationRunMtime")).toBeUndefined();
   });
 
-  it("parses mappingState with invalid/wrong-typed properties using fallback defaults", () => {
+  it("rejects invalid mapping state rather than replacing valuable values", () => {
     const project = {
       ...validProject,
       mappingState: {
@@ -193,10 +313,7 @@ describe("ProjectFileSchema", () => {
         runAliases: [{ captured: 123, alias: "alias" }],
       },
     };
-    const parsed = ProjectFileSchema.parse(project);
-    expect(parsed.mappingState.sourceDataPath).toBe("");
-    expect(parsed.mappingState.rawPaths).toEqual([]);
-    expect(parsed.mappingState.runAliases).toEqual([]);
+    expect(ProjectFileSchema.safeParse(project).success).toBe(false);
   });
 });
 

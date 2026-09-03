@@ -8,6 +8,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
+import { ProjectStorageError } from "../lib/projectPersistence";
 import { useProcessingStore } from "../stores/processingStore";
 import { useImportStore } from "../stores/importStore";
 import ProjectPage from "../pages/ProjectPage";
@@ -261,7 +262,9 @@ describe("Layout", () => {
   });
 
   it("shows an error and stays in the project when save-and-leave fails", async () => {
-    const saveProject = vi.fn().mockRejectedValue(new Error("disk full"));
+    const saveProject = vi
+      .fn()
+      .mockRejectedValue(new ProjectStorageError("insufficient_space", "temporary write failed"));
     const closeProject = vi.fn();
 
     useProjectStore.setState({
@@ -303,6 +306,7 @@ describe("Layout", () => {
         expect.objectContaining({
           color: "red",
           title: expect.stringMatching(/failed to save project/i),
+          message: expect.stringMatching(/free space/i),
         }),
       );
       expect(screen.getAllByTestId("layout-nav-import").length).toBeGreaterThan(0);

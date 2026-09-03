@@ -1,5 +1,6 @@
 import { MantineProvider } from "@mantine/core";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,6 +44,7 @@ const PROJECT_JSON = {
 
 describe("ProjectPage", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     sessionStorage.clear();
     seedValidProfileGate();
     useImportStore.getState().resetImport();
@@ -70,7 +72,6 @@ describe("ProjectPage", () => {
       processingPhase: "idle",
       workerPids: [],
     });
-    vi.mocked(writeTextFile).mockResolvedValue(undefined);
   });
 
   it("syncs the current phase from the route and persists it", async () => {
@@ -86,7 +87,7 @@ describe("ProjectPage", () => {
 
     await waitFor(() => {
       expect(useProjectStore.getState().project?.projectMeta.currentPhase).toBe("parameters");
-      expect(writeTextFile).toHaveBeenCalled();
+      expect(invoke).toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
     });
 
     expect(screen.getByText("ExploreASL Processing Parameters")).toBeInTheDocument();
@@ -256,7 +257,7 @@ describe("ProjectPage", () => {
         importCompleted: true,
         importPhase: "completed",
       });
-      expect(writeTextFile).toHaveBeenCalled();
+      expect(invoke).toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
     });
   });
 

@@ -15,6 +15,7 @@ import RecentProjectsList from "../components/landing/RecentProjectsList";
 import WelcomeCard from "../components/landing/WelcomeCard";
 import type { LayoutOutletContext } from "../components/Layout";
 import { logAction } from "../lib/debug";
+import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import appLogo from "../../src-tauri/icons/easl_gui_logo.png";
 
 /** Shape returned by the Rust `check_bids_dataset` command. */
@@ -51,6 +52,9 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const [loading, setLoading] = useState(false);
   const createProject = useProjectStore((state) => state.createProject);
   const loadProject = useProjectStore((state) => state.loadProject);
+  const confirmRecovery = useProjectStore((state) => state.confirmRecovery);
+  const declineRecovery = useProjectStore((state) => state.declineRecovery);
+  const recovery = useProjectStore((state) => state.recovery);
   const addRecentProject = useGlobalStore((state) => state.addRecentProject);
   const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
   const hasValidProfile = useGlobalStore((state) => state.hasValidProfile());
@@ -64,6 +68,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const [bidsRadioValue, setBidsRadioValue] = useState<"bids" | "dicom" | null>(null);
   // Store the selected folder path + project name for dialog actions
   const [pendingFolder, setPendingFolder] = useState<{ path: string; name: string } | null>(null);
+  const recoveryPath = recovery?.easlPath ?? null;
 
   function showError(title: string, message: string) {
     notifications.show({
@@ -72,6 +77,13 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       message,
       autoClose: 10000,
     });
+  }
+
+  function storageErrorMessage(error: unknown) {
+    if (error instanceof ProjectStorageError) {
+      return projectStorageErrorMessage(error);
+    }
+    return "Failed to open project. The file may be corrupted or from a newer version.";
   }
 
   async function proceedWithProject(
@@ -192,10 +204,12 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         // Fallback: no BIDS, create DICOM project directly
         await proceedWithProject(selected, projectName, "dicom");
       }
-    } catch {
+    } catch (error) {
       showError(
         "Failed to create project",
-        "ExploreASL GUI could not initialize the project files in the selected directory.",
+        error instanceof ProjectStorageError
+          ? storageErrorMessage(error)
+          : "ExploreASL GUI could not initialize the project files in the selected directory.",
       );
       logAction("landing_new_project_error", { reason: "exception" });
     } finally {
@@ -302,10 +316,12 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     setLoading(true);
     try {
       await proceedWithProject(path, name, dataSource);
-    } catch {
+    } catch (error) {
       showError(
         "Failed to create project",
-        "ExploreASL GUI could not initialize the project files in the selected directory.",
+        error instanceof ProjectStorageError
+          ? storageErrorMessage(error)
+          : "ExploreASL GUI could not initialize the project files in the selected directory.",
       );
     } finally {
       setLoading(false);
@@ -360,14 +376,12 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
 
       try {
         await loadProject(selected);
-      } catch {
-        showError(
-          "Invalid project file",
-          "Failed to open project. The file may be corrupted or from a newer version.",
-        );
+      } catch (error) {
+        showError("Invalid project file", storageErrorMessage(error));
         logAction("landing_open_project_error", { path: selected, reason: "invalid_file" });
         return;
       }
+      if (useProjectStore.getState().recovery?.easlPath === selected) return;
       addRecentProject(selected);
       logAction("landing_open_project_success", { path: selected });
 
@@ -386,6 +400,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
 
     try {
       await loadProject(path);
+      if (useProjectStore.getState().recovery?.easlPath === path) return;
       addRecentProject(path);
       logAction("landing_open_recent_success", { path });
 
@@ -393,15 +408,32 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       if (project) {
         navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`);
       }
-    } catch {
-      showError(
-        "Invalid project file",
-        "Failed to open project. The file may be corrupted or from a newer version.",
-      );
+    } catch (error) {
+      showError("Invalid project file", storageErrorMessage(error));
       logAction("landing_open_recent_error", { path });
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleConfirmRecovery() {
+    if (!recoveryPath) return;
+    setLoading(true);
+    try {
+      await confirmRecovery();
+      addRecentProject(recoveryPath);
+      const project = useProjectStore.getState().project;
+      if (project)
+        navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`);
+    } catch (error) {
+      showError("Recovery failed", storageErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleDeclineRecovery() {
+    declineRecovery();
   }
 
   return (
@@ -557,6 +589,42 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
           )}
         </Stack>
       </div>
+
+      <Modal
+        opened={recoveryPath !== null}
+        onClose={handleDeclineRecovery}
+        title="Recovered project available"
+        centered
+        data-testid="project-recovery-dialog"
+        transitionProps={{ duration: 0, exitDuration: 0 }}
+      >
+        <Stack gap="md">
+          <Alert
+            color="yellow"
+            icon={<IconAlertTriangle size={16} />}
+            data-testid="project-recovery-alert"
+          >
+            The primary project file is missing or malformed. A valid backup is available.
+          </Alert>
+          <Text size="sm">Open the backup in memory? It will not modify files until you save.</Text>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={handleDeclineRecovery}
+              data-testid="project-recovery-decline-btn"
+            >
+              Cancel
+            </Button>
+            <Button
+              loading={loading}
+              onClick={handleConfirmRecovery}
+              data-testid="project-recovery-confirm-btn"
+            >
+              Open recovered copy
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* ===== Unified BIDS/DICOM Detection Dialog ===== */}
       <Modal

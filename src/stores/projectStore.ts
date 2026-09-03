@@ -1,9 +1,13 @@
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { create } from "zustand";
 
 import { ensureBidsIgnore, isBidsProject } from "../lib/bids/validation";
-import { compressSnapshot } from "../lib/snapshotCompression";
 import { logAction } from "../lib/debug";
+import {
+  atomicWriteProject,
+  cleanupProjectTemps,
+  ProjectStorageError,
+} from "../lib/projectPersistence";
 import {
   clearSessionCheckpoint,
   projectEaslPath,
@@ -15,14 +19,17 @@ import {
   DEFAULT_PROJECT_FILE,
   ManifestVerdictSchema,
   PROJECT_FILE_NAME,
-  ProjectFileSchema,
+  parseProject,
+  ProjectMalformedError,
+  serializeProject,
   type ManifestUiState,
   type ProjectFile,
   type ProjectMeta,
   type Reviewer,
+  type VersionedProjectFile,
 } from "../schemas/project";
 import { flattenBidsGroupsToSubjectRows } from "../lib/bids/subjectRows";
-import type { ImportSnapshot, MetadataGroup } from "../schemas/importSchemas";
+import type { MetadataGroup } from "../schemas/importSchemas";
 import type { ManifestFailReason, ManifestVerdict } from "../schemas/project";
 import { MAX_REVIEWERS } from "../schemas/manifestSchemas";
 import { useImportStore, type ImportState } from "./importStore";
@@ -45,7 +52,11 @@ interface ProjectState {
   project: ProjectFile | null;
   isDirty: boolean;
   loaded: boolean;
+  recovery: { easlPath: string; backupPath: string; projectId: string } | null;
+  recoveredFromBackup: boolean;
   loadProject: (easlPath: string) => Promise<void>;
+  confirmRecovery: () => Promise<void>;
+  declineRecovery: () => void;
   createProject: (
     rootPath: string,
     name: string,
@@ -98,12 +109,99 @@ let projectRevision = 0;
 /** Serializes concurrent saveProject calls so writes complete in order. */
 let saveChain: Promise<void> = Promise.resolve();
 
+/** Changes whenever the active project lifecycle changes; guards stale saves after reopen. */
+let projectSession = 0;
+
 function getProjectFilePath(rootPath: string) {
   return projectEaslPath(rootPath);
 }
 
 function isProjectFilePath(easlPath: string) {
   return easlPath.split(/[/\\]/).filter(Boolean).pop() === PROJECT_FILE_NAME;
+}
+
+/** Derive a parent path without assuming the host path separator in tests or restored paths. */
+function projectRootFromEaslPath(easlPath: string) {
+  const separatorIndex = Math.max(easlPath.lastIndexOf("/"), easlPath.lastIndexOf("\\"));
+  if (separatorIndex < 0) return ".";
+  if (separatorIndex === 0) return easlPath[0];
+
+  const parent = easlPath.slice(0, separatorIndex);
+  // A file directly under a Windows drive root has a parent of `C:\\`, not `C:`.
+  return /^[A-Za-z]:$/.test(parent) ? `${parent}${easlPath[separatorIndex]}` : parent;
+}
+
+function backupPathFor(easlPath: string) {
+  return `${easlPath}.bak`;
+}
+
+function isMissingFileError(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  ) {
+    return true;
+  }
+  const message = errorMessage(error);
+  return /(?:enoent|not found|does not exist|no such file)/i.test(message);
+}
+
+function isPermissionError(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    ["EACCES", "EPERM"].includes(String((error as { code?: unknown }).code))
+  ) {
+    return true;
+  }
+  const message = errorMessage(error);
+  return /(?:permission denied|access denied|operation not permitted)/i.test(message);
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const { message } = error as { message?: unknown };
+    if (typeof message === "string") return message;
+  }
+  return "";
+}
+
+function recoveryFailed(cause: unknown) {
+  return Object.assign(
+    new ProjectStorageError(
+      "recovery",
+      "Project recovery failed: backup is missing, malformed, or unsupported.",
+    ),
+    { cause },
+  );
+}
+
+async function cleanupValidatedProjectTemps(easlPath: string) {
+  try {
+    await cleanupProjectTemps(easlPath);
+  } catch (error) {
+    console.warn("Failed to clean stale project temporary files:", error);
+  }
+}
+
+/** Serialize and validate before entering the native filesystem-write boundary. */
+function serializeForStorage(project: ProjectFile): string {
+  try {
+    return serializeProject(project as VersionedProjectFile);
+  } catch (error) {
+    throw Object.assign(
+      new ProjectStorageError(
+        "invalid_serialization",
+        "Project data failed validation and was not written.",
+      ),
+      { cause: error },
+    );
+  }
 }
 
 function isManifestVerdict(value: unknown): value is ManifestVerdict {
@@ -168,24 +266,6 @@ function createReviewer(label: string): Reviewer {
   };
 }
 
-function serializeProject(project: ProjectFile): string {
-  return JSON.stringify(
-    project,
-    (key, value) => {
-      if (
-        key === "mostRecentConfig" &&
-        value &&
-        typeof value === "object" &&
-        "sourceDataPath" in value
-      ) {
-        return compressSnapshot(value as ImportSnapshot);
-      }
-      return value;
-    },
-    2,
-  );
-}
-
 type ProjectUpdater = (project: ProjectFile) => ProjectFile | null;
 
 function updateProject(
@@ -215,6 +295,11 @@ function resetProjectRevision() {
   projectRevision = 0;
 }
 
+function startProjectSession() {
+  projectSession++;
+  resetProjectRevision();
+}
+
 /** @internal Exposed for unit tests only. */
 export function __getProjectRevisionForTests() {
   return projectRevision;
@@ -223,6 +308,7 @@ export function __getProjectRevisionForTests() {
 /** @internal Exposed for unit tests only. */
 export function __resetProjectRevisionForTests() {
   projectRevision = 0;
+  projectSession = 0;
   saveChain = Promise.resolve();
 }
 
@@ -230,6 +316,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   project: null,
   isDirty: false,
   loaded: false,
+  recovery: null,
+  recoveredFromBackup: false,
 
   loadProject: async (easlPath) => {
     if (!useGlobalStore.getState().hasValidProfile()) {
@@ -242,17 +330,49 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       throw new Error(`Project files must be named ${PROJECT_FILE_NAME}.`);
     }
 
-    const raw = await readTextFile(easlPath);
-    const parsed = ProjectFileSchema.parse(JSON.parse(raw));
+    let parsed: ProjectFile;
+    try {
+      parsed = parseProject(await readTextFile(easlPath));
+    } catch (error) {
+      if (!(error instanceof ProjectMalformedError) && !isMissingFileError(error)) {
+        if (isPermissionError(error)) {
+          throw new ProjectStorageError(
+            "permission_denied",
+            "Permission denied while reading the primary project file.",
+          );
+        }
+        throw error;
+      }
+
+      const backupPath = backupPathFor(easlPath);
+      let backup: ProjectFile;
+      try {
+        backup = parseProject(await readTextFile(backupPath));
+      } catch (backupError) {
+        console.warn("Project backup validation failed:", backupError);
+        throw recoveryFailed(backupError);
+      }
+      // A recovery prompt cannot leave a previously opened project active.
+      // Declining must return the store to an unloaded state without touching project files.
+      startProjectSession();
+      clearSessionCheckpoint();
+      set({
+        project: null,
+        isDirty: false,
+        loaded: false,
+        recovery: { easlPath, backupPath, projectId: backup.projectMeta.id },
+        recoveredFromBackup: false,
+      });
+      return;
+    }
+    await cleanupValidatedProjectTemps(easlPath);
     const hydratedProject: ProjectFile = {
       ...parsed,
       projectMeta: {
         ...parsed.projectMeta,
-        lastOpened: new Date().toISOString(),
+        rootPath: projectRootFromEaslPath(easlPath),
       },
     };
-
-    await writeTextFile(easlPath, JSON.stringify(hydratedProject, null, 2));
 
     const rootPath = hydratedProject.projectMeta.rootPath;
     try {
@@ -263,17 +383,58 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.warn("Failed to check BIDS project status or write .bidsignore:", e);
     }
 
-    resetProjectRevision();
+    startProjectSession();
     set({
       project: hydratedProject,
       isDirty: false,
       loaded: true,
+      recovery: null,
+      recoveredFromBackup: false,
     });
     logAction("project_load", {
       name: hydratedProject.projectMeta.name,
       path: hydratedProject.projectMeta.rootPath,
     });
     syncSessionCheckpointFromProject(hydratedProject);
+  },
+
+  confirmRecovery: async () => {
+    const recovery = get().recovery;
+    if (!recovery) return;
+
+    let parsed: ProjectFile;
+    try {
+      parsed = parseProject(await readTextFile(recovery.backupPath));
+    } catch (error) {
+      console.warn("Project backup recovery failed:", error);
+      throw recoveryFailed(error);
+    }
+    await cleanupValidatedProjectTemps(recovery.easlPath);
+    const hydratedProject: ProjectFile = {
+      ...parsed,
+      projectMeta: { ...parsed.projectMeta, rootPath: projectRootFromEaslPath(recovery.easlPath) },
+    };
+    startProjectSession();
+    set({
+      project: hydratedProject,
+      isDirty: true,
+      loaded: true,
+      recovery: null,
+      recoveredFromBackup: true,
+    });
+    syncSessionCheckpointFromProject(hydratedProject);
+  },
+
+  declineRecovery: () => {
+    startProjectSession();
+    clearSessionCheckpoint();
+    set({
+      project: null,
+      isDirty: false,
+      loaded: false,
+      recovery: null,
+      recoveredFromBackup: false,
+    });
   },
 
   /**
@@ -314,7 +475,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       };
     }
 
-    await writeTextFile(getProjectFilePath(rootPath), JSON.stringify(project, null, 2));
+    await atomicWriteProject({
+      projectPath: getProjectFilePath(rootPath),
+      canonicalBytes: serializeForStorage(project),
+      preserveBackup: false,
+    });
 
     try {
       if (await isBidsProject(rootPath)) {
@@ -324,11 +489,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.warn("Failed to check BIDS project status or write .bidsignore:", e);
     }
 
-    resetProjectRevision();
+    startProjectSession();
     set({
       project,
       isDirty: false,
       loaded: true,
+      recovery: null,
+      recoveredFromBackup: false,
     });
     logAction("project_create", {
       name: project.projectMeta.name,
@@ -339,24 +506,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   saveProject: async () => {
     const runSave = async () => {
-      const { project, isDirty } = get();
+      const { project, isDirty, recoveredFromBackup } = get();
       if (!project || !isDirty) {
         return;
       }
 
       const revisionAtSaveStart = projectRevision;
+      const sessionAtSaveStart = projectSession;
       const projectIdAtSaveStart = project.projectMeta.id;
       const snapshot = project;
-      const serialized = serializeProject(snapshot);
+      const serialized = serializeForStorage(snapshot);
 
-      await writeTextFile(getProjectFilePath(snapshot.projectMeta.rootPath), serialized);
+      await atomicWriteProject({
+        projectPath: getProjectFilePath(snapshot.projectMeta.rootPath),
+        canonicalBytes: serialized,
+        preserveBackup: recoveredFromBackup,
+      });
 
       const current = get().project;
       if (
         current?.projectMeta.id === projectIdAtSaveStart &&
+        projectSession === sessionAtSaveStart &&
         projectRevision === revisionAtSaveStart
       ) {
-        set({ isDirty: false });
+        set({ isDirty: false, recoveredFromBackup: false });
       }
     };
 
@@ -398,12 +571,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   closeProject: () => {
     clearSessionCheckpoint();
     logAction("project_close");
-    resetProjectRevision();
-    saveChain = Promise.resolve();
+    startProjectSession();
     set({
       project: null,
       isDirty: false,
       loaded: false,
+      recovery: null,
+      recoveredFromBackup: false,
     });
   },
 

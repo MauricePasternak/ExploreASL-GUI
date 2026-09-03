@@ -26,12 +26,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Agent-related
-openspec/changes/
-.superpowers/
-.cursor/
-.opencode/
-
 # Other
 notes/
 

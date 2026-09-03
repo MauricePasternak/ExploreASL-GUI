@@ -1,4 +1,5 @@
 import { readTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGlobalStore } from "../stores/globalStore";
@@ -63,6 +64,32 @@ describe("restoreProjectSession", () => {
   it("returns false when no checkpoint or recent project matches", async () => {
     await expect(tryRestoreProjectSession("missing-project")).resolves.toBe(false);
     expect(useProjectStore.getState().project).toBeNull();
+  });
+
+  it("keeps matching backup recovery pending for LandingPage confirmation", async () => {
+    writeSessionCheckpoint({
+      easlPath: "/tmp/brain-study/project.easl",
+      projectId: "project-1",
+      phase: "import",
+    });
+    vi.mocked(readTextFile)
+      .mockResolvedValueOnce("{")
+      .mockResolvedValueOnce("{")
+      .mockResolvedValueOnce(
+        JSON.stringify({ schemaVersion: 1, ...PROJECT_JSON, version: undefined }),
+      );
+
+    await expect(tryRestoreProjectSession("project-1")).resolves.toBe(true);
+
+    expect(useProjectStore.getState()).toMatchObject({
+      project: null,
+      loaded: false,
+      recovery: {
+        easlPath: "/tmp/brain-study/project.easl",
+        projectId: "project-1",
+      },
+    });
+    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
   });
 
   it("keeps the route phase when it is accessible", () => {

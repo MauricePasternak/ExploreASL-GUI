@@ -1,6 +1,28 @@
 import { gzipSync, gunzipSync, strFromU8, strToU8 } from "fflate";
 
-import type { ImportSnapshot } from "../schemas/importSchemas";
+import { ImportSnapshotSchema, type ImportSnapshot } from "../schemas/importSchemas";
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => (entry === undefined ? null : canonicalize(entry)));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .flatMap((key) => {
+          const entry = (value as Record<string, unknown>)[key];
+          return entry === undefined ? [] : [[key, canonicalize(entry)]];
+        }),
+    );
+  }
+  return value;
+}
+
+/** JSON encoding with sorted object keys for reproducible compressed snapshots. */
+export function stableJsonStringify(value: unknown, space?: number): string {
+  return JSON.stringify(canonicalize(value), null, space);
+}
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -22,29 +44,13 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 export function compressSnapshot(snapshot: ImportSnapshot): string {
-  const json = JSON.stringify(snapshot);
+  const json = stableJsonStringify(ImportSnapshotSchema.parse(snapshot));
   const compressed = gzipSync(strToU8(json), { level: 9 });
   return bytesToBase64(compressed);
 }
 
-export function decompressSnapshot(encoded: string): ImportSnapshot | null {
-  try {
-    const bytes = base64ToBytes(encoded);
-    const decompressed = gunzipSync(bytes);
-    const json = strFromU8(decompressed);
-    const parsed = JSON.parse(json) as unknown;
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      "sourceDataPath" in parsed &&
-      "subjectRows" in parsed
-    ) {
-      return parsed as ImportSnapshot;
-    }
-    console.warn("[snapshotCompression] decompressed payload missing required keys");
-    return null;
-  } catch (err) {
-    console.warn("[snapshotCompression] decompress failed:", err);
-    return null;
-  }
+export function decompressSnapshot(encoded: string): ImportSnapshot {
+  const bytes = base64ToBytes(encoded);
+  const decompressed = gunzipSync(bytes);
+  return ImportSnapshotSchema.parse(JSON.parse(strFromU8(decompressed)));
 }
