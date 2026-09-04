@@ -32,6 +32,17 @@ const DEFAULT_ADVANCED_VISIBILITY: DataParametersAdvancedVisibility = {
   showAdvancedAtlases: false,
 };
 
+export function createInitialDataParState() {
+  return {
+    dataPar: {
+      Atlases: ["Total", "DeepWM"],
+      TissueMasking: ["GM", "WM"],
+      TissueThreshold: [0.7, 0.7],
+    } as DataParState,
+    advancedVisibility: { ...DEFAULT_ADVANCED_VISIBILITY },
+  };
+}
+
 function alignAtlasesFields(
   atlases?: string[],
   tissueMasking?: string[],
@@ -122,14 +133,7 @@ export const useDataParStore = create<DataParSlice>((set, get) => ({
   },
 
   resetDataPar: () => {
-    set({
-      dataPar: {
-        Atlases: ["Total", "DeepWM"],
-        TissueMasking: ["GM", "WM"],
-        TissueThreshold: [0.7, 0.7],
-      },
-      advancedVisibility: { ...DEFAULT_ADVANCED_VISIBILITY },
-    });
+    set(createInitialDataParState());
   },
 
   saveToProject: () => {

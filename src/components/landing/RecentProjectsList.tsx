@@ -8,6 +8,7 @@ import { logAction } from "../../lib/debug";
 
 interface RecentEntry {
   path: string;
+  projectId?: string;
   stale: boolean;
 }
 
@@ -45,9 +46,9 @@ export default function RecentProjectsList({
       setLoading(true);
 
       const nextEntries = await Promise.all(
-        recentProjects.map(async (path) => ({
-          path,
-          stale: !(await exists(path)),
+        recentProjects.map(async (project) => ({
+          ...project,
+          stale: !(await exists(project.path)),
         })),
       );
 

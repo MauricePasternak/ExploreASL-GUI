@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Alert,
   AppShell,
   Badge,
   Button,
@@ -32,12 +33,12 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/core";
 
 import { canAccessPhase, type ProjectPhase } from "../schemas/project";
 import { useProcessingStore } from "../stores/processingStore";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
+import { useVisualizationStore } from "../stores/visualizationStore";
 import { logAction } from "../lib/debug";
 import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import ProcessingStatusBar from "./processing/ProcessingStatusBar";
@@ -113,6 +114,10 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const processingPhase = useProcessingStore((state) => state.processingPhase);
   const importPhase = useImportStore((state) => state.importPhase);
   const importRunning = useImportStore((state) => state.importRunning);
+  const dicomSourceAvailability = useImportStore((state) => state.sourceAvailability);
+  const externalSourceAvailability = useVisualizationStore(
+    (state) => state.externalSourceAvailability,
+  );
   const isProcessRunning =
     processingPhase === "running" || importPhase === "running" || importRunning;
   const isProcessingActive = processingPhase === "running" || processingPhase === "preparing";
@@ -133,10 +138,26 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
             currentImportPhase === "running" ||
             currentImportRunning;
 
-          if (currentProject && (currentIsDirty || activeProcess)) {
-            event.preventDefault();
+          if (!currentProject) return;
+          event.preventDefault();
+          if (currentIsDirty || activeProcess) {
             setLeaveTarget("exit");
             setLeaveModalOpen(true);
+            return;
+          }
+          try {
+            await useProjectStore.getState().closeProject();
+            await appWindow.destroy();
+          } catch (error) {
+            notifications.show({
+              color: "red",
+              title: "Could not close project",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Project work could not be stopped. Retry after stopping active work.",
+              autoClose: 10000,
+            });
           }
         });
       } catch (err) {
@@ -177,27 +198,6 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   async function leaveProject({ saveChanges }: { saveChanges: boolean }) {
     logAction("layout_leave_project", { saveChanges });
 
-    const currentProcessingPhase = useProcessingStore.getState().processingPhase;
-    const currentImportPhase = useImportStore.getState().importPhase;
-    const currentImportRunning = useImportStore.getState().importRunning;
-    const activeProcess =
-      currentProcessingPhase === "running" ||
-      currentImportPhase === "running" ||
-      currentImportRunning;
-
-    if (activeProcess) {
-      try {
-        if (currentProcessingPhase === "running") {
-          await useProcessingStore.getState().killProcessing();
-        }
-        if (currentImportPhase === "running" || currentImportRunning) {
-          await invoke("stop_active_import");
-        }
-      } catch (err) {
-        console.error("Failed to abort running processes:", err);
-      }
-    }
-
     if (saveChanges) {
       try {
         await saveProject();
@@ -217,23 +217,30 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       }
     }
 
-    setLeaveModalOpen(false);
-
-    if (leaveTarget === "exit") {
-      try {
+    try {
+      await closeProject();
+      setLeaveModalOpen(false);
+      if (leaveTarget === "exit") {
         const appWindow = getCurrentWindow();
         await appWindow.destroy();
-      } catch (error) {
-        console.error("Failed to destroy window on exit:", error);
+      } else {
+        closeMobileNav();
+        navigate("/");
       }
-    } else {
-      closeMobileNav();
-      navigate("/");
-      closeProject();
+    } catch (error) {
+      notifications.show({
+        color: "red",
+        title: "Could not leave project",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Project work could not be stopped. Retry after stopping active work.",
+        autoClose: 10000,
+      });
     }
   }
 
-  function handleReturnHome() {
+  async function handleReturnHome() {
     const { project: currentProject, isDirty: currentIsDirty } = useProjectStore.getState();
     const currentProcessingPhase = useProcessingStore.getState().processingPhase;
     const currentImportPhase = useImportStore.getState().importPhase;
@@ -255,9 +262,21 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     }
 
     logAction("layout_return_home");
-    closeMobileNav();
-    navigate("/");
-    closeProject();
+    try {
+      await closeProject();
+      closeMobileNav();
+      navigate("/");
+    } catch (error) {
+      notifications.show({
+        color: "red",
+        title: "Could not leave project",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Project work could not be stopped. Retry after stopping active work.",
+        autoClose: 10000,
+      });
+    }
   }
 
   return (
@@ -492,6 +511,14 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           className="page-fade-container"
           data-testid="page-fade-container"
         >
+          {project &&
+            (["missing", "unreadable", "ambiguous"].includes(dicomSourceAvailability.status) ||
+              ["missing", "unreadable", "changed"].includes(externalSourceAvailability.status)) && (
+              <Alert color="yellow" mb="md" data-testid="layout-missing-source-summary">
+                One or more external sources are unavailable. Use Relink in Import or Visualization;
+                unaffected phases remain available.
+              </Alert>
+            )}
           <Outlet context={{ onOpenSettings } satisfies LayoutOutletContext} />
         </div>
       </AppShell.Main>

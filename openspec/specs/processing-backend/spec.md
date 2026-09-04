@@ -149,12 +149,32 @@ Registered in `lib.rs` and exported via Tauri commands list (existing behavior p
 
 ### Requirement: AppState for Processing
 
-`AppState` SHALL gain a `processing_state: Mutex<ProcessingState>` field containing `worker_pids: Vec<u32>` and `watcher_handle: Option<thread::JoinHandle<()>>`. On `RunEvent::ExitRequested`, the exit handler SHALL kill all worker PIDs and stop the watcher.
+Native processing state SHALL own worker process identities and the active lock watcher together with the project root that started them. App exit, project close, and project switch SHALL terminate all owned workers and stop the watcher before releasing that project ownership. Shutdown SHALL report a structured success or failure outcome; an already-stopped worker or absent watcher SHALL count as success. The frontend SHALL be able to block a project transition or normal app exit when native shutdown cannot be confirmed.
 
 #### Scenario: App exit during processing
 
 - **WHEN** the user closes the app while workers are running
-- **THEN** all worker processes SHALL be terminated (SIGTERM → SIGKILL after 5s) and the file watcher SHALL be stopped
+- **THEN** all workers SHALL be terminated, the lock watcher SHALL stop, and exit SHALL proceed only after shutdown is confirmed
+
+#### Scenario: Project switch during processing
+
+- **WHEN** the user requests project B while project A owns workers or a lock watcher
+- **THEN** all A-owned workers and the watcher SHALL stop before B can become active
+
+#### Scenario: Processing shutdown fails
+
+- **WHEN** a worker or watcher cannot be confirmed stopped during a close or switch request
+- **THEN** native shutdown SHALL return an actionable failure and SHALL retain enough ownership state for a retry
+
+#### Scenario: No processing resources are active
+
+- **WHEN** shutdown is requested without active workers or a watcher
+- **THEN** shutdown SHALL succeed without warning
+
+#### Scenario: Watcher event arrives during shutdown
+
+- **WHEN** the watcher emits an event after project shutdown begins
+- **THEN** the event SHALL NOT be attributed to a new project lifecycle
 
 ### Requirement: Module Name Mapping
 

@@ -455,3 +455,60 @@ Flushing the temporary file SHALL be required. Parent-directory flushing SHALL b
 
 - **WHEN** parent-directory flushing is supported but fails after primary replacement
 - **THEN** Save SHALL report uncertain durability and dirty state SHALL remain set
+
+### Requirement: Portable project-internal paths
+
+Canonical schema v1 output SHALL persist project-internal paths relative to the project root and external source paths as explicit absolute paths. Runtime state SHALL resolve project-relative paths only against the parent of the currently opened `project.easl`. A project-relative path SHALL NOT escape that root. BIDS source paths SHALL always resolve to the current project root. DICOM source paths located within the project root SHALL move with the project; DICOM sources outside it SHALL retain their external absolute location. Generated qCBF and other project outputs SHALL remain project-relative.
+
+#### Scenario: BIDS project is moved
+
+- **WHEN** a BIDS project is opened from a new parent directory
+- **THEN** its source root and every project-internal read or write SHALL resolve beneath the new parent and SHALL NOT consult the former location
+
+#### Scenario: Internal DICOM source moves with project
+
+- **WHEN** a DICOM source was recorded within the project root and the whole project folder is moved
+- **THEN** the source and its project-internal raw paths SHALL resolve beneath the newly opened root
+
+#### Scenario: External DICOM source remains external
+
+- **WHEN** a DICOM source was recorded outside the project root and the project folder is moved
+- **THEN** the external absolute source path SHALL remain unchanged
+
+#### Scenario: Project-relative path attempts escape
+
+- **WHEN** a persisted project-relative path resolves outside the opened project root
+- **THEN** project validation SHALL reject that path without accessing the escaped location
+
+### Requirement: Read-only path normalization
+
+The system SHALL continue to accept valid legacy `0.1.0` and schema v1 path strings. It SHALL normalize paths in memory when their ownership is unambiguous. If canonical output would differ, the opened project SHALL be marked dirty, but opening SHALL NOT write any project file. A missing legacy absolute DICOM source whose prior ownership cannot be proven SHALL be classified as missing and SHALL require explicit relinking rather than filesystem guessing.
+
+#### Scenario: Older BIDS root is normalized after relocation
+
+- **WHEN** a supported BIDS project contains its former absolute root in import state and opens from a new location
+- **THEN** runtime state SHALL use the new root, the project SHALL be dirty, and no disk write SHALL occur until normal Save
+
+#### Scenario: Ambiguous legacy DICOM source is missing
+
+- **WHEN** an older project contains an unavailable absolute DICOM source and the system cannot prove that it was inside the former project root
+- **THEN** the project SHALL open with missing-source state and SHALL NOT search for or guess a replacement
+
+#### Scenario: Normal Save persists normalization
+
+- **WHEN** a dirty relocated or relinked project is saved
+- **THEN** normalized paths SHALL be persisted through the existing validated atomic Save operation
+
+### Requirement: Relocation forbids former-root access
+
+After a relocated project becomes active, project-owned reads, writes, watchers, subprocess arguments, checkpoints, and autosaves SHALL use the new runtime root. The former project root SHALL NOT be accessed except while validating an explicitly selected external source or resolving a known Recent Projects entry.
+
+#### Scenario: Relocated project saves
+
+- **WHEN** a relocated project is changed and saved
+- **THEN** `project.easl`, its backup, temporary files, and all project outputs SHALL be addressed under the new root only
+
+#### Scenario: Relocated project starts processing
+
+- **WHEN** processing starts after relocation
+- **THEN** worker arguments and the lock watcher SHALL use the new project root and SHALL NOT use the former root

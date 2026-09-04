@@ -49,6 +49,7 @@ function useImportStoreInitialState() {
     mostRecentConfig: null,
     setActiveStep: () => {},
     setSourceDataPath: () => {},
+    relinkCompatibleSource: () => {},
     setIngestionResults: () => {},
     setBMatchDirectories: () => {},
     setTokenAssignment: () => {},
@@ -89,6 +90,13 @@ function useImportStoreInitialState() {
 }
 
 describe("computeStaleness", () => {
+  it("treats equivalent project-relative source spellings as one logical source", () => {
+    const subjectRows = [{ id: "sub-01/01", subject: "sub-01", session: "01", groupId: "g" }];
+    const state = makeState({ sourceDataPath: "./sourcedata", subjectRows });
+    const snapshot = { ...BASE_SNAPSHOT, sourceDataPath: "sourcedata", subjectRows };
+
+    expect(computeStaleness(state, snapshot)).toEqual({ "sub-01": false });
+  });
   it("returns empty when snapshot is null", () => {
     const state = makeState();
     expect(computeStaleness(state, null)).toEqual({});

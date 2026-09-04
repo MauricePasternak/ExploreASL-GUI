@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { exists } from "@tauri-apps/plugin-fs";
+import { exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { notifications } from "@mantine/notifications";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MantineProvider } from "@mantine/core";
@@ -18,6 +18,23 @@ import {
 import { makeMatlabProfile } from "../test/profileFixtures";
 import { ProjectStorageError } from "../lib/projectPersistence";
 import LandingPage from "./LandingPage";
+
+function identityProjectBytes(id: string) {
+  return JSON.stringify({
+    schemaVersion: 1,
+    projectMeta: {
+      id,
+      name: "Identity Project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastOpened: "2026-01-01T00:00:00.000Z",
+      currentPhase: "import",
+      dataSource: "bids",
+    },
+    uiState: {},
+    mappingState: { sourceDataPath: "." },
+    dataPar: {},
+  });
+}
 
 describe("LandingPage", () => {
   afterEach(() => cleanup());
@@ -284,7 +301,7 @@ describe("LandingPage", () => {
     useGlobalStore.setState((state) => ({
       settings: {
         ...state.settings,
-        recentProjects: ["/tmp/recent/project.easl"],
+        recentProjects: [{ path: "/tmp/recent/project.easl" }],
       },
     }));
     vi.mocked(exists).mockResolvedValue(true);
@@ -329,6 +346,154 @@ describe("LandingPage", () => {
         }),
       );
     });
+  });
+
+  it("cancels duplicate-identity opening without changing active project or recents", async () => {
+    const loadProject = vi.fn();
+    useProjectStore.setState({ loadProject });
+    useGlobalStore.setState((state) => ({
+      settings: {
+        ...state.settings,
+        recentProjects: [{ path: "/old/project.easl", projectId: "same-id" }],
+      },
+    }));
+    vi.mocked(open).mockResolvedValue("/new/project.easl");
+    vi.mocked(exists).mockResolvedValue(true);
+    vi.mocked(readTextFile).mockImplementation(async (path) =>
+      path === "/old/project.easl"
+        ? identityProjectBytes("same-id")
+        : identityProjectBytes("same-id"),
+    );
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    fireEvent.click(screen.getByTestId("landing-open-project-btn"));
+    await screen.findByTestId("project-identity-dialog");
+    fireEvent.click(screen.getByTestId("project-identity-cancel-btn"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("project-identity-cancel-btn")).not.toBeInTheDocument(),
+    );
+    expect(loadProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().project).toBeNull();
+    expect(useGlobalStore.getState().settings.recentProjects).toEqual([
+      { path: "/old/project.easl", projectId: "same-id" },
+    ]);
+  });
+
+  it("replaces the recent path when duplicate identity is confirmed as moved", async () => {
+    const loadProject = vi.fn(async () => {
+      useProjectStore.setState({
+        project: {
+          version: "0.1.0",
+          projectMeta: {
+            id: "same-id",
+            name: "Identity Project",
+            rootPath: "/new",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            lastOpened: "2026-01-01T00:00:00.000Z",
+            currentPhase: "import",
+            dataSource: "bids",
+          },
+          uiState: {},
+          mappingState: { sourceDataPath: "." },
+          dataPar: {},
+        },
+        loaded: true,
+        isDirty: false,
+      });
+    });
+    useProjectStore.setState({ loadProject });
+    useGlobalStore.setState((state) => ({
+      settings: {
+        ...state.settings,
+        recentProjects: [{ path: "/old/project.easl", projectId: "same-id" }],
+      },
+    }));
+    vi.mocked(open).mockResolvedValue("/new/project.easl");
+    vi.mocked(exists).mockResolvedValue(true);
+    vi.mocked(readTextFile).mockResolvedValue(identityProjectBytes("same-id"));
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    fireEvent.click(screen.getByTestId("landing-open-project-btn"));
+    await screen.findByTestId("project-identity-dialog");
+    fireEvent.click(screen.getByTestId("project-identity-moved-btn"));
+
+    await waitFor(() =>
+      expect(useGlobalStore.getState().settings.recentProjects[0]).toEqual({
+        path: "/new/project.easl",
+        projectId: "same-id",
+      }),
+    );
+    expect(loadProject).toHaveBeenCalledWith("/new/project.easl", { forceDirty: false });
+  });
+
+  it("opens a confirmed copy under a new dirty runtime identity", async () => {
+    const loadProject = vi.fn(
+      async (_path: string, options?: { projectIdOverride?: string; forceDirty?: boolean }) => {
+        useProjectStore.setState({
+          project: {
+            version: "0.1.0",
+            projectMeta: {
+              id: options?.projectIdOverride ?? "same-id",
+              name: "Identity Project",
+              rootPath: "/copy",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              lastOpened: "2026-01-01T00:00:00.000Z",
+              currentPhase: "import",
+              dataSource: "bids",
+            },
+            uiState: {},
+            mappingState: { sourceDataPath: "." },
+            dataPar: {},
+          },
+          loaded: true,
+          isDirty: options?.forceDirty === true,
+        });
+      },
+    );
+    useProjectStore.setState({ loadProject });
+    useGlobalStore.setState((state) => ({
+      settings: {
+        ...state.settings,
+        recentProjects: [{ path: "/old/project.easl", projectId: "same-id" }],
+      },
+    }));
+    vi.mocked(open).mockResolvedValue("/copy/project.easl");
+    vi.mocked(exists).mockResolvedValue(true);
+    vi.mocked(readTextFile).mockResolvedValue(identityProjectBytes("same-id"));
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    fireEvent.click(screen.getByTestId("landing-open-project-btn"));
+    await screen.findByTestId("project-identity-dialog");
+    fireEvent.click(screen.getByTestId("project-identity-copied-btn"));
+
+    await waitFor(() => expect(useProjectStore.getState().project).not.toBeNull());
+    const copiedId = useProjectStore.getState().project!.projectMeta.id;
+    expect(copiedId).not.toBe("same-id");
+    expect(useProjectStore.getState().isDirty).toBe(true);
+    expect(useGlobalStore.getState().settings.recentProjects).toEqual([
+      { path: "/copy/project.easl", projectId: copiedId },
+      { path: "/old/project.easl", projectId: "same-id" },
+    ]);
+    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
   });
 });
 
@@ -738,7 +903,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     useGlobalStore.setState({
       settings: {
         ...useGlobalStore.getState().settings,
-        recentProjects: ["/tmp/brain-study/project.easl"],
+        recentProjects: [{ path: "/tmp/brain-study/project.easl", projectId: "project-1" }],
       },
     });
 

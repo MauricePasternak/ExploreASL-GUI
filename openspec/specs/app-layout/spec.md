@@ -86,3 +86,31 @@ The navbar SHALL include a "Manifest" entry in `PHASE_NAV` appended after the "V
 
 - **WHEN** the navbar phases are rendered
 - **THEN** the "Manifest" entry SHALL appear immediately after the "Visualization" entry
+
+### Requirement: Safe project and application close
+
+Ordinary Return to Home, project replacement, and application close actions SHALL wait for project-owned import and processing shutdown. If shutdown cannot be confirmed, navigation or exit SHALL be cancelled, the current project SHALL remain visible, and the system SHALL show an actionable error with retry guidance. Operating-system force termination remains outside this guarantee.
+
+#### Scenario: Return to Home stops project work
+
+- **WHEN** the user returns to Home while project-owned work or watchers are active
+- **THEN** navigation SHALL occur only after those resources are confirmed stopped and project-scoped state is reset
+
+#### Scenario: Normal close cannot stop work
+
+- **WHEN** the user requests application close and project-owned work cannot be confirmed stopped
+- **THEN** the application SHALL remain open and SHALL show an actionable shutdown error
+
+### Requirement: Missing external source guidance
+
+When a project opens with one or more unavailable external sources, the application shell SHALL show a summary notice without blocking project access. The Import or Visualization phase that owns each missing source SHALL show a persistent warning with the saved source location and a Relink action until that source is restored or explicitly removed. All warning and Relink controls SHALL expose stable `data-testid` attributes.
+
+#### Scenario: Project opens with missing source
+
+- **WHEN** a valid project opens with an unavailable DICOM source or visualization external file
+- **THEN** the shell SHALL show a summary notice and navigation to unaffected phases SHALL remain available
+
+#### Scenario: User visits affected phase
+
+- **WHEN** the user visits a phase whose external source is unavailable
+- **THEN** a persistent warning SHALL identify the source and offer Relink while only source-dependent actions remain disabled

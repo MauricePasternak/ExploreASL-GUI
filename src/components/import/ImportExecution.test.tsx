@@ -113,6 +113,23 @@ describe("ImportExecution", () => {
     expect(useImportStore.getState().importPhase).toBe("idle");
   });
 
+  it("disables source-dependent import when the saved DICOM source is unavailable", () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    useImportStore.setState({
+      sourceDataPath: "/missing/dicom",
+      sourceAvailability: {
+        status: "missing",
+        savedPath: "/missing/dicom",
+        message: "Source missing.",
+      },
+    });
+
+    renderWithProviders();
+
+    expect(firstButton(/start import/i)).toBeDisabled();
+  });
+
   it("disables start when selected profile is invalid", () => {
     const profile = makeMatlabProfile({ id: "profile-invalid" });
     useGlobalStore.setState({

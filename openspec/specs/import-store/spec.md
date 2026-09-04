@@ -145,3 +145,60 @@ Session-only state. Not persisted to `.easl`. The `confirmed` flag is NOT in thi
 
 - **WHEN** `rescanConfirmedBidsProject` fails with a scan error
 - **THEN** `scanError` is set in session state and persisted `mappingState` / `uiState.import.skippedSubjects` remain unchanged
+
+### Requirement: Portable DICOM source state
+
+For DICOM projects, the persisted source location SHALL distinguish a project-internal relative path from an external absolute path. Persisted raw DICOM entries SHALL be location-independent relative paths under the logical source root and SHALL resolve to absolute paths only at runtime. Older absolute source and raw-path strings SHALL remain accepted. BIDS projects SHALL resolve their source to the current project root and SHALL NOT depend on a persisted former root.
+
+#### Scenario: User selects DICOM folder inside project
+
+- **WHEN** the selected DICOM source is contained by the active project root
+- **THEN** canonical project state SHALL preserve it as a project-relative source and its raw entries SHALL remain portable when the project moves
+
+#### Scenario: User selects external DICOM folder
+
+- **WHEN** the selected DICOM source is outside the active project root
+- **THEN** canonical project state SHALL preserve the source as an explicit absolute path while raw entries remain relative to that source
+
+### Requirement: Missing DICOM source and relinking
+
+A missing or unreadable DICOM source SHALL NOT prevent the project from opening. The Import phase SHALL retain the saved source reference and mapping configuration, display a persistent Relink warning, and disable only actions that require source access. Relinking SHALL scan the replacement and compare its discovered path structure with the saved structure before changing project state. A compatible replacement SHALL preserve mapping setup. An incompatible replacement SHALL require confirmation and SHALL reset only source-dependent import setup. A successful relink SHALL mark the project dirty and SHALL persist only through normal Save.
+
+#### Scenario: External DICOM source is missing
+
+- **WHEN** a project opens and its external DICOM source cannot be read
+- **THEN** the project SHALL open, the Import phase SHALL show a persistent Relink warning, and source-dependent scan or import actions SHALL remain disabled
+
+#### Scenario: Replacement structure matches
+
+- **WHEN** the user selects a readable replacement whose discovered structure matches the saved source structure
+- **THEN** the new source SHALL replace the missing reference, existing compatible token and metadata setup SHALL remain, and the project SHALL become dirty
+
+#### Scenario: Replacement structure differs
+
+- **WHEN** the selected replacement has a different discovered structure
+- **THEN** the system SHALL explain which setup will reset and SHALL make no change until the user confirms
+
+#### Scenario: User confirms changed DICOM source
+
+- **WHEN** the user confirms an incompatible replacement
+- **THEN** the system SHALL adopt the source, reset source-dependent raw paths, patterns, token assignments, and incompatible mappings, and mark the project dirty
+
+#### Scenario: User cancels DICOM relink
+
+- **WHEN** the user cancels selection or declines an incompatible replacement
+- **THEN** the saved source reference and all import setup SHALL remain unchanged
+
+### Requirement: Complete import hydration
+
+Opening a project SHALL replace the complete import runtime slice with validated project values over import defaults. Missing optional mapping or UI fields SHALL apply defaults. Session-only BIDS review state, logs, errors, progress, running flags, and selections SHALL reset before the new project's values are exposed.
+
+#### Scenario: Sparse project follows populated import state
+
+- **WHEN** project A has populated mappings, logs, progress, and BIDS review state and project B omits optional import fields
+- **THEN** project B SHALL expose import defaults and SHALL contain none of A's state
+
+#### Scenario: Persisted import state belongs to project B
+
+- **WHEN** project B contains valid persisted mappings and import UI state
+- **THEN** the import store SHALL replace its persisted slice with B's values and reset all non-persisted fields

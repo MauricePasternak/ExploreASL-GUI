@@ -121,7 +121,7 @@ fn spawn_apptainer_processing_process(
 }
 
 #[cfg(unix)]
-fn send_termination_signal(pid: u32) -> Result<(), String> {
+pub(crate) fn send_termination_signal(pid: u32) -> Result<(), String> {
     use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
     kill(Pid::from_raw(pid as i32), Signal::SIGTERM)
@@ -129,7 +129,7 @@ fn send_termination_signal(pid: u32) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn send_termination_signal(pid: u32) -> Result<(), String> {
+pub(crate) fn send_termination_signal(pid: u32) -> Result<(), String> {
     use windows_sys::Win32::System::Console::GenerateConsoleCtrlEvent;
     let ok = unsafe { GenerateConsoleCtrlEvent(1, pid) };
     if ok == 0 {
@@ -139,7 +139,7 @@ fn send_termination_signal(pid: u32) -> Result<(), String> {
 }
 
 #[cfg(unix)]
-fn force_kill_process(pid: u32) -> Result<(), String> {
+pub(crate) fn force_kill_process(pid: u32) -> Result<(), String> {
     use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
     kill(Pid::from_raw(pid as i32), Signal::SIGKILL)
@@ -147,7 +147,7 @@ fn force_kill_process(pid: u32) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn force_kill_process(pid: u32) -> Result<(), String> {
+pub(crate) fn force_kill_process(pid: u32) -> Result<(), String> {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
     let handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
@@ -163,7 +163,7 @@ fn force_kill_process(pid: u32) -> Result<(), String> {
 }
 
 #[cfg(unix)]
-fn process_exists(pid: u32) -> bool {
+pub(crate) fn process_exists(pid: u32) -> bool {
     use nix::errno::Errno;
     use nix::sys::signal::kill;
     use nix::unistd::Pid;
@@ -175,7 +175,7 @@ fn process_exists(pid: u32) -> bool {
 }
 
 #[cfg(windows)]
-fn process_exists(pid: u32) -> bool {
+pub(crate) fn process_exists(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
     use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
     use windows_sys::Win32::System::Threading::{
@@ -347,6 +347,15 @@ pub fn run_pipeline(
             return Err(format!(
                 "Processing already running with PIDs: {:?}",
                 processing_state.worker_pids
+            ));
+        }
+        if processing_state.watcher_stop.is_some()
+            && !processing_state.project_root.as_os_str().is_empty()
+            && processing_state.project_root != project_root
+        {
+            return Err(format!(
+                "Lock watcher belongs to project {}",
+                processing_state.project_root.display()
             ));
         }
         processing_state.project_root = project_root.clone();

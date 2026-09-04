@@ -7,6 +7,11 @@ import { useProjectStore } from "../stores/projectStore";
 import { useProcessingStore } from "../stores/processingStore";
 import type { ProcessConfig } from "../schemas/processingSchemas";
 import type { ExecutionProfile } from "../schemas/executionProfile";
+import {
+  activateProjectLease,
+  invalidateProjectLease,
+  resetProjectLifecycleForTests,
+} from "./projectLifecycle";
 
 const MATLAB_PROFILE: ExecutionProfile = {
   id: "profile-1",
@@ -161,6 +166,7 @@ describe("population completion mtime capture", () => {
   };
 
   beforeEach(() => {
+    resetProjectLifecycleForTests();
     vi.mocked(invoke).mockClear();
     vi.mocked(listen).mockClear();
 
@@ -197,6 +203,7 @@ describe("population completion mtime capture", () => {
   });
 
   afterEach(() => {
+    resetProjectLifecycleForTests();
     useProcessingStore.setState({
       config: null,
       workerPids: [],
@@ -275,5 +282,28 @@ describe("population completion mtime capture", () => {
     expect(
       useProjectStore.getState().project?.uiState?.processing?.population?.lastRun?.Mtime,
     ).toBeNull();
+  });
+
+  it("discards watcher events from a replaced same-ID lifecycle", async () => {
+    const listeners: Record<string, (event: any) => void> = {};
+    vi.mocked(listen).mockImplementation(async (eventName: string, callback: any) => {
+      listeners[eventName] = callback;
+      return () => {};
+    });
+    activateProjectLease("same-id", "/test/project_root");
+    await setupProcessingListeners();
+
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/test/project_root");
+    useProcessingStore.setState({ subjectStatuses: [] });
+    listeners.StatusFileCreated({
+      payload: {
+        module: "xASL_module_Structural",
+        subjectSession: "sub-001_01",
+        stepCode: "999_ready",
+      },
+    });
+
+    expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
   });
 });

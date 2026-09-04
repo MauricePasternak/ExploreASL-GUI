@@ -1,5 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { exists } from "@tauri-apps/plugin-fs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { useManifestStore } from "./manifestStore";
+import {
+  activateProjectLease,
+  invalidateProjectLease,
+  resetProjectLifecycleForTests,
+} from "../lib/projectLifecycle";
 
 const { mockGetState, mockProcessingState } = vi.hoisted(() => ({
   mockGetState: vi.fn(),
@@ -33,12 +41,71 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 describe("useManifestStore", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    resetProjectLifecycleForTests();
     useManifestStore.setState({
       step: 0,
       filter: "all",
       staleVerdicts: new Set(),
       priorModulesMtimes: {},
+      qcData: null,
+      qcLoaded: false,
+      qcLoading: false,
+      dataPar: null,
     });
+    mockProcessingState.availableSubjects = [{ subjectSession: "sub-01_01" }];
+    mockGetState.mockReturnValue({
+      project: {
+        projectMeta: { id: "project-a", rootPath: "/project-a" },
+        uiState: {},
+        mappingState: {},
+      },
+    });
+  });
+
+  afterEach(() => resetProjectLifecycleForTests());
+
+  it("discards a late QC load after project replacement", async () => {
+    activateProjectLease("same-id", "/project-a");
+    let resolveQc!: (value: unknown) => void;
+    vi.mocked(invoke).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveQc = resolve;
+        }),
+    );
+
+    const load = useManifestStore.getState().loadQcData("/project-a");
+    await vi.waitFor(() => expect(resolveQc).toBeTypeOf("function"));
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/project-b");
+    useManifestStore.getState().resetManifest();
+    resolveQc({ "sub-01_01": { coverage: 90 } });
+    await load;
+
+    expect(useManifestStore.getState().qcData).toBeNull();
+  });
+
+  it("discards a late dataPar read after project replacement", async () => {
+    activateProjectLease("same-id", "/project-a");
+    vi.mocked(exists).mockResolvedValueOnce(true);
+    let resolveRead!: (value: string) => void;
+    vi.mocked(readTextFile).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+
+    const load = useManifestStore.getState().loadDataPar("/project-a");
+    await vi.waitFor(() => expect(resolveRead).toBeTypeOf("function"));
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/project-b");
+    useManifestStore.getState().resetManifest();
+    resolveRead(JSON.stringify({ x: { oldProject: true } }));
+    await load;
+
+    expect(useManifestStore.getState().dataPar).toBeNull();
   });
 
   it("starts on step 0 by default", () => {

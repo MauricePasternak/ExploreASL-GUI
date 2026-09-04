@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasParentTraversal } from "../lib/projectPaths";
 import {
   parseCommaSeparatedNumbers,
   parseNumberOrArray,
@@ -641,8 +642,12 @@ export type SubjectRow = z.infer<typeof SubjectRowSchema>;
 // Import Snapshot (staleness detection)
 // =============================================================================
 
+export const StoredPathSchema = z
+  .string()
+  .refine((path) => !hasParentTraversal(path), "Project-relative path cannot escape its root.");
+
 export const ImportSnapshotSchema = z.object({
-  sourceDataPath: z.string(),
+  sourceDataPath: StoredPathSchema,
   pathPatterns: z.array(PathPatternSchema),
   tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)),
   bMatchDirectories: z.boolean(),
@@ -658,8 +663,8 @@ export const ImportSnapshotSchema = z.object({
 export type ImportSnapshot = z.infer<typeof ImportSnapshotSchema>;
 
 export const MappingStateSchema = z.object({
-  sourceDataPath: z.string().optional(),
-  rawPaths: z.array(z.string()).optional(),
+  sourceDataPath: StoredPathSchema.optional(),
+  rawPaths: z.array(StoredPathSchema).optional(),
   pathPatterns: z.array(PathPatternSchema).optional(),
   bMatchDirectories: z.boolean().optional(),
   ingestionComplete: z.boolean().optional(),

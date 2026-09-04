@@ -38,6 +38,7 @@ export async function tryRestoreProjectSession(routeProjectId: string): Promise<
       const parsed = parseProject(raw);
       if (parsed.projectMeta.id === routeProjectId) {
         await loadProject(easlPath);
+        useGlobalStore.getState().addRecentProject(easlPath, parsed.projectMeta.id);
         return true;
       }
     } catch {
@@ -65,13 +66,16 @@ export async function tryRestoreProjectSession(routeProjectId: string): Promise<
     return true;
   }
 
-  for (const easlPath of useGlobalStore.getState().settings.recentProjects) {
-    if (await tryLoadFromPath(easlPath)) {
+  for (const recentProject of useGlobalStore.getState().settings.recentProjects) {
+    if (
+      (!recentProject.projectId || recentProject.projectId === routeProjectId) &&
+      (await tryLoadFromPath(recentProject.path))
+    ) {
       return true;
     }
   }
 
-  closeProject();
+  await closeProject();
   clearSessionCheckpoint();
   return false;
 }

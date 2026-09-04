@@ -11,6 +11,7 @@ import { useProjectStore } from "./projectStore";
 import { useProcessingStore } from "./processingStore";
 import { exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
+import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 
 type FlatManifestVerdicts = Record<string, ManifestVerdict>;
 type NestedManifestVerdicts = Record<string, FlatManifestVerdicts>;
@@ -49,6 +50,22 @@ interface ManifestState {
   resetManifest: () => void;
   loadQcData: (projectRoot: string) => Promise<void>;
   loadDataPar: (projectRoot: string) => Promise<void>;
+}
+
+export function createInitialManifestState() {
+  return {
+    step: 0 as const,
+    filter: "all" as const,
+    reviewerMode: "single" as const,
+    disagreements: [],
+    agreementResults: null,
+    staleVerdicts: new Set<string>(),
+    priorModulesMtimes: {},
+    qcData: null,
+    qcLoaded: false,
+    qcLoading: false,
+    dataPar: null,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -191,17 +208,7 @@ function subjectSessionGroupIds(
 }
 
 export const useManifestStore = create<ManifestState>((set, get) => ({
-  step: 0,
-  filter: "all",
-  reviewerMode: "single",
-  disagreements: [],
-  agreementResults: null,
-  staleVerdicts: new Set(),
-  priorModulesMtimes: {},
-  qcData: null,
-  qcLoaded: false,
-  qcLoading: false,
-  dataPar: null,
+  ...createInitialManifestState(),
 
   setStep: (step) => set({ step }),
 
@@ -209,27 +216,16 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
 
   resetStep: () => set({ step: 0 }),
 
-  resetManifest: () =>
-    set({
-      step: 0,
-      filter: "all",
-      reviewerMode: "single",
-      disagreements: [],
-      agreementResults: null,
-      staleVerdicts: new Set(),
-      priorModulesMtimes: {},
-      qcData: null,
-      qcLoaded: false,
-      qcLoading: false,
-      dataPar: null,
-    }),
+  resetManifest: () => set(createInitialManifestState()),
 
   loadPriorModulesMtimes: async () => {
+    const lease = captureProjectLease();
     const project = useProjectStore.getState().project;
     const projectRoot = project?.projectMeta.rootPath;
     if (!projectRoot) return;
     const projectId = project?.projectMeta.id;
     const isCurrentProject = () => {
+      if (lease) return isCurrentProjectLease(lease);
       const currentProject = useProjectStore.getState().project;
       return (
         currentProject?.projectMeta.rootPath === projectRoot &&
@@ -366,6 +362,8 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
 
   loadQcData: async (projectRoot) => {
     if (get().qcLoading) return;
+    const lease = captureProjectLease();
+    const isCurrent = () => !lease || isCurrentProjectLease(lease);
     set({ qcLoading: true });
     try {
       let subjects = useProcessingStore.getState().availableSubjects;
@@ -378,27 +376,36 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
           });
         subjects = useProcessingStore.getState().availableSubjects;
       }
+      if (!isCurrent()) return;
 
       const subjectSessions = subjects.map((s) => s.subjectSession);
       const data = await readAllSubjectQcOutputs(projectRoot, subjectSessions);
+      if (!isCurrent()) return;
       set({ qcData: data, qcLoaded: true, qcLoading: false });
     } catch (err) {
+      if (!isCurrent()) return;
       console.warn("[manifestStore] failed to load QC data", err);
       set({ qcData: null, qcLoaded: true, qcLoading: false });
     }
   },
 
   loadDataPar: async (projectRoot) => {
+    const lease = captureProjectLease();
+    const isCurrent = () => !lease || isCurrentProjectLease(lease);
     const path = `${projectRoot}/derivatives/ExploreASL/dataPar.json`;
     try {
       if (await exists(path)) {
+        if (!isCurrent()) return;
         const raw = await readTextFile(path);
+        if (!isCurrent()) return;
         const parsed = JSON.parse(raw);
         set({ dataPar: parsed });
       } else {
+        if (!isCurrent()) return;
         set({ dataPar: null });
       }
     } catch (err) {
+      if (!isCurrent()) return;
       console.warn("[manifestStore] failed to load dataPar.json", err);
       set({ dataPar: null });
     }

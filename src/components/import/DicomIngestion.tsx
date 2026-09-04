@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Code, Group, Stack, Switch, Text } from "@mantine/core";
+import { Alert, Badge, Button, Card, Code, Group, Modal, Stack, Switch, Text } from "@mantine/core";
 import {
   IconAlertCircle,
   IconArrowRight,
@@ -12,6 +12,9 @@ import { useState } from "react";
 
 import { logAction } from "../../lib/debug";
 import { discoverPathPatterns } from "../../lib/pathUtils";
+import { inspectSourcePath, resolveLogicalSource } from "../../lib/projectPaths";
+import { areDicomStructuresCompatible } from "../../lib/dicomRelink";
+import type { PathPattern } from "../../schemas/importSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -35,9 +38,31 @@ export default function DicomIngestion() {
   const ingestionComplete = useImportStore((s) => s.ingestionComplete);
   const setIngestionResults = useImportStore((s) => s.setIngestionResults);
   const setActiveStep = useImportStore((s) => s.setActiveStep);
+  const sourceAvailability = useImportStore((s) => s.sourceAvailability);
+  const setSourceAvailability = useImportStore((s) => s.setSourceAvailability);
+  const relinkCompatibleSource = useImportStore((s) => s.relinkCompatibleSource);
+  const relinkIncompatibleSource = useImportStore((s) => s.relinkIncompatibleSource);
 
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRelink, setPendingRelink] = useState<{
+    path: string;
+    rawPaths: string[];
+    patterns: PathPattern[];
+  } | null>(null);
+  const sourceUnavailable = ["missing", "unreadable", "ambiguous"].includes(
+    sourceAvailability.status,
+  );
+
+  async function logicalSelectedPath(selectedPath: string) {
+    const inspection = await inspectSourcePath(project?.projectMeta.rootPath ?? "", selectedPath);
+    if (!inspection.exists || !inspection.readable || !inspection.isDirectory) {
+      throw new Error("Selected source directory is unavailable or unreadable.");
+    }
+    return inspection.ownership === "internal"
+      ? (inspection.projectRelativePath ?? selectedPath)
+      : inspection.absolutePath;
+  }
 
   async function handleSelectFolder() {
     logAction("dicom_select_folder");
@@ -49,9 +74,63 @@ export default function DicomIngestion() {
     });
 
     if (selected) {
-      setSourceDataPath(selected as string);
-      setError(null);
-      logAction("dicom_folder_selected", { path: selected as string });
+      try {
+        const selectedPath = selected as string;
+        const logicalPath = await logicalSelectedPath(selectedPath);
+        setSourceDataPath(logicalPath);
+        setSourceAvailability({ status: "available", savedPath: logicalPath, message: null });
+        setError(null);
+        logAction("dicom_folder_selected", { path: logicalPath });
+      } catch (err) {
+        setError(
+          `Failed to inspect source directory: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
+  async function handleRelink() {
+    const selected = await open({
+      defaultPath: project?.projectMeta.rootPath,
+      directory: true,
+      multiple: false,
+      title: "Relink DICOM source directory",
+    });
+    if (typeof selected !== "string") return;
+
+    setScanning(true);
+    setError(null);
+    try {
+      const logicalPath = await logicalSelectedPath(selected);
+      const resolvedSource = resolveLogicalSource(
+        project?.projectMeta.rootPath ?? "",
+        logicalPath,
+        "dicom",
+      );
+      const paths = await invoke<string[]>("walk_directory", {
+        root: resolvedSource,
+        maxDepth: 20,
+        bMatchDirectories,
+      });
+      if (paths.length === 0) throw new Error("Replacement contains no DICOM locations.");
+      const patterns = discoverPathPatterns(paths, "", tokenSubDelimiters);
+      if (
+        areDicomStructuresCompatible(
+          useImportStore.getState().rawPaths,
+          pathPatterns,
+          paths,
+          patterns,
+        )
+      ) {
+        relinkCompatibleSource(logicalPath);
+        useProjectStore.getState().syncImportState(useImportStore.getState());
+      } else {
+        setPendingRelink({ path: logicalPath, rawPaths: paths, patterns });
+      }
+    } catch (err) {
+      setError(`Failed to relink source: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -63,8 +142,13 @@ export default function DicomIngestion() {
     logAction("dicom_scan_start", { path: sourceDataPath, bMatchDirectories });
 
     try {
+      const resolvedSource = resolveLogicalSource(
+        project?.projectMeta.rootPath ?? "",
+        sourceDataPath,
+        "dicom",
+      );
       const paths = await invoke<string[]>("walk_directory", {
-        root: sourceDataPath,
+        root: resolvedSource,
         maxDepth: 20,
         bMatchDirectories,
       });
@@ -78,11 +162,9 @@ export default function DicomIngestion() {
         return;
       }
 
-      // Convert to full paths for pattern discovery
-      const fullPaths = paths.map((p) => `${sourceDataPath}/${p}`);
-      const patterns = discoverPathPatterns(fullPaths, sourceDataPath, tokenSubDelimiters);
+      const patterns = discoverPathPatterns(paths, "", tokenSubDelimiters);
 
-      setIngestionResults(fullPaths, patterns);
+      setIngestionResults(paths, patterns);
       logAction("dicom_scan_success", {
         path: sourceDataPath,
         pathCount: paths.length,
@@ -114,6 +196,28 @@ export default function DicomIngestion() {
         dataTestId="dicom-ingestion-header"
       />
 
+      {sourceUnavailable && (
+        <Alert
+          icon={<IconAlertCircle size={16} />}
+          title="DICOM source unavailable"
+          color="yellow"
+          data-testid="dicom-missing-source-warning"
+        >
+          <Stack gap="xs">
+            <Text size="sm">{sourceAvailability.message}</Text>
+            <Code data-testid="dicom-missing-source-path">{sourceAvailability.savedPath}</Code>
+            <Button
+              variant="light"
+              onClick={handleRelink}
+              loading={scanning}
+              data-testid="dicom-relink-btn"
+            >
+              Relink
+            </Button>
+          </Stack>
+        </Alert>
+      )}
+
       {/* Folder selection */}
       <Card withBorder p="md">
         <Stack gap="sm">
@@ -140,6 +244,7 @@ export default function DicomIngestion() {
               leftSection={<IconFolderSearch size={16} />}
               variant="light"
               onClick={handleSelectFolder}
+              disabled={sourceUnavailable}
               data-testid="dicom-browse-btn"
             >
               Browse
@@ -167,7 +272,7 @@ export default function DicomIngestion() {
 
           <Button
             leftSection={<IconFolderSearch size={16} />}
-            disabled={!sourceDataPath}
+            disabled={!sourceDataPath || sourceUnavailable}
             loading={scanning}
             onClick={handleScan}
             data-testid="scan-dicoms-btn"
@@ -189,6 +294,46 @@ export default function DicomIngestion() {
           {error}
         </Alert>
       )}
+
+      <Modal
+        opened={pendingRelink !== null}
+        onClose={() => setPendingRelink(null)}
+        title="DICOM folder structure changed"
+        data-testid="dicom-relink-mismatch-dialog"
+      >
+        <Stack>
+          <Text size="sm">
+            Replacement structure differs from saved DICOM inventory. Continuing resets tokenizer,
+            alias, metadata, and prior import snapshot setup.
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => setPendingRelink(null)}
+              data-testid="dicom-relink-cancel-btn"
+            >
+              Cancel
+            </Button>
+            <Button
+              color="orange"
+              onClick={() => {
+                if (pendingRelink) {
+                  relinkIncompatibleSource(
+                    pendingRelink.path,
+                    pendingRelink.rawPaths,
+                    pendingRelink.patterns,
+                  );
+                  useProjectStore.getState().syncImportState(useImportStore.getState());
+                }
+                setPendingRelink(null);
+              }}
+              data-testid="dicom-relink-confirm-btn"
+            >
+              Relink and reset setup
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* Results */}
       {ingestionComplete && (

@@ -12,6 +12,7 @@ import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useProcessingStore } from "../stores/processingStore";
+import { hydrateProjectStores } from "../stores/projectStoreHydration";
 import { seedValidProfileGate } from "../test/landingProfileGate";
 import ProjectPage from "./ProjectPage";
 
@@ -223,24 +224,24 @@ describe("ProjectPage", () => {
     });
   });
 
-  it("hydrates import execution ui state into the import store when mapping state is empty", async () => {
-    useProjectStore.setState((state) => ({
-      project: state.project
-        ? {
-            ...state.project,
-            uiState: {
-              ...state.project.uiState,
-              import: {
-                completed: true,
-                currentPhase: "completed",
-                bidsReviewConfirmed: false,
-                skippedSubjects: [],
-              },
-            },
-            mappingState: {},
-          }
-        : null,
-    }));
+  it("uses import execution state pre-hydrated by project activation", async () => {
+    const current = useProjectStore.getState().project!;
+    hydrateProjectStores(
+      {
+        ...current,
+        uiState: {
+          ...current.uiState,
+          import: {
+            completed: true,
+            currentPhase: "completed",
+            bidsReviewConfirmed: false,
+            skippedSubjects: [],
+          },
+        },
+        mappingState: {},
+      },
+      false,
+    );
 
     render(
       <MantineProvider>
@@ -257,7 +258,6 @@ describe("ProjectPage", () => {
         importCompleted: true,
         importPhase: "completed",
       });
-      expect(invoke).toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
     });
   });
 
@@ -266,7 +266,7 @@ describe("ProjectPage", () => {
       loaded: true,
       settings: {
         ...DEFAULT_SETTINGS,
-        recentProjects: ["/tmp/brain-study/project.easl"],
+        recentProjects: [{ path: "/tmp/brain-study/project.easl", projectId: "project-1" }],
       },
     });
     vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(PROJECT_JSON));

@@ -77,15 +77,6 @@ function deriveSubjectRows({
     const sessionAssignment = assignments.find((assignment) => assignment.tag === "Session");
 
     for (const fullPath of rawPaths) {
-      const normFullPath = fullPath.replace(/\\/g, "/");
-      const normSourceDataPath = sourceDataPath.replace(/\\/g, "/");
-      const normalizedRoot = normSourceDataPath.endsWith("/")
-        ? normSourceDataPath
-        : `${normSourceDataPath}/`;
-      if (!normFullPath.startsWith(normalizedRoot)) {
-        continue;
-      }
-
       const relativePath = getRelativePath(fullPath, sourceDataPath);
       const segments = relativePath.split("/").filter(Boolean);
       if (!pathMatchesPattern(segments, pattern)) {

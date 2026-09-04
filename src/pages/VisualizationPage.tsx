@@ -1,4 +1,13 @@
-import { Alert, Button, Group, Stack, Stepper, Text, useMantineColorScheme } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Code,
+  Group,
+  Stack,
+  Stepper,
+  Text,
+  useMantineColorScheme,
+} from "@mantine/core";
 import { IconAlertCircle, IconChartDots } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
@@ -11,6 +20,7 @@ import VisualizeStep from "../components/visualization/VisualizeStep";
 import { useVisualizationSync } from "../hooks/useVisualizationSync";
 import { useProjectStore } from "../stores/projectStore";
 import { DataInspection, useVisualizationStore } from "../stores/visualizationStore";
+import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 
 interface FileStats {
   mtime: string;
@@ -26,6 +36,8 @@ export default function VisualizationPage() {
   const inspection = useVisualizationStore((s) => s.inspection);
   const columnTypes = useVisualizationStore((s) => s.columnTypes);
   const setAvailableFiles = useVisualizationStore((s) => s.setAvailableFiles);
+  const joinConfig = useVisualizationStore((s) => s.joinConfig);
+  const externalSourceAvailability = useVisualizationStore((s) => s.externalSourceAvailability);
 
   const project = useProjectStore((s) => s.project);
   const [invalidationBanner, setInvalidationBanner] = useState<string | null>(null);
@@ -44,12 +56,15 @@ export default function VisualizationPage() {
   const activeStep = visibleSteps.indexOf(stage);
 
   useEffect(() => {
+    const lease = captureProjectLease();
+    const isCurrent = () => !lease || isCurrentProjectLease(lease);
     async function scanStats() {
       if (!project) return;
       try {
         const files = await invoke<
           Array<{ fileName: string; relativePath: string; size: number; modified: string }>
         >("list_stats_files", { projectRoot: project.projectMeta.rootPath });
+        if (!isCurrent()) return;
         setAvailableFiles(files);
         if (files.length === 0) {
           setStatsError("No statistics files found in Population/Stats.");
@@ -57,6 +72,7 @@ export default function VisualizationPage() {
           setStatsError(null);
         }
       } catch {
+        if (!isCurrent()) return;
         setStatsError("Population Stats not found. Population may have been modified externally.");
       }
     }
@@ -64,11 +80,27 @@ export default function VisualizationPage() {
 
     const handleFocus = async () => {
       await scanStats();
+      if (!isCurrent()) return;
 
       const joinConfig = useVisualizationStore.getState().joinConfig;
       const qcbfSource = useVisualizationStore.getState().qcbfSource;
       const currentProject = useProjectStore.getState().project;
       if (!joinConfig || !qcbfSource || !currentProject) return;
+
+      const loadQcbfOnly = async () => {
+        const result = await invoke<DataInspection>("load_qcbf_data", {
+          projectRoot: currentProject.projectMeta.rootPath,
+          relativePath: qcbfSource.relativePath,
+        });
+        if (!isCurrent()) return null;
+        if (result.qcbfHash !== qcbfSource.fileHash) {
+          useVisualizationStore.getState().invalidateContract();
+          setInvalidationBanner("Data file has changed. Please reconfigure.");
+          return null;
+        }
+        useVisualizationStore.getState().setInspection(result);
+        return result;
+      };
 
       // Step 1: Stat external file mtime (cheap, no full read)
       let stats: FileStats;
@@ -76,30 +108,21 @@ export default function VisualizationPage() {
         stats = await invoke<FileStats>("stat_file", {
           path: joinConfig.externalSource.absolutePath,
         });
+        if (!isCurrent()) return;
       } catch {
-        // File deleted mid-session
-        useVisualizationStore.getState().setJoinConfig(null);
-        const filename =
-          joinConfig.externalSource.absolutePath.split(/[/\\]/).pop() ??
-          joinConfig.externalSource.absolutePath;
-        setInvalidationBanner(`External file '${filename}' no longer exists.`);
-        // Re-run load_qcbf_data to revert to qCBF-only
+        if (!isCurrent()) return;
+        useVisualizationStore.getState().setExternalSourceAvailability({
+          status: "missing",
+          savedPath: joinConfig.externalSource.absolutePath,
+          message:
+            "The saved external visualization file is missing. Relink it to restore joined data.",
+        });
         try {
-          const result = await invoke<DataInspection>("load_qcbf_data", {
-            projectRoot: currentProject.projectMeta.rootPath,
-            relativePath: qcbfSource.relativePath,
-          });
-          useVisualizationStore.getState().setInspection(result);
-          const types: Record<string, string> = {};
-          for (const col of result.columns) {
-            types[col.name] = col.inferredType;
-          }
-          useVisualizationStore.getState().setColumnTypes(types);
-          useVisualizationStore.getState().setLevelOrderings({});
-          useVisualizationStore.getState().setAxisAssignment({ x: null, y: null, colorBy: null });
+          await loadQcbfOnly();
         } catch {
-          // qCBF file also gone — full invalidation
+          if (!isCurrent()) return;
           useVisualizationStore.getState().invalidateContract();
+          setInvalidationBanner(`File '${qcbfSource.relativePath}' no longer exists.`);
         }
         return;
       }
@@ -121,36 +144,40 @@ export default function VisualizationPage() {
           sheetName: joinConfig.externalSource.sheetName,
           delimiter: joinConfig.delimiter === "auto" ? null : joinConfig.delimiter,
         });
+        if (!isCurrent()) return;
 
         // Step 4: Compare external hash
         if (result.externalHash !== joinConfig.externalSource.fileHash) {
-          // Content changed — invalidate join, revert to qCBF-only
-          useVisualizationStore.getState().setJoinConfig(null);
-          const qcbfOnlyResult = await invoke<DataInspection>("load_qcbf_data", {
-            projectRoot: currentProject.projectMeta.rootPath,
-            relativePath: qcbfSource.relativePath,
+          useVisualizationStore.getState().setExternalSourceAvailability({
+            status: "changed",
+            savedPath: joinConfig.externalSource.absolutePath,
+            message:
+              "External data content changed. Relink and confirm before resetting dependent visualization setup.",
           });
-          useVisualizationStore.getState().setInspection(qcbfOnlyResult);
-          const types: Record<string, string> = {};
-          for (const col of qcbfOnlyResult.columns) {
-            types[col.name] = col.inferredType;
-          }
-          useVisualizationStore.getState().setColumnTypes(types);
-          useVisualizationStore.getState().setLevelOrderings({});
-          useVisualizationStore.getState().setAxisAssignment({ x: null, y: null, colorBy: null });
-          setInvalidationBanner(
-            "External data file has changed. Join configuration has been reset.",
-          );
+          await loadQcbfOnly();
         } else {
-          // Content identical (file was touched but unchanged) — update inspection with fresh merged data
+          useVisualizationStore.getState().setExternalSourceAvailability({
+            status: "available",
+            savedPath: joinConfig.externalSource.absolutePath,
+            message: null,
+          });
           useVisualizationStore.getState().setInspection(result);
         }
       } catch {
-        // execute_join failed (e.g., file became unreadable) — invalidate join
-        useVisualizationStore.getState().setJoinConfig(null);
-        setInvalidationBanner(
-          "External data file could not be read. Join configuration has been reset.",
-        );
+        if (!isCurrent()) return;
+        useVisualizationStore.getState().setExternalSourceAvailability({
+          status: "unreadable",
+          savedPath: joinConfig.externalSource.absolutePath,
+          message:
+            "The saved external visualization file is unreadable. Relink it to restore joined data.",
+        });
+        try {
+          await loadQcbfOnly();
+        } catch {
+          if (!isCurrent()) return;
+          useVisualizationStore.getState().invalidateContract();
+          setInvalidationBanner(`File '${qcbfSource.relativePath}' no longer exists.`);
+        }
       }
     };
 
@@ -159,6 +186,8 @@ export default function VisualizationPage() {
   }, [project, setAvailableFiles]);
 
   useEffect(() => {
+    const lease = captureProjectLease();
+    const isCurrent = () => !lease || isCurrentProjectLease(lease);
     async function validateContract() {
       const currentProject = useProjectStore.getState().project;
       const qcbfSource = useVisualizationStore.getState().qcbfSource;
@@ -192,22 +221,58 @@ export default function VisualizationPage() {
             sheetName: joinConfig.externalSource.sheetName,
             delimiter: joinConfig.delimiter,
           });
+          if (!isCurrent()) return;
           if (result.qcbfHash !== qcbfSource.fileHash) {
             useVisualizationStore.getState().invalidateContract();
             setInvalidationBanner("Data file has changed. Please reconfigure.");
             return;
           }
           if (result.externalHash !== joinConfig.externalSource.fileHash) {
-            useVisualizationStore.getState().setJoinConfig(null);
-            setInvalidationBanner(
-              "External data file has changed. Join configuration has been reset.",
-            );
+            useVisualizationStore.getState().setExternalSourceAvailability({
+              status: "changed",
+              savedPath: joinConfig.externalSource.absolutePath,
+              message:
+                "External data content changed. Relink and confirm before resetting dependent visualization setup.",
+            });
+            const qcbfOnly = await invoke<DataInspection>("load_qcbf_data", {
+              projectRoot: currentProject.projectMeta.rootPath,
+              relativePath: qcbfSource.relativePath,
+            });
+            if (!isCurrent()) return;
+            useVisualizationStore.getState().setInspection(qcbfOnly);
             return;
           }
+          useVisualizationStore.getState().setExternalSourceAvailability({
+            status: "available",
+            savedPath: joinConfig.externalSource.absolutePath,
+            message: null,
+          });
           useVisualizationStore.getState().setInspection(result);
         } catch {
-          useVisualizationStore.getState().invalidateContract();
-          setInvalidationBanner(`File '${qcbfSource.relativePath}' no longer exists.`);
+          if (!isCurrent()) return;
+          try {
+            const qcbfOnly = await invoke<DataInspection>("load_qcbf_data", {
+              projectRoot: currentProject.projectMeta.rootPath,
+              relativePath: qcbfSource.relativePath,
+            });
+            if (!isCurrent()) return;
+            if (qcbfOnly.qcbfHash !== qcbfSource.fileHash) {
+              useVisualizationStore.getState().invalidateContract();
+              setInvalidationBanner("Data file has changed. Please reconfigure.");
+              return;
+            }
+            useVisualizationStore.getState().setInspection(qcbfOnly);
+            useVisualizationStore.getState().setExternalSourceAvailability({
+              status: "unreadable",
+              savedPath: joinConfig.externalSource.absolutePath,
+              message:
+                "The saved external visualization file is missing or unreadable. Relink it to restore joined data.",
+            });
+          } catch {
+            if (!isCurrent()) return;
+            useVisualizationStore.getState().invalidateContract();
+            setInvalidationBanner(`File '${qcbfSource.relativePath}' no longer exists.`);
+          }
           return;
         }
       } else {
@@ -231,6 +296,7 @@ export default function VisualizationPage() {
             projectRoot: currentProject.projectMeta.rootPath,
             relativePath: qcbfSource.relativePath,
           });
+          if (!isCurrent()) return;
           if (result.qcbfHash !== qcbfSource.fileHash) {
             useVisualizationStore.getState().invalidateContract();
             setInvalidationBanner("Data file has changed. Please reconfigure.");
@@ -238,6 +304,7 @@ export default function VisualizationPage() {
           }
           useVisualizationStore.getState().setInspection(result);
         } catch {
+          if (!isCurrent()) return;
           useVisualizationStore.getState().invalidateContract();
           setInvalidationBanner(`File '${qcbfSource.relativePath}' no longer exists.`);
           return;
@@ -248,6 +315,7 @@ export default function VisualizationPage() {
   }, []);
 
   async function handleSelectDataNext() {
+    const lease = captureProjectLease();
     const joinConfig = useVisualizationStore.getState().joinConfig;
     const qcbfSource = useVisualizationStore.getState().qcbfSource;
     const project = useProjectStore.getState().project;
@@ -284,6 +352,7 @@ export default function VisualizationPage() {
           sheetName: joinConfig.externalSource.sheetName,
           delimiter: joinConfig.delimiter === "auto" ? null : joinConfig.delimiter,
         });
+        if (lease && !isCurrentProjectLease(lease)) return;
         useVisualizationStore.getState().setInspection(result);
         // Reset column types, level orderings, axis assignment (schema changed)
         const types: Record<string, string> = {};
@@ -295,6 +364,7 @@ export default function VisualizationPage() {
         useVisualizationStore.getState().setAxisAssignment({ x: null, y: null, colorBy: null });
         useVisualizationStore.getState().setStage("columnTypes");
       } catch (err) {
+        if (lease && !isCurrentProjectLease(lease)) return;
         setError(`Join failed: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
     } else {
@@ -328,7 +398,9 @@ export default function VisualizationPage() {
   }
 
   const nextDisabled =
-    (stage === "selectData" && !inspection) ||
+    (stage === "selectData" &&
+      (!inspection ||
+        (joinConfig !== null && externalSourceAvailability.status !== "available"))) ||
     (stage === "columnTypes" && Object.values(columnTypes).every((t) => t === "excluded"));
 
   const nextLabel =
@@ -366,6 +438,31 @@ export default function VisualizationPage() {
         color="orange"
         dataTestId="visualization-header"
       />
+
+      {["missing", "unreadable", "changed"].includes(externalSourceAvailability.status) && (
+        <Alert
+          icon={<IconAlertCircle size={16} />}
+          color="yellow"
+          title="External visualization data unavailable"
+          data-testid="visualization-missing-source-warning"
+        >
+          <Stack gap="xs">
+            <Text size="sm">{externalSourceAvailability.message}</Text>
+            <Code data-testid="visualization-missing-source-path">
+              {externalSourceAvailability.savedPath}
+            </Code>
+            {stage !== "selectData" && (
+              <Button
+                variant="light"
+                onClick={() => setStage("selectData")}
+                data-testid="visualization-relink-btn"
+              >
+                Relink
+              </Button>
+            )}
+          </Stack>
+        </Alert>
+      )}
       {invalidationBanner && (
         <Alert icon={<IconAlertCircle size={16} />} color="red" data-testid="invalidation-banner">
           {invalidationBanner}

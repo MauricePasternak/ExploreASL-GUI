@@ -8,9 +8,12 @@ import { readSessionCheckpoint } from "../lib/sessionCheckpoint";
 import { makeMatlabProfile } from "../test/profileFixtures";
 import { useGlobalStore } from "./globalStore";
 import { useImportStore } from "./importStore";
+import { useVisualizationStore } from "./visualizationStore";
 import { __resetProjectRevisionForTests, useProjectStore } from "./projectStore";
 import { isBidsProject, ensureBidsIgnore } from "../lib/bids/validation";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
+import { compressSnapshot } from "../lib/snapshotCompression";
+import { resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 
 vi.mock("../lib/bids/validation", () => ({
   isBidsProject: vi.fn(),
@@ -37,6 +40,7 @@ describe("useProjectStore", () => {
     vi.clearAllMocks();
     sessionStorage.clear();
     __resetProjectRevisionForTests();
+    resetProjectLifecycleForTests();
     seedValidProfileGate();
     useProjectStore.setState({
       project: null,
@@ -47,6 +51,17 @@ describe("useProjectStore", () => {
     });
 
     vi.mocked(readTextFile).mockResolvedValue("");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "shutdown_project_runtime") {
+        return {
+          success: true,
+          importProcess: { success: true },
+          processingWorkers: { success: true },
+          lockWatcher: { success: true },
+        };
+      }
+      return null;
+    });
     vi.mocked(isBidsProject).mockReset();
     vi.mocked(ensureBidsIgnore).mockReset();
   });
@@ -281,6 +296,327 @@ describe("useProjectStore", () => {
     }
   });
 
+  it("hydrates a copied project under a new runtime ID without writing until Save", async () => {
+    const persisted = {
+      schemaVersion: 1,
+      projectMeta: {
+        id: "original-id",
+        name: "Copied Project",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastOpened: "2026-01-01T00:00:00.000Z",
+        currentPhase: "import",
+        dataSource: "bids",
+      },
+      uiState: {},
+      mappingState: { sourceDataPath: "." },
+      dataPar: {},
+    };
+    vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(persisted));
+
+    await useProjectStore.getState().loadProject("/copy/project.easl", {
+      projectIdOverride: "copy-id",
+      forceDirty: true,
+    });
+
+    expect(useProjectStore.getState()).toMatchObject({
+      project: { projectMeta: { id: "copy-id", rootPath: "/copy" } },
+      isDirty: true,
+      loaded: true,
+    });
+    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
+
+    await useProjectStore.getState().saveProject();
+    expect(invoke).toHaveBeenCalledWith(
+      "atomic_write_project",
+      expect.objectContaining({
+        projectPath: "/copy/project.easl",
+        canonicalBytes: expect.stringContaining('"id": "copy-id"'),
+      }),
+    );
+  });
+
+  describe("portable path normalization", () => {
+    const projectEnvelope = (
+      dataSource: "dicom" | "bids",
+      mappingState: Record<string, unknown>,
+      importState: Record<string, unknown> = {},
+    ) => ({
+      schemaVersion: 1,
+      projectMeta: {
+        id: "portable-project",
+        name: "Portable",
+        createdAt: "2026-09-03T00:00:00.000Z",
+        lastOpened: "2026-09-03T00:00:00.000Z",
+        currentPhase: "import",
+        dataSource,
+      },
+      uiState: { import: importState },
+      mappingState,
+      dataPar: {},
+    });
+
+    it("normalizes relocated BIDS state and compressed snapshot without writing", async () => {
+      const snapshot: ImportSnapshot = {
+        sourceDataPath: "/old/bids-root",
+        pathPatterns: [],
+        tokenizerConfigs: {},
+        bMatchDirectories: false,
+        modalityAliases: [],
+        sessionAliases: [],
+        runAliases: [],
+        subjectRenames: [],
+        metadataGroups: [],
+        subjectRows: [],
+      };
+      vi.mocked(readTextFile).mockResolvedValue(
+        JSON.stringify(
+          projectEnvelope(
+            "bids",
+            { sourceDataPath: "/old/bids-root" },
+            { mostRecentConfig: compressSnapshot(snapshot) },
+          ),
+        ),
+      );
+
+      await useProjectStore.getState().loadProject("/moved/bids/project.easl");
+
+      const state = useProjectStore.getState();
+      expect(state.project?.mappingState.sourceDataPath).toBe(".");
+      expect(state.project?.uiState.import?.mostRecentConfig?.sourceDataPath).toBe(".");
+      expect(state.isDirty).toBe(true);
+      expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
+    });
+
+    it("classifies available internal DICOM state and canonicalizes raw paths", async () => {
+      vi.mocked(readTextFile).mockResolvedValue(
+        JSON.stringify(
+          projectEnvelope("dicom", {
+            sourceDataPath: "/moved/dicom/sourcedata",
+            rawPaths: ["/moved/dicom/sourcedata/sub-01/scan"],
+          }),
+        ),
+      );
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "inspect_source_path") {
+          return {
+            absolutePath: "/moved/dicom/sourcedata",
+            exists: true,
+            readable: true,
+            isDirectory: true,
+            ownership: "internal",
+            projectRelativePath: "./sourcedata",
+          };
+        }
+        return null;
+      });
+
+      await useProjectStore.getState().loadProject("/moved/dicom/project.easl");
+
+      expect(useProjectStore.getState().project?.mappingState).toMatchObject({
+        sourceDataPath: "./sourcedata",
+        rawPaths: ["sub-01/scan"],
+      });
+      expect(useProjectStore.getState().isDirty).toBe(true);
+      expect(useImportStore.getState().sourceAvailability).toEqual({
+        status: "available",
+        savedPath: "./sourcedata",
+        message: null,
+      });
+    });
+
+    it("classifies a readable external DICOM source without changing its mapping", async () => {
+      const mappingState = {
+        sourceDataPath: "/media/dicom",
+        rawPaths: ["sub-01/scan"],
+        tokenizerConfigs: { saved: [] },
+      };
+      vi.mocked(readTextFile).mockResolvedValue(
+        JSON.stringify(projectEnvelope("dicom", mappingState)),
+      );
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "inspect_source_path") {
+          return {
+            absolutePath: "/media/dicom",
+            exists: true,
+            readable: true,
+            isDirectory: true,
+            ownership: "external",
+            projectRelativePath: null,
+          };
+        }
+        return null;
+      });
+
+      await useProjectStore.getState().loadProject("/project/project.easl");
+
+      expect(useProjectStore.getState().project?.mappingState).toEqual(mappingState);
+      expect(useImportStore.getState().sourceAvailability).toEqual({
+        status: "available",
+        savedPath: "/media/dicom",
+        message: null,
+      });
+    });
+
+    it("opens with runtime-only missing state while preserving a missing relative source", async () => {
+      const mappingState = {
+        sourceDataPath: "./sourcedata",
+        rawPaths: ["sub-01/scan"],
+        tokenizerConfigs: { saved: [] },
+      };
+      vi.mocked(readTextFile).mockResolvedValue(
+        JSON.stringify(projectEnvelope("dicom", mappingState)),
+      );
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "inspect_source_path") {
+          return {
+            absolutePath: "/project/sourcedata",
+            exists: false,
+            readable: false,
+            isDirectory: false,
+            ownership: "missing",
+            projectRelativePath: null,
+          };
+        }
+        return null;
+      });
+
+      await useProjectStore.getState().loadProject("/project/project.easl");
+
+      expect(useProjectStore.getState().project?.mappingState).toEqual(mappingState);
+      expect(useImportStore.getState().sourceAvailability).toMatchObject({
+        status: "missing",
+        savedPath: "./sourcedata",
+      });
+      expect(useProjectStore.getState().isDirty).toBe(false);
+    });
+
+    it("opens with runtime-only unreadable state without clearing source setup", async () => {
+      const mappingState = {
+        sourceDataPath: "/media/restricted",
+        rawPaths: ["sub-01/scan"],
+        tokenizerConfigs: { saved: [] },
+      };
+      vi.mocked(readTextFile).mockResolvedValue(
+        JSON.stringify(projectEnvelope("dicom", mappingState)),
+      );
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "inspect_source_path") {
+          return {
+            absolutePath: "/media/restricted",
+            exists: true,
+            readable: false,
+            isDirectory: true,
+            ownership: "external",
+            projectRelativePath: null,
+          };
+        }
+        return null;
+      });
+
+      await useProjectStore.getState().loadProject("/project/project.easl");
+
+      expect(useProjectStore.getState().project?.mappingState).toEqual(mappingState);
+      expect(useImportStore.getState().sourceAvailability).toMatchObject({
+        status: "unreadable",
+        savedPath: "/media/restricted",
+      });
+    });
+
+    it("opens with a missing external visualization file without clearing saved setup", async () => {
+      const dataVis = {
+        qcbfSource: { relativePath: "Population/Stats/qcbf.tsv", fileHash: "qcbf" },
+        joinConfig: {
+          externalSource: {
+            absolutePath: "/media/missing/clinical.csv",
+            fileHash: "external",
+            sheetName: null,
+          },
+          keys: [{ left: "participant_id", right: "SubjectID" }],
+          dropRightOn: true,
+          naTokens: [""],
+          delimiter: ",",
+        },
+        columnTypes: { Diagnosis: "nominal" },
+        levelOrderings: { Diagnosis: ["Control", "Patient"] },
+        axisAssignment: { x: "Diagnosis", y: "qCBF", colorBy: null },
+        domainFilters: { xMin: null, xMax: null, yMin: 10, yMax: 90 },
+        stage: "visualize",
+      };
+      vi.mocked(readTextFile).mockResolvedValue(
+        JSON.stringify({
+          ...projectEnvelope("bids", { sourceDataPath: "." }),
+          uiState: { dataVis },
+        }),
+      );
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "inspect_source_path") {
+          return {
+            absolutePath: "/media/missing/clinical.csv",
+            exists: false,
+            readable: false,
+            isDirectory: false,
+            ownership: "missing",
+            projectRelativePath: null,
+          };
+        }
+        return null;
+      });
+
+      await useProjectStore.getState().loadProject("/project/project.easl");
+
+      expect(useProjectStore.getState().project?.uiState.dataVis).toMatchObject(dataVis);
+      expect(useVisualizationStore.getState()).toMatchObject({
+        joinConfig: dataVis.joinConfig,
+        columnTypes: dataVis.columnTypes,
+        levelOrderings: dataVis.levelOrderings,
+        axisAssignment: dataVis.axisAssignment,
+        domainFilters: dataVis.domainFilters,
+        stage: "visualize",
+        externalSourceAvailability: {
+          status: "missing",
+          savedPath: "/media/missing/clinical.csv",
+        },
+      });
+      expect(useProjectStore.getState().isDirty).toBe(false);
+    });
+
+    it("preserves unavailable ambiguous DICOM paths without guessing", async () => {
+      vi.mocked(readTextFile).mockResolvedValue(
+        JSON.stringify(
+          projectEnvelope("dicom", {
+            sourceDataPath: "/old/unknown-source",
+            rawPaths: ["/old/unknown-source/sub-01/scan"],
+          }),
+        ),
+      );
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "inspect_source_path") {
+          return {
+            absolutePath: "/old/unknown-source",
+            exists: false,
+            readable: false,
+            isDirectory: false,
+            ownership: "missing",
+            projectRelativePath: null,
+          };
+        }
+        return null;
+      });
+
+      await useProjectStore.getState().loadProject("/moved/dicom/project.easl");
+
+      expect(useProjectStore.getState().project?.mappingState).toMatchObject({
+        sourceDataPath: "/old/unknown-source",
+        rawPaths: ["/old/unknown-source/sub-01/scan"],
+      });
+      expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
+      expect(useImportStore.getState().sourceAvailability).toMatchObject({
+        status: "ambiguous",
+        savedPath: "/old/unknown-source",
+      });
+    });
+  });
+
   it("reports invalid serialization before invoking the native writer", async () => {
     useProjectStore.setState({
       project: { projectMeta: {} } as any,
@@ -359,7 +695,7 @@ describe("useProjectStore", () => {
       );
     });
 
-    it("unloads any prior project while waiting for recovery confirmation or decline", async () => {
+    it("preserves any prior project while waiting for recovery confirmation or decline", async () => {
       await useProjectStore
         .getState()
         .createProject("/tmp/prior-project", "Prior Project", { dataSource: "dicom" });
@@ -369,17 +705,17 @@ describe("useProjectStore", () => {
 
       await useProjectStore.getState().loadProject("/tmp/recovery/project.easl");
       expect(useProjectStore.getState()).toMatchObject({
-        project: null,
+        project: { projectMeta: { name: "Prior Project" } },
         isDirty: false,
-        loaded: false,
+        loaded: true,
         recovery: { easlPath: "/tmp/recovery/project.easl" },
       });
 
       useProjectStore.getState().declineRecovery();
       expect(useProjectStore.getState()).toMatchObject({
-        project: null,
+        project: { projectMeta: { name: "Prior Project" } },
         isDirty: false,
-        loaded: false,
+        loaded: true,
         recovery: null,
       });
     });
@@ -497,7 +833,7 @@ describe("useProjectStore", () => {
       .getState()
       .createProject("/tmp/close-project", "Close Project", { dataSource: "dicom" });
 
-    useProjectStore.getState().closeProject();
+    await useProjectStore.getState().closeProject();
 
     expect(useProjectStore.getState()).toMatchObject({
       project: null,
@@ -812,7 +1148,7 @@ describe("useProjectStore", () => {
       expect(ensureBidsIgnore).not.toHaveBeenCalled();
     });
 
-    it("calls ensureBidsIgnore on loadProject if it is a BIDS project", async () => {
+    it("opens BIDS projects read-only without checking or writing bidsignore", async () => {
       vi.mocked(isBidsProject).mockResolvedValue(true);
       vi.mocked(ensureBidsIgnore).mockResolvedValue(undefined);
       vi.mocked(readTextFile).mockResolvedValue(
@@ -835,11 +1171,11 @@ describe("useProjectStore", () => {
 
       await useProjectStore.getState().loadProject("/tmp/bids-loaded/project.easl");
 
-      expect(isBidsProject).toHaveBeenCalledWith("/tmp/bids-loaded");
-      expect(ensureBidsIgnore).toHaveBeenCalledWith("/tmp/bids-loaded");
+      expect(isBidsProject).not.toHaveBeenCalled();
+      expect(ensureBidsIgnore).not.toHaveBeenCalled();
     });
 
-    it("does not call ensureBidsIgnore on loadProject if it is not a BIDS project", async () => {
+    it("opens DICOM projects read-only without checking or writing bidsignore", async () => {
       vi.mocked(isBidsProject).mockResolvedValue(false);
       vi.mocked(readTextFile).mockResolvedValue(
         JSON.stringify({
@@ -861,7 +1197,7 @@ describe("useProjectStore", () => {
 
       await useProjectStore.getState().loadProject("/tmp/non-bids-loaded/project.easl");
 
-      expect(isBidsProject).toHaveBeenCalledWith("/tmp/non-bids-loaded");
+      expect(isBidsProject).not.toHaveBeenCalled();
       expect(ensureBidsIgnore).not.toHaveBeenCalled();
     });
 
@@ -1329,13 +1665,13 @@ describe("useProjectStore", () => {
       const slowSave = useProjectStore.getState().saveProject();
       await Promise.resolve();
 
-      await useProjectStore
+      const createProjectB = useProjectStore
         .getState()
         .createProject("/tmp/project-b", "Project B", { dataSource: "dicom" });
-      useProjectStore.getState().toggleNavbar();
-
       resolveSlowWrite?.();
       await slowSave;
+      await createProjectB;
+      useProjectStore.getState().toggleNavbar();
 
       expect(useProjectStore.getState().project?.projectMeta.name).toBe("Project B");
       expect(useProjectStore.getState().isDirty).toBe(true);
@@ -1358,16 +1694,56 @@ describe("useProjectStore", () => {
 
       const oldSave = useProjectStore.getState().saveProject();
       await Promise.resolve();
-      useProjectStore.getState().closeProject();
+      const close = useProjectStore.getState().closeProject();
+      resolveSlowWrite?.();
+      await oldSave;
+      await close;
       useProjectStore.setState({ project: reopenedProject, isDirty: true, loaded: true });
       useProjectStore.getState().toggleNavbar();
       const reopenedSave = useProjectStore.getState().saveProject();
 
-      resolveSlowWrite?.();
-      await oldSave;
       expect(useProjectStore.getState().isDirty).toBe(true);
       await reopenedSave;
       expect(useProjectStore.getState().isDirty).toBe(false);
+    });
+
+    it("blocks transition until an in-flight save settles and rejects new old-session saves", async () => {
+      await useProjectStore
+        .getState()
+        .createProject("/tmp/drain-project", "Drain Project", { dataSource: "dicom" });
+      useProjectStore.getState().toggleNavbar();
+
+      let resolveWrite!: () => void;
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "atomic_write_project") {
+          await new Promise<void>((resolve) => {
+            resolveWrite = resolve;
+          });
+          return null;
+        }
+        if (command === "shutdown_project_runtime") {
+          return {
+            success: true,
+            importProcess: { success: true },
+            processingWorkers: { success: true },
+            lockWatcher: { success: true },
+          };
+        }
+        return null;
+      });
+
+      const save = useProjectStore.getState().saveProject();
+      await vi.waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
+      const close = useProjectStore.getState().closeProject();
+      await Promise.resolve();
+
+      expect(useProjectStore.getState().project?.projectMeta.name).toBe("Drain Project");
+      await expect(useProjectStore.getState().saveProject()).rejects.toThrow(/transition/i);
+
+      resolveWrite();
+      await save;
+      await close;
+      expect(useProjectStore.getState().project).toBeNull();
     });
   });
 

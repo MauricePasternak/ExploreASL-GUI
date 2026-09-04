@@ -6,7 +6,13 @@ import {
   decompressSnapshot,
   stableJsonStringify,
 } from "../lib/snapshotCompression";
-import { ImportSnapshotSchema, MappingStateSchema, IMPORT_EXECUTION_PHASES } from "./importSchemas";
+import {
+  ImportSnapshotSchema,
+  MappingStateSchema,
+  IMPORT_EXECUTION_PHASES,
+  StoredPathSchema,
+} from "./importSchemas";
+import { canonicalRawPath, canonicalSourcePath, resolveLogicalSource } from "../lib/projectPaths";
 
 export const PROJECT_PHASES = [
   "import",
@@ -199,7 +205,7 @@ export const ProjectFileSchema = z.object({
         .object({
           qcbfSource: z
             .object({
-              relativePath: z.string(),
+              relativePath: StoredPathSchema,
               fileHash: z.string(),
             })
             .nullable()
@@ -355,11 +361,57 @@ function persistedProjectMeta(projectMeta: ProjectMeta) {
 }
 
 function persistedProjectDto(project: ProjectFile) {
+  const sourceDataPath = project.mappingState.sourceDataPath ?? "";
+  const canonicalSource = canonicalSourcePath(
+    project.projectMeta.rootPath,
+    sourceDataPath,
+    project.projectMeta.dataSource,
+  );
+  const resolvedSource = resolveLogicalSource(
+    project.projectMeta.rootPath,
+    canonicalSource,
+    project.projectMeta.dataSource,
+  );
+  const mappingState = {
+    ...project.mappingState,
+    ...(sourceDataPath.length > 0 || project.projectMeta.dataSource === "bids"
+      ? { sourceDataPath: canonicalSource }
+      : {}),
+    ...(project.mappingState.rawPaths
+      ? {
+          rawPaths: project.mappingState.rawPaths.map((path) =>
+            canonicalRawPath(path, resolvedSource),
+          ),
+        }
+      : {}),
+  };
+  const importState = project.uiState.import;
+  const mostRecentConfig = importState?.mostRecentConfig
+    ? {
+        ...importState.mostRecentConfig,
+        sourceDataPath: canonicalSourcePath(
+          project.projectMeta.rootPath,
+          importState.mostRecentConfig.sourceDataPath,
+          project.projectMeta.dataSource,
+        ),
+      }
+    : importState?.mostRecentConfig;
+
   return {
     schemaVersion: 1 as const,
     projectMeta: persistedProjectMeta(project.projectMeta),
-    uiState: project.uiState,
-    mappingState: project.mappingState,
+    uiState: {
+      ...project.uiState,
+      ...(importState
+        ? {
+            import: {
+              ...importState,
+              mostRecentConfig,
+            },
+          }
+        : {}),
+    },
+    mappingState,
     dataPar: project.dataPar,
   };
 }

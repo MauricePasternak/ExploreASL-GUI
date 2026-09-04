@@ -15,6 +15,11 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useGlobalStore } from "./globalStore";
 import { useProcessingStore } from "./processingStore";
+import {
+  activateProjectLease,
+  invalidateProjectLease,
+  resetProjectLifecycleForTests,
+} from "../lib/projectLifecycle";
 
 const { mockSetPopulationCompleted, mockSetLastRunProfileId, mockSetLastPopulationRunMtime } =
   vi.hoisted(() => ({
@@ -66,6 +71,7 @@ const MATLAB_PROFILE: ExecutionProfile = {
 };
 
 beforeEach(() => {
+  resetProjectLifecycleForTests();
   useGlobalStore.setState({
     settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
     profileValidationState: { "profile-1": { valid: true, errors: [] } },
@@ -73,6 +79,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  resetProjectLifecycleForTests();
   await useProcessingStore.getState().resetProcessing();
   vi.clearAllMocks();
   // Restore the default invoke mock implementation. Per-test overrides
@@ -1108,6 +1115,24 @@ describe("processingStore Tauri integration: scanAvailableSubjects", () => {
     expect(useProcessingStore.getState().availableSubjects).toEqual(SUBJECT_INFOS);
   });
 
+  it("discards a subject scan that resolves after project replacement", async () => {
+    activateProjectLease("project-a", "/test/project");
+    let resolve!: (subjects: SubjectInfo[]) => void;
+    (loadSubjects as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise<SubjectInfo[]>((done) => {
+        resolve = done;
+      }),
+    );
+
+    const scan = useProcessingStore.getState().scanAvailableSubjects();
+    invalidateProjectLease();
+    activateProjectLease("project-b", "/test/project-b");
+    resolve(SUBJECT_INFOS);
+    await scan;
+
+    expect(useProcessingStore.getState().availableSubjects).toEqual([]);
+  });
+
   it("throws when no project is loaded", async () => {
     const { useProjectStore } = await import("./projectStore");
     (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValueOnce({
@@ -1134,6 +1159,24 @@ describe("processingStore Tauri integration: loadLockFileStatus", () => {
     (loadLockStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce([STATUS_A, STATUS_B]);
     await useProcessingStore.getState().loadLockFileStatus();
     expect(useProcessingStore.getState().subjectStatuses).toEqual([STATUS_A, STATUS_B]);
+  });
+
+  it("discards lock status that resolves after same-ID replacement", async () => {
+    activateProjectLease("same-id", "/test/project");
+    let resolve!: (statuses: SubjectModuleStatus[]) => void;
+    (loadLockStatus as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise<SubjectModuleStatus[]>((done) => {
+        resolve = done;
+      }),
+    );
+
+    const load = useProcessingStore.getState().loadLockFileStatus();
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/test/project");
+    resolve([STATUS_A]);
+    await load;
+
+    expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
   });
 
   it("throws when no project is loaded", async () => {
@@ -1287,6 +1330,30 @@ describe("processingStore manifest version capture", () => {
     expect(mockSetLastRunProfileId).toHaveBeenCalled();
     expect(runProcessingPipeline).toHaveBeenCalled();
     ensureSpy.mockRestore();
+  });
+
+  it("discards version capture and remaining startup after same-ID replacement", async () => {
+    activateProjectLease("same-id", "/test/project");
+    let resolveVersions!: (value: { explore_asl: string; matlab: string }) => void;
+    vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "capture_environment_versions") {
+        return new Promise((resolve) => {
+          resolveVersions = resolve;
+        });
+      }
+      return Promise.resolve(null);
+    });
+    useProcessingStore.getState().setConfig(POPULATION_CONFIG);
+
+    const start = useProcessingStore.getState().startProcessing();
+    await vi.waitFor(() => expect(resolveVersions).toBeTypeOf("function"));
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/test/project");
+    resolveVersions({ explore_asl: "old", matlab: "old" });
+    await start;
+
+    expect(mockSetLastRunProfileId).not.toHaveBeenCalled();
+    expect(runProcessingPipeline).not.toHaveBeenCalled();
   });
 
   it("calls capture_environment_versions when population is in modules", async () => {

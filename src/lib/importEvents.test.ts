@@ -10,6 +10,11 @@ import {
   setupImportListeners,
   type ImportStructuredEventPayload,
 } from "./importEvents";
+import {
+  activateProjectLease,
+  invalidateProjectLease,
+  resetProjectLifecycleForTests,
+} from "./projectLifecycle";
 
 type EventHandler = (event: { payload: unknown }) => void;
 
@@ -32,6 +37,9 @@ function emitMatlabExitError(exitCode: number) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  resetProjectLifecycleForTests();
+  activateProjectLease("project-a", "/tmp/project");
   useImportStore.getState().resetImport();
   useGlobalStore.setState({
     loaded: true,
@@ -70,10 +78,77 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  resetProjectLifecycleForTests();
   useImportStore.getState().resetImport();
 });
 
 describe("setupImportListeners", () => {
+  it("rejects stale structured events and queued raw log batches", async () => {
+    vi.useFakeTimers();
+    useImportStore.getState().startImport();
+    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+    emitRaw("project A log");
+
+    invalidateProjectLease();
+    activateProjectLease("project-b", "/tmp/project-b");
+    emitStructured({ type: "subject_start", subject: "GOOD" });
+    vi.advanceTimersByTime(16);
+
+    expect(useImportStore.getState().importLog).toEqual([]);
+    expect(useImportStore.getState().importProgress.GOOD).toBeUndefined();
+    vi.useRealTimers();
+  });
+
+  it("abandons listener setup that resolves after project replacement", async () => {
+    let resolveFirst!: (unlisten: () => void) => void;
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+
+    const setup = setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+    invalidateProjectLease();
+    activateProjectLease("project-b", "/tmp/project-b");
+    resolveFirst(unlisten);
+    await setup;
+
+    expect(unlisten).toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops late post-processing before moving output or mutating the replacement project", async () => {
+    useImportStore.getState().startImport();
+    useImportStore.getState().markSubjectFailed("BAD", "NII2BIDS", "bad metadata");
+    let releaseClean!: () => void;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "clean_import_status") {
+        await new Promise<void>((resolve) => {
+          releaseClean = resolve;
+        });
+      }
+      return null;
+    });
+    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["BAD"]);
+
+    emitStructured({ type: "import_complete" });
+    await vi.waitFor(() => expect(releaseClean).toBeTypeOf("function"));
+    invalidateProjectLease();
+    activateProjectLease("project-b", "/tmp/project-b");
+    useImportStore.getState().resetImport();
+    releaseClean();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(invoke).not.toHaveBeenCalledWith("move_import_output", expect.anything());
+    expect(useImportStore.getState()).toMatchObject({
+      importPhase: "idle",
+      importSummary: null,
+      importProgress: {},
+    });
+  });
   it("maps structured events to import store actions", async () => {
     useImportStore.getState().startImport();
     await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "BADDIE"]);

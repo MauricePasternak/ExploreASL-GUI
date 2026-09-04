@@ -1,9 +1,14 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import NiftiViewer from "./NiftiViewer";
+import {
+  activateProjectLease,
+  invalidateProjectLease,
+  resetProjectLifecycleForTests,
+} from "../../lib/projectLifecycle";
 
 vi.mock("@niivue/niivue", () => {
   class MockNiivue {
@@ -40,6 +45,7 @@ function renderComponent() {
 
 describe("NiftiViewer", () => {
   beforeEach(() => {
+    resetProjectLifecycleForTests();
     useVisualizationStore.setState({
       selectedPointId: null,
       chartData: [],
@@ -49,6 +55,7 @@ describe("NiftiViewer", () => {
   });
 
   afterEach(() => {
+    resetProjectLifecycleForTests();
     HTMLCanvasElement.prototype.getContext = originalGetContext;
   });
 
@@ -138,6 +145,49 @@ describe("NiftiViewer", () => {
     const errorEl = await screen.findByTestId("viewer-error");
     expect(errorEl).toHaveTextContent("Failed to load image for sub-01_01.");
 
+    loadVolumesMock.mockRestore();
+  });
+
+  it("discards a viewer completion from a replaced same-ID lifecycle", async () => {
+    HTMLCanvasElement.prototype.getContext = vi.fn((type: string) => {
+      if (type === "webgl2") return {} as WebGL2RenderingContext;
+      return originalGetContext.call(document.createElement("canvas"), type);
+    }) as typeof originalGetContext;
+    const { Niivue } = await import("@niivue/niivue");
+    let resolveLoad!: () => void;
+    const loadVolumesMock = vi.spyOn(Niivue.prototype, "loadVolumes").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLoad = resolve;
+        }) as unknown as ReturnType<typeof Niivue.prototype.loadVolumes>,
+    );
+    activateProjectLease("same-id", "/project-a");
+    useVisualizationStore.setState({
+      selectedPointId: "point-a",
+      chartData: [
+        {
+          id: "point-a",
+          x: 10,
+          y: 20,
+          participantId: "sub-a",
+          subject: "A",
+          session: "01",
+          run: "01",
+        },
+      ],
+      webglAvailable: true,
+    });
+    renderComponent();
+    await waitFor(() => expect(resolveLoad).toBeTypeOf("function"));
+
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/project-b");
+    useVisualizationStore.getState().reset();
+    resolveLoad();
+    await Promise.resolve();
+
+    expect(useVisualizationStore.getState().viewerState).toEqual({ status: "idle" });
+    expect(useVisualizationStore.getState().selectedPointId).toBeNull();
     loadVolumesMock.mockRestore();
   });
 });

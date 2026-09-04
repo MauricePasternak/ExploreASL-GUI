@@ -1,16 +1,18 @@
-import { render, waitFor } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProjectPage from "./ProjectPage";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 
 describe("Import autosave loop", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    resetProjectLifecycleForTests();
     useImportStore.getState().resetImport();
     useProjectStore.setState({
       project: {
@@ -35,6 +37,12 @@ describe("Import autosave loop", () => {
       loaded: true,
     });
     vi.mocked(writeTextFile).mockResolvedValue(undefined);
+    activateProjectLease("project-1", "/tmp/brain-study");
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetProjectLifecycleForTests();
   });
 
   it("does not re-hydrate import state on every mapping autosave", async () => {
@@ -50,9 +58,7 @@ describe("Import autosave loop", () => {
       </MantineProvider>,
     );
 
-    await waitFor(() => {
-      expect(loadSpy).toHaveBeenCalledTimes(1);
-    });
+    expect(loadSpy).not.toHaveBeenCalled();
 
     useImportStore.getState().setSourceDataPath("/tmp/brain-study/sourcedata/updated");
 
@@ -62,7 +68,7 @@ describe("Import autosave loop", () => {
       );
     });
 
-    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(loadSpy).not.toHaveBeenCalled();
     loadSpy.mockRestore();
   });
 });

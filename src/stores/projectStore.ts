@@ -8,11 +8,7 @@ import {
   cleanupProjectTemps,
   ProjectStorageError,
 } from "../lib/projectPersistence";
-import {
-  clearSessionCheckpoint,
-  projectEaslPath,
-  syncSessionCheckpointFromProject,
-} from "../lib/sessionCheckpoint";
+import { projectEaslPath, syncSessionCheckpointFromProject } from "../lib/sessionCheckpoint";
 import type { DataParState } from "../schemas/dataParSchema";
 import {
   canAccessPhase,
@@ -29,12 +25,27 @@ import {
   type VersionedProjectFile,
 } from "../schemas/project";
 import { flattenBidsGroupsToSubjectRows } from "../lib/bids/subjectRows";
-import type { MetadataGroup } from "../schemas/importSchemas";
+import { MappingStateSchema, type MetadataGroup } from "../schemas/importSchemas";
 import type { ManifestFailReason, ManifestVerdict } from "../schemas/project";
 import { MAX_REVIEWERS } from "../schemas/manifestSchemas";
-import { useImportStore, type ImportState } from "./importStore";
+import {
+  canonicalInternalSource,
+  canonicalRawPath,
+  inspectSourcePath,
+  isAbsolutePath,
+  resolveLogicalSource,
+} from "../lib/projectPaths";
+import { useImportStore, type DicomSourceAvailability, type ImportState } from "./importStore";
 import type { ProcessingState } from "./processingStore";
 import { useGlobalStore } from "./globalStore";
+import { useVisualizationStore, type ExternalSourceAvailability } from "./visualizationStore";
+import { closeProjectRuntime, transitionProjectRuntime } from "../lib/projectCoordinator";
+import {
+  captureProjectLease,
+  isCurrentProjectLease,
+  isProjectWorkAccepted,
+  registerProjectTask,
+} from "../lib/projectLifecycle";
 
 type DataVisState = NonNullable<ProjectFile["uiState"]["dataVis"]>;
 type DataParAdvancedVisibility = NonNullable<
@@ -54,7 +65,10 @@ interface ProjectState {
   loaded: boolean;
   recovery: { easlPath: string; backupPath: string; projectId: string } | null;
   recoveredFromBackup: boolean;
-  loadProject: (easlPath: string) => Promise<void>;
+  loadProject: (
+    easlPath: string,
+    options?: { projectIdOverride?: string; forceDirty?: boolean },
+  ) => Promise<void>;
   confirmRecovery: () => Promise<void>;
   declineRecovery: () => void;
   createProject: (
@@ -99,7 +113,7 @@ interface ProjectState {
     },
   ) => void;
   setLastPopulationRunMtime: (mtime: number | null) => void;
-  closeProject: () => void;
+  closeProject: () => Promise<void>;
   confirmBidsReview: () => Promise<void>;
 }
 
@@ -187,6 +201,153 @@ async function cleanupValidatedProjectTemps(easlPath: string) {
   } catch (error) {
     console.warn("Failed to clean stale project temporary files:", error);
   }
+}
+
+async function normalizeProjectPaths(project: ProjectFile): Promise<{
+  project: ProjectFile;
+  changed: boolean;
+  sourceAvailability: DicomSourceAvailability;
+  externalSourceAvailability: ExternalSourceAvailability;
+}> {
+  const rootPath = project.projectMeta.rootPath;
+  const sourcePath = project.mappingState.sourceDataPath;
+  let canonicalSource = sourcePath;
+  let canNormalizeRawPaths = false;
+  let sourceAvailability: DicomSourceAvailability = {
+    status: sourcePath ? "available" : "unconfigured",
+    savedPath: sourcePath ?? null,
+    message: null,
+  };
+  const externalPath = project.uiState.dataVis?.joinConfig?.externalSource.absolutePath;
+  let externalSourceAvailability: ExternalSourceAvailability = {
+    status: externalPath ? "available" : "unconfigured",
+    savedPath: externalPath ?? null,
+    message: null,
+  };
+  if (externalPath) {
+    try {
+      const inspection = await inspectSourcePath(rootPath, externalPath);
+      if (!inspection?.exists || !inspection.readable) {
+        externalSourceAvailability = {
+          status: inspection?.exists ? "unreadable" : "missing",
+          savedPath: externalPath,
+          message: inspection?.exists
+            ? "The saved external visualization file is unreadable. Relink it to restore joined data."
+            : "The saved external visualization file is missing. Relink it to restore joined data.",
+        };
+      }
+    } catch {
+      externalSourceAvailability = {
+        status: "unreadable",
+        savedPath: externalPath,
+        message:
+          "The saved external visualization file could not be inspected. Relink it to restore joined data.",
+      };
+    }
+  }
+
+  if (project.projectMeta.dataSource === "bids") {
+    canonicalSource = ".";
+    canNormalizeRawPaths = true;
+  } else if (sourcePath && !isAbsolutePath(sourcePath)) {
+    canonicalSource = canonicalInternalSource(sourcePath);
+    try {
+      const inspection = await inspectSourcePath(rootPath, canonicalSource);
+      if (inspection?.exists && inspection.readable) {
+        canNormalizeRawPaths = true;
+      } else {
+        sourceAvailability = {
+          status: inspection?.exists ? "unreadable" : "missing",
+          savedPath: canonicalSource,
+          message: inspection?.exists
+            ? "The saved DICOM source is unreadable. Relink it to continue source-dependent work."
+            : "The saved DICOM source is missing. Relink it to continue source-dependent work.",
+        };
+      }
+    } catch {
+      sourceAvailability = {
+        status: "unreadable",
+        savedPath: canonicalSource,
+        message:
+          "The saved DICOM source could not be inspected. Relink it to continue source-dependent work.",
+      };
+    }
+  } else if (sourcePath) {
+    try {
+      const inspection = await inspectSourcePath(rootPath, sourcePath);
+      if (inspection?.exists && inspection.readable) {
+        canonicalSource =
+          inspection.ownership === "internal"
+            ? (inspection.projectRelativePath ?? sourcePath)
+            : inspection.absolutePath;
+        canNormalizeRawPaths = true;
+        sourceAvailability = {
+          status: "available",
+          savedPath: canonicalSource,
+          message: null,
+        };
+      } else {
+        sourceAvailability = {
+          status: inspection?.exists ? "unreadable" : "ambiguous",
+          savedPath: sourcePath,
+          message: inspection?.exists
+            ? "The saved DICOM source is unreadable. Relink it to continue source-dependent work."
+            : "The saved legacy DICOM source is unavailable and its ownership is ambiguous. Relink it explicitly.",
+        };
+      }
+    } catch (error) {
+      console.warn("Failed to inspect DICOM source during project open:", error);
+      sourceAvailability = {
+        status: "unreadable",
+        savedPath: sourcePath,
+        message:
+          "The saved DICOM source could not be inspected. Relink it to continue source-dependent work.",
+      };
+    }
+  }
+
+  const resolvedSource = canonicalSource
+    ? resolveLogicalSource(rootPath, canonicalSource, project.projectMeta.dataSource)
+    : "";
+  const mappingState = {
+    ...project.mappingState,
+    ...(canonicalSource === undefined ? {} : { sourceDataPath: canonicalSource }),
+    ...(canNormalizeRawPaths && project.mappingState.rawPaths
+      ? {
+          rawPaths: project.mappingState.rawPaths.map((path) =>
+            canonicalRawPath(path, resolvedSource),
+          ),
+        }
+      : {}),
+  };
+  const importState = project.uiState.import;
+  const snapshot = importState?.mostRecentConfig;
+  const normalizedSnapshot = snapshot
+    ? {
+        ...snapshot,
+        sourceDataPath:
+          project.projectMeta.dataSource === "bids" || snapshot.sourceDataPath === sourcePath
+            ? (canonicalSource ?? snapshot.sourceDataPath)
+            : snapshot.sourceDataPath,
+      }
+    : snapshot;
+  const nextProject: ProjectFile = {
+    ...project,
+    mappingState,
+    uiState: {
+      ...project.uiState,
+      ...(importState ? { import: { ...importState, mostRecentConfig: normalizedSnapshot } } : {}),
+    },
+  };
+
+  return {
+    project: nextProject,
+    changed:
+      JSON.stringify(project.mappingState) !== JSON.stringify(nextProject.mappingState) ||
+      JSON.stringify(snapshot) !== JSON.stringify(normalizedSnapshot),
+    sourceAvailability,
+    externalSourceAvailability,
+  };
 }
 
 /** Serialize and validate before entering the native filesystem-write boundary. */
@@ -319,7 +480,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   recovery: null,
   recoveredFromBackup: false,
 
-  loadProject: async (easlPath) => {
+  loadProject: async (easlPath, options) => {
     if (!useGlobalStore.getState().hasValidProfile()) {
       throw new Error(
         "Cannot open a project without at least one valid execution profile. Fix a profile in Settings.",
@@ -352,50 +513,33 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         console.warn("Project backup validation failed:", backupError);
         throw recoveryFailed(backupError);
       }
-      // A recovery prompt cannot leave a previously opened project active.
-      // Declining must return the store to an unloaded state without touching project files.
-      startProjectSession();
-      clearSessionCheckpoint();
-      set({
-        project: null,
-        isDirty: false,
-        loaded: false,
-        recovery: { easlPath, backupPath, projectId: backup.projectMeta.id },
-        recoveredFromBackup: false,
-      });
+      set({ recovery: { easlPath, backupPath, projectId: backup.projectMeta.id } });
       return;
     }
     await cleanupValidatedProjectTemps(easlPath);
-    const hydratedProject: ProjectFile = {
+    const rootedProject: ProjectFile = {
       ...parsed,
       projectMeta: {
         ...parsed.projectMeta,
+        ...(options?.projectIdOverride ? { id: options.projectIdOverride } : {}),
         rootPath: projectRootFromEaslPath(easlPath),
       },
     };
-
-    const rootPath = hydratedProject.projectMeta.rootPath;
-    try {
-      if (await isBidsProject(rootPath)) {
-        await ensureBidsIgnore(rootPath);
-      }
-    } catch (e) {
-      console.warn("Failed to check BIDS project status or write .bidsignore:", e);
-    }
-
-    startProjectSession();
-    set({
+    const {
       project: hydratedProject,
-      isDirty: false,
-      loaded: true,
-      recovery: null,
-      recoveredFromBackup: false,
-    });
+      changed: pathsChanged,
+      sourceAvailability,
+      externalSourceAvailability,
+    } = await normalizeProjectPaths(rootedProject);
+
+    await transitionProjectRuntime(hydratedProject, pathsChanged || options?.forceDirty === true);
+    useImportStore.getState().setSourceAvailability(sourceAvailability);
+    useVisualizationStore.getState().setExternalSourceAvailability(externalSourceAvailability);
+    startProjectSession();
     logAction("project_load", {
       name: hydratedProject.projectMeta.name,
       path: hydratedProject.projectMeta.rootPath,
     });
-    syncSessionCheckpointFromProject(hydratedProject);
   },
 
   confirmRecovery: async () => {
@@ -410,31 +554,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       throw recoveryFailed(error);
     }
     await cleanupValidatedProjectTemps(recovery.easlPath);
-    const hydratedProject: ProjectFile = {
+    const rootedProject: ProjectFile = {
       ...parsed,
       projectMeta: { ...parsed.projectMeta, rootPath: projectRootFromEaslPath(recovery.easlPath) },
     };
-    startProjectSession();
-    set({
+    const {
       project: hydratedProject,
-      isDirty: true,
-      loaded: true,
-      recovery: null,
-      recoveredFromBackup: true,
-    });
-    syncSessionCheckpointFromProject(hydratedProject);
+      sourceAvailability,
+      externalSourceAvailability,
+    } = await normalizeProjectPaths(rootedProject);
+    await transitionProjectRuntime(hydratedProject, true);
+    useImportStore.getState().setSourceAvailability(sourceAvailability);
+    useVisualizationStore.getState().setExternalSourceAvailability(externalSourceAvailability);
+    startProjectSession();
+    set({ recoveredFromBackup: true });
   },
 
   declineRecovery: () => {
-    startProjectSession();
-    clearSessionCheckpoint();
-    set({
-      project: null,
-      isDirty: false,
-      loaded: false,
-      recovery: null,
-      recoveredFromBackup: false,
-    });
+    set({ recovery: null });
   },
 
   /**
@@ -459,6 +596,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     const project = DEFAULT_PROJECT_FILE(crypto.randomUUID(), name, rootPath);
     project.projectMeta.dataSource = options.dataSource;
+    if (options.dataSource === "bids") project.mappingState.sourceDataPath = ".";
 
     const firstValidProfile = global.settings.executionProfiles.find(
       (profile) => global.profileValidationState[profile.id]?.valid === true,
@@ -489,23 +627,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.warn("Failed to check BIDS project status or write .bidsignore:", e);
     }
 
+    await transitionProjectRuntime(project, false);
     startProjectSession();
-    set({
-      project,
-      isDirty: false,
-      loaded: true,
-      recovery: null,
-      recoveredFromBackup: false,
-    });
     logAction("project_create", {
       name: project.projectMeta.name,
       path: project.projectMeta.rootPath,
     });
-    syncSessionCheckpointFromProject(project);
   },
 
   saveProject: async () => {
+    const lease = captureProjectLease();
+    if (lease && (!isCurrentProjectLease(lease) || !isProjectWorkAccepted())) {
+      throw new Error("Project transition is in progress; save was not started.");
+    }
     const runSave = async () => {
+      if (lease && !isCurrentProjectLease(lease)) {
+        throw new Error("Project lifecycle changed before the queued save started.");
+      }
       const { project, isDirty, recoveredFromBackup } = get();
       if (!project || !isDirty) {
         return;
@@ -530,11 +668,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         projectRevision === revisionAtSaveStart
       ) {
         set({ isDirty: false, recoveredFromBackup: false });
+        useImportStore.getState().clearManualSaveRequirement();
+        useVisualizationStore.getState().clearManualSaveRequirement();
       }
     };
 
-    saveChain = saveChain.then(runSave, runSave);
-    return saveChain;
+    const queuedSave = saveChain.then(runSave, runSave);
+    saveChain = queuedSave;
+    return lease ? registerProjectTask(queuedSave) : queuedSave;
   },
 
   setPhase: (phase) => {
@@ -568,17 +709,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }));
   },
 
-  closeProject: () => {
-    clearSessionCheckpoint();
+  closeProject: async () => {
     logAction("project_close");
+    await closeProjectRuntime();
     startProjectSession();
-    set({
-      project: null,
-      isDirty: false,
-      loaded: false,
-      recovery: null,
-      recoveredFromBackup: false,
-    });
   },
 
   setPopulationCompleted: (value) => {
@@ -967,8 +1101,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         importCompleted,
         mostRecentConfig,
         selectedProfileId,
-        ...payload
+        ...runtimeState
       } = importState;
+      const payload = MappingStateSchema.parse(runtimeState);
 
       // Gate mappingState: BIDS-direct projects own mappingState after confirm;
       // DICOM sync must not clobber the 4-field mappingState written by

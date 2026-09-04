@@ -15,7 +15,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-const RESERVED_IMPORT_PID: u32 = 0;
+pub(crate) const RESERVED_IMPORT_PID: u32 = 0;
 const IMPORT_STATUS_FILES: [&str; 3] = [
     "010_DCM2NII.status",
     "020_NII2BIDS.status",
@@ -1144,7 +1144,11 @@ pub fn stop_import_pid(state: &AppState, pid: u32) -> Result<(), String> {
 
     if !wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(5)) {
         force_kill_process(pid)?;
-        let _ = wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(1));
+        if !wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(1)) {
+            return Err(format!(
+                "Import process {pid} could not be confirmed stopped"
+            ));
+        }
     }
 
     if let Some(handle) = take_matching_supervisor_handle(state, pid) {
@@ -1160,6 +1164,11 @@ pub fn stop_import_pid_for_exit(state: &AppState, pid: u32) -> Result<(), String
 
     if !wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(5)) {
         force_kill_process(pid)?;
+        if !wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(1)) {
+            return Err(format!(
+                "Import process {pid} could not be confirmed stopped"
+            ));
+        }
     }
 
     let _ = take_matching_supervisor_handle(state, pid);

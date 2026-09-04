@@ -46,6 +46,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { useVisualizationStore } from "../stores/visualizationStore";
 import { useProjectStore } from "../stores/projectStore";
 import VisualizationPage from "../pages/VisualizationPage";
+import {
+  activateProjectLease,
+  invalidateProjectLease,
+  resetProjectLifecycleForTests,
+} from "../lib/projectLifecycle";
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -144,6 +149,7 @@ const mockExtInspection = {
 
 describe("Visualization setup flow integration", () => {
   beforeEach(() => {
+    resetProjectLifecycleForTests();
     // Reset stores
     useVisualizationStore.setState({
       qcbfSource: null,
@@ -195,6 +201,115 @@ describe("Visualization setup flow integration", () => {
       if (cmd === "inspect_external_data") return Promise.resolve(mockExtInspection);
       return Promise.resolve([]);
     });
+  });
+
+  afterEach(() => resetProjectLifecycleForTests());
+
+  it("discards a late stats scan after same-ID project replacement", async () => {
+    let resolveFiles!: (files: typeof mockFiles) => void;
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "list_stats_files") {
+        return new Promise((resolve) => {
+          resolveFiles = resolve;
+        });
+      }
+      return Promise.resolve([]);
+    });
+    activateProjectLease("same-id", "/tmp/test");
+    renderWithMantine(<VisualizationPage />);
+    await vi.waitFor(() => expect(resolveFiles).toBeTypeOf("function"));
+
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/tmp/replacement");
+    useVisualizationStore.getState().reset();
+    useVisualizationStore.setState({
+      availableFiles: [
+        { fileName: "replacement.tsv", relativePath: "replacement.tsv", size: 1, modified: "1" },
+      ],
+    });
+    resolveFiles(mockFiles);
+    await Promise.resolve();
+
+    expect(useVisualizationStore.getState().availableFiles).toEqual([
+      { fileName: "replacement.tsv", relativePath: "replacement.tsv", size: 1, modified: "1" },
+    ]);
+  });
+
+  it("discards late contract validation after project replacement", async () => {
+    let resolveInspection!: (inspection: typeof mockInspection) => void;
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "list_stats_files") return Promise.resolve(mockFiles);
+      if (command === "load_qcbf_data") {
+        return new Promise((resolve) => {
+          resolveInspection = resolve;
+        });
+      }
+      return Promise.resolve([]);
+    });
+    useVisualizationStore.setState({
+      qcbfSource: { relativePath: "old.tsv", fileHash: "abc123" },
+      stage: "visualize",
+    });
+    activateProjectLease("same-id", "/tmp/test");
+    renderWithMantine(<VisualizationPage />);
+    await vi.waitFor(() => expect(resolveInspection).toBeTypeOf("function"));
+
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/tmp/replacement");
+    useVisualizationStore.getState().reset();
+    resolveInspection(mockInspection);
+    await Promise.resolve();
+
+    expect(useVisualizationStore.getState()).toMatchObject({
+      inspection: null,
+      qcbfSource: null,
+      stage: "selectData",
+    });
+  });
+
+  it("discards a late external-file focus check after replacement", async () => {
+    let resolveStat!: (stats: { mtime: string; size: number }) => void;
+    let deferStat = false;
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "list_stats_files") return Promise.resolve(mockFiles);
+      if (command === "stat_file") {
+        if (!deferStat) return Promise.resolve({ mtime: "1000", size: 1 });
+        return new Promise((resolve) => {
+          resolveStat = resolve;
+        });
+      }
+      if (command === "execute_join") {
+        return Promise.resolve({ ...mockInspection, externalHash: "ext123" });
+      }
+      if (command === "inspect_external_data") return Promise.resolve(mockExtInspection);
+      return Promise.resolve([]);
+    });
+    useVisualizationStore.setState({
+      qcbfSource: { relativePath: "old.tsv", fileHash: "abc123" },
+      joinConfig: {
+        externalSource: { absolutePath: "/external/old.csv", fileHash: "ext123", sheetName: null },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+        dropRightOn: true,
+        naTokens: [""],
+        delimiter: ",",
+      },
+      _lastExtMtime: "1000",
+    });
+    activateProjectLease("same-id", "/tmp/test");
+    renderWithMantine(<VisualizationPage />);
+    await vi.waitFor(() => expect(useVisualizationStore.getState().inspection).not.toBeNull());
+    deferStat = true;
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(resolveStat).toBeTypeOf("function"));
+
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/tmp/replacement");
+    useVisualizationStore.getState().reset();
+    resolveStat({ mtime: "2000", size: 2 });
+    await Promise.resolve();
+
+    expect(useVisualizationStore.getState()._lastExtMtime).toBeNull();
+    expect(useVisualizationStore.getState().joinConfig).toBeNull();
   });
 
   it("renders the visualization page with stepper", async () => {
@@ -339,6 +454,64 @@ describe("Visualization setup flow integration", () => {
     expect(useVisualizationStore.getState().inspection).toEqual(mockJoinedInspection);
   });
 
+  it("keeps missing external setup while exposing qCBF-only data and Relink", async () => {
+    useVisualizationStore.setState({
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
+      joinConfig: {
+        externalSource: {
+          absolutePath: "/missing/external.csv",
+          fileHash: "ext123",
+          sheetName: null,
+        },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+        dropRightOn: true,
+        naTokens: [""],
+        delimiter: ",",
+      },
+      columnTypes: { Diagnosis: "nominal" },
+      levelOrderings: { Diagnosis: ["HC", "FTD"] },
+      axisAssignment: { x: "Diagnosis", y: "GM_vol", colorBy: null },
+      domainFilters: { xMin: null, xMax: null, yMin: 10, yMax: 90 },
+      stage: "selectData",
+      externalSourceAvailability: {
+        status: "missing",
+        savedPath: "/missing/external.csv",
+        message: "The saved external visualization file is missing. Relink it.",
+      },
+    });
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "list_stats_files") return Promise.resolve(mockFiles);
+      if (command === "execute_join" || command === "inspect_external_data") {
+        return Promise.reject(new Error("File not found"));
+      }
+      if (command === "load_qcbf_data") return Promise.resolve(mockInspection);
+      return Promise.resolve([]);
+    });
+
+    renderWithMantine(<VisualizationPage />);
+
+    expect(await screen.findByTestId("visualization-missing-source-warning")).toHaveTextContent(
+      "missing",
+    );
+    expect(screen.getByTestId("external-source-warning")).toBeInTheDocument();
+    expect(screen.getByTestId("external-source-path")).toHaveTextContent("/missing/external.csv");
+    expect(screen.getByTestId("external-source-relink-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("stepper-next-btn")).toBeDisabled();
+    await vi.waitFor(() =>
+      expect(useVisualizationStore.getState().inspection).toEqual(mockInspection),
+    );
+    expect(useVisualizationStore.getState()).toMatchObject({
+      joinConfig: {
+        externalSource: { absolutePath: "/missing/external.csv", fileHash: "ext123" },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+      },
+      columnTypes: { Diagnosis: "nominal" },
+      levelOrderings: { Diagnosis: ["HC", "FTD"] },
+      axisAssignment: { x: "Diagnosis", y: "GM_vol", colorBy: null },
+      domainFilters: { xMin: null, xMax: null, yMin: 10, yMax: 90 },
+    });
+  });
+
   it("re-validates external file on window focus", async () => {
     // Setup state
     useVisualizationStore.setState({
@@ -421,11 +594,12 @@ describe("Visualization setup flow integration", () => {
     executeJoinHash = "ext456";
     window.dispatchEvent(new Event("focus"));
     await vi.waitFor(() => {
-      expect(useVisualizationStore.getState().joinConfig).toBeNull();
+      expect(useVisualizationStore.getState().externalSourceAvailability.status).toBe("changed");
     });
-    const banner = await screen.findByTestId("invalidation-banner");
-    expect(banner.textContent).toContain(
-      "External data file has changed. Join configuration has been reset.",
+    expect(useVisualizationStore.getState().joinConfig).not.toBeNull();
+    expect(useVisualizationStore.getState().inspection).toEqual(mockInspection);
+    expect(await screen.findByTestId("visualization-missing-source-warning")).toHaveTextContent(
+      "External data content changed",
     );
 
     // Scenario 4: Focus event when stat_file fails (file deleted)
@@ -445,9 +619,14 @@ describe("Visualization setup flow integration", () => {
     statShouldFail = true;
     window.dispatchEvent(new Event("focus"));
     await vi.waitFor(() => {
-      expect(useVisualizationStore.getState().joinConfig).toBeNull();
+      expect(useVisualizationStore.getState().externalSourceAvailability.status).toBe("missing");
     });
-    const errorBanner = await screen.findByTestId("invalidation-banner");
-    expect(errorBanner.textContent).toContain("External file 'external.csv' no longer exists.");
+    expect(useVisualizationStore.getState().joinConfig).not.toBeNull();
+    expect(useVisualizationStore.getState().inspection).toEqual(mockInspection);
+    const errorBanner = await screen.findByTestId("visualization-missing-source-warning");
+    expect(errorBanner).toHaveTextContent("missing");
+    expect(screen.getByTestId("visualization-missing-source-path")).toHaveTextContent(
+      "/tmp/external.csv",
+    );
   });
 });

@@ -50,7 +50,10 @@ describe("restoreProjectSession", () => {
       loaded: true,
       settings: {
         ...state.settings,
-        recentProjects: ["/tmp/other/project.easl", "/tmp/brain-study/project.easl"],
+        recentProjects: [
+          { path: "/tmp/other/project.easl", projectId: "other-project" },
+          { path: "/tmp/brain-study/project.easl", projectId: "project-1" },
+        ],
       },
       profileValidationState: {
         [profile.id]: { valid: true, errors: [] },
@@ -59,6 +62,26 @@ describe("restoreProjectSession", () => {
 
     await expect(tryRestoreProjectSession("project-1")).resolves.toBe(true);
     expect(readTextFile).toHaveBeenCalledWith("/tmp/brain-study/project.easl");
+    expect(readTextFile).not.toHaveBeenCalledWith("/tmp/other/project.easl");
+  });
+
+  it("fills project identity when restoring an unmatched legacy recent path", async () => {
+    const profile = seedValidProfileGate();
+    useGlobalStore.setState((state) => ({
+      loaded: true,
+      settings: {
+        ...state.settings,
+        recentProjects: [{ path: "/tmp/brain-study/project.easl" }],
+      },
+      profileValidationState: { [profile.id]: { valid: true, errors: [] } },
+    }));
+
+    await expect(tryRestoreProjectSession("project-1")).resolves.toBe(true);
+
+    expect(useGlobalStore.getState().settings.recentProjects[0]).toEqual({
+      path: "/tmp/brain-study/project.easl",
+      projectId: "project-1",
+    });
   });
 
   it("returns false when no checkpoint or recent project matches", async () => {

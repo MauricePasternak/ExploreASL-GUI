@@ -6,13 +6,13 @@ interface QcbfSource {
   fileHash: string;
 }
 
-interface ExternalSource {
+export interface ExternalSource {
   absolutePath: string;
   fileHash: string;
   sheetName: string | null;
 }
 
-interface JoinConfig {
+export interface JoinConfig {
   externalSource: ExternalSource;
   keys: Array<{ left: string; right: string }>;
   dropRightOn: boolean;
@@ -131,7 +131,13 @@ interface EphemeralState {
   webglAvailable: boolean;
   exclusionCount: { plotted: number; excluded: number };
   _lastExtMtime: string | null;
+  externalSourceAvailability: ExternalSourceAvailability;
+  requiresManualSave: boolean;
 }
+
+export type ExternalSourceAvailability =
+  | { status: "unconfigured" | "available"; savedPath: string | null; message: null }
+  | { status: "missing" | "unreadable" | "changed"; savedPath: string; message: string };
 
 interface VisualizationActions {
   // Persisted actions
@@ -185,6 +191,11 @@ interface VisualizationActions {
   setWebglAvailable: (available: boolean) => void;
   setExclusionCount: (count: { plotted: number; excluded: number }) => void;
   _setLastExtMtime: (mtime: string | null) => void;
+  setExternalSourceAvailability: (availability: ExternalSourceAvailability) => void;
+  relinkMatchingExternalSource: (source: ExternalSource) => void;
+  relinkChangedExternalSource: (source: ExternalSource) => void;
+  clearManualSaveRequirement: () => void;
+  hydrate: (persisted?: Record<string, unknown>) => void;
   reset: () => void;
 }
 
@@ -239,7 +250,35 @@ const INITIAL_EPHEMERAL: EphemeralState = {
   webglAvailable: false,
   exclusionCount: { plotted: 0, excluded: 0 },
   _lastExtMtime: null,
+  externalSourceAvailability: { status: "unconfigured", savedPath: null, message: null },
+  requiresManualSave: false,
 };
+
+export function createInitialVisualizationState() {
+  return {
+    ...INITIAL_PERSISTED,
+    axisAssignment: { ...INITIAL_PERSISTED.axisAssignment },
+    domainFilters: { ...INITIAL_PERSISTED.domainFilters },
+    columnTypes: {},
+    levelOrderings: {},
+    ...INITIAL_EPHEMERAL,
+    availableFiles: [],
+    chartData: [],
+    viewerState: { status: "idle" as const },
+    exclusionCount: { plotted: 0, excluded: 0 },
+  };
+}
+
+const PERSISTED_KEYS = Object.keys(INITIAL_PERSISTED) as Array<keyof PersistedState>;
+
+function hydratedVisualizationState(persisted?: Record<string, unknown>) {
+  const next = createInitialVisualizationState() as Record<string, unknown>;
+  for (const key of PERSISTED_KEYS) {
+    const value = persisted?.[key];
+    if (value !== undefined) next[key] = value;
+  }
+  return next as ReturnType<typeof createInitialVisualizationState>;
+}
 
 export const useVisualizationStore = create<VisualizationState>((set) => ({
   ...INITIAL_PERSISTED,
@@ -312,5 +351,44 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
   setWebglAvailable: (available) => set({ webglAvailable: available }),
   setExclusionCount: (count) => set({ exclusionCount: count }),
   _setLastExtMtime: (mtime) => set({ _lastExtMtime: mtime }),
-  reset: () => set({ ...INITIAL_PERSISTED, ...INITIAL_EPHEMERAL }),
+  setExternalSourceAvailability: (externalSourceAvailability) =>
+    set({ externalSourceAvailability }),
+  relinkMatchingExternalSource: (source) =>
+    set((state) => ({
+      joinConfig: state.joinConfig
+        ? { ...state.joinConfig, externalSource: source }
+        : state.joinConfig,
+      externalSourceAvailability: {
+        status: "available",
+        savedPath: source.absolutePath,
+        message: null,
+      },
+      requiresManualSave: true,
+    })),
+  relinkChangedExternalSource: (source) =>
+    set((state) => ({
+      joinConfig: state.joinConfig
+        ? { ...state.joinConfig, externalSource: source, keys: [] }
+        : state.joinConfig,
+      columnTypes: {},
+      identifiers: null,
+      levelOrderings: {},
+      axisAssignment: { ...INITIAL_PERSISTED.axisAssignment },
+      domainFilters: { ...INITIAL_PERSISTED.domainFilters },
+      stage: "selectData",
+      inspection: null,
+      chartData: [],
+      selectedPointId: null,
+      viewerState: { status: "idle" },
+      exclusionCount: { plotted: 0, excluded: 0 },
+      externalSourceAvailability: {
+        status: "available",
+        savedPath: source.absolutePath,
+        message: null,
+      },
+      requiresManualSave: true,
+    })),
+  clearManualSaveRequirement: () => set({ requiresManualSave: false }),
+  hydrate: (persisted) => set(hydratedVisualizationState(persisted)),
+  reset: () => set(createInitialVisualizationState()),
 }));

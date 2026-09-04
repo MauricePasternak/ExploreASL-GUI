@@ -11,8 +11,11 @@ import { useProjectStore } from "../stores/projectStore";
 import { ProjectStorageError } from "../lib/projectPersistence";
 import { useProcessingStore } from "../stores/processingStore";
 import { useImportStore } from "../stores/importStore";
+import { useVisualizationStore } from "../stores/visualizationStore";
 import ProjectPage from "../pages/ProjectPage";
 import Layout from "./Layout";
+
+const realCloseProject = useProjectStore.getState().closeProject;
 
 function renderLayout(initialPath = "/") {
   return render(
@@ -46,6 +49,7 @@ describe("Layout", () => {
       project: null,
       isDirty: false,
       loaded: false,
+      closeProject: realCloseProject,
     });
     useProcessingStore.setState({
       processingPhase: "idle",
@@ -54,6 +58,10 @@ describe("Layout", () => {
     useImportStore.setState({
       importPhase: "idle",
       importRunning: false,
+      sourceAvailability: { status: "unconfigured", savedPath: null, message: null },
+    });
+    useVisualizationStore.setState({
+      externalSourceAvailability: { status: "unconfigured", savedPath: null, message: null },
     });
     vi.mocked(writeTextFile).mockResolvedValue(undefined);
   });
@@ -113,6 +121,43 @@ describe("Layout", () => {
     );
   });
 
+  it("summarizes unavailable sources without blocking unaffected phase navigation", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "parameters",
+          dataSource: "dicom" as const,
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: { sourceDataPath: "/missing/dicom" },
+        dataPar: {},
+      },
+      isDirty: false,
+      loaded: true,
+    });
+    useImportStore.setState({
+      sourceAvailability: {
+        status: "missing",
+        savedPath: "/missing/dicom",
+        message: "Source missing.",
+      },
+    });
+
+    renderLayout("/project/project-1/parameters");
+
+    expect(screen.getByTestId("layout-missing-source-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("layout-nav-parameters")).not.toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+  });
+
   it("returns to the landing page immediately when leaving a clean project", async () => {
     const projectJson = {
       version: "0.1.0" as const,
@@ -134,7 +179,7 @@ describe("Layout", () => {
       loaded: true,
       settings: {
         ...DEFAULT_SETTINGS,
-        recentProjects: ["/tmp/brain-study/project.easl"],
+        recentProjects: [{ path: "/tmp/brain-study/project.easl", projectId: "project-1" }],
       },
     });
     vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(projectJson));
@@ -163,7 +208,7 @@ describe("Layout", () => {
 
   it("asks whether to save before leaving a dirty project", async () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
-    const closeProject = vi.fn(() => {
+    const closeProject = vi.fn(async () => {
       useProjectStore.setState({
         project: null,
         isDirty: false,
@@ -212,7 +257,7 @@ describe("Layout", () => {
 
   it("can leave a dirty project without saving", async () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
-    const closeProject = vi.fn(() => {
+    const closeProject = vi.fn(async () => {
       useProjectStore.setState({
         project: null,
         isDirty: false,
@@ -265,7 +310,7 @@ describe("Layout", () => {
     const saveProject = vi
       .fn()
       .mockRejectedValue(new ProjectStorageError("insufficient_space", "temporary write failed"));
-    const closeProject = vi.fn();
+    const closeProject = vi.fn().mockResolvedValue(undefined);
 
     useProjectStore.setState({
       project: {
@@ -552,7 +597,14 @@ describe("Layout", () => {
     expect(screen.getByTestId("layout-nav-manifest")).not.toHaveAttribute("data-disabled", "true");
   });
 
-  it("does not intercept close request when project is clean", async () => {
+  it("waits for shutdown before closing a clean project", async () => {
+    let releaseShutdown!: () => void;
+    const closeProject = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseShutdown = resolve;
+        }),
+    );
     useProjectStore.setState({
       project: {
         version: "0.1.0" as const,
@@ -571,6 +623,7 @@ describe("Layout", () => {
       },
       isDirty: false,
       loaded: true,
+      closeProject,
     });
 
     renderLayout("/project/project-1/import");
@@ -580,10 +633,95 @@ describe("Layout", () => {
     });
 
     const preventDefault = vi.fn();
-    await (window as any).__mockCloseRequestedListener({ preventDefault });
+    const closeRequest = (window as any).__mockCloseRequestedListener({ preventDefault });
 
-    expect(preventDefault).not.toHaveBeenCalled();
+    expect(preventDefault).toHaveBeenCalled();
     expect(screen.queryByText(/Save your changes/i)).not.toBeInTheDocument();
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    expect(closeProject).toHaveBeenCalled();
+    expect(getCurrentWindow().destroy).not.toHaveBeenCalled();
+
+    releaseShutdown();
+    await closeRequest;
+    expect(getCurrentWindow().destroy).toHaveBeenCalled();
+  });
+
+  it("keeps the project visible when Return to Home shutdown fails", async () => {
+    const closeProject = vi.fn().mockRejectedValue(new Error("cannot stop watcher"));
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+          dataSource: "dicom" as const,
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: {},
+        dataPar: {},
+      },
+      isDirty: false,
+      loaded: true,
+      closeProject,
+    });
+
+    renderLayout("/project/project-1/import");
+    fireEvent.click(getLastButton(/return to home/i));
+
+    await waitFor(() => {
+      expect(notifications.show).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Could not leave project",
+          message: "cannot stop watcher",
+        }),
+      );
+    });
+    expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-1");
+    expect(screen.queryByText("Landing content")).not.toBeInTheDocument();
+  });
+
+  it("blocks ordinary app close when runtime shutdown fails", async () => {
+    const closeProject = vi.fn().mockRejectedValue(new Error("cannot stop worker"));
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0" as const,
+        projectMeta: {
+          id: "project-1",
+          name: "Brain Study",
+          rootPath: "/tmp/brain-study",
+          createdAt: "2026-05-03T00:00:00.000Z",
+          lastOpened: "2026-05-03T00:00:00.000Z",
+          currentPhase: "import",
+          dataSource: "dicom" as const,
+        },
+        uiState: { navbarCollapsed: false },
+        mappingState: {},
+        dataPar: {},
+      },
+      isDirty: false,
+      loaded: true,
+      closeProject,
+    });
+    renderLayout("/project/project-1/import");
+    await waitFor(() => expect((window as any).__mockCloseRequestedListener).toBeDefined());
+
+    const preventDefault = vi.fn();
+    await (window as any).__mockCloseRequestedListener({ preventDefault });
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(getCurrentWindow().destroy).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-1");
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Could not close project",
+        message: "cannot stop worker",
+      }),
+    );
   });
 
   it("intercepts close request and prompts when project is dirty, can save and exit", async () => {
@@ -690,7 +828,7 @@ describe("Layout", () => {
   });
 
   it("prompts for abort when close request is sent and processing is running", async () => {
-    const killProcessing = vi.fn().mockResolvedValue(undefined);
+    const closeProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
         version: "0.1.0" as const,
@@ -709,10 +847,10 @@ describe("Layout", () => {
       },
       isDirty: false,
       loaded: true,
+      closeProject,
     });
     useProcessingStore.setState({
       processingPhase: "running",
-      killProcessing,
     });
 
     renderLayout("/project/project-1/processing");
@@ -742,13 +880,13 @@ describe("Layout", () => {
     const appWindow = getCurrentWindow();
 
     await waitFor(() => {
-      expect(killProcessing).toHaveBeenCalled();
+      expect(closeProject).toHaveBeenCalled();
       expect(appWindow.destroy).toHaveBeenCalled();
     });
   });
 
   it("prompts for abort when close request is sent and import is running", async () => {
-    const invokeMock = vi.mocked((await import("@tauri-apps/api/core")).invoke);
+    const closeProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
         version: "0.1.0" as const,
@@ -767,6 +905,7 @@ describe("Layout", () => {
       },
       isDirty: false,
       loaded: true,
+      closeProject,
     });
     useImportStore.setState({
       importPhase: "running",
@@ -794,7 +933,7 @@ describe("Layout", () => {
     const appWindow = getCurrentWindow();
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("stop_active_import");
+      expect(closeProject).toHaveBeenCalled();
       expect(appWindow.destroy).toHaveBeenCalled();
     });
   });

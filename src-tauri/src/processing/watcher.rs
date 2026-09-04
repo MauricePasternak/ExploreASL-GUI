@@ -17,19 +17,32 @@ pub fn watch_lock_dir(
     let trace = CommandTrace::new("watch_lock_dir");
     trace.arg("project_root", &project_root);
 
-    // Prevent starting multiple watcher threads
+    let root = PathBuf::from(project_root.trim());
+
+    // Prevent starting multiple watcher threads or crossing project ownership.
     {
         let processing_state = state
             .processing_state
             .lock()
             .map_err(|_| "Processing state lock was poisoned".to_string())?;
         if processing_state.watcher_stop.is_some() {
+            if processing_state.project_root != root {
+                return Err(format!(
+                    "Lock watcher belongs to project {}",
+                    processing_state.project_root.display()
+                ));
+            }
             trace.success(&());
             return Ok(());
         }
+        if !processing_state.worker_pids.is_empty() && processing_state.project_root != root {
+            return Err(format!(
+                "Processing workers belong to project {}",
+                processing_state.project_root.display()
+            ));
+        }
     }
 
-    let root = PathBuf::from(project_root.trim());
     let lock_root = root.join("derivatives").join("ExploreASL").join("lock");
     if !lock_root.exists() {
         std::fs::create_dir_all(&lock_root).map_err(|e| {
@@ -173,6 +186,7 @@ pub fn watch_lock_dir(
             .map_err(|_| "Processing state lock was poisoned".to_string())?;
         processing_state.watcher_handle = Some(watcher_thread);
         processing_state.watcher_stop = Some(stop_tx);
+        processing_state.project_root = root;
     }
 
     trace.success(&());

@@ -11,6 +11,7 @@ import {
   ProjectUnsupportedVersionError,
   serializeProject,
 } from "./project";
+import { gzipSync, strToU8 } from "fflate";
 
 const validProject = DEFAULT_PROJECT_FILE("test-id", "Test", "/tmp/test");
 
@@ -110,6 +111,51 @@ describe("legacy migration and canonical serialization", () => {
     expect(JSON.parse(serialized).projectMeta).not.toHaveProperty("transient");
   });
 
+  it("serializes project-owned paths relative to the root", () => {
+    const project = {
+      ...validProject,
+      mappingState: {
+        sourceDataPath: "/tmp/test/sourcedata",
+        rawPaths: ["/tmp/test/sourcedata/sub-01/scan"],
+      },
+    };
+
+    const output = JSON.parse(
+      serializeProject({ ...ProjectFileSchema.parse(project), schemaVersion: 1 }),
+    );
+    expect(output.mappingState).toMatchObject({
+      sourceDataPath: "./sourcedata",
+      rawPaths: ["sub-01/scan"],
+    });
+  });
+
+  it("serializes BIDS source identity as dot and preserves external DICOM roots", () => {
+    const bids = {
+      ...ProjectFileSchema.parse({
+        ...validProject,
+        projectMeta: { ...validProject.projectMeta, dataSource: "bids" },
+        mappingState: { sourceDataPath: "/old/location" },
+      }),
+      schemaVersion: 1 as const,
+    };
+    const external = {
+      ...ProjectFileSchema.parse({
+        ...validProject,
+        mappingState: {
+          sourceDataPath: "/media/dicom",
+          rawPaths: ["/media/dicom/sub-01/scan"],
+        },
+      }),
+      schemaVersion: 1 as const,
+    };
+
+    expect(JSON.parse(serializeProject(bids)).mappingState.sourceDataPath).toBe(".");
+    expect(JSON.parse(serializeProject(external)).mappingState).toMatchObject({
+      sourceDataPath: "/media/dicom",
+      rawPaths: ["sub-01/scan"],
+    });
+  });
+
   it("rejects object-form snapshots in schema v1 while preserving valid legacy objects", () => {
     const snapshot = {
       sourceDataPath: "/source",
@@ -137,6 +183,38 @@ describe("legacy migration and canonical serialization", () => {
     const legacy = { ...validProject, uiState: { import: { mostRecentConfig: snapshot } } };
     delete (legacy as { schemaVersion?: number }).schemaVersion;
     expect(parseProject(JSON.stringify(legacy)).uiState.import?.mostRecentConfig).toEqual(snapshot);
+  });
+
+  it("rejects compressed snapshots containing a project-relative escape", () => {
+    const snapshot = {
+      sourceDataPath: "./../outside",
+      pathPatterns: [],
+      tokenizerConfigs: {},
+      bMatchDirectories: false,
+      modalityAliases: [],
+      sessionAliases: [],
+      runAliases: [],
+      subjectRenames: [],
+      metadataGroups: [],
+      subjectRows: [],
+    };
+    const v1 = {
+      schemaVersion: 1,
+      projectMeta: Object.fromEntries(
+        Object.entries(validProject.projectMeta).filter(([key]) => key !== "rootPath"),
+      ),
+      uiState: {
+        import: {
+          mostRecentConfig: btoa(
+            String.fromCharCode(...gzipSync(strToU8(JSON.stringify(snapshot)), { level: 9 })),
+          ),
+        },
+      },
+      mappingState: {},
+      dataPar: {},
+    };
+
+    expect(() => parseProject(JSON.stringify(v1))).toThrow(ProjectMalformedError);
   });
 });
 
@@ -314,6 +392,19 @@ describe("ProjectFileSchema", () => {
       },
     };
     expect(ProjectFileSchema.safeParse(project).success).toBe(false);
+  });
+
+  it("rejects project-relative source, raw, snapshot, and qCBF traversal", () => {
+    for (const project of [
+      { ...validProject, mappingState: { sourceDataPath: "./../outside" } },
+      { ...validProject, mappingState: { rawPaths: ["subject/../../outside"] } },
+      {
+        ...validProject,
+        uiState: { dataVis: { qcbfSource: { relativePath: "../outside.tsv", fileHash: "hash" } } },
+      },
+    ]) {
+      expect(ProjectFileSchema.safeParse(project).success).toBe(false);
+    }
   });
 });
 

@@ -1,9 +1,15 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import ChartPanel from "./ChartPanel";
+import {
+  activateProjectLease,
+  invalidateProjectLease,
+  resetProjectLifecycleForTests,
+} from "../../lib/projectLifecycle";
 
 vi.mock("@nivo/scatterplot", () => ({
   ResponsiveScatterPlotCanvas: (props: any) => (
@@ -42,6 +48,8 @@ function renderComponent() {
 
 describe("ChartPanel", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    resetProjectLifecycleForTests();
     useVisualizationStore.setState({
       axisAssignment: { x: null, y: null, colorBy: null },
       columnTypes: {},
@@ -52,6 +60,70 @@ describe("ChartPanel", () => {
       selectedPointId: null,
       domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
     });
+  });
+
+  afterEach(() => resetProjectLifecycleForTests());
+
+  it("discards chart rows loaded for a replaced lifecycle", async () => {
+    let resolveRows!: (rows: Record<string, string>[]) => void;
+    vi.mocked(invoke).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRows = resolve;
+        }),
+    );
+    activateProjectLease("same-id", "/test/project");
+    useVisualizationStore.setState({
+      axisAssignment: { x: "age", y: "score", colorBy: null },
+      columnTypes: { age: "continuous", score: "continuous" },
+      inspection: {
+        columns: [
+          {
+            name: "age",
+            originalName: "age",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
+          {
+            name: "score",
+            originalName: "score",
+            source: "qcbf",
+            units: "",
+            inferredType: "continuous",
+            levels: [],
+            isIdentifier: false,
+          },
+        ],
+        rowCount: 1,
+        qcbfRowCount: 1,
+        qcbfHash: "old",
+        externalHash: null,
+      },
+      qcbfSource: { relativePath: "old.tsv", fileHash: "old" },
+    });
+    renderComponent();
+    await waitFor(() => expect(resolveRows).toBeTypeOf("function"));
+
+    invalidateProjectLease();
+    activateProjectLease("same-id", "/test/project");
+    useVisualizationStore.getState().reset();
+    const replacementPoint = {
+      id: "replacement",
+      x: 1,
+      y: 2,
+      participantId: "replacement",
+      subject: "replacement",
+      session: "01",
+      run: "01",
+    };
+    useVisualizationStore.setState({ chartData: [replacementPoint] });
+    resolveRows([{ age: "99", score: "99" }]);
+    await Promise.resolve();
+
+    expect(useVisualizationStore.getState().chartData).toEqual([replacementPoint]);
   });
 
   it("shows prompt when no axes selected", () => {

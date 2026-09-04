@@ -8,6 +8,8 @@ import { canEnterStep5 } from "../../lib/importStepAccess";
 import { assembleSourcestructure, assembleStudyPar } from "../../lib/tokenizerUtils";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useImportStore } from "../../stores/importStore";
+import { useProjectStore } from "../../stores/projectStore";
+import { resolveLogicalSource } from "../../lib/projectPaths";
 import ConfigPreview from "./ConfigPreview";
 import StagingMappingTable from "./StagingMappingTable";
 
@@ -28,6 +30,8 @@ export default function ImportPreview() {
   const settings = useGlobalStore((s) => s.settings);
   const profileValidationState = useGlobalStore((s) => s.profileValidationState);
   const tokenSubDelimiters = useGlobalStore((s) => s.settings.tokenSubDelimiters);
+  const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath ?? "");
+  const resolvedSource = resolveLogicalSource(projectRoot, sourceDataPath, "dicom");
 
   const subjectRenamesMap = useMemo(
     () => Object.fromEntries(subjectRenames.map((r) => [r.original, r.target])),
@@ -38,7 +42,7 @@ export default function ImportPreview() {
     () =>
       buildAllStagingMappings(
         rawPaths,
-        sourceDataPath,
+        resolvedSource,
         pathPatterns,
         tokenizerConfigs,
         subjectRenamesMap,
@@ -48,7 +52,7 @@ export default function ImportPreview() {
       ),
     [
       rawPaths,
-      sourceDataPath,
+      resolvedSource,
       pathPatterns,
       tokenizerConfigs,
       subjectRenamesMap,

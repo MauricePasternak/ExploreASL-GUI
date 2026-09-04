@@ -21,15 +21,57 @@ function renderWithProviders() {
 }
 
 afterEach(() => {
+  cleanup();
   useImportStore.getState().resetImport();
   useGlobalStore.setState({
     settings: DEFAULT_SETTINGS,
     loaded: true,
     profileValidationState: {},
   });
+  useProjectStore.setState({ project: null, isDirty: false, loaded: false });
 });
 
 describe("ImportPage metadata step", () => {
+  it("keeps missing-source guidance visible outside ingestion and routes Relink to it", () => {
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0",
+        projectMeta: {
+          id: "project-1",
+          name: "Project",
+          rootPath: "/project",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          lastOpened: "2026-01-01T00:00:00.000Z",
+          currentPhase: "import",
+          dataSource: "dicom",
+        },
+        uiState: {},
+        mappingState: {},
+        dataPar: {},
+      },
+      loaded: true,
+      isDirty: false,
+    });
+    useImportStore.setState({
+      activeStep: 5,
+      sourceDataPath: "/missing/dicom",
+      sourceAvailability: {
+        status: "missing",
+        savedPath: "/missing/dicom",
+        message: "Source missing. Relink it.",
+      },
+    });
+
+    renderWithProviders();
+
+    expect(screen.getByTestId("import-missing-source-warning")).toHaveTextContent(
+      "Source missing. Relink it.",
+    );
+    expect(screen.getByTestId("import-missing-source-path")).toHaveTextContent("/missing/dicom");
+    fireEvent.click(screen.getByTestId("import-relink-btn"));
+    expect(useImportStore.getState().activeStep).toBe(0);
+    expect(screen.getByTestId("dicom-missing-source-warning")).toBeInTheDocument();
+  });
   it("uses configured delimiters in the tokenizer hierarchy preview", () => {
     const store = useImportStore.getState();
     store.setActiveStep(1);

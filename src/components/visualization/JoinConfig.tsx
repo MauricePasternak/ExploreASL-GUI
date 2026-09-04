@@ -3,13 +3,14 @@ import {
   Button,
   Checkbox,
   Group,
+  Modal,
   Paper,
   Select,
   Stack,
   TagsInput,
   Text,
 } from "@mantine/core";
-import { IconUpload } from "@tabler/icons-react";
+import { IconAlertTriangle, IconUpload } from "@tabler/icons-react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
@@ -18,9 +19,18 @@ import { useProjectStore } from "../../stores/projectStore";
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import JoinDiagram from "./JoinDiagram";
 import SanityChecks from "./SanityChecks";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
+import { extractPersistedVisualizationState } from "../../hooks/useVisualizationSync";
 
 const DEFAULT_NA_TOKENS = ["", "NaN", "NA", "n/a", "<NA>"];
 const IDENTIFIER_COLUMNS = ["participant_id", "subject", "session", "run"];
+
+interface ExternalInspection {
+  columns: Array<{ name: string; inferredType: string; levels: string[]; isIdentifier: boolean }>;
+  rowCount: number;
+  fileHash: string;
+  sheetName: string | null;
+}
 
 export default function JoinConfig() {
   const joinConfig = useVisualizationStore((s) => s.joinConfig);
@@ -28,13 +38,18 @@ export default function JoinConfig() {
   const qcbfSource = useVisualizationStore((s) => s.qcbfSource);
   const inspection = useVisualizationStore((s) => s.inspection);
   const project = useProjectStore((s) => s.project);
-  const [extInspection, setExtInspection] = useState<{
-    columns: Array<{ name: string; inferredType: string; levels: string[]; isIdentifier: boolean }>;
-    rowCount: number;
-    fileHash: string;
-    sheetName: string | null;
-  } | null>(null);
+  const externalSourceAvailability = useVisualizationStore((s) => s.externalSourceAvailability);
+  const setExternalSourceAvailability = useVisualizationStore(
+    (s) => s.setExternalSourceAvailability,
+  );
+  const relinkMatchingExternalSource = useVisualizationStore((s) => s.relinkMatchingExternalSource);
+  const relinkChangedExternalSource = useVisualizationStore((s) => s.relinkChangedExternalSource);
+  const [extInspection, setExtInspection] = useState<ExternalInspection | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRelink, setPendingRelink] = useState<{
+    absolutePath: string;
+    inspection: ExternalInspection;
+  } | null>(null);
 
   const lastInspectedRef = useRef<{ path: string; hash: string; delimiter: string } | null>(null);
 
@@ -59,6 +74,7 @@ export default function JoinConfig() {
     }
 
     let active = true;
+    const lease = captureProjectLease();
     async function loadExt() {
       try {
         console.log(
@@ -67,23 +83,23 @@ export default function JoinConfig() {
           "with delimiter:",
           currentDelimiter,
         );
-        const result = await invoke<{
-          columns: Array<{
-            name: string;
-            inferredType: string;
-            levels: string[];
-            isIdentifier: boolean;
-          }>;
-          rowCount: number;
-          fileHash: string;
-          sheetName: string | null;
-        }>("inspect_external_data", {
+        const result = await invoke<ExternalInspection>("inspect_external_data", {
           absolutePath: currentPath,
           delimiter: currentDelimiter,
         });
-        if (active) {
+        if (active && (!lease || isCurrentProjectLease(lease))) {
           console.log("[JoinConfig] External file inspection success:", result);
           setExtInspection(result);
+          setExternalSourceAvailability(
+            result.fileHash === currentHash
+              ? { status: "available", savedPath: currentPath, message: null }
+              : {
+                  status: "changed",
+                  savedPath: currentPath,
+                  message:
+                    "External data content changed. Relink and confirm before resetting dependent visualization setup.",
+                },
+          );
           lastInspectedRef.current = {
             path: currentPath,
             hash: currentHash,
@@ -91,11 +107,17 @@ export default function JoinConfig() {
           };
         }
       } catch (err) {
-        if (active) {
+        if (active && (!lease || isCurrentProjectLease(lease))) {
           console.error("[JoinConfig] Failed to inspect external file:", err);
           setError(
             `Failed to inspect external file: ${err instanceof Error ? err.message : "Unknown error"}`,
           );
+          setExternalSourceAvailability({
+            status: "unreadable",
+            savedPath: currentPath,
+            message:
+              "The saved external visualization file is missing or unreadable. Relink it to restore joined data.",
+          });
         }
       }
     }
@@ -103,9 +125,16 @@ export default function JoinConfig() {
     return () => {
       active = false;
     };
-  }, [joinConfig, extInspection]);
+  }, [joinConfig, extInspection, setExternalSourceAvailability]);
+
+  function syncRelinkToProject() {
+    useProjectStore
+      .getState()
+      .syncVisualizationState(extractPersistedVisualizationState(useVisualizationStore.getState()));
+  }
 
   async function handleBrowse() {
+    const lease = captureProjectLease();
     let defaultPath: string | undefined = undefined;
     if (joinConfig?.externalSource?.absolutePath) {
       const lastSlash = Math.max(
@@ -125,6 +154,7 @@ export default function JoinConfig() {
       multiple: false,
       defaultPath,
     });
+    if (lease && !isCurrentProjectLease(lease)) return;
     if (!selected || typeof selected !== "string") {
       console.log("[JoinConfig] File browse cancelled");
       return;
@@ -134,20 +164,14 @@ export default function JoinConfig() {
     setError(null);
     try {
       console.log("[JoinConfig] Inspecting selected file:", selected);
-      const result = await invoke<{
-        columns: Array<{
-          name: string;
-          inferredType: string;
-          levels: string[];
-          isIdentifier: boolean;
-        }>;
-        rowCount: number;
-        fileHash: string;
-        sheetName: string | null;
-      }>("inspect_external_data", {
+      const result = await invoke<ExternalInspection>("inspect_external_data", {
         absolutePath: selected,
         delimiter: joinConfig?.delimiter ?? "auto",
       });
+      if (lease && !isCurrentProjectLease(lease)) return;
+      if (!result || typeof result.fileHash !== "string") {
+        throw new Error("External data inspection returned an invalid result.");
+      }
       console.log("[JoinConfig] Selected file inspection success:", result);
       setExtInspection(result);
       lastInspectedRef.current = {
@@ -155,8 +179,20 @@ export default function JoinConfig() {
         hash: result.fileHash,
         delimiter: joinConfig?.delimiter ?? "auto",
       };
-      // Reset keys to empty array when changing external data
       const existing = joinConfig;
+      if (existing) {
+        if (result.fileHash === existing.externalSource.fileHash) {
+          relinkMatchingExternalSource({
+            absolutePath: selected,
+            fileHash: result.fileHash,
+            sheetName: result.sheetName,
+          });
+          syncRelinkToProject();
+        } else {
+          setPendingRelink({ absolutePath: selected, inspection: result });
+        }
+        return;
+      }
       const newKeys: Array<{ left: string; right: string }> = [];
       setJoinConfig({
         externalSource: {
@@ -165,11 +201,12 @@ export default function JoinConfig() {
           sheetName: result.sheetName,
         },
         keys: newKeys,
-        dropRightOn: existing?.dropRightOn ?? true,
-        naTokens: existing?.naTokens ?? DEFAULT_NA_TOKENS,
-        delimiter: existing?.delimiter ?? "auto",
+        dropRightOn: true,
+        naTokens: DEFAULT_NA_TOKENS,
+        delimiter: "auto",
       });
     } catch (err) {
+      if (lease && !isCurrentProjectLease(lease)) return;
       console.error("[JoinConfig] Failed to inspect selected file:", err);
       setError(
         `Failed to inspect external file: ${err instanceof Error ? err.message : "Unknown error"}`,
@@ -180,6 +217,7 @@ export default function JoinConfig() {
   function handleRemoveExternal() {
     console.log("[JoinConfig] Removing external dataset join configuration");
     setJoinConfig(null);
+    setExternalSourceAvailability({ status: "unconfigured", savedPath: null, message: null });
     setExtInspection(null);
     lastInspectedRef.current = null;
   }
@@ -221,23 +259,15 @@ export default function JoinConfig() {
 
   async function handleDelimiterChange(value: string | null) {
     if (!joinConfig || !project) return;
+    const lease = captureProjectLease();
     const newDelimiter = value ?? "auto";
     setJoinConfig({ ...joinConfig, delimiter: newDelimiter });
     try {
-      const result = await invoke<{
-        columns: Array<{
-          name: string;
-          inferredType: string;
-          levels: string[];
-          isIdentifier: boolean;
-        }>;
-        rowCount: number;
-        fileHash: string;
-        sheetName: string | null;
-      }>("inspect_external_data", {
+      const result = await invoke<ExternalInspection>("inspect_external_data", {
         absolutePath: joinConfig.externalSource.absolutePath,
         delimiter: newDelimiter,
       });
+      if (lease && !isCurrentProjectLease(lease)) return;
       setExtInspection(result);
       lastInspectedRef.current = {
         path: joinConfig.externalSource.absolutePath,
@@ -245,6 +275,7 @@ export default function JoinConfig() {
         delimiter: newDelimiter,
       };
     } catch (err) {
+      if (lease && !isCurrentProjectLease(lease)) return;
       setError(
         `Failed to inspect external file: ${err instanceof Error ? err.message : "Unknown error"}`,
       );
@@ -284,6 +315,28 @@ export default function JoinConfig() {
 
   return (
     <Stack data-testid="join-config-active">
+      {["missing", "unreadable", "changed"].includes(externalSourceAvailability.status) && (
+        <Alert
+          color="yellow"
+          icon={<IconAlertTriangle size={16} />}
+          data-testid="external-source-warning"
+        >
+          <Stack gap="xs">
+            <Text size="sm">{externalSourceAvailability.message}</Text>
+            <Text size="sm" ff="monospace" data-testid="external-source-path">
+              {externalSourceAvailability.savedPath}
+            </Text>
+            <Button
+              variant="light"
+              size="xs"
+              onClick={handleBrowse}
+              data-testid="external-source-relink-btn"
+            >
+              Relink
+            </Button>
+          </Stack>
+        </Alert>
+      )}
       {error && (
         <Alert color="red" data-testid="join-config-error">
           {error}
@@ -316,6 +369,47 @@ export default function JoinConfig() {
           </Button>
         </Stack>
       </Paper>
+
+      <Modal
+        opened={pendingRelink !== null}
+        onClose={() => setPendingRelink(null)}
+        title="External data content changed"
+        data-testid="external-relink-mismatch-dialog"
+      >
+        <Stack>
+          <Text size="sm">
+            Replacement content does not match the saved SHA-256 hash. Continuing resets join keys,
+            column types, level ordering, axes, filters, and loaded chart data.
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => setPendingRelink(null)}
+              data-testid="external-relink-cancel-btn"
+            >
+              Cancel
+            </Button>
+            <Button
+              color="orange"
+              onClick={() => {
+                if (pendingRelink) {
+                  relinkChangedExternalSource({
+                    absolutePath: pendingRelink.absolutePath,
+                    fileHash: pendingRelink.inspection.fileHash,
+                    sheetName: pendingRelink.inspection.sheetName,
+                  });
+                  setExtInspection(pendingRelink.inspection);
+                  syncRelinkToProject();
+                }
+                setPendingRelink(null);
+              }}
+              data-testid="external-relink-confirm-btn"
+            >
+              Relink and reset setup
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Paper p="md" withBorder>
         <Stack gap="sm">

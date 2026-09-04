@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::tracing::CommandTrace;
@@ -30,6 +30,135 @@ pub fn get_available_memory_mb() -> u64 {
     let mb = available_memory_mb_impl();
     trace.success(&mb);
     mb
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PathOwnership {
+    Internal,
+    External,
+    Missing,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourcePathInspection {
+    pub absolute_path: PathBuf,
+    pub exists: bool,
+    pub readable: bool,
+    pub is_directory: bool,
+    pub ownership: PathOwnership,
+    pub project_relative_path: Option<String>,
+}
+
+fn safe_relative_path(path: &Path) -> Result<(), String> {
+    if path.is_absolute() {
+        return Ok(());
+    }
+    if path.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return Err(format!(
+            "Relative path cannot escape its root: {}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn portable_relative_path(path: &Path) -> String {
+    let relative = path
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => Some(value.to_string_lossy()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    if relative.is_empty() {
+        ".".to_owned()
+    } else {
+        format!("./{relative}")
+    }
+}
+
+pub fn inspect_source_path_impl(
+    project_root: &Path,
+    source_path: &Path,
+) -> Result<SourcePathInspection, String> {
+    safe_relative_path(source_path)?;
+    let canonical_project = project_root.canonicalize().map_err(|error| {
+        format!(
+            "Failed to resolve project root {}: {error}",
+            project_root.display()
+        )
+    })?;
+    let candidate = if source_path.is_absolute() {
+        source_path.to_path_buf()
+    } else {
+        canonical_project.join(source_path)
+    };
+
+    if !candidate.exists() {
+        return Ok(SourcePathInspection {
+            absolute_path: candidate,
+            exists: false,
+            readable: false,
+            is_directory: false,
+            ownership: PathOwnership::Missing,
+            project_relative_path: None,
+        });
+    }
+
+    let canonical_source = candidate.canonicalize().map_err(|error| {
+        format!(
+            "Failed to resolve source path {}: {error}",
+            candidate.display()
+        )
+    })?;
+    let is_directory = canonical_source.is_dir();
+    let readable = if is_directory {
+        fs::read_dir(&canonical_source).is_ok()
+    } else {
+        fs::File::open(&canonical_source).is_ok()
+    };
+    let project_relative_path = canonical_source
+        .strip_prefix(&canonical_project)
+        .ok()
+        .map(portable_relative_path);
+    let ownership = if project_relative_path.is_some() {
+        PathOwnership::Internal
+    } else {
+        PathOwnership::External
+    };
+
+    Ok(SourcePathInspection {
+        absolute_path: canonical_source,
+        exists: true,
+        readable,
+        is_directory,
+        ownership,
+        project_relative_path,
+    })
+}
+
+#[tauri::command]
+pub fn inspect_source_path(
+    project_root: String,
+    source_path: String,
+) -> Result<SourcePathInspection, String> {
+    let trace = CommandTrace::new("inspect_source_path");
+    trace.arg("project_root", &project_root);
+    trace.arg("source_path", &source_path);
+    let result = inspect_source_path_impl(Path::new(&project_root), Path::new(&source_path));
+    match &result {
+        Ok(value) => trace.success(value),
+        Err(error) => trace.error(error),
+    }
+    result
 }
 
 #[cfg(target_os = "linux")]
@@ -262,5 +391,69 @@ fn link_or_copy(source: &Path, target: &Path) -> Result<(), String> {
                 e
             )
         })
+    }
+}
+
+#[cfg(test)]
+mod path_inspection_tests {
+    use super::{PathOwnership, inspect_source_path_impl};
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn classifies_internal_and_external_directories() {
+        let workspace = tempdir().expect("workspace");
+        let project = workspace.path().join("project");
+        let internal = project.join("sourcedata");
+        let external = workspace.path().join("external");
+        fs::create_dir_all(&internal).expect("internal source");
+        fs::create_dir_all(&external).expect("external source");
+
+        let internal_result =
+            inspect_source_path_impl(&project, &internal).expect("inspect internal");
+        assert_eq!(internal_result.ownership, PathOwnership::Internal);
+        assert_eq!(
+            internal_result.project_relative_path.as_deref(),
+            Some("./sourcedata")
+        );
+        assert!(internal_result.exists);
+        assert!(internal_result.readable);
+
+        let external_result =
+            inspect_source_path_impl(&project, &external).expect("inspect external");
+        assert_eq!(external_result.ownership, PathOwnership::External);
+        assert_eq!(external_result.project_relative_path, None);
+    }
+
+    #[test]
+    fn classifies_missing_paths_without_guessing_ownership() {
+        let workspace = tempdir().expect("workspace");
+        let project = workspace.path().join("project");
+        fs::create_dir_all(&project).expect("project");
+
+        let result = inspect_source_path_impl(&project, &workspace.path().join("missing"))
+            .expect("inspect missing");
+        assert_eq!(result.ownership, PathOwnership::Missing);
+        assert!(!result.exists);
+        assert!(!result.readable);
+        assert_eq!(result.project_relative_path, None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_escaping_project_is_external() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempdir().expect("workspace");
+        let project = workspace.path().join("project");
+        let external = workspace.path().join("external");
+        let linked = project.join("linked-source");
+        fs::create_dir_all(&project).expect("project");
+        fs::create_dir_all(&external).expect("external source");
+        symlink(&external, &linked).expect("symlink");
+
+        let result = inspect_source_path_impl(&project, &linked).expect("inspect symlink");
+        assert_eq!(result.ownership, PathOwnership::External);
+        assert_eq!(result.absolute_path, external.canonicalize().unwrap());
     }
 }

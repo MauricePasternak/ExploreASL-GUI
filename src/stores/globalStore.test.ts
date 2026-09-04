@@ -47,7 +47,7 @@ describe("useGlobalStore", () => {
       settings: {
         ...DEFAULT_SETTINGS,
         theme: "dark",
-        recentProjects: ["/tmp/project.easl"],
+        recentProjects: [{ path: "/tmp/project.easl" }],
       },
     });
   });
@@ -59,7 +59,10 @@ describe("useGlobalStore", () => {
     useGlobalStore.getState().addRecentProject("/tmp/project-5.easl");
 
     expect(useGlobalStore.getState().settings.recentProjects).toHaveLength(20);
-    expect(useGlobalStore.getState().settings.recentProjects[0]).toBe("/tmp/project-5.easl");
+    expect(useGlobalStore.getState().settings.recentProjects[0]).toEqual({
+      path: "/tmp/project-5.easl",
+      projectId: undefined,
+    });
   });
 
   it("persists the current settings snapshot", async () => {
@@ -70,7 +73,7 @@ describe("useGlobalStore", () => {
 
     const store = await Store.load("settings.json");
     await expect(store.get("theme")).resolves.toBe("dark");
-    await expect(store.get("recentProjects")).resolves.toEqual(["/tmp/a/project.easl"]);
+    await expect(store.get("recentProjects")).resolves.toEqual([{ path: "/tmp/a/project.easl" }]);
   });
 
   it("loads and saves tokenizer delimiters", async () => {
@@ -156,7 +159,9 @@ describe("useGlobalStore", () => {
     useGlobalStore.getState().addRecentProject("/tmp/auto-saved/project.easl");
 
     await vi.waitFor(async () => {
-      await expect(store.get("recentProjects")).resolves.toEqual(["/tmp/auto-saved/project.easl"]);
+      await expect(store.get("recentProjects")).resolves.toEqual([
+        { path: "/tmp/auto-saved/project.easl" },
+      ]);
     });
 
     useGlobalStore.getState().removeRecentProject("/tmp/auto-saved/project.easl");
@@ -164,6 +169,83 @@ describe("useGlobalStore", () => {
     await vi.waitFor(async () => {
       await expect(store.get("recentProjects")).resolves.toEqual([]);
     });
+  });
+
+  it("loads identity-aware recent records and canonicalizes legacy strings", async () => {
+    const store = await Store.load("settings.json");
+    await store.set("recentProjects", [
+      "/legacy/project.easl",
+      { path: "/known/project.easl", projectId: "known-id" },
+    ]);
+    await store.save();
+
+    await useGlobalStore.getState().loadSettings();
+
+    const expected = [
+      { path: "/legacy/project.easl" },
+      { path: "/known/project.easl", projectId: "known-id" },
+    ];
+    expect(useGlobalStore.getState().settings.recentProjects).toEqual(expected);
+    await expect(store.get("recentProjects")).resolves.toEqual(expected);
+  });
+
+  it("drops malformed recent entries while retaining unmatched legacy paths", async () => {
+    const store = await Store.load("settings.json");
+    await store.set("recentProjects", [
+      " /legacy/stale/project.easl ",
+      { path: "/known/project.easl", projectId: "known-id", ignored: true },
+      "",
+      null,
+      { path: 42 },
+      { projectId: "orphan" },
+      "/legacy/stale/project.easl",
+    ]);
+    await store.save();
+
+    await useGlobalStore.getState().loadSettings();
+
+    const expected = [
+      { path: "/legacy/stale/project.easl" },
+      { path: "/known/project.easl", projectId: "known-id" },
+    ];
+    expect(useGlobalStore.getState().settings.recentProjects).toEqual(expected);
+    await expect(store.get("recentProjects")).resolves.toEqual(expected);
+  });
+
+  it("fills identity for a successfully opened legacy recent path", () => {
+    useGlobalStore.setState((state) => ({
+      settings: {
+        ...state.settings,
+        recentProjects: [{ path: "/legacy/project.easl" }],
+      },
+    }));
+
+    useGlobalStore.getState().addRecentProject("/legacy/project.easl", "project-id");
+
+    expect(useGlobalStore.getState().settings.recentProjects).toEqual([
+      { path: "/legacy/project.easl", projectId: "project-id" },
+    ]);
+  });
+
+  it("replaces a moved recent path without deleting unrelated records", () => {
+    useGlobalStore.setState((state) => ({
+      settings: {
+        ...state.settings,
+        recentProjects: [
+          { path: "/old/project.easl", projectId: "same-id" },
+          { path: "/other/project.easl", projectId: "other-id" },
+        ],
+      },
+    }));
+
+    useGlobalStore
+      .getState()
+      .replaceRecentProject("/old/project.easl", "/new/project.easl", "same-id");
+
+    expect(useGlobalStore.getState().settings.recentProjects).toEqual([
+      { path: "/new/project.easl", projectId: "same-id" },
+      { path: "/other/project.easl", projectId: "other-id" },
+    ]);
   });
 
   describe("addProfile", () => {

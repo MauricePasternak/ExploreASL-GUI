@@ -7,6 +7,7 @@ import { useVisualizationStore, DataInspection } from "../../stores/visualizatio
 import { useProjectStore } from "../../stores/projectStore";
 import { parseStatsFileName } from "../../lib/tsvUtils";
 import JoinConfig from "./JoinConfig";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 
 export default function DataSelection() {
   const availableFiles = useVisualizationStore((s) => s.availableFiles);
@@ -29,6 +30,7 @@ export default function DataSelection() {
 
   async function handleSelectQcbf(relativePath: string | null) {
     if (!project) return;
+    const lease = captureProjectLease();
     setError(null);
 
     if (qcbfSource && qcbfSource.relativePath !== relativePath) {
@@ -46,6 +48,7 @@ export default function DataSelection() {
         projectRoot: project.projectMeta.rootPath,
         relativePath,
       });
+      if (lease && !isCurrentProjectLease(lease)) return;
 
       setInspection(result);
       setQcbfSource({ relativePath, fileHash: result.qcbfHash });
@@ -67,6 +70,7 @@ export default function DataSelection() {
         });
       }
     } catch (err) {
+      if (lease && !isCurrentProjectLease(lease)) return;
       console.error("Failed to load qCBF data:", err);
       setError(`Failed to inspect file: ${err instanceof Error ? err.message : "Unknown error"}`);
       setInspection(null);

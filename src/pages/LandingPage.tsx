@@ -4,11 +4,11 @@ import { notifications } from "@mantine/notifications";
 import { Button, Divider, Group, Image, Modal, Radio, Stack, Text, Alert } from "@mantine/core";
 import { IconAlertTriangle, IconFolderOpen, IconPlus } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { exists } from "@tauri-apps/plugin-fs";
+import { exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { homeDir } from "@tauri-apps/api/path";
 import { useNavigate, useOutletContext } from "react-router";
 
-import { PROJECT_FILE_NAME } from "../schemas/project";
+import { parseProject, PROJECT_FILE_NAME } from "../schemas/project";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
 import RecentProjectsList from "../components/landing/RecentProjectsList";
@@ -17,6 +17,7 @@ import type { LayoutOutletContext } from "../components/Layout";
 import { logAction } from "../lib/debug";
 import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import appLogo from "../../src-tauri/icons/easl_gui_logo.png";
+import { resolveProjectIdentity, type DuplicateProjectChoice } from "../lib/projectIdentity";
 
 /** Shape returned by the Rust `check_bids_dataset` command. */
 interface BidsCheckResult {
@@ -45,6 +46,12 @@ interface LandingPageProps {
   onOpenSettings?: () => void;
 }
 
+interface IdentityPrompt {
+  oldPath: string;
+  newPath: string;
+  resolve: (choice: DuplicateProjectChoice) => void;
+}
+
 export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: LandingPageProps = {}) {
   const navigate = useNavigate();
   const outletContext = useOutletContext<LayoutOutletContext | undefined>();
@@ -56,6 +63,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const declineRecovery = useProjectStore((state) => state.declineRecovery);
   const recovery = useProjectStore((state) => state.recovery);
   const addRecentProject = useGlobalStore((state) => state.addRecentProject);
+  const replaceRecentProject = useGlobalStore((state) => state.replaceRecentProject);
   const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
   const hasValidProfile = useGlobalStore((state) => state.hasValidProfile());
   const recentProjects = useGlobalStore((state) => state.settings.recentProjects);
@@ -68,6 +76,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const [bidsRadioValue, setBidsRadioValue] = useState<"bids" | "dicom" | null>(null);
   // Store the selected folder path + project name for dialog actions
   const [pendingFolder, setPendingFolder] = useState<{ path: string; name: string } | null>(null);
+  const [identityPrompt, setIdentityPrompt] = useState<IdentityPrompt | null>(null);
   const recoveryPath = recovery?.easlPath ?? null;
 
   function showError(title: string, message: string) {
@@ -93,13 +102,62 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   ) {
     const projectPath = `${selected}/${PROJECT_FILE_NAME}`;
     await createProject(selected, projectName, { dataSource });
-    addRecentProject(projectPath);
+    const project = useProjectStore.getState().project;
+    addRecentProject(projectPath, project?.projectMeta.id);
     logAction("landing_new_project_created", { path: selected, name: projectName, dataSource });
 
-    const project = useProjectStore.getState().project;
     if (project) {
       navigate(`/project/${project.projectMeta.id}/import`);
     }
+  }
+
+  function chooseDuplicateIdentity(oldPath: string, newPath: string) {
+    return new Promise<DuplicateProjectChoice>((resolve) => {
+      setIdentityPrompt({ oldPath, newPath, resolve });
+    });
+  }
+
+  function resolveIdentityPrompt(choice: DuplicateProjectChoice) {
+    const prompt = identityPrompt;
+    if (!prompt) return;
+    setIdentityPrompt(null);
+    prompt.resolve(choice);
+  }
+
+  async function openProjectWithIdentity(path: string): Promise<boolean> {
+    let candidateId: string | null = null;
+    try {
+      candidateId = parseProject(await readTextFile(path)).projectMeta.id;
+    } catch {
+      await loadProject(path);
+    }
+
+    if (candidateId) {
+      const resolution = await resolveProjectIdentity(path, candidateId, recentProjects, {
+        chooseDuplicate: chooseDuplicateIdentity,
+      });
+      if (resolution.status === "cancelled") return false;
+
+      await loadProject(path, {
+        ...(resolution.projectId !== candidateId
+          ? { projectIdOverride: resolution.projectId }
+          : {}),
+        forceDirty: resolution.dirty,
+      });
+      if (useProjectStore.getState().recovery?.easlPath === path) return false;
+
+      if (resolution.recentAction.kind === "replace") {
+        replaceRecentProject(resolution.recentAction.oldPath, path, resolution.projectId);
+      } else {
+        addRecentProject(path, resolution.projectId);
+      }
+      return true;
+    }
+
+    if (useProjectStore.getState().recovery?.easlPath === path) return false;
+    const openedProject = useProjectStore.getState().project;
+    if (openedProject) addRecentProject(path, openedProject.projectMeta.id);
+    return openedProject !== null;
   }
 
   async function handleNewProject() {
@@ -109,7 +167,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     try {
       let defaultPath: string | undefined;
       if (recentProjects && recentProjects.length > 0) {
-        const mostRecent = recentProjects[0];
+        const mostRecent = recentProjects[0].path;
         const parentDir = mostRecent.replace(/[/\\][^/\\]+$/, "");
         if (await exists(parentDir)) {
           defaultPath = parentDir;
@@ -344,7 +402,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     try {
       let defaultPath: string | undefined;
       if (recentProjects && recentProjects.length > 0) {
-        const mostRecent = recentProjects[0];
+        const mostRecent = recentProjects[0].path;
         if (await exists(mostRecent)) {
           defaultPath = mostRecent;
         } else {
@@ -375,14 +433,12 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       }
 
       try {
-        await loadProject(selected);
+        if (!(await openProjectWithIdentity(selected))) return;
       } catch (error) {
         showError("Invalid project file", storageErrorMessage(error));
         logAction("landing_open_project_error", { path: selected, reason: "invalid_file" });
         return;
       }
-      if (useProjectStore.getState().recovery?.easlPath === selected) return;
-      addRecentProject(selected);
       logAction("landing_open_project_success", { path: selected });
 
       const project = useProjectStore.getState().project;
@@ -399,9 +455,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     logAction("landing_open_recent_start", { path });
 
     try {
-      await loadProject(path);
-      if (useProjectStore.getState().recovery?.easlPath === path) return;
-      addRecentProject(path);
+      if (!(await openProjectWithIdentity(path))) return;
       logAction("landing_open_recent_success", { path });
 
       const project = useProjectStore.getState().project;
@@ -421,8 +475,8 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     setLoading(true);
     try {
       await confirmRecovery();
-      addRecentProject(recoveryPath);
       const project = useProjectStore.getState().project;
+      addRecentProject(recoveryPath, project?.projectMeta.id);
       if (project)
         navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`);
     } catch (error) {
@@ -589,6 +643,50 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
           )}
         </Stack>
       </div>
+
+      <Modal
+        opened={identityPrompt !== null}
+        onClose={() => resolveIdentityPrompt("cancel")}
+        title="Project identity already exists"
+        centered
+        data-testid="project-identity-dialog"
+        transitionProps={{ duration: 0, exitDuration: 0 }}
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            This project ID is already known at another available path. Is the selected project the
+            moved original or a copied project?
+          </Text>
+          {identityPrompt && (
+            <Stack gap={4}>
+              <Text size="xs">Known: {identityPrompt.oldPath}</Text>
+              <Text size="xs">Selected: {identityPrompt.newPath}</Text>
+            </Stack>
+          )}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => resolveIdentityPrompt("cancel")}
+              data-testid="project-identity-cancel-btn"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="light"
+              onClick={() => resolveIdentityPrompt("moved")}
+              data-testid="project-identity-moved-btn"
+            >
+              Moved
+            </Button>
+            <Button
+              onClick={() => resolveIdentityPrompt("copied")}
+              data-testid="project-identity-copied-btn"
+            >
+              Copied
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={recoveryPath !== null}

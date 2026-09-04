@@ -3,6 +3,7 @@ import { MULTIPLANAR_TYPE, Niivue, SHOW_RENDER } from "@niivue/niivue";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 
 const getBackColor = (color: string): [number, number, number, number] => {
   if (color === "white") return [1, 1, 1, 1];
@@ -183,6 +184,8 @@ export default function NiftiViewer() {
   // Load volume when selectedPointId changes or NiiVue becomes ready
   useEffect(() => {
     if (!nvReady) return;
+    const lease = captureProjectLease();
+    let active = true;
 
     async function loadVolume() {
       const nv = nvRef.current;
@@ -227,6 +230,7 @@ export default function NiftiViewer() {
         }
 
         await nv.loadVolumes([{ url, name: `qCBF_${point.participantId}_${point.run}${ext}` }]);
+        if (!active || (lease && !isCurrentProjectLease(lease))) return;
         console.log("[NiftiViewer] Volume loaded successfully");
         if (nv.volumes.length > 0) {
           nv.setColormap(nv.volumes[0].id, paramsRef.current.nvColormap);
@@ -236,6 +240,7 @@ export default function NiftiViewer() {
         loadedPointIdRef.current = selectedPointId;
         setViewerState({ status: "loaded" });
       } catch (err) {
+        if (!active || (lease && !isCurrentProjectLease(lease))) return;
         console.error("[NiftiViewer] Failed to load NIfTI from URL:", url, err);
         setViewerState({
           status: "error",
@@ -243,7 +248,10 @@ export default function NiftiViewer() {
         });
       }
     }
-    loadVolume();
+    void loadVolume();
+    return () => {
+      active = false;
+    };
   }, [selectedPointId, point, nvReady, setViewerState]);
 
   if (!webglAvailable) {

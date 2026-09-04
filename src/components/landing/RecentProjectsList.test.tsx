@@ -15,7 +15,10 @@ describe("RecentProjectsList", () => {
       loaded: true,
       settings: {
         ...DEFAULT_SETTINGS,
-        recentProjects: ["/tmp/available/project.easl", "/tmp/missing/project.easl"],
+        recentProjects: [
+          { path: "/tmp/available/project.easl", projectId: "available" },
+          { path: "/tmp/missing/project.easl", projectId: "missing" },
+        ],
       },
     });
 
@@ -73,7 +76,7 @@ describe("RecentProjectsList", () => {
       expect(confirmSpy).toHaveBeenCalled();
       expect(onOpen).not.toHaveBeenCalled();
       expect(useGlobalStore.getState().settings.recentProjects).toEqual([
-        "/tmp/available/project.easl",
+        { path: "/tmp/available/project.easl", projectId: "available" },
       ]);
     });
 

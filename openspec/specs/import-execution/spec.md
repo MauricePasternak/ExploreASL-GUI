@@ -54,17 +54,32 @@ The system SHALL stream MATLAB subprocess stdout and stderr to the frontend via 
 
 ### Requirement: Process lifecycle management
 
-The system SHALL store the MATLAB child process PID in Rust app state. On Tauri app close, the system SHALL send SIGTERM (Unix) or CTRL_BREAK_EVENT (Windows), wait up to 5 seconds, then send SIGKILL (Unix) or TerminateProcess (Windows) if the process is still alive. The app SHALL block exit during this cleanup via `RunEvent::ExitRequested`. The system SHALL also provide a `stop_import(pid)` command that performs the same termination sequence on demand.
+The system SHALL store the import child process identity in native app state. User Stop, project close, project switch, and normal app exit SHALL request platform-appropriate graceful termination, wait up to five seconds, and force termination if the process remains alive. The shutdown operation SHALL report whether the process actually stopped. Project close, project switch, and normal app exit SHALL remain blocked if termination cannot be confirmed. A successful project transition SHALL unregister import listeners, cancel queued log batches, and invalidate post-processing owned by the prior project before another project is hydrated.
 
 #### Scenario: User stops import mid-run
 
 - **WHEN** the user clicks "Stop" during a running import
-- **THEN** SIGTERM is sent to the MATLAB process, 5s grace period, SIGKILL if still alive, all in-progress subjects are marked "cancelled"
+- **THEN** graceful termination SHALL be requested, force termination SHALL follow after five seconds if needed, and all in-progress subjects SHALL be marked cancelled
+
+#### Scenario: User switches project during import
+
+- **WHEN** the user requests project B while project A has an active import
+- **THEN** the system SHALL terminate A's import and unregister its listeners before B becomes active
+
+#### Scenario: Import cannot stop during switch
+
+- **WHEN** project A's import cannot be confirmed stopped
+- **THEN** project switching SHALL fail, project B SHALL NOT become active, and an actionable error SHALL be shown
 
 #### Scenario: App closes during import
 
-- **WHEN** the user closes the Tauri window while MATLAB is running
-- **THEN** the app blocks exit, sends SIGTERM, waits up to 5s, sends SIGKILL if needed, then allows exit. No orphan process remains.
+- **WHEN** the user closes the app while an import is running
+- **THEN** the app SHALL block exit until termination succeeds and SHALL remain open with an error if termination cannot be confirmed
+
+#### Scenario: Prior post-processing resolves late
+
+- **WHEN** project A import post-processing resolves after A's lifecycle has ended
+- **THEN** it SHALL NOT move output, update progress, change phase, or save state for project B
 
 ### Requirement: Lock file cleanup for failed subjects
 

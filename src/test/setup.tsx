@@ -184,6 +184,13 @@ vi.mock("@tauri-apps/api/core", () => ({
         return Promise.resolve({ groups: [], skipped: [] });
       case "check_bids_dataset":
         return Promise.resolve({ isBids: true });
+      case "shutdown_project_runtime":
+        return Promise.resolve({
+          success: true,
+          importProcess: { success: true },
+          processingWorkers: { success: true },
+          lockWatcher: { success: true },
+        });
       default:
         return Promise.resolve(null);
     }

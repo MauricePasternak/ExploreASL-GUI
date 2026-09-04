@@ -53,6 +53,10 @@ export interface BidsReviewState {
   skippedSubjects: string[];
 }
 
+export type DicomSourceAvailability =
+  | { status: "unconfigured" | "available"; savedPath: string | null; message: null }
+  | { status: "missing" | "unreadable" | "ambiguous"; savedPath: string; message: string };
+
 export interface ImportState {
   // Step tracking
   activeStep: number;
@@ -96,6 +100,8 @@ export interface ImportState {
 
   // BIDS review (session-only, not persisted)
   bidsReview: BidsReviewState;
+  sourceAvailability: DicomSourceAvailability;
+  requiresManualSave: boolean;
 
   // Execution profile selection (persisted to .easl via uiState.import.selectedProfileId)
   selectedProfileId: string | null;
@@ -108,6 +114,10 @@ export interface ImportState {
   // Actions
   setActiveStep: (step: number) => void;
   setSourceDataPath: (path: string) => void;
+  relinkCompatibleSource: (path: string) => void;
+  relinkIncompatibleSource: (path: string, paths: string[], patterns: PathPattern[]) => void;
+  setSourceAvailability: (availability: DicomSourceAvailability) => void;
+  clearManualSaveRequirement: () => void;
   setIngestionResults: (paths: string[], patterns: PathPattern[]) => void;
   setBMatchDirectories: (value: boolean) => void;
   setTokenAssignment: (
@@ -200,7 +210,37 @@ const INITIAL_STATE = {
   },
   selectedProfileId: null as string | null,
   profileError: null as string | null,
+  sourceAvailability: {
+    status: "unconfigured",
+    savedPath: null,
+    message: null,
+  } as DicomSourceAvailability,
+  requiresManualSave: false,
 };
+
+export function createInitialImportState() {
+  return {
+    ...INITIAL_STATE,
+    rawPaths: [],
+    pathPatterns: [],
+    tokenizerConfigs: {},
+    modalityAliases: [],
+    sessionAliases: [],
+    runAliases: [],
+    subjectRenames: [],
+    metadataGroups: [],
+    subjectRows: [],
+    importLog: [],
+    failedSubjects: [],
+    importProgress: {},
+    bidsReview: {
+      scanComplete: false,
+      scanError: null,
+      detectedGroups: [],
+      skippedSubjects: [],
+    },
+  };
+}
 
 function subjectProgress(subject: string, existing?: ImportProgress): ImportProgress {
   return (
@@ -272,6 +312,47 @@ export const useImportStore = create<ImportState>((set, get) => ({
   setSourceDataPath: (path) => {
     set({ sourceDataPath: path });
   },
+
+  relinkCompatibleSource: (path) => {
+    set((state) => ({
+      sourceDataPath: path,
+      mostRecentConfig: state.mostRecentConfig
+        ? { ...state.mostRecentConfig, sourceDataPath: path }
+        : null,
+      sourceAvailability: { status: "available", savedPath: path, message: null },
+      requiresManualSave: true,
+    }));
+  },
+
+  relinkIncompatibleSource: (path, paths, patterns) => {
+    set({
+      activeStep: 0,
+      sourceDataPath: path,
+      rawPaths: paths,
+      pathPatterns: patterns,
+      ingestionComplete: paths.length > 0,
+      tokenizerConfigs: {},
+      modalityAliases: [],
+      sessionAliases: [],
+      runAliases: [],
+      subjectRenames: [],
+      metadataGroups: [],
+      subjectRows: [],
+      importProgress: {},
+      importPhase: "idle",
+      importCompleted: false,
+      importLog: [],
+      failedSubjects: [],
+      importRunning: false,
+      importSummary: null,
+      mostRecentConfig: null,
+      sourceAvailability: { status: "available", savedPath: path, message: null },
+      requiresManualSave: true,
+    });
+  },
+
+  setSourceAvailability: (sourceAvailability) => set({ sourceAvailability }),
+  clearManualSaveRequirement: () => set({ requiresManualSave: false }),
 
   setIngestionResults: (paths, patterns) => {
     set({
@@ -794,13 +875,14 @@ export const useImportStore = create<ImportState>((set, get) => ({
     const maxStep = getMaxRestorableImportStep(partialState);
 
     set({
+      ...createInitialImportState(),
       ...partialState,
       activeStep: Math.min(requestedStep, maxStep),
     });
   },
 
   resetImport: () => {
-    set({ ...INITIAL_STATE });
+    set(createInitialImportState());
   },
 
   // ---------------------------------------------------------------------------

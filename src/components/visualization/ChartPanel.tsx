@@ -7,6 +7,7 @@ import { ResponsiveSwarmPlotCanvas } from "@nivo/swarmplot";
 
 import { useVisualizationStore, type ChartPoint } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 import { transformToChartData, translateColumnName } from "../../lib/tsvUtils";
 import { OKABE_ITO } from "../../lib/okabeIto";
 import { buildNivoTheme } from "../../lib/nivoTheme";
@@ -111,6 +112,8 @@ export default function ChartPanel() {
   const columnTypesSerialized = JSON.stringify(columnTypes);
 
   useEffect(() => {
+    const lease = captureProjectLease();
+    let active = true;
     async function loadData() {
       if (!projectRoot || !xCol || !yCol) return;
       const columnsToFetch = [xCol, yCol];
@@ -121,6 +124,7 @@ export default function ChartPanel() {
           projectRoot,
           columnNames: columnsToFetch,
         });
+        if (!active || (lease && !isCurrentProjectLease(lease))) return;
         const { points, excluded } = transformToChartData(
           rows,
           xCol,
@@ -134,10 +138,14 @@ export default function ChartPanel() {
         setChartData(points);
         setExclusionCount({ plotted: points.length, excluded });
       } catch (err) {
+        if (!active || (lease && !isCurrentProjectLease(lease))) return;
         console.error("[ChartPanel] Failed to load chart data:", err);
       }
     }
-    loadData();
+    void loadData();
+    return () => {
+      active = false;
+    };
     // oxlint-disable-next-line react/exhaustive-deps
   }, [
     xCol,

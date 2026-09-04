@@ -815,6 +815,84 @@ describe("importStore step navigation", () => {
 // mostRecentConfig (ImportSnapshot)
 // ---------------------------------------------------------------------------
 describe("importStore mostRecentConfig", () => {
+  it("updates current and snapshot identity for a compatible source relink", () => {
+    const snapshot = {
+      sourceDataPath: "/old/source",
+      pathPatterns: [],
+      tokenizerConfigs: {},
+      bMatchDirectories: true,
+      modalityAliases: [],
+      sessionAliases: [],
+      runAliases: [],
+      subjectRenames: [],
+      metadataGroups: [],
+      subjectRows: [],
+    };
+    useImportStore.setState({ sourceDataPath: "/old/source", mostRecentConfig: snapshot });
+
+    useImportStore.getState().relinkCompatibleSource("/new/source");
+
+    expect(useImportStore.getState().sourceDataPath).toBe("/new/source");
+    expect(useImportStore.getState().mostRecentConfig?.sourceDataPath).toBe("/new/source");
+    expect(useImportStore.getState().requiresManualSave).toBe(true);
+    expect(useImportStore.getState().sourceAvailability.status).toBe("available");
+  });
+
+  it("selectively resets source-dependent setup for a confirmed incompatible relink", () => {
+    useImportStore.setState({
+      activeStep: 5,
+      sourceDataPath: "/old/source",
+      rawPaths: ["old/scan"],
+      pathPatterns: SAMPLE_PATTERNS,
+      tokenizerConfigs: { saved: [] },
+      modalityAliases: [{ captured: "asl", mapped: "ASL4D" }],
+      metadataGroups: [VALID_METADATA_GROUP],
+      subjectRows: [{ id: "OLD/01", subject: "OLD", session: "01", groupId: "global-defaults" }],
+      importPhase: "completed",
+      importCompleted: true,
+      importLog: ["old log"],
+      failedSubjects: ["OLD"],
+      importRunning: false,
+      importProgress: {
+        OLD: { subject: "OLD", session: "01", status: "completed" },
+      },
+      mostRecentConfig: {
+        sourceDataPath: "/old/source",
+        pathPatterns: SAMPLE_PATTERNS,
+        tokenizerConfigs: { saved: [] },
+        bMatchDirectories: true,
+        modalityAliases: [],
+        sessionAliases: [],
+        runAliases: [],
+        subjectRenames: [],
+        metadataGroups: [],
+        subjectRows: [],
+      },
+      selectedProfileId: "profile-1",
+    });
+
+    useImportStore
+      .getState()
+      .relinkIncompatibleSource("/new/source", ["new/scan"], SAMPLE_PATTERNS);
+
+    expect(useImportStore.getState()).toMatchObject({
+      activeStep: 0,
+      sourceDataPath: "/new/source",
+      rawPaths: ["new/scan"],
+      tokenizerConfigs: {},
+      modalityAliases: [],
+      metadataGroups: [],
+      subjectRows: [],
+      importPhase: "idle",
+      importCompleted: false,
+      importLog: [],
+      failedSubjects: [],
+      importProgress: {},
+      mostRecentConfig: null,
+      selectedProfileId: "profile-1",
+      requiresManualSave: true,
+    });
+  });
   it("starts as null", () => {
     expect(useImportStore.getState().mostRecentConfig).toBeNull();
   });

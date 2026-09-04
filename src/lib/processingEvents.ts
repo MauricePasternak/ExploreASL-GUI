@@ -15,6 +15,7 @@ import { aslRunsEqual, normalizeAslRunId } from "./aslRun";
 import { useProcessingStore, clearProcessingListeners } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { generateSubjectRegexp } from "./subjectMatching";
+import { captureProjectLease, isCurrentProjectLease } from "./projectLifecycle";
 
 // =============================================================================
 // Event Payload Types (matching Rust event shapes)
@@ -71,10 +72,13 @@ export function mapModuleName(rustName: string): (typeof PROCESSING_MODULES)[num
  * Returns a cleanup function that removes every listener.
  */
 export async function setupProcessingListeners(): Promise<() => void> {
+  const lease = captureProjectLease();
+  const isCurrent = () => !lease || isCurrentProjectLease(lease);
   const { updateSubjectStatus, removeWorkerPid, setPhase } = useProcessingStore.getState();
 
   // 1. StatusFileCreated
   const unlistenStatus = await listen<StatusFileCreatedPayload>("StatusFileCreated", (event) => {
+    if (!isCurrent()) return;
     const { subjectSession, stepCode, run } = event.payload;
     console.log(
       `[FRONTEND_WATCHER] StatusFileCreated: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} stepCode=${stepCode} run=${run ?? "None"}`,
@@ -118,6 +122,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
 
   // 2. LockCreated
   const unlistenLock = await listen<LockCreatedPayload>("LockCreated", (event) => {
+    if (!isCurrent()) return;
     const { subjectSession, run } = event.payload;
     console.log(
       `[FRONTEND_WATCHER] LockCreated: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} run=${run ?? "None"}`,
@@ -152,6 +157,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
 
   // 2b. LockRemoved
   const unlistenLockRemoved = await listen<LockRemovedPayload>("LockRemoved", (event) => {
+    if (!isCurrent()) return;
     const { subjectSession, run } = event.payload;
     console.log(
       `[FRONTEND_WATCHER] LockRemoved: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} run=${run ?? "None"}`,
@@ -179,6 +185,7 @@ export async function setupProcessingListeners(): Promise<() => void> {
 
   // 3. WorkerExited
   const unlistenWorker = await listen<WorkerExitedPayload>("WorkerExited", async (event) => {
+    if (!isCurrent()) return;
     const { pid } = event.payload;
     console.log(`[FRONTEND_WATCHER] WorkerExited: pid=${pid} exitCode=${event.payload.exitCode}`);
     removeWorkerPid(pid);
@@ -194,8 +201,11 @@ export async function setupProcessingListeners(): Promise<() => void> {
 
     try {
       await stopWatcher();
+      if (!isCurrent()) return;
       await clearStaleLocks(projectRoot);
+      if (!isCurrent()) return;
       const finalStatuses = await loadLockStatus(projectRoot);
+      if (!isCurrent()) return;
       useProcessingStore.setState({ subjectStatuses: finalStatuses });
 
       const allComplete =
@@ -210,17 +220,20 @@ export async function setupProcessingListeners(): Promise<() => void> {
             const mtime = await invoke<number | null>("read_population_ready_mtime", {
               projectRoot,
             });
+            if (!isCurrent()) return;
             useProjectStore.getState().setLastPopulationRunMtime(mtime);
           } catch (err) {
+            if (!isCurrent()) return;
             console.warn("[manifest] mtime read failed", err);
             useProjectStore.getState().setLastPopulationRunMtime(null);
           }
         }
       }
     } catch {
+      if (!isCurrent()) return;
       setPhase("failed");
     } finally {
-      clearProcessingListeners();
+      if (isCurrent()) clearProcessingListeners();
     }
   });
 

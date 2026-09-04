@@ -7,6 +7,7 @@ import type {
 } from "../schemas/importSchemas";
 import { buildStagingMapping, pathMatchesPattern } from "./tokenizerUtils";
 import { getRelativePath } from "./pathUtils";
+import { isAbsolutePath, normalizeRawPath, resolveRawPath } from "./projectPaths";
 
 export function buildAllStagingMappings(
   rawPaths: string[],
@@ -48,7 +49,12 @@ export function buildAllStagingMappings(
       sessionRenamesMap,
       aliasMap,
       tokenSubDelimiters,
-    );
+    ).map((entry) => ({
+      ...entry,
+      sourcePath: isAbsolutePath(entry.sourcePath)
+        ? entry.sourcePath
+        : resolveRawPath(rootPath, normalizeRawPath(entry.sourcePath)),
+    }));
 
     results.push({
       patternSignature: pattern.signature,

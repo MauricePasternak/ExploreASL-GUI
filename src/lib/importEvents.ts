@@ -15,6 +15,13 @@ import type { StagingEntry } from "../schemas/importSchemas";
 import type { ExecutionProfile } from "../schemas/executionProfile";
 import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
+import {
+  captureProjectLease,
+  isCurrentProjectLease,
+  isProjectWorkAccepted,
+  registerProjectTask,
+  type ProjectLease,
+} from "./projectLifecycle";
 
 declare global {
   interface Window {
@@ -116,7 +123,9 @@ async function runPostProcessing(
   projectRoot: string,
   allSubjects: string[],
   isExitError = false,
+  lease: ProjectLease | null = captureProjectLease(),
 ): Promise<void> {
+  if (lease && !isCurrentProjectLease(lease)) return;
   const { failedSubjects, completeImport, failImport } = useImportStore.getState();
   const debugMode = useGlobalStore.getState().settings.import.preserveStagingDir;
 
@@ -127,6 +136,7 @@ async function runPostProcessing(
         stagingRoot,
         subjects: failedSubjects,
       });
+      if (lease && !isCurrentProjectLease(lease)) return;
     } catch {
       // Best-effort — don't block the rest of post-processing
     }
@@ -146,6 +156,7 @@ async function runPostProcessing(
         debugMode,
         cleanupStaging: allSucceeded,
       });
+      if (lease && !isCurrentProjectLease(lease)) return;
     } catch {
       if (allSucceeded) {
         failImport();
@@ -175,6 +186,8 @@ export async function setupImportListeners(
   projectRoot: string,
   allSubjects: string[],
 ): Promise<() => void> {
+  const lease = captureProjectLease();
+  const isCurrent = () => !lease || isCurrentProjectLease(lease);
   if (typeof window !== "undefined" && window.__IMPORT_CLEANUP__) {
     try {
       window.__IMPORT_CLEANUP__();
@@ -192,12 +205,25 @@ export async function setupImportListeners(
     markSubjectFailed,
   } = useImportStore.getState();
 
-  const logBatcher = createLogBatcher(addLogLines);
+  const logBatcher = createLogBatcher((lines) => {
+    if (isCurrent()) addLogLines(lines);
+  });
+  const unlisteners: Array<() => void> = [];
+  const acceptListener = (unlisten: () => void) => {
+    if (!isCurrent()) {
+      unlisten();
+      for (const prior of unlisteners) prior();
+      return false;
+    }
+    unlisteners.push(unlisten);
+    return true;
+  };
 
   // 1. import-structured-event
   const unlistenStructured = await listen<ImportStructuredEventPayload>(
     "import-structured-event",
     (event) => {
+      if (!isCurrent()) return;
       const payload = event.payload;
 
       switch (payload.type) {
@@ -224,7 +250,19 @@ export async function setupImportListeners(
           break;
 
         case "import_complete":
-          void runPostProcessing(stagingRoot, projectRoot, allSubjects);
+          {
+            if (lease && !isProjectWorkAccepted()) break;
+            const task = runPostProcessing(stagingRoot, projectRoot, allSubjects, false, lease);
+            if (lease) {
+              try {
+                void registerProjectTask(task);
+              } catch {
+                // Transition admission closed before post-processing started.
+              }
+            } else {
+              void task;
+            }
+          }
           break;
 
         case "dcm2nii_status":
@@ -233,19 +271,25 @@ export async function setupImportListeners(
       }
     },
   );
+  if (!acceptListener(unlistenStructured)) return () => {};
 
   // 2. import-raw-event (batched)
   const unlistenRaw = await listen<ImportRawEventPayload>("import-raw-event", (event) => {
+    if (!isCurrent()) return;
     logBatcher.push(event.payload.line);
   });
+  if (!acceptListener(unlistenRaw)) return () => {};
 
   // 3. ImportPrepareComplete
   const unlistenPrepare = await listen<Record<string, never>>("ImportPrepareComplete", () => {
+    if (!isCurrent()) return;
     setImportPhase("running");
   });
+  if (!acceptListener(unlistenPrepare)) return () => {};
 
   // 4. MatlabExitError
   const unlistenExitError = await listen<MatlabExitErrorPayload>("MatlabExitError", (_event) => {
+    if (!isCurrent()) return;
     // Mark all currently-running or pending subjects as failed
     const { importProgress } = useImportStore.getState();
     for (const [subject, progress] of Object.entries(importProgress)) {
@@ -254,8 +298,19 @@ export async function setupImportListeners(
       }
     }
 
-    void runPostProcessing(stagingRoot, projectRoot, allSubjects, true);
+    if (lease && !isProjectWorkAccepted()) return;
+    const task = runPostProcessing(stagingRoot, projectRoot, allSubjects, true, lease);
+    if (lease) {
+      try {
+        void registerProjectTask(task);
+      } catch {
+        // Transition admission closed before post-processing started.
+      }
+    } else {
+      void task;
+    }
   });
+  if (!acceptListener(unlistenExitError)) return () => {};
 
   // Return cleanup function
   const cleanup = () => {

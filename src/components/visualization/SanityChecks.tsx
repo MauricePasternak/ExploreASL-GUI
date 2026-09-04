@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { useProjectStore } from "../../stores/projectStore";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 
 interface SanityChecksProps {
   qcbfRelativePath: string;
@@ -45,6 +46,7 @@ export default function SanityChecks({
       return;
     }
     let cancelled = false;
+    const lease = captureProjectLease();
     async function runChecks() {
       if (!project) return;
       try {
@@ -57,12 +59,12 @@ export default function SanityChecks({
           sheetName,
           delimiter: delimiter === "auto" ? null : delimiter,
         });
-        if (!cancelled) {
+        if (!cancelled && (!lease || isCurrentProjectLease(lease))) {
           setResult(res);
           setError(null);
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && (!lease || isCurrentProjectLease(lease))) {
           setError(err instanceof Error ? err.message : "Sanity check failed");
           setResult(null);
         }

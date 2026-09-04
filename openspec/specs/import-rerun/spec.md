@@ -6,14 +6,14 @@ Define import configuration snapshots and safe selective import re-runs.
 
 ### Requirement: Import snapshot persistence
 
-The system SHALL capture an `ImportSnapshot` at `startImport()` time and persist it in the project file at `uiState.import.mostRecentConfig`. The snapshot SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, and `subjectRows` (including `groupId` assignments). The snapshot SHALL be `null` before the first import run.
+The system SHALL capture an `ImportSnapshot` at `startImport()` time and persist it in the project file at `uiState.import.mostRecentConfig`. The snapshot SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, and `subjectRows` (including `groupId` assignments). The snapshot SHALL be `null` before the first import run. Its source location SHALL use the same project-relative-internal or absolute-external representation as current import state so moving a project does not change the logical source.
 
-When persisted to `.easl`, the snapshot SHALL be serialized as a gzip-compressed, base64-encoded string (algorithm: gzip, level 9). The in-memory store and staleness computation SHALL operate on a fully validated `ImportSnapshot` object. Schema v1 parsing SHALL decompress and validate a persisted string before exposing the snapshot. Migration of a legacy `.easl` file SHALL preserve either a valid compressed snapshot or a valid full-object snapshot, and canonical schema v1 serialization SHALL emit the compressed form. An invalid object, base64 value, gzip payload, JSON payload, or snapshot shape SHALL produce an actionable project validation or migration error instead of silently replacing the snapshot with `null`.
+When persisted to `.easl`, the snapshot SHALL be serialized as a gzip-compressed, base64-encoded string (algorithm: gzip, level 9). The in-memory store and staleness computation SHALL operate on a fully validated `ImportSnapshot` object. Schema v1 parsing SHALL decompress and validate a persisted string before exposing the snapshot. Migration of a legacy `.easl` file SHALL preserve either a valid compressed snapshot or a valid full-object snapshot, and canonical schema v1 serialization SHALL emit the compressed form. An invalid object, base64 value, gzip payload, JSON payload, snapshot shape, or escaping project-relative path SHALL produce an actionable project validation or migration error instead of silently replacing the snapshot with `null`.
 
 #### Scenario: First import creates snapshot
 
 - **WHEN** the user clicks "Start Import" for the first time
-- **THEN** the current import configuration SHALL be captured as an `ImportSnapshot` and stored at `uiState.import.mostRecentConfig`
+- **THEN** the current location-independent import configuration SHALL be captured as an `ImportSnapshot` and stored at `uiState.import.mostRecentConfig`
 
 #### Scenario: Re-run overwrites snapshot
 
@@ -24,6 +24,11 @@ When persisted to `.easl`, the snapshot SHALL be serialized as a gzip-compressed
 
 - **WHEN** a schema v1 project containing a valid compressed snapshot is closed and reopened
 - **THEN** the validated full snapshot SHALL be restored to runtime state
+
+#### Scenario: Snapshot survives project relocation
+
+- **WHEN** a project and its internal DICOM source move together and the project reopens from the new location
+- **THEN** current configuration and snapshot SHALL resolve to the same logical source without making subjects stale solely because the root changed
 
 #### Scenario: Legacy object snapshot is migrated
 
@@ -37,38 +42,48 @@ When persisted to `.easl`, the snapshot SHALL be serialized as a gzip-compressed
 
 ### Requirement: Two-tier staleness detection
 
-On entering import step 5, the system SHALL compare the current import configuration against `uiState.import.mostRecentConfig` to determine per-subject staleness.
+On entering import step 5, the system SHALL compare the current import configuration against `uiState.import.mostRecentConfig` to determine per-subject staleness. Source locations SHALL be compared by normalized logical identity rather than resolved absolute runtime path.
 
-**Structural staleness**: If any of the following fields differ between current config and snapshot, ALL subjects SHALL be marked stale: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`.
+**Structural staleness**: If any of the following fields differ between current config and snapshot, ALL subjects SHALL be marked stale: logical `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`.
 
 **Metadata staleness**: If only `metadataGroups` or `subjectRows` differ, the system SHALL identify which metadata groups changed and mark only subjects assigned to those groups as stale. A metadata group is considered changed if its `bidsParams` object differs from the snapshot. Subject row changes (group assignment changes) SHALL also mark affected subjects stale.
 
-**No staleness**: If the snapshot matches the current configuration exactly, no subjects SHALL be marked stale.
+**No staleness**: If the normalized snapshot matches the current configuration exactly, no subjects SHALL be marked stale. A compatible relink SHALL update current and snapshot source locations together and SHALL NOT make subjects stale solely because the path changed. A confirmed incompatible relink SHALL make affected subjects stale through its source-dependent configuration reset.
 
 #### Scenario: Structural change stales all subjects
 
 - **WHEN** the user changes a tokenizer assignment after import completion and navigates to step 5
-- **THEN** all subjects are marked stale regardless of their metadata group assignment
+- **THEN** all subjects SHALL be marked stale regardless of their metadata group assignment
 
 #### Scenario: Metadata change stales only affected subjects
 
 - **WHEN** the user changes `PostLabelingDelay` in metadata group "Group A" after import completion and navigates to step 5
-- **THEN** only subjects assigned to "Group A" are marked stale; subjects in other groups remain fresh
+- **THEN** only subjects assigned to "Group A" SHALL be marked stale and subjects in other groups SHALL remain fresh
 
 #### Scenario: Subject moved between groups
 
 - **WHEN** the user reassigns a subject from "Group A" to "Group B" after import completion and navigates to step 5
-- **THEN** the moved subject is marked stale (its group assignment changed), even if both groups' params are unchanged
+- **THEN** the moved subject SHALL be marked stale even if both groups' parameters are unchanged
+
+#### Scenario: Project root changes only
+
+- **WHEN** the project root changes but the internal source and import configuration have the same logical identity
+- **THEN** no subject SHALL become stale solely because of relocation
+
+#### Scenario: Compatible external source relink
+
+- **WHEN** a missing external source is relinked to a structurally matching replacement
+- **THEN** no subject SHALL become stale solely because the absolute source path changed
 
 #### Scenario: No config changes
 
-- **WHEN** the user navigates to step 5 without changing any import configuration since the last run
-- **THEN** no subjects are marked stale
+- **WHEN** the user navigates to step 5 without changing any logical import configuration since the last run
+- **THEN** no subjects SHALL be marked stale
 
 #### Scenario: No prior snapshot
 
 - **WHEN** the user navigates to step 5 and `mostRecentConfig` is `null`
-- **THEN** no staleness comparison is performed; all subjects show their reconstructed status without stale overlay
+- **THEN** no staleness comparison SHALL be performed and subjects SHALL show reconstructed status without stale overlay
 
 ### Requirement: Import progress reconstruction from lock files
 

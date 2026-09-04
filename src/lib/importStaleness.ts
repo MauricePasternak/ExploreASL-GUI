@@ -1,5 +1,6 @@
 import type { ImportSnapshot } from "../schemas/importSchemas";
 import type { ImportState } from "../stores/importStore";
+import { logicalSourceIdentity } from "./projectPaths";
 
 type StructuralKey = keyof Pick<
   ImportSnapshot,
@@ -37,9 +38,15 @@ export function computeStaleness(
     subjects.add(row.subject);
   }
 
-  const hasStructuralChange = STRUCTURAL_KEYS.some(
-    (key) => JSON.stringify(currentState[key]) !== JSON.stringify(snapshot[key]),
-  );
+  const hasStructuralChange = STRUCTURAL_KEYS.some((key) => {
+    if (key === "sourceDataPath") {
+      return (
+        logicalSourceIdentity(currentState.sourceDataPath) !==
+        logicalSourceIdentity(snapshot.sourceDataPath)
+      );
+    }
+    return JSON.stringify(currentState[key]) !== JSON.stringify(snapshot[key]);
+  });
 
   if (hasStructuralChange) {
     const result: Record<string, boolean> = {};

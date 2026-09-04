@@ -129,4 +129,94 @@ describe("visualizationStore", () => {
     expect(state.nvRadiological).toBe(true);
     expect(state.nvBackColor).toBe("white");
   });
+
+  it("preserves all setup and changes only the external path for a matching relink", () => {
+    useVisualizationStore.setState({
+      qcbfSource: { relativePath: "qcbf.tsv", fileHash: "qcbf" },
+      joinConfig: {
+        externalSource: { absolutePath: "/old.csv", fileHash: "same", sheetName: null },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+        dropRightOn: true,
+        naTokens: [""],
+        delimiter: ",",
+      },
+      columnTypes: { Diagnosis: "nominal" },
+      identifiers: { subject: "subject", session: "session", run: "run" },
+      levelOrderings: { Diagnosis: ["A", "B"] },
+      axisAssignment: { x: "Diagnosis", y: "qCBF", colorBy: null },
+      domainFilters: { xMin: 1, xMax: 2, yMin: 3, yMax: 4 },
+      stage: "visualize",
+      chartData: [
+        { id: "p", x: 1, y: 2, participantId: "p", subject: "p", session: "01", run: "01" },
+      ],
+    });
+
+    useVisualizationStore.getState().relinkMatchingExternalSource({
+      absolutePath: "/new.csv",
+      fileHash: "same",
+      sheetName: null,
+    });
+
+    expect(useVisualizationStore.getState()).toMatchObject({
+      qcbfSource: { relativePath: "qcbf.tsv", fileHash: "qcbf" },
+      joinConfig: {
+        externalSource: { absolutePath: "/new.csv", fileHash: "same" },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+      },
+      columnTypes: { Diagnosis: "nominal" },
+      identifiers: { subject: "subject", session: "session", run: "run" },
+      levelOrderings: { Diagnosis: ["A", "B"] },
+      axisAssignment: { x: "Diagnosis", y: "qCBF", colorBy: null },
+      domainFilters: { xMin: 1, xMax: 2, yMin: 3, yMax: 4 },
+      stage: "visualize",
+      requiresManualSave: true,
+    });
+  });
+
+  it("resets only external-dependent setup for a confirmed changed relink", () => {
+    useVisualizationStore.setState({
+      qcbfSource: { relativePath: "qcbf.tsv", fileHash: "qcbf" },
+      joinConfig: {
+        externalSource: { absolutePath: "/old.csv", fileHash: "old", sheetName: null },
+        keys: [{ left: "participant_id", right: "SubjectID" }],
+        dropRightOn: false,
+        naTokens: ["NA"],
+        delimiter: ";",
+      },
+      columnTypes: { Diagnosis: "nominal" },
+      identifiers: { subject: "subject", session: "session", run: "run" },
+      levelOrderings: { Diagnosis: ["A", "B"] },
+      axisAssignment: { x: "Diagnosis", y: "qCBF", colorBy: null },
+      domainFilters: { xMin: 1, xMax: 2, yMin: 3, yMax: 4 },
+      stage: "visualize",
+      chartData: [
+        { id: "p", x: 1, y: 2, participantId: "p", subject: "p", session: "01", run: "01" },
+      ],
+    });
+
+    useVisualizationStore.getState().relinkChangedExternalSource({
+      absolutePath: "/changed.csv",
+      fileHash: "changed",
+      sheetName: "Data",
+    });
+
+    expect(useVisualizationStore.getState()).toMatchObject({
+      qcbfSource: { relativePath: "qcbf.tsv", fileHash: "qcbf" },
+      joinConfig: {
+        externalSource: { absolutePath: "/changed.csv", fileHash: "changed", sheetName: "Data" },
+        keys: [],
+        dropRightOn: false,
+        naTokens: ["NA"],
+        delimiter: ";",
+      },
+      columnTypes: {},
+      identifiers: null,
+      levelOrderings: {},
+      axisAssignment: { x: null, y: null, colorBy: null },
+      domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
+      stage: "selectData",
+      chartData: [],
+      requiresManualSave: true,
+    });
+  });
 });

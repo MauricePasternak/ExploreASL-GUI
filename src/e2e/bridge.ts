@@ -193,7 +193,7 @@ async function resetStores() {
   await useProcessingStore.getState().resetProcessing();
   useVisualizationStore.getState().reset();
   useManifestStore.getState().resetManifest();
-  useProjectStore.getState().closeProject();
+  await useProjectStore.getState().closeProject();
   useGlobalStore.setState({
     settings: DEFAULT_SETTINGS,
     loaded: true,

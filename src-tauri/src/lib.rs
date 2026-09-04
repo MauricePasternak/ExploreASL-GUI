@@ -9,6 +9,7 @@ pub mod manifest;
 pub mod matlab;
 mod niivue_protocol;
 pub mod processing;
+mod project_runtime;
 mod project_writer;
 pub mod qc;
 mod tracing;
@@ -21,7 +22,8 @@ mod project_writer_tests;
 use apptainer::which_apptainer;
 use bids_commands::{check_bids_dataset, ensure_rawdata_dir, scan_bids_sidecars};
 use commands::{
-    create_symlink_tree, get_available_memory_mb, get_cpu_cores, is_writable, walk_directory,
+    create_symlink_tree, get_available_memory_mb, get_cpu_cores, inspect_source_path, is_writable,
+    walk_directory,
 };
 use execution_profile::{validate_all_execution_profiles, validate_execution_profile};
 use import::{
@@ -37,6 +39,7 @@ use processing::{
     list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,
     run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir,
 };
+use project_runtime::shutdown_project_runtime;
 use project_writer::{atomic_write_project, cleanup_project_temps};
 use qc::{get_all_subjects_qc, get_subject_session_qc};
 use tauri::Manager;
@@ -88,6 +91,7 @@ pub fn run() {
             create_symlink_tree,
             get_cpu_cores,
             get_available_memory_mb,
+            inspect_source_path,
             run_import_pipeline,
             stop_import,
             stop_active_import,
@@ -126,6 +130,7 @@ pub fn run() {
             ensure_rawdata_dir,
             atomic_write_project,
             cleanup_project_temps,
+            shutdown_project_runtime,
         ])
         .register_uri_scheme_protocol("niivue", niivue_protocol::handle_niivue_protocol)
         .setup(|app| {

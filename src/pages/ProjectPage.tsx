@@ -7,8 +7,6 @@ import DataParEditor from "../components/parameters/DataParEditor";
 import { resolveRestoredPhase, tryRestoreProjectSession } from "../lib/restoreProjectSession";
 import { syncSessionCheckpointFromProject } from "../lib/sessionCheckpoint";
 import { canAccessPhase, PROJECT_PHASES, type ProjectPhase } from "../schemas/project";
-import { useDataParStore } from "../stores/dataParStore";
-import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useProcessingStore } from "../stores/processingStore";
 import ImportPage from "./ImportPage";
@@ -26,71 +24,11 @@ export default function ProjectPage() {
   const project = useProjectStore((state) => state.project);
   const setPhase = useProjectStore((state) => state.setPhase);
   const saveProject = useProjectStore((state) => state.saveProject);
-  const loadPersistedState = useImportStore((state) => state.loadPersistedState);
   const processingPhase = useProcessingStore((state) => state.processingPhase);
   const isProcessingActive = processingPhase === "running" || processingPhase === "preparing";
   const [restoring, setRestoring] = useState(() => !useProjectStore.getState().project);
   const restoreInFlight = useRef(false);
   const hadProjectRef = useRef(Boolean(useProjectStore.getState().project));
-  const hydratedProjectId = useRef<string | null>(null);
-  const hydratedDataParProjectId = useRef<string | null>(null);
-
-  // Hydrate dataPar store once per opened project
-  useEffect(() => {
-    if (!project) {
-      hydratedDataParProjectId.current = null;
-      useDataParStore.getState().resetDataPar();
-      return;
-    }
-
-    if (hydratedDataParProjectId.current === project.projectMeta.id) {
-      return;
-    }
-
-    hydratedDataParProjectId.current = project.projectMeta.id;
-
-    if (project.dataPar) {
-      useDataParStore.getState().loadDataPar(project.dataPar);
-    }
-    if (project.uiState?.datapar?.advancedVisibility) {
-      useDataParStore.getState().setAdvancedVisibility(project.uiState.datapar.advancedVisibility);
-    }
-  }, [project]);
-
-  // Hydrate import store once per opened project (not on every mappingState autosave)
-  useEffect(() => {
-    if (!project) {
-      hydratedProjectId.current = null;
-      return;
-    }
-
-    if (hydratedProjectId.current === project.projectMeta.id) {
-      return;
-    }
-
-    hydratedProjectId.current = project.projectMeta.id;
-    const mappingState = project.mappingState;
-    const hasPersistedImportState =
-      Object.keys(mappingState).length > 0 ||
-      project.uiState?.import?.activeStep !== undefined ||
-      project.uiState?.import?.currentPhase !== undefined ||
-      project.uiState?.import?.completed !== undefined ||
-      project.uiState?.import?.selectedProfileId !== undefined;
-
-    if (!hasPersistedImportState) {
-      return;
-    }
-
-    const persistedState = {
-      ...mappingState,
-      activeStep: project.uiState?.import?.activeStep,
-      importPhase: project.uiState?.import?.currentPhase,
-      importCompleted: project.uiState?.import?.completed,
-      mostRecentConfig: project.uiState?.import?.mostRecentConfig,
-      selectedProfileId: project.uiState?.import?.selectedProfileId,
-    };
-    loadPersistedState(persistedState as Record<string, unknown>);
-  }, [project?.projectMeta.id, loadPersistedState, project]);
 
   // After reload, rehydrate project from session checkpoint or recent projects
   useEffect(() => {

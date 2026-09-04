@@ -14,6 +14,7 @@ import { useDataParStore } from "./dataParStore";
 import { aslRunsEqual, normalizeAslRunId } from "../lib/aslRun";
 import { generateSubjectRegexp } from "../lib/subjectMatching";
 import { assembleDataPar } from "../lib/assembleDataPar";
+import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 
 // =============================================================================
 // State Interface
@@ -38,6 +39,10 @@ export interface ProcessingState {
   setAvailableSubjects: (subjects: SubjectInfo[]) => void;
   scanAvailableSubjects: () => Promise<void>;
   loadLockFileStatus: () => Promise<void>;
+  hydrateProcessing: (persisted?: {
+    config?: ProcessConfig;
+    currentPhase?: ProcessingPhase;
+  }) => void;
   resetProcessing: () => Promise<void>;
   clearPendingRawdataWarning: () => void;
   clearProfileError: () => void;
@@ -57,6 +62,15 @@ const INITIAL_STATE = {
   profileError: null as string | null,
   preparingMessage: null as string | null,
 };
+
+export function createInitialProcessingState() {
+  return {
+    ...INITIAL_STATE,
+    availableSubjects: [],
+    subjectStatuses: [],
+    workerPids: [],
+  };
+}
 
 // =============================================================================
 // Cleanup ref
@@ -106,6 +120,8 @@ export const useProcessingStore = create<ProcessingState>()(
     },
 
     startProcessing: async (explicitConfirm = false) => {
+      const lease = captureProjectLease();
+      const isCurrent = () => !lease || isCurrentProjectLease(lease);
       const config = useProcessingStore.getState().config;
       if (!config) throw new Error("No config set");
       if (config.modules.length === 0) throw new Error("No modules selected");
@@ -161,6 +177,7 @@ export const useProcessingStore = create<ProcessingState>()(
           });
         });
       });
+      if (!isCurrent()) return;
 
       try {
         // Kick off version capture in parallel with the rest of prep so a slow
@@ -183,6 +200,7 @@ export const useProcessingStore = create<ProcessingState>()(
                   matlabPath,
                 },
               );
+              if (!isCurrent()) return;
               const gui =
                 import.meta.env.VITE_APP_VERSION ??
                 useProjectStore.getState().project?.version ??
@@ -193,6 +211,7 @@ export const useProcessingStore = create<ProcessingState>()(
                 guiVersion: gui,
               });
             } catch (err) {
+              if (!isCurrent()) return;
               console.warn("[manifest] version capture failed", err);
               useProjectStore.getState().setLastRunProfileId("population", profileId, {
                 exploreASLVersion: "unknown",
@@ -205,6 +224,7 @@ export const useProcessingStore = create<ProcessingState>()(
 
         const { watchLockDir, setupProcessingListeners, runProcessingPipeline } =
           await import("../lib/processingEvents");
+        if (!isCurrent()) return;
 
         const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
         if (!projectRoot) throw new Error("No project loaded");
@@ -219,6 +239,7 @@ export const useProcessingStore = create<ProcessingState>()(
               created: boolean;
               bidsignoreUpdated: boolean;
             }>("ensure_rawdata_dir", { rootPath: projectRoot });
+            if (!isCurrent()) return;
             if (result.warning) {
               set({ pendingRawdataWarning: result.warning, preparingMessage: null });
               // Let version capture finish in the background; do not block the warning modal.
@@ -244,12 +265,18 @@ export const useProcessingStore = create<ProcessingState>()(
           dataPar.enableMetadataGroupingCorrection ?? false,
           dataSource,
         );
+        if (!isCurrent()) return;
 
         set({ preparingMessage: "Configuring file watcher..." });
         await watchLockDir(projectRoot);
+        if (!isCurrent()) return;
 
         set({ preparingMessage: "Setting up event listeners..." });
         const cleanup = await setupProcessingListeners();
+        if (!isCurrent()) {
+          cleanup();
+          return;
+        }
         processingCleanup = cleanup;
 
         const dataParJson = assembleDataPar(dataPar);
@@ -267,9 +294,12 @@ export const useProcessingStore = create<ProcessingState>()(
         set({ preparingMessage: "Starting processing pipeline..." });
         // Join version capture before launching workers so the manifest has versions.
         await versionCapture;
+        if (!isCurrent()) return;
         const pids = await runProcessingPipeline(config, profile, dataParJson);
+        if (!isCurrent()) return;
         set({ workerPids: pids, processingPhase: "running", preparingMessage: null });
       } catch (err) {
+        if (!isCurrent()) return;
         clearProcessingListeners();
         try {
           const { stopWatcher: stopW } = await import("../lib/processingEvents");
@@ -356,20 +386,34 @@ export const useProcessingStore = create<ProcessingState>()(
     },
 
     scanAvailableSubjects: async () => {
+      const lease = captureProjectLease();
       const project = useProjectStore.getState().project;
       const projectRoot = project?.projectMeta.rootPath;
       if (!projectRoot) throw new Error("No project loaded");
       const { loadSubjects } = await import("../lib/processingEvents");
       const subjects = await loadSubjects(projectRoot, project.projectMeta.dataSource);
+      if (lease && !isCurrentProjectLease(lease)) return;
       useProcessingStore.getState().setAvailableSubjects(subjects);
     },
 
     loadLockFileStatus: async () => {
+      const lease = captureProjectLease();
       const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
       if (!projectRoot) throw new Error("No project loaded");
       const { loadLockStatus } = await import("../lib/processingEvents");
       const statuses = await loadLockStatus(projectRoot);
+      if (lease && !isCurrentProjectLease(lease)) return;
       set({ subjectStatuses: statuses });
+    },
+
+    hydrateProcessing: (persisted) => {
+      const phase = persisted?.currentPhase;
+      set({
+        ...createInitialProcessingState(),
+        config: persisted?.config ?? null,
+        processingPhase:
+          phase === "running" || phase === "preparing" ? "failed" : (phase ?? "idle"),
+      });
     },
 
     resetProcessing: async () => {
@@ -382,7 +426,7 @@ export const useProcessingStore = create<ProcessingState>()(
       }
       // A lock watcher can emit while its asynchronous shutdown is pending.
       // Reset after it has stopped so no status survives into the next project.
-      set({ ...INITIAL_STATE });
+      set(createInitialProcessingState());
     },
 
     clearPendingRawdataWarning: () => {

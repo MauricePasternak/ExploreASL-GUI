@@ -17,6 +17,7 @@ pub use logs::{list_module_logs, read_module_logs};
 pub use pipeline::{
     detect_exploreasl_version, kill_pipeline, run_pipeline, stop_running_processing_for_exit,
 };
+pub(crate) use pipeline::{force_kill_process, process_exists, send_termination_signal};
 pub use reports::{list_subject_reports, read_report_image};
 pub use subjects::list_subjects;
 pub use types::*;

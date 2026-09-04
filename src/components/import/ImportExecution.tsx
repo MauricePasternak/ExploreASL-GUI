@@ -14,6 +14,7 @@ import { runImportPipeline, setupImportListeners, stopImportProcess } from "../.
 import { buildAllStagingMappings } from "../../lib/importPreviewUtils";
 import { computeStaleness } from "../../lib/importStaleness";
 import { readImportStatus } from "../../lib/importStatus";
+import { resolveLogicalSource } from "../../lib/projectPaths";
 import { assembleSourcestructure, assembleStudyPar } from "../../lib/tokenizerUtils";
 import { useGlobalStore } from "../../stores/globalStore";
 import { type ImportPhase, useImportStore } from "../../stores/importStore";
@@ -269,6 +270,7 @@ export default function ImportExecution() {
   const resetImportPhase = useImportStore((state) => state.resetImportPhase);
   const addLogLine = useImportStore((state) => state.addLogLine);
   const failImport = useImportStore((state) => state.failImport);
+  const sourceAvailability = useImportStore((state) => state.sourceAvailability);
   const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
   const profileValidationState = useGlobalStore((state) => state.profileValidationState);
   const backLocked = importPhase === "running";
@@ -280,7 +282,8 @@ export default function ImportExecution() {
   const selectedProfileValid =
     selectedId.length > 0 && profileValidationState[selectedId]?.valid === true;
   const noProfiles = executionProfiles.length === 0;
-  const canRun = selectedProfileValid && hasSubjects;
+  const sourceAvailable = ["available", "unconfigured"].includes(sourceAvailability.status);
+  const canRun = selectedProfileValid && hasSubjects && sourceAvailable;
 
   const [prevImportProgress, setPrevImportProgress] = useState(importProgress);
   const [prevImportPhase, setPrevImportPhase] = useState(importPhase);
@@ -445,9 +448,10 @@ export default function ImportExecution() {
         const subjectRenamesMap = Object.fromEntries(
           store.subjectRenames.map((r) => [r.original, r.target]),
         );
+        const resolvedSource = resolveLogicalSource(projectRoot, store.sourceDataPath, "dicom");
         const mappings = buildAllStagingMappings(
           store.rawPaths,
-          store.sourceDataPath,
+          resolvedSource,
           store.pathPatterns,
           store.tokenizerConfigs,
           subjectRenamesMap,
