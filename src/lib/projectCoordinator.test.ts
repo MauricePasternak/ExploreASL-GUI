@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { notifications } from "@mantine/notifications";
 
 import { DEFAULT_PROJECT_FILE } from "../schemas/project";
 import { useImportStore } from "../stores/importStore";
@@ -16,6 +17,7 @@ afterEach(() => {
   resetProjectLifecycleForTests();
   useImportStore.getState().resetImport();
   useProjectStore.setState({ project: null, loaded: false, isDirty: false });
+  vi.mocked(notifications.show).mockClear();
 });
 
 describe("project coordinator", () => {
@@ -142,6 +144,30 @@ describe("project coordinator", () => {
     ).rejects.toThrow(/native denied/);
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("a");
     expect(isProjectWorkAccepted()).toBe(false);
+  });
+
+  it("reports relocation recovery before hydrating the candidate project", async () => {
+    const order: string[] = [];
+    await transitionProjectRuntime(DEFAULT_PROJECT_FILE("b", "B", "/b"), false, {
+      setActiveProject: async () => {
+        order.push("native");
+        return {
+          preservedSubjects: ["A"],
+          restoredSubjects: ["B"],
+          cleanedSubjects: ["A", "B"],
+          cleanupErrors: [],
+        };
+      },
+    });
+
+    expect(order).toEqual(["native"]);
+    expect(vi.mocked(notifications.show)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Import relocation recovery completed",
+        message: "Preserved: A. Restored: B",
+      }),
+    );
+    expect(useProjectStore.getState().project?.projectMeta.id).toBe("b");
   });
 
   it("clears native root before resetting project stores", async () => {

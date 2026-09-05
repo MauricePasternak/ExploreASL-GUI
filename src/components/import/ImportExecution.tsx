@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Virtuoso } from "react-virtuoso";
+import { invoke } from "@tauri-apps/api/core";
 
 import {
   ImportPipelineError,
@@ -17,7 +18,7 @@ import {
   stopActiveImport,
   stopImportProcess,
 } from "../../lib/importEvents";
-import { buildImportPlan } from "../../lib/importPlan";
+import { buildImportPlan, selectImportEntries } from "../../lib/importPlan";
 import { computeStaleness } from "../../lib/importStaleness";
 import { readImportStatus } from "../../lib/importStatus";
 import {
@@ -260,39 +261,62 @@ function ConfirmReimportDialog({
   opened,
   onClose,
   onConfirm,
-  subjects,
+  plan,
 }: {
   opened: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  subjects: string[];
+  plan: RelocationPlan | null;
 }) {
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Re-import completed subject?"
+      title="Replace existing imported data?"
       data-testid="confirm-reimport-dialog"
     >
       <Text size="sm">
-        The following subjects appear to have completed successfully. Re-importing will overwrite
-        their existing output.
+        Re-importing replaces each complete selected subject. Older sessions and files absent from
+        the new import will be removed; this does not merge existing subject output.
       </Text>
-      <ul>
-        {subjects.map((subject) => (
-          <li key={subject}>{subject}</li>
+      <Stack gap="xs" mt="sm" data-testid="relocation-inventory">
+        {plan?.subjects.map((subject) => (
+          <details key={subject.subject} data-testid={`relocation-inventory-${subject.subject}`}>
+            <summary>
+              {subject.subject}: {subject.fileCount} files, {subject.byteTotal} bytes
+              {subject.sessions.length > 0 ? `, ${subject.sessions.join(", ")}` : ""}
+            </summary>
+            <ul>
+              {subject.entries.map((entry) => (
+                <li key={entry.path}>{entry.path}</li>
+              ))}
+            </ul>
+          </details>
         ))}
-      </ul>
+      </Stack>
       <Group justify="flex-end" mt="md">
         <Button variant="default" onClick={onClose} data-testid="confirm-reimport-cancel">
           Cancel
         </Button>
         <Button color="orange" onClick={onConfirm} data-testid="confirm-reimport-confirm">
-          Re-import anyway
+          Replace and import
         </Button>
       </Group>
     </Modal>
   );
+}
+
+interface RelocationPlan {
+  planId: string;
+  subjects: Array<{
+    subject: string;
+    entries: Array<{ path: string; kind: "file" | "directory"; bytes: number }>;
+    fileCount: number;
+    byteTotal: number;
+    sessions: string[];
+    fingerprint: string;
+  }>;
+  fingerprint: string;
 }
 
 function currentImportPlan(projectRoot: string) {
@@ -372,7 +396,12 @@ export default function ImportExecution() {
     }
     return [];
   });
-  const [confirmSubjects, setConfirmSubjects] = useState<string[] | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    runSubjects: string[];
+    plan: RelocationPlan;
+  } | null>(null);
+  const [planningError, setPlanningError] = useState<string | null>(null);
+  const [planning, setPlanning] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
 
@@ -475,7 +504,7 @@ export default function ImportExecution() {
   }, [importPhase]);
 
   const doRunImport = useCallback(
-    (subjectsToImport: string[]) => {
+    (subjectsToImport: string[], relocationPlanId: string) => {
       const lease = captureProjectLease();
       const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
       const plan = currentImportPlan(projectRoot);
@@ -485,6 +514,7 @@ export default function ImportExecution() {
         ? useGlobalStore.getState().getProfileById(store.selectedProfileId)
         : undefined;
       const subjectsToImportKeys = new Set(subjectsToImport.map(portableKey));
+      const stagingEntries = selectImportEntries(plan.entries, subjectsToImport);
       const succeededForRetry = Object.values(store.importProgress)
         .filter(
           (progress) =>
@@ -515,7 +545,7 @@ export default function ImportExecution() {
       }
       pidRef.current = null;
       runRequestIdRef.current = runRequestId;
-      startImport();
+      startImport(subjectsToImport);
 
       const operation = (async () => {
         cleanupRef.current?.();
@@ -547,12 +577,13 @@ export default function ImportExecution() {
 
           const pid = await runImportPipeline({
             runRequestId,
-            stagingEntries: plan.entries,
+            stagingEntries,
             sourcestructureJson: plan.sourcestructureJson,
             studyparJson: plan.studyparJson,
             executionProfile,
             subjectList: subjectsToImport,
             subjectsToPreserve: succeededForRetry.length > 0 ? succeededForRetry : undefined,
+            relocationPlanId,
           });
           if (isCurrentRun() && useImportStore.getState().importPhase === "running") {
             pidRef.current = { runRequestId, pid };
@@ -580,35 +611,66 @@ export default function ImportExecution() {
     [resetImportPhase, startImport, addLogLine, failImport, setStagingPreflightIssues],
   );
 
-  const handleStartImport = useCallback(() => {
+  const handleStartImport = useCallback(async () => {
     const progress = useImportStore.getState().importProgress;
     const subjectsToImport =
       selectedSubjects.length > 0
-        ? selectedSubjects
-        : [...new Set(useImportStore.getState().subjectRows.map((r) => r.subject))];
+        ? [...selectedSubjects]
+        : Object.keys(progress).length === 0
+          ? [...new Set(useImportStore.getState().subjectRows.map((r) => r.subject))]
+          : [];
+
+    if (subjectsToImport.length === 0 || planning) return;
+
+    const lease = captureProjectLease();
+    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
+    setPlanning(true);
+    setPlanningError(null);
+    let plan: RelocationPlan;
+    try {
+      plan = await invoke<RelocationPlan>("plan_import_relocation", {
+        subjectList: subjectsToImport,
+      });
+    } catch (error) {
+      if (!lease || (isCurrentProjectLease(lease) && isProjectWorkAccepted())) {
+        setPlanningError(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    } finally {
+      if (!lease || (isCurrentProjectLease(lease) && isProjectWorkAccepted())) setPlanning(false);
+    }
+    if (
+      (lease && (!isCurrentProjectLease(lease) || !isProjectWorkAccepted())) ||
+      (useProjectStore.getState().project?.projectMeta.rootPath ?? "") !== projectRoot
+    )
+      return;
 
     const freshlyCompleted = subjectsToImport.filter(
       (s) => progress[s]?.status === "completed" && progress[s]?.stale !== true,
     );
 
-    if (freshlyCompleted.length > 0) {
-      setConfirmSubjects(freshlyCompleted);
+    if (
+      freshlyCompleted.length > 0 ||
+      plan.subjects.some((subject) => subject.entries.length > 0)
+    ) {
+      setPendingConfirmation({
+        runSubjects: subjectsToImport,
+        plan,
+      });
     } else {
-      void doRunImport(subjectsToImport);
+      doRunImport(subjectsToImport, plan.planId);
     }
-  }, [selectedSubjects, doRunImport]);
+  }, [selectedSubjects, doRunImport, planning]);
 
   const handleConfirmReimport = useCallback(() => {
-    setConfirmSubjects(null);
-    const subjectsToImport =
-      selectedSubjects.length > 0
-        ? selectedSubjects
-        : [...new Set(useImportStore.getState().subjectRows.map((r) => r.subject))];
-    void doRunImport(subjectsToImport);
-  }, [selectedSubjects, doRunImport]);
+    const subjectsToImport = pendingConfirmation?.runSubjects;
+    const relocationPlanId = pendingConfirmation?.plan.planId;
+    setPendingConfirmation(null);
+    if (subjectsToImport && relocationPlanId) void doRunImport(subjectsToImport, relocationPlanId);
+  }, [pendingConfirmation, doRunImport]);
 
   const handleCancelReimport = useCallback(() => {
-    setConfirmSubjects(null);
+    setPendingConfirmation(null);
   }, []);
 
   const handleStop = useCallback(async () => {
@@ -655,7 +717,7 @@ export default function ImportExecution() {
 
       <ImportExecutionControls
         phase={importPhase}
-        canRun={canRun}
+        canRun={canRun && !planning}
         onStart={handleStartImport}
         onStop={handleStop}
         noProfiles={noProfiles}
@@ -669,6 +731,16 @@ export default function ImportExecution() {
           (Object.keys(importProgress).length === 0 && subjectRows.length > 0)
         }
       />
+      {planningError ? (
+        <Alert
+          color="red"
+          icon={<IconAlertTriangle size={16} />}
+          p="xs"
+          data-testid="relocation-planning-error"
+        >
+          <Text size="sm">{planningError}</Text>
+        </Alert>
+      ) : null}
 
       {!canRun ? (
         <Text c="dimmed" size="sm">
@@ -695,10 +767,10 @@ export default function ImportExecution() {
       <ImportLogPanel lines={importLog} />
 
       <ConfirmReimportDialog
-        opened={confirmSubjects !== null}
+        opened={pendingConfirmation !== null}
         onClose={handleCancelReimport}
         onConfirm={handleConfirmReimport}
-        subjects={confirmSubjects ?? []}
+        plan={pendingConfirmation?.plan ?? null}
       />
 
       <Group

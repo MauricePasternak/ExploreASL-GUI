@@ -125,6 +125,31 @@ mod tests {
     }
 
     #[test]
+    fn relocation_recovery_blocks_candidate_activation_without_replacing_active_root() {
+        let active = tempfile::tempdir().unwrap();
+        let candidate = tempfile::tempdir().unwrap();
+        fs::write(
+            candidate
+                .path()
+                .join(crate::import_relocation::JOURNAL_FILE),
+            "not a relocation journal",
+        )
+        .unwrap();
+        let state = AppState::default();
+        let active_root = active.path().canonicalize().unwrap();
+        *state.active_project_root.lock().unwrap() = Some(active_root.clone());
+
+        let error = set_active_project_impl(candidate.path().display().to_string(), &state)
+            .expect_err("malformed journal must block activation");
+
+        assert!(error.contains("Malformed relocation journal"));
+        assert_eq!(
+            state.active_project_root.lock().unwrap().as_deref(),
+            Some(active_root.as_path())
+        );
+    }
+
+    #[test]
     fn active_project_changes_reject_live_processing_ownership() {
         let first = tempfile::tempdir().unwrap();
         let second = tempfile::tempdir().unwrap();

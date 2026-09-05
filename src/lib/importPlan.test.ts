@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildImportPlan, validateLocalStagingEntries } from "./importPlan";
+import { buildImportPlan, selectImportEntries, validateLocalStagingEntries } from "./importPlan";
 import type { StagingEntry } from "../schemas/importSchemas";
 
 const entry = (overrides: Partial<StagingEntry> = {}): StagingEntry => ({
@@ -115,5 +115,20 @@ describe("import plan local validation", () => {
     expect(plan.entries[0]).toMatchObject({ run: "01", runAlias: "ASL_1", originalRun: "01" });
     expect(plan.sourcestructureJson.folderHierarchy).toHaveLength(4);
     expect(plan.studyparJson.StudyPars).toHaveLength(1);
+  });
+});
+
+describe("import run entry selection", () => {
+  it("uses portable case folding and Unicode normalization", () => {
+    const entries = [
+      entry({ subject: "subjecta" }),
+      entry({ subject: "Straße", sourcePath: "/source/strasse" }),
+      entry({ subject: "Café", sourcePath: "/source/cafe" }),
+      entry({ subject: "OTHER", sourcePath: "/source/other" }),
+    ];
+
+    expect(selectImportEntries(entries, ["SUBJECTA", "STRASSE", "Cafe\u0301"])).toEqual(
+      entries.slice(0, 3),
+    );
   });
 });

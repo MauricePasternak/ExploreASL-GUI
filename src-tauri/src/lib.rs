@@ -5,6 +5,7 @@ mod commands;
 pub mod execution_profile;
 pub mod import;
 pub mod import_parser;
+pub mod import_relocation;
 pub mod manifest;
 pub mod matlab;
 mod niivue_protocol;
@@ -19,6 +20,8 @@ pub mod visualization;
 mod visualization_tests;
 
 #[cfg(test)]
+mod import_relocation_tests;
+#[cfg(test)]
 mod project_writer_tests;
 
 use apptainer::which_apptainer;
@@ -30,9 +33,9 @@ use commands::{
 };
 use execution_profile::{validate_all_execution_profiles, validate_execution_profile};
 use import::{
-    AppState, clean_import_status, copy_lock_files, move_import_output, preflight_staging_plan,
-    read_import_status, run_import_pipeline, stop_active_import, stop_import,
-    stop_running_import_for_exit,
+    AppState, clean_import_status, copy_lock_files, move_import_output, plan_import_relocation,
+    preflight_staging_plan, read_import_status, run_import_pipeline, stop_active_import,
+    stop_import, stop_running_import_for_exit,
 };
 use manifest::{
     capture_environment_versions, capture_environment_versions_for_run,
@@ -99,6 +102,7 @@ pub fn run() {
             get_available_memory_mb,
             inspect_source_path,
             preflight_staging_plan,
+            plan_import_relocation,
             run_import_pipeline,
             stop_import,
             stop_active_import,

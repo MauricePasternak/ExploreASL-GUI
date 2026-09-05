@@ -202,10 +202,15 @@ vi.mock("@tauri-apps/api/core", () => ({
       }
       case "preflight_staging_plan":
         return Promise.resolve({ valid: true, issues: [] });
+      case "plan_import_relocation":
+        return Promise.resolve({
+          planId: "test-relocation-plan",
+          subjects: [],
+          fingerprint: "test",
+        });
       case "stop_import":
       case "stop_active_import":
       case "clean_import_status":
-      case "move_import_output":
       case "copy_lock_files":
       case "validate_all_execution_profiles":
       case "read_import_status":
@@ -215,6 +220,13 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "list_subjects":
       case "list_stats_files":
         return Promise.resolve([]);
+      case "move_import_output":
+        return Promise.resolve({
+          planId: "test-relocation-plan",
+          generation: 1,
+          stagingCleanupComplete: true,
+          subjects: [],
+        });
       case "scan_bids_sidecars":
         return Promise.resolve({ groups: [], skipped: [] });
       case "check_bids_dataset":

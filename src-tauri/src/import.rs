@@ -11,6 +11,7 @@ use crate::staging::{
     execute_compiled_staging_plan, portable_key, preflight_staging_plan_for_state,
 };
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
@@ -20,7 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 pub(crate) const RESERVED_IMPORT_PID: u32 = 0;
 const IMPORT_STATUS_FILES: [&str; 3] = [
@@ -53,6 +54,7 @@ pub struct ImportState {
     pub failed_subjects: Vec<String>,
     pub succeeded_subjects: Vec<String>,
     pub subject_list: Vec<String>,
+    pub relocation_plan_id: Option<String>,
 }
 
 impl ImportState {
@@ -69,6 +71,7 @@ impl ImportState {
             failed_subjects: Vec::new(),
             succeeded_subjects: Vec::new(),
             subject_list,
+            relocation_plan_id: None,
         }
     }
 }
@@ -87,6 +90,7 @@ impl Default for ImportState {
             failed_subjects: Vec::new(),
             succeeded_subjects: Vec::new(),
             subject_list: Vec::new(),
+            relocation_plan_id: None,
         }
     }
 }
@@ -102,6 +106,8 @@ pub struct AppState {
     pub project_transition: Mutex<()>,
     pub active_project_root: Mutex<Option<PathBuf>>,
     pub active_data: Mutex<Option<crate::visualization::ActiveData>>,
+    pub relocation_plans: Mutex<BTreeMap<String, crate::import_relocation::RelocationPlan>>,
+    pub relocation_plan_sequence: AtomicU64,
 }
 
 impl Default for AppState {
@@ -113,6 +119,8 @@ impl Default for AppState {
             project_transition: Mutex::new(()),
             active_project_root: Mutex::new(None),
             active_data: Mutex::new(None),
+            relocation_plans: Mutex::new(BTreeMap::new()),
+            relocation_plan_sequence: AtomicU64::new(0),
         }
     }
 }
@@ -199,11 +207,9 @@ fn import_lock_dir(root: &Path, subject: &str) -> PathBuf {
         .join("xASL_module_Import")
 }
 
-fn bids2legacy_lock_base(root: &Path) -> PathBuf {
-    root.join("derivatives")
-        .join("ExploreASL")
-        .join("lock")
-        .join("xASL_module_BIDS2Legacy")
+/// Relocation owns lock paths natively; callers never supply these roots over IPC.
+pub(crate) fn import_lock_dir_for_relocation(root: &Path, subject: &str) -> PathBuf {
+    import_lock_dir(root, subject)
 }
 
 pub fn validate_subject_components(subjects: &[String]) -> Result<(), String> {
@@ -255,7 +261,7 @@ fn validate_owned_subjects(owned_subjects: &[String], subjects: &[String]) -> Re
     validate_subject_components(subjects)?;
 
     for subject in subjects {
-        if !owned_subjects.contains(subject) {
+        if owned_subject_spelling(owned_subjects, subject).is_none() {
             return Err(format!(
                 "Subject is not owned by the active import: {subject}"
             ));
@@ -263,6 +269,18 @@ fn validate_owned_subjects(owned_subjects: &[String], subjects: &[String]) -> Re
     }
 
     Ok(())
+}
+
+fn owned_subject_spelling<'a>(owned_subjects: &'a [String], subject: &str) -> Option<&'a str> {
+    let key = portable_key(subject);
+    owned_subjects
+        .iter()
+        .find(|owned| portable_key(owned) == key)
+        .map(String::as_str)
+}
+
+fn contains_portable_subject(subjects: &[String], subject: &str) -> bool {
+    owned_subject_spelling(subjects, subject).is_some()
 }
 
 fn validate_preserved_subjects_are_disjoint(
@@ -365,21 +383,53 @@ fn move_import_output_for_state(
     state: &AppState,
     debug_mode: bool,
     cleanup_staging: bool,
-) -> Result<(), String> {
+) -> Result<crate::import_relocation::RelocationOutcome, String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
     with_owned_import_roots(state, |import_state, project_root, staging_root| {
         validate_owned_subjects(&import_state.subject_list, &import_state.succeeded_subjects)?;
-        move_import_output_paths(
+        let plan_id = import_state
+            .relocation_plan_id
+            .as_ref()
+            .ok_or_else(|| "Import ownership has no confirmed relocation plan".to_string())?;
+        let plan = state
+            .relocation_plans
+            .lock()
+            .map_err(|_| "Relocation plan state lock was poisoned".to_string())?
+            .get(plan_id)
+            .cloned()
+            .ok_or_else(|| "Confirmed relocation plan is unavailable".to_string())?;
+        let outcome = crate::import_relocation::relocate(
+            &plan,
+            import_state.ownership_generation,
             staging_root,
-            project_root,
             &import_state.succeeded_subjects,
-            debug_mode,
             cleanup_staging,
+            debug_mode,
         )?;
 
-        if cleanup_staging && !debug_mode {
+        if debug_mode
+            && cleanup_staging
+            && !outcome.subjects.is_empty()
+            && outcome.subjects.iter().all(|subject| {
+                matches!(
+                    subject.status,
+                    crate::import_relocation::RelocationSubjectStatus::Committed
+                )
+            })
+        {
+            // Debug runs retain staging. Copy configs only after every subject
+            // has durably committed; any copy failure remains visible to the
+            // frontend and leaves terminal ownership/staging available.
+            copy_import_configs(staging_root, project_root)?;
+        }
+
+        if outcome.staging_cleanup_complete {
             *import_state = ImportState::default();
         }
-        Ok(())
+        Ok(outcome)
     })
 }
 
@@ -439,21 +489,42 @@ pub fn move_import_output_paths(
     validate_project_root_for_staging(staging_root, project_root)?;
     validate_subject_components(succeeded_subjects)?;
 
-    merge_import_output(staging_root, project_root, succeeded_subjects)?;
-
-    if cleanup_staging {
-        if debug_mode {
-            copy_import_configs(staging_root, project_root)?;
-            fs::create_dir_all(staging_root).map_err(|error| {
-                format!(
-                    "Failed to preserve staging directory {}: {}",
-                    staging_root.display(),
-                    error
-                )
-            })?;
-        } else {
-            cleanup_staging_root(staging_root)?;
-        }
+    let mut plan = crate::import_relocation::create_plan(
+        project_root,
+        succeeded_subjects,
+        "direct-test-plan".to_string(),
+    )?;
+    crate::import_relocation::bind_plan(&mut plan, project_root, succeeded_subjects, 0)?;
+    let outcome = crate::import_relocation::relocate(
+        &plan,
+        0,
+        staging_root,
+        succeeded_subjects,
+        cleanup_staging,
+        debug_mode,
+    )?;
+    if debug_mode
+        && cleanup_staging
+        && !outcome.subjects.is_empty()
+        && outcome.subjects.iter().all(|subject| {
+            matches!(
+                subject.status,
+                crate::import_relocation::RelocationSubjectStatus::Committed
+            )
+        })
+    {
+        copy_import_configs(staging_root, project_root)?;
+    }
+    if !outcome.subjects.iter().all(|subject| {
+        matches!(
+            subject.status,
+            crate::import_relocation::RelocationSubjectStatus::Committed
+        )
+    }) {
+        return Err(format!(
+            "One or more subject relocations failed: {:?}",
+            outcome.subjects
+        ));
     }
 
     Ok(())
@@ -514,95 +585,6 @@ fn normalize_path_for_validation(path: &Path) -> Result<PathBuf, String> {
     Ok(parent.join(file_name))
 }
 
-fn merge_import_output(
-    staging_root: &Path,
-    project_root: &Path,
-    subjects: &[String],
-) -> Result<(), String> {
-    copy_dataset_description_if_missing(staging_root, project_root)?;
-
-    for subject in subjects {
-        let source_subject_rawdata = staging_root.join("rawdata").join(format!("sub-{subject}"));
-        let destination_subject_rawdata =
-            project_root.join("rawdata").join(format!("sub-{subject}"));
-        if source_subject_rawdata.exists() {
-            copy_dir_replace(&source_subject_rawdata, &destination_subject_rawdata)?;
-        }
-
-        let source_lock_dir = import_lock_dir(staging_root, subject);
-        let destination_lock_dir = import_lock_dir(project_root, subject);
-        if source_lock_dir.exists() {
-            copy_dir_replace(&source_lock_dir, &destination_lock_dir)?;
-        }
-
-        copy_matching_subject_logs(staging_root, project_root, subject)?;
-        remove_bids2legacy_locks_for_subject(project_root, subject)?;
-    }
-
-    Ok(())
-}
-
-fn remove_bids2legacy_locks_for_subject(project_root: &Path, subject: &str) -> Result<(), String> {
-    let lock_base = bids2legacy_lock_base(project_root);
-    if !lock_base.exists() {
-        return Ok(());
-    }
-
-    let subject_prefix = if subject.starts_with("sub-") {
-        format!("{subject}_")
-    } else {
-        format!("sub-{subject}_")
-    };
-
-    for entry in fs::read_dir(&lock_base).map_err(|error| {
-        format!(
-            "Failed to read BIDS2Legacy lock directory {}: {}",
-            lock_base.display(),
-            error
-        )
-    })? {
-        let entry = entry.map_err(|error| {
-            format!(
-                "Failed to read BIDS2Legacy lock entry in {}: {}",
-                lock_base.display(),
-                error
-            )
-        })?;
-        if !entry
-            .file_type()
-            .map_err(|error| {
-                format!(
-                    "Failed to inspect BIDS2Legacy lock entry {}: {}",
-                    entry.path().display(),
-                    error
-                )
-            })?
-            .is_dir()
-        {
-            continue;
-        }
-
-        let file_name = entry.file_name();
-        if file_name.to_string_lossy().starts_with(&subject_prefix) {
-            remove_dir_if_exists(&entry.path())?;
-        }
-    }
-
-    Ok(())
-}
-
-fn remove_dir_if_exists(path: &Path) -> Result<(), String> {
-    match fs::remove_dir_all(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!(
-            "Failed to remove directory {}: {}",
-            path.display(),
-            error
-        )),
-    }
-}
-
 fn copy_import_configs(staging_root: &Path, project_root: &Path) -> Result<(), String> {
     let destination_dir = project_root.join("derivatives").join("ExploreASL_GUI");
     fs::create_dir_all(&destination_dir).map_err(|error| {
@@ -620,139 +602,6 @@ fn copy_import_configs(staging_root: &Path, project_root: &Path) -> Result<(), S
                 format!(
                     "Failed to copy import config {}: {}",
                     source.display(),
-                    error
-                )
-            })?;
-        }
-    }
-
-    Ok(())
-}
-
-fn copy_dataset_description_if_missing(
-    staging_root: &Path,
-    project_root: &Path,
-) -> Result<(), String> {
-    let source = staging_root
-        .join("rawdata")
-        .join("dataset_description.json");
-    let destination = project_root
-        .join("rawdata")
-        .join("dataset_description.json");
-    if !source.exists() || destination.exists() {
-        return Ok(());
-    }
-
-    if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "Failed to create rawdata directory {}: {}",
-                parent.display(),
-                error
-            )
-        })?;
-    }
-
-    fs::copy(&source, &destination).map_err(|error| {
-        format!(
-            "Failed to copy dataset description {} to {}: {}",
-            source.display(),
-            destination.display(),
-            error
-        )
-    })?;
-
-    Ok(())
-}
-
-fn copy_matching_subject_logs(
-    staging_root: &Path,
-    project_root: &Path,
-    subject: &str,
-) -> Result<(), String> {
-    let source_log_dir = staging_root
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("log");
-    if !source_log_dir.exists() {
-        return Ok(());
-    }
-
-    let destination_log_dir = project_root
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("log");
-    fs::create_dir_all(&destination_log_dir).map_err(|error| {
-        format!(
-            "Failed to create log directory {}: {}",
-            destination_log_dir.display(),
-            error
-        )
-    })?;
-
-    let subject_marker = format!("sub-{subject}");
-    for entry in fs::read_dir(&source_log_dir).map_err(|error| {
-        format!(
-            "Failed to read log directory {}: {}",
-            source_log_dir.display(),
-            error
-        )
-    })? {
-        let entry = entry.map_err(|error| format!("Failed to read log entry: {}", error))?;
-        let file_name = entry.file_name();
-        if file_name.to_string_lossy().contains(&subject_marker) && entry.path().is_file() {
-            fs::copy(entry.path(), destination_log_dir.join(file_name)).map_err(|error| {
-                format!(
-                    "Failed to copy import log for subject {}: {}",
-                    subject, error
-                )
-            })?;
-        }
-    }
-
-    Ok(())
-}
-
-fn copy_dir_replace(source: &Path, destination: &Path) -> Result<(), String> {
-    remove_dir_if_exists(destination)?;
-    copy_dir_recursive(source, destination)
-}
-
-fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), String> {
-    fs::create_dir_all(destination).map_err(|error| {
-        format!(
-            "Failed to create destination directory {}: {}",
-            destination.display(),
-            error
-        )
-    })?;
-
-    for entry in fs::read_dir(source).map_err(|error| {
-        format!(
-            "Failed to read source directory {}: {}",
-            source.display(),
-            error
-        )
-    })? {
-        let entry = entry.map_err(|error| format!("Failed to read directory entry: {}", error))?;
-        let source_path = entry.path();
-        let destination_path = destination.join(entry.file_name());
-        let metadata = entry.metadata().map_err(|error| {
-            format!(
-                "Failed to inspect source path {}: {}",
-                source_path.display(),
-                error
-            )
-        })?;
-
-        if metadata.is_dir() {
-            copy_dir_recursive(&source_path, &destination_path)?;
-        } else if metadata.is_file() {
-            fs::copy(&source_path, &destination_path).map_err(|error| {
-                format!(
-                    "Failed to copy {} to {}: {}",
-                    source_path.display(),
-                    destination_path.display(),
                     error
                 )
             })?;
@@ -818,6 +667,97 @@ pub fn validate_non_empty_inputs(
     }
 
     Ok(())
+}
+
+pub fn validate_subject_scope(
+    staging_entries: &[StagingEntry],
+    subject_list: &[String],
+) -> Result<(), String> {
+    let mut staging_subjects = BTreeMap::new();
+    for entry in staging_entries {
+        staging_subjects
+            .entry(portable_key(&entry.subject))
+            .or_insert_with(|| entry.subject.clone());
+    }
+
+    let mut declared_subjects = BTreeMap::new();
+    for subject in subject_list {
+        declared_subjects
+            .entry(portable_key(subject))
+            .or_insert_with(|| subject.clone());
+    }
+
+    let undeclared = staging_subjects
+        .iter()
+        .filter(|(key, _)| !declared_subjects.contains_key(*key))
+        .map(|(_, subject)| subject.as_str())
+        .collect::<Vec<_>>();
+    let missing = declared_subjects
+        .iter()
+        .filter(|(key, _)| !staging_subjects.contains_key(*key))
+        .map(|(_, subject)| subject.as_str())
+        .collect::<Vec<_>>();
+
+    if undeclared.is_empty() && missing.is_empty() {
+        return Ok(());
+    }
+
+    let mut details = Vec::new();
+    if !undeclared.is_empty() {
+        details.push(format!(
+            "undeclared staging subjects: {}",
+            undeclared.join(", ")
+        ));
+    }
+    if !missing.is_empty() {
+        details.push(format!(
+            "declared subjects without staging entries: {}",
+            missing.join(", ")
+        ));
+    }
+
+    Err(format!(
+        "Import subject scope mismatch: {}",
+        details.join("; ")
+    ))
+}
+
+pub fn validate_import_request_inputs(
+    staging_entries: &[StagingEntry],
+    subject_list: &[String],
+) -> Result<(), String> {
+    validate_non_empty_inputs(staging_entries, subject_list)?;
+    validate_subject_scope(staging_entries, subject_list)
+}
+
+fn normalize_staging_subject_spelling(
+    staging_entries: &[StagingEntry],
+    subject_list: &[String],
+) -> Result<Vec<StagingEntry>, String> {
+    let mut owned_by_key = BTreeMap::new();
+    for subject in subject_list {
+        let key = portable_key(subject);
+        if owned_by_key.insert(key, subject.as_str()).is_some() {
+            return Err("Import subject list contains portable-equivalent duplicates".to_string());
+        }
+    }
+
+    staging_entries
+        .iter()
+        .map(|entry| {
+            let canonical = owned_by_key
+                .get(&portable_key(&entry.subject))
+                .ok_or_else(|| {
+                    format!(
+                        "Staging entry subject is not in the declared import scope: {}",
+                        entry.subject
+                    )
+                })?;
+            let mut normalized = entry.clone();
+            normalized.subject = (*canonical).to_string();
+            Ok(normalized)
+        })
+        .collect()
 }
 
 pub fn validate_matlab_executable(matlab_path: &str) -> Result<String, String> {
@@ -994,6 +934,7 @@ fn reserve_import_state_for_run(
     run_request_id: String,
     subject_list: Vec<String>,
     subjects_to_preserve: Option<Vec<String>>,
+    relocation_plan_id: String,
 ) -> Result<ImportReservation, String> {
     // Hold active-project and import ownership locks through authorization and
     // replacement. The project transition uses the active-project lock, while
@@ -1022,7 +963,8 @@ fn reserve_import_state_for_run(
         .map_err(|_| "Import state lock was poisoned".to_string())?;
     validate_import_not_running(&import_state)?;
 
-    let preserved_subjects = subjects_to_preserve.unwrap_or_default();
+    let requested_preserved_subjects = subjects_to_preserve.unwrap_or_default();
+    let mut preserved_subjects = requested_preserved_subjects.clone();
     if !preserved_subjects.is_empty() {
         validate_subject_components(&preserved_subjects)?;
         validate_preserved_subjects_are_disjoint(&subject_list, &preserved_subjects)?;
@@ -1034,14 +976,23 @@ fn reserve_import_state_for_run(
         validate_owned_subjects(&import_state.subject_list, &preserved_subjects)?;
         if preserved_subjects
             .iter()
-            .any(|subject| import_state.failed_subjects.contains(subject))
+            .any(|subject| contains_portable_subject(&import_state.failed_subjects, subject))
         {
             return Err("Retry preserve subjects include a failed subject".to_string());
         }
         validate_owned_subjects(&import_state.succeeded_subjects, &preserved_subjects)?;
+        preserved_subjects = requested_preserved_subjects
+            .iter()
+            .map(|subject| {
+                owned_subject_spelling(&import_state.subject_list, subject)
+                    .expect("validated preserved subject")
+                    .to_string()
+            })
+            .collect();
     }
 
     *import_state = ImportState::new(staging_root, project_root, subject_list);
+    import_state.relocation_plan_id = Some(relocation_plan_id);
     import_state.run_request_id = run_request_id;
     let generation = state.import_generation.fetch_add(1, Ordering::Relaxed) + 1;
     import_state.ownership_generation = generation;
@@ -1052,6 +1003,39 @@ fn reserve_import_state_for_run(
         generation,
         preserved_subjects,
     })
+}
+
+fn validate_relocation_plan_for_run(
+    state: &AppState,
+    plan_id: &str,
+    project_root: &Path,
+    subjects: &[String],
+) -> Result<(), String> {
+    let plans = state
+        .relocation_plans
+        .lock()
+        .map_err(|_| "Relocation plan state lock was poisoned".to_string())?;
+    let plan = plans
+        .get(plan_id)
+        .ok_or_else(|| "Confirmed relocation plan is unavailable".to_string())?;
+    crate::import_relocation::validate_plan_scope(plan, project_root, subjects)
+}
+
+fn bind_relocation_plan_for_run(
+    state: &AppState,
+    plan_id: &str,
+    project_root: &Path,
+    subjects: &[String],
+    generation: u64,
+) -> Result<(), String> {
+    let mut plans = state
+        .relocation_plans
+        .lock()
+        .map_err(|_| "Relocation plan state lock was poisoned".to_string())?;
+    let plan = plans
+        .get_mut(plan_id)
+        .ok_or_else(|| "Confirmed relocation plan is unavailable".to_string())?;
+    crate::import_relocation::bind_plan(plan, project_root, subjects, generation)
 }
 
 fn clear_reserved_import(state: &AppState, generation: u64) {
@@ -1141,8 +1125,8 @@ fn clear_matching_import(state: &AppState, generation: u64) -> bool {
     false
 }
 
-fn emit_prepare_complete_for_running_import(
-    app: &AppHandle,
+fn emit_prepare_complete_for_running_import<R: Runtime>(
+    app: &AppHandle<R>,
     state: &AppState,
     generation: u64,
     child_pid: u32,
@@ -1235,33 +1219,38 @@ fn record_import_results(
         return false;
     }
 
-    let subject_is_owned = |subject: &str| {
-        import_state
-            .subject_list
-            .iter()
-            .any(|owned| owned == subject)
-    };
     match event {
-        ImportStructuredEvent::ImportFailed { subject, .. } if subject_is_owned(subject) => {
-            if !import_state.failed_subjects.contains(subject) {
-                import_state.failed_subjects.push(subject.clone());
+        ImportStructuredEvent::ImportFailed { subject, .. }
+            if owned_subject_spelling(&import_state.subject_list, subject).is_some() =>
+        {
+            let canonical = owned_subject_spelling(&import_state.subject_list, subject)
+                .expect("guarded owned subject")
+                .to_string();
+            if !contains_portable_subject(&import_state.failed_subjects, &canonical) {
+                import_state.failed_subjects.push(canonical.clone());
             }
             import_state
                 .succeeded_subjects
-                .retain(|owned| owned != subject);
+                .retain(|owned| portable_key(owned) != portable_key(&canonical));
         }
         ImportStructuredEvent::SubjectComplete { subject, .. }
-            if subject_is_owned(subject) && !import_state.failed_subjects.contains(subject) =>
+            if owned_subject_spelling(&import_state.subject_list, subject).is_some()
+                && !contains_portable_subject(&import_state.failed_subjects, subject) =>
         {
-            if !import_state.succeeded_subjects.contains(subject) {
-                import_state.succeeded_subjects.push(subject.clone());
+            let canonical = owned_subject_spelling(&import_state.subject_list, subject)
+                .expect("guarded owned subject")
+                .to_string();
+            if !contains_portable_subject(&import_state.succeeded_subjects, &canonical) {
+                import_state.succeeded_subjects.push(canonical);
             }
         }
         ImportStructuredEvent::ImportComplete => {
             let succeeded = import_state
                 .subject_list
                 .iter()
-                .filter(|subject| !import_state.failed_subjects.contains(*subject))
+                .filter(|subject| {
+                    !contains_portable_subject(&import_state.failed_subjects, subject)
+                })
                 .cloned()
                 .collect();
             import_state.succeeded_subjects = succeeded;
@@ -1271,13 +1260,33 @@ fn record_import_results(
     true
 }
 
-fn emit_structured_events(
-    app: &AppHandle,
+fn canonicalize_import_event_subject(
+    event: &mut ImportStructuredEvent,
+    owned_subjects: &[String],
+) -> bool {
+    let subject = match event {
+        ImportStructuredEvent::SubjectStart { subject, .. }
+        | ImportStructuredEvent::SubjectComplete { subject, .. }
+        | ImportStructuredEvent::ImportFailed { subject, .. }
+        | ImportStructuredEvent::Dcm2NiiStatus { subject, .. } => subject,
+        ImportStructuredEvent::ImportComplete => return true,
+    };
+    let Some(canonical) = owned_subject_spelling(owned_subjects, subject) else {
+        return false;
+    };
+    if subject != canonical {
+        *subject = canonical.to_string();
+    }
+    true
+}
+
+fn emit_structured_events<R: Runtime>(
+    app: &AppHandle<R>,
     generation: u64,
     events: Vec<ImportStructuredEvent>,
 ) -> bool {
     let mut saw_import_complete = false;
-    for event in events {
+    for mut event in events {
         if matches!(event, ImportStructuredEvent::ImportComplete) {
             saw_import_complete = true;
             continue;
@@ -1288,6 +1297,9 @@ fn emit_structured_events(
             .lock()
             .ok()
             .is_some_and(|mut import_state| {
+                if !canonicalize_import_event_subject(&mut event, &import_state.subject_list) {
+                    return false;
+                }
                 if !record_import_results(&mut import_state, generation, &event) {
                     return false;
                 }
@@ -1336,8 +1348,8 @@ pub fn should_emit_matlab_exit_error(
     true
 }
 
-fn stream_import_output(
-    app: &AppHandle,
+fn stream_import_output<R: Runtime>(
+    app: &AppHandle<R>,
     generation: u64,
     output_line: ImportOutputLine,
     parser: &mut ImportOutputParser,
@@ -1374,8 +1386,8 @@ fn stream_import_output(
     )
 }
 
-fn supervise_import_process(
-    app: AppHandle,
+fn supervise_import_process<R: Runtime>(
+    app: AppHandle<R>,
     generation: u64,
     child_pid: u32,
     mut child: Child,
@@ -1731,10 +1743,42 @@ pub fn preflight_staging_plan(
     Ok(preflight_staging_plan_for_state(&state, &staging_entries))
 }
 
+/// Read-only destination inventory. Root and scope come only from native active
+/// project ownership; frontend receives no absolute filesystem paths.
+#[tauri::command]
+pub fn plan_import_relocation(
+    state: State<'_, AppState>,
+    subject_list: Vec<String>,
+) -> Result<crate::import_relocation::RelocationPlan, String> {
+    validate_subject_components(&subject_list)?;
+    let root = state
+        .active_project_root
+        .lock()
+        .map_err(|_| "Active project state lock was poisoned".to_string())?
+        .clone()
+        .ok_or_else(|| "No active project root".to_string())?;
+    let sequence = state
+        .relocation_plan_sequence
+        .fetch_add(1, Ordering::Relaxed)
+        + 1;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let plan_id = format!("relocation-{}-{timestamp}-{sequence}", std::process::id());
+    let plan = crate::import_relocation::create_plan(&root, &subject_list, plan_id.clone())?;
+    state
+        .relocation_plans
+        .lock()
+        .map_err(|_| "Relocation plan state lock was poisoned".to_string())?
+        .insert(plan_id, plan.clone());
+    Ok(plan)
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn run_import_pipeline(
-    app: AppHandle,
+pub fn run_import_pipeline<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     staging_entries: Vec<StagingEntry>,
     sourcestructure_json: Value,
@@ -1743,10 +1787,15 @@ pub fn run_import_pipeline(
     subject_list: Vec<String>,
     subjects_to_preserve: Option<Vec<String>>,
     run_request_id: String,
+    relocation_plan_id: String,
 ) -> Result<u32, ImportCommandError> {
-    validate_non_empty_inputs(&staging_entries, &subject_list)?;
+    validate_import_request_inputs(&staging_entries, &subject_list)?;
+    let staging_entries = normalize_staging_subject_spelling(&staging_entries, &subject_list)?;
     if run_request_id.trim().is_empty() {
         return Err("run_request_id must not be empty".to_string().into());
+    }
+    if relocation_plan_id.trim().is_empty() {
+        return Err("relocation_plan_id must not be empty".to_string().into());
     }
 
     if !sourcestructure_json.is_object() {
@@ -1812,6 +1861,9 @@ pub fn run_import_pipeline(
         .expect("compiled staging root has a parent")
         .to_path_buf();
     let stream_subject_list = subject_list.clone();
+    // Reject foreign, stale-scope, and already-consumed plans before replacing
+    // import ownership or touching staging.
+    validate_relocation_plan_for_run(&state, &relocation_plan_id, &project_root, &subject_list)?;
     let reservation = reserve_import_state_for_run(
         &state,
         staging_root.clone(),
@@ -1819,8 +1871,19 @@ pub fn run_import_pipeline(
         run_request_id,
         subject_list,
         subjects_to_preserve,
+        relocation_plan_id.clone(),
     )?;
     let generation = reservation.generation;
+    if let Err(error) = bind_relocation_plan_for_run(
+        &state,
+        &relocation_plan_id,
+        &project_root,
+        &stream_subject_list,
+        generation,
+    ) {
+        clear_reserved_import(&state, generation);
+        return Err(error.into());
+    }
 
     cleanup_staging_root(&staging_root).map_err(|error| {
         ImportCommandError::from(rollback_reserved_preparation_failure(
@@ -2047,7 +2110,7 @@ pub fn move_import_output(
     state: State<'_, AppState>,
     debug_mode: bool,
     cleanup_staging: bool,
-) -> Result<(), String> {
+) -> Result<crate::import_relocation::RelocationOutcome, String> {
     move_import_output_for_state(&state, debug_mode, cleanup_staging)
 }
 

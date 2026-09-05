@@ -1,7 +1,7 @@
 import { MantineProvider } from "@mantine/core";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -54,9 +54,109 @@ function configureSubjects() {
   ]);
 }
 
+function configureStagingPlan() {
+  useImportStore.setState({
+    sourceDataPath: "/source",
+    rawPaths: ["/source/SUB01/ASL", "/source/SUB02/ASL"],
+    pathPatterns: [
+      {
+        signature: "VARYING/VARYING",
+        samplePath: "SUB01/ASL",
+        blocks: ["SUB01", "ASL"],
+        uniqueNames: { 0: ["SUB01", "SUB02"], 1: ["ASL"] },
+        count: 2,
+        depth: 2,
+      },
+    ],
+    tokenizerConfigs: {
+      "VARYING/VARYING": [
+        { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+        { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
+      ],
+    },
+    subjectRenames: [
+      { original: "SUB01", target: "SUB01" },
+      { original: "SUB02", target: "SUB02" },
+    ],
+    modalityAliases: [{ captured: "ASL", mapped: "ASL4D" }],
+  });
+}
+
+function configureMultiSessionStagingPlan() {
+  useImportStore.setState({
+    sourceDataPath: "/source",
+    rawPaths: ["/source/SUB01/VISIT1/ASL", "/source/SUB01/VISIT2/ASL", "/source/SUB02/VISIT1/ASL"],
+    pathPatterns: [
+      {
+        signature: "VARYING/VARYING/VARYING",
+        samplePath: "SUB01/VISIT1/ASL",
+        blocks: ["SUB01", "VISIT1", "ASL"],
+        uniqueNames: {
+          0: ["SUB01", "SUB02"],
+          1: ["VISIT1", "VISIT2"],
+          2: ["ASL"],
+        },
+        count: 3,
+        depth: 3,
+      },
+    ],
+    tokenizerConfigs: {
+      "VARYING/VARYING/VARYING": [
+        { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+        { blockIndex: 1, subBlockIndex: null, tag: "Session" },
+        { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+      ],
+    },
+    subjectRenames: [
+      { original: "SUB01", target: "SUB01" },
+      { original: "SUB02", target: "SUB02" },
+    ],
+    sessionAliases: [
+      { captured: "VISIT1", alias: "01", index: 1 },
+      { captured: "VISIT2", alias: "02", index: 2 },
+    ],
+    modalityAliases: [{ captured: "ASL", mapped: "ASL4D" }],
+  });
+  useImportStore.getState().setSubjectRows([
+    { id: "SUB01/01", subject: "SUB01", session: "01", groupId: "global" },
+    { id: "SUB01/02", subject: "SUB01", session: "02", groupId: "global" },
+    { id: "SUB02/01", subject: "SUB02", session: "01", groupId: "global" },
+  ]);
+}
+
+function configurePendingProgress() {
+  useImportStore.setState({
+    importProgress: {
+      SUB01: { subject: "SUB01", session: "01", status: "pending" },
+      SUB02: { subject: "SUB02", session: "01", status: "pending" },
+    },
+  });
+}
+
+function runImportPayload() {
+  const call = vi.mocked(invoke).mock.calls.find(([command]) => command === "run_import_pipeline");
+  expect(call).toBeDefined();
+  return call![1] as {
+    subjectList: string[];
+    stagingEntries: Array<{ subject: string; session: string }>;
+    relocationPlanId: string;
+  };
+}
+
 function firstButton(name: RegExp | string) {
   return screen.getAllByRole("button", { name })[0];
 }
+
+const EMPTY_RELOCATION_PLAN = { planId: "test-plan", subjects: [], fingerprint: "test" };
+
+beforeEach(() => {
+  vi.mocked(invoke).mockImplementation((command: string) => {
+    if (command === "plan_import_relocation") return Promise.resolve(EMPTY_RELOCATION_PLAN);
+    if (command === "run_import_pipeline") return Promise.resolve(12345);
+    if (command === "read_import_status") return Promise.resolve([]);
+    return Promise.resolve(null);
+  });
+});
 
 afterEach(() => {
   cleanup();
@@ -109,11 +209,173 @@ describe("ImportExecution", () => {
     expect(screen.getByTestId("import-table")).toBeInTheDocument();
   });
 
+  it("submits staging entries only for the selected pending subject", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    configureStagingPlan();
+    configurePendingProgress();
+    renderWithProviders();
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    await userEvent.click(checkboxes[1]);
+    await userEvent.click(firstButton(/start import/i));
+
+    await vi.waitFor(() => expect(runImportPayload().subjectList).toEqual(["SUB02"]));
+    expect(runImportPayload().stagingEntries.map(({ subject }) => subject)).toEqual(["SUB02"]);
+  });
+
+  it("shows exact native inventory and binds its immutable plan identity before replacement", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    configureStagingPlan();
+    configurePendingProgress();
+    vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "plan_import_relocation") {
+        return Promise.resolve({
+          planId: "native-plan-42",
+          fingerprint: "sha256",
+          subjects: [
+            {
+              subject: "SUB01",
+              fileCount: 2,
+              byteTotal: 12,
+              sessions: ["ses-01", "ses-02"],
+              fingerprint: "subject-sha",
+              entries: [
+                { path: "rawdata/sub-SUB01/ses-02/asl.nii", kind: "file", bytes: 12 },
+                { path: "rawdata/sub-SUB01/obsolete.json", kind: "file", bytes: 0 },
+              ],
+            },
+          ],
+        });
+      }
+      if (command === "run_import_pipeline") return Promise.resolve(12345);
+      if (command === "read_import_status") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithProviders();
+
+    await userEvent.click(screen.getAllByRole("checkbox")[2]);
+    await userEvent.click(firstButton(/start import/i));
+    await screen.findByTestId("confirm-reimport-confirm");
+
+    expect(screen.getByText(/complete selected subject/i)).toBeInTheDocument();
+    expect(screen.getByText("rawdata/sub-SUB01/ses-02/asl.nii")).toBeInTheDocument();
+    expect(screen.getByTestId("relocation-inventory-SUB01")).toHaveTextContent("ses-02");
+    await userEvent.click(screen.getByTestId("confirm-reimport-confirm"));
+    await vi.waitFor(() => expect(runImportPayload().relocationPlanId).toBe("native-plan-42"));
+  });
+
+  it("shows planning failures without starting import", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    vi.mocked(invoke).mockImplementation((command: string) =>
+      command === "plan_import_relocation"
+        ? Promise.reject(new Error("Unsafe destination inventory"))
+        : Promise.resolve(null),
+    );
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/start import/i));
+    expect(await screen.findByTestId("relocation-planning-error")).toHaveTextContent(
+      "Unsafe destination inventory",
+    );
+    expect(vi.mocked(invoke)).not.toHaveBeenCalledWith("run_import_pipeline", expect.anything());
+  });
+
+  it("submits every session for the selected subject and no sessions for another subject", async () => {
+    configureRuntimeSettings();
+    configureMultiSessionStagingPlan();
+    configurePendingProgress();
+    renderWithProviders();
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    await userEvent.click(checkboxes[2]);
+    await userEvent.click(firstButton(/start import/i));
+
+    await vi.waitFor(() => expect(runImportPayload().subjectList).toEqual(["SUB01"]));
+    expect(
+      runImportPayload().stagingEntries.map(({ subject, session }) => ({ subject, session })),
+    ).toEqual([
+      { subject: "SUB01", session: "01" },
+      { subject: "SUB01", session: "02" },
+    ]);
+  });
+
+  it("submits no request when the explicit table selection is empty", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    configureStagingPlan();
+    configurePendingProgress();
+    renderWithProviders();
+
+    await userEvent.click(screen.getAllByRole("checkbox")[0]);
+
+    expect(firstButton(/start import/i)).toBeDisabled();
+    expect(
+      vi.mocked(invoke).mock.calls.some(([command]) => command === "run_import_pipeline"),
+    ).toBe(false);
+  });
+
+  it("reuses the confirmed subject snapshot when selection changes behind the dialog", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    configureStagingPlan();
+    useImportStore.setState({
+      importProgress: {
+        SUB01: { subject: "SUB01", session: "01", status: "completed" },
+        SUB02: { subject: "SUB02", session: "01", status: "completed" },
+      },
+    });
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/start import/i));
+    await screen.findByTestId("confirm-reimport-confirm");
+    await userEvent.click(screen.getAllByRole("checkbox")[1]);
+    await userEvent.click(screen.getByTestId("confirm-reimport-confirm"));
+
+    await vi.waitFor(() => expect(runImportPayload().subjectList).toEqual(["SUB01", "SUB02"]));
+    expect(runImportPayload().stagingEntries.map(({ subject }) => subject)).toEqual([
+      "SUB01",
+      "SUB02",
+    ]);
+  });
+
+  it("keeps the full import plan as the operation fingerprint", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    configureStagingPlan();
+    configurePendingProgress();
+    const unlisten = vi.fn();
+    let resolveFirstListener!: (cleanup: () => void) => void;
+    vi.mocked(listen).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstListener = resolve;
+        }),
+    );
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/start import/i));
+    await vi.waitFor(() => expect(resolveFirstListener).toBeTypeOf("function"));
+    useImportStore.getState().setSubjectRenames([
+      { original: "SUB01", target: "SUB01" },
+      { original: "SUB02", target: "SUB03" },
+    ]);
+    resolveFirstListener(unlisten);
+
+    await vi.waitFor(() => expect(unlisten).toHaveBeenCalled());
+    expect(
+      vi.mocked(invoke).mock.calls.some(([command]) => command === "run_import_pipeline"),
+    ).toBe(false);
+  });
+
   it("locks configuration and navigation throughout deferred preparation, then unlocks on failure", async () => {
     configureRuntimeSettings();
     configureSubjects();
     let rejectRun!: (reason?: unknown) => void;
     vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "plan_import_relocation") return Promise.resolve(EMPTY_RELOCATION_PLAN);
       if (command === "run_import_pipeline") {
         return new Promise((_, reject) => {
           rejectRun = reject;
@@ -168,6 +430,7 @@ describe("ImportExecution", () => {
     configureRuntimeSettings();
     configureSubjects();
     vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "plan_import_relocation") return Promise.resolve(EMPTY_RELOCATION_PLAN);
       if (command === "run_import_pipeline") {
         return Promise.reject(
           JSON.stringify({
@@ -207,6 +470,7 @@ describe("ImportExecution", () => {
     activateProjectLease("project-a", "/project-a");
     let rejectRun!: (error: unknown) => void;
     vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "plan_import_relocation") return Promise.resolve(EMPTY_RELOCATION_PLAN);
       if (command === "run_import_pipeline") {
         return new Promise((_, reject) => {
           rejectRun = reject;
@@ -325,6 +589,7 @@ describe("ImportExecution", () => {
       return () => {};
     });
     vi.mocked(invoke).mockImplementation((command: string, payload?: unknown) => {
+      if (command === "plan_import_relocation") return Promise.resolve(EMPTY_RELOCATION_PLAN);
       if (command === "run_import_pipeline") {
         runRequestId = (payload as { runRequestId?: string } | undefined)?.runRequestId ?? "";
         return new Promise(() => {});
@@ -370,6 +635,7 @@ describe("ImportExecution", () => {
       return () => {};
     });
     vi.mocked(invoke).mockImplementation((command: string, payload?: unknown) => {
+      if (command === "plan_import_relocation") return Promise.resolve(EMPTY_RELOCATION_PLAN);
       if (command === "run_import_pipeline") {
         runRequests.push((payload as { runRequestId?: string } | undefined)?.runRequestId ?? "");
         if (runRequests.length === 1) {
@@ -418,6 +684,7 @@ describe("ImportExecution", () => {
     useImportStore.getState().startImport();
     useImportStore.getState().setImportPhase("running");
     vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "plan_import_relocation") return Promise.resolve(EMPTY_RELOCATION_PLAN);
       if (command === "stop_active_import") return Promise.reject(new Error("Permission denied"));
       if (command === "read_import_status") return Promise.resolve([]);
       return Promise.resolve(null);
@@ -585,6 +852,8 @@ describe("ImportExecution", () => {
 
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       switch (cmd) {
+        case "plan_import_relocation":
+          return Promise.resolve(EMPTY_RELOCATION_PLAN);
         case "read_import_status":
           return Promise.resolve([{ subject: "SUB01", status: "completed" }]);
         case "run_import_pipeline":
@@ -619,6 +888,7 @@ describe("ImportExecution", () => {
     store.markSubjectFailed("sub01", "NII2BIDS", "Rerun with corrected metadata");
     store.failImport();
     vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "plan_import_relocation") return Promise.resolve(EMPTY_RELOCATION_PLAN);
       if (command === "run_import_pipeline") return Promise.resolve(12345);
       if (command === "read_import_status") return Promise.resolve([]);
       return Promise.resolve(null);

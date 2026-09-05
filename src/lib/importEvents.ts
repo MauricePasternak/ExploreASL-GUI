@@ -120,6 +120,18 @@ export class ImportPipelineError extends Error {
   }
 }
 
+export interface RelocationOutcome {
+  planId: string;
+  generation: number;
+  stagingCleanupComplete: boolean;
+  subjects: Array<{
+    subject: string;
+    status: "committed" | "rolledBack" | "recoveryRequired";
+    phase: string;
+    message: string | null;
+  }>;
+}
+
 /** Decode current tagged Rust errors and old string-only command errors. */
 export function decodeImportPipelineError(error: unknown): ImportPipelineFailure {
   let value = error;
@@ -175,7 +187,8 @@ async function runPostProcessing(
   lease: ProjectLease | null = captureProjectLease(),
 ): Promise<void> {
   if (lease && !isCurrentProjectLease(lease)) return;
-  const { failedSubjects, completeImport, failImport } = useImportStore.getState();
+  const { failedSubjects, completeImport, failImport, markSubjectFailed, addLogLine } =
+    useImportStore.getState();
   const debugMode = useGlobalStore.getState().settings.import.preserveStagingDir;
 
   // 1. Clean import status for failed subjects
@@ -194,16 +207,40 @@ async function runPostProcessing(
   // 3. Move output and update store
   if (!isExitError || failedSubjects.length > 0) {
     try {
-      await invoke("move_import_output", {
+      const outcome = await invoke<RelocationOutcome>("move_import_output", {
         debugMode,
         cleanupStaging: allSucceeded,
       });
       if (lease && !isCurrentProjectLease(lease)) return;
-    } catch {
-      if (allSucceeded) {
+      const failedRelocations = outcome.subjects.filter(
+        (subject) => subject.status !== "committed",
+      );
+      for (const subject of outcome.subjects) {
+        if (subject.status === "committed") {
+          addLogLine(`Relocation committed for ${subject.subject}.`);
+          continue;
+        }
+        const message = subject.message ?? "Relocation did not complete safely.";
+        const detail = `Relocation ${subject.phase} failed for ${subject.subject}: ${message}`;
+        addLogLine(detail);
+        markSubjectFailed(subject.subject, "NII2BIDS", detail);
+      }
+      if (failedRelocations.length > 0) {
         failImport();
         return;
       }
+      if (allSucceeded && !debugMode && !outcome.stagingCleanupComplete) {
+        addLogLine(
+          "Relocation committed, but durable cleanup remains pending. Reopen the project to finish recovery before retrying import.",
+        );
+        failImport();
+        return;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addLogLine(`Relocation failed: ${message}`);
+      failImport();
+      return;
     }
   }
 
@@ -408,6 +445,7 @@ export async function runImportPipeline(params: {
   executionProfile: ExecutionProfile;
   subjectList: string[];
   subjectsToPreserve?: string[];
+  relocationPlanId: string;
 }): Promise<number> {
   try {
     return await invoke<number>("run_import_pipeline", {
@@ -418,6 +456,7 @@ export async function runImportPipeline(params: {
       executionProfile: params.executionProfile,
       subjectList: params.subjectList,
       subjectsToPreserve: params.subjectsToPreserve ?? null,
+      relocationPlanId: params.relocationPlanId,
     });
   } catch (error) {
     throw new ImportPipelineError(decodeImportPipelineError(error));

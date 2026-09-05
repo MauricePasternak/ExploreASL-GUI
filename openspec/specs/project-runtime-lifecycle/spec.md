@@ -6,6 +6,49 @@ Define safe project transitions so each opened project owns a complete, isolated
 
 ## Requirements
 
+### Requirement: Import relocation recovery before activation
+
+Project activation SHALL inspect the candidate root for an unfinished native import-relocation recovery record after candidate validation but before normal project hydration, output access, or subprocess launch. Recovery SHALL derive every candidate, destination, and backup path from the canonical candidate project root and validated project-relative record data; it SHALL NOT trust absolute or escaping recorded paths.
+
+For each subject durably recorded as committed, recovery SHALL preserve the installed replacement and remove only transaction-owned stale candidates or backups. For each subject not durably committed, recovery SHALL restore the complete previous destination when one existed or restore destination absence when it did not. Recovery SHALL finish all safe subject decisions before the project becomes active and SHALL expose a summary of preserved, restored, and cleaned subjects.
+
+If the recovery record is malformed, references an unsafe path that could affect project output, conflicts with authoritative destination state, or cannot establish one complete old or new subject state, project activation MUST fail without guessing, deleting unowned content, or hydrating the candidate project. When a durable reservation intent identifies an isolated candidate path but interruption occurred before candidate ownership evidence became verifiable, recovery SHALL preserve that unknown candidate without reading, renaming, or deleting it, SHALL retain the provably complete project destination or destination absence as authoritative, and SHALL permit activation with an actionable cleanup warning. Other cleanup failures for an otherwise unambiguous complete state SHALL likewise be reported without changing which subject copy is authoritative.
+
+#### Scenario: Crash before subject commit
+
+- **WHEN** project activation finds an interrupted subject transaction without a durable commit record
+- **THEN** recovery SHALL restore the previous complete subject or previous absence before the project becomes active
+
+#### Scenario: Crash after subject commit
+
+- **WHEN** project activation finds a durable subject commit with an installed replacement and retained transaction backup
+- **THEN** recovery SHALL preserve the installed replacement and SHALL remove only the transaction-owned backup and candidate artifacts
+
+#### Scenario: Earlier subject committed before later interruption
+
+- **WHEN** the recovery record shows subject A committed and subject B interrupted before commit
+- **THEN** recovery SHALL preserve A's replacement, restore B's previous state, and report both outcomes before activation completes
+
+#### Scenario: Recovery record contains unsafe path data
+
+- **WHEN** a recovery record contains an absolute path, traversal, symlink escape, foreign project identity, or unowned evidence that prevents proving a complete authoritative project destination
+- **THEN** project activation SHALL fail without deleting, renaming, or copying the referenced filesystem content
+
+#### Scenario: Interrupted candidate reservation is unverifiable
+
+- **WHEN** a durable reservation intent identifies an isolated transaction candidate, its ownership marker is incomplete or unverifiable, and the project destination or prior destination absence remains provably complete
+- **THEN** recovery SHALL preserve the unknown candidate unchanged, SHALL remove it from authoritative transaction consideration, and SHALL activate the project with an actionable cleanup warning
+
+#### Scenario: Recovery cannot establish complete state
+
+- **WHEN** required destination and backup evidence is missing or conflicting such that recovery cannot prove a complete old or new subject state
+- **THEN** project activation SHALL remain blocked and SHALL present an actionable recovery error instead of selecting a state heuristically
+
+#### Scenario: No relocation recovery record exists
+
+- **WHEN** a valid candidate project has no import-relocation recovery record
+- **THEN** project activation SHALL continue with existing transition and hydration behavior
+
 ### Requirement: Transactional project transition
 
 The system SHALL validate a candidate project and classify its recoverable source references before changing the active project. If candidate validation fails, the current project and its runtime state SHALL remain active. After validation, the system SHALL stop project-owned work and listeners before resetting or hydrating state. If confirmed shutdown fails, the transition SHALL fail and the candidate SHALL NOT become active.

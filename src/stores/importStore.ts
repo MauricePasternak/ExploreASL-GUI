@@ -12,7 +12,7 @@ import {
   isProjectWorkAccepted,
   type ProjectLease,
 } from "../lib/projectLifecycle";
-import type { StagingValidationIssue } from "../lib/stagingValidation";
+import { portableKey, type StagingValidationIssue } from "../lib/stagingValidation";
 import { useGlobalStore } from "./globalStore";
 
 import type {
@@ -177,7 +177,7 @@ export interface ImportState {
   updateMetadataGroup: (id: string, updates: Partial<MetadataGroup>) => void;
   setSubjectRows: (rows: SubjectRow[]) => void;
   updateSubjectRowGroup: (rowIds: string[], groupId: string) => void;
-  startImport: () => void;
+  startImport: (subjects?: string[]) => void;
   setImportPhase: (phase: ImportPhase) => void;
   addLogLine: (line: string) => void;
   addLogLines: (lines: string[]) => void;
@@ -599,7 +599,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     }));
   },
 
-  startImport: () => {
+  startImport: (subjects) => {
     // Pre-validate the execution profile before preparing. On failure we show
     // an inline error and block — we do NOT transition to the `failed` phase
     // (nothing has started yet).
@@ -642,9 +642,15 @@ export const useImportStore = create<ImportState>((set, get) => ({
         }
       }
 
+      const selectedSubjectKeys = subjects ? new Set(subjects.map(portableKey)) : null;
       const importProgress = Object.fromEntries(
         Array.from(rowsBySubject.values()).map((row) => {
           const existing = state.importProgress[row.subject];
+          const selected =
+            selectedSubjectKeys === null || selectedSubjectKeys.has(portableKey(row.subject));
+          if (!selected && existing) {
+            return [row.subject, existing];
+          }
           const status =
             existing && existing.status === "completed"
               ? ("completed" as const)

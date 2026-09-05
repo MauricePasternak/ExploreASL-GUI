@@ -53,6 +53,14 @@ export interface ImportPlan {
   };
 }
 
+export function selectImportEntries(
+  entries: StagingEntry[],
+  subjects: readonly string[],
+): StagingEntry[] {
+  const subjectKeys = new Set(subjects.map(portableKey));
+  return entries.filter((entry) => subjectKeys.has(portableKey(entry.subject)));
+}
+
 function issueCode(value: string): StagingValidationIssue["code"] {
   if (value.length === 0) return "EMPTY_COMPONENT";
   if (value === "." || value === "..") return "TRAVERSAL_COMPONENT";

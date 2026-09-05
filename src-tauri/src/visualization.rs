@@ -471,7 +471,7 @@ pub async fn read_data_columns(
 pub fn set_active_project_impl(
     root_path: String,
     state: &crate::import::AppState,
-) -> Result<(), String> {
+) -> Result<crate::import_relocation::RelocationRecoverySummary, String> {
     let _transition = state
         .project_transition
         .lock()
@@ -481,24 +481,27 @@ pub fn set_active_project_impl(
         log::error!("set_active_project failed canonicalizing: {}", e);
         format!("Invalid project path: {}", e)
     })?;
+    // Recovery must finish before this candidate can become observable through
+    // active-root IPC or frontend hydration.
+    let recovery = crate::import_relocation::recover(&path)?;
     *state
         .active_project_root
         .lock()
         .map_err(|e| e.to_string())? = Some(path);
     *state.active_data.lock().map_err(|e| e.to_string())? = None;
-    Ok(())
+    Ok(recovery)
 }
 
 #[tauri::command]
 pub fn set_active_project(
     root_path: String,
     state: State<'_, crate::import::AppState>,
-) -> Result<(), String> {
+) -> Result<crate::import_relocation::RelocationRecoverySummary, String> {
     let _trace = crate::tracing::CommandTrace::new("set_active_project");
     log::info!("set_active_project: root_path = {}", root_path);
-    set_active_project_impl(root_path, &state)?;
+    let recovery = set_active_project_impl(root_path, &state)?;
     log::info!("set_active_project success");
-    Ok(())
+    Ok(recovery)
 }
 
 pub fn clear_active_project_impl(state: &crate::import::AppState) -> Result<(), String> {

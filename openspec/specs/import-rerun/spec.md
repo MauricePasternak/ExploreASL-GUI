@@ -164,35 +164,68 @@ The import step 5 execution view SHALL replace the current `ImportProgressTable`
 The system SHALL provide "Start Import" and "Stop" controls on step 5. When the user clicks "Start Import":
 
 1. If no subjects are selected, the button SHALL be disabled.
-2. If selected subjects include any with status "completed" and not stale, a confirmation dialog SHALL appear: title "Re-import completed subject?", body listing the completed subject names with text "These subjects appear to have completed successfully. Re-importing will overwrite their existing output.", actions "Cancel" (default) and "Re-import anyway".
-3. If all selected subjects are stale, pending, or failed, no confirmation dialog SHALL appear and import starts immediately.
-4. Before spawning MATLAB, lock files for selected subjects SHALL be deleted. Lock files for unselected fresh subjects SHALL be preserved via `copyLockFilesForRetry`.
-5. The staging tree SHALL be rebuilt from current configuration.
+2. The system SHALL resolve one immutable selected-subject snapshot and request a native read-only replacement inventory for that exact snapshot before staging mutation or process spawn.
+3. If the inventory contains any existing project artifact that relocation would replace or remove, or selected subjects include any fresh completed subject, a confirmation dialog SHALL appear with title "Replace existing imported data?", an expandable subject-grouped inventory of affected project-relative paths, sessions, file counts, and byte totals, explanatory text that the complete selected subject will replace older sessions and files, and actions "Cancel" (default) and "Replace and import".
+4. If the inventory is empty and all selected subjects are stale, pending, or failed, import SHALL start without a replacement confirmation.
+5. Cancellation SHALL preserve selection and SHALL NOT bind a relocation plan, mutate staging, or spawn ExploreASL.
+6. Confirmation SHALL bind the native relocation-plan identity and fingerprint to the same selected-subject snapshot used for staging, progress tracking, parser ownership, retry preservation, and execution.
+7. Before spawning MATLAB, lock files for selected subjects SHALL be deleted. Lock files for unselected fresh subjects SHALL be preserved via retry lock preservation.
+8. The staging tree SHALL be rebuilt from current configuration with source entries only for selected subjects. Unselected subjects SHALL NOT be staged or processed, regardless of status or preservable locks.
+
+#### Scenario: Initial import has no existing destination
+
+- **WHEN** selected pending subjects have no project artifacts that relocation would replace or remove
+- **THEN** import SHALL start without replacement confirmation using the immutable selected-subject snapshot and empty relocation inventory
+
+#### Scenario: Existing pending or stale subject has output
+
+- **WHEN** a selected pending, stale, or failed subject has existing project artifacts that relocation would replace or remove
+- **THEN** the replacement confirmation SHALL appear regardless of displayed completion status
 
 #### Scenario: Re-import with only stale subjects
 
-- **WHEN** the user selects only stale subjects and clicks "Start Import"
-- **THEN** import starts without confirmation, lock files for selected subjects are deleted, lock files for unselected fresh subjects are preserved
+- **WHEN** the user selects only stale subjects and native inventory finds no existing project artifact that relocation would replace or remove
+- **THEN** import SHALL start without replacement confirmation, stage only those stale subjects, delete their import locks, and preserve authorized locks for unselected fresh subjects
+
+#### Scenario: Freshly completed subject is selected
+
+- **WHEN** a freshly completed subject that is not stale is selected
+- **THEN** the replacement confirmation SHALL appear and SHALL include that subject and its native destination inventory
 
 #### Scenario: Re-import with freshly completed subjects
 
-- **WHEN** the user selects a freshly completed subject (not stale) and clicks "Start Import"
-- **THEN** a confirmation dialog appears with the subject name listed
+- **WHEN** the user selects one or more freshly completed subjects and clicks "Start Import"
+- **THEN** the replacement confirmation SHALL list those subjects and their native destination inventories before import can start
+
+#### Scenario: Existing subject contains older sessions
+
+- **WHEN** native inventory finds selected-subject sessions or files that the whole-subject replacement can remove
+- **THEN** the dialog SHALL identify those project-relative paths and SHALL explain that confirmation replaces the complete subject rather than merging old content
 
 #### Scenario: Confirmation cancelled
 
-- **WHEN** the user clicks "Cancel" on the confirmation dialog
-- **THEN** the import does not start and the subject selection is preserved
+- **WHEN** the user clicks "Cancel" on the replacement confirmation
+- **THEN** import SHALL NOT start, subject selection SHALL remain unchanged, and project and staging files SHALL remain unchanged
 
 #### Scenario: Confirmation accepted
 
-- **WHEN** the user clicks "Re-import anyway" on the confirmation dialog
-- **THEN** import proceeds, lock files for all selected subjects (including the freshly completed ones) are deleted
+- **WHEN** the user clicks "Replace and import"
+- **THEN** import SHALL proceed only for the confirmed immutable subject snapshot and SHALL carry its native relocation-plan identity for later destination revalidation
 
 #### Scenario: No subjects selected
 
 - **WHEN** no subjects are selected in the checkbox table
-- **THEN** the "Start Import" button is disabled
+- **THEN** the "Start Import" button SHALL be disabled and no inventory or import request SHALL be submitted
+
+#### Scenario: Unselected pending subject has no lock file
+
+- **WHEN** a run selects one subject while another pending subject is unselected and has no import lock file
+- **THEN** the unselected pending subject SHALL be absent from the replacement inventory, staging source tree, and ExploreASL execution scope
+
+#### Scenario: Inventory planning fails
+
+- **WHEN** native inventory cannot safely inspect a selected destination or derive an owned relocation plan
+- **THEN** import SHALL remain blocked, project and staging files SHALL remain unchanged, and the user SHALL receive an actionable error
 
 ### Requirement: Import namespace restructure
 

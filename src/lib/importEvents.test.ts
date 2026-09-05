@@ -91,6 +91,13 @@ beforeEach(() => {
     switch (cmd) {
       case "run_import_pipeline":
         return 12345;
+      case "move_import_output":
+        return {
+          planId: "test-plan",
+          generation: 1,
+          stagingCleanupComplete: true,
+          subjects: [],
+        };
       default:
         return null;
     }
@@ -350,6 +357,90 @@ describe("setupImportListeners", () => {
     expect(vi.mocked(invoke).mock.calls.some((call) => call[0] === "clean_import_status")).toBe(
       false,
     );
+  });
+
+  it("keeps committed evidence but fails visible partial relocation outcomes", async () => {
+    useImportStore.getState().startImport();
+    useImportStore.getState().markSubjectCompleted("GOOD", 10);
+    useImportStore.getState().markSubjectCompleted("BAD", 10);
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "move_import_output") {
+        return {
+          planId: "plan-a",
+          generation: 1,
+          stagingCleanupComplete: false,
+          subjects: [
+            { subject: "GOOD", status: "committed", phase: "committed", message: null },
+            {
+              subject: "BAD",
+              status: "rolledBack",
+              phase: "install",
+              message: "Candidate install failed",
+            },
+          ],
+        };
+      }
+      return null;
+    });
+    await setupImportListeners(RUN_REQUEST_ID);
+
+    emitStructured({ type: "import_complete" });
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("failed"));
+    expect(useImportStore.getState().importProgress.GOOD.status).toBe("completed");
+    expect(useImportStore.getState().importProgress.BAD).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("Relocation install failed"),
+    });
+    expect(useImportStore.getState().importLog).toContain("Relocation committed for GOOD.");
+  });
+
+  it("fails visibly when committed relocation cleanup remains pending", async () => {
+    useGlobalStore.setState((state) => ({
+      settings: {
+        ...state.settings,
+        import: { preserveStagingDir: false },
+      },
+    }));
+    useImportStore.getState().startImport();
+    useImportStore.getState().markSubjectCompleted("GOOD", 10);
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "move_import_output") {
+        return {
+          planId: "plan-a",
+          generation: 1,
+          stagingCleanupComplete: false,
+          subjects: [{ subject: "GOOD", status: "committed", phase: "committed", message: null }],
+        };
+      }
+      return null;
+    });
+    await setupImportListeners(RUN_REQUEST_ID);
+
+    emitStructured({ type: "import_complete" });
+
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("failed"));
+    expect(useImportStore.getState().importProgress.GOOD.status).toBe("completed");
+    expect(
+      useImportStore
+        .getState()
+        .importLog.some((line) => line.includes("durable cleanup remains pending")),
+    ).toBe(true);
+  });
+
+  it("does not swallow a stale relocation command error", async () => {
+    useImportStore.getState().startImport();
+    useImportStore.getState().markSubjectCompleted("GOOD", 10);
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "move_import_output") {
+        throw new Error("Relocation plan is stale; project output changed after confirmation");
+      }
+      return null;
+    });
+    await setupImportListeners(RUN_REQUEST_ID);
+
+    emitStructured({ type: "import_complete" });
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("failed"));
+    expect(useImportStore.getState().importLog.join("\n")).toContain("plan is stale");
   });
 
   it("marks running subjects failed and post-processes on MatlabExitError", async () => {

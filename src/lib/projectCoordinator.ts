@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifications } from "@mantine/notifications";
 
 import type { ProjectFile } from "../schemas/project";
 import { clearProcessingListeners } from "../stores/processingStore";
@@ -29,8 +30,15 @@ export interface ProjectRuntimeShutdownResult {
 export interface TransitionDependencies {
   shutdownRuntime?: () => Promise<ProjectRuntimeShutdownResult>;
   cleanupListeners?: () => void;
-  setActiveProject?: (rootPath: string) => Promise<void>;
+  setActiveProject?: (rootPath: string) => Promise<RelocationRecoverySummary | void>;
   clearActiveProject?: () => Promise<void>;
+}
+
+export interface RelocationRecoverySummary {
+  preservedSubjects: string[];
+  restoredSubjects: string[];
+  cleanedSubjects: string[];
+  cleanupErrors: string[];
 }
 
 export async function shutdownProjectRuntime(): Promise<ProjectRuntimeShutdownResult> {
@@ -45,8 +53,8 @@ function cleanupProjectListeners(): void {
   clearProcessingListeners();
 }
 
-async function setNativeActiveProject(rootPath: string): Promise<void> {
-  await invoke("set_active_project", { rootPath });
+async function setNativeActiveProject(rootPath: string): Promise<RelocationRecoverySummary> {
+  return invoke<RelocationRecoverySummary>("set_active_project", { rootPath });
 }
 
 async function clearNativeActiveProject(): Promise<void> {
@@ -92,9 +100,31 @@ export function transitionProjectRuntime(
     (dependencies.cleanupListeners ?? cleanupProjectListeners)();
     invalidateProjectLease();
     try {
-      await (dependencies.setActiveProject ?? setNativeActiveProject)(
+      const recovery = await (dependencies.setActiveProject ?? setNativeActiveProject)(
         candidate.projectMeta.rootPath,
       );
+      if (
+        recovery &&
+        (recovery.preservedSubjects.length > 0 ||
+          recovery.restoredSubjects.length > 0 ||
+          recovery.cleanupErrors.length > 0)
+      ) {
+        notifications.show({
+          color: recovery.cleanupErrors.length > 0 ? "orange" : "blue",
+          title: "Import relocation recovery completed",
+          message: [
+            recovery.preservedSubjects.length > 0
+              ? `Preserved: ${recovery.preservedSubjects.join(", ")}`
+              : "",
+            recovery.restoredSubjects.length > 0
+              ? `Restored: ${recovery.restoredSubjects.join(", ")}`
+              : "",
+            ...recovery.cleanupErrors,
+          ]
+            .filter(Boolean)
+            .join(". "),
+        });
+      }
     } catch (error) {
       // Candidate native root was not admitted. Do not reactivate old frontend work.
       throw new Error(

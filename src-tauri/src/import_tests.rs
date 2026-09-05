@@ -1,20 +1,22 @@
 #[cfg(test)]
 mod tests {
+    use crate::execution_profile::ExecutionProfile;
     use crate::import::{
         AppState, ImportCommandError, ImportLifecycle, ImportPrepareComplete,
         ImportRawEventPayload, ImportState, ImportStructuredEventPayload, MatlabExitError,
         RESERVED_IMPORT_PID, StagingEntry, authorize_stop_import_pid, build_apptainer_import_args,
-        clean_import_status_for_state, clean_import_status_paths,
-        cleanup_after_prepare_event_failure, cleanup_staging_root,
+        canonicalize_import_event_subject, clean_import_status_for_state,
+        clean_import_status_paths, cleanup_after_prepare_event_failure, cleanup_staging_root,
         clear_matching_termination_intent, clear_reserved_import, copy_lock_files_for_state,
         copy_lock_files_paths, find_executable_on_path, mark_import_terminal_if_matches,
         mark_import_termination_requested, move_import_output_for_state, move_import_output_paths,
-        record_import_results, reserve_import_state, reserve_import_state_for_run,
-        rollback_preparation_failure, rollback_process_spawn_failure, set_reserved_import_pid,
-        should_emit_matlab_exit_error, start_supervisor_or_reap, stop_import_pid_with,
-        take_matching_supervisor_handle, validate_import_not_running, validate_matlab_executable,
-        validate_non_empty_inputs, validate_project_root_for_staging, validate_staging_root,
-        validate_subject_components,
+        normalize_staging_subject_spelling, record_import_results, reserve_import_state,
+        reserve_import_state_for_run, rollback_preparation_failure, rollback_process_spawn_failure,
+        run_import_pipeline, set_reserved_import_pid, should_emit_matlab_exit_error,
+        start_supervisor_or_reap, stop_import_pid_with, take_matching_supervisor_handle,
+        validate_import_not_running, validate_matlab_executable, validate_non_empty_inputs,
+        validate_project_root_for_staging, validate_staging_root, validate_subject_components,
+        validate_subject_scope,
     };
     use crate::import_parser::ImportStructuredEvent;
     use std::cell::Cell;
@@ -22,9 +24,9 @@ mod tests {
     use std::path::PathBuf;
     #[cfg(unix)]
     use std::process::Command;
-    #[cfg(unix)]
-    use std::sync::mpsc;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::{Arc, Barrier, mpsc};
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+    use tauri::Manager;
     use tempfile::tempdir;
 
     fn unique_temp_path(name: &str) -> PathBuf {
@@ -377,6 +379,409 @@ mod tests {
             .expect_err("empty subject list should be rejected");
 
         assert_eq!(error, "subject_list must contain at least one subject");
+    }
+
+    fn scoped_entry(subject: &str, source_path: &str) -> StagingEntry {
+        StagingEntry {
+            subject: subject.to_string(),
+            session: "01".to_string(),
+            run: "01".to_string(),
+            run_alias: "ASL_1".to_string(),
+            modality: "ASL4D".to_string(),
+            original_subject: subject.to_string(),
+            original_session: "01".to_string(),
+            original_run: "01".to_string(),
+            source_path: source_path.to_string(),
+        }
+    }
+
+    #[test]
+    fn subject_scope_accepts_multiple_entries_per_declared_subject() {
+        let entries = vec![
+            scoped_entry("A", "/source/A/asl"),
+            scoped_entry("A", "/source/A/m0"),
+            scoped_entry("B", "/source/B/asl"),
+        ];
+
+        validate_subject_scope(&entries, &["A".to_string(), "B".to_string()])
+            .expect("distinct staging subjects match the declared subject set");
+    }
+
+    #[test]
+    fn subject_scope_rejects_undeclared_staging_subjects() {
+        let entries = vec![
+            scoped_entry("A", "/source/A/asl"),
+            scoped_entry("EXTRA", "/source/extra/asl"),
+        ];
+
+        let error = validate_subject_scope(&entries, &["A".to_string(), "MISSING".to_string()])
+            .expect_err("undeclared staging subject should be rejected");
+
+        assert!(error.contains("undeclared staging subjects: EXTRA"));
+        assert!(error.contains("declared subjects without staging entries: MISSING"));
+    }
+
+    #[test]
+    fn subject_scope_rejects_declared_subjects_without_entries() {
+        let entries = vec![scoped_entry("A", "/source/A/asl")];
+
+        let error = validate_subject_scope(&entries, &["A".to_string(), "MISSING".to_string()])
+            .expect_err("declared subject without entries should be rejected");
+
+        assert!(error.contains("declared subjects without staging entries: MISSING"));
+    }
+
+    #[test]
+    fn subject_scope_uses_portable_case_and_unicode_comparison() {
+        let entries = vec![
+            scoped_entry("subjecta", "/source/a/asl"),
+            scoped_entry("Straße", "/source/strasse/asl"),
+        ];
+
+        validate_subject_scope(&entries, &["SUBJECTA".to_string(), "STRASSE".to_string()])
+            .expect("portable-equivalent subject spellings should agree");
+    }
+
+    #[test]
+    fn import_results_use_owned_spelling_for_portable_equivalent_parser_subjects() {
+        let mut state = ImportState::new(
+            PathBuf::from("/project/.easl_staging"),
+            PathBuf::from("/project"),
+            vec!["SubjectA".to_string(), "Straße".to_string()],
+        );
+
+        assert!(record_import_results(
+            &mut state,
+            0,
+            &ImportStructuredEvent::SubjectComplete {
+                subject: "subjecta".to_string(),
+                duration_secs: 1,
+            },
+        ));
+        assert!(record_import_results(
+            &mut state,
+            0,
+            &ImportStructuredEvent::SubjectComplete {
+                subject: "STRASSE".to_string(),
+                duration_secs: 1,
+            },
+        ));
+
+        assert_eq!(state.succeeded_subjects, ["SubjectA", "Straße"]);
+    }
+
+    #[test]
+    fn structured_events_expose_canonical_owned_subject_spelling() {
+        for mut event in [
+            ImportStructuredEvent::SubjectStart {
+                subject: "subjecta".to_string(),
+                step: "DCM2NII".to_string(),
+            },
+            ImportStructuredEvent::Dcm2NiiStatus {
+                subject: "STRASSE".to_string(),
+                exit_code: 0,
+            },
+        ] {
+            assert!(canonicalize_import_event_subject(
+                &mut event,
+                &["SubjectA".to_string(), "Straße".to_string()],
+            ));
+            let subject = match event {
+                ImportStructuredEvent::SubjectStart { subject, .. }
+                | ImportStructuredEvent::Dcm2NiiStatus { subject, .. } => subject,
+                _ => unreachable!(),
+            };
+            assert!(subject == "SubjectA" || subject == "Straße");
+        }
+    }
+
+    #[test]
+    fn relocation_uses_canonical_owned_spelling_after_portable_result_matches() {
+        for (canonical, parsed) in [("SubjectA", "subjecta"), ("Straße", "STRASSE")] {
+            let workspace = tempdir().expect("workspace");
+            let project_root = workspace.path().join("project");
+            let state = state_with_active_project(&project_root);
+            let staging_root = project_root.join(".easl_staging");
+            fs::create_dir_all(staging_root.join(format!("rawdata/sub-{canonical}"))).unwrap();
+            fs::write(
+                staging_root.join(format!("rawdata/sub-{canonical}/new.nii")),
+                "new",
+            )
+            .unwrap();
+            set_import_ownership(&state, &project_root, &[canonical], &[], &[]);
+            assert!(record_import_results(
+                &mut state.import_state.lock().unwrap(),
+                0,
+                &ImportStructuredEvent::SubjectComplete {
+                    subject: parsed.to_string(),
+                    duration_secs: 1,
+                },
+            ));
+
+            let outcome = move_import_output_for_state(&state, true, false).unwrap();
+
+            assert_eq!(outcome.subjects[0].subject, canonical);
+            assert_eq!(
+                fs::read_to_string(project_root.join(format!("rawdata/sub-{canonical}/new.nii")))
+                    .unwrap(),
+                "new"
+            );
+            let subject_directories = fs::read_dir(project_root.join("rawdata"))
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().to_string_lossy().to_string())
+                .filter(|name| name.starts_with("sub-"))
+                .collect::<Vec<_>>();
+            assert_eq!(subject_directories, [format!("sub-{canonical}")]);
+        }
+    }
+
+    #[test]
+    fn canonical_owned_subject_spelling_flows_through_staging_and_relocation() {
+        for (canonical, entry_spelling) in [("SubjectA", "subjecta"), ("STRASSE", "Straße")] {
+            let workspace = tempdir().expect("workspace");
+            let project_root = workspace.path().join("project");
+            let source = workspace.path().join("source.nii");
+            fs::create_dir_all(&project_root).unwrap();
+            fs::write(&source, "source").unwrap();
+            let state = state_with_active_project(&project_root);
+            let entry = scoped_entry(entry_spelling, source.to_string_lossy().as_ref());
+
+            let normalized = normalize_staging_subject_spelling(
+                std::slice::from_ref(&entry),
+                &[canonical.to_string()],
+            )
+            .expect("portable subject normalization");
+            assert_eq!(normalized[0].subject, canonical);
+            assert_eq!(normalized[0].original_subject, entry.original_subject);
+            assert_eq!(normalized[0].source_path, entry.source_path);
+            let compiled = crate::staging::compile_staging_plan(
+                Some(fs::canonicalize(&project_root).unwrap()),
+                &normalized,
+            )
+            .expect("compiled canonical staging plan");
+            crate::staging::execute_compiled_staging_plan(&compiled).unwrap();
+            assert!(
+                compiled.records[0].destination.starts_with(
+                    project_root
+                        .join(".easl_staging/sourcedata")
+                        .join(canonical)
+                )
+            );
+
+            let staging_root = project_root.join(".easl_staging");
+            fs::create_dir_all(staging_root.join(format!("rawdata/sub-{canonical}"))).unwrap();
+            fs::write(
+                staging_root.join(format!("rawdata/sub-{canonical}/new.nii")),
+                "new",
+            )
+            .unwrap();
+            set_import_ownership(&state, &project_root, &[canonical], &[], &[]);
+            assert!(record_import_results(
+                &mut state.import_state.lock().unwrap(),
+                0,
+                &ImportStructuredEvent::SubjectComplete {
+                    subject: entry_spelling.to_string(),
+                    duration_secs: 1,
+                },
+            ));
+            let outcome = move_import_output_for_state(&state, true, false).unwrap();
+            assert_eq!(outcome.subjects[0].subject, canonical);
+            assert!(
+                project_root
+                    .join(format!("rawdata/sub-{canonical}/new.nii"))
+                    .exists()
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_staging_normalization_rejects_portable_duplicate_declarations() {
+        let entry = scoped_entry("subjecta", "/source.nii");
+        assert!(
+            normalize_staging_subject_spelling(
+                &[entry],
+                &["SubjectA".to_string(), "subjecta".to_string()],
+            )
+            .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_pipeline_stages_and_relocates_with_declared_canonical_subject_spelling() {
+        use std::os::unix::fs::PermissionsExt;
+
+        for (canonical, entry_spelling) in [("SubjectA", "subjecta"), ("STRASSE", "Straße")] {
+            let workspace = tempdir().expect("workspace");
+            let project_root = workspace.path().join("project");
+            let source = workspace.path().join("source.nii");
+            let fake_matlab = workspace.path().join("matlab");
+            let exploreasl = workspace.path().join("ExploreASL");
+            fs::create_dir_all(&project_root).unwrap();
+            fs::create_dir_all(&exploreasl).unwrap();
+            fs::write(&source, "source").unwrap();
+            fs::write(exploreasl.join("ExploreASL.m"), "% fake").unwrap();
+            fs::write(
+                &fake_matlab,
+                format!(
+                    "#!/bin/sh\nmkdir -p \"{}/.easl_staging/rawdata/sub-{}\"\nprintf new > \"{}/.easl_staging/rawdata/sub-{}/new.nii\"\nprintf '%s\\n' 'Subject: {}, Module: Import' 'Job-iteration 1 stopped at now and took 1 seconds' 'xASL_module_Import completed 100%'\n",
+                    project_root.display(),
+                    canonical,
+                    project_root.display(),
+                    canonical,
+                    canonical,
+                ),
+            )
+            .unwrap();
+            let mut permissions = fs::metadata(&fake_matlab).unwrap().permissions();
+            permissions.set_mode(0o700);
+            fs::set_permissions(&fake_matlab, permissions).unwrap();
+
+            let app = tauri::test::mock_builder()
+                .manage(AppState::default())
+                .build(tauri::test::mock_context(tauri::test::noop_assets()))
+                .expect("test app");
+            let state = app.state::<AppState>();
+            let canonical_root = fs::canonicalize(&project_root).unwrap();
+            *state.active_project_root.lock().unwrap() = Some(canonical_root.clone());
+            let plan_id = format!("canonical-pipeline-{canonical}");
+            let plan = crate::import_relocation::create_plan(
+                &canonical_root,
+                &[canonical.to_string()],
+                plan_id.clone(),
+            )
+            .unwrap();
+            state
+                .relocation_plans
+                .lock()
+                .unwrap()
+                .insert(plan_id.clone(), plan);
+            let entry = scoped_entry(entry_spelling, source.to_string_lossy().as_ref());
+
+            let pid = run_import_pipeline(
+                app.handle().clone(),
+                state.clone(),
+                vec![entry.clone()],
+                serde_json::json!({}),
+                serde_json::json!({}),
+                ExecutionProfile::Matlab {
+                    id: "fake".to_string(),
+                    label: "Fake MATLAB".to_string(),
+                    matlab_path: fake_matlab.to_string_lossy().to_string(),
+                    explore_asl_path: exploreasl.to_string_lossy().to_string(),
+                    explore_asl_version: None,
+                },
+                vec![canonical.to_string()],
+                None,
+                format!("canonical-run-{canonical}"),
+                plan_id,
+            )
+            .expect("pipeline starts");
+
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                if state.import_state.lock().unwrap().lifecycle == ImportLifecycle::Terminal {
+                    break;
+                }
+                assert!(Instant::now() < deadline, "fake import did not terminate");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let generation = state.import_state.lock().unwrap().ownership_generation;
+            take_matching_supervisor_handle(&state, generation, pid)
+                .expect("supervisor handle")
+                .join()
+                .unwrap();
+
+            let staging_root = canonical_root.join(".easl_staging");
+            assert!(
+                staging_root
+                    .join("sourcedata")
+                    .join(canonical)
+                    .join("01/01/ASL4D/source.nii")
+                    .exists()
+            );
+            assert!(
+                !staging_root
+                    .join("sourcedata")
+                    .join(entry_spelling)
+                    .exists()
+            );
+            assert_eq!(
+                state.import_state.lock().unwrap().succeeded_subjects,
+                [canonical]
+            );
+
+            let outcome = move_import_output_for_state(&state, true, false).unwrap();
+            assert_eq!(outcome.subjects[0].subject, canonical);
+            assert_eq!(
+                fs::read_to_string(canonical_root.join(format!("rawdata/sub-{canonical}/new.nii")))
+                    .unwrap(),
+                "new"
+            );
+            assert_eq!(entry.original_subject, entry_spelling);
+            assert_eq!(entry.source_path, source.to_string_lossy());
+        }
+    }
+
+    #[test]
+    fn run_import_pipeline_rejects_subject_scope_mismatch_before_mutation_or_spawn() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(&staging_root).expect("staging root should be created");
+        fs::write(staging_root.join("sentinel.txt"), "unchanged")
+            .expect("staging sentinel should be written");
+
+        let app = tauri::test::mock_builder()
+            .manage(AppState::default())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("test app should build");
+        let state = app.state::<AppState>();
+        *state
+            .active_project_root
+            .lock()
+            .expect("active project lock") =
+            Some(fs::canonicalize(&project_root).expect("project root should canonicalize"));
+        set_import_ownership(&state, &project_root, &["PREVIOUS"], &[], &["PREVIOUS"]);
+
+        let error = run_import_pipeline(
+            app.handle().clone(),
+            state,
+            vec![scoped_entry("EXTRA", "/source/extra/asl")],
+            serde_json::json!({}),
+            serde_json::json!({}),
+            ExecutionProfile::Matlab {
+                id: "unused".to_string(),
+                label: "Unused".to_string(),
+                matlab_path: "unused".to_string(),
+                explore_asl_path: "unused".to_string(),
+                explore_asl_version: None,
+            },
+            vec!["SELECTED".to_string()],
+            None,
+            "request-scope-mismatch".to_string(),
+            "unused-plan".to_string(),
+        )
+        .expect_err("scope mismatch should reject the command");
+
+        match error {
+            ImportCommandError::Operational { message } => {
+                assert!(message.contains("undeclared staging subjects: EXTRA"));
+                assert!(message.contains("declared subjects without staging entries: SELECTED"));
+            }
+            ImportCommandError::Preflight { .. } => panic!("scope mismatch is an input error"),
+        }
+        let state = app.state::<AppState>();
+        let import_state = state.import_state.lock().expect("import state lock");
+        assert_eq!(import_state.lifecycle, ImportLifecycle::Terminal);
+        assert_eq!(import_state.child_pid, None);
+        assert_eq!(import_state.subject_list, ["PREVIOUS"]);
+        drop(import_state);
+        assert_eq!(
+            fs::read_to_string(staging_root.join("sentinel.txt"))
+                .expect("staging sentinel should remain"),
+            "unchanged"
+        );
     }
 
     #[test]
@@ -964,10 +1369,30 @@ mod tests {
             .iter()
             .map(|subject| (*subject).to_string())
             .collect();
+        let plan_id = "test-owned-plan".to_string();
+        let mut plan = crate::import_relocation::create_plan(
+            &import_state.project_root,
+            &import_state.subject_list,
+            plan_id.clone(),
+        )
+        .expect("test relocation plan");
+        crate::import_relocation::bind_plan(
+            &mut plan,
+            &import_state.project_root,
+            &import_state.subject_list,
+            0,
+        )
+        .expect("bind test relocation plan");
+        import_state.relocation_plan_id = Some(plan_id.clone());
         *state
             .import_state
             .lock()
             .expect("import state lock should be available") = import_state;
+        state
+            .relocation_plans
+            .lock()
+            .expect("plan state")
+            .insert(plan_id, plan);
     }
 
     fn set_import_lifecycle(state: &AppState, lifecycle: ImportLifecycle, pid: u32) {
@@ -1202,8 +1627,7 @@ mod tests {
             let mut import_state = state.import_state.lock().expect("import state");
             import_state.lifecycle = ImportLifecycle::Running;
             import_state.child_pid = Some(42);
-            import_state.ownership_generation = 7;
-            assert!(mark_import_terminal_if_matches(&mut import_state, 7, 42));
+            assert!(mark_import_terminal_if_matches(&mut import_state, 0, 42));
         }
 
         move_import_output_for_state(&state, false, false)
@@ -1256,6 +1680,8 @@ mod tests {
             "A",
         )
         .expect("staging output");
+        fs::write(staging_root.join("sourcestructure.json"), "source config").unwrap();
+        fs::write(staging_root.join("studyPar.json"), "study config").unwrap();
         set_import_ownership(&state, &project_root, &["A"], &[], &["A"]);
 
         move_import_output_for_state(&state, true, true)
@@ -1269,6 +1695,125 @@ mod tests {
         );
         assert_eq!(import_state.succeeded_subjects, ["A"]);
         assert!(staging_root.exists());
+        assert_eq!(
+            fs::read_to_string(
+                project_root.join("derivatives/ExploreASL_GUI/sourcestructure.json")
+            )
+            .unwrap(),
+            "source config"
+        );
+        assert_eq!(
+            fs::read_to_string(project_root.join("derivatives/ExploreASL_GUI/studyPar.json"))
+                .unwrap(),
+            "study config"
+        );
+    }
+
+    #[test]
+    fn debug_config_copy_failure_is_visible_and_retains_terminal_ownership() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(staging_root.join("rawdata/sub-A")).expect("staging output");
+        fs::write(staging_root.join("rawdata/sub-A/image.nii"), "new").unwrap();
+        fs::write(staging_root.join("sourcestructure.json"), "source config").unwrap();
+        let blocked_destination =
+            project_root.join("derivatives/ExploreASL_GUI/sourcestructure.json");
+        fs::create_dir_all(&blocked_destination).unwrap();
+        set_import_ownership(&state, &project_root, &["A"], &[], &["A"]);
+
+        let error = move_import_output_for_state(&state, true, true)
+            .expect_err("debug config copy failure must be surfaced");
+
+        assert!(error.contains("Failed to copy import config"));
+        assert_eq!(
+            fs::read_to_string(project_root.join("rawdata/sub-A/image.nii")).unwrap(),
+            "new"
+        );
+        assert!(staging_root.exists());
+        let import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.lifecycle, ImportLifecycle::Terminal);
+        assert_eq!(import_state.succeeded_subjects, ["A"]);
+    }
+
+    #[test]
+    fn debug_all_failed_run_does_not_copy_configs() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(&staging_root).expect("staging output");
+        fs::write(staging_root.join("sourcestructure.json"), "source config").unwrap();
+        fs::write(staging_root.join("studyPar.json"), "study config").unwrap();
+        set_import_ownership(&state, &project_root, &["A"], &["A"], &[]);
+
+        let outcome = move_import_output_for_state(&state, true, true)
+            .expect("no succeeded subjects should be a nonmutating outcome");
+
+        assert!(outcome.subjects.is_empty());
+        assert!(!project_root.join("derivatives/ExploreASL_GUI").exists());
+        assert!(staging_root.exists());
+        let import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.lifecycle, ImportLifecycle::Terminal);
+        assert_eq!(import_state.failed_subjects, ["A"]);
+    }
+
+    #[test]
+    fn activation_and_relocation_share_transition_exclusion_without_deadlock() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = Arc::new(state_with_active_project(&project_root));
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(staging_root.join("rawdata/sub-A")).unwrap();
+        fs::write(staging_root.join("rawdata/sub-A/new.nii"), "new").unwrap();
+        set_import_ownership(&state, &project_root, &["A"], &[], &["A"]);
+        let transition = state.project_transition.lock().unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let start = Arc::new(Barrier::new(3));
+
+        let relocation_state = Arc::clone(&state);
+        let relocation_sender = sender.clone();
+        let relocation_start = Arc::clone(&start);
+        let relocation = std::thread::spawn(move || {
+            relocation_start.wait();
+            relocation_sender
+                .send(move_import_output_for_state(&relocation_state, true, false).map(|_| ()))
+                .unwrap();
+        });
+        let activation_state = Arc::clone(&state);
+        let activation_root = project_root.to_string_lossy().to_string();
+        let activation_start = Arc::clone(&start);
+        let activation = std::thread::spawn(move || {
+            activation_start.wait();
+            sender
+                .send(
+                    crate::visualization::set_active_project_impl(
+                        activation_root,
+                        &activation_state,
+                    )
+                    .map(|_| ()),
+                )
+                .unwrap();
+        });
+
+        start.wait();
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(transition);
+        receiver
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        receiver
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        relocation.join().unwrap();
+        activation.join().unwrap();
+        assert_eq!(
+            fs::read_to_string(project_root.join("rawdata/sub-A/new.nii")).unwrap(),
+            "new"
+        );
     }
 
     #[test]
@@ -1348,6 +1893,7 @@ mod tests {
                     "retry".to_string(),
                     vec!["FAILED".to_string()],
                     Some(subjects),
+                    "test-plan".to_string(),
                 )
                 .is_err()
             );
@@ -1381,6 +1927,7 @@ mod tests {
                 "retry".to_string(),
                 vec![run_subject.to_string()],
                 Some(vec![preserved_subject.to_string()]),
+                "test-plan".to_string(),
             )
             .expect_err("a preserved subject cannot be selected for rerun");
             assert_eq!(
@@ -1419,6 +1966,7 @@ mod tests {
                 "retry".to_string(),
                 vec!["GOOD".to_string()],
                 Some(vec!["GOOD".to_string()]),
+                "test-plan".to_string(),
             )
             .is_err()
         );
@@ -1445,6 +1993,7 @@ mod tests {
                 "retry".to_string(),
                 vec!["GOOD".to_string()],
                 Some(vec!["GOOD".to_string()]),
+                "test-plan".to_string(),
             )
             .is_err()
         );
@@ -1479,6 +2028,7 @@ mod tests {
             "retry".to_string(),
             vec!["FAILED".to_string()],
             Some(vec!["GOOD".to_string()]),
+            "test-plan".to_string(),
         )
         .expect("terminal native success authorizes preservation");
 
@@ -1685,7 +2235,16 @@ mod tests {
     fn move_import_output_full_success_debug_preserves_staging_and_copies_configs() {
         let project_root = unique_temp_path("move-full-debug-project");
         let staging_root = project_root.join(".easl_staging");
-        fs::create_dir_all(staging_root.join("rawdata")).expect("staging rawdata should exist");
+        fs::create_dir_all(staging_root.join("rawdata").join("sub-BADDIE"))
+            .expect("staging rawdata should exist");
+        fs::write(
+            staging_root
+                .join("rawdata")
+                .join("sub-BADDIE")
+                .join("asl.nii"),
+            "asl",
+        )
+        .expect("staged rawdata");
         fs::create_dir_all(staging_root.join("derivatives"))
             .expect("staging derivatives should exist");
         fs::write(

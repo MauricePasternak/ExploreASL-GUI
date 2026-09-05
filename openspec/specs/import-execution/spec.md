@@ -163,6 +163,30 @@ Prior to spawning the subprocess, lock files for selected subjects SHALL be dele
 - **WHEN** `run_import_pipeline` is called with an execution profile whose `matlabPath` does not exist
 - **THEN** the command returns an error string describing the missing executable
 
+### Requirement: Import run subject scope integrity
+
+Each import execution request SHALL declare a non-empty subject list and SHALL contain staging entries whose distinct subject set exactly equals that declared list under the existing portable subject comparison rules. The system MUST validate this agreement before replacing native import ownership or mutating the staging tree. A mismatched request SHALL be rejected and SHALL NOT spawn ExploreASL.
+
+#### Scenario: Selected subjects and staging entries agree
+
+- **WHEN** every declared subject has at least one staging entry and every staging entry belongs to a declared subject under portable comparison
+- **THEN** native validation SHALL accept the request for normal preflight and preparation
+
+#### Scenario: Staging includes an undeclared subject
+
+- **WHEN** an import request contains a staging entry for a subject absent from the declared subject list
+- **THEN** native validation SHALL reject the request before replacing import ownership, deleting existing staging content, writing configuration, or spawning ExploreASL
+
+#### Scenario: Declared subject has no staging entry
+
+- **WHEN** an import request declares a subject for execution but contains no staging entry for that subject
+- **THEN** native validation SHALL reject the request before replacing import ownership, deleting existing staging content, writing configuration, or spawning ExploreASL
+
+#### Scenario: Portable subject spellings agree
+
+- **WHEN** a declared subject and its staging-entry subject differ only by a spelling distinction normalized by the existing portable subject comparison rules
+- **THEN** native validation SHALL treat them as the same subject while retaining existing staging collision validation
+
 ### Requirement: Real-time stdout streaming
 
 The system SHALL stream MATLAB subprocess stdout and stderr to the frontend via Tauri events. Two event types SHALL be emitted: `ImportStructuredEvent` with typed payloads (`subject_start`, `subject_complete`, `import_failed`, `import_complete`, `dcm2nii_status`) and `ImportRawEvent` with the raw line string. Every line from MATLAB stdout and stderr SHALL be emitted as `ImportRawEvent`. Structured events SHALL be parsed from stdout using the following regex patterns:
@@ -231,42 +255,122 @@ The system SHALL provide a Rust command `clean_import_status(staging_root, subje
 - **WHEN** all subjects complete without `import_failed` events
 - **THEN** no lock files are deleted
 
+### Requirement: Confirmed relocation plan integrity
+
+Before import starts, the system SHALL obtain a native, read-only relocation plan for the immutable selected-subject snapshot. The plan SHALL derive all project and staging roots from native active-project ownership, SHALL identify every existing project-relative rawdata, import-lock, import-log, and BIDS2Legacy-lock path that a successful relocation would replace or remove, and SHALL include per-subject file counts, byte totals, sessions, and an opaque content fingerprint. Absolute project paths SHALL NOT be exposed in the user-facing inventory.
+
+Native import ownership SHALL bind the confirmed plan identity and fingerprint to the same subject snapshot and import generation used for staging and execution. Before relocation mutates project output, the system MUST recompute the destination inventory and SHALL reject a missing, foreign, subject-mismatched, or stale plan without changing project output. Staging output SHALL remain available after this rejection.
+
+#### Scenario: Destination has no replaceable artifacts
+
+- **WHEN** native planning finds no existing project artifacts that relocation would replace or remove for the selected subjects
+- **THEN** the plan SHALL report an empty replacement inventory and SHALL remain eligible to bind to that exact selected-subject snapshot
+
+#### Scenario: Destination inventory changes after confirmation
+
+- **WHEN** a confirmed destination file is added, removed, renamed, or changed before relocation begins
+- **THEN** native relocation SHALL reject the stale fingerprint before changing project output and SHALL preserve staging for a new plan and confirmation
+
+#### Scenario: Plan belongs to another scope
+
+- **WHEN** relocation receives a plan identity created for another project, import generation, or portable selected-subject set
+- **THEN** native relocation SHALL reject before creating candidates, moving destinations, deleting caches, or changing import ownership
+
+### Requirement: Structured relocation outcome
+
+Relocation SHALL return a structured outcome that identifies each owned succeeded subject as committed, rolled back, or failed and includes an actionable phase and message for every failure. A subject SHALL NOT be reported as committed until its complete replacement is durable. The frontend SHALL surface relocation failures and partial outcomes in import status and logs; it SHALL NOT convert a relocation failure into successful import completion or silently discard the error.
+
+Staging cleanup SHALL occur only when every subject expected to relocate is committed and existing cleanup conditions permit it. Any failed or unresolved relocation SHALL retain staging and terminal native ownership for retry, inspection, or recovery. Existing debug-mode staging preservation SHALL remain unchanged.
+
+#### Scenario: Every subject commits
+
+- **WHEN** all owned succeeded subjects complete relocation and required cleanup succeeds
+- **THEN** the outcome SHALL report every subject as committed and normal import completion SHALL proceed
+
+#### Scenario: One subject commits and another fails
+
+- **WHEN** subject A commits and subject B encounters a relocation failure that is rolled back
+- **THEN** the outcome SHALL report A as committed and B as rolled back or failed, the frontend SHALL show a failed partial outcome, and staging SHALL remain available
+
+#### Scenario: Relocation error reaches frontend
+
+- **WHEN** native relocation returns any subject failure or recovery-required state
+- **THEN** the frontend SHALL show the affected subject, failure phase, and actionable message and SHALL NOT mark the run fully completed
+
 ### Requirement: Output relocation after import
 
-The Rust command `move_import_output(staging_root, project_root, succeeded_subjects: Vec<String>, debug_mode: bool, cleanup_staging: bool)` SHALL merge import output subject-by-subject without deleting unrelated project data. For each succeeded subject, it SHALL selectively copy: (1) `.easl_staging/rawdata/sub-<Subject>/` → `<project_root>/rawdata/sub-<Subject>/`, (2) `.easl_staging/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/` → `<project_root>/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/`, (3) `.easl_staging/derivatives/ExploreASL/log/*sub-<Subject>*` → `<project_root>/derivatives/ExploreASL/log/`, (4) `.easl_staging/rawdata/dataset_description.json` → `<project_root>/rawdata/dataset_description.json` (only if not exists at destination). Existing processing outputs under `<project_root>/derivatives/ExploreASL/` (Structural, ASL, Population, Stats, `dataPar.json`, `participants.tsv`, non-import lock files, etc.) SHALL be preserved.
+The native output-relocation operation SHALL replace import output per owned succeeded subject without deleting unrelated project data. For each subject, the staged `rawdata/sub-<Subject>/` SHALL be the complete authoritative replacement for the project `rawdata/sub-<Subject>/`; older sessions and files absent from the staged replacement SHALL NOT be merged forward. The operation SHALL also update that subject's import-lock directory and matching import logs, and SHALL remove matching BIDS2Legacy subject-session lock directories only as part of the same committed subject transaction. Existing Structural, ASL, Population, Stats, `dataPar.json`, `participants.tsv`, non-import lock files, unrelated logs, and unrelated subjects SHALL remain unchanged.
 
-For each succeeded subject, `move_import_output` SHALL delete all matching `<project_root>/derivatives/ExploreASL/lock/xASL_module_BIDS2Legacy/sub-<Subject>_<Session>/` directories. This invalidates ExploreASL's BIDS2Legacy conversion cache for the re-imported subject while preserving Structural/ASL/Population lock files and unrelated subjects' BIDS2Legacy locks.
+Before replacing a subject, the system SHALL require nonempty staged subject rawdata, reject symlinks and unsupported filesystem entries in owned source, candidate, destination, backup, and journal paths, copy into uniquely owned sibling candidates, and verify the complete relative-path, entry-type, size, and content inventory against the staged source. It SHALL durably record recovery state before moving an existing destination to a sibling backup. A subject SHALL commit only after all of its replacement artifacts are installed and durable. Existing subject data SHALL remain recoverable until a durable run-level outcome records that subject as committed or rolled back.
 
-When `cleanup_staging` is `true` (all subjects succeeded): if debug mode is off, delete `.easl_staging/`; if debug mode is on, preserve `.easl_staging/` and copy `sourcestructure.json` and `studyPar.json` to `<project_root>/derivatives/ExploreASL_GUI/`.
+Relocation SHALL process subjects independently. Failure before a subject commits SHALL restore that subject's complete previous state or preserve its absence when no prior state existed. A subject committed before another subject fails SHALL remain committed. Dataset description creation, when required and absent, SHALL be atomic and SHALL NOT overwrite an existing project dataset description.
 
-When `cleanup_staging` is `false` (partial success): failed subjects' data remains in `.easl_staging/` for potential retry.
-
-**All-fail scenario**: `move_import_output` is not called at all. `.easl_staging/` remains intact for retry. No data is moved to project root.
+When all subjects succeed and staging cleanup is requested, the system SHALL delete staging only after every subject commit and the durable outcome. Debug mode SHALL preserve staging and copy import configuration as before. During partial process success, relocation failure, stale confirmation, or unresolved recovery, staging SHALL remain available. When no subjects succeeded, relocation SHALL NOT modify project output.
 
 #### Scenario: Full success with debug mode off
 
-- **WHEN** all subjects succeed and debug mode is disabled
-- **THEN** succeeded subjects' rawdata, import lock files, and import logs are merged into project root, existing processing derivatives are preserved, `.easl_staging/` is deleted, `project.easl` `currentPhase` is set to `"parameters"`
+- **WHEN** all subjects succeed, every subject transaction commits, and debug mode is disabled
+- **THEN** complete subject rawdata, import locks, and matching logs SHALL replace their planned destinations, matching BIDS2Legacy locks SHALL be removed, unrelated project data SHALL remain unchanged, staging SHALL be deleted, and normal phase advancement SHALL proceed
 
 #### Scenario: Full success with debug mode on
 
-- **WHEN** all subjects succeed and debug mode is enabled
-- **THEN** succeeded subjects' rawdata, import lock files, and import logs are merged into project root, existing processing derivatives are preserved, `.easl_staging/` is preserved, configs are copied to `derivatives/ExploreASL_GUI/`
+- **WHEN** all subjects succeed, every subject transaction commits, and debug mode is enabled
+- **THEN** subject output SHALL commit, unrelated project data SHALL remain unchanged, staging SHALL be preserved, and import configurations SHALL be copied to the GUI derivatives directory
+
+#### Scenario: Existing subject has extra sessions and files
+
+- **WHEN** a confirmed subject destination contains sessions or files absent from the verified staged subject replacement
+- **THEN** the committed project subject SHALL exactly match the staged subject inventory and SHALL exclude those older sessions or files
 
 #### Scenario: Re-import after full processing pipeline
 
-- **WHEN** a user re-runs import for one or more subjects on a project that already has completed Structural/ASL/Population outputs
-- **THEN** only the re-imported subjects' rawdata and import lock/log artifacts are updated, matching BIDS2Legacy subject-session lock folders are removed, and all other `derivatives/ExploreASL` processing outputs remain intact
+- **WHEN** a user re-runs import for selected subjects on a project that already has completed Structural, ASL, or Population output
+- **THEN** only each committed subject's rawdata, import locks, matching import logs, and BIDS2Legacy locks SHALL change, while all processing outputs and unrelated subjects SHALL remain unchanged
+
+#### Scenario: Candidate copy or verification fails
+
+- **WHEN** candidate creation, copying, synchronization, or inventory verification fails before destination replacement
+- **THEN** the previous project subject SHALL remain unchanged, temporary state SHALL remain recoverable or be safely removed, and the subject SHALL NOT be reported as committed
+
+#### Scenario: Failure follows backup creation
+
+- **WHEN** relocation fails after moving a previous subject destination to backup but before durable subject commit
+- **THEN** the system SHALL restore the complete previous subject state, retain staging, and report the failed relocation phase
+
+#### Scenario: Required staged rawdata is missing
+
+- **WHEN** a subject recorded as succeeded has no nonempty staged rawdata subject directory
+- **THEN** relocation SHALL fail that subject before moving or deleting its existing destination
+
+#### Scenario: Partial process success
+
+- **WHEN** some import subjects succeeded and some failed before relocation
+- **THEN** only native-owned succeeded subjects SHALL be relocation candidates, failed subjects SHALL remain in staging, and staging SHALL NOT be cleaned
 
 #### Scenario: Partial success (GOOD succeeded, BADDIE failed)
 
-- **WHEN** some subjects succeed and some fail
-- **THEN** succeeded subjects' `rawdata/sub-<Subject>/`, lock files, and log files are copied to project root. Failed subjects' data stays in staging. `.easl_staging/` is preserved for retry.
+- **WHEN** GOOD succeeds during import and BADDIE fails before relocation
+- **THEN** GOOD SHALL relocate transactionally, BADDIE SHALL remain in staging without changing its project destination, and staging SHALL be preserved
+
+#### Scenario: Later subject relocation fails
+
+- **WHEN** subject A commits and subject B fails before commit
+- **THEN** A SHALL retain its complete new state, B SHALL retain or recover its complete old state, unrelated subjects SHALL remain unchanged, and the run SHALL expose a partial relocation outcome
+
+#### Scenario: All subjects fail before relocation
+
+- **WHEN** native ownership records no succeeded subjects
+- **THEN** project output SHALL remain unchanged and staging SHALL remain available
 
 #### Scenario: All subjects fail
 
-- **WHEN** no subjects succeed
-- **THEN** nothing is moved to project root, `.easl_staging/` remains intact for retry
+- **WHEN** no import subject succeeds
+- **THEN** relocation SHALL NOT modify project output and staging SHALL remain intact for retry or inspection
+
+#### Scenario: Destination or recovery path is unsafe
+
+- **WHEN** any planned destination, candidate, backup, or recovery-record path escapes its canonical owned root, collides with an unowned path, or resolves through a symlink
+- **THEN** relocation SHALL reject before destructive mutation and SHALL NOT remove the unsafe path
 
 ### Requirement: Retry with lock file preservation
 
