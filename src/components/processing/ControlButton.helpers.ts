@@ -12,11 +12,16 @@ export function getButtonProps(phase: ProcessingPhase) {
     case "running":
       return { label: "Stop", color: "red", icon: IconPlayerStop, action: "kill" as const };
     case "preparing":
-      return { label: "Stop", color: "red", icon: IconPlayerStop, action: "kill" as const };
+      return { label: "Preparing", color: "gray", icon: IconPlayerStop, action: "wait" as const };
+    case "finalizing":
+      return { label: "Finalizing", color: "gray", icon: IconPlayerStop, action: "wait" as const };
+    case "cancelling":
+      return { label: "Cancelling", color: "gray", icon: IconPlayerStop, action: "wait" as const };
     case "idle":
     case "completed":
     case "failed":
     case "cancelled":
+    case "interrupted":
     default:
       return { label: "Start", color: "teal", icon: IconPlayerPlay, action: "start" as const };
   }

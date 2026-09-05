@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::matlab::probe_matlab_version;
+use crate::processing::runs::{completed_population_run_root, preparing_run_root};
 use crate::tracing::CommandTrace;
 
 #[path = "manifest_tests.rs"]
@@ -69,6 +70,42 @@ pub async fn capture_environment_versions(
     result
 }
 
+/// Capture is correlated to a current Preparing Population reservation. Holding
+/// the native transition gate makes a delayed response fail rather than being
+/// attributed to a replacement project/run by the renderer.
+#[tauri::command]
+pub fn capture_environment_versions_for_run(
+    state: tauri::State<'_, crate::import::AppState>,
+    run_id: String,
+    explore_asl_path: String,
+    matlab_path: String,
+) -> Result<EnvironmentVersions, String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _root = preparing_run_root(&state, &run_id)?;
+    let selected_population = state
+        .processing_state
+        .lock()
+        .map_err(|_| "Processing state lock was poisoned".to_string())?
+        .current_run
+        .as_ref()
+        .is_some_and(|run| {
+            run.selected_modules
+                .iter()
+                .any(|module| module == "population")
+        });
+    if !selected_population {
+        return Err(format!(
+            "Processing run {run_id} does not select Population"
+        ));
+    }
+    let result = capture_environment_versions_impl(explore_asl_path, matlab_path);
+    let _root = preparing_run_root(&state, &run_id)?;
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn read_population_ready_mtime(project_root: String) -> Option<i64> {
     let trace = CommandTrace::new("read_population_ready_mtime");
@@ -92,6 +129,32 @@ pub fn read_population_ready_mtime(project_root: String) -> Option<i64> {
 
     trace.success(&result);
     result
+}
+
+#[tauri::command]
+pub fn read_population_ready_mtime_for_run(
+    state: tauri::State<'_, crate::import::AppState>,
+    run_id: String,
+) -> Result<Option<i64>, String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let root = completed_population_run_root(&state, &run_id)?;
+    let p = root
+        .join("derivatives")
+        .join("ExploreASL")
+        .join("lock")
+        .join("xASL_module_Population")
+        .join("xASL_module_Population")
+        .join("999_ready.status");
+    Ok(p.metadata().ok().and_then(|m| {
+        m.modified().ok().and_then(|t| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .map(|d| d.as_millis() as i64)
+        })
+    }))
 }
 
 #[tauri::command]

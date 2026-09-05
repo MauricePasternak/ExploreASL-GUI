@@ -26,9 +26,11 @@ export interface ProjectRuntimeShutdownResult {
   lockWatcher: RuntimeResourceShutdown;
 }
 
-interface TransitionDependencies {
+export interface TransitionDependencies {
   shutdownRuntime?: () => Promise<ProjectRuntimeShutdownResult>;
   cleanupListeners?: () => void;
+  setActiveProject?: (rootPath: string) => Promise<void>;
+  clearActiveProject?: () => Promise<void>;
 }
 
 export async function shutdownProjectRuntime(): Promise<ProjectRuntimeShutdownResult> {
@@ -41,6 +43,14 @@ function cleanupProjectListeners(): void {
     window.__IMPORT_CLEANUP__ = undefined;
   }
   clearProcessingListeners();
+}
+
+async function setNativeActiveProject(rootPath: string): Promise<void> {
+  await invoke("set_active_project", { rootPath });
+}
+
+async function clearNativeActiveProject(): Promise<void> {
+  await invoke("clear_active_project");
 }
 
 function shutdownError(result: ProjectRuntimeShutdownResult): Error {
@@ -81,6 +91,18 @@ export function transitionProjectRuntime(
 
     (dependencies.cleanupListeners ?? cleanupProjectListeners)();
     invalidateProjectLease();
+    try {
+      await (dependencies.setActiveProject ?? setNativeActiveProject)(
+        candidate.projectMeta.rootPath,
+      );
+    } catch (error) {
+      // Candidate native root was not admitted. Do not reactivate old frontend work.
+      throw new Error(
+        `Failed to activate native project root: ${error instanceof Error ? error.message : String(error)}`,
+        // @ts-expect-error ErrorOptions is absent from the ES2020 target library.
+        { cause: error },
+      );
+    }
     hydrateProjectStores(candidate, isDirty);
     activateProjectLease(candidate.projectMeta.id, candidate.projectMeta.rootPath);
     syncSessionCheckpointFromProject(candidate);
@@ -103,6 +125,16 @@ export function closeProjectRuntime(dependencies: TransitionDependencies = {}): 
 
     (dependencies.cleanupListeners ?? cleanupProjectListeners)();
     invalidateProjectLease();
+    try {
+      await (dependencies.clearActiveProject ?? clearNativeActiveProject)();
+    } catch (error) {
+      // Keep admission closed: frontend root could no longer match native state.
+      throw new Error(
+        `Failed to clear native project root: ${error instanceof Error ? error.message : String(error)}`,
+        // @ts-expect-error ErrorOptions is absent from the ES2020 target library.
+        { cause: error },
+      );
+    }
     resetProjectStores();
     clearSessionCheckpoint();
   });

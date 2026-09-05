@@ -472,6 +472,11 @@ pub fn set_active_project_impl(
     root_path: String,
     state: &crate::import::AppState,
 ) -> Result<(), String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    ensure_processing_runtime_released(state)?;
     let path = std::fs::canonicalize(&root_path).map_err(|e| {
         log::error!("set_active_project failed canonicalizing: {}", e);
         format!("Invalid project path: {}", e)
@@ -497,11 +502,39 @@ pub fn set_active_project(
 }
 
 pub fn clear_active_project_impl(state: &crate::import::AppState) -> Result<(), String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    ensure_processing_runtime_released(state)?;
     *state
         .active_project_root
         .lock()
         .map_err(|e| e.to_string())? = None;
     *state.active_data.lock().map_err(|e| e.to_string())? = None;
+    Ok(())
+}
+
+/// Direct active-root IPC must not bypass project-runtime shutdown. Frontend
+/// transitions drain/stop first; callers that skip that contract fail closed.
+fn ensure_processing_runtime_released(state: &crate::import::AppState) -> Result<(), String> {
+    let processing = state
+        .processing_state
+        .lock()
+        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    if processing
+        .current_run
+        .as_ref()
+        .is_some_and(|run| !run.lifecycle.is_terminal())
+        || processing.watcher_run_id.is_some()
+        || processing.watcher_stop.is_some()
+        || processing.watcher_handle.is_some()
+        || !processing.worker_supervisors.is_empty()
+    {
+        return Err(
+            "Processing runtime is still owned; shut it down before changing projects".to_string(),
+        );
+    }
     Ok(())
 }
 

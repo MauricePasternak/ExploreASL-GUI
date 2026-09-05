@@ -4,9 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import ImportExecution from "./ImportExecution";
 import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
+import { DEFAULT_PROJECT_FILE } from "../../schemas/project";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
+import { transitionProjectRuntime } from "../../lib/projectCoordinator";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -40,6 +44,7 @@ function configureRuntimeSettings() {
     },
   });
   useImportStore.getState().setSelectedProfileId(profile.id);
+  activateProjectLease("test-project", "/test-project");
 }
 
 function configureSubjects() {
@@ -63,6 +68,7 @@ afterEach(() => {
     isDirty: false,
     loaded: false,
   });
+  resetProjectLifecycleForTests();
   vi.resetAllMocks();
 });
 
@@ -101,6 +107,146 @@ describe("ImportExecution", () => {
     expect(useImportStore.getState().importPhase).toBe("preparing");
     expect(screen.getByText("Preparing")).toBeInTheDocument();
     expect(screen.getByTestId("import-table")).toBeInTheDocument();
+  });
+
+  it("locks configuration and navigation throughout deferred preparation, then unlocks on failure", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    let rejectRun!: (reason?: unknown) => void;
+    vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "run_import_pipeline") {
+        return new Promise((_, reject) => {
+          rejectRun = reject;
+        });
+      }
+      if (command === "read_import_status") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/start import/i));
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("preparing"));
+
+    expect(firstButton(/start import/i)).toBeDisabled();
+    expect(firstButton(/stop/i)).toBeDisabled();
+    expect(screen.getByTestId("import-back-btn")).toBeDisabled();
+    expect(screen.getByTestId("import-next-params-btn")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /execution profile/i })).toBeDisabled();
+    expect(
+      screen.getAllByRole("checkbox").every((checkbox) => (checkbox as HTMLInputElement).disabled),
+    ).toBe(true);
+
+    rejectRun(new Error("Preparation failed"));
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("failed"));
+
+    expect(screen.getByTestId("import-back-btn")).not.toBeDisabled();
+    expect(screen.getByTestId("import-next-params-btn")).not.toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /execution profile/i })).not.toBeDisabled();
+    expect(firstButton(/start import/i)).not.toBeDisabled();
+  });
+
+  it("unlocks configuration and navigation when preparation is cancelled", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    const store = useImportStore.getState();
+    store.startImport();
+    renderWithProviders();
+
+    expect(screen.getByTestId("import-back-btn")).toBeDisabled();
+    expect(screen.getByTestId("import-next-params-btn")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /execution profile/i })).toBeDisabled();
+
+    store.cancelImport();
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("cancelled"));
+
+    expect(screen.getByTestId("import-back-btn")).not.toBeDisabled();
+    expect(screen.getByTestId("import-next-params-btn")).not.toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /execution profile/i })).not.toBeDisabled();
+  });
+
+  it("returns to failed state and retains structured native preflight issues", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "run_import_pipeline") {
+        return Promise.reject(
+          JSON.stringify({
+            kind: "preflight",
+            issues: [
+              {
+                code: "SOURCE_MISSING",
+                field: "sourcePath",
+                entryIndex: 0,
+                message: "Source vanished.",
+              },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(null);
+    });
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/start import/i));
+
+    await vi.waitFor(() => {
+      expect(useImportStore.getState().importPhase).toBe("failed");
+      expect(useImportStore.getState().stagingPreflight).toMatchObject({
+        status: "invalid",
+        issues: [expect.objectContaining({ code: "SOURCE_MISSING" })],
+      });
+    });
+  });
+
+  it("does not let a deferred Run rejection mutate a replacement project", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    const projectA = DEFAULT_PROJECT_FILE("project-a", "Project A", "/project-a");
+    const projectB = DEFAULT_PROJECT_FILE("project-b", "Project B", "/project-b");
+    useProjectStore.setState({ project: projectA, loaded: true, isDirty: false });
+    activateProjectLease("project-a", "/project-a");
+    let rejectRun!: (error: unknown) => void;
+    vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "run_import_pipeline") {
+        return new Promise((_, reject) => {
+          rejectRun = reject;
+        });
+      }
+      if (command === "read_import_status") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/start import/i));
+    await vi.waitFor(() =>
+      expect(
+        vi.mocked(invoke).mock.calls.some(([command]) => command === "run_import_pipeline"),
+      ).toBe(true),
+    );
+
+    const transition = transitionProjectRuntime(projectB, false, {
+      shutdownRuntime: async () => ({
+        success: true,
+        importProcess: { success: true },
+        processingWorkers: { success: true },
+        lockWatcher: { success: true },
+      }),
+      setActiveProject: async () => {},
+    });
+    rejectRun(
+      JSON.stringify({
+        kind: "preflight",
+        issues: [
+          { code: "SOURCE_MISSING", field: "sourcePath", entryIndex: 0, message: "Old project" },
+        ],
+      }),
+    );
+    await transition;
+
+    expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-b");
+    expect(useImportStore.getState().importPhase).toBe("idle");
+    expect(useImportStore.getState().importLog).toEqual([]);
+    expect(useImportStore.getState().stagingPreflight.issues).toEqual([]);
   });
 
   it("does not start import without staged subjects", async () => {
@@ -163,6 +309,128 @@ describe("ImportExecution", () => {
 
     expect(useImportStore.getState().importPhase).toBe("cancelled");
     expect(useImportStore.getState().importProgress.SUB01.status).toBe("cancelled");
+  });
+
+  it("uses native active stop before the deferred Run response supplies a PID", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    let emitPrepareComplete: (() => void) | undefined;
+    let runRequestId = "";
+    let resolveStop!: () => void;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "ImportPrepareComplete") {
+        emitPrepareComplete = () =>
+          handler({ payload: { runRequestId, ownershipGeneration: 1 } } as never);
+      }
+      return () => {};
+    });
+    vi.mocked(invoke).mockImplementation((command: string, payload?: unknown) => {
+      if (command === "run_import_pipeline") {
+        runRequestId = (payload as { runRequestId?: string } | undefined)?.runRequestId ?? "";
+        return new Promise(() => {});
+      }
+      if (command === "stop_active_import") {
+        return new Promise<void>((resolve) => {
+          resolveStop = resolve;
+        });
+      }
+      if (command === "read_import_status") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/start import/i));
+    await vi.waitFor(() => expect(emitPrepareComplete).toBeTypeOf("function"));
+    emitPrepareComplete?.();
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("running"));
+
+    await userEvent.click(firstButton(/stop/i));
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("stop_active_import"));
+    expect(useImportStore.getState().importPhase).toBe("running");
+    expect(screen.getByTestId("import-back-btn")).toBeDisabled();
+    expect(screen.getByTestId("import-next-params-btn")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /execution profile/i })).toBeDisabled();
+
+    resolveStop();
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("cancelled"));
+    expect(screen.getByTestId("import-back-btn")).not.toBeDisabled();
+    expect(screen.getByTestId("import-next-params-btn")).not.toBeDisabled();
+  });
+
+  it("does not reuse an old PID when a queued old run response and readiness arrive during a rerun", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    const readinessHandlers: Array<(event: { payload: unknown }) => void> = [];
+    const runRequests: string[] = [];
+    let resolveOldRun!: (pid: number) => void;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "ImportPrepareComplete") {
+        readinessHandlers.push(handler as (event: { payload: unknown }) => void);
+      }
+      return () => {};
+    });
+    vi.mocked(invoke).mockImplementation((command: string, payload?: unknown) => {
+      if (command === "run_import_pipeline") {
+        runRequests.push((payload as { runRequestId?: string } | undefined)?.runRequestId ?? "");
+        if (runRequests.length === 1) {
+          return new Promise<number>((resolve) => {
+            resolveOldRun = resolve;
+          });
+        }
+        return new Promise<number>(() => {});
+      }
+      if (command === "stop_active_import") return Promise.resolve();
+      if (command === "read_import_status") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/start import/i));
+    await vi.waitFor(() => expect(runRequests).toHaveLength(1));
+    readinessHandlers[0]?.({
+      payload: { runRequestId: runRequests[0], ownershipGeneration: 1 },
+    });
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("running"));
+    await userEvent.click(firstButton(/stop/i));
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("cancelled"));
+
+    await userEvent.click(firstButton(/start import/i));
+    await vi.waitFor(() => expect(runRequests).toHaveLength(2));
+    resolveOldRun(4242);
+    readinessHandlers[0]?.({
+      payload: { runRequestId: runRequests[0], ownershipGeneration: 1 },
+    });
+    expect(useImportStore.getState().importPhase).toBe("preparing");
+
+    readinessHandlers[1]?.({
+      payload: { runRequestId: runRequests[1], ownershipGeneration: 2 },
+    });
+    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("running"));
+    await userEvent.click(firstButton(/stop/i));
+
+    expect(invoke).toHaveBeenCalledWith("stop_active_import");
+    expect(invoke).not.toHaveBeenCalledWith("stop_import", { pid: 4242 });
+  });
+
+  it("keeps the import attached and locked when native stop fails", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    useImportStore.getState().startImport();
+    useImportStore.getState().setImportPhase("running");
+    vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "stop_active_import") return Promise.reject(new Error("Permission denied"));
+      if (command === "read_import_status") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithProviders();
+
+    await userEvent.click(firstButton(/stop/i));
+
+    await vi.waitFor(() => expect(screen.getByTestId("stop-import-error-alert")).toBeVisible());
+    expect(screen.getByTestId("stop-import-error-alert")).toHaveTextContent("Permission denied");
+    expect(useImportStore.getState().importPhase).toBe("running");
+    expect(screen.getByTestId("import-back-btn")).toBeDisabled();
+    expect(screen.getByTestId("import-next-params-btn")).toBeDisabled();
   });
 
   it("shows confirmation dialog when freshly completed subject is selected for re-import", async () => {
@@ -336,6 +604,35 @@ describe("ImportExecution", () => {
         .mock.calls.find((call) => call[0] === "run_import_pipeline");
       expect(runCall).toBeDefined();
       expect((runCall![1] as Record<string, unknown>).subjectsToPreserve).toEqual(["SUB01"]);
+      expect((runCall![1] as Record<string, unknown>).runRequestId).toEqual(expect.any(String));
+      expect(runCall![1]).not.toHaveProperty("stagingRoot");
+      expect(runCall![1]).not.toHaveProperty("projectRoot");
+    });
+  });
+
+  it("does not preserve a completed subject selected for rerun under portable casing", async () => {
+    configureRuntimeSettings();
+    configureSubjects();
+    const store = useImportStore.getState();
+    store.startImport();
+    store.markSubjectCompleted("SUB01", 12);
+    store.markSubjectFailed("sub01", "NII2BIDS", "Rerun with corrected metadata");
+    store.failImport();
+    vi.mocked(invoke).mockImplementation((command: string) => {
+      if (command === "run_import_pipeline") return Promise.resolve(12345);
+      if (command === "read_import_status") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+
+    renderWithProviders();
+    await userEvent.click(firstButton(/start import/i));
+
+    await vi.waitFor(() => {
+      const runCall = vi
+        .mocked(invoke)
+        .mock.calls.find(([command]) => command === "run_import_pipeline");
+      expect(runCall).toBeDefined();
+      expect((runCall![1] as Record<string, unknown>).subjectsToPreserve).toBeNull();
     });
   });
 

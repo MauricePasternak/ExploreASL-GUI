@@ -119,8 +119,12 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     (state) => state.externalSourceAvailability,
   );
   const isProcessRunning =
-    processingPhase === "running" || importPhase === "running" || importRunning;
-  const isProcessingActive = processingPhase === "running" || processingPhase === "preparing";
+    ["preparing", "running", "finalizing", "cancelling"].includes(processingPhase) ||
+    importPhase === "running" ||
+    importRunning;
+  const isProcessingActive = ["preparing", "running", "finalizing", "cancelling"].includes(
+    processingPhase,
+  );
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -134,7 +138,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           const currentImportPhase = useImportStore.getState().importPhase;
           const currentImportRunning = useImportStore.getState().importRunning;
           const activeProcess =
-            currentProcessingPhase === "running" ||
+            ["preparing", "running", "finalizing", "cancelling"].includes(currentProcessingPhase) ||
             currentImportPhase === "running" ||
             currentImportRunning;
 
@@ -246,7 +250,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     const currentImportPhase = useImportStore.getState().importPhase;
     const currentImportRunning = useImportStore.getState().importRunning;
     const activeProcess =
-      currentProcessingPhase === "running" ||
+      ["preparing", "running", "finalizing", "cancelling"].includes(currentProcessingPhase) ||
       currentImportPhase === "running" ||
       currentImportRunning;
 

@@ -8,33 +8,58 @@ Define backend execution and monitoring of ExploreASL processing.
 
 ### Requirement: run_pipeline Command
 
-The `run_pipeline` Tauri command SHALL accept: `project_root: String`, `execution_profile: ExecutionProfile`, `data_par_json: String`, `b_process: Vec<bool>`, `workers: u32`, `subject_regexp: String`. It SHALL return `Vec<u32>` (worker PIDs). Tauri handles deserialization natively from the typed object. The command SHALL dispatch on the profile `type` and construct the appropriate command. For the `matlab` type, the command SHALL construct worker invocations using the profile's `matlabPath` and `exploreAslPath`.
+The `run_pipeline` Tauri command SHALL accept an existing native `run_id`, `execution_profile: ExecutionProfile`, `data_par_json: String`, `b_process: Vec<bool>`, `workers: u32`, `subject_regexp: String`, and the existing `rerun_bids2legacy` option. It SHALL derive the project root from the matching native `Preparing` reservation and SHALL reject missing, stale, foreign-project, or non-`Preparing` run IDs before mutation. Such admission rejection SHALL NOT change lifecycle, worker/watcher ownership, exit or launch-failure evidence, files, or spawned processes. Invalid profile, mismatched/invalid selected work or worker count, and later mutation/spawn errors SHALL be recorded as launch failure only after exact `Preparing` admission. Public `fail_processing_run` SHALL accept only the exact current `Preparing` reservation and SHALL reject `Running`, `Finalizing`, and terminal runs without mutation; internal post-spawn launch-failure recording MAY retain a partial launch as `Running` with `pendingLaunchFailure`. `run_pipeline` SHALL return the current authoritative run snapshot rather than a PID array. The snapshot SHALL expose optional `pendingLaunchFailure` when a later worker spawn fails after at least one worker was registered. The command SHALL dispatch on the profile `type` and construct the appropriate command. For the `matlab` type, the command SHALL construct worker invocations using the profile's `matlabPath` and `exploreAslPath`.
 
 Before spawning workers, the command SHALL:
 
-1. **Preparation-phase validation**: Call `execution_profile.validate()`. If validation fails, SHALL return an error without performing any destructive operations. This provides a final safety net even though the frontend validates profiles on selection and before calling the command.
-2. Write `data_par_json` to `<project_root>/derivatives/ExploreASL/dataPar.json`
-3. Create `<project_root>/derivatives/ExploreASL/lock/` if it doesn't exist
-4. Clear all stale `locked/` directories under the lock path
-5. Delete `.status` files for modules matching `b_process` on subjects matching `subject_regexp`
-6. Delete existing module log files for modules matching `b_process` on subjects matching `subject_regexp` from `<project_root>/derivatives/ExploreASL/log/`
-7. Sanity-check that no lock file watcher is already running
-8. Spawn N workers via `matlab -batch "addpath('...'); ExploreASL(root, 0, bProcess, 0, i, n)"`
+1. Confirm the matching native `Preparing` reservation.
+2. Call `execution_profile.validate()`. If validation fails, it SHALL transition the reserved run to `Failed` without performing destructive operations.
+3. Write `data_par_json` to `<project_root>/derivatives/ExploreASL/dataPar.json`.
+4. Create `<project_root>/derivatives/ExploreASL/lock/` if it does not exist.
+5. Clear all stale `locked/` directories under the lock path.
+6. Delete `.status` files for modules matching `b_process` on subjects matching `subject_regexp`.
+7. Delete existing module log files for modules matching `b_process` on subjects matching `subject_regexp` from `<project_root>/derivatives/ExploreASL/log/`.
+8. Confirm the lock watcher is either absent or owned by the same `run_id`.
+9. Attempt N workers in order with the existing stagger between attempts, register each successful worker in native run state, and supervise each worker under the same `run_id`.
+
+The native backend SHALL serialize the complete launch admission/mutation/spawn section with active-project shutdown and root replacement. A direct stale launch SHALL reject before every mutation. Any processing-scoped rawdata setup, stale-lock cleanup, Population version capture, or Population ready-mtime command SHALL accept `run_id`, derive its root from current native ownership, and reject an obsolete/foreign/wrong-state run before mutation or response.
+
+The first registered worker SHALL transition the matching run to `Running`. If the first spawn fails, the run SHALL become `Failed`. If a later spawn fails, the run SHALL retain the first error as `pendingLaunchFailure`, remain `Running` with surviving workers, remain killable, and return a launch error. When its final surviving worker exits, it SHALL become `Failed`, stop its matching watcher before replacement, and retain exit evidence. If workers exit before the command response is delivered, any response or subsequent attachment SHALL reflect current native worker membership and lifecycle rather than reconstructing membership from the originally spawned PID list.
 
 #### Scenario: Status file deletion for selected modules
 
-- **WHEN** `run_pipeline` is called with `b_process = [true, true, false]` and `subject_regexp = "^sub-.*$"`
+- **WHEN** `run_pipeline` is called for a valid `Preparing` run with `b_process = [true, true, false]` and `subject_regexp = "^sub-.*$"`
 - **THEN** all `.status` files under `xASL_module_Structural/*/` and `xASL_module_ASL/*/` SHALL be deleted for matching subjects; Population status files SHALL be left untouched
 
 #### Scenario: Stale lock cleanup before launch
 
-- **WHEN** `run_pipeline` is called and `locked/` directories exist from a previous crashed run
+- **WHEN** `run_pipeline` is called for a valid reservation and `locked/` directories exist from a previous crashed run
 - **THEN** all `locked/` directories under `derivatives/ExploreASL/lock/` SHALL be removed before spawning workers
 
 #### Scenario: Watcher already running
 
-- **WHEN** `run_pipeline` is called while a lock file watcher is already active
+- **WHEN** `run_pipeline` is called while a lock watcher owned by another run is active
 - **THEN** the command SHALL return an error and SHALL NOT spawn workers
+
+#### Scenario: Missing reservation
+
+- **WHEN** `run_pipeline` is called with an unknown or obsolete `run_id`
+- **THEN** the command SHALL reject before writing configuration, creating directories, deleting status or log files, or spawning workers
+
+#### Scenario: Worker exits before launch response
+
+- **WHEN** a worker exits after native registration but before `run_pipeline` returns to the frontend
+- **THEN** the returned snapshot SHALL contain the backend's current worker membership and lifecycle for that run and SHALL NOT reintroduce the exited PID
+
+#### Scenario: First worker spawn fails
+
+- **WHEN** worker 1 cannot be spawned for a matching `Preparing` run
+- **THEN** the run SHALL transition to `Failed`, own no worker, stop/join its matching watcher before replacement (or retain watcher ownership that blocks replacement on stop failure), and the command SHALL return the launch error
+
+#### Scenario: Later worker spawn fails
+
+- **WHEN** one or more workers are registered and a later worker cannot be spawned
+- **THEN** the run SHALL remain `Running` and killable with surviving authoritative membership and public `pendingLaunchFailure`; after its final worker exits it SHALL transition to `Failed` rather than `Finalizing`
 
 ### Requirement: Module Log File Cleanup
 
@@ -67,29 +92,46 @@ During preparation, `run_pipeline` SHALL delete existing ExploreASL module log f
 
 ### Requirement: kill_pipeline Command
 
-The `kill_pipeline` Tauri command SHALL accept no arguments. It SHALL read all worker PIDs from `AppState.processing_state` and send SIGTERM to each. If a process does not exit within 5 seconds, it SHALL send SIGKILL. It SHALL wait for all processes to exit before returning.
+The `kill_pipeline` Tauri command SHALL accept `run_id`. It SHALL reject a missing, obsolete, foreign-project, or non-cancellable run without affecting another run. For a matching `Running` run it SHALL read and validate the complete authoritative PID set before any lifecycle transition or OS call, transition to `Cancelling`, validate the complete set again, and send SIGTERM to each. If a process does not exit within 5 seconds, it SHALL send SIGKILL. A TERM or force-kill error SHALL trigger an immediate exact-PID existence recheck: confirmed disappearance SHALL continue as success; a still-live process or inconclusive existence check SHALL return an error while retaining actionable `Cancelling` ownership. After every worker is confirmed absent, it SHALL join supervisor handles, transition the matching run to `Cancelled`, and return its terminal snapshot. Worker supervisors SHALL NOT independently transition a `Cancelling` run to `Cancelled`.
+
+Immediately after a successful `Running -> Cancelling` transition and before waiting for worker termination, it SHALL emit `ProcessingLifecycleSnapshot` containing the exact run snapshot. Every terminal transition SHALL stop/join or retain actionable matching watcher ownership before permitting terminal replacement.
 
 #### Scenario: Graceful kill with timeout
 
-- **WHEN** `kill_pipeline` is called with 3 running workers
-- **THEN** SIGTERM SHALL be sent to all 3 PIDs; after 5 seconds any remaining SHALL receive SIGKILL
+- **WHEN** `kill_pipeline` is called with the current run ID and 3 running workers
+- **THEN** the run SHALL enter `Cancelling`, SIGTERM SHALL be sent to all 3 PIDs, after 5 seconds any remaining SHALL receive SIGKILL, and the run SHALL enter `Cancelled` only after all workers are reaped
+
+#### Scenario: Obsolete run kill
+
+- **WHEN** `kill_pipeline` is called with an obsolete run ID after a newer run has been reserved
+- **THEN** the command SHALL reject without signalling workers or changing the newer run
 
 ### Requirement: watch_lock_dir Command
 
-The `watch_lock_dir` Tauri command SHALL accept `project_root: String`. It SHALL start a `notify` crate watcher on `<project_root>/derivatives/ExploreASL/lock/` and emit two event types to the frontend:
+The `watch_lock_dir` Tauri command SHALL accept `run_id`, derive the project lock directory from the matching native run, and bind the watcher to that run for its entire lifetime. It SHALL reject missing, stale, foreign-project, or terminal run IDs. Every emitted payload SHALL contain the bound `runId`:
 
-- `StatusFileCreated { module: String, subject_session: String, step_code: String }` — when a `.status` file is created
-- `LockCreated { module: String, subject_session: String }` — when a `locked/` directory is created
+- `StatusFileCreated { runId, module, subjectSession, stepCode, run? }`
+- `LockCreated { runId, module, subjectSession?, run? }`
+- `LockRemoved { runId, module, subjectSession?, run? }`
+
+The watcher SHALL NOT obtain a new run ID by consulting whichever run is current when a delayed filesystem event is delivered.
+
+Repeated watch attachment for the same run SHALL be idempotent. Stop/control for another run SHALL reject without releasing current ownership. Before a run becomes replaceable in a terminal state, its matching watcher SHALL be stopped and joined; if watcher shutdown fails, the backend SHALL retain actionable ownership and SHALL reject replacement rather than relabel queued callbacks.
 
 #### Scenario: Status file created for step completion
 
-- **WHEN** ExploreASL creates `060_Segment_T1w.status` under `xASL_module_Structural/sub-X_01/xASL_module_Structural/`
-- **THEN** a `StatusFileCreated` event SHALL be emitted with `{ module: "structural", subject_session: "sub-X_01", step_code: "060_Segment_T1w" }`
+- **WHEN** ExploreASL creates `060_Segment_T1w.status` under `xASL_module_Structural/sub-X_01/xASL_module_Structural/` for run `R1`
+- **THEN** a `StatusFileCreated` event SHALL be emitted with `{ runId: "R1", module: "structural", subjectSession: "sub-X_01", stepCode: "060_Segment_T1w" }`
 
 #### Scenario: ASL module with run number
 
-- **WHEN** a `.status` file is created under `xASL_module_ASL/sub-X_01/xASL_module_ASL_ASL_1/`
-- **THEN** the event SHALL include `run: "1"` in the parsed subject session info
+- **WHEN** a `.status` file is created under `xASL_module_ASL/sub-X_01/xASL_module_ASL_ASL_1/` for run `R1`
+- **THEN** the event SHALL include `runId: "R1"` and `run: "1"`
+
+#### Scenario: Delayed watcher event after replacement
+
+- **WHEN** a filesystem notification captured by run `R1` is delivered after run `R2` becomes current
+- **THEN** its payload SHALL retain `runId: "R1"` and SHALL NOT be relabelled as run `R2`
 
 ### Requirement: read_lock_status Command
 
@@ -414,3 +456,97 @@ fn spawn_apptainer_worker(
 - **THEN** the backend SHALL perform a warmup run if MCR is not cached, and then spawn 2 parallel worker processes:
   1. `apptainer exec --cleanenv --writable-tmpfs --bind <project_root>:/data /path/to/image.sif /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/ /data "0" "[1,1,0]" "0" "1" "2"`
   2. `apptainer exec --cleanenv --writable-tmpfs --bind <project_root>:/data /path/to/image.sif /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/ /data "0" "[1,1,0]" "0" "2" "2"`
+
+### Requirement: Authoritative Processing Run Record
+
+Native state SHALL own at most one current processing run record containing a backend-generated session-unique `runId`, canonical active project root, selected modules, selected subject-sessions, lifecycle state, start time, worker membership and exit evidence, watcher ownership, optional public `pendingLaunchFailure`, and terminal result when present. Frontend PID arrays and persisted project UI state SHALL NOT be authoritative sources of active worker membership or run identity. A terminal record MAY remain available for inspection until the matching watcher has stopped and the next reservation or project shutdown replaces it.
+
+The legal lifecycle transitions SHALL be:
+
+- `Preparing` to `Running` or `Failed`.
+- `Running` to `Finalizing`, `Cancelling`, `Failed`, or `Interrupted`.
+- `Cancelling` to `Cancelled` or `Failed`.
+- `Finalizing` to `Completed` or `Failed`.
+
+Terminal states SHALL NOT transition. A new reservation MAY replace a terminal record but SHALL NOT replace a nonterminal record.
+
+#### Scenario: Legal launch transition
+
+- **WHEN** all workers for a matching `Preparing` run are registered successfully
+- **THEN** native state SHALL transition that run to `Running`
+
+#### Scenario: Illegal terminal transition
+
+- **WHEN** a caller or supervisor attempts to transition a `Completed` run to `Running`
+- **THEN** native state SHALL reject the transition without changing the run record
+
+#### Scenario: Old supervisor after replacement
+
+- **WHEN** delayed supervisor work for terminal run `R1` executes after run `R2` has replaced it
+- **THEN** the delayed work SHALL NOT mutate `R2` or emit an event attributed to `R2`
+
+### Requirement: Pre-Mutation Processing Reservation
+
+The backend SHALL provide `reserve_processing_run(selected_modules, selected_subject_sessions)` and derive the canonical project root from native active-project state. It SHALL atomically reject when a nonterminal processing run or foreign watcher owns the backend. On success it SHALL create `Preparing` state and return its snapshot before any run-specific configuration write, directory creation, status deletion, log deletion, watcher start, or worker spawn occurs. A concurrent rejected reservation SHALL perform zero filesystem mutation.
+
+#### Scenario: Two concurrent starts
+
+- **WHEN** two callers concurrently reserve processing for the same active project
+- **THEN** exactly one SHALL receive a `Preparing` run and the rejected caller SHALL perform no configuration write, directory creation, status deletion, log deletion, watcher start, or worker spawn
+
+#### Scenario: Active run blocks another project start
+
+- **WHEN** project A owns a nonterminal processing run and a caller attempts to reserve another run
+- **THEN** the reservation SHALL reject without replacing project A ownership or mutating either project
+
+#### Scenario: Terminal run replacement
+
+- **WHEN** the current run is terminal and the active project reserves a new run
+- **THEN** the backend SHALL atomically replace the terminal record with a new `Preparing` record having a different `runId`
+
+### Requirement: Processing Run Discovery and Attachment
+
+The backend SHALL provide `get_active_run()` and `attach_run(run_id)`. `get_active_run` SHALL derive the active project from native state and return the current nonterminal run snapshot only when it belongs to that project. `attach_run` SHALL return the current matching run snapshot, including authoritative worker membership, without starting workers, restarting the watcher, deleting files, or changing lifecycle state. It SHALL reject unknown, obsolete, or foreign-project IDs.
+
+#### Scenario: Discover current run
+
+- **WHEN** the active project owns a `Running` run
+- **THEN** `get_active_run()` SHALL return that run's ID, lifecycle state, selected work, and current worker membership
+
+#### Scenario: Attach after early worker exit
+
+- **WHEN** a frontend attaches after one registered worker has already exited
+- **THEN** `attach_run` SHALL return only the workers still owned by native state plus the recorded exit evidence
+
+#### Scenario: Attach obsolete run
+
+- **WHEN** `attach_run` receives a run ID that is not the current active-project run
+- **THEN** it SHALL reject without mutating native or filesystem state
+
+### Requirement: Run-Correlated Worker Events
+
+Every processing worker event that can affect run state SHALL include the owning `runId`. Worker supervisors SHALL update authoritative membership and exit evidence only when their captured run ID still matches native ownership. `WorkerExited` SHALL include `{ runId, pid, exitCode }`. When the final worker exits, native state SHALL leave `Running` before emitting the final worker event: it SHALL enter `Failed` when `pendingLaunchFailure` exists, otherwise `Finalizing`.
+
+#### Scenario: Final worker exits before frontend registration
+
+- **WHEN** the final worker exits before the frontend receives the launch response
+- **THEN** native state SHALL record its exit, transition to `Finalizing`, and emit `WorkerExited` with the run ID; a later response or attachment SHALL not re-add that worker
+
+#### Scenario: Stale worker exit
+
+- **WHEN** a delayed `WorkerExited` event from run `R1` arrives after run `R2` starts
+- **THEN** the payload SHALL retain `R1` and native state for `R2` SHALL remain unchanged
+
+### Requirement: Run Finalization Protocol
+
+Until expected-target completion is made native-authoritative by PL-03, the backend SHALL accept a run-scoped finalization result only for the current `Finalizing` run, validate the run ID, and record either `Completed` or `Failed` as the terminal native result. The frontend MAY derive this provisional result using the existing lock-status behavior, but SHALL NOT directly overwrite native lifecycle state. A future target-verification change SHALL replace that provisional evidence source without changing run identity or transition legality.
+
+#### Scenario: Current run finalizes
+
+- **WHEN** the frontend submits the existing lock-status result for the current `Finalizing` run
+- **THEN** the backend SHALL record the requested `Completed` or `Failed` terminal state and return the resulting snapshot
+
+#### Scenario: Obsolete finalization
+
+- **WHEN** a delayed finalization request names a run that is no longer current
+- **THEN** the backend SHALL reject it without changing the current run

@@ -849,14 +849,14 @@ describe("Layout", () => {
       loaded: true,
       closeProject,
     });
-    useProcessingStore.setState({
-      processingPhase: "running",
-    });
-
     renderLayout("/project/project-1/processing");
 
     await waitFor(() => {
       expect((window as any).__mockCloseRequestedListener).toBeDefined();
+    });
+    useProcessingStore.setState({
+      processingPhase: "running",
+      activeRunId: "processing-run-1",
     });
 
     const preventDefault = vi.fn();

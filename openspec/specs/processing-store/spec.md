@@ -8,81 +8,88 @@ Define processing lifecycle state, progress, and persistence behavior.
 
 ### Requirement: Processing Phase State Machine
 
-The processing store SHALL manage a phase state machine with exactly six states: `idle`, `preparing`, `running`, `completed`, `failed`, `cancelled`. The store SHALL persist `processingPhase` and `lastRunConfig` to the `.easl` project file. Per-subject progress SHALL NOT be persisted — it SHALL be reconstructed from lock files on page load or route re-entry. When `processingPhase` transitions to `"completed"` and the processing config's `modules` includes `"population"`, the store SHALL call `setPopulationCompleted(true)` on the project store. When `startProcessing` is called with `modules` including `"population"`, the store SHALL call `setPopulationCompleted(false)` to clear any prior flag before spawning workers.
+The processing store SHALL represent the native lifecycle states `preparing`, `running`, `finalizing`, `completed`, `cancelling`, `cancelled`, `failed`, and `interrupted`, plus local `idle` when no native run is attached. Runtime `activeRunId` and worker membership SHALL NOT be persisted as restart truth. The store SHALL persist terminal `processingPhase` and `lastRunConfig` to the `.easl` project file. Per-subject progress SHALL NOT be persisted; it SHALL be reconstructed from lock files on page load or route re-entry. Native run snapshots and events SHALL be authoritative while a run is attached.
 
-When `startProcessing` is invoked with `modules` including `"population"`, the store SHALL additionally invoke the Rust command `capture_environment_versions` (or named equivalent) to obtain `{ explore_asl: string; matlab: string }`. Version capture SHALL be initiated during the `preparing` phase in parallel with other prep work (participants generation, file watcher setup) to avoid blocking the UI on slow MATLAB probes. The capture SHALL be joined (awaited) before worker processes are spawned so the manifest has version data. The returned values SHALL be persisted to `uiState.processing.population.lastRun.exploreASLVersion` and `uiState.processing.population.lastRun.matlabVersion` on the project store via `setLastRunProfileId`. The GUI version SHALL be sourced synchronously from the frontend (e.g. `package.json` version) and written to `uiState.processing.population.lastRun.guiVersion`. Version capture SHALL NOT abort the run if a probe fails; on probe failure, the corresponding field SHALL be set to the literal string `"unknown"`.
+When the native run transitions to `completed` and the processing config's modules include `population`, the store SHALL call `setPopulationCompleted(true)` on the project store. When `startProcessing` is called with modules including `population`, the store SHALL call `setPopulationCompleted(false)` after native reservation succeeds and before workers spawn.
 
-After `processingPhase` transitions to `"completed"` and `modules` includes `"population"`, the store SHALL additionally read the mtime of `derivatives/ExploreASL/.../xASL_module_Population/xASL_module_Population/999_ready.status` and persist it to `uiState.processing.population.lastRun.Mtime` as integer milliseconds since epoch (via `setLastPopulationRunMtime`). If the file cannot be located, the field SHALL be set to `null` and a warning SHALL be logged via the existing debug bridge; the run SHALL still transition to `completed`. Each invocation of `startProcessing` with Population in modules SHALL overwrite the prior `lastRun` values and (on completion) the `Mtime` value.
+When `startProcessing` is invoked with modules including `population`, the store SHALL additionally invoke the Rust command `capture_environment_versions` (or named equivalent) to obtain `{ explore_asl: string; matlab: string }`. Version capture SHALL be initiated during `preparing` in parallel with other preparation work. The capture SHALL be joined before worker processes are spawned. Returned values SHALL be persisted to `uiState.processing.population.lastRun` through the existing project-store actions. Probe failure SHALL produce the literal string `unknown` and SHALL NOT abort the run.
+
+After the native run transitions to `completed` with `population` selected, the store SHALL read the Population `999_ready.status` mtime and persist integer milliseconds through `setLastPopulationRunMtime`. A missing file SHALL produce `null` plus a debug warning without changing the terminal state. Each Population start SHALL overwrite prior last-run version values and, on completion, the mtime.
 
 #### Scenario: Initial state on page load
 
-- **WHEN** the processing page is loaded
-- **THEN** the store SHALL call `read_lock_status` to reconstruct per-subject progress from lock files, and set `processingPhase` based on persisted value (or `idle` if no prior run exists)
+- **WHEN** the processing page loads and `get_active_run` returns no run
+- **THEN** the store SHALL reconstruct per-subject progress from lock files and use the persisted terminal phase or `idle`
 
 #### Scenario: Phase transition on start
 
-- **WHEN** the user clicks Start after validation passes
-- **THEN** the store SHALL transition from `idle` to `preparing`, then to `running` after workers are spawned
+- **WHEN** validation passes and native reservation succeeds
+- **THEN** the store SHALL bind the returned run ID and render `preparing`, then follow authoritative native snapshots through `running` and `finalizing`
 
 #### Scenario: Phase transition on all workers complete successfully
 
-- **WHEN** all worker processes exit and `read_lock_status` confirms all subjects have `999_ready.status`
-- **THEN** the store SHALL transition to `completed`, and if `config.modules` includes `"population"`, SHALL call `setPopulationCompleted(true)` and SHALL persist the `999_ready.status` file's mtime to `uiState.processing.population.lastRun.Mtime` via `setLastPopulationRunMtime`
+- **WHEN** the current native run enters `Finalizing`, existing lock-status finalization confirms all subjects have `999_ready.status`, and native finalization returns `Completed`
+- **THEN** the store SHALL render `completed`, and if modules include `population`, SHALL set Population completed and persist its ready-file mtime
 
 #### Scenario: Phase transition on worker failure
 
-- **WHEN** all worker processes exit but some subjects lack `999_ready.status`
-- **THEN** the store SHALL transition to `failed` and SHALL NOT call `setPopulationCompleted(true)`
+- **WHEN** the current native run enters `Finalizing`, existing lock-status finalization finds missing ready status, and native finalization returns `Failed`
+- **THEN** the store SHALL render `failed` and SHALL NOT set Population completed
 
 #### Scenario: Phase transition on user kill
 
-- **WHEN** the user clicks Kill and all worker processes are terminated
-- **THEN** the store SHALL transition to `cancelled`
+- **WHEN** the current run is cancelled and native `kill_pipeline(runId)` returns `Cancelled`
+- **THEN** the store SHALL render `cancelled`
 
 #### Scenario: Population flag cleared on re-run
 
-- **WHEN** the user starts processing with `config.modules` including `"population"` and `uiState.processing.population.completed` is currently `true`
-- **THEN** the store SHALL call `setPopulationCompleted(false)` before transitioning to `preparing`, which in turn SHALL disable both the Visualization and Manifest phase nav entries via `canAccessPhase`
+- **WHEN** native reservation succeeds for modules including `population` and the Population completed flag is true
+- **THEN** the store SHALL clear that flag before workers spawn
+
+#### Scenario: Population flag not cleared on rejected start
+
+- **WHEN** reservation rejects because another run is active
+- **THEN** the store SHALL NOT clear the Population completed flag
 
 #### Scenario: Population flag not cleared on non-Population re-run
 
-- **WHEN** the user starts processing with `config.modules` not including `"population"`
-- **THEN** the store SHALL NOT call `setPopulationCompleted(false)`
+- **WHEN** the user reserves processing without `population` selected
+- **THEN** the store SHALL NOT clear the Population completed flag
 
 #### Scenario: Versions captured on Population run start
 
-- **WHEN** `startProcessing` is called with `modules: ["population"]` and both version probes succeed
-- **THEN** version capture SHALL be initiated during the `preparing` phase in parallel with other prep work (participants generation, file watcher setup) and SHALL complete before worker processes are spawned. `project.uiState.processing.population.lastRun` SHALL be populated with non-`"unknown"` values for `exploreASLVersion`, `matlabVersion`, and `guiVersion`
+- **WHEN** a Population run reservation succeeds and both version probes succeed
+- **THEN** capture SHALL run during `preparing`, complete before worker spawn, and persist non-`unknown` ExploreASL, MATLAB, and GUI versions
 
 #### Scenario: Version probe failure does not block run
 
-- **WHEN** the ExploreASL version probe returns an error but the MATLAB probe succeeds
-- **THEN** `project.uiState.processing.population.lastRun.exploreASLVersion === "unknown"`, `lastRun.matlabVersion` SHALL be the probed value, and the run SHALL proceed to spawning workers normally
+- **WHEN** the ExploreASL probe fails but the MATLAB probe succeeds
+- **THEN** the ExploreASL version SHALL be `unknown`, the MATLAB version SHALL be retained, and launch SHALL continue
 
 #### Scenario: Version capture runs in parallel with participants generation
 
-- **WHEN** `startProcessing` is invoked with `modules: ["population"]` and the MATLAB probe is slow (e.g. takes 15 seconds)
-- **THEN** `ensureParticipantsFiles` SHALL begin executing before `capture_environment_versions` resolves, and the `preparingMessage` SHALL advance to `"Generating participants list..."` while the version probe is still pending
+- **WHEN** a reserved Population run has a slow MATLAB probe
+- **THEN** participants generation SHALL begin before the probe resolves while the store remains attached to the same `preparing` run
 
 #### Scenario: Mtime persisted after Population completes
 
-- **WHEN** a Population run completes successfully and `999_ready.status` exists with mtime `1700000060000` (ms)
-- **THEN** `project.uiState.processing.population.lastRun.Mtime` SHALL equal `1700000060000` after the project is saved
+- **WHEN** a Population run reaches native `Completed` and its ready file mtime is `1700000060000`
+- **THEN** the persisted Population last-run mtime SHALL equal `1700000060000`
 
 #### Scenario: Missing 999_ready at capture time
 
-- **WHEN** a Population run reports `completed` but the `999_ready.status` file cannot be located
-- **THEN** `lastRun.Mtime` SHALL be set to `null`, a warning SHALL be logged, and the run SHALL still transition to `completed`
+- **WHEN** a Population run reaches native `Completed` but its ready file cannot be located
+- **THEN** mtime SHALL be `null`, a warning SHALL be logged, and phase SHALL remain `completed`
 
 #### Scenario: Re-run overwrites prior version capture
 
-- **WHEN** a Population run has previously captured `lastRun.exploreASLVersion === "1.0.0"` and a subsequent run uses ExploreASL `1.1.0`
-- **THEN** after the second `startProcessing` call, `lastRun.exploreASLVersion === "1.1.0"` and no field referencing `"1.0.0"` SHALL remain
+- **WHEN** a new reserved Population run captures version `1.1.0` after a prior run stored `1.0.0`
+- **THEN** the new last-run version SHALL replace the old value
 
 #### Scenario: Verdicts remain on disk during re-run
 
 - **WHEN** a Population re-run is in flight
-- **THEN** `uiState.manifest.verdicts` in the persisted `.easl` SHALL remain unchanged (no automatic deletion); the verdicts SHALL become stale per the `manifest-verdicts` staleness rules once the new run completes
+- **THEN** persisted manifest verdicts SHALL remain unchanged and become stale only under existing verdict staleness rules
 
 ### Requirement: Process Configuration
 
@@ -198,12 +205,27 @@ The store SHALL maintain `subjectStatuses` as an array of `SubjectModuleStatus` 
 
 ### Requirement: Worker Process Tracking
 
-The store SHALL track `workerPids` (array of numbers) returned from `run_pipeline`. When all workers have exited (detected via `WorkerExited` events), the store SHALL call `read_lock_status` to determine final per-subject status and transition the processing phase.
+The store SHALL bind displayed worker membership to `activeRunId` and reconcile it from each authoritative run snapshot. It SHALL NOT construct current membership solely from the PID list originally spawned by the launch call. `WorkerExited` SHALL affect the store only when its `runId` matches `activeRunId`; an unknown PID SHALL NOT remove another worker or finalize a run. When a matching event reports the final worker exit, the store SHALL obtain or accept the native snapshot: native `Finalizing` enters existing provisional lock-status finalization, while native `Failed` from `pendingLaunchFailure` remains authoritative and bypasses provisional completion.
 
 #### Scenario: Single worker crash
 
-- **WHEN** one of N workers crashes (non-zero exit)
-- **THEN** the remaining workers SHALL continue running; the store SHALL NOT kill them
+- **WHEN** one of N workers exits nonzero for the attached run
+- **THEN** the event SHALL be recorded for that run, remaining native workers SHALL continue, and the store SHALL NOT kill them
+
+#### Scenario: Early worker exit before launch response
+
+- **WHEN** a worker exits before `run_pipeline` returns
+- **THEN** the returned authoritative snapshot SHALL not contain that PID and the store SHALL not re-add it
+
+#### Scenario: Partial spawn failure remains controllable
+
+- **WHEN** launch returns an error after native attachment reports `Running`, surviving workers, and `pendingLaunchFailure`
+- **THEN** the store SHALL retain that exact run attachment, keep controls locked, permit Kill, and SHALL NOT issue a duplicate preparation-failure request
+
+#### Scenario: Unknown worker event
+
+- **WHEN** a matching-run `WorkerExited` names a PID absent from authoritative membership and exit evidence
+- **THEN** the store SHALL not remove another PID or independently finalize the run
 
 ### Requirement: Last Run Config Persistence
 
@@ -223,3 +245,52 @@ The store SHALL persist the last run configuration (`ProcessConfig`) to the `.ea
 
 - **WHEN** `syncProcessingState` is called with `{ config, processingPhase: "running" }` and `uiState.processing.population.completed` is `true` with `lastRun` metadata present
 - **THEN** after the sync, `uiState.processing.population.completed` SHALL remain `true` and `uiState.processing.population.lastRun` SHALL retain its prior values (profileId, versions, Mtime)
+
+### Requirement: Runtime Run Identity and Event Admission
+
+The processing store SHALL hold session-only `activeRunId` and accept processing snapshots, status events, lock events, and worker events only when both the captured project lease is current and payload `runId` equals `activeRunId`. Missing or mismatched run IDs SHALL fail closed without changing phase, worker membership, subject progress, Population metadata, or listener ownership. Starting or attaching a different run SHALL replace listeners atomically and prevent queued old callbacks from mutating the replacement.
+
+The listener set SHALL also admit run-correlated `ProcessingLifecycleSnapshot` events. Attachment SHALL use a discover/bind/listen/attach handshake so the post-listener snapshot reconciles an exit emitted during setup. Terminal Population version/mtime writes SHALL retain an exact terminal run correlation until the asynchronous side effect resolves and SHALL reject results after a replacement run or project lease change.
+
+#### Scenario: Delayed same-project event
+
+- **WHEN** run `R2` is attached and a queued status or worker event from run `R1` arrives for the same project
+- **THEN** the store SHALL ignore the event completely
+
+#### Scenario: Event missing run identity
+
+- **WHEN** an event capable of changing processing state lacks `runId`
+- **THEN** the store SHALL reject the payload without mutation
+
+#### Scenario: Project replacement with reused run text
+
+- **WHEN** project lifecycle changes while an old event callback remains queued
+- **THEN** the project-lease check SHALL reject it even if its run ID equals the currently stored text
+
+### Requirement: Native Reservation Before Frontend Preparation
+
+After local configuration validation and before run-specific participants generation, rawdata preparation, watcher start, status/log cleanup, or Population metadata clearing, `startProcessing` SHALL reserve a native run. The full start operation SHALL be registered as a deferred project-lifecycle thunk; if an active project's work admission has closed for close/switch, registration SHALL reject without invoking the thunk, reserving a run, or entering local `preparing`. A reservation conflict SHALL leave the store attached to the existing run or return to its prior state and SHALL cause no rejected-run filesystem or project-state mutation. Any preparation failure after reservation SHALL transition the matching native run to `Failed` before local controls unlock. A rawdata-warning confirmation SHALL atomically claim the matching pending continuation so repeated confirmation submits at most one preparation/launch continuation; native `Preparing` admission remains authoritative.
+
+#### Scenario: Concurrent frontend starts
+
+- **WHEN** two start actions race after local validation
+- **THEN** only the action holding the successful native reservation SHALL perform preparation or launch mutations
+
+#### Scenario: Preparation fails after reservation
+
+- **WHEN** participants generation fails for a reserved `Preparing` run
+- **THEN** the store SHALL request failure of that exact run and render the returned native `Failed` state without leaving an active `Preparing` reservation
+
+### Requirement: Run Discovery and Attachment Client
+
+The frontend SHALL expose typed clients for `get_active_run` and `attach_run`. Attachment SHALL validate the returned run ID and active project lease, install run-scoped listeners exactly once, and reconcile phase and worker membership from the returned snapshot. PL-01 attachment covers the current in-memory native run; persistence and full application-restart recovery remain outside this requirement.
+
+#### Scenario: Attach current in-memory run
+
+- **WHEN** `get_active_run` returns `R1` for the active project and `attach_run(R1)` confirms it
+- **THEN** the store SHALL bind `R1`, install one listener set, and render its authoritative lifecycle and worker membership
+
+#### Scenario: Attachment response becomes stale
+
+- **WHEN** project lifecycle or active run changes while `attach_run` is pending
+- **THEN** the response SHALL be ignored without replacing current listeners or state

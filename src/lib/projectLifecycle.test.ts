@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   activateProjectLease,
@@ -40,6 +40,15 @@ describe("project lifecycle lease", () => {
     closeProjectWorkAdmission();
 
     expect(() => registerProjectTask(Promise.resolve())).toThrow(/transition/i);
+  });
+
+  it("never invokes an admitted thunk after active-project admission closes", () => {
+    activateProjectLease("project", "/project");
+    closeProjectWorkAdmission();
+    const thunk = vi.fn(async () => undefined);
+
+    expect(() => registerProjectTask(thunk)).toThrow(/transition/i);
+    expect(thunk).not.toHaveBeenCalled();
   });
 
   it("waits for registered work to settle", async () => {

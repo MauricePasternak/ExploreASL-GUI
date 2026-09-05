@@ -45,6 +45,12 @@ const VALID_GATE = {
     [profile.id]: { valid: true, errors: [] },
   },
 };
+const VALID_STAGING_GATE = {
+  status: "valid" as const,
+  fingerprint: "fingerprint",
+  currentFingerprint: "fingerprint",
+  localIssueCount: 0,
+};
 
 const READY_FOR_PREVIEW_STATE = {
   ingestionComplete: true,
@@ -149,9 +155,13 @@ describe("importStepAccess", () => {
 
   it("keeps run import locked until metadata and valid profile gate are satisfied", () => {
     expect(hasValidExecutionProfile(VALID_GATE)).toBe(true);
-    expect(canEnterStep5(READY_FOR_PREVIEW_STATE, VALID_GATE)).toBe(true);
-    expect(getMaxUnlockedImportStep(READY_FOR_PREVIEW_STATE, VALID_GATE)).toBe(5);
-    expect(canSelectImportStep(5, READY_FOR_PREVIEW_STATE, VALID_GATE)).toBe(true);
+    expect(canEnterStep5(READY_FOR_PREVIEW_STATE, VALID_GATE, VALID_STAGING_GATE)).toBe(true);
+    expect(getMaxUnlockedImportStep(READY_FOR_PREVIEW_STATE, VALID_GATE, VALID_STAGING_GATE)).toBe(
+      5,
+    );
+    expect(canSelectImportStep(5, READY_FOR_PREVIEW_STATE, VALID_GATE, VALID_STAGING_GATE)).toBe(
+      true,
+    );
 
     expect(
       canEnterStep5(
@@ -160,22 +170,46 @@ describe("importStepAccess", () => {
           metadataGroups: [{ ...VALID_METADATA, bidsParams: {} }],
         },
         VALID_GATE,
+        VALID_STAGING_GATE,
       ),
     ).toBe(false);
 
     expect(
-      canEnterStep5(READY_FOR_PREVIEW_STATE, {
-        executionProfiles: [],
-        profileValidationState: {},
-      }),
+      canEnterStep5(
+        READY_FOR_PREVIEW_STATE,
+        {
+          executionProfiles: [],
+          profileValidationState: {},
+        },
+        VALID_STAGING_GATE,
+      ),
     ).toBe(false);
 
     expect(
-      canEnterStep5(READY_FOR_PREVIEW_STATE, {
-        executionProfiles: [profile],
-        profileValidationState: {
-          [profile.id]: { valid: false, errors: ["MATLAB not found"] },
+      canEnterStep5(
+        READY_FOR_PREVIEW_STATE,
+        {
+          executionProfiles: [profile],
+          profileValidationState: {
+            [profile.id]: { valid: false, errors: ["MATLAB not found"] },
+          },
         },
+        VALID_STAGING_GATE,
+      ),
+    ).toBe(false);
+
+    for (const status of ["idle", "pending", "invalid", "failed"] as const) {
+      expect(
+        canEnterStep5(READY_FOR_PREVIEW_STATE, VALID_GATE, {
+          ...VALID_STAGING_GATE,
+          status,
+        }),
+      ).toBe(false);
+    }
+    expect(
+      canEnterStep5(READY_FOR_PREVIEW_STATE, VALID_GATE, {
+        ...VALID_STAGING_GATE,
+        fingerprint: "stale",
       }),
     ).toBe(false);
   });

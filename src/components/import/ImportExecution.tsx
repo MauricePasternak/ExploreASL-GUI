@@ -10,12 +10,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Virtuoso } from "react-virtuoso";
 
-import { runImportPipeline, setupImportListeners, stopImportProcess } from "../../lib/importEvents";
-import { buildAllStagingMappings } from "../../lib/importPreviewUtils";
+import {
+  ImportPipelineError,
+  runImportPipeline,
+  setupImportListeners,
+  stopActiveImport,
+  stopImportProcess,
+} from "../../lib/importEvents";
+import { buildImportPlan } from "../../lib/importPlan";
 import { computeStaleness } from "../../lib/importStaleness";
 import { readImportStatus } from "../../lib/importStatus";
+import {
+  captureProjectLease,
+  isCurrentProjectLease,
+  isProjectWorkAccepted,
+  registerProjectTask,
+} from "../../lib/projectLifecycle";
 import { resolveLogicalSource } from "../../lib/projectPaths";
-import { assembleSourcestructure, assembleStudyPar } from "../../lib/tokenizerUtils";
+import { fingerprintImportPlan } from "../../lib/stagingPreflight";
+import { portableKey } from "../../lib/stagingValidation";
 import { useGlobalStore } from "../../stores/globalStore";
 import { type ImportPhase, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -34,6 +47,15 @@ const PHASE_META: Record<
   failed: { label: "Failed", color: "red" },
   cancelled: { label: "Cancelled", color: "orange" },
 };
+
+let nextRunRequestSequence = 0;
+
+function createRunRequestId(): string {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  if (randomId) return randomId;
+  nextRunRequestSequence += 1;
+  return `import-${Date.now()}-${nextRunRequestSequence}`;
+}
 
 function ImportExecutionHeader({ phase }: { phase: ImportPhase }) {
   const meta = PHASE_META[phase];
@@ -73,6 +95,8 @@ function ImportExecutionControls({
   onProfileChange,
   hasSelectedSubjects,
   profileError,
+  stopping,
+  stopError,
 }: {
   phase: ImportPhase;
   canRun: boolean;
@@ -83,6 +107,8 @@ function ImportExecutionControls({
   onProfileChange: (id: string) => void;
   hasSelectedSubjects: boolean;
   profileError: string | null;
+  stopping: boolean;
+  stopError: string | null;
 }) {
   return (
     <Stack gap="sm" data-testid="import-execution-controls">
@@ -90,12 +116,18 @@ function ImportExecutionControls({
         <ProfileSelector
           value={selectedProfileId}
           onChange={onProfileChange}
-          disabled={phase === "running"}
+          disabled={phase === "preparing" || phase === "running"}
           minWidth={300}
         />
         <Button
           leftSection={<IconPlayerPlay size={16} />}
-          disabled={phase === "running" || !canRun || !hasSelectedSubjects || noProfiles}
+          disabled={
+            phase === "preparing" ||
+            phase === "running" ||
+            !canRun ||
+            !hasSelectedSubjects ||
+            noProfiles
+          }
           onClick={onStart}
           data-testid="start-import-btn"
         >
@@ -105,7 +137,7 @@ function ImportExecutionControls({
           leftSection={<IconPlayerStop size={16} />}
           color="red"
           variant="light"
-          disabled={phase !== "running"}
+          disabled={phase !== "running" || stopping}
           onClick={onStop}
           data-testid="stop-import-btn"
         >
@@ -130,6 +162,16 @@ function ImportExecutionControls({
           data-testid="profile-error-alert"
         >
           <Text size="sm">{profileError}</Text>
+        </Alert>
+      ) : null}
+      {stopError ? (
+        <Alert
+          color="red"
+          icon={<IconAlertTriangle size={16} />}
+          p="xs"
+          data-testid="stop-import-error-alert"
+        >
+          <Text size="sm">{stopError}</Text>
         </Alert>
       ) : null}
     </Stack>
@@ -253,6 +295,26 @@ function ConfirmReimportDialog({
   );
 }
 
+function currentImportPlan(projectRoot: string) {
+  const store = useImportStore.getState();
+  const globalSettings = useGlobalStore.getState().settings;
+  const sourceRoot = resolveLogicalSource(projectRoot, store.sourceDataPath, "dicom");
+  return buildImportPlan({
+    rawPaths: store.rawPaths,
+    sourceRoot,
+    pathPatterns: store.pathPatterns,
+    tokenizerConfigs: store.tokenizerConfigs,
+    subjectRenames: store.subjectRenames,
+    sessionAliases: store.sessionAliases,
+    runAliases: store.runAliases,
+    modalityAliases: store.modalityAliases,
+    tokenSubDelimiters: globalSettings.tokenSubDelimiters,
+    bMatchDirectories: store.bMatchDirectories,
+    metadataGroups: store.metadataGroups,
+    subjectRows: store.subjectRows,
+  });
+}
+
 export default function ImportExecution() {
   const navigate = useNavigate();
   const importPhase = useImportStore((state) => state.importPhase);
@@ -271,9 +333,10 @@ export default function ImportExecution() {
   const addLogLine = useImportStore((state) => state.addLogLine);
   const failImport = useImportStore((state) => state.failImport);
   const sourceAvailability = useImportStore((state) => state.sourceAvailability);
+  const setStagingPreflightIssues = useImportStore((state) => state.setStagingPreflightIssues);
   const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
   const profileValidationState = useGlobalStore((state) => state.profileValidationState);
-  const backLocked = importPhase === "running";
+  const executionLocked = importPhase === "preparing" || importPhase === "running";
   const progressRows = Object.values(importProgress).sort((left, right) =>
     left.subject.localeCompare(right.subject),
   );
@@ -310,6 +373,8 @@ export default function ImportExecution() {
     return [];
   });
   const [confirmSubjects, setConfirmSubjects] = useState<string[] | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
 
   if (importProgress !== prevImportProgress || importPhase !== prevImportPhase) {
     setPrevImportProgress(importProgress);
@@ -347,7 +412,8 @@ export default function ImportExecution() {
     clearProfileError();
   }, [selectedProfileId, clearProfileError]);
 
-  const pidRef = useRef<number | null>(null);
+  const pidRef = useRef<{ runRequestId: string; pid: number } | null>(null);
+  const runRequestIdRef = useRef<string | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const isMountedRef = useRef(true);
 
@@ -362,8 +428,18 @@ export default function ImportExecution() {
     return () => {
       cleanupRef.current?.();
       cleanupRef.current = null;
+      pidRef.current = null;
+      runRequestIdRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (importPhase === "preparing" || importPhase === "running") return;
+    pidRef.current = null;
+    runRequestIdRef.current = null;
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+  }, [importPhase]);
 
   useEffect(() => {
     if (importPhase === "running" || importPhase === "preparing") {
@@ -399,106 +475,109 @@ export default function ImportExecution() {
   }, [importPhase]);
 
   const doRunImport = useCallback(
-    async (subjectsToImport: string[]) => {
-      const previousPhase = importPhase;
-
-      const allProgress = Object.values(useImportStore.getState().importProgress);
-      const succeededForRetry = allProgress
+    (subjectsToImport: string[]) => {
+      const lease = captureProjectLease();
+      const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
+      const plan = currentImportPlan(projectRoot);
+      const fingerprint = fingerprintImportPlan(projectRoot, plan);
+      const store = useImportStore.getState();
+      const executionProfile = store.selectedProfileId
+        ? useGlobalStore.getState().getProfileById(store.selectedProfileId)
+        : undefined;
+      const subjectsToImportKeys = new Set(subjectsToImport.map(portableKey));
+      const succeededForRetry = Object.values(store.importProgress)
         .filter(
           (progress) =>
-            progress.status === "completed" && !subjectsToImport.includes(progress.subject),
+            progress.status === "completed" &&
+            !subjectsToImportKeys.has(portableKey(progress.subject)),
         )
         .map((progress) => progress.subject);
+      const runRequestId = createRunRequestId();
+      const isCurrentOperation = () => {
+        if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return false;
+        const currentProjectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
+        if (currentProjectRoot !== projectRoot) return false;
+        try {
+          return (
+            fingerprintImportPlan(currentProjectRoot, currentImportPlan(currentProjectRoot)) ===
+            fingerprint
+          );
+        } catch {
+          return false;
+        }
+      };
 
-      if (previousPhase === "failed" || previousPhase === "cancelled") {
+      const isCurrentRun = () => runRequestIdRef.current === runRequestId && isCurrentOperation();
+
+      if (!isCurrentOperation()) return;
+      if (store.importPhase === "failed" || store.importPhase === "cancelled") {
         resetImportPhase();
       }
+      pidRef.current = null;
+      runRequestIdRef.current = runRequestId;
       startImport();
 
-      const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
-      const stagingRoot = `${projectRoot}/.easl_staging`;
+      const operation = (async () => {
+        cleanupRef.current?.();
+        cleanupRef.current = null;
 
-      cleanupRef.current?.();
-      cleanupRef.current = null;
+        try {
+          const cleanup = await setupImportListeners(runRequestId, {
+            onTerminal: () => {
+              if (runRequestIdRef.current === runRequestId) {
+                pidRef.current = null;
+                runRequestIdRef.current = null;
+              }
+            },
+          });
+          if (!isMountedRef.current || !isCurrentRun()) {
+            cleanup();
+            return;
+          }
+          cleanupRef.current = cleanup;
 
+          if (!executionProfile) {
+            throw new Error("No execution profile selected.");
+          }
+          if (succeededForRetry.length > 0) {
+            addLogLine(
+              `Preserving lock files for previously-completed subjects: ${succeededForRetry.join(", ")}`,
+            );
+          }
+
+          const pid = await runImportPipeline({
+            runRequestId,
+            stagingEntries: plan.entries,
+            sourcestructureJson: plan.sourcestructureJson,
+            studyparJson: plan.studyparJson,
+            executionProfile,
+            subjectList: subjectsToImport,
+            subjectsToPreserve: succeededForRetry.length > 0 ? succeededForRetry : undefined,
+          });
+          if (isCurrentRun() && useImportStore.getState().importPhase === "running") {
+            pidRef.current = { runRequestId, pid };
+          }
+        } catch (err) {
+          if (!isCurrentRun()) return;
+          if (err instanceof ImportPipelineError && err.failure.kind === "preflight") {
+            setStagingPreflightIssues(err.failure.issues);
+          }
+          const message = err instanceof Error ? err.message : "Failed to start import";
+          addLogLine(message);
+          failImport();
+          pidRef.current = null;
+          runRequestIdRef.current = null;
+          cleanupRef.current?.();
+          cleanupRef.current = null;
+        }
+      })();
       try {
-        const cleanup = await setupImportListeners(stagingRoot, projectRoot, subjectsToImport);
-        if (!isMountedRef.current) {
-          cleanup();
-          return;
-        }
-        cleanupRef.current = cleanup;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to set up import listeners";
-        addLogLine(message);
-        failImport();
-        return;
-      }
-
-      try {
-        const store = useImportStore.getState();
-        const globalSettings = useGlobalStore.getState().settings;
-        const globalState = useGlobalStore.getState();
-        const profileId = store.selectedProfileId;
-        const executionProfile = profileId ? globalState.getProfileById(profileId) : undefined;
-        if (!executionProfile) {
-          throw new Error("No execution profile selected.");
-        }
-
-        const subjectRenamesMap = Object.fromEntries(
-          store.subjectRenames.map((r) => [r.original, r.target]),
-        );
-        const resolvedSource = resolveLogicalSource(projectRoot, store.sourceDataPath, "dicom");
-        const mappings = buildAllStagingMappings(
-          store.rawPaths,
-          resolvedSource,
-          store.pathPatterns,
-          store.tokenizerConfigs,
-          subjectRenamesMap,
-          store.sessionAliases,
-          store.modalityAliases,
-          globalSettings.tokenSubDelimiters,
-        );
-        const stagingEntries = mappings.flatMap((m) => m.entries);
-
-        const sourcestructureJson = assembleSourcestructure(
-          store.sessionAliases,
-          store.runAliases,
-          store.modalityAliases,
-          store.bMatchDirectories,
-        ) as Record<string, unknown>;
-
-        const studyparJson = assembleStudyPar(store.metadataGroups, store.subjectRows) as Record<
-          string,
-          unknown
-        >;
-
-        const subjectList = subjectsToImport;
-
-        if (succeededForRetry.length > 0) {
-          addLogLine(
-            `Preserving lock files for previously-completed subjects: ${succeededForRetry.join(", ")}`,
-          );
-        }
-
-        const pid = await runImportPipeline({
-          projectRoot,
-          stagingEntries,
-          sourcestructureJson,
-          studyparJson,
-          executionProfile,
-          subjectList,
-          subjectsToPreserve: succeededForRetry.length > 0 ? succeededForRetry : undefined,
-        });
-
-        pidRef.current = pid;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to start import";
-        addLogLine(message);
-        failImport();
+        registerProjectTask(operation);
+      } catch {
+        // Admission closed after synchronous setup. The operation self-gates after every await.
       }
     },
-    [importPhase, resetImportPhase, startImport, addLogLine, failImport],
+    [resetImportPhase, startImport, addLogLine, failImport, setStagingPreflightIssues],
   );
 
   const handleStartImport = useCallback(() => {
@@ -532,15 +611,34 @@ export default function ImportExecution() {
     setConfirmSubjects(null);
   }, []);
 
-  const handleStop = useCallback(() => {
-    if (pidRef.current !== null) {
-      void stopImportProcess(pidRef.current).catch((err) => {
-        console.warn("[ImportExecution] stopImportProcess failed:", err);
-      });
-      pidRef.current = null;
+  const handleStop = useCallback(async () => {
+    const runRequestId = runRequestIdRef.current;
+    const pid = pidRef.current;
+    setStopping(true);
+    setStopError(null);
+    try {
+      if (runRequestId && pid?.runRequestId === runRequestId) {
+        await stopImportProcess(pid.pid);
+      } else {
+        await stopActiveImport();
+      }
+      if (runRequestIdRef.current === runRequestId) {
+        pidRef.current = null;
+        runRequestIdRef.current = null;
+        cleanupRef.current?.();
+        cleanupRef.current = null;
+      }
+      if (isMountedRef.current && useImportStore.getState().importPhase === "running") {
+        cancelImportAction();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to stop import.";
+      addLogLine(`Failed to stop import: ${message}`);
+      if (isMountedRef.current) setStopError(message);
+    } finally {
+      if (isMountedRef.current) setStopping(false);
     }
-    cancelImportAction();
-  }, [cancelImportAction]);
+  }, [addLogLine, cancelImportAction]);
 
   const advanceToParameters = () => {
     const project = useProjectStore.getState().project;
@@ -564,6 +662,8 @@ export default function ImportExecution() {
         selectedProfileId={selectedId}
         onProfileChange={setSelectedProfileId}
         profileError={profileError}
+        stopping={stopping}
+        stopError={stopError}
         hasSelectedSubjects={
           selectedSubjects.length > 0 ||
           (Object.keys(importProgress).length === 0 && subjectRows.length > 0)
@@ -590,6 +690,7 @@ export default function ImportExecution() {
         rows={progressRows}
         selectedSubjects={selectedSubjects}
         onSelectedSubjectsChange={setSelectedSubjects}
+        selectionLocked={executionLocked}
       />
       <ImportLogPanel lines={importLog} />
 
@@ -616,7 +717,7 @@ export default function ImportExecution() {
         <Button
           leftSection={<IconArrowLeft size={16} />}
           variant="light"
-          disabled={backLocked}
+          disabled={executionLocked}
           onClick={() => setActiveStep(4)}
           data-testid="import-back-btn"
         >
@@ -624,7 +725,7 @@ export default function ImportExecution() {
         </Button>
         <Button
           onClick={advanceToParameters}
-          disabled={importPhase === "running"}
+          disabled={executionLocked}
           data-testid="import-next-params-btn"
         >
           Next: Parameters

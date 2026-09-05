@@ -9,9 +9,12 @@ export const PROCESSING_PHASES = [
   "idle",
   "preparing",
   "running",
+  "finalizing",
+  "cancelling",
   "completed",
   "failed",
   "cancelled",
+  "interrupted",
 ] as const;
 export const SUBJECT_MODULE_STATUSES = ["pending", "incomplete", "complete", "outdated"] as const;
 
@@ -39,6 +42,73 @@ export const SubjectModuleStatusSchema = z.object({
 
 export const ProcessingPhaseSchema = z.enum(PROCESSING_PHASES);
 
+/** Native lifecycle. `idle` exists only in renderer runtime state. */
+export const ProcessingLifecycleSchema = z.enum([
+  "preparing",
+  "running",
+  "finalizing",
+  "completed",
+  "cancelling",
+  "cancelled",
+  "failed",
+  "interrupted",
+]);
+
+export const ProcessingTerminalResultSchema = z.enum([
+  "completed",
+  "failed",
+  "cancelled",
+  "interrupted",
+]);
+
+export const WorkerExitEvidenceSchema = z
+  .object({
+    pid: z.number().int().nonnegative(),
+    exitCode: z.number().int(),
+  })
+  .strict();
+
+/** Exact camelCase serialization of Rust `ProcessingRunSnapshot`. */
+export const ProcessingRunSnapshotSchema = z
+  .object({
+    runId: z.string().min(1),
+    lifecycle: ProcessingLifecycleSchema,
+    projectRoot: z.string().min(1),
+    selectedModules: z.array(z.string()),
+    selectedSubjectSessions: z.array(z.string()),
+    startTime: z.number().int().nonnegative(),
+    workers: z.array(z.number().int().nonnegative()),
+    exitEvidence: z.array(WorkerExitEvidenceSchema),
+    watcherOwned: z.boolean(),
+    terminalResult: ProcessingTerminalResultSchema.nullable().optional(),
+    pendingLaunchFailure: z.string().min(1).nullable().optional(),
+  })
+  .strict();
+
+export const ProcessingRunLaunchResponseSchema = ProcessingRunSnapshotSchema;
+/** Run-correlated native lifecycle event payload. */
+export const ProcessingLifecycleSnapshotSchema = ProcessingRunSnapshotSchema;
+
+const RunCorrelatedEventBaseSchema = z.object({
+  runId: z.string().min(1),
+  module: z.string(),
+  subjectSession: z.string().nullable().optional(),
+  run: z.string().nullable().optional(),
+});
+
+export const StatusFileCreatedPayloadSchema = RunCorrelatedEventBaseSchema.extend({
+  stepCode: z.string(),
+}).strict();
+export const LockCreatedPayloadSchema = RunCorrelatedEventBaseSchema.strict();
+export const LockRemovedPayloadSchema = RunCorrelatedEventBaseSchema.strict();
+export const WorkerExitedPayloadSchema = z
+  .object({
+    runId: z.string().min(1),
+    pid: z.number().int().nonnegative(),
+    exitCode: z.number().int(),
+  })
+  .strict();
+
 export const SubjectInfoSchema = z.object({
   subjectSession: z.string(),
   subject: z.string(),
@@ -49,18 +119,14 @@ export const SubjectInfoSchema = z.object({
 });
 
 export const LockFileEventSchema = z.discriminatedUnion("type", [
-  z.object({
+  StatusFileCreatedPayloadSchema.extend({
     type: z.literal("StatusFileCreated"),
-    module: z.string(),
-    subjectSession: z.string().optional(),
-    stepCode: z.string(),
-    run: z.string().optional(),
   }),
-  z.object({
+  LockCreatedPayloadSchema.extend({
     type: z.literal("LockCreated"),
-    module: z.string(),
-    subjectSession: z.string().optional(),
-    run: z.string().optional(),
+  }),
+  LockRemovedPayloadSchema.extend({
+    type: z.literal("LockRemoved"),
   }),
 ]);
 
@@ -71,6 +137,16 @@ export const LockFileEventSchema = z.discriminatedUnion("type", [
 export type ProcessConfig = z.infer<typeof ProcessConfigSchema>;
 export type SubjectModuleStatus = z.infer<typeof SubjectModuleStatusSchema>;
 export type ProcessingPhase = z.infer<typeof ProcessingPhaseSchema>;
+export type ProcessingLifecycle = z.infer<typeof ProcessingLifecycleSchema>;
+export type ProcessingTerminalResult = z.infer<typeof ProcessingTerminalResultSchema>;
+export type WorkerExitEvidence = z.infer<typeof WorkerExitEvidenceSchema>;
+export type ProcessingRunSnapshot = z.infer<typeof ProcessingRunSnapshotSchema>;
+export type ProcessingRunLaunchResponse = z.infer<typeof ProcessingRunLaunchResponseSchema>;
+export type ProcessingLifecycleSnapshot = z.infer<typeof ProcessingLifecycleSnapshotSchema>;
+export type StatusFileCreatedPayload = z.infer<typeof StatusFileCreatedPayloadSchema>;
+export type LockCreatedPayload = z.infer<typeof LockCreatedPayloadSchema>;
+export type LockRemovedPayload = z.infer<typeof LockRemovedPayloadSchema>;
+export type WorkerExitedPayload = z.infer<typeof WorkerExitedPayloadSchema>;
 export type SubjectInfo = z.infer<typeof SubjectInfoSchema>;
 export type LockFileEvent = z.infer<typeof LockFileEventSchema>;
 

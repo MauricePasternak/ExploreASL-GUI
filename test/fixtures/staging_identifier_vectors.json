@@ -1,0 +1,37 @@
+{
+  "components": [
+    { "value": "Session_01", "valid": true },
+    { "value": "Å", "valid": true },
+    { "value": "", "valid": false },
+    { "value": ".", "valid": false },
+    { "value": "..", "valid": false },
+    { "value": "a/b", "valid": false },
+    { "value": "a\\b", "valid": false },
+    { "value": "/absolute", "valid": false },
+    { "value": "C:\\absolute", "valid": false },
+    { "value": "a\u0001b", "valid": false },
+    { "value": "a:b", "valid": false },
+    { "value": "name.", "valid": false },
+    { "value": "name ", "valid": false },
+    { "value": "é", "valid": false },
+    { "value": "CON", "valid": false },
+    { "value": "aux.txt", "valid": false },
+    { "value": "COM¹", "valid": false }
+  ],
+  "portableKeys": [
+    { "value": "Straße", "key": "strasse" },
+    { "value": "ΟΣ", "key": "οσ" },
+    { "value": "Å", "key": "å" }
+  ],
+  "subjects": [
+    { "value": "A01", "valid": true },
+    { "value": "sub-A01", "valid": false },
+    { "value": "A_01", "valid": false },
+    { "value": "Å", "valid": false }
+  ],
+  "modalities": [
+    { "value": "T1w", "valid": true },
+    { "value": "ASL4D", "valid": true },
+    { "value": "unknown", "valid": false }
+  ]
+}

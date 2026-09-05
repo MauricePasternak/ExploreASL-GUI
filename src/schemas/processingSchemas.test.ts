@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   LockFileEventSchema,
+  LockCreatedPayloadSchema,
+  LockRemovedPayloadSchema,
   modulesToBProcess,
   ProcessConfigSchema,
   ProcessingPhaseSchema,
+  ProcessingRunSnapshotSchema,
+  StatusFileCreatedPayloadSchema,
   SubjectInfoSchema,
   SubjectModuleStatusSchema,
 } from "./processingSchemas";
@@ -178,12 +182,19 @@ describe("SubjectModuleStatusSchema", () => {
 // ProcessingPhaseSchema
 // ---------------------------------------------------------------------------
 describe("ProcessingPhaseSchema", () => {
-  it.each(["idle", "preparing", "running", "completed", "failed", "cancelled"] as const)(
-    "accepts valid phase: %s",
-    (phase) => {
-      expect(ProcessingPhaseSchema.parse(phase)).toBe(phase);
-    },
-  );
+  it.each([
+    "idle",
+    "preparing",
+    "running",
+    "finalizing",
+    "cancelling",
+    "completed",
+    "failed",
+    "cancelled",
+    "interrupted",
+  ] as const)("accepts valid phase: %s", (phase) => {
+    expect(ProcessingPhaseSchema.parse(phase)).toBe(phase);
+  });
 
   it("rejects invalid phase", () => {
     expect(() => ProcessingPhaseSchema.parse("invalid")).toThrow();
@@ -228,6 +239,7 @@ describe("LockFileEventSchema", () => {
   it("accepts StatusFileCreated event", () => {
     const data = {
       type: "StatusFileCreated" as const,
+      runId: "processing-run-1",
       module: "asl",
       subjectSession: "sub-01/01",
       stepCode: "Quantification",
@@ -239,6 +251,7 @@ describe("LockFileEventSchema", () => {
   it("accepts StatusFileCreated event with optional run", () => {
     const data = {
       type: "StatusFileCreated" as const,
+      runId: "processing-run-1",
       module: "structural",
       subjectSession: "sub-01/01",
       stepCode: "Segmentation",
@@ -251,6 +264,7 @@ describe("LockFileEventSchema", () => {
   it("accepts LockCreated event", () => {
     const data = {
       type: "LockCreated" as const,
+      runId: "processing-run-1",
       module: "asl",
       subjectSession: "sub-01/01",
     };
@@ -261,6 +275,7 @@ describe("LockFileEventSchema", () => {
   it("accepts LockCreated event with optional run", () => {
     const data = {
       type: "LockCreated" as const,
+      runId: "processing-run-1",
       module: "population",
       subjectSession: "sub-01/01",
       run: "01",
@@ -273,6 +288,7 @@ describe("LockFileEventSchema", () => {
     expect(() =>
       LockFileEventSchema.parse({
         type: "UnknownEvent",
+        runId: "processing-run-1",
         module: "asl",
         subjectSession: "sub-01/01",
       }),
@@ -282,6 +298,7 @@ describe("LockFileEventSchema", () => {
   it("accepts StatusFileCreated event with undefined subjectSession (Population)", () => {
     const data = {
       type: "StatusFileCreated" as const,
+      runId: "processing-run-1",
       module: "xASL_module_Population",
       stepCode: "999_ready",
     };
@@ -292,6 +309,7 @@ describe("LockFileEventSchema", () => {
   it("accepts LockCreated event with undefined subjectSession (Population)", () => {
     const data = {
       type: "LockCreated" as const,
+      runId: "processing-run-1",
       module: "xASL_module_Population",
     };
     const result = LockFileEventSchema.parse(data);
@@ -301,6 +319,51 @@ describe("LockFileEventSchema", () => {
   it("rejects missing required fields", () => {
     expect(() => LockFileEventSchema.parse({ type: "LockCreated" })).toThrow();
   });
+});
+
+describe("native processing-run wire schemas", () => {
+  const snapshot = {
+    runId: "processing-run-1",
+    lifecycle: "running",
+    projectRoot: "/projects/example",
+    selectedModules: ["structural", "asl"],
+    selectedSubjectSessions: ["sub-001_01"],
+    startTime: 1_700_000_000_000,
+    workers: [101, 202],
+    exitEvidence: [{ pid: 99, exitCode: 1 }],
+    watcherOwned: true,
+  };
+
+  it.each([
+    "preparing",
+    "running",
+    "finalizing",
+    "completed",
+    "cancelling",
+    "cancelled",
+    "failed",
+    "interrupted",
+  ])("accepts Rust lifecycle %s", (lifecycle) => {
+    expect(ProcessingRunSnapshotSchema.parse({ ...snapshot, lifecycle }).lifecycle).toBe(lifecycle);
+  });
+
+  it("accepts terminal result and rejects unknown snapshot fields", () => {
+    expect(
+      ProcessingRunSnapshotSchema.parse({
+        ...snapshot,
+        lifecycle: "completed",
+        terminalResult: "completed",
+      }),
+    ).toMatchObject({ terminalResult: "completed" });
+    expect(() => ProcessingRunSnapshotSchema.parse({ ...snapshot, unexpected: true })).toThrow();
+  });
+
+  it.each([StatusFileCreatedPayloadSchema, LockCreatedPayloadSchema, LockRemovedPayloadSchema])(
+    "fails closed when a lock event lacks runId",
+    (schema) => {
+      expect(() => schema.parse({ module: "xASL_module_ASL" })).toThrow();
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

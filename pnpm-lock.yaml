@@ -89,6 +89,9 @@ importers:
       react-virtuoso:
         specifier: ^4.18.12
         version: 4.18.12(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      unicode-case-folding:
+        specifier: ^1.1.1
+        version: 1.1.1
       zod:
         specifier: ^4.5.4
         version: 4.5.4
@@ -1997,6 +2000,9 @@ packages:
     resolution: {integrity: sha512-YQ3WlbqjYMmNpdvDH64jAgLjxuAR9+649calDWhbshYaeQGO2bR4nI94ORJmwI3J9YhoKQnpyGOK+0zlWS5N5Q==}
     engines: {node: '>=22.19.0'}
 
+  unicode-case-folding@1.1.1:
+    resolution: {integrity: sha512-ZAYziAnMTBisO2dT5tyGvBFMNsIfonOS/BZTd3UZaKWtXMOZqK8s8HRUCrlKxGCTeCxCuCjS/6HW+4a6G+rbzw==}
+
   unzipit@1.4.3:
     resolution: {integrity: sha512-gsq2PdJIWWGhx5kcdWStvNWit9FVdTewm4SEG7gFskWs+XCVaULt9+BwuoBtJiRE8eo3L1IPAOrbByNLtLtIlg==}
     engines: {node: '>=12'}
@@ -3791,6 +3797,8 @@ snapshots:
   undici-types@8.3.0: {}
 
   undici@8.10.1: {}
+
+  unicode-case-folding@1.1.1: {}
 
   unzipit@1.4.3:
     dependencies:

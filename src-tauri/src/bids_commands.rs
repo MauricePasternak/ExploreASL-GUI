@@ -1,6 +1,7 @@
 use crate::bids::group::{BidsSidecarScan, group_by_fingerprint};
 use crate::bids::scan::{asl_json_path_for, parse_bids_structure};
 use crate::bids::sidecar::find_asl_sidecars;
+use crate::processing::runs::preparing_run_root;
 use crate::tracing::CommandTrace;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -224,6 +225,21 @@ pub fn ensure_rawdata_dir(root_path: String) -> Result<EnsureRawdataResult, Stri
     let result = ensure_rawdata_dir_impl(root)?;
     trace.success(&result);
     Ok(result)
+}
+
+/// Processing-only rawdata preparation. The root is native reservation
+/// authority, never renderer input.
+#[tauri::command]
+pub fn ensure_rawdata_dir_for_run(
+    state: tauri::State<'_, crate::import::AppState>,
+    run_id: String,
+) -> Result<EnsureRawdataResult, String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let root = preparing_run_root(&state, &run_id)?;
+    ensure_rawdata_dir_impl(&root)
 }
 
 const RAWDATA_README: &str = r#"# rawdata/

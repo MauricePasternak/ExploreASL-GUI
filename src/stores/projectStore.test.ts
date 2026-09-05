@@ -1592,13 +1592,26 @@ describe("useProjectStore", () => {
       const firstWriteGate = new Promise<void>((resolve) => {
         resolveFirstWrite = resolve;
       });
-
-      vi.mocked(invoke).mockImplementationOnce(async () => {
-        await firstWriteGate;
+      let resolveSecondWrite: (() => void) | undefined;
+      const secondWriteGate = new Promise<void>((resolve) => {
+        resolveSecondWrite = resolve;
+      });
+      let resolveFirstWriteEntered!: () => void;
+      const firstWriteEntered = new Promise<void>((resolve) => {
+        resolveFirstWriteEntered = resolve;
       });
 
+      vi.mocked(invoke)
+        .mockImplementationOnce(async () => {
+          resolveFirstWriteEntered();
+          await firstWriteGate;
+        })
+        .mockImplementationOnce(async () => {
+          await secondWriteGate;
+        });
+
       const firstSave = useProjectStore.getState().saveProject();
-      await Promise.resolve();
+      await firstWriteEntered;
       useProjectStore.getState().syncVisualizationState({ stage: "visualize", pointSize: 8 });
 
       const secondSave = useProjectStore.getState().saveProject();
@@ -1607,6 +1620,7 @@ describe("useProjectStore", () => {
       await firstSave;
       expect(useProjectStore.getState().isDirty).toBe(true);
 
+      resolveSecondWrite?.();
       await secondSave;
       expect(useProjectStore.getState().isDirty).toBe(false);
 

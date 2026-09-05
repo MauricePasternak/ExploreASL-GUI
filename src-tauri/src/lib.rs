@@ -8,10 +8,12 @@ pub mod import_parser;
 pub mod manifest;
 pub mod matlab;
 mod niivue_protocol;
+mod process_control;
 pub mod processing;
 mod project_runtime;
 mod project_writer;
 pub mod qc;
+mod staging;
 mod tracing;
 pub mod visualization;
 mod visualization_tests;
@@ -20,24 +22,29 @@ mod visualization_tests;
 mod project_writer_tests;
 
 use apptainer::which_apptainer;
-use bids_commands::{check_bids_dataset, ensure_rawdata_dir, scan_bids_sidecars};
+use bids_commands::{
+    check_bids_dataset, ensure_rawdata_dir, ensure_rawdata_dir_for_run, scan_bids_sidecars,
+};
 use commands::{
-    create_symlink_tree, get_available_memory_mb, get_cpu_cores, inspect_source_path, is_writable,
-    walk_directory,
+    get_available_memory_mb, get_cpu_cores, inspect_source_path, is_writable, walk_directory,
 };
 use execution_profile::{validate_all_execution_profiles, validate_execution_profile};
 use import::{
-    AppState, clean_import_status, copy_lock_files, move_import_output, read_import_status,
-    run_import_pipeline, stop_active_import, stop_import, stop_running_import_for_exit,
+    AppState, clean_import_status, copy_lock_files, move_import_output, preflight_staging_plan,
+    read_import_status, run_import_pipeline, stop_active_import, stop_import,
+    stop_running_import_for_exit,
 };
 use manifest::{
-    capture_environment_versions, read_population_ready_mtime, read_prior_modules_mtimes,
+    capture_environment_versions, capture_environment_versions_for_run,
+    read_population_ready_mtime, read_population_ready_mtime_for_run, read_prior_modules_mtimes,
 };
 use matlab::which_matlab;
 use processing::{
-    clear_stale_locks, detect_exploreasl_version, kill_pipeline, list_module_logs,
+    attach_run, clear_stale_locks, clear_stale_locks_for_run, detect_exploreasl_version,
+    fail_processing_run, finalize_processing_run, get_active_run, kill_pipeline, list_module_logs,
     list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,
-    run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir,
+    reserve_processing_run, run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir,
+    watch_lock_dir,
 };
 use project_runtime::shutdown_project_runtime;
 use project_writer::{atomic_write_project, cleanup_project_temps};
@@ -88,10 +95,10 @@ pub fn run() {
             validate_all_execution_profiles,
             is_writable,
             walk_directory,
-            create_symlink_tree,
             get_cpu_cores,
             get_available_memory_mb,
             inspect_source_path,
+            preflight_staging_plan,
             run_import_pipeline,
             stop_import,
             stop_active_import,
@@ -101,16 +108,24 @@ pub fn run() {
             read_import_status,
             list_subjects,
             read_lock_status,
+            reserve_processing_run,
+            fail_processing_run,
+            finalize_processing_run,
+            get_active_run,
+            attach_run,
             run_pipeline,
             kill_pipeline,
             watch_lock_dir,
             stop_watch_lock_dir,
             clear_stale_locks,
+            clear_stale_locks_for_run,
             capture_environment_versions,
+            capture_environment_versions_for_run,
             detect_exploreasl_version,
             list_module_logs,
             read_module_logs,
             read_population_ready_mtime,
+            read_population_ready_mtime_for_run,
             read_prior_modules_mtimes,
             list_subject_reports,
             read_report_image,
@@ -128,6 +143,7 @@ pub fn run() {
             check_bids_dataset,
             scan_bids_sidecars,
             ensure_rawdata_dir,
+            ensure_rawdata_dir_for_run,
             atomic_write_project,
             cleanup_project_temps,
             shutdown_project_runtime,

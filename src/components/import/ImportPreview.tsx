@@ -1,11 +1,11 @@
-import { Button, Group, Stack, Text } from "@mantine/core";
+import { Alert, Button, Group, Stack, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconEye } from "@tabler/icons-react";
 import { useMemo } from "react";
 import HeaderCard from "../common/HeaderCard";
 
-import { buildAllStagingMappings } from "../../lib/importPreviewUtils";
+import { buildImportPlan } from "../../lib/importPlan";
 import { canEnterStep5 } from "../../lib/importStepAccess";
-import { assembleSourcestructure, assembleStudyPar } from "../../lib/tokenizerUtils";
+import { useStagingPreflight } from "../../hooks/useStagingPreflight";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -33,47 +33,42 @@ export default function ImportPreview() {
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath ?? "");
   const resolvedSource = resolveLogicalSource(projectRoot, sourceDataPath, "dicom");
 
-  const subjectRenamesMap = useMemo(
-    () => Object.fromEntries(subjectRenames.map((r) => [r.original, r.target])),
-    [subjectRenames],
-  );
-
-  const mappings = useMemo(
+  const plan = useMemo(
     () =>
-      buildAllStagingMappings(
+      buildImportPlan({
         rawPaths,
-        resolvedSource,
+        sourceRoot: resolvedSource,
         pathPatterns,
         tokenizerConfigs,
-        subjectRenamesMap,
+        subjectRenames,
         sessionAliases,
+        runAliases,
         modalityAliases,
         tokenSubDelimiters,
-      ),
+        bMatchDirectories,
+        metadataGroups,
+        subjectRows,
+      }),
     [
       rawPaths,
       resolvedSource,
       pathPatterns,
       tokenizerConfigs,
-      subjectRenamesMap,
+      subjectRenames,
       sessionAliases,
+      runAliases,
       modalityAliases,
       tokenSubDelimiters,
+      bMatchDirectories,
+      metadataGroups,
+      subjectRows,
     ],
   );
 
-  const sourcestructure = useMemo(
-    () => assembleSourcestructure(sessionAliases, runAliases, modalityAliases, bMatchDirectories),
-    [sessionAliases, runAliases, modalityAliases, bMatchDirectories],
-  );
+  const { fingerprint, state: stagingPreflight } = useStagingPreflight(projectRoot, plan);
 
-  const studyPar = useMemo(
-    () => assembleStudyPar(metadataGroups, subjectRows),
-    [metadataGroups, subjectRows],
-  );
-
-  const totalEntries = mappings.reduce((sum, m) => sum + m.entries.length, 0);
-  const totalSubjects = new Set(mappings.flatMap((m) => m.entries.map((e) => e.subject))).size;
+  const totalEntries = plan.entries.length;
+  const totalSubjects = new Set(plan.entries.map((entry) => entry.subject)).size;
   const canProceedToStep5 = canEnterStep5(
     {
       ingestionComplete,
@@ -89,6 +84,12 @@ export default function ImportPreview() {
     {
       executionProfiles: settings.executionProfiles,
       profileValidationState,
+    },
+    {
+      status: stagingPreflight.status,
+      fingerprint: stagingPreflight.fingerprint,
+      currentFingerprint: fingerprint,
+      localIssueCount: plan.localIssues.length,
     },
   );
 
@@ -132,11 +133,53 @@ export default function ImportPreview() {
       </Stack>
 
       <StagingMappingTable
-        mappings={mappings}
+        mappings={plan.mappings}
         subjectRows={subjectRows}
         metadataGroups={metadataGroups}
       />
-      <ConfigPreview sourcestructure={sourcestructure} studyPar={studyPar} />
+      <ConfigPreview sourcestructure={plan.sourcestructureJson} studyPar={plan.studyparJson} />
+      {(plan.localIssues.length > 0 || stagingPreflight.status !== "valid") && (
+        <Alert
+          color="red"
+          title="Staging validation blocks import"
+          data-testid="staging-validation-summary"
+        >
+          <Stack gap="xs">
+            {plan.localIssues.length > 0 && (
+              <Text size="sm" data-testid="staging-local-issues">
+                {plan.localIssues.length} local mapping issue
+                {plan.localIssues.length === 1 ? "" : "s"}.
+              </Text>
+            )}
+            {stagingPreflight.status === "pending" && (
+              <Text size="sm" data-testid="staging-preflight-pending">
+                Checking source and destination plan…
+              </Text>
+            )}
+            {stagingPreflight.status === "failed" && (
+              <Text size="sm" data-testid="staging-preflight-failed">
+                {stagingPreflight.error}
+              </Text>
+            )}
+            {stagingPreflight.status === "invalid" && (
+              <Text size="sm" data-testid="staging-native-issues">
+                {stagingPreflight.issues.length} native source or destination issue
+                {stagingPreflight.issues.length === 1 ? "" : "s"}.
+              </Text>
+            )}
+            {plan.localIssues.map((issue, index) => (
+              <Text key={`local-${index}`} size="xs" data-testid={`staging-local-issue-${index}`}>
+                {issue.message}
+              </Text>
+            ))}
+            {stagingPreflight.issues.map((issue, index) => (
+              <Text key={`native-${index}`} size="xs" data-testid={`staging-native-issue-${index}`}>
+                {issue.message}
+              </Text>
+            ))}
+          </Stack>
+        </Alert>
+      )}
       <Group
         justify="space-between"
         pos="sticky"

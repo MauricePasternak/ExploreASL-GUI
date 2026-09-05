@@ -29,6 +29,7 @@ interface ImportSubjectTableProps {
   rows: ImportProgress[];
   selectedSubjects: string[];
   onSelectedSubjectsChange: (subjects: string[]) => void;
+  selectionLocked?: boolean;
 }
 
 interface ImportRow extends ImportProgress {
@@ -136,6 +137,7 @@ export default function ImportSubjectTable({
   rows,
   selectedSubjects,
   onSelectedSubjectsChange,
+  selectionLocked = false,
 }: ImportSubjectTableProps) {
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
   const importPhase = useImportStore((s) => s.importPhase);
@@ -240,6 +242,7 @@ export default function ImportSubjectTable({
 
   const handleSelectedRecordsChange = useCallback(
     (selected: ImportRow[]) => {
+      if (selectionLocked) return;
       const pageSubjects = new Set(paginatedRows.map((r) => r.subject));
       const selectedOnPage = new Set(selected.map((r) => r.subject));
       const next = new Set(selectedSubjects.filter((subject) => !pageSubjects.has(subject)));
@@ -248,7 +251,7 @@ export default function ImportSubjectTable({
       }
       onSelectedSubjectsChange([...next]);
     },
-    [paginatedRows, selectedSubjects, onSelectedSubjectsChange],
+    [paginatedRows, selectedSubjects, onSelectedSubjectsChange, selectionLocked],
   );
 
   const columns: DataTableColumn<ImportRow>[] = useMemo(
@@ -377,6 +380,9 @@ export default function ImportSubjectTable({
           columns={columns}
           selectedRecords={selectedRecords}
           onSelectedRecordsChange={handleSelectedRecordsChange}
+          isRecordSelectable={() => !selectionLocked}
+          selectionCheckboxProps={{ disabled: selectionLocked }}
+          allRecordsSelectionCheckboxProps={{ disabled: selectionLocked }}
           idAccessor="subject"
           minHeight={240}
           striped

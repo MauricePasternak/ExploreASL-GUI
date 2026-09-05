@@ -11,7 +11,16 @@ const mockStartProcessing = vi.fn();
 const mockClearPendingRawdataWarning = vi.fn();
 let mockPendingRawdataWarning: string | null = null;
 
-let mockPhase: "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled" = "running";
+let mockPhase:
+  | "idle"
+  | "preparing"
+  | "running"
+  | "finalizing"
+  | "cancelling"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "interrupted" = "running";
 
 let mockConfig: {
   subjects: string[];
@@ -108,6 +117,29 @@ describe("ControlButtons kill confirmation", () => {
 
     expect(mockKillProcessing).not.toHaveBeenCalled();
   });
+});
+
+describe("ControlButtons native lifecycle controls", () => {
+  afterEach(cleanup);
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each(["preparing", "finalizing", "cancelling"] as const)(
+    "locks control while native run is %s",
+    (phase) => {
+      mockPhase = phase;
+      renderButtons();
+      expect(screen.getByRole("button")).toBeDisabled();
+    },
+  );
+
+  it.each(["completed", "failed", "cancelled", "interrupted"] as const)(
+    "allows terminal %s restart",
+    (phase) => {
+      mockPhase = phase;
+      renderButtons();
+      expect(screen.getByTestId("start-btn")).toBeEnabled();
+    },
+  );
 });
 
 describe("ControlButtons Start button disabled state", () => {

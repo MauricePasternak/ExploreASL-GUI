@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ProcessConfig,
   ProcessingPhase,
+  ProcessingRunSnapshot,
   SubjectInfo,
   SubjectModuleStatus,
 } from "../schemas/processingSchemas";
@@ -15,6 +16,7 @@ import { aslRunsEqual, normalizeAslRunId } from "../lib/aslRun";
 import { generateSubjectRegexp } from "../lib/subjectMatching";
 import { assembleDataPar } from "../lib/assembleDataPar";
 import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
+import { registerProjectTask } from "../lib/projectLifecycle";
 
 // =============================================================================
 // State Interface
@@ -25,12 +27,21 @@ export interface ProcessingState {
   config: ProcessConfig | null;
   availableSubjects: SubjectInfo[];
   subjectStatuses: SubjectModuleStatus[];
+  /** Session-only native attachment. Never project-file recovery truth. */
+  activeRunId: string | null;
+  /** Retained only while terminal Population metadata side effects settle. */
+  terminalRunId: string | null;
   workerPids: number[];
   pendingRawdataWarning: string | null;
   profileError: string | null;
   preparingMessage: string | null;
 
   setConfig: (config: ProcessConfig) => void;
+  bindRunSnapshot: (snapshot: import("../schemas/processingSchemas").ProcessingRunSnapshot) => void;
+  reconcileRunSnapshot: (
+    snapshot: import("../schemas/processingSchemas").ProcessingRunSnapshot,
+  ) => void;
+  synchronizeProcessingRun: () => Promise<void>;
   startProcessing: (explicitConfirm?: boolean) => Promise<void>;
   killProcessing: () => Promise<void>;
   updateSubjectStatus: (status: SubjectModuleStatus) => void;
@@ -44,7 +55,7 @@ export interface ProcessingState {
     currentPhase?: ProcessingPhase;
   }) => void;
   resetProcessing: () => Promise<void>;
-  clearPendingRawdataWarning: () => void;
+  clearPendingRawdataWarning: () => Promise<void>;
   clearProfileError: () => void;
 }
 
@@ -57,6 +68,8 @@ const INITIAL_STATE = {
   config: null as ProcessConfig | null,
   availableSubjects: [] as SubjectInfo[],
   subjectStatuses: [] as SubjectModuleStatus[],
+  activeRunId: null as string | null,
+  terminalRunId: null as string | null,
   workerPids: [] as number[],
   pendingRawdataWarning: null as string | null,
   profileError: null as string | null,
@@ -68,6 +81,8 @@ export function createInitialProcessingState() {
     ...INITIAL_STATE,
     availableSubjects: [],
     subjectStatuses: [],
+    activeRunId: null,
+    terminalRunId: null,
     workerPids: [],
   };
 }
@@ -83,6 +98,24 @@ export function clearProcessingListeners() {
     processingCleanup();
     processingCleanup = null;
   }
+}
+
+function replaceProcessingListeners(cleanup: () => void) {
+  const previous = processingCleanup;
+  // Publish new ownership before old asynchronous callbacks are released.
+  processingCleanup = cleanup;
+  previous?.();
+}
+
+const ACTIVE_PROCESSING_PHASES: ProcessingPhase[] = [
+  "preparing",
+  "running",
+  "finalizing",
+  "cancelling",
+];
+
+function isActiveProcessingPhase(phase: ProcessingPhase): boolean {
+  return ACTIVE_PROCESSING_PHASES.includes(phase);
 }
 
 // =============================================================================
@@ -119,219 +152,328 @@ export const useProcessingStore = create<ProcessingState>()(
       set({ config: patched });
     },
 
-    startProcessing: async (explicitConfirm = false) => {
-      const lease = captureProjectLease();
-      const isCurrent = () => !lease || isCurrentProjectLease(lease);
-      const config = useProcessingStore.getState().config;
-      if (!config) throw new Error("No config set");
-      if (config.modules.length === 0) throw new Error("No modules selected");
-
-      const global = useGlobalStore.getState();
-      const profile = global.getProfileById(config.selectedProfileId);
-      if (!profile) {
-        set({
-          profileError:
-            "The selected execution profile could not be found. Choose a valid profile before running.",
-        });
-        return;
-      }
-      const validation = global.profileValidationState[profile.id];
-      if (!validation || !validation.valid) {
-        set({
-          profileError: `Execution profile "${profile.label}" is invalid. Fix it in Settings before running.`,
-        });
-        return;
-      }
-      set({ profileError: null });
-
-      const available = useProcessingStore.getState().availableSubjects;
-      for (const subj of config.subjects) {
-        if (!/^sub-[^_\s]+_[^_\s]+$/.test(subj)) {
-          throw new Error(
-            `Subject session "${subj}" does not match BIDS syntax (sub-<subject>_<session>)`,
-          );
-        }
-        if (!available.some((a) => a.subjectSession === subj)) {
-          throw new Error(
-            `Selected subject session "${subj}" is not present in the ${
-              useProjectStore.getState().project?.projectMeta.dataSource === "bids"
-                ? "project root"
-                : "rawdata folder"
-            }`,
-          );
-        }
-      }
-
+    bindRunSnapshot: (snapshot: ProcessingRunSnapshot) => {
       set({
-        processingPhase: "preparing",
-        subjectStatuses: [],
-        preparingMessage: "Initializing processing...",
+        activeRunId: isActiveProcessingPhase(snapshot.lifecycle) ? snapshot.runId : null,
+        terminalRunId: isActiveProcessingPhase(snapshot.lifecycle) ? null : snapshot.runId,
+        workerPids: snapshot.workers,
+        processingPhase: snapshot.lifecycle,
+        preparingMessage: snapshot.lifecycle === "preparing" ? "Initializing processing..." : null,
       });
+    },
 
-      // Let React commit + the browser paint/promote the spinner animation before
-      // any heavy IPC (especially MATLAB version probing) can contend for the UI.
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setTimeout(resolve, 0);
-          });
-        });
+    reconcileRunSnapshot: (snapshot: ProcessingRunSnapshot) => {
+      set((state) => {
+        if (state.activeRunId !== snapshot.runId && state.terminalRunId !== snapshot.runId)
+          return {};
+        return {
+          activeRunId: isActiveProcessingPhase(snapshot.lifecycle) ? snapshot.runId : null,
+          terminalRunId: isActiveProcessingPhase(snapshot.lifecycle) ? null : snapshot.runId,
+          workerPids: snapshot.workers,
+          processingPhase: snapshot.lifecycle,
+          preparingMessage: snapshot.lifecycle === "preparing" ? state.preparingMessage : null,
+        };
       });
-      if (!isCurrent()) return;
+    },
 
-      try {
-        // Kick off version capture in parallel with the rest of prep so a slow
-        // MATLAB probe (older laptops) does not serialize behind / freeze the
-        // preparing UI. We only join before the pipeline actually starts.
-        let versionCapture: Promise<void> = Promise.resolve();
-        if (config.modules.includes("population")) {
-          useProjectStore.getState().setPopulationCompleted(false);
+    synchronizeProcessingRun: async () => {
+      const lease = captureProjectLease();
+      if (!lease) return;
+      const { attachRun, getActiveRun, reconcileAndFinalizeIfNeeded, setupProcessingListeners } =
+        await import("../lib/processingEvents");
+      const active = await getActiveRun();
+      if (!isCurrentProjectLease(lease)) return;
+      if (!active) {
+        set((state) =>
+          isActiveProcessingPhase(state.processingPhase)
+            ? { activeRunId: null, workerPids: [], processingPhase: "idle", preparingMessage: null }
+            : {},
+        );
+        return;
+      }
+      if (useProcessingStore.getState().activeRunId === active.runId) {
+        useProcessingStore.getState().reconcileRunSnapshot(active);
+        await reconcileAndFinalizeIfNeeded(active, lease);
+        return;
+      }
+      // Bind discovered identity, install every listener, then take the final
+      // authoritative snapshot. A WorkerExited during listener setup is either
+      // observed or reconciled from this second attach.
+      useProcessingStore.getState().bindRunSnapshot(active);
+      const cleanup = await setupProcessingListeners(active.runId);
+      const snapshot = await attachRun(active.runId);
+      if (
+        !isCurrentProjectLease(lease) ||
+        useProcessingStore.getState().activeRunId !== snapshot.runId
+      ) {
+        cleanup();
+        set((state) =>
+          state.activeRunId === active.runId
+            ? { activeRunId: null, terminalRunId: null, workerPids: [], processingPhase: "idle" }
+            : {},
+        );
+        return;
+      }
+      useProcessingStore.getState().reconcileRunSnapshot(snapshot);
+      replaceProcessingListeners(cleanup);
+      await reconcileAndFinalizeIfNeeded(snapshot, lease);
+    },
 
-          const matlabPath = profile.type === "matlab" ? profile.matlabPath : "";
-          const exploreAslPath = profile.type === "matlab" ? profile.exploreAslPath : "";
-          const profileId = profile.id;
-
-          versionCapture = (async () => {
-            try {
-              const versions = await invoke<{ explore_asl: string; matlab: string }>(
-                "capture_environment_versions",
-                {
-                  exploreAslPath,
-                  matlabPath,
-                },
-              );
-              if (!isCurrent()) return;
-              const gui =
-                import.meta.env.VITE_APP_VERSION ??
-                useProjectStore.getState().project?.version ??
-                "unknown";
-              useProjectStore.getState().setLastRunProfileId("population", profileId, {
-                exploreASLVersion: versions.explore_asl,
-                matlabVersion: versions.matlab,
-                guiVersion: gui,
-              });
-            } catch (err) {
-              if (!isCurrent()) return;
-              console.warn("[manifest] version capture failed", err);
-              useProjectStore.getState().setLastRunProfileId("population", profileId, {
-                exploreASLVersion: "unknown",
-                matlabVersion: "unknown",
-                guiVersion: useProjectStore.getState().project?.version ?? "unknown",
-              });
-            }
-          })();
+    startProcessing: (explicitConfirm = false) =>
+      registerProjectTask(async () => {
+        let confirmedRunId: string | null = null;
+        if (explicitConfirm) {
+          const current = useProcessingStore.getState();
+          // Claim this exact Preparing continuation synchronously before the
+          // first await. A double-click's second admitted thunk sees no pending
+          // warning and performs no preparation or launch work.
+          if (
+            current.pendingRawdataWarning === null ||
+            current.processingPhase !== "preparing" ||
+            current.activeRunId === null
+          ) {
+            return;
+          }
+          confirmedRunId = current.activeRunId;
+          set({ pendingRawdataWarning: null, preparingMessage: "Initializing processing..." });
         }
+        const lease = captureProjectLease();
+        const isCurrent = () => !lease || isCurrentProjectLease(lease);
+        const config = useProcessingStore.getState().config;
+        if (!config) throw new Error("No config set");
+        if (config.modules.length === 0) throw new Error("No modules selected");
 
-        const { watchLockDir, setupProcessingListeners, runProcessingPipeline } =
-          await import("../lib/processingEvents");
-        if (!isCurrent()) return;
+        const global = useGlobalStore.getState();
+        const profile = global.getProfileById(config.selectedProfileId);
+        if (!profile) {
+          set({
+            profileError:
+              "The selected execution profile could not be found. Choose a valid profile before running.",
+          });
+          return;
+        }
+        const validation = global.profileValidationState[profile.id];
+        if (!validation || !validation.valid) {
+          set({
+            profileError: `Execution profile "${profile.label}" is invalid. Fix it in Settings before running.`,
+          });
+          return;
+        }
+        set({ profileError: null });
 
-        const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
-        if (!projectRoot) throw new Error("No project loaded");
-
-        const dataSource = useProjectStore.getState().project?.projectMeta.dataSource ?? "dicom";
-
-        if (dataSource === "bids") {
-          set({ preparingMessage: "Checking dataset rawdata..." });
-          if (!explicitConfirm) {
-            const result = await invoke<{
-              warning: string | null;
-              created: boolean;
-              bidsignoreUpdated: boolean;
-            }>("ensure_rawdata_dir", { rootPath: projectRoot });
-            if (!isCurrent()) return;
-            if (result.warning) {
-              set({ pendingRawdataWarning: result.warning, preparingMessage: null });
-              // Let version capture finish in the background; do not block the warning modal.
-              void versionCapture;
-              return;
-            }
-          } else {
-            // Clear warning state when proceeding after confirmation
-            set({ pendingRawdataWarning: null });
+        const available = useProcessingStore.getState().availableSubjects;
+        for (const subj of config.subjects) {
+          if (!/^sub-[^_\s]+_[^_\s]+$/.test(subj)) {
+            throw new Error(
+              `Subject session "${subj}" does not match BIDS syntax (sub-<subject>_<session>)`,
+            );
+          }
+          if (!available.some((a) => a.subjectSession === subj)) {
+            throw new Error(
+              `Selected subject session "${subj}" is not present in the ${
+                useProjectStore.getState().project?.projectMeta.dataSource === "bids"
+                  ? "project root"
+                  : "rawdata folder"
+              }`,
+            );
           }
         }
 
-        // Generate/update participants.tsv (always call to either add or strip the 'site' column)
-        set({ preparingMessage: "Generating participants list..." });
-        const dataPar = useDataParStore.getState().dataPar;
-        const mappingState = useProjectStore.getState().project?.mappingState;
-        const { ensureParticipantsFiles } = await import("../lib/participantsUtils");
-        await ensureParticipantsFiles(
-          projectRoot,
-          config,
-          mappingState,
-          available,
-          dataPar.enableMetadataGroupingCorrection ?? false,
-          dataSource,
-        );
-        if (!isCurrent()) return;
-
-        set({ preparingMessage: "Configuring file watcher..." });
-        await watchLockDir(projectRoot);
-        if (!isCurrent()) return;
-
-        set({ preparingMessage: "Setting up event listeners..." });
-        const cleanup = await setupProcessingListeners();
-        if (!isCurrent()) {
-          cleanup();
-          return;
-        }
-        processingCleanup = cleanup;
-
-        const dataParJson = assembleDataPar(dataPar);
-        if (dataSource === "bids") {
-          dataParJson.x.opts = {
-            ...(dataParJson.x.opts ?? {}),
-            subjectFolder: projectRoot,
-          };
-        }
-        dataParJson.x.dataset = {
-          subjectRegexp: generateSubjectRegexp(config.subjects),
-          ...(config.subjects.length > 0 && { ForceInclusionList: config.subjects }),
-        };
-
-        set({ preparingMessage: "Starting processing pipeline..." });
-        // Join version capture before launching workers so the manifest has versions.
-        await versionCapture;
-        if (!isCurrent()) return;
-        const pids = await runProcessingPipeline(config, profile, dataParJson);
-        if (!isCurrent()) return;
-        set({ workerPids: pids, processingPhase: "running", preparingMessage: null });
-      } catch (err) {
-        if (!isCurrent()) return;
-        clearProcessingListeners();
+        const { reserveProcessingRun } = await import("../lib/processingEvents");
+        let runId = confirmedRunId;
         try {
-          const { stopWatcher: stopW } = await import("../lib/processingEvents");
-          await stopW();
-        } catch (watchErr) {
-          console.warn("[processingStore] stopWatcher failed in catch:", watchErr);
+          // Reservation is admission. Nothing filesystem-facing or project-facing
+          // occurs before its authoritative Preparing snapshot wins.
+          if (!runId) {
+            const reservation = await reserveProcessingRun(config.modules, config.subjects);
+            if (!isCurrent()) return;
+            runId = reservation.runId;
+            useProcessingStore.getState().bindRunSnapshot(reservation);
+            set({ subjectStatuses: [], preparingMessage: "Initializing processing..." });
+          }
+
+          // Let React paint after native admission, before expensive preparation.
+          await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)));
+          });
+          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+
+          // Kick off version capture in parallel with the rest of prep so a slow
+          // MATLAB probe (older laptops) does not serialize behind / freeze the
+          // preparing UI. We only join before the pipeline actually starts.
+          let versionCapture: Promise<void> = Promise.resolve();
+          if (config.modules.includes("population")) {
+            useProjectStore.getState().setPopulationCompleted(false);
+
+            const matlabPath = profile.type === "matlab" ? profile.matlabPath : "";
+            const exploreAslPath = profile.type === "matlab" ? profile.exploreAslPath : "";
+            const profileId = profile.id;
+
+            versionCapture = (async () => {
+              try {
+                const versions = await invoke<{ explore_asl: string; matlab: string }>(
+                  "capture_environment_versions_for_run",
+                  {
+                    runId,
+                    exploreAslPath,
+                    matlabPath,
+                  },
+                );
+                if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+                const gui =
+                  import.meta.env.VITE_APP_VERSION ??
+                  useProjectStore.getState().project?.version ??
+                  "unknown";
+                useProjectStore.getState().setLastRunProfileId("population", profileId, {
+                  exploreASLVersion: versions.explore_asl,
+                  matlabVersion: versions.matlab,
+                  guiVersion: gui,
+                });
+              } catch (err) {
+                if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+                console.warn("[manifest] version capture failed", err);
+                useProjectStore.getState().setLastRunProfileId("population", profileId, {
+                  exploreASLVersion: "unknown",
+                  matlabVersion: "unknown",
+                  guiVersion: useProjectStore.getState().project?.version ?? "unknown",
+                });
+              }
+            })();
+          }
+
+          const {
+            watchLockDir,
+            setupProcessingListeners,
+            runProcessingPipeline,
+            reconcileAndFinalizeIfNeeded,
+          } = await import("../lib/processingEvents");
+          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+
+          const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
+          if (!projectRoot) throw new Error("No project loaded");
+
+          const dataSource = useProjectStore.getState().project?.projectMeta.dataSource ?? "dicom";
+
+          if (dataSource === "bids") {
+            set({ preparingMessage: "Checking dataset rawdata..." });
+            if (!explicitConfirm) {
+              const result = await invoke<{
+                warning: string | null;
+                created: boolean;
+                bidsignoreUpdated: boolean;
+              }>("ensure_rawdata_dir_for_run", { runId });
+              if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+              if (result.warning) {
+                set({ pendingRawdataWarning: result.warning, preparingMessage: null });
+                // Keep preparation registered until its correlated probe settles.
+                await versionCapture;
+                return;
+              }
+            }
+          }
+
+          // Generate/update participants.tsv (always call to either add or strip the 'site' column)
+          set({ preparingMessage: "Generating participants list..." });
+          const dataPar = useDataParStore.getState().dataPar;
+          const mappingState = useProjectStore.getState().project?.mappingState;
+          const { ensureParticipantsFiles } = await import("../lib/participantsUtils");
+          await ensureParticipantsFiles(
+            projectRoot,
+            config,
+            mappingState,
+            available,
+            dataPar.enableMetadataGroupingCorrection ?? false,
+            dataSource,
+          );
+          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+
+          set({ preparingMessage: "Configuring file watcher..." });
+          set({ preparingMessage: "Setting up event listeners..." });
+          const cleanup = await setupProcessingListeners(runId);
+          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) {
+            cleanup();
+            return;
+          }
+          replaceProcessingListeners(cleanup);
+
+          set({ preparingMessage: "Configuring file watcher..." });
+          const watcherSnapshot = await watchLockDir(runId);
+          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+          useProcessingStore.getState().reconcileRunSnapshot(watcherSnapshot);
+
+          const dataParJson = assembleDataPar(dataPar);
+          if (dataSource === "bids") {
+            dataParJson.x.opts = {
+              ...(dataParJson.x.opts ?? {}),
+              subjectFolder: projectRoot,
+            };
+          }
+          dataParJson.x.dataset = {
+            subjectRegexp: generateSubjectRegexp(config.subjects),
+            ...(config.subjects.length > 0 && { ForceInclusionList: config.subjects }),
+          };
+
+          set({ preparingMessage: "Starting processing pipeline..." });
+          // Join version capture before launching workers so the manifest has versions.
+          await versionCapture;
+          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+          const snapshot = await runProcessingPipeline(runId, config, profile, dataParJson);
+          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+          useProcessingStore.getState().reconcileRunSnapshot(snapshot);
+          await reconcileAndFinalizeIfNeeded(snapshot, lease);
+        } catch (err) {
+          if (!runId || !isCurrent() || useProcessingStore.getState().activeRunId !== runId)
+            throw err;
+          const failedRunId = runId;
+          const { attachRun, failProcessingRun, reconcileAndFinalizeIfNeeded, stopWatcher } =
+            await import("../lib/processingEvents");
+          try {
+            // A native launch error has already recorded its own failure state.
+            // Attach first: a partial spawn leaves Running ownership plus
+            // pending evidence, and reporting failure again must not overwrite
+            // that evidence or turn a live run terminal.
+            let observed = await attachRun(failedRunId).catch(() => null);
+            if (isCurrent() && useProcessingStore.getState().activeRunId === failedRunId) {
+              if (observed?.lifecycle === "preparing" || observed === null) {
+                observed = await failProcessingRun(failedRunId);
+              }
+              if (
+                isCurrent() &&
+                useProcessingStore.getState().activeRunId === failedRunId &&
+                observed.runId === failedRunId
+              ) {
+                useProcessingStore.getState().reconcileRunSnapshot(observed);
+                if (isActiveProcessingPhase(observed.lifecycle)) {
+                  await reconcileAndFinalizeIfNeeded(observed, lease);
+                } else {
+                  await stopWatcher(failedRunId).catch(() => undefined);
+                  clearProcessingListeners();
+                }
+              }
+            }
+          } catch (failureError) {
+            console.warn("[processingStore] failed to report preparation failure", failureError);
+          }
+          throw err;
         }
-        set({ ...INITIAL_STATE });
-        throw err;
-      }
-    },
+      }),
 
     killProcessing: async () => {
-      const { stopProcessingPipeline, clearStaleLocks, loadLockStatus, stopWatcher } =
-        await import("../lib/processingEvents");
-
-      clearProcessingListeners();
-
-      await stopWatcher();
-      await stopProcessingPipeline();
-
-      const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
-      if (projectRoot) {
-        try {
-          await clearStaleLocks(projectRoot);
-          const statuses = await loadLockStatus(projectRoot);
-          set({ processingPhase: "cancelled", subjectStatuses: statuses });
-        } catch {
-          set({ processingPhase: "cancelled" });
-        }
-      } else {
-        set({ processingPhase: "cancelled" });
+      const lease = captureProjectLease();
+      const runId = useProcessingStore.getState().activeRunId;
+      const phase = useProcessingStore.getState().processingPhase;
+      if (!runId || phase !== "running") return;
+      const { stopProcessingPipeline, stopWatcher } = await import("../lib/processingEvents");
+      const snapshot = await stopProcessingPipeline(runId);
+      if (
+        (lease && !isCurrentProjectLease(lease)) ||
+        useProcessingStore.getState().activeRunId !== runId
+      )
+        return;
+      useProcessingStore.getState().reconcileRunSnapshot(snapshot);
+      if (snapshot.lifecycle === "cancelled") {
+        await stopWatcher(runId).catch(() => undefined);
+        if (!lease || isCurrentProjectLease(lease)) clearProcessingListeners();
       }
     },
 
@@ -411,36 +553,41 @@ export const useProcessingStore = create<ProcessingState>()(
       set({
         ...createInitialProcessingState(),
         config: persisted?.config ?? null,
-        processingPhase:
-          phase === "running" || phase === "preparing" ? "failed" : (phase ?? "idle"),
+        processingPhase: phase && !isActiveProcessingPhase(phase) ? phase : "idle",
       });
     },
 
     resetProcessing: async () => {
+      const runId = useProcessingStore.getState().activeRunId;
       clearProcessingListeners();
-      try {
-        const { stopWatcher } = await import("../lib/processingEvents");
-        await stopWatcher();
-      } catch (err) {
-        console.warn("[processingStore] stopWatcher failed:", err);
+      if (runId) {
+        try {
+          const { stopWatcher } = await import("../lib/processingEvents");
+          await stopWatcher(runId);
+        } catch (err) {
+          console.warn("[processingStore] stopWatcher failed:", err);
+        }
       }
       // A lock watcher can emit while its asynchronous shutdown is pending.
       // Reset after it has stopped so no status survives into the next project.
       set(createInitialProcessingState());
     },
 
-    clearPendingRawdataWarning: () => {
-      // Clear the warning AND reset the preparing phase that was set just before
-      // ensure_rawdata_dir was invoked. Without the phase reset the Start button
-      // would remain permanently disabled after the user cancels the warning.
-      set((state) => ({
-        pendingRawdataWarning: null,
-        preparingMessage: null,
-        processingPhase:
-          state.processingPhase === "preparing"
-            ? ("idle" as ProcessingPhase)
-            : state.processingPhase,
-      }));
+    clearPendingRawdataWarning: async () => {
+      const runId = useProcessingStore.getState().activeRunId;
+      set({ pendingRawdataWarning: null, preparingMessage: null });
+      if (!runId) return;
+      const lease = captureProjectLease();
+      const { failProcessingRun } = await import("../lib/processingEvents");
+      const snapshot = await failProcessingRun(runId);
+      if (
+        lease &&
+        isCurrentProjectLease(lease) &&
+        useProcessingStore.getState().activeRunId === runId
+      ) {
+        useProcessingStore.getState().reconcileRunSnapshot(snapshot);
+        clearProcessingListeners();
+      }
     },
 
     clearProfileError: () => {

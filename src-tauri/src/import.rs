@@ -1,18 +1,25 @@
 use crate::apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH, ensure_mcr_cache};
-use crate::commands::{SymlinkEntry, create_symlink_tree};
 use crate::execution_profile::ExecutionProfile;
 use crate::import_parser::*;
+use crate::process_control::{
+    force_kill_process, send_termination_signal, validate_process_id, wait_for_process_exit,
+};
 use crate::processing::ProcessState;
-use serde::Deserialize;
+pub use crate::staging::StagingEntry;
+use crate::staging::{
+    StagingPreflightResult, StagingValidationIssue, compile_staging_plan,
+    execute_compiled_staging_plan, portable_key, preflight_staging_plan_for_state,
+};
 use serde_json::Value;
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, mpsc};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 pub(crate) const RESERVED_IMPORT_PID: u32 = 0;
@@ -22,8 +29,22 @@ const IMPORT_STATUS_FILES: [&str; 3] = [
     "999_ready.status",
 ];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImportLifecycle {
+    Idle,
+    Preparing,
+    Running,
+    Terminal,
+}
+
 #[derive(Debug)]
 pub struct ImportState {
+    pub lifecycle: ImportLifecycle,
+    pub ownership_generation: u64,
+    /// Frontend-generated correlation metadata. Native ownership remains the
+    /// authoritative generation; this value only prevents queued WebView
+    /// events from being accepted by a later frontend request.
+    pub run_request_id: String,
     pub child_pid: Option<u32>,
     pub supervisor_handle: Option<thread::JoinHandle<()>>,
     pub termination_requested_for: Option<u32>,
@@ -37,6 +58,9 @@ pub struct ImportState {
 impl ImportState {
     pub fn new(staging_root: PathBuf, project_root: PathBuf, subject_list: Vec<String>) -> Self {
         Self {
+            lifecycle: ImportLifecycle::Terminal,
+            ownership_generation: 0,
+            run_request_id: String::new(),
             child_pid: None,
             supervisor_handle: None,
             termination_requested_for: None,
@@ -51,13 +75,31 @@ impl ImportState {
 
 impl Default for ImportState {
     fn default() -> Self {
-        Self::new(PathBuf::new(), PathBuf::new(), Vec::new())
+        Self {
+            lifecycle: ImportLifecycle::Idle,
+            ownership_generation: 0,
+            run_request_id: String::new(),
+            child_pid: None,
+            supervisor_handle: None,
+            termination_requested_for: None,
+            staging_root: PathBuf::new(),
+            project_root: PathBuf::new(),
+            failed_subjects: Vec::new(),
+            succeeded_subjects: Vec::new(),
+            subject_list: Vec::new(),
+        }
     }
 }
 
 pub struct AppState {
     pub import_state: Mutex<ImportState>,
+    pub import_generation: AtomicU64,
     pub processing_state: Mutex<ProcessState>,
+    /// Serializes active-project replacement with processing launch/shutdown.
+    /// A launch holds this through its run-scoped filesystem mutations and spawn
+    /// registration, so a direct IPC caller cannot mutate an old root after a
+    /// project transition has started.
+    pub project_transition: Mutex<()>,
     pub active_project_root: Mutex<Option<PathBuf>>,
     pub active_data: Mutex<Option<crate::visualization::ActiveData>>,
 }
@@ -66,32 +108,25 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             import_state: Mutex::new(ImportState::default()),
+            import_generation: AtomicU64::new(0),
             processing_state: Mutex::new(ProcessState::default()),
+            project_transition: Mutex::new(()),
             active_project_root: Mutex::new(None),
             active_data: Mutex::new(None),
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StagingEntry {
-    pub subject: String,
-    pub session: String,
-    pub run: String,
-    pub modality: String,
-    pub source_path: String,
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ImportCommandError {
+    Preflight { issues: Vec<StagingValidationIssue> },
+    Operational { message: String },
 }
 
-impl StagingEntry {
-    pub fn into_symlink_entry(self) -> SymlinkEntry {
-        SymlinkEntry {
-            subject: self.subject,
-            session: self.session,
-            run: self.run,
-            modality: self.modality,
-            source_path: self.source_path,
-        }
+impl From<String> for ImportCommandError {
+    fn from(message: String) -> Self {
+        Self::Operational { message }
     }
 }
 
@@ -110,12 +145,35 @@ pub enum ImportSubjectStatusKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct ImportPrepareComplete;
+#[serde(rename_all = "camelCase")]
+pub struct ImportPrepareComplete {
+    pub run_request_id: String,
+    pub ownership_generation: u64,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MatlabExitError {
     pub exit_code: i32,
+    pub run_request_id: String,
+    pub ownership_generation: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportRawEventPayload {
+    pub line: String,
+    pub run_request_id: String,
+    pub ownership_generation: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportStructuredEventPayload {
+    #[serde(flatten)]
+    pub event: ImportStructuredEvent,
+    pub run_request_id: String,
+    pub ownership_generation: u64,
 }
 
 pub fn cleanup_staging_root(staging_root: &Path) -> Result<(), String> {
@@ -187,6 +245,150 @@ pub fn clean_import_status_paths(staging_root: &Path, subjects: &[String]) -> Re
     }
 
     Ok(())
+}
+
+fn validate_owned_subjects(owned_subjects: &[String], subjects: &[String]) -> Result<(), String> {
+    if owned_subjects.is_empty() {
+        return Err("Import ownership has no subjects".to_string());
+    }
+    validate_subject_components(owned_subjects)?;
+    validate_subject_components(subjects)?;
+
+    for subject in subjects {
+        if !owned_subjects.contains(subject) {
+            return Err(format!(
+                "Subject is not owned by the active import: {subject}"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_preserved_subjects_are_disjoint(
+    subject_list: &[String],
+    preserved_subjects: &[String],
+) -> Result<(), String> {
+    let run_subject_keys = subject_list
+        .iter()
+        .map(|subject| portable_key(subject))
+        .collect::<std::collections::HashSet<_>>();
+    if preserved_subjects
+        .iter()
+        .any(|subject| run_subject_keys.contains(&portable_key(subject)))
+    {
+        return Err("Retry preserve subjects overlap subjects selected for import".to_string());
+    }
+
+    Ok(())
+}
+
+fn with_owned_import_roots<T>(
+    state: &AppState,
+    operation: impl FnOnce(&mut ImportState, &Path, &Path) -> Result<T, String>,
+) -> Result<T, String> {
+    let active_project_root_guard = state
+        .active_project_root
+        .lock()
+        .map_err(|_| "Active project state lock was poisoned".to_string())?;
+    let active_project_root = active_project_root_guard
+        .as_ref()
+        .ok_or_else(|| "No active project root".to_string())?;
+    let active_project_root = fs::canonicalize(active_project_root).map_err(|error| {
+        format!(
+            "Failed to canonicalize active project root {}: {error}",
+            active_project_root.display()
+        )
+    })?;
+
+    let mut import_state = state
+        .import_state
+        .lock()
+        .map_err(|_| "Import state lock was poisoned".to_string())?;
+    if import_state.project_root.as_os_str().is_empty()
+        || import_state.staging_root.as_os_str().is_empty()
+    {
+        return Err("No active import ownership".to_string());
+    }
+    if import_state.lifecycle != ImportLifecycle::Terminal {
+        return Err("Import process has not reached terminal state".to_string());
+    }
+
+    let import_project_root = fs::canonicalize(&import_state.project_root).map_err(|error| {
+        format!(
+            "Failed to canonicalize import project root {}: {error}",
+            import_state.project_root.display()
+        )
+    })?;
+    if import_project_root != active_project_root {
+        return Err("Import ownership does not match the active project root".to_string());
+    }
+
+    let expected_staging_root = active_project_root.join(crate::staging::STAGING_DIRECTORY);
+    if import_state.staging_root != expected_staging_root {
+        return Err("Import ownership has a malformed staging root".to_string());
+    }
+    if let Ok(metadata) = fs::symlink_metadata(&expected_staging_root)
+        && metadata.file_type().is_symlink()
+    {
+        return Err("Import ownership staging root must not be a symlink".to_string());
+    }
+    if expected_staging_root.exists()
+        && fs::canonicalize(&expected_staging_root).map_err(|error| {
+            format!(
+                "Failed to canonicalize import staging root {}: {error}",
+                expected_staging_root.display()
+            )
+        })? != expected_staging_root
+    {
+        return Err("Import ownership staging root is not canonical".to_string());
+    }
+
+    let result = operation(
+        &mut import_state,
+        &active_project_root,
+        &expected_staging_root,
+    );
+    drop(import_state);
+    drop(active_project_root_guard);
+    result
+}
+
+fn clean_import_status_for_state(state: &AppState) -> Result<(), String> {
+    with_owned_import_roots(state, |import_state, _, staging_root| {
+        validate_owned_subjects(&import_state.subject_list, &import_state.failed_subjects)?;
+        clean_import_status_paths(staging_root, &import_state.failed_subjects)
+    })
+}
+
+fn move_import_output_for_state(
+    state: &AppState,
+    debug_mode: bool,
+    cleanup_staging: bool,
+) -> Result<(), String> {
+    with_owned_import_roots(state, |import_state, project_root, staging_root| {
+        validate_owned_subjects(&import_state.subject_list, &import_state.succeeded_subjects)?;
+        move_import_output_paths(
+            staging_root,
+            project_root,
+            &import_state.succeeded_subjects,
+            debug_mode,
+            cleanup_staging,
+        )?;
+
+        if cleanup_staging && !debug_mode {
+            *import_state = ImportState::default();
+        }
+        Ok(())
+    })
+}
+
+fn copy_lock_files_for_state(state: &AppState, subjects: &[String]) -> Result<(), String> {
+    with_owned_import_roots(state, |import_state, project_root, staging_root| {
+        validate_owned_subjects(&import_state.subject_list, &import_state.succeeded_subjects)?;
+        validate_owned_subjects(&import_state.succeeded_subjects, subjects)?;
+        copy_lock_files_paths(project_root, staging_root, subjects)
+    })
 }
 
 pub fn copy_lock_files_paths(
@@ -577,18 +779,30 @@ pub fn validate_staging_root(staging_root: &Path) -> Result<(), String> {
 }
 
 pub fn validate_import_not_running(state: &ImportState) -> Result<(), String> {
-    match state.child_pid {
-        Some(RESERVED_IMPORT_PID) => Err("An import is already preparing".to_string()),
-        Some(pid) => Err(format!(
-            "An import is already running with process PID {pid}"
-        )),
-        None => Ok(()),
+    match state.lifecycle {
+        ImportLifecycle::Preparing => Err("An import is already preparing".to_string()),
+        ImportLifecycle::Running => Err(match state.child_pid {
+            Some(pid) => format!("An import is already running with process PID {pid}"),
+            None => "An import is already running".to_string(),
+        }),
+        ImportLifecycle::Idle | ImportLifecycle::Terminal => Ok(()),
     }
 }
 
-pub fn clear_import_child_pid_if_matches(state: &mut ImportState, child_pid: u32) {
-    if state.child_pid == Some(child_pid) {
+pub(crate) fn mark_import_terminal_if_matches(
+    state: &mut ImportState,
+    generation: u64,
+    child_pid: u32,
+) -> bool {
+    if state.ownership_generation == generation
+        && state.lifecycle == ImportLifecycle::Running
+        && state.child_pid == Some(child_pid)
+    {
         state.child_pid = None;
+        state.lifecycle = ImportLifecycle::Terminal;
+        true
+    } else {
+        false
     }
 }
 
@@ -701,75 +915,287 @@ fn executable_candidates(dir: &Path, command: &str) -> Vec<PathBuf> {
     vec![dir.join(command)]
 }
 
+#[cfg(test)]
 fn reserve_import_state(
     state: &AppState,
     staging_root: PathBuf,
     project_root: PathBuf,
+    run_request_id: String,
     subject_list: Vec<String>,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     let mut import_state = state
         .import_state
         .lock()
         .map_err(|_| "Import state lock was poisoned".to_string())?;
     validate_import_not_running(&import_state)?;
     *import_state = ImportState::new(staging_root, project_root, subject_list);
+    import_state.run_request_id = run_request_id;
+    let generation = state.import_generation.fetch_add(1, Ordering::Relaxed) + 1;
+    import_state.ownership_generation = generation;
+    import_state.lifecycle = ImportLifecycle::Preparing;
     import_state.child_pid = Some(RESERVED_IMPORT_PID);
 
+    Ok(generation)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ImportReservation {
+    generation: u64,
+    preserved_subjects: Vec<String>,
+}
+
+fn validate_terminal_import_ownership(
+    import_state: &ImportState,
+    active_project_root: &Path,
+    expected_staging_root: &Path,
+) -> Result<(), String> {
+    if import_state.project_root.as_os_str().is_empty()
+        || import_state.staging_root.as_os_str().is_empty()
+    {
+        return Err("No active import ownership".to_string());
+    }
+    if import_state.lifecycle != ImportLifecycle::Terminal {
+        return Err("Import process has not reached terminal state".to_string());
+    }
+    if fs::canonicalize(&import_state.project_root).map_err(|error| {
+        format!(
+            "Failed to canonicalize import project root {}: {error}",
+            import_state.project_root.display()
+        )
+    })? != active_project_root
+    {
+        return Err("Import ownership does not match the active project root".to_string());
+    }
+    if import_state.staging_root != expected_staging_root {
+        return Err("Import ownership has a malformed staging root".to_string());
+    }
+    if let Ok(metadata) = fs::symlink_metadata(expected_staging_root)
+        && metadata.file_type().is_symlink()
+    {
+        return Err("Import ownership staging root must not be a symlink".to_string());
+    }
+    if expected_staging_root.exists()
+        && fs::canonicalize(expected_staging_root).map_err(|error| {
+            format!(
+                "Failed to canonicalize import staging root {}: {error}",
+                expected_staging_root.display()
+            )
+        })? != expected_staging_root
+    {
+        return Err("Import ownership staging root is not canonical".to_string());
+    }
     Ok(())
 }
 
-fn clear_reserved_import(state: &AppState) {
-    if let Ok(mut import_state) = state.import_state.lock() {
-        clear_import_child_pid_if_matches(&mut import_state, RESERVED_IMPORT_PID);
+fn reserve_import_state_for_run(
+    state: &AppState,
+    staging_root: PathBuf,
+    project_root: PathBuf,
+    run_request_id: String,
+    subject_list: Vec<String>,
+    subjects_to_preserve: Option<Vec<String>>,
+) -> Result<ImportReservation, String> {
+    // Hold active-project and import ownership locks through authorization and
+    // replacement. The project transition uses the active-project lock, while
+    // the supervisor uses import ownership, so neither can interleave here.
+    let active_project_root_guard = state
+        .active_project_root
+        .lock()
+        .map_err(|_| "Active project state lock was poisoned".to_string())?;
+    let active_project_root = active_project_root_guard
+        .as_ref()
+        .ok_or_else(|| "No active project root".to_string())?;
+    let active_project_root = fs::canonicalize(active_project_root).map_err(|error| {
+        format!(
+            "Failed to canonicalize active project root {}: {error}",
+            active_project_root.display()
+        )
+    })?;
+    let expected_staging_root = active_project_root.join(crate::staging::STAGING_DIRECTORY);
+    if project_root != active_project_root || staging_root != expected_staging_root {
+        return Err("Compiled staging plan does not match the active project root".to_string());
+    }
+
+    let mut import_state = state
+        .import_state
+        .lock()
+        .map_err(|_| "Import state lock was poisoned".to_string())?;
+    validate_import_not_running(&import_state)?;
+
+    let preserved_subjects = subjects_to_preserve.unwrap_or_default();
+    if !preserved_subjects.is_empty() {
+        validate_subject_components(&preserved_subjects)?;
+        validate_preserved_subjects_are_disjoint(&subject_list, &preserved_subjects)?;
+        validate_terminal_import_ownership(
+            &import_state,
+            &active_project_root,
+            &expected_staging_root,
+        )?;
+        validate_owned_subjects(&import_state.subject_list, &preserved_subjects)?;
+        if preserved_subjects
+            .iter()
+            .any(|subject| import_state.failed_subjects.contains(subject))
+        {
+            return Err("Retry preserve subjects include a failed subject".to_string());
+        }
+        validate_owned_subjects(&import_state.succeeded_subjects, &preserved_subjects)?;
+    }
+
+    *import_state = ImportState::new(staging_root, project_root, subject_list);
+    import_state.run_request_id = run_request_id;
+    let generation = state.import_generation.fetch_add(1, Ordering::Relaxed) + 1;
+    import_state.ownership_generation = generation;
+    import_state.lifecycle = ImportLifecycle::Preparing;
+    import_state.child_pid = Some(RESERVED_IMPORT_PID);
+
+    Ok(ImportReservation {
+        generation,
+        preserved_subjects,
+    })
+}
+
+fn clear_reserved_import(state: &AppState, generation: u64) {
+    if let Ok(mut import_state) = state.import_state.lock()
+        && import_state.ownership_generation == generation
+        && import_state.lifecycle == ImportLifecycle::Preparing
+    {
+        *import_state = ImportState::default();
     }
 }
 
 fn rollback_reserved_preparation_failure(
     state: &AppState,
+    generation: u64,
     staging_root: &Path,
     error: String,
 ) -> String {
-    clear_reserved_import(state);
+    clear_reserved_import(state, generation);
     rollback_preparation_failure(staging_root, error)
+}
+
+fn rollback_process_spawn_failure(
+    state: &AppState,
+    generation: u64,
+    staging_root: &Path,
+    process_name: &str,
+    executable_path: &str,
+    error: std::io::Error,
+) -> ImportCommandError {
+    let message = if error.kind() == std::io::ErrorKind::NotFound {
+        format!("{process_name} executable not found: {executable_path}")
+    } else {
+        format!("Failed to spawn {process_name} import process: {error}")
+    };
+    ImportCommandError::from(rollback_reserved_preparation_failure(
+        state,
+        generation,
+        staging_root,
+        message,
+    ))
 }
 
 fn cleanup_after_prepare_event_failure(
     state: &AppState,
+    generation: u64,
     staging_root: &Path,
     error: String,
 ) -> String {
-    rollback_reserved_preparation_failure(state, staging_root, error)
-}
-
-fn set_reserved_import_pid(state: &AppState, child_pid: u32) -> Result<(), String> {
-    let mut import_state = state
-        .import_state
-        .lock()
-        .map_err(|_| "Import state lock was poisoned".to_string())?;
-
-    if import_state.child_pid != Some(RESERVED_IMPORT_PID) {
-        return Err(
-            "Import state changed before process tracking could be established".to_string(),
-        );
+    if clear_matching_import(state, generation) {
+        rollback_preparation_failure(staging_root, error)
+    } else {
+        error
     }
-
-    import_state.child_pid = Some(child_pid);
-    Ok(())
 }
 
-fn set_import_supervisor_handle(
+fn set_reserved_import_pid(
     state: &AppState,
+    generation: u64,
     child_pid: u32,
-    supervisor_handle: thread::JoinHandle<()>,
 ) -> Result<(), String> {
     let mut import_state = state
         .import_state
         .lock()
         .map_err(|_| "Import state lock was poisoned".to_string())?;
 
-    if import_state.child_pid.is_some() && import_state.child_pid != Some(child_pid) {
-        return Err(format!(
-            "Import state changed before supervisor tracking could be established for PID {child_pid}"
+    if import_state.ownership_generation != generation
+        || import_state.lifecycle != ImportLifecycle::Preparing
+        || import_state.child_pid != Some(RESERVED_IMPORT_PID)
+    {
+        return Err(
+            "Import state changed before process tracking could be established".to_string(),
+        );
+    }
+
+    import_state.child_pid = Some(child_pid);
+    import_state.lifecycle = ImportLifecycle::Running;
+    Ok(())
+}
+
+fn clear_matching_import(state: &AppState, generation: u64) -> bool {
+    if let Ok(mut import_state) = state.import_state.lock()
+        && import_state.ownership_generation == generation
+    {
+        *import_state = ImportState::default();
+        return true;
+    }
+    false
+}
+
+fn emit_prepare_complete_for_running_import(
+    app: &AppHandle,
+    state: &AppState,
+    generation: u64,
+    child_pid: u32,
+) -> Result<bool, String> {
+    let import_state = state
+        .import_state
+        .lock()
+        .map_err(|_| "Import state lock was poisoned".to_string())?;
+    if import_state.ownership_generation != generation
+        || import_state.lifecycle != ImportLifecycle::Running
+        || import_state.child_pid != Some(child_pid)
+    {
+        return Ok(false);
+    }
+
+    // Keep ownership locked through emission so a replacement reservation cannot
+    // receive this generation's readiness notification.
+    app.emit(
+        "ImportPrepareComplete",
+        ImportPrepareComplete {
+            run_request_id: import_state.run_request_id.clone(),
+            ownership_generation: generation,
+        },
+    )
+    .map_err(|error| format!("Failed to emit ImportPrepareComplete: {error}"))?;
+    Ok(true)
+}
+
+fn set_import_supervisor_handle(
+    state: &AppState,
+    generation: u64,
+    child_pid: u32,
+    supervisor_handle: thread::JoinHandle<()>,
+) -> Result<(), (String, thread::JoinHandle<()>)> {
+    let mut import_state = match state.import_state.lock() {
+        Ok(import_state) => import_state,
+        Err(_) => {
+            return Err((
+                "Import state lock was poisoned".to_string(),
+                supervisor_handle,
+            ));
+        }
+    };
+
+    if import_state.ownership_generation != generation
+        || import_state.lifecycle != ImportLifecycle::Running
+        || import_state.child_pid != Some(child_pid)
+    {
+        return Err((
+            format!(
+                "Import state changed before supervisor tracking could be established for PID {child_pid}"
+            ),
+            supervisor_handle,
         ));
     }
 
@@ -800,14 +1226,88 @@ where
     })
 }
 
-fn emit_structured_events(app: &AppHandle, events: Vec<ImportStructuredEvent>) {
-    for event in events {
-        let _ = app.emit("import-structured-event", event);
+fn record_import_results(
+    import_state: &mut ImportState,
+    generation: u64,
+    event: &ImportStructuredEvent,
+) -> bool {
+    if import_state.ownership_generation != generation {
+        return false;
     }
+
+    let subject_is_owned = |subject: &str| {
+        import_state
+            .subject_list
+            .iter()
+            .any(|owned| owned == subject)
+    };
+    match event {
+        ImportStructuredEvent::ImportFailed { subject, .. } if subject_is_owned(subject) => {
+            if !import_state.failed_subjects.contains(subject) {
+                import_state.failed_subjects.push(subject.clone());
+            }
+            import_state
+                .succeeded_subjects
+                .retain(|owned| owned != subject);
+        }
+        ImportStructuredEvent::SubjectComplete { subject, .. }
+            if subject_is_owned(subject) && !import_state.failed_subjects.contains(subject) =>
+        {
+            if !import_state.succeeded_subjects.contains(subject) {
+                import_state.succeeded_subjects.push(subject.clone());
+            }
+        }
+        ImportStructuredEvent::ImportComplete => {
+            let succeeded = import_state
+                .subject_list
+                .iter()
+                .filter(|subject| !import_state.failed_subjects.contains(*subject))
+                .cloned()
+                .collect();
+            import_state.succeeded_subjects = succeeded;
+        }
+        _ => {}
+    }
+    true
 }
 
-fn emit_matlab_exit_error(app: &AppHandle, exit_code: i32) {
-    let _ = app.emit("MatlabExitError", MatlabExitError { exit_code });
+fn emit_structured_events(
+    app: &AppHandle,
+    generation: u64,
+    events: Vec<ImportStructuredEvent>,
+) -> bool {
+    let mut saw_import_complete = false;
+    for event in events {
+        if matches!(event, ImportStructuredEvent::ImportComplete) {
+            saw_import_complete = true;
+            continue;
+        }
+        let state = app.state::<AppState>();
+        let emitted = state
+            .import_state
+            .lock()
+            .ok()
+            .is_some_and(|mut import_state| {
+                if !record_import_results(&mut import_state, generation, &event) {
+                    return false;
+                }
+                // Hold ownership through the event so a later reservation cannot
+                // receive output from this generation.
+                let _ = app.emit(
+                    "import-structured-event",
+                    ImportStructuredEventPayload {
+                        event,
+                        run_request_id: import_state.run_request_id.clone(),
+                        ownership_generation: generation,
+                    },
+                );
+                true
+            });
+        if emitted {
+            continue;
+        }
+    }
+    saw_import_complete
 }
 
 pub fn mark_import_termination_requested(state: &mut ImportState, pid: u32) {
@@ -822,6 +1322,9 @@ pub fn should_emit_matlab_exit_error(
     success: bool,
 ) -> bool {
     if success {
+        if state.termination_requested_for == Some(child_pid) {
+            state.termination_requested_for = None;
+        }
         return false;
     }
 
@@ -835,33 +1338,54 @@ pub fn should_emit_matlab_exit_error(
 
 fn stream_import_output(
     app: &AppHandle,
+    generation: u64,
     output_line: ImportOutputLine,
     parser: &mut ImportOutputParser,
-) {
+) -> bool {
     let is_progress = progress_bar_re().is_match(&output_line.line);
     if !is_progress {
         let trimmed = output_line.line.trim().to_string();
         if !parser.is_duplicate(&trimmed) {
             parser.record_line(trimmed);
-            let _ = app.emit(
-                "import-raw-event",
-                ImportRawEvent {
-                    line: output_line.line.clone(),
-                },
-            );
+            let state = app.state::<AppState>();
+            let _ = state.import_state.lock().ok().and_then(|import_state| {
+                if import_state.ownership_generation != generation {
+                    return None;
+                }
+                // Hold ownership through the event so stale raw output cannot
+                // be delivered after a replacement reservation.
+                app.emit(
+                    "import-raw-event",
+                    ImportRawEventPayload {
+                        line: output_line.line.clone(),
+                        run_request_id: import_state.run_request_id.clone(),
+                        ownership_generation: generation,
+                    },
+                )
+                .ok()
+            });
         }
     }
 
-    emit_structured_events(app, parser.push_line(&output_line.line, output_line.source));
+    emit_structured_events(
+        app,
+        generation,
+        parser.push_line(&output_line.line, output_line.source),
+    )
 }
 
 fn supervise_import_process(
     app: AppHandle,
+    generation: u64,
     child_pid: u32,
     mut child: Child,
     subject_list: Vec<String>,
+    start_receiver: mpsc::Receiver<()>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
+        if !start_supervisor_or_reap(&mut child, start_receiver) {
+            return;
+        }
         let (sender, receiver) = mpsc::channel();
         let stdout_thread = child
             .stdout
@@ -874,8 +1398,9 @@ fn supervise_import_process(
         drop(sender);
 
         let mut parser = ImportOutputParser::new(&subject_list);
+        let mut saw_import_complete = false;
         for output_line in receiver {
-            stream_import_output(&app, output_line, &mut parser);
+            saw_import_complete |= stream_import_output(&app, generation, output_line, &mut parser);
         }
 
         if let Some(handle) = stdout_thread {
@@ -884,27 +1409,73 @@ fn supervise_import_process(
         if let Some(handle) = stderr_thread {
             let _ = handle.join();
         }
-        emit_structured_events(&app, parser.finish());
-
+        let finished_events = parser.finish();
         if let Ok(status) = child.wait() {
             let state = app.state::<AppState>();
-            let should_emit = state
-                .import_state
-                .lock()
-                .map(|mut import_state| {
-                    should_emit_matlab_exit_error(&mut import_state, child_pid, status.success())
-                })
-                .unwrap_or(!status.success());
-            if should_emit {
-                emit_matlab_exit_error(&app, status.code().unwrap_or(-1));
-            }
-        }
+            let _ = state.import_state.lock().ok().and_then(|mut import_state| {
+                if !mark_import_terminal_if_matches(&mut import_state, generation, child_pid) {
+                    return None;
+                }
 
-        let state = app.state::<AppState>();
-        if let Ok(mut import_state) = state.import_state.lock() {
-            clear_import_child_pid_if_matches(&mut import_state, child_pid);
-        };
+                let should_emit_exit_error =
+                    should_emit_matlab_exit_error(&mut import_state, child_pid, status.success());
+                for event in finished_events {
+                    if matches!(event, ImportStructuredEvent::ImportComplete) {
+                        saw_import_complete = true;
+                        continue;
+                    }
+                    if record_import_results(&mut import_state, generation, &event) {
+                        let _ = app.emit(
+                            "import-structured-event",
+                            ImportStructuredEventPayload {
+                                event,
+                                run_request_id: import_state.run_request_id.clone(),
+                                ownership_generation: generation,
+                            },
+                        );
+                    }
+                }
+                if status.success()
+                    && saw_import_complete
+                    && record_import_results(
+                        &mut import_state,
+                        generation,
+                        &ImportStructuredEvent::ImportComplete,
+                    )
+                {
+                    let _ = app.emit(
+                        "import-structured-event",
+                        ImportStructuredEventPayload {
+                            event: ImportStructuredEvent::ImportComplete,
+                            run_request_id: import_state.run_request_id.clone(),
+                            ownership_generation: generation,
+                        },
+                    );
+                }
+                if should_emit_exit_error {
+                    let _ = app.emit(
+                        "MatlabExitError",
+                        MatlabExitError {
+                            exit_code: status.code().unwrap_or(-1),
+                            run_request_id: import_state.run_request_id.clone(),
+                            ownership_generation: generation,
+                        },
+                    );
+                }
+                Some(())
+            });
+        }
     })
+}
+
+fn start_supervisor_or_reap(child: &mut Child, start_receiver: mpsc::Receiver<()>) -> bool {
+    if start_receiver.recv().is_ok() {
+        return true;
+    }
+
+    let _ = child.kill();
+    let _ = child.wait();
+    false
 }
 
 fn spawn_matlab_import_process(matlab_path: &str, batch: &str) -> std::io::Result<Child> {
@@ -986,118 +1557,25 @@ fn spawn_apptainer_import_process(apptainer_path: &str, args: &[String]) -> std:
     command.spawn()
 }
 
-#[cfg(unix)]
-fn send_termination_signal(pid: u32) -> Result<(), String> {
-    use nix::sys::signal::{Signal, kill};
-    use nix::unistd::Pid;
-
-    kill(Pid::from_raw(pid as i32), Signal::SIGTERM)
-        .map_err(|error| format!("Failed to send SIGTERM to PID {pid}: {error}"))
-}
-
-#[cfg(windows)]
-fn send_termination_signal(pid: u32) -> Result<(), String> {
-    use windows_sys::Win32::System::Console::GenerateConsoleCtrlEvent;
-
-    let ok = unsafe { GenerateConsoleCtrlEvent(1, pid) };
-    if ok == 0 {
-        return Err(format!("Failed to send CTRL_BREAK_EVENT to PID {pid}"));
-    }
-
-    Ok(())
-}
-
-#[cfg(unix)]
-fn force_kill_process(pid: u32) -> Result<(), String> {
-    use nix::sys::signal::{Signal, kill};
-    use nix::unistd::Pid;
-
-    kill(Pid::from_raw(pid as i32), Signal::SIGKILL)
-        .map_err(|error| format!("Failed to send SIGKILL to PID {pid}: {error}"))
-}
-
-#[cfg(windows)]
-fn force_kill_process(pid: u32) -> Result<(), String> {
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
-
-    let handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
-    if handle.is_null() {
-        return Err(format!("Failed to open PID {pid} for termination"));
-    }
-
-    let ok = unsafe { TerminateProcess(handle, 1) };
-    unsafe {
-        CloseHandle(handle);
-    }
-    if ok == 0 {
-        return Err(format!("Failed to terminate PID {pid}"));
-    }
-
-    Ok(())
-}
-
-fn wait_for_pid_to_clear_or_exit(state: &AppState, pid: u32, timeout: Duration) -> bool {
-    let deadline = Instant::now() + timeout;
-    loop {
-        let state_cleared = state
-            .import_state
-            .lock()
-            .map(|import_state| import_state.child_pid != Some(pid))
-            .unwrap_or(true);
-        if state_cleared || !process_exists(pid) {
-            return true;
-        }
-
-        if Instant::now() >= deadline {
-            return false;
-        }
-
-        thread::sleep(Duration::from_millis(50));
-    }
-}
-
-#[cfg(unix)]
-fn process_exists(pid: u32) -> bool {
-    use nix::errno::Errno;
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-
-    match kill(Pid::from_raw(pid as i32), None) {
-        Ok(()) => true,
-        Err(Errno::ESRCH) => false,
-        Err(_) => true,
-    }
-}
-
-#[cfg(windows)]
-fn process_exists(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
-    use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
-    use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, WaitForSingleObject,
-    };
-
-    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid) };
-    if handle.is_null() {
-        return false;
-    }
-
-    let result = unsafe { WaitForSingleObject(handle, 0) };
-    unsafe {
-        CloseHandle(handle);
-    }
-
-    result == WAIT_TIMEOUT
-}
-
-fn take_matching_supervisor_handle(state: &AppState, pid: u32) -> Option<thread::JoinHandle<()>> {
+fn take_matching_supervisor_handle(
+    state: &AppState,
+    generation: u64,
+    pid: u32,
+) -> Option<thread::JoinHandle<()>> {
     state.import_state.lock().ok().and_then(|mut import_state| {
-        if import_state.child_pid == Some(pid) {
-            import_state.child_pid = None;
-            import_state.supervisor_handle.take()
-        } else {
-            None
+        if import_state.ownership_generation != generation {
+            return None;
+        }
+        match import_state.lifecycle {
+            ImportLifecycle::Running if import_state.child_pid == Some(pid) => {
+                import_state.child_pid = None;
+                import_state.lifecycle = ImportLifecycle::Terminal;
+                import_state.supervisor_handle.take()
+            }
+            // The supervisor may have observed exit before a stopper takes its
+            // handle. The generation guard still makes this handle exclusive.
+            ImportLifecycle::Terminal => import_state.supervisor_handle.take(),
+            _ => None,
         }
     })
 }
@@ -1112,15 +1590,19 @@ pub fn authorize_stop_import_pid(state: &AppState, pid: u32) -> Result<(), Strin
 }
 
 fn authorize_import_state_pid(import_state: &ImportState, pid: u32) -> Result<(), String> {
-    if pid == RESERVED_IMPORT_PID {
+    if import_state.lifecycle == ImportLifecycle::Preparing && pid == RESERVED_IMPORT_PID {
+        return Err("Import is still preparing and cannot be stopped yet".to_string());
+    }
+    validate_process_id(pid)?;
+    if import_state.lifecycle == ImportLifecycle::Preparing {
         return Err("Import is still preparing and cannot be stopped yet".to_string());
     }
 
+    if import_state.lifecycle != ImportLifecycle::Running {
+        return Err("No import process is currently running".to_string());
+    }
     match import_state.child_pid {
         None => Err("No import process is currently running".to_string()),
-        Some(RESERVED_IMPORT_PID) => {
-            Err("Import is still preparing and cannot be stopped yet".to_string())
-        }
         Some(active_pid) if active_pid != pid => Err(format!(
             "Requested PID {pid} does not match active import PID {active_pid}"
         )),
@@ -1128,70 +1610,125 @@ fn authorize_import_state_pid(import_state: &ImportState, pid: u32) -> Result<()
     }
 }
 
-fn mark_import_termination_requested_for_state(state: &AppState, pid: u32) -> Result<(), String> {
+fn clear_matching_termination_intent(import_state: &mut ImportState, generation: u64, pid: u32) {
+    if import_state.ownership_generation == generation
+        && import_state.child_pid == Some(pid)
+        && import_state.termination_requested_for == Some(pid)
+    {
+        import_state.termination_requested_for = None;
+    }
+}
+
+fn confirm_import_termination_with(
+    state: &AppState,
+    pid: u32,
+    send_signal: impl FnOnce(u32) -> Result<(), String>,
+    force_kill: impl FnOnce(u32) -> Result<(), String>,
+    mut wait_for_exit: impl FnMut(u32, Duration) -> Result<bool, String>,
+) -> Result<u64, String> {
     let mut import_state = state
         .import_state
         .lock()
         .map_err(|_| "Import state lock was poisoned".to_string())?;
+    validate_process_id(pid)?;
     authorize_import_state_pid(&import_state, pid)?;
+    let generation = import_state.ownership_generation;
+
+    // Keep ownership locked until Stop succeeds or its intent has been removed.
+    // The supervisor waits on its child before acquiring this mutex, so its
+    // terminal exit decision cannot consume a provisional termination intent.
+    send_signal(pid)?;
     mark_import_termination_requested(&mut import_state, pid);
-    Ok(())
+
+    let result = match wait_for_exit(pid, Duration::from_secs(5)) {
+        Ok(true) => Ok(()),
+        Ok(false) => match force_kill(pid) {
+            Ok(()) => match wait_for_exit(pid, Duration::from_secs(1)) {
+                Ok(true) => Ok(()),
+                Ok(false) => Err(format!(
+                    "Import process {pid} could not be confirmed stopped"
+                )),
+                Err(error) => Err(error),
+            },
+            Err(error) => Err(error),
+        },
+        Err(error) => Err(error),
+    };
+
+    if result.is_err() {
+        clear_matching_termination_intent(&mut import_state, generation, pid);
+    }
+    result.map(|()| generation)
 }
 
-pub fn stop_import_pid(state: &AppState, pid: u32) -> Result<(), String> {
-    mark_import_termination_requested_for_state(state, pid)?;
-    send_termination_signal(pid)?;
+fn stop_import_pid_with(
+    state: &AppState,
+    pid: u32,
+    send_signal: impl FnOnce(u32) -> Result<(), String>,
+    force_kill: impl FnOnce(u32) -> Result<(), String>,
+    wait_for_exit: impl FnMut(u32, Duration) -> Result<bool, String>,
+) -> Result<(), String> {
+    let generation =
+        confirm_import_termination_with(state, pid, send_signal, force_kill, wait_for_exit)?;
 
-    if !wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(5)) {
-        force_kill_process(pid)?;
-        if !wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(1)) {
-            return Err(format!(
-                "Import process {pid} could not be confirmed stopped"
-            ));
-        }
-    }
-
-    if let Some(handle) = take_matching_supervisor_handle(state, pid) {
+    if let Some(handle) = take_matching_supervisor_handle(state, generation, pid) {
         let _ = handle.join();
     }
 
     Ok(())
 }
 
+pub fn stop_import_pid(state: &AppState, pid: u32) -> Result<(), String> {
+    stop_import_pid_with(
+        state,
+        pid,
+        send_termination_signal,
+        force_kill_process,
+        wait_for_process_exit,
+    )
+}
+
 pub fn stop_import_pid_for_exit(state: &AppState, pid: u32) -> Result<(), String> {
-    mark_import_termination_requested_for_state(state, pid)?;
-    send_termination_signal(pid)?;
+    let generation = confirm_import_termination_with(
+        state,
+        pid,
+        send_termination_signal,
+        force_kill_process,
+        wait_for_process_exit,
+    )?;
 
-    if !wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(5)) {
-        force_kill_process(pid)?;
-        if !wait_for_pid_to_clear_or_exit(state, pid, Duration::from_secs(1)) {
-            return Err(format!(
-                "Import process {pid} could not be confirmed stopped"
-            ));
-        }
-    }
-
-    let _ = take_matching_supervisor_handle(state, pid);
+    let _ = take_matching_supervisor_handle(state, generation, pid);
 
     Ok(())
 }
 
 pub fn stop_running_import_for_exit(app: &AppHandle) -> Result<bool, String> {
     let state = app.state::<AppState>();
-    let pid = state
-        .import_state
-        .lock()
-        .map_err(|_| "Import state lock was poisoned".to_string())?
-        .child_pid;
+    let (lifecycle, pid) = {
+        let import_state = state
+            .import_state
+            .lock()
+            .map_err(|_| "Import state lock was poisoned".to_string())?;
+        (import_state.lifecycle, import_state.child_pid)
+    };
 
-    if let Some(pid) = pid
-        && pid != RESERVED_IMPORT_PID
-    {
-        stop_import_pid_for_exit(&state, pid)?;
-        return Ok(true);
+    match (lifecycle, pid) {
+        (ImportLifecycle::Preparing, Some(RESERVED_IMPORT_PID)) => Ok(false),
+        (_, Some(pid)) => {
+            validate_process_id(pid)?;
+            stop_import_pid_for_exit(&state, pid)?;
+            Ok(true)
+        }
+        (_, None) => Ok(false),
     }
+}
 
-    Ok(false)
+#[tauri::command]
+pub fn preflight_staging_plan(
+    state: State<'_, AppState>,
+    staging_entries: Vec<StagingEntry>,
+) -> Result<StagingPreflightResult, String> {
+    Ok(preflight_staging_plan_for_state(&state, &staging_entries))
 }
 
 #[tauri::command]
@@ -1199,28 +1736,31 @@ pub fn stop_running_import_for_exit(app: &AppHandle) -> Result<bool, String> {
 pub fn run_import_pipeline(
     app: AppHandle,
     state: State<'_, AppState>,
-    staging_root: String,
     staging_entries: Vec<StagingEntry>,
     sourcestructure_json: Value,
     studypar_json: Value,
     execution_profile: ExecutionProfile,
     subject_list: Vec<String>,
     subjects_to_preserve: Option<Vec<String>>,
-) -> Result<u32, String> {
-    let staging_root = validate_path_input("staging_root", &staging_root)?;
-    validate_staging_root(&staging_root)?;
+    run_request_id: String,
+) -> Result<u32, ImportCommandError> {
     validate_non_empty_inputs(&staging_entries, &subject_list)?;
+    if run_request_id.trim().is_empty() {
+        return Err("run_request_id must not be empty".to_string().into());
+    }
 
     if !sourcestructure_json.is_object() {
-        return Err("sourcestructure_json must be a JSON object".to_string());
+        return Err("sourcestructure_json must be a JSON object"
+            .to_string()
+            .into());
     }
     if !studypar_json.is_object() {
-        return Err("studypar_json must be a JSON object".to_string());
+        return Err("studypar_json must be a JSON object".to_string().into());
     }
 
     let validation = execution_profile.validate();
     if !validation.valid {
-        return Err(validation.errors.join("; "));
+        return Err(validation.errors.join("; ").into());
     }
 
     enum ImportExecution {
@@ -1253,60 +1793,101 @@ pub fn run_import_pipeline(
         },
     };
 
-    let project_root = derive_project_root(&staging_root);
+    let compiled_plan = compile_staging_plan(
+        state
+            .active_project_root
+            .lock()
+            .map_err(|_| "Active project state lock was poisoned".to_string())?
+            .clone(),
+        &staging_entries,
+    )
+    .map_err(|result| ImportCommandError::Preflight {
+        issues: result.issues,
+    })?;
+    // All operations after validation use the immutable, canonical plan root.
+    let staging_root = compiled_plan.staging_root.clone();
+    let project_root = compiled_plan
+        .staging_root
+        .parent()
+        .expect("compiled staging root has a parent")
+        .to_path_buf();
     let stream_subject_list = subject_list.clone();
-    reserve_import_state(
+    let reservation = reserve_import_state_for_run(
         &state,
         staging_root.clone(),
         project_root.clone(),
+        run_request_id,
         subject_list,
+        subjects_to_preserve,
     )?;
+    let generation = reservation.generation;
 
-    cleanup_staging_root(&staging_root).inspect_err(|_| {
-        clear_reserved_import(&state);
+    cleanup_staging_root(&staging_root).map_err(|error| {
+        ImportCommandError::from(rollback_reserved_preparation_failure(
+            &state,
+            generation,
+            &staging_root,
+            error,
+        ))
     })?;
 
-    let symlink_entries = staging_entries
-        .into_iter()
-        .map(StagingEntry::into_symlink_entry)
-        .collect();
-    create_symlink_tree(symlink_entries, staging_root.to_string_lossy().to_string())
-        .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
+    execute_compiled_staging_plan(&compiled_plan).map_err(|error| {
+        ImportCommandError::from(rollback_reserved_preparation_failure(
+            &state,
+            generation,
+            &staging_root,
+            error,
+        ))
+    })?;
 
     fs::create_dir_all(&staging_root).map_err(|e| {
-        rollback_reserved_preparation_failure(
+        ImportCommandError::from(rollback_reserved_preparation_failure(
             &state,
+            generation,
             &staging_root,
             format!(
                 "Failed to create staging directory {}: {}",
                 staging_root.display(),
                 e
             ),
-        )
+        ))
     })?;
     write_config_json(
         &staging_root.join("sourcestructure.json"),
         &sourcestructure_json,
     )
-    .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
-    write_config_json(&staging_root.join("studyPar.json"), &studypar_json)
-        .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
+    .map_err(|e| {
+        ImportCommandError::from(rollback_reserved_preparation_failure(
+            &state,
+            generation,
+            &staging_root,
+            e,
+        ))
+    })?;
+    write_config_json(&staging_root.join("studyPar.json"), &studypar_json).map_err(|e| {
+        ImportCommandError::from(rollback_reserved_preparation_failure(
+            &state,
+            generation,
+            &staging_root,
+            e,
+        ))
+    })?;
 
-    if let Some(ref subjects) = subjects_to_preserve
-        && !subjects.is_empty()
-    {
-        copy_lock_files_paths(&project_root, &staging_root, subjects)
-            .map_err(|e| rollback_reserved_preparation_failure(&state, &staging_root, e))?;
-    }
-
-    app.emit("ImportPrepareComplete", ImportPrepareComplete)
+    if !reservation.preserved_subjects.is_empty() {
+        copy_lock_files_paths(
+            &project_root,
+            &staging_root,
+            &reservation.preserved_subjects,
+        )
         .map_err(|e| {
-            cleanup_after_prepare_event_failure(
+            ImportCommandError::from(rollback_reserved_preparation_failure(
                 &state,
+                generation,
                 &staging_root,
-                format!("Failed to emit ImportPrepareComplete: {}", e),
-            )
+                e,
+            ))
         })?;
+    }
 
     let mut child = match execution {
         ImportExecution::Matlab {
@@ -1318,47 +1899,112 @@ pub fn run_import_pipeline(
                 escape_matlab_string(&exploreasl_path.to_string_lossy()),
                 escape_matlab_string(&staging_root.to_string_lossy()),
             );
-            spawn_matlab_import_process(&matlab_path, &batch).map_err(|e| {
-                clear_reserved_import(&state);
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    format!("MATLAB executable not found: {}", matlab_path)
-                } else {
-                    format!("Failed to spawn MATLAB import process: {}", e)
-                }
+            spawn_matlab_import_process(&matlab_path, &batch).map_err(|error| {
+                rollback_process_spawn_failure(
+                    &state,
+                    generation,
+                    &staging_root,
+                    "MATLAB",
+                    &matlab_path,
+                    error,
+                )
             })?
         }
         ImportExecution::Apptainer {
             apptainer_path,
             sif_path,
         } => {
-            ensure_mcr_cache(&apptainer_path, &sif_path, &staging_root).inspect_err(|_| {
-                clear_reserved_import(&state);
-                let _ = cleanup_staging_root(&staging_root);
+            ensure_mcr_cache(&apptainer_path, &sif_path, &staging_root).map_err(|error| {
+                ImportCommandError::from(rollback_reserved_preparation_failure(
+                    &state,
+                    generation,
+                    &staging_root,
+                    error,
+                ))
             })?;
             let args = build_apptainer_import_args(&staging_root, &sif_path);
-            spawn_apptainer_import_process(&apptainer_path, &args).map_err(|e| {
-                clear_reserved_import(&state);
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    format!("Apptainer executable not found: {}", apptainer_path)
-                } else {
-                    format!("Failed to spawn Apptainer import process: {}", e)
-                }
+            spawn_apptainer_import_process(&apptainer_path, &args).map_err(|error| {
+                rollback_process_spawn_failure(
+                    &state,
+                    generation,
+                    &staging_root,
+                    "Apptainer",
+                    &apptainer_path,
+                    error,
+                )
             })?
         }
     };
     let child_pid = child.id();
 
-    if let Err(err) = set_reserved_import_pid(&state, child_pid) {
+    if let Err(err) = set_reserved_import_pid(&state, generation, child_pid) {
         let _ = child.kill();
         let _ = child.wait();
-        clear_reserved_import(&state);
-        return Err(err);
+        if clear_matching_import(&state, generation) {
+            let _ = cleanup_staging_root(&staging_root);
+        }
+        return Err(err.into());
     }
 
-    let supervisor_handle = supervise_import_process(app, child_pid, child, stream_subject_list);
-    if let Err(err) = set_import_supervisor_handle(&state, child_pid, supervisor_handle) {
-        clear_reserved_import(&state);
-        return Err(err);
+    // Keep the supervisor gated until readiness is delivered. This gives a
+    // failed readiness emission one owner that can terminate and reap the
+    // child before staging and matching ownership are released.
+    let (start_sender, start_receiver) = mpsc::channel();
+    let supervisor_handle = supervise_import_process(
+        app.clone(),
+        generation,
+        child_pid,
+        child,
+        stream_subject_list,
+        start_receiver,
+    );
+    if let Err((err, supervisor_handle)) =
+        set_import_supervisor_handle(&state, generation, child_pid, supervisor_handle)
+    {
+        drop(start_sender);
+        let _ = supervisor_handle.join();
+        if clear_matching_import(&state, generation) {
+            let _ = cleanup_staging_root(&staging_root);
+        }
+        return Err(err.into());
+    }
+
+    match emit_prepare_complete_for_running_import(&app, &state, generation, child_pid) {
+        Ok(true) => {}
+        Ok(false) => {
+            drop(start_sender);
+            if let Some(handle) = take_matching_supervisor_handle(&state, generation, child_pid) {
+                let _ = handle.join();
+            }
+            let error = cleanup_after_prepare_event_failure(
+                &state,
+                generation,
+                &staging_root,
+                "Import state changed before ImportPrepareComplete could be emitted".to_string(),
+            );
+            return Err(error.into());
+        }
+        Err(error) => {
+            drop(start_sender);
+            if let Some(handle) = take_matching_supervisor_handle(&state, generation, child_pid) {
+                let _ = handle.join();
+            }
+            let error =
+                cleanup_after_prepare_event_failure(&state, generation, &staging_root, error);
+            return Err(error.into());
+        }
+    }
+    if start_sender.send(()).is_err() {
+        if let Some(handle) = take_matching_supervisor_handle(&state, generation, child_pid) {
+            let _ = handle.join();
+        }
+        let error = cleanup_after_prepare_event_failure(
+            &state,
+            generation,
+            &staging_root,
+            "Import supervisor stopped before it could begin".to_string(),
+        );
+        return Err(error.into());
     }
 
     Ok(child_pid)
@@ -1371,56 +2017,43 @@ pub fn stop_import(state: State<'_, AppState>, pid: u32) -> Result<(), String> {
 
 #[tauri::command]
 pub fn stop_active_import(state: State<'_, AppState>) -> Result<(), String> {
-    let pid = state
-        .import_state
-        .lock()
-        .map_err(|_| "Import state lock was poisoned".to_string())?
-        .child_pid;
+    let (lifecycle, pid) = {
+        let import_state = state
+            .import_state
+            .lock()
+            .map_err(|_| "Import state lock was poisoned".to_string())?;
+        (import_state.lifecycle, import_state.child_pid)
+    };
 
-    if let Some(pid) = pid
-        && pid != RESERVED_IMPORT_PID
-    {
-        stop_import_pid(&state, pid)?;
+    match (lifecycle, pid) {
+        (ImportLifecycle::Preparing, Some(RESERVED_IMPORT_PID)) => {
+            Err("Import is still preparing and cannot be stopped yet".to_string())
+        }
+        (_, Some(pid)) => {
+            validate_process_id(pid)?;
+            stop_import_pid(&state, pid)
+        }
+        (_, None) => Err("No import process is currently running".to_string()),
     }
-    Ok(())
 }
 
 #[tauri::command]
-pub fn clean_import_status(staging_root: String, subjects: Vec<String>) -> Result<(), String> {
-    let staging_root = validate_path_input("staging_root", &staging_root)?;
-    validate_staging_root(&staging_root)?;
-    clean_import_status_paths(&staging_root, &subjects)
+pub fn clean_import_status(state: State<'_, AppState>) -> Result<(), String> {
+    clean_import_status_for_state(&state)
 }
 
 #[tauri::command]
 pub fn move_import_output(
-    staging_root: String,
-    project_root: String,
-    succeeded_subjects: Vec<String>,
+    state: State<'_, AppState>,
     debug_mode: bool,
     cleanup_staging: bool,
 ) -> Result<(), String> {
-    let staging_root = validate_path_input("staging_root", &staging_root)?;
-    let project_root = validate_path_input("project_root", &project_root)?;
-    move_import_output_paths(
-        &staging_root,
-        &project_root,
-        &succeeded_subjects,
-        debug_mode,
-        cleanup_staging,
-    )
+    move_import_output_for_state(&state, debug_mode, cleanup_staging)
 }
 
 #[tauri::command]
-pub fn copy_lock_files(
-    project_root: String,
-    staging_root: String,
-    subjects: Vec<String>,
-) -> Result<(), String> {
-    let project_root = validate_path_input("project_root", &project_root)?;
-    let staging_root = validate_path_input("staging_root", &staging_root)?;
-    validate_staging_root(&staging_root)?;
-    copy_lock_files_paths(&project_root, &staging_root, &subjects)
+pub fn copy_lock_files(state: State<'_, AppState>, subjects: Vec<String>) -> Result<(), String> {
+    copy_lock_files_for_state(&state, &subjects)
 }
 
 #[tauri::command]
@@ -1503,13 +2136,6 @@ fn validate_string_input(name: &str, value: &str) -> Result<String, String> {
 
 fn validate_path_input(name: &str, value: &str) -> Result<PathBuf, String> {
     validate_string_input(name, value).map(PathBuf::from)
-}
-
-fn derive_project_root(staging_root: &Path) -> PathBuf {
-    staging_root
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| staging_root.to_path_buf())
 }
 
 fn write_config_json(path: &Path, value: &Value) -> Result<(), String> {

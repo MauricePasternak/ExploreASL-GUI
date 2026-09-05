@@ -279,7 +279,7 @@ describe("ProcessingPage", () => {
         "Generating participants list...",
       );
       expect(screen.queryByTestId("subject-selection")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("execution-dashboard")).not.toBeInTheDocument();
+      expect(screen.getByTestId("execution-dashboard")).toBeInTheDocument();
     });
 
     it("falls back to default text when preparingMessage is null", () => {
@@ -295,4 +295,24 @@ describe("ProcessingPage", () => {
       );
     });
   });
+
+  it.each(["running", "finalizing", "cancelling"] as const)(
+    "keeps the attached dashboard visible during %s",
+    (processingPhase) => {
+      useProcessingStore.setState({ processingPhase, activeRunId: "processing-run-1" });
+      renderPage();
+      expect(screen.getByTestId("execution-dashboard")).toBeInTheDocument();
+      expect(screen.queryByTestId("pipeline-config")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["completed", "failed", "cancelled", "interrupted"] as const)(
+    "hides active dashboard for terminal %s",
+    (processingPhase) => {
+      useProcessingStore.setState({ processingPhase, activeRunId: null });
+      renderPage();
+      expect(screen.queryByTestId("execution-dashboard")).not.toBeInTheDocument();
+      expect(screen.getByTestId("pipeline-config")).toBeInTheDocument();
+    },
+  );
 });

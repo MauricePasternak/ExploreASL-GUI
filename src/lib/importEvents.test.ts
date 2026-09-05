@@ -7,6 +7,7 @@ import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
 import {
   copyLockFilesForRetry,
+  decodeImportPipelineError,
   setupImportListeners,
   type ImportStructuredEventPayload,
 } from "./importEvents";
@@ -19,21 +20,40 @@ import {
 type EventHandler = (event: { payload: unknown }) => void;
 
 const handlers: Record<string, EventHandler> = {};
+const RUN_REQUEST_ID = "run-request-a";
+const OWNERSHIP_GENERATION = 1;
 
-function emitStructured(payload: ImportStructuredEventPayload) {
-  handlers["import-structured-event"]?.({ payload });
+function emitStructured(
+  payload: Omit<ImportStructuredEventPayload, "runRequestId" | "ownershipGeneration">,
+  runRequestId = RUN_REQUEST_ID,
+  ownershipGeneration = OWNERSHIP_GENERATION,
+) {
+  handlers["import-structured-event"]?.({
+    payload: { ...payload, runRequestId, ownershipGeneration },
+  });
 }
 
-function emitRaw(line: string) {
-  handlers["import-raw-event"]?.({ payload: { line } });
+function emitRaw(
+  line: string,
+  runRequestId = RUN_REQUEST_ID,
+  ownershipGeneration = OWNERSHIP_GENERATION,
+) {
+  handlers["import-raw-event"]?.({ payload: { line, runRequestId, ownershipGeneration } });
 }
 
-function emitPrepareComplete() {
-  handlers.ImportPrepareComplete?.({ payload: {} });
+function emitPrepareComplete(
+  runRequestId = RUN_REQUEST_ID,
+  ownershipGeneration = OWNERSHIP_GENERATION,
+) {
+  handlers.ImportPrepareComplete?.({ payload: { runRequestId, ownershipGeneration } });
 }
 
-function emitMatlabExitError(exitCode: number) {
-  handlers.MatlabExitError?.({ payload: { exitCode } });
+function emitMatlabExitError(
+  exitCode: number,
+  runRequestId = RUN_REQUEST_ID,
+  ownershipGeneration = OWNERSHIP_GENERATION,
+) {
+  handlers.MatlabExitError?.({ payload: { exitCode, runRequestId, ownershipGeneration } });
 }
 
 beforeEach(() => {
@@ -86,7 +106,7 @@ describe("setupImportListeners", () => {
   it("rejects stale structured events and queued raw log batches", async () => {
     vi.useFakeTimers();
     useImportStore.getState().startImport();
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+    await setupImportListeners(RUN_REQUEST_ID);
     emitRaw("project A log");
 
     invalidateProjectLease();
@@ -109,7 +129,7 @@ describe("setupImportListeners", () => {
         }),
     );
 
-    const setup = setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+    const setup = setupImportListeners(RUN_REQUEST_ID);
     invalidateProjectLease();
     activateProjectLease("project-b", "/tmp/project-b");
     resolveFirst(unlisten);
@@ -117,6 +137,48 @@ describe("setupImportListeners", () => {
 
     expect(unlisten).toHaveBeenCalled();
     expect(listen).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects queued events from a same-project rerun before they bind a generation", async () => {
+    const prepareHandlers: EventHandler[] = [];
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "ImportPrepareComplete") prepareHandlers.push(handler as EventHandler);
+      return () => {};
+    });
+    useImportStore.getState().startImport();
+
+    await setupImportListeners("run-old");
+    await setupImportListeners("run-new");
+
+    prepareHandlers[0]?.({
+      payload: { runRequestId: "run-old", ownershipGeneration: 1 },
+    });
+    expect(useImportStore.getState().importPhase).toBe("preparing");
+
+    prepareHandlers[1]?.({
+      payload: { runRequestId: "run-new", ownershipGeneration: 2 },
+    });
+    expect(useImportStore.getState().importPhase).toBe("running");
+  });
+
+  it("fails closed for missing, mismatched, and changed event correlation", async () => {
+    useImportStore.getState().startImport();
+    await setupImportListeners(RUN_REQUEST_ID);
+
+    handlers.ImportPrepareComplete?.({ payload: {} });
+    emitStructured({ type: "subject_start", subject: "OLD" }, "old-request", 1);
+    emitRaw("old output", "old-request", 1);
+    emitMatlabExitError(1, "old-request", 1);
+    expect(useImportStore.getState().importPhase).toBe("preparing");
+    expect(useImportStore.getState().importProgress.OLD).toBeUndefined();
+    expect(useImportStore.getState().importLog).toEqual([]);
+
+    emitRaw("current output", RUN_REQUEST_ID, 7);
+    emitStructured({ type: "subject_start", subject: "WRONG_GENERATION" }, RUN_REQUEST_ID, 8);
+    emitPrepareComplete(RUN_REQUEST_ID, 7);
+
+    expect(useImportStore.getState().importPhase).toBe("running");
+    expect(useImportStore.getState().importProgress.WRONG_GENERATION).toBeUndefined();
   });
 
   it("stops late post-processing before moving output or mutating the replacement project", async () => {
@@ -131,7 +193,7 @@ describe("setupImportListeners", () => {
       }
       return null;
     });
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["BAD"]);
+    await setupImportListeners(RUN_REQUEST_ID);
 
     emitStructured({ type: "import_complete" });
     await vi.waitFor(() => expect(releaseClean).toBeTypeOf("function"));
@@ -151,7 +213,7 @@ describe("setupImportListeners", () => {
   });
   it("maps structured events to import store actions", async () => {
     useImportStore.getState().startImport();
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "BADDIE"]);
+    await setupImportListeners(RUN_REQUEST_ID);
 
     emitStructured({ type: "subject_start", subject: "GOOD" });
     expect(useImportStore.getState().importProgress.GOOD.status).toBe("running");
@@ -179,7 +241,7 @@ describe("setupImportListeners", () => {
   it("accumulates raw log lines and transitions preparing to running", async () => {
     vi.useFakeTimers();
     useImportStore.getState().setImportPhase("preparing");
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD"]);
+    await setupImportListeners(RUN_REQUEST_ID);
 
     emitRaw("ExploreASL import started");
     vi.advanceTimersByTime(16);
@@ -195,9 +257,7 @@ describe("setupImportListeners", () => {
   it("flushes section dividers immediately without waiting for rAF", async () => {
     vi.useFakeTimers();
     useImportStore.getState().startImport();
-    const cleanup = await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
-      "GOOD",
-    ]);
+    const cleanup = await setupImportListeners(RUN_REQUEST_ID);
 
     emitRaw(
       "[ ======================================== ExploreASL Settings ==================================]",
@@ -224,9 +284,7 @@ describe("setupImportListeners", () => {
   it("flushes remaining buffered lines on cleanup", async () => {
     vi.useFakeTimers();
     useImportStore.getState().startImport();
-    const cleanup = await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
-      "GOOD",
-    ]);
+    const cleanup = await setupImportListeners(RUN_REQUEST_ID);
 
     emitRaw("buffered line 1");
     emitRaw("buffered line 2");
@@ -244,7 +302,7 @@ describe("setupImportListeners", () => {
     useImportStore.getState().markSubjectCompleted("GOOD", 10);
     useImportStore.getState().markSubjectFailed("BADDIE", "NII2BIDS", "Bad metadata");
 
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "BADDIE"]);
+    await setupImportListeners(RUN_REQUEST_ID);
 
     emitStructured({ type: "import_complete" });
     await vi.waitFor(() => {
@@ -253,19 +311,10 @@ describe("setupImportListeners", () => {
 
     expect(vi.mocked(invoke).mock.calls).toEqual(
       expect.arrayContaining([
-        [
-          "clean_import_status",
-          {
-            stagingRoot: "/tmp/project/.easl_staging",
-            subjects: ["BADDIE"],
-          },
-        ],
+        ["clean_import_status", {}],
         [
           "move_import_output",
           {
-            stagingRoot: "/tmp/project/.easl_staging",
-            projectRoot: "/tmp/project",
-            succeededSubjects: ["GOOD"],
             debugMode: true,
             cleanupStaging: false,
           },
@@ -279,7 +328,7 @@ describe("setupImportListeners", () => {
     useImportStore.getState().markSubjectCompleted("GOOD", 10);
     useImportStore.getState().markSubjectCompleted("BADDIE", 20);
 
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "BADDIE"]);
+    await setupImportListeners(RUN_REQUEST_ID);
 
     vi.mocked(invoke).mockClear();
     emitStructured({ type: "import_complete" });
@@ -292,9 +341,6 @@ describe("setupImportListeners", () => {
         [
           "move_import_output",
           {
-            stagingRoot: "/tmp/project/.easl_staging",
-            projectRoot: "/tmp/project",
-            succeededSubjects: ["GOOD", "BADDIE"],
             debugMode: true,
             cleanupStaging: true,
           },
@@ -312,7 +358,7 @@ describe("setupImportListeners", () => {
     useImportStore.getState().markSubjectRunning("GOOD");
     useImportStore.getState().markSubjectCompleted("DONE", 5);
 
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", ["GOOD", "DONE"]);
+    await setupImportListeners(RUN_REQUEST_ID);
 
     emitMatlabExitError(1);
     await vi.waitFor(() => {
@@ -341,15 +387,16 @@ describe("setupImportListeners", () => {
     useImportStore.getState().setImportPhase("running");
     // All subjects are still in "pending" status on initialization failure
 
-    await setupImportListeners("/tmp/project/.easl_staging", "/tmp/project", [
-      "GOOD",
-      "PENDING_SUBJ",
-    ]);
+    await setupImportListeners(RUN_REQUEST_ID);
 
     emitMatlabExitError(1);
     await vi.waitFor(() => {
       expect(useImportStore.getState().importProgress.GOOD.status).toBe("failed");
       expect(useImportStore.getState().importProgress.PENDING_SUBJ.status).toBe("failed");
+    });
+
+    await vi.waitFor(() => {
+      expect(useImportStore.getState().importPhase).toBe("failed");
     });
 
     expect(useImportStore.getState().importProgress.GOOD.error).toBe(
@@ -358,34 +405,58 @@ describe("setupImportListeners", () => {
     expect(useImportStore.getState().importProgress.PENDING_SUBJ.error).toBe(
       "MATLAB process exited unexpectedly",
     );
-    expect(useImportStore.getState().importPhase).toBe("failed");
   });
 });
 
 describe("copyLockFilesForRetry", () => {
   it("invokes copy_lock_files when retry subjects are provided", async () => {
     await copyLockFilesForRetry({
-      projectRoot: "/tmp/project",
-      stagingRoot: "/tmp/project/.easl_staging",
       subjects: ["GOOD"],
     });
 
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("copy_lock_files", {
-      projectRoot: "/tmp/project",
-      stagingRoot: "/tmp/project/.easl_staging",
       subjects: ["GOOD"],
     });
+    const copyPayload = vi
+      .mocked(invoke)
+      .mock.calls.find(([command]) => command === "copy_lock_files")?.[1] as Record<
+      string,
+      unknown
+    >;
+    expect(copyPayload).not.toHaveProperty("projectRoot");
+    expect(copyPayload).not.toHaveProperty("stagingRoot");
   });
 
   it("skips invoke when there are no retry subjects", async () => {
     vi.mocked(invoke).mockClear();
 
     await copyLockFilesForRetry({
-      projectRoot: "/tmp/project",
-      stagingRoot: "/tmp/project/.easl_staging",
       subjects: [],
     });
 
     expect(vi.mocked(invoke)).not.toHaveBeenCalled();
+  });
+});
+
+describe("decodeImportPipelineError", () => {
+  it("keeps structured preflight issues for current Rust command failures", () => {
+    expect(
+      decodeImportPipelineError({
+        kind: "preflight",
+        issues: [
+          { code: "PORTABLE_COLLISION", field: "subject", entryIndex: 1, message: "collision" },
+        ],
+      }),
+    ).toMatchObject({
+      kind: "preflight",
+      issues: [{ code: "PORTABLE_COLLISION", entryIndex: 1 }],
+    });
+  });
+
+  it("falls back to legacy string operational errors", () => {
+    expect(decodeImportPipelineError("legacy import failed")).toEqual({
+      kind: "operational",
+      message: "legacy import failed",
+    });
   });
 });

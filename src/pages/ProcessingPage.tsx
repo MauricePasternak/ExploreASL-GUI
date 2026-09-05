@@ -20,12 +20,15 @@ export default function ProcessingPage() {
 
   const processingPhase = useProcessingStore((s) => s.processingPhase);
   const isPreparing = processingPhase === "preparing";
-  const isRunning = processingPhase === "running";
+  const hasActiveRun = ["preparing", "running", "finalizing", "cancelling"].includes(
+    processingPhase,
+  );
   const showConfig =
     processingPhase === "idle" ||
     processingPhase === "completed" ||
     processingPhase === "failed" ||
-    processingPhase === "cancelled";
+    processingPhase === "cancelled" ||
+    processingPhase === "interrupted";
 
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const startDisabled = preflightResult?.ready !== true;
@@ -52,7 +55,7 @@ export default function ProcessingPage() {
 
       {isPreparing && <PreparingTransition />}
 
-      {isRunning && <ExecutionDashboard />}
+      {hasActiveRun && <ExecutionDashboard />}
     </Stack>
   );
 }

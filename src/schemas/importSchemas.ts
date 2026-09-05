@@ -5,6 +5,7 @@ import {
   parseNumberOrArray,
 } from "../components/import/metadataFormUtils";
 import { normalizePulseSequenceType, normalizeManufacturer } from "../lib/bids/normalize";
+import { componentValidationMessage } from "../lib/stagingValidation";
 
 const preprocessCommaNumber = (val: unknown) => {
   if (typeof val === "string") {
@@ -139,6 +140,20 @@ export type TokenizerConfig = z.infer<typeof TokenizerConfigSchema>;
 
 /** ExploreASL modality names */
 export const EXPLOREASL_MODALITIES = ["T1w", "T2w", "ASL4D", "M0", "FLAIR", "WMH_SEGM"] as const;
+
+export const PortableStagingComponentSchema = z.string().superRefine((value, ctx) => {
+  const message = componentValidationMessage(value);
+  if (message) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+  }
+});
+
+export const StagingSubjectSchema = PortableStagingComponentSchema.refine(
+  (value) => /^[A-Za-z0-9]+$/.test(value) && !value.startsWith("sub-"),
+  "Subject must be ASCII alphanumeric and must not include the sub- prefix.",
+);
+
+export const StagingModalitySchema = z.enum(EXPLOREASL_MODALITIES);
 
 export const ModalityAliasSchema = z.object({
   /** Raw captured modality string from folder names */
@@ -685,10 +700,15 @@ export type MappingState = z.infer<typeof MappingStateSchema>;
 
 /** Maps a raw DICOM path to the normalized 4-level staging path */
 export const StagingEntrySchema = z.object({
-  subject: z.string(),
-  session: z.string(),
-  run: z.string(),
-  modality: z.string(),
+  subject: StagingSubjectSchema,
+  session: PortableStagingComponentSchema,
+  run: PortableStagingComponentSchema,
+  runAlias: PortableStagingComponentSchema,
+  modality: StagingModalitySchema,
+  /** Original logical tokens used for collision and one-to-one mapping checks. */
+  originalSubject: z.string().min(1),
+  originalSession: z.string().min(1),
+  originalRun: z.string().min(1),
   /** Absolute path to the original DICOM directory or file */
   sourcePath: z.string(),
 });

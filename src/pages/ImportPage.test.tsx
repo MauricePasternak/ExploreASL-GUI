@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -22,6 +23,7 @@ function renderWithProviders() {
 
 afterEach(() => {
   cleanup();
+  resetProjectLifecycleForTests();
   useImportStore.getState().resetImport();
   useGlobalStore.setState({
     settings: DEFAULT_SETTINGS,
@@ -684,7 +686,7 @@ describe("ImportPage import runner step", () => {
     expect(nextButtons[nextButtons.length - 1]).toBeDisabled();
   });
 
-  it("navigates from preview to run import when metadata and settings are configured", () => {
+  it("navigates from preview to run import when metadata and settings are configured", async () => {
     const store = useImportStore.getState();
     store.setActiveStep(4);
     store.setSourceDataPath("/data");
@@ -738,12 +740,35 @@ describe("ImportPage import runner step", () => {
       },
       loaded: true,
     });
+    useProjectStore.setState({
+      project: {
+        version: "0.1.0",
+        projectMeta: {
+          id: "import-page-project",
+          name: "Import Page Project",
+          rootPath: "/project",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          lastOpened: "2026-01-01T00:00:00.000Z",
+          currentPhase: "import",
+          dataSource: "dicom",
+        },
+        uiState: {},
+        mappingState: {},
+        dataPar: {},
+      },
+      loaded: true,
+    });
+    activateProjectLease("import-page-project", "/project");
 
     renderWithProviders();
 
+    await waitFor(() => {
+      const nextButtons = screen.getAllByRole("button", { name: /next: run import/i });
+      expect(nextButtons[nextButtons.length - 1]).toBeEnabled();
+    });
+
     const nextButtons = screen.getAllByRole("button", { name: /next: run import/i });
     const nextButton = nextButtons[nextButtons.length - 1];
-    expect(nextButton).toBeEnabled();
 
     fireEvent.click(nextButton);
 

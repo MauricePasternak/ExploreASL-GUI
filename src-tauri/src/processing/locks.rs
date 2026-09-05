@@ -1,9 +1,11 @@
+use super::runs::finalizing_run_root;
 use super::types::SubjectModuleStatus;
 use super::utils::{
     check_log_for_error, determine_status, exploreasl_log_dirs, find_asl_runs_from_logs,
     get_asl_completion_time, get_structural_completion_time, module_index_to_name,
     normalize_asl_run_id,
 };
+use crate::import::AppState;
 use crate::tracing::CommandTrace;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -288,6 +290,33 @@ pub fn clear_stale_locks(project_root: String) -> Result<(), String> {
         return Ok(());
     }
     for module_name in &[
+        "xASL_module_Structural",
+        "xASL_module_ASL",
+        "xASL_module_Population",
+    ] {
+        clear_module_locked_dirs(&lock_root, module_name)?;
+    }
+    Ok(())
+}
+
+/// Finalization cleanup is scoped to an exact native Finalizing run. Retain the
+/// generic command for non-processing maintenance, but processing callers must
+/// use this command so a stale renderer root cannot clear another project.
+#[tauri::command]
+pub fn clear_stale_locks_for_run(
+    state: tauri::State<'_, AppState>,
+    run_id: String,
+) -> Result<(), String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let root = finalizing_run_root(&state, &run_id)?;
+    let lock_root = root.join("derivatives").join("ExploreASL").join("lock");
+    if !lock_root.exists() {
+        return Ok(());
+    }
+    for module_name in [
         "xASL_module_Structural",
         "xASL_module_ASL",
         "xASL_module_Population",

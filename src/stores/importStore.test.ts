@@ -4,6 +4,11 @@ import type { MetadataGroup, PathPattern, ImportSnapshot } from "../schemas/impo
 import type { ExecutionProfile } from "../schemas/executionProfile";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { computeStaleness } from "../lib/importStaleness";
+import {
+  activateProjectLease,
+  closeProjectWorkAdmission,
+  resetProjectLifecycleForTests,
+} from "../lib/projectLifecycle";
 import { useGlobalStore } from "./globalStore";
 import { useImportStore } from "./importStore";
 
@@ -28,6 +33,7 @@ beforeEach(() => {
 // Reset store state between tests
 afterEach(() => {
   useImportStore.getState().resetImport();
+  resetProjectLifecycleForTests();
 });
 
 // ---------------------------------------------------------------------------
@@ -638,7 +644,7 @@ describe("importStore import execution actions", () => {
     });
   });
 
-  it("restores step 5 during hydration when project prerequisites are valid", () => {
+  it("restores to Preview because native preflight is session-only", () => {
     const store = useImportStore.getState();
 
     store.loadPersistedState({
@@ -657,7 +663,7 @@ describe("importStore import execution actions", () => {
       subjectRows: [{ id: "SUB/01", subject: "SUB", session: "01", groupId: "global-defaults" }],
     });
 
-    expect(useImportStore.getState().activeStep).toBe(5);
+    expect(useImportStore.getState().activeStep).toBe(4);
   });
 });
 
@@ -1024,6 +1030,70 @@ describe("importStore applyStaleness", () => {
   });
 });
 
+describe("importStore staging preflight", () => {
+  it("accepts only latest matching request under its captured project lease", () => {
+    const lease = activateProjectLease("project", "/project");
+    const store = useImportStore.getState();
+    const first = store.beginStagingPreflight("first", lease);
+    const second = store.beginStagingPreflight("second", lease);
+    store.resolveStagingPreflight(first, "first", lease, { valid: true, issues: [] });
+    expect(useImportStore.getState().stagingPreflight.status).toBe("pending");
+    store.resolveStagingPreflight(second, "second", lease, {
+      valid: false,
+      issues: [{ code: "PORTABLE_COLLISION", field: "subject", message: "collision" }],
+    });
+    expect(useImportStore.getState().stagingPreflight).toMatchObject({
+      status: "invalid",
+      fingerprint: "second",
+      requestId: second,
+    });
+  });
+
+  it("does not admit responses after transition work closes", () => {
+    const lease = activateProjectLease("project", "/project");
+    const store = useImportStore.getState();
+    const requestId = store.beginStagingPreflight("current", lease);
+    closeProjectWorkAdmission();
+    store.resolveStagingPreflight(requestId, "current", lease, { valid: true, issues: [] });
+    expect(useImportStore.getState().stagingPreflight.status).toBe("pending");
+  });
+
+  it("records operational preflight failures for the latest current request", () => {
+    const lease = activateProjectLease("project", "/project");
+    const store = useImportStore.getState();
+    const requestId = store.beginStagingPreflight("current", lease);
+    store.failStagingPreflight(requestId, "current", lease, "IPC unavailable");
+    expect(useImportStore.getState().stagingPreflight).toMatchObject({
+      status: "failed",
+      error: "IPC unavailable",
+    });
+  });
+});
+
+describe("legacy staging identifiers", () => {
+  it("hydrates unsafe aliases and rename values unchanged without runtime preflight persistence", () => {
+    const persisted = {
+      subjectRenames: [
+        { original: "002.12", target: "002.12" },
+        { original: "FOO+BAR", target: "../escape" },
+      ],
+      sessionAliases: [{ captured: "one", alias: "CON", index: 1 }],
+      runAliases: [
+        { captured: "one", alias: "ASL/1", index: 1 },
+        { captured: "two", alias: "asl/1", index: 2 },
+        { captured: "three", alias: "é", index: 3 },
+        { captured: "four", alias: "é", index: 4 },
+      ],
+    };
+    useImportStore.getState().loadPersistedState(persisted);
+    const state = useImportStore.getState();
+    expect(state.subjectRenames).toEqual(persisted.subjectRenames);
+    expect(state.sessionAliases).toEqual(persisted.sessionAliases);
+    expect(state.runAliases).toEqual(persisted.runAliases);
+    expect(state.stagingPreflight).toMatchObject({ status: "idle", issues: [] });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // reconstructProgressFromLockFiles
 // ---------------------------------------------------------------------------
@@ -1265,7 +1335,7 @@ describe("importStore reconstructProgressFromLockFiles", () => {
     const state = useImportStore.getState();
     expect(state.mostRecentConfig).toEqual(nestedSnapshot);
     expect(state.mostRecentConfig!.sourceDataPath).toBe("/persisted/scan");
-    expect(state.activeStep).toBe(5);
+    expect(state.activeStep).toBe(4);
     expect(state.importPhase).toBe("completed");
 
     // Verify nested keys are preserved (not flattened)

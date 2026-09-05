@@ -1,53 +1,44 @@
-/**
- * Tauri event listener glue for the processing module.
- *
- * Bridges Rust backend events -> Zustand store actions.
- * Exposes thin wrappers around Tauri `invoke` for running/stopping the pipeline.
- */
+/** Tauri processing-run protocol clients and run-scoped event listeners. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import type { ProcessConfig, SubjectInfo, SubjectModuleStatus } from "../schemas/processingSchemas";
-import { modulesToBProcess, PROCESSING_MODULES } from "../schemas/processingSchemas";
 import type { ExecutionProfile } from "../schemas/executionProfile";
+import {
+  LockCreatedPayloadSchema,
+  LockRemovedPayloadSchema,
+  ProcessingLifecycleSnapshotSchema,
+  ProcessingRunSnapshotSchema,
+  StatusFileCreatedPayloadSchema,
+  WorkerExitedPayloadSchema,
+  type LockCreatedPayload,
+  type LockRemovedPayload,
+  type ProcessConfig,
+  type ProcessingRunSnapshot,
+  type ProcessingTerminalResult,
+  type StatusFileCreatedPayload,
+  type SubjectInfo,
+  type SubjectModuleStatus,
+  type WorkerExitedPayload,
+} from "../schemas/processingSchemas";
+import { modulesToBProcess, PROCESSING_MODULES } from "../schemas/processingSchemas";
 import type { DataParJson } from "./assembleDataPar";
 import { aslRunsEqual, normalizeAslRunId } from "./aslRun";
-import { useProcessingStore, clearProcessingListeners } from "../stores/processingStore";
-import { useProjectStore } from "../stores/projectStore";
-import { generateSubjectRegexp } from "./subjectMatching";
 import { captureProjectLease, isCurrentProjectLease } from "./projectLifecycle";
+import { generateSubjectRegexp } from "./subjectMatching";
+import { useProjectStore } from "../stores/projectStore";
+import { useProcessingStore } from "../stores/processingStore";
 
-// =============================================================================
-// Event Payload Types (matching Rust event shapes)
-// =============================================================================
+export type {
+  LockCreatedPayload,
+  LockRemovedPayload,
+  ProcessingRunSnapshot,
+  StatusFileCreatedPayload,
+  WorkerExitedPayload,
+};
 
-export interface StatusFileCreatedPayload {
-  module: string;
-  subjectSession: string;
-  stepCode: string;
-  run?: string;
-}
-
-export interface LockCreatedPayload {
-  module: string;
-  subjectSession: string;
-  run?: string;
-}
-
-export interface LockRemovedPayload {
-  module: string;
-  subjectSession: string;
-  run?: string;
-}
-
-export interface WorkerExitedPayload {
-  pid: number;
-  exitCode: number;
-}
-
-// =============================================================================
-// Module Name Mapping (Rust → TypeScript)
-// =============================================================================
+// Finalization can be requested by a WorkerExited callback and a launch/attach
+// reconciliation racing across IPC. One native run gets one provisional flow.
+const finalizingRunIds = new Set<string>();
 
 const RUST_MODULE_MAP: Record<string, (typeof PROCESSING_MODULES)[number]> = {
   xASL_module_Structural: "structural",
@@ -57,264 +48,98 @@ const RUST_MODULE_MAP: Record<string, (typeof PROCESSING_MODULES)[number]> = {
 
 export function mapModuleName(rustName: string): (typeof PROCESSING_MODULES)[number] | undefined {
   if (rustName in RUST_MODULE_MAP) return RUST_MODULE_MAP[rustName];
-  if ((PROCESSING_MODULES as readonly string[]).includes(rustName))
+  if ((PROCESSING_MODULES as readonly string[]).includes(rustName)) {
     return rustName as (typeof PROCESSING_MODULES)[number];
+  }
   return undefined;
 }
 
-// =============================================================================
-// Public API — Event Listeners
-// =============================================================================
-
-/**
- * Set up all Tauri event listeners for the processing pipeline.
- *
- * Returns a cleanup function that removes every listener.
- */
-export async function setupProcessingListeners(): Promise<() => void> {
-  const lease = captureProjectLease();
-  const isCurrent = () => !lease || isCurrentProjectLease(lease);
-  const { updateSubjectStatus, removeWorkerPid, setPhase } = useProcessingStore.getState();
-
-  // 1. StatusFileCreated
-  const unlistenStatus = await listen<StatusFileCreatedPayload>("StatusFileCreated", (event) => {
-    if (!isCurrent()) return;
-    const { subjectSession, stepCode, run } = event.payload;
-    console.log(
-      `[FRONTEND_WATCHER] StatusFileCreated: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} stepCode=${stepCode} run=${run ?? "None"}`,
-    );
-    const module = mapModuleName(event.payload.module);
-    if (!module) return;
-
-    // ExploreASL's population QC pass may re-run steps (e.g. 100_VisualQC_Structural)
-    // for subjects that have already completed the module. Ignore non-completion
-    // events that would downgrade a "complete" subject back to "incomplete".
-    const isComplete = stepCode === "999_ready";
-
-    const store = useProcessingStore.getState();
-    const normalizedRun = run != null ? normalizeAslRunId(run) : undefined;
-
-    const existing = store.subjectStatuses.find(
-      (s) =>
-        s.subjectSession === (subjectSession ?? "") &&
-        s.module === module &&
-        aslRunsEqual(s.run, normalizedRun),
-    );
-
-    if (existing?.status === "complete" && !isComplete) return;
-    const completedSteps = existing
-      ? isComplete
-        ? existing.completedSteps
-        : [...new Set([...existing.completedSteps, stepCode])]
-      : isComplete
-        ? []
-        : [stepCode];
-
-    updateSubjectStatus({
-      subjectSession: subjectSession ?? "",
-      module,
-      run: normalizedRun,
-      status: isComplete ? "complete" : "incomplete",
-      completedSteps,
-      locked: isComplete ? false : (existing?.locked ?? false),
-    });
-  });
-
-  // 2. LockCreated
-  const unlistenLock = await listen<LockCreatedPayload>("LockCreated", (event) => {
-    if (!isCurrent()) return;
-    const { subjectSession, run } = event.payload;
-    console.log(
-      `[FRONTEND_WATCHER] LockCreated: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} run=${run ?? "None"}`,
-    );
-    const module = mapModuleName(event.payload.module);
-    if (!module) return;
-
-    const store = useProcessingStore.getState();
-    const normalizedRun = run != null ? normalizeAslRunId(run) : undefined;
-
-    const existing = store.subjectStatuses.find(
-      (s) =>
-        s.subjectSession === (subjectSession ?? "") &&
-        s.module === module &&
-        aslRunsEqual(s.run, normalizedRun),
-    );
-
-    // ExploreASL's population QC pass re-creates lock directories for subjects
-    // that have already completed. Ignore these to prevent a phantom
-    // "processing" icon (LockRemoved events are unreliable on Linux).
-    if (existing?.status === "complete") return;
-
-    updateSubjectStatus({
-      subjectSession: subjectSession ?? "",
-      module,
-      run: normalizedRun,
-      status: existing?.status ?? "pending",
-      completedSteps: existing?.completedSteps ?? [],
-      locked: true,
-    });
-  });
-
-  // 2b. LockRemoved
-  const unlistenLockRemoved = await listen<LockRemovedPayload>("LockRemoved", (event) => {
-    if (!isCurrent()) return;
-    const { subjectSession, run } = event.payload;
-    console.log(
-      `[FRONTEND_WATCHER] LockRemoved: module=${event.payload.module} subjectSession=${subjectSession ?? "None"} run=${run ?? "None"}`,
-    );
-    const module = mapModuleName(event.payload.module);
-    if (!module) return;
-
-    const store = useProcessingStore.getState();
-    const normalizedRun = run != null ? normalizeAslRunId(run) : undefined;
-
-    const existing = store.subjectStatuses.find(
-      (s) =>
-        s.subjectSession === (subjectSession ?? "") &&
-        s.module === module &&
-        aslRunsEqual(s.run, normalizedRun),
-    );
-
-    if (existing) {
-      updateSubjectStatus({
-        ...existing,
-        locked: false,
-      });
-    }
-  });
-
-  // 3. WorkerExited
-  const unlistenWorker = await listen<WorkerExitedPayload>("WorkerExited", async (event) => {
-    if (!isCurrent()) return;
-    const { pid } = event.payload;
-    console.log(`[FRONTEND_WATCHER] WorkerExited: pid=${pid} exitCode=${event.payload.exitCode}`);
-    removeWorkerPid(pid);
-
-    const remaining = useProcessingStore.getState().workerPids;
-    if (remaining.length > 0) return;
-
-    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
-    if (!projectRoot) return;
-
-    const currentPhase = useProcessingStore.getState().processingPhase;
-    if (currentPhase === "cancelled") return;
-
-    try {
-      await stopWatcher();
-      if (!isCurrent()) return;
-      await clearStaleLocks(projectRoot);
-      if (!isCurrent()) return;
-      const finalStatuses = await loadLockStatus(projectRoot);
-      if (!isCurrent()) return;
-      useProcessingStore.setState({ subjectStatuses: finalStatuses });
-
-      const allComplete =
-        finalStatuses.length > 0 && finalStatuses.every((s) => s.status === "complete");
-      setPhase(allComplete ? "completed" : "failed");
-
-      if (allComplete) {
-        const config = useProcessingStore.getState().config;
-        if (config?.modules.includes("population")) {
-          useProjectStore.getState().setPopulationCompleted(true);
-          try {
-            const mtime = await invoke<number | null>("read_population_ready_mtime", {
-              projectRoot,
-            });
-            if (!isCurrent()) return;
-            useProjectStore.getState().setLastPopulationRunMtime(mtime);
-          } catch (err) {
-            if (!isCurrent()) return;
-            console.warn("[manifest] mtime read failed", err);
-            useProjectStore.getState().setLastPopulationRunMtime(null);
-          }
-        }
-      }
-    } catch {
-      if (!isCurrent()) return;
-      setPhase("failed");
-    } finally {
-      if (isCurrent()) clearProcessingListeners();
-    }
-  });
-
-  // Return cleanup function
-  return () => {
-    unlistenStatus();
-    unlistenLock();
-    unlistenLockRemoved();
-    unlistenWorker();
-  };
+function parseSnapshot(value: unknown): ProcessingRunSnapshot {
+  return ProcessingRunSnapshotSchema.parse(value);
 }
 
-// =============================================================================
-// Public API — Pipeline Actions
-// =============================================================================
+export async function reserveProcessingRun(
+  selectedModules: string[],
+  selectedSubjectSessions: string[],
+): Promise<ProcessingRunSnapshot> {
+  return parseSnapshot(
+    await invoke("reserve_processing_run", { selectedModules, selectedSubjectSessions }),
+  );
+}
 
-/**
- * Invoke the Rust `run_pipeline` command.
- *
- * Returns the PIDs of the spawned worker processes.
- */
+export async function failProcessingRun(runId: string): Promise<ProcessingRunSnapshot> {
+  return parseSnapshot(await invoke("fail_processing_run", { runId }));
+}
+
+export async function finalizeProcessingRun(
+  runId: string,
+  outcome: Extract<ProcessingTerminalResult, "completed" | "failed">,
+): Promise<ProcessingRunSnapshot> {
+  return parseSnapshot(await invoke("finalize_processing_run", { runId, outcome }));
+}
+
+export async function getActiveRun(): Promise<ProcessingRunSnapshot | null> {
+  const response = await invoke<unknown>("get_active_run");
+  return response === null ? null : parseSnapshot(response);
+}
+
+export async function attachRun(runId: string): Promise<ProcessingRunSnapshot> {
+  return parseSnapshot(await invoke("attach_run", { runId }));
+}
+
 export async function runProcessingPipeline(
+  runId: string,
   config: ProcessConfig,
   profile: ExecutionProfile,
   dataPar: DataParJson = { x: {} },
-): Promise<number[]> {
-  const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
-  if (!projectRoot) throw new Error("No project loaded");
-
-  const bProcess = modulesToBProcess(config.modules);
-
+): Promise<ProcessingRunSnapshot> {
   const workers =
     config.subjects.length > 0 ? Math.min(config.workers, config.subjects.length) : config.workers;
-
-  const pids = await invoke<number[]>("run_pipeline", {
-    projectRoot,
-    executionProfile: profile,
-    dataParJson: JSON.stringify(dataPar),
-    bProcess,
-    workers,
-    subjectRegexp: generateSubjectRegexp(config.subjects),
-    rerunBids2legacy: config.rerunBids2Legacy ?? false,
-  });
-
-  return pids;
+  return parseSnapshot(
+    await invoke("run_pipeline", {
+      runId,
+      executionProfile: profile,
+      dataParJson: JSON.stringify(dataPar),
+      bProcess: modulesToBProcess(config.modules),
+      workers,
+      // Rust derives authority from reservation, but command compatibility still
+      // requires this exact argument.
+      subjectRegexp: generateSubjectRegexp(config.subjects),
+      rerunBids2legacy: config.rerunBids2Legacy ?? false,
+    }),
+  );
 }
 
-/**
- * Invoke the Rust `kill_pipeline` command.
- */
-export async function stopProcessingPipeline(): Promise<void> {
-  await invoke("kill_pipeline");
+export async function stopProcessingPipeline(runId: string): Promise<ProcessingRunSnapshot> {
+  return parseSnapshot(await invoke("kill_pipeline", { runId }));
 }
 
-/**
- * Invoke the Rust `list_subjects` command.
- */
+export async function watchLockDir(runId: string): Promise<ProcessingRunSnapshot> {
+  return parseSnapshot(await invoke("watch_lock_dir", { runId }));
+}
+
+export async function stopWatcher(runId: string): Promise<void> {
+  await invoke("stop_watch_lock_dir", { runId });
+}
+
 export async function loadSubjects(
   projectRoot: string,
   dataSource?: "dicom" | "bids",
 ): Promise<SubjectInfo[]> {
-  return await invoke<SubjectInfo[]>("list_subjects", {
-    projectRoot,
-    dataSource: dataSource ?? null,
-  });
+  return invoke<SubjectInfo[]>("list_subjects", { projectRoot, dataSource: dataSource ?? null });
 }
 
-/**
- * Invoke the Rust `clear_stale_locks` command.
- * Removes all `locked` directories under the lock folder.
- */
 export async function clearStaleLocks(projectRoot: string): Promise<void> {
   await invoke("clear_stale_locks", { projectRoot });
 }
 
-/**
- * Invoke the Rust `read_lock_status` command.
- */
+export async function clearStaleLocksForRun(runId: string): Promise<void> {
+  await invoke("clear_stale_locks_for_run", { runId });
+}
+
 export async function loadLockStatus(projectRoot: string): Promise<SubjectModuleStatus[]> {
   const raw = await invoke<SubjectModuleStatus[]>("read_lock_status", { projectRoot });
-  const mapped = raw
+  return raw
     .map((entry) => {
       const module = mapModuleName(entry.module as string);
       if (!module) return null;
@@ -325,31 +150,197 @@ export async function loadLockStatus(projectRoot: string): Promise<SubjectModule
         run: entry.run != null ? normalizeAslRunId(entry.run) : undefined,
       };
     })
-    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-
-  return mapped as SubjectModuleStatus[];
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null) as SubjectModuleStatus[];
 }
 
-/**
- * Invoke the Rust `watch_lock_dir` command.
- * Stops any existing watcher before starting a new one.
- */
-export async function watchLockDir(projectRoot: string): Promise<void> {
-  await invoke("stop_watch_lock_dir").catch((err) => {
-    console.debug(
-      "[processingEvents] stop_watch_lock_dir failed (this is normal if not running):",
-      err,
+function isAttachedRunCurrent(
+  runId: string,
+  lease: ReturnType<typeof captureProjectLease>,
+): boolean {
+  return (
+    Boolean(lease && isCurrentProjectLease(lease)) &&
+    useProcessingStore.getState().activeRunId === runId
+  );
+}
+
+function isTerminalRunCurrent(
+  runId: string,
+  lease: ReturnType<typeof captureProjectLease>,
+): boolean {
+  return (
+    Boolean(lease && isCurrentProjectLease(lease)) &&
+    useProcessingStore.getState().terminalRunId === runId
+  );
+}
+
+async function finalizeCurrentRun(
+  runId: string,
+  lease: ReturnType<typeof captureProjectLease>,
+): Promise<void> {
+  if (!isAttachedRunCurrent(runId, lease)) return;
+  if (finalizingRunIds.has(runId)) return;
+  finalizingRunIds.add(runId);
+  try {
+    const snapshot = await attachRun(runId);
+    if (!isAttachedRunCurrent(runId, lease)) return;
+    if (snapshot.runId !== runId) return;
+    useProcessingStore.getState().reconcileRunSnapshot(snapshot);
+    if (snapshot.lifecycle !== "finalizing") return;
+
+    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
+    if (!projectRoot) return;
+    try {
+      await stopWatcher(runId);
+      if (!isAttachedRunCurrent(runId, lease)) return;
+      await clearStaleLocksForRun(runId);
+      if (!isAttachedRunCurrent(runId, lease)) return;
+      const statuses = await loadLockStatus(projectRoot);
+      if (!isAttachedRunCurrent(runId, lease)) return;
+      useProcessingStore.setState({ subjectStatuses: statuses });
+      const outcome =
+        statuses.length > 0 && statuses.every((status) => status.status === "complete")
+          ? "completed"
+          : "failed";
+      const terminal = await finalizeProcessingRun(runId, outcome);
+      if (!isAttachedRunCurrent(runId, lease) || terminal.runId !== runId) return;
+      useProcessingStore.getState().reconcileRunSnapshot(terminal);
+      if (terminal.lifecycle === "completed" && terminal.selectedModules.includes("population")) {
+        useProjectStore.getState().setPopulationCompleted(true);
+        try {
+          const mtime = await invoke<number | null>("read_population_ready_mtime_for_run", {
+            runId,
+          });
+          if (isTerminalRunCurrent(runId, lease))
+            useProjectStore.getState().setLastPopulationRunMtime(mtime);
+        } catch (error) {
+          if (isTerminalRunCurrent(runId, lease)) {
+            console.warn("[manifest] mtime read failed", error);
+            useProjectStore.getState().setLastPopulationRunMtime(null);
+          }
+        }
+      }
+    } catch (error) {
+      // Native lifecycle remains authoritative. A local finalization error must not
+      // invent a terminal phase.
+      console.warn("[processing] finalization failed", error);
+    }
+  } finally {
+    finalizingRunIds.delete(runId);
+  }
+}
+
+/** Install callbacks bound to both one project lease and one native run. */
+export async function setupProcessingListeners(runId: string): Promise<() => void> {
+  if (!runId) throw new Error("Processing listeners require a run ID");
+  const lease = captureProjectLease();
+  const admitted = <T>(
+    schema: { safeParse: (value: unknown) => { success: boolean; data?: T } },
+    value: unknown,
+  ): T | null => {
+    const parsed = schema.safeParse(value);
+    if (!parsed.success || !isAttachedRunCurrent(runId, lease)) return null;
+    const payload = parsed.data! as T & { runId: string };
+    return payload.runId === runId ? (payload as T) : null;
+  };
+
+  const unlistenStatus = await listen<unknown>("StatusFileCreated", (event) => {
+    const payload = admitted(StatusFileCreatedPayloadSchema, event.payload);
+    if (!payload) return;
+    const module = mapModuleName(payload.module);
+    if (!module) return;
+    const normalizedRun = payload.run != null ? normalizeAslRunId(payload.run) : undefined;
+    const store = useProcessingStore.getState();
+    const existing = store.subjectStatuses.find(
+      (status) =>
+        status.subjectSession === (payload.subjectSession ?? "") &&
+        status.module === module &&
+        aslRunsEqual(status.run, normalizedRun),
     );
+    const complete = payload.stepCode === "999_ready";
+    if (existing?.status === "complete" && !complete) return;
+    store.updateSubjectStatus({
+      subjectSession: payload.subjectSession ?? "",
+      module,
+      run: normalizedRun,
+      status: complete ? "complete" : "incomplete",
+      completedSteps: existing
+        ? complete
+          ? existing.completedSteps
+          : [...new Set([...existing.completedSteps, payload.stepCode])]
+        : complete
+          ? []
+          : [payload.stepCode],
+      locked: complete ? false : (existing?.locked ?? false),
+    });
   });
-  await invoke("watch_lock_dir", { projectRoot });
+
+  const updateLock =
+    (schema: typeof LockCreatedPayloadSchema | typeof LockRemovedPayloadSchema, locked: boolean) =>
+    (event: { payload: unknown }) => {
+      const payload = admitted(schema, event.payload);
+      if (!payload) return;
+      const module = mapModuleName(payload.module);
+      if (!module) return;
+      const normalizedRun = payload.run != null ? normalizeAslRunId(payload.run) : undefined;
+      const store = useProcessingStore.getState();
+      const existing = store.subjectStatuses.find(
+        (status) =>
+          status.subjectSession === (payload.subjectSession ?? "") &&
+          status.module === module &&
+          aslRunsEqual(status.run, normalizedRun),
+      );
+      if (!existing && !locked) return;
+      if (existing?.status === "complete" && locked) return;
+      store.updateSubjectStatus({
+        subjectSession: payload.subjectSession ?? "",
+        module,
+        run: normalizedRun,
+        status: existing?.status ?? "pending",
+        completedSteps: existing?.completedSteps ?? [],
+        locked,
+      });
+    };
+  const unlistenLock = await listen<unknown>(
+    "LockCreated",
+    updateLock(LockCreatedPayloadSchema, true),
+  );
+  const unlistenLockRemoved = await listen<unknown>(
+    "LockRemoved",
+    updateLock(LockRemovedPayloadSchema, false),
+  );
+  const unlistenWorker = await listen<unknown>("WorkerExited", async (event) => {
+    const payload = admitted(WorkerExitedPayloadSchema, event.payload);
+    if (!payload) return;
+    const store = useProcessingStore.getState();
+    // An event not in authoritative snapshot membership cannot choose another PID
+    // to remove or independently trigger finalization.
+    if (!store.workerPids.includes(payload.pid)) return;
+    store.removeWorkerPid(payload.pid);
+    if (useProcessingStore.getState().workerPids.length === 0) {
+      await finalizeCurrentRun(runId, lease);
+    }
+  });
+  const unlistenLifecycle = await listen<unknown>("ProcessingLifecycleSnapshot", (event) => {
+    const payload = admitted(ProcessingLifecycleSnapshotSchema, event.payload);
+    if (!payload) return;
+    useProcessingStore.getState().reconcileRunSnapshot(payload);
+  });
+
+  return () => {
+    unlistenStatus();
+    unlistenLock();
+    unlistenLockRemoved();
+    unlistenWorker();
+    unlistenLifecycle();
+  };
 }
 
-/**
- * Invoke the Rust `stop_watch_lock_dir` command.
- * Stops the file watcher if one is running.
- */
-export async function stopWatcher(): Promise<void> {
-  await invoke("stop_watch_lock_dir").catch((err) => {
-    console.debug("[processingEvents] stopWatcher failed:", err);
-  });
+/** Reconcile a returned launch/attach snapshot and finalise when workers already exited. */
+export async function reconcileAndFinalizeIfNeeded(
+  snapshot: ProcessingRunSnapshot,
+  lease = captureProjectLease(),
+): Promise<void> {
+  if (!isAttachedRunCurrent(snapshot.runId, lease)) return;
+  useProcessingStore.getState().reconcileRunSnapshot(snapshot);
+  if (snapshot.lifecycle === "finalizing") await finalizeCurrentRun(snapshot.runId, lease);
 }

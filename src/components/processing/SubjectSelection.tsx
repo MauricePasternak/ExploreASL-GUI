@@ -61,7 +61,7 @@ export function StatusIcon({
         </Tooltip>
       );
     case "incomplete":
-      if (processingPhase === "running" || processingPhase === "preparing") {
+      if (["preparing", "running", "finalizing", "cancelling"].includes(processingPhase)) {
         return (
           <Tooltip label="In progress">
             <IconLoader

@@ -44,7 +44,7 @@ function activeWork() {
   const processingPhase = useProcessingStore.getState().processingPhase;
   const { importPhase, importRunning } = useImportStore.getState();
   return {
-    processing: processingPhase === "preparing" || processingPhase === "running",
+    processing: ["preparing", "running", "finalizing", "cancelling"].includes(processingPhase),
     importing: importPhase === "preparing" || importPhase === "running" || importRunning,
   };
 }
@@ -285,7 +285,7 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
   const importPhase = useImportStore((state) => state.importPhase);
   const importRunning = useImportStore((state) => state.importRunning);
   const dirty = useProjectStore((state) => state.isDirty);
-  const processing = processingPhase === "preparing" || processingPhase === "running";
+  const processing = ["preparing", "running", "finalizing", "cancelling"].includes(processingPhase);
   const importing = importPhase === "preparing" || importPhase === "running" || importRunning;
   const confirmationAction =
     processing || importing

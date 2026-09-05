@@ -4,6 +4,41 @@ Define import progress state, parsing, and persistence behavior.
 
 ## Requirements
 
+### Requirement: Portable staging identifier validation
+
+The import store SHALL validate the Subject, Session, Run, Run alias, and Modality values used to construct the four-level staging destination before import execution. Every value SHALL be non-empty, already Unicode NFC-normalized, and exactly one relative filesystem component. Values SHALL reject `.` and `..`, absolute-path syntax, path separators, Unicode General Category `Cc` controls, Windows-forbidden filename characters, trailing spaces or periods, and Windows device names under case-insensitive comparison on the basename before its first dot. Device names include `CON`, `PRN`, `AUX`, `NUL`, `CLOCK$`, `COM1`–`COM9`, `LPT1`–`LPT9`, and superscript-digit `COM`/`LPT` names.
+
+Subject rename targets SHALL contain only ASCII letters and digits as a BIDS entity label and SHALL NOT include the literal `sub-` prefix. Modality SHALL be one of the supported ExploreASL modality names. Session and Run SHALL satisfy the common portable component contract without silently changing the user's value.
+
+Portable uniqueness SHALL compare NFC-normalized Unicode default-case-folded keys so values that can collapse on another supported filesystem are treated as collisions. Original logical Subject/Session/Run provenance remains separate from final targets; distinct original subjects, sessions, or runs SHALL NOT share a portable Subject target, Session target, or Run alias respectively. Validation failures SHALL be runtime-only structured issues associated with the affected field and entry; they SHALL NOT overwrite or persist corrected values automatically. Existing projects with unsafe saved aliases or rename targets SHALL remain openable, but staging execution SHALL remain blocked until the user explicitly corrects them.
+
+The runtime-only native preflight state SHALL carry a plan fingerprint, monotonic requestId, and captured ProjectLease. It SHALL accept a result only when the request is latest, the fingerprint and lease remain current, and project work admission is open; it SHALL not be serialized with mapping state.
+
+#### Scenario: Unsafe component is retained for correction
+
+- **WHEN** a legacy project opens with a subject target, session alias, or run alias containing traversal, a separator, or a reserved filename
+- **THEN** the saved value SHALL remain visible and unchanged, a structured validation issue SHALL identify the affected field, and import staging SHALL remain blocked
+
+#### Scenario: BIDS subject label is invalid
+
+- **WHEN** a subject rename target contains punctuation, whitespace, Unicode characters, or the literal `sub-` prefix
+- **THEN** validation SHALL reject the target, identify the subject field, and require explicit user correction before staging
+
+#### Scenario: Portable subject collision
+
+- **WHEN** two distinct source subjects have rename targets that differ only by case or Unicode representation
+- **THEN** both targets SHALL be reported as a collision and neither SHALL be silently renamed or merged
+
+#### Scenario: Suggested correction is not applied automatically
+
+- **WHEN** the system can derive a safe suggested replacement for an invalid identifier
+- **THEN** the suggestion SHALL be presented separately and the stored value SHALL remain unchanged until the user accepts or edits it
+
+#### Scenario: Valid staging identifiers
+
+- **WHEN** Subject, Session, Run, and Modality values satisfy their semantic rules and have unique portable keys
+- **THEN** identifier validation SHALL produce no blocking issues
+
 ### Requirement: ImportProgress state shape
 
 The `ImportProgress` type in the import store SHALL be extended to include: `errorStep?: "DCM2NII" | "NII2BIDS"` (which step failed), `warnings?: string[]` (collected warning messages from stdout), `duration?: number` (processing duration in seconds), and `stale?: boolean` (whether the config has changed since this subject was imported). The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`.

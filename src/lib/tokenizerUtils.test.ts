@@ -300,6 +300,7 @@ describe("buildStagingMapping", () => {
         "sernum-0018_ser-pcasl_3d_multiTI": "ASL4D",
         "sernum-0024_ser-t1_mpr_tra_iso_neuronavigation": "T1w",
       },
+      {},
     );
 
     expect(result).toHaveLength(3);
@@ -324,6 +325,7 @@ describe("buildStagingMapping", () => {
       { BAR: "sub-BAR" },
       {},
       { "sernum-0001_ser-AAHead_Scout": "T1w" },
+      {},
     );
 
     expect(result[0].subject).toBe("sub-BAR");
@@ -347,6 +349,7 @@ describe("buildStagingMapping", () => {
         "sernum-0018_ser-pcasl_3d_multiTI": "ASL4D",
         "sernum-0024_ser-t1_mpr_tra_iso_neuronavigation": "T1w",
       },
+      {},
     );
 
     // Should skip the ignored modality
@@ -367,6 +370,7 @@ describe("buildStagingMapping", () => {
       {},
       {},
       { "sernum-0001_ser-AAHead_Scout": "T1w" },
+      {},
     );
 
     expect(result).toEqual([]);
@@ -402,6 +406,7 @@ describe("buildStagingMapping", () => {
       {},
       {},
       { ASL: "ASL4D", T1: "T1w" },
+      {},
       ["_", "-"],
     );
 

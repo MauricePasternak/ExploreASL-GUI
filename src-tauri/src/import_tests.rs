@@ -1,19 +1,31 @@
 #[cfg(test)]
 mod tests {
     use crate::import::{
-        AppState, ImportState, MatlabExitError, RESERVED_IMPORT_PID, StagingEntry,
-        authorize_stop_import_pid, build_apptainer_import_args, clean_import_status_paths,
+        AppState, ImportCommandError, ImportLifecycle, ImportPrepareComplete,
+        ImportRawEventPayload, ImportState, ImportStructuredEventPayload, MatlabExitError,
+        RESERVED_IMPORT_PID, StagingEntry, authorize_stop_import_pid, build_apptainer_import_args,
+        clean_import_status_for_state, clean_import_status_paths,
         cleanup_after_prepare_event_failure, cleanup_staging_root,
-        clear_import_child_pid_if_matches, copy_lock_files_paths, find_executable_on_path,
-        mark_import_termination_requested, move_import_output_paths, reserve_import_state,
-        rollback_preparation_failure, should_emit_matlab_exit_error,
+        clear_matching_termination_intent, clear_reserved_import, copy_lock_files_for_state,
+        copy_lock_files_paths, find_executable_on_path, mark_import_terminal_if_matches,
+        mark_import_termination_requested, move_import_output_for_state, move_import_output_paths,
+        record_import_results, reserve_import_state, reserve_import_state_for_run,
+        rollback_preparation_failure, rollback_process_spawn_failure, set_reserved_import_pid,
+        should_emit_matlab_exit_error, start_supervisor_or_reap, stop_import_pid_with,
         take_matching_supervisor_handle, validate_import_not_running, validate_matlab_executable,
         validate_non_empty_inputs, validate_project_root_for_staging, validate_staging_root,
         validate_subject_components,
     };
+    use crate::import_parser::ImportStructuredEvent;
+    use std::cell::Cell;
     use std::fs;
     use std::path::PathBuf;
+    #[cfg(unix)]
+    use std::process::Command;
+    #[cfg(unix)]
+    use std::sync::mpsc;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use tempfile::tempdir;
 
     fn unique_temp_path(name: &str) -> PathBuf {
         let suffix = SystemTime::now()
@@ -85,23 +97,24 @@ mod tests {
     }
 
     #[test]
-    fn staging_entry_deserializes_frontend_source_path_and_converts_to_symlink_entry() {
+    fn staging_entry_deserializes_frontend_provenance() {
         let entry: StagingEntry = serde_json::from_value(serde_json::json!({
             "subject": "sub-001",
             "session": "01",
             "run": "01",
+            "runAlias": "ASL1",
             "modality": "ASL4D",
+            "originalSubject": "sub-001",
+            "originalSession": "01",
+            "originalRun": "01",
             "sourcePath": "/dicom/sub-001/asl"
         }))
         .expect("frontend staging entry should deserialize");
 
-        let symlink_entry = entry.into_symlink_entry();
-
-        assert_eq!(symlink_entry.subject, "sub-001");
-        assert_eq!(symlink_entry.session, "01");
-        assert_eq!(symlink_entry.run, "01");
-        assert_eq!(symlink_entry.modality, "ASL4D");
-        assert_eq!(symlink_entry.source_path, "/dicom/sub-001/asl");
+        assert_eq!(entry.subject, "sub-001");
+        assert_eq!(entry.run_alias, "ASL1");
+        assert_eq!(entry.original_subject, "sub-001");
+        assert_eq!(entry.source_path, "/dicom/sub-001/asl");
     }
 
     #[test]
@@ -125,24 +138,28 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_after_prepare_event_failure_clears_reserved_state_and_removes_staging() {
+    fn cleanup_after_spawned_prepare_event_failure_clears_matching_running_state_and_staging() {
         let app_state = AppState::default();
         let staging_root = unique_temp_path("prepare-event-failure");
         fs::create_dir_all(staging_root.join("sourcedata").join("sub-001"))
             .expect("prepared staging directory should be created");
-        reserve_import_state(
+        let generation = reserve_import_state(
             &app_state,
             staging_root.clone(),
             staging_root
                 .parent()
                 .expect("staging root should have parent")
                 .to_path_buf(),
+            "request-a".to_string(),
             vec!["sub-001".to_string()],
         )
         .expect("import state should be reserved");
+        set_reserved_import_pid(&app_state, generation, 4242)
+            .expect("spawned child should atomically enter running ownership");
 
         let error = cleanup_after_prepare_event_failure(
             &app_state,
+            generation,
             &staging_root,
             "Failed to emit ImportPrepareComplete: closed".to_string(),
         );
@@ -154,6 +171,181 @@ mod tests {
             .lock()
             .expect("import state lock should be available");
         assert_eq!(state.child_pid, None);
+        assert!(state.staging_root.as_os_str().is_empty());
+        assert!(state.project_root.as_os_str().is_empty());
+        assert!(state.subject_list.is_empty());
+    }
+
+    #[test]
+    fn readiness_failure_cleanup_never_clears_or_deletes_replacement_ownership() {
+        let app_state = AppState::default();
+        let old_staging = unique_temp_path("old-prepare-event");
+        let replacement_staging = unique_temp_path("replacement-prepare-event");
+        fs::create_dir_all(&old_staging).expect("old staging");
+        fs::create_dir_all(&replacement_staging).expect("replacement staging");
+        fs::write(old_staging.join("old.txt"), "old").expect("old marker");
+        fs::write(replacement_staging.join("new.txt"), "new").expect("new marker");
+
+        let old_generation = reserve_import_state(
+            &app_state,
+            old_staging.clone(),
+            old_staging.parent().expect("project root").to_path_buf(),
+            "request-old".to_string(),
+            vec!["OLD".to_string()],
+        )
+        .expect("old reservation");
+        set_reserved_import_pid(&app_state, old_generation, 41).expect("old running state");
+        {
+            let mut state = app_state.import_state.lock().expect("state lock");
+            assert!(mark_import_terminal_if_matches(
+                &mut state,
+                old_generation,
+                41
+            ));
+        }
+        let replacement_generation = reserve_import_state(
+            &app_state,
+            replacement_staging.clone(),
+            replacement_staging
+                .parent()
+                .expect("project root")
+                .to_path_buf(),
+            "request-new".to_string(),
+            vec!["NEW".to_string()],
+        )
+        .expect("replacement reservation");
+
+        let error = cleanup_after_prepare_event_failure(
+            &app_state,
+            old_generation,
+            &old_staging,
+            "old readiness event failed".to_string(),
+        );
+
+        assert_eq!(error, "old readiness event failed");
+        assert_eq!(
+            app_state
+                .import_state
+                .lock()
+                .expect("state lock")
+                .ownership_generation,
+            replacement_generation
+        );
+        assert!(old_staging.join("old.txt").exists());
+        assert!(replacement_staging.join("new.txt").exists());
+    }
+
+    #[test]
+    fn stale_generation_cannot_record_results_for_replacement_ownership() {
+        let mut state = ImportState::new(
+            PathBuf::from("/replacement/.easl_staging"),
+            PathBuf::from("/replacement"),
+            vec!["NEW".to_string()],
+        );
+        state.ownership_generation = 2;
+        state.lifecycle = ImportLifecycle::Running;
+        state.child_pid = Some(42);
+
+        assert!(!record_import_results(
+            &mut state,
+            1,
+            &ImportStructuredEvent::ImportFailed {
+                subject: "NEW".to_string(),
+                step: "DCM2NII".to_string(),
+                message: "old generation".to_string(),
+            },
+        ));
+        assert!(state.failed_subjects.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closed_readiness_gate_terminates_and_reaps_spawned_child() {
+        let mut child = Command::new("sh")
+            .args(["-c", "sleep 30"])
+            .spawn()
+            .expect("test child should spawn");
+        let (sender, receiver) = mpsc::channel();
+        drop(sender);
+
+        assert!(!start_supervisor_or_reap(&mut child, receiver));
+        assert!(child.try_wait().expect("reaped child status").is_some());
+    }
+
+    #[test]
+    fn clearing_pre_spawn_reservation_releases_all_owned_import_fields_for_retry() {
+        let state = AppState::default();
+        let staging_root = unique_temp_path("reserved-retry");
+        let generation = reserve_import_state(
+            &state,
+            staging_root.clone(),
+            staging_root.parent().expect("parent").to_path_buf(),
+            "request-a".to_string(),
+            vec!["A01".to_string()],
+        )
+        .expect("reserve");
+
+        clear_reserved_import(&state, generation);
+        reserve_import_state(
+            &state,
+            staging_root.clone(),
+            staging_root.parent().expect("parent").to_path_buf(),
+            "request-b".to_string(),
+            vec!["A01".to_string()],
+        )
+        .expect("corrected retry reserves again");
+    }
+
+    #[test]
+    fn apptainer_spawn_failure_rolls_back_prepared_tree_and_reservation() {
+        let state = AppState::default();
+        let staging_root = unique_temp_path("apptainer-spawn-rollback");
+        fs::create_dir_all(staging_root.join("sourcedata")).expect("prepared tree");
+        fs::write(staging_root.join("sourcedata/sentinel.dcm"), "prepared").expect("sentinel");
+        let generation = reserve_import_state(
+            &state,
+            staging_root.clone(),
+            staging_root.parent().expect("project root").to_path_buf(),
+            "request-a".to_string(),
+            vec!["A01".to_string()],
+        )
+        .expect("reserve import state");
+
+        let error = rollback_process_spawn_failure(
+            &state,
+            generation,
+            &staging_root,
+            "Apptainer",
+            "/missing/apptainer",
+            std::io::Error::new(std::io::ErrorKind::NotFound, "missing"),
+        );
+
+        assert!(matches!(error, ImportCommandError::Operational { .. }));
+        assert!(!staging_root.exists());
+        let import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.child_pid, None);
+        assert!(import_state.staging_root.as_os_str().is_empty());
+        assert!(import_state.project_root.as_os_str().is_empty());
+        assert!(import_state.subject_list.is_empty());
+    }
+
+    #[test]
+    fn import_command_error_serializes_tagged_preflight_and_operational_variants() {
+        let preflight = serde_json::to_value(ImportCommandError::Preflight { issues: vec![] })
+            .expect("preflight serializes");
+        let operational = serde_json::to_value(ImportCommandError::Operational {
+            message: "legacy-compatible message".to_string(),
+        })
+        .expect("operational serializes");
+
+        assert_eq!(
+            preflight,
+            serde_json::json!({ "kind": "preflight", "issues": [] })
+        );
+        assert_eq!(
+            operational,
+            serde_json::json!({ "kind": "operational", "message": "legacy-compatible message" })
+        );
     }
 
     #[test]
@@ -173,7 +365,11 @@ mod tests {
             subject: "sub-001".to_string(),
             session: "01".to_string(),
             run: "01".to_string(),
+            run_alias: "ASL1".to_string(),
             modality: "ASL4D".to_string(),
+            original_subject: "sub-001".to_string(),
+            original_session: "01".to_string(),
+            original_run: "01".to_string(),
             source_path: "/dicom/sub-001/asl".to_string(),
         }];
 
@@ -273,6 +469,7 @@ mod tests {
             vec!["sub-001".to_string()],
         );
         state.child_pid = Some(42);
+        state.lifecycle = ImportLifecycle::Running;
 
         let error = validate_import_not_running(&state)
             .expect_err("active import pid should reject a new import");
@@ -281,7 +478,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_import_child_pid_if_matches_only_clears_matching_pid() {
+    fn mark_import_terminal_if_matches_only_changes_matching_generation_and_pid() {
         let temp = std::env::temp_dir();
         let mut state = ImportState::new(
             temp.join("project").join(".easl_staging"),
@@ -289,12 +486,22 @@ mod tests {
             vec!["sub-001".to_string()],
         );
         state.child_pid = Some(42);
+        state.lifecycle = ImportLifecycle::Running;
+        state.ownership_generation = 4;
 
-        clear_import_child_pid_if_matches(&mut state, 7);
+        assert!(!mark_import_terminal_if_matches(&mut state, 3, 42));
         assert_eq!(state.child_pid, Some(42));
 
-        clear_import_child_pid_if_matches(&mut state, 42);
+        assert!(!mark_import_terminal_if_matches(&mut state, 4, 7));
+        assert!(mark_import_terminal_if_matches(&mut state, 4, 42));
         assert_eq!(state.child_pid, None);
+        assert_eq!(state.lifecycle, ImportLifecycle::Terminal);
+        assert_eq!(state.project_root, temp.join("project"));
+        assert_eq!(
+            state.staging_root,
+            temp.join("project").join(".easl_staging")
+        );
+        assert_eq!(state.subject_list, vec!["sub-001"]);
     }
 
     #[test]
@@ -316,6 +523,7 @@ mod tests {
                 .lock()
                 .expect("import state lock should be available");
             import_state.child_pid = Some(RESERVED_IMPORT_PID);
+            import_state.lifecycle = ImportLifecycle::Preparing;
         }
 
         let error = authorize_stop_import_pid(&state, RESERVED_IMPORT_PID)
@@ -333,6 +541,7 @@ mod tests {
                 .lock()
                 .expect("import state lock should be available");
             import_state.child_pid = Some(42);
+            import_state.lifecycle = ImportLifecycle::Running;
         }
 
         let error = authorize_stop_import_pid(&state, 7)
@@ -350,6 +559,7 @@ mod tests {
                 .lock()
                 .expect("import state lock should be available");
             import_state.child_pid = Some(42);
+            import_state.lifecycle = ImportLifecycle::Running;
         }
 
         authorize_stop_import_pid(&state, 42).expect("matching import PID should be accepted");
@@ -507,6 +717,151 @@ mod tests {
     }
 
     #[test]
+    fn stop_outcome_keeps_intent_only_after_successful_signal_and_exit_confirmation() {
+        let state = AppState::default();
+        {
+            let mut import_state = state.import_state.lock().expect("import state");
+            import_state.lifecycle = ImportLifecycle::Running;
+            import_state.child_pid = Some(42);
+            import_state.ownership_generation = 9;
+        }
+
+        let error = stop_import_pid_with(
+            &state,
+            42,
+            |_| Err("signal failed".to_string()),
+            |_| unreachable!("force kill must not run after a failed initial signal"),
+            |_, _| unreachable!("wait must not run after a failed initial signal"),
+        )
+        .expect_err("failed signal leaves no termination intent");
+        assert_eq!(error, "signal failed");
+        let mut import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.termination_requested_for, None);
+        assert!(should_emit_matlab_exit_error(&mut import_state, 42, false));
+        drop(import_state);
+
+        stop_import_pid_with(&state, 42, |_| Ok(()), |_| Ok(()), |_, _| Ok(true))
+            .expect("confirmed stop retains intent for the supervisor exit decision");
+        let mut import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.termination_requested_for, Some(42));
+        assert!(!should_emit_matlab_exit_error(&mut import_state, 42, false));
+    }
+
+    #[test]
+    fn stop_timeout_force_kill_failure_and_final_timeout_clear_matching_intent() {
+        let run_failed_stop = |force_kill: Box<dyn FnOnce(u32) -> Result<(), String>>,
+                               wait_for_exit: Box<
+            dyn FnMut(u32, std::time::Duration) -> Result<bool, String>,
+        >| {
+            let state = AppState::default();
+            {
+                let mut import_state = state.import_state.lock().expect("import state");
+                import_state.lifecycle = ImportLifecycle::Running;
+                import_state.child_pid = Some(42);
+                import_state.ownership_generation = 9;
+            }
+
+            assert!(
+                stop_import_pid_with(&state, 42, |_| Ok(()), force_kill, wait_for_exit).is_err()
+            );
+            let mut import_state = state.import_state.lock().expect("import state");
+            assert_eq!(import_state.termination_requested_for, None);
+            assert!(should_emit_matlab_exit_error(&mut import_state, 42, false));
+        };
+
+        run_failed_stop(
+            Box::new(|_| Err("SIGKILL failed".to_string())),
+            Box::new(|_, _| Ok(false)),
+        );
+        run_failed_stop(Box::new(|_| Ok(())), Box::new(|_, _| Ok(false)));
+    }
+
+    #[test]
+    fn stop_sigterm_timeout_then_successful_force_kill_suppresses_exit_error_once() {
+        let state = AppState::default();
+        {
+            let mut import_state = state.import_state.lock().expect("import state");
+            import_state.lifecycle = ImportLifecycle::Running;
+            import_state.child_pid = Some(42);
+            import_state.ownership_generation = 9;
+        }
+        let mut wait_count = 0;
+
+        stop_import_pid_with(
+            &state,
+            42,
+            |_| Ok(()),
+            |_| Ok(()),
+            |_, _| {
+                wait_count += 1;
+                Ok(wait_count == 2)
+            },
+        )
+        .expect("force kill confirms the timed-out Stop request");
+
+        let mut import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.termination_requested_for, Some(42));
+        assert!(!should_emit_matlab_exit_error(&mut import_state, 42, false));
+        assert!(should_emit_matlab_exit_error(&mut import_state, 42, false));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn invalid_import_pid_fails_without_signaling_and_retains_ownership() {
+        let state = AppState::default();
+        {
+            let mut import_state = state.import_state.lock().expect("import state");
+            import_state.lifecycle = ImportLifecycle::Running;
+            import_state.child_pid = Some(u32::MAX);
+            import_state.project_root = PathBuf::from("/project-a");
+        }
+        let signal_called = Cell::new(false);
+        let force_called = Cell::new(false);
+        let wait_called = Cell::new(false);
+
+        let error = stop_import_pid_with(
+            &state,
+            u32::MAX,
+            |_| {
+                signal_called.set(true);
+                Ok(())
+            },
+            |_| {
+                force_called.set(true);
+                Ok(())
+            },
+            |_, _| {
+                wait_called.set(true);
+                Ok(true)
+            },
+        )
+        .expect_err("invalid PID must fail before process operations");
+
+        assert!(error.contains("exceeds the Unix positive PID range"));
+        assert!(!signal_called.get());
+        assert!(!force_called.get());
+        assert!(!wait_called.get());
+        let import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.child_pid, Some(u32::MAX));
+        assert_eq!(import_state.project_root, PathBuf::from("/project-a"));
+        assert_eq!(import_state.lifecycle, ImportLifecycle::Running);
+    }
+
+    #[test]
+    fn failed_stop_never_clears_a_replacement_generation_intent() {
+        let state = AppState::default();
+        let mut import_state = state.import_state.lock().expect("import state");
+        import_state.lifecycle = ImportLifecycle::Running;
+        import_state.child_pid = Some(43);
+        import_state.ownership_generation = 10;
+        import_state.termination_requested_for = Some(43);
+
+        clear_matching_termination_intent(&mut import_state, 9, 42);
+
+        assert_eq!(import_state.termination_requested_for, Some(43));
+    }
+
+    #[test]
     fn supervisor_handle_cleanup_preserves_termination_intent_until_exit_decision() {
         let state = AppState::default();
         {
@@ -515,10 +870,11 @@ mod tests {
                 .lock()
                 .expect("import state lock should be available");
             import_state.child_pid = Some(42);
+            import_state.lifecycle = ImportLifecycle::Running;
             mark_import_termination_requested(&mut import_state, 42);
         }
 
-        let handle = take_matching_supervisor_handle(&state, 42);
+        let handle = take_matching_supervisor_handle(&state, 0, 42);
         assert!(handle.is_none());
 
         let mut import_state = state
@@ -570,6 +926,605 @@ mod tests {
         ] {
             fs::write(lock_dir.join(file_name), file_name).expect("status file should be written");
         }
+    }
+
+    fn state_with_active_project(project_root: &std::path::Path) -> AppState {
+        fs::create_dir_all(project_root).expect("project root should be created");
+        let state = AppState::default();
+        *state
+            .active_project_root
+            .lock()
+            .expect("active root lock should be available") =
+            Some(fs::canonicalize(project_root).expect("project root should canonicalize"));
+        state
+    }
+
+    fn set_import_ownership(
+        state: &AppState,
+        project_root: &std::path::Path,
+        subject_list: &[&str],
+        failed_subjects: &[&str],
+        succeeded_subjects: &[&str],
+    ) {
+        let project_root =
+            fs::canonicalize(project_root).expect("project root should canonicalize");
+        let mut import_state = ImportState::new(
+            project_root.join(".easl_staging"),
+            project_root,
+            subject_list
+                .iter()
+                .map(|subject| (*subject).to_string())
+                .collect(),
+        );
+        import_state.failed_subjects = failed_subjects
+            .iter()
+            .map(|subject| (*subject).to_string())
+            .collect();
+        import_state.succeeded_subjects = succeeded_subjects
+            .iter()
+            .map(|subject| (*subject).to_string())
+            .collect();
+        *state
+            .import_state
+            .lock()
+            .expect("import state lock should be available") = import_state;
+    }
+
+    fn set_import_lifecycle(state: &AppState, lifecycle: ImportLifecycle, pid: u32) {
+        let mut import_state = state.import_state.lock().expect("import state lock");
+        import_state.lifecycle = lifecycle;
+        import_state.child_pid = match lifecycle {
+            ImportLifecycle::Preparing => Some(RESERVED_IMPORT_PID),
+            ImportLifecycle::Running => Some(pid),
+            ImportLifecycle::Idle | ImportLifecycle::Terminal => None,
+        };
+    }
+
+    #[test]
+    fn post_processing_commands_reject_without_an_active_project_root() {
+        let state = AppState::default();
+
+        assert!(clean_import_status_for_state(&state).is_err());
+        assert!(move_import_output_for_state(&state, false, false).is_err());
+        assert!(copy_lock_files_for_state(&state, &["GOOD".to_string()]).is_err());
+    }
+
+    #[test]
+    fn post_processing_commands_reject_without_import_ownership() {
+        let workspace = tempdir().expect("workspace should be created");
+        let state = state_with_active_project(&workspace.path().join("project"));
+
+        assert!(clean_import_status_for_state(&state).is_err());
+        assert!(move_import_output_for_state(&state, false, false).is_err());
+        assert!(copy_lock_files_for_state(&state, &["GOOD".to_string()]).is_err());
+    }
+
+    #[test]
+    fn post_processing_commands_reject_foreign_import_ownership_without_mutation() {
+        let workspace = tempdir().expect("workspace should be created");
+        let active_project = workspace.path().join("active-project");
+        let foreign_project = workspace.path().join("foreign-project");
+        let state = state_with_active_project(&active_project);
+        fs::create_dir_all(foreign_project.join(".easl_staging")).expect("foreign staging");
+        set_import_ownership(&state, &foreign_project, &["GOOD"], &["GOOD"], &["GOOD"]);
+
+        let foreign_staging = foreign_project.join(".easl_staging");
+        write_status_files(&foreign_staging, "GOOD");
+        fs::create_dir_all(foreign_staging.join("rawdata").join("sub-GOOD"))
+            .expect("foreign rawdata");
+        fs::write(
+            foreign_staging
+                .join("rawdata")
+                .join("sub-GOOD")
+                .join("foreign.dcm"),
+            "foreign staging sentinel",
+        )
+        .expect("foreign staging sentinel");
+        fs::create_dir_all(foreign_project.join("rawdata")).expect("foreign project rawdata");
+        fs::write(
+            foreign_project.join("rawdata").join("sentinel.txt"),
+            "foreign project sentinel",
+        )
+        .expect("foreign project sentinel");
+        write_status_files(&foreign_project, "GOOD");
+
+        assert!(clean_import_status_for_state(&state).is_err());
+        assert!(move_import_output_for_state(&state, false, false).is_err());
+        assert!(copy_lock_files_for_state(&state, &["GOOD".to_string()]).is_err());
+
+        assert_eq!(
+            fs::read_to_string(import_lock_dir(&foreign_staging, "GOOD").join("999_ready.status"))
+                .expect("foreign lock sentinel should remain"),
+            "999_ready.status"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                foreign_staging
+                    .join("rawdata")
+                    .join("sub-GOOD")
+                    .join("foreign.dcm"),
+            )
+            .expect("foreign staging sentinel should remain"),
+            "foreign staging sentinel"
+        );
+        assert_eq!(
+            fs::read_to_string(foreign_project.join("rawdata").join("sentinel.txt"))
+                .expect("foreign project sentinel should remain"),
+            "foreign project sentinel"
+        );
+    }
+
+    #[test]
+    fn post_processing_commands_reject_malformed_owned_staging_root() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        set_import_ownership(&state, &project_root, &["GOOD"], &["GOOD"], &["GOOD"]);
+        let sentinel = project_root.join("foreign-staging").join("sentinel.txt");
+        fs::create_dir_all(sentinel.parent().expect("sentinel parent")).expect("sentinel parent");
+        fs::write(&sentinel, "foreign sentinel").expect("sentinel should be written");
+        state
+            .import_state
+            .lock()
+            .expect("import state lock should be available")
+            .staging_root = sentinel.parent().expect("sentinel parent").to_path_buf();
+
+        assert!(clean_import_status_for_state(&state).is_err());
+        assert!(move_import_output_for_state(&state, false, false).is_err());
+        assert!(copy_lock_files_for_state(&state, &["GOOD".to_string()]).is_err());
+        assert_eq!(
+            fs::read_to_string(sentinel).expect("sentinel should remain"),
+            "foreign sentinel"
+        );
+    }
+
+    #[test]
+    fn post_processing_commands_use_owned_native_roots_and_results() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(&staging_root).expect("staging root should be created");
+        set_import_ownership(
+            &state,
+            &project_root,
+            &["GOOD", "FAILED"],
+            &["FAILED"],
+            &["GOOD"],
+        );
+        write_status_files(&staging_root, "FAILED");
+        fs::create_dir_all(staging_root.join("rawdata").join("sub-GOOD"))
+            .expect("staged good rawdata");
+        fs::write(
+            staging_root
+                .join("rawdata")
+                .join("sub-GOOD")
+                .join("image.nii"),
+            "owned output",
+        )
+        .expect("staged output should be written");
+        write_status_files(&staging_root, "GOOD");
+
+        clean_import_status_for_state(&state).expect("owned failed status cleanup should succeed");
+        assert!(
+            !import_lock_dir(&staging_root, "FAILED")
+                .join("999_ready.status")
+                .exists()
+        );
+
+        move_import_output_for_state(&state, false, false)
+            .expect("owned output relocation should succeed");
+        assert_eq!(
+            fs::read_to_string(
+                project_root
+                    .join("rawdata")
+                    .join("sub-GOOD")
+                    .join("image.nii")
+            )
+            .expect("owned output should be relocated"),
+            "owned output"
+        );
+
+        copy_lock_files_for_state(&state, &["GOOD".to_string()])
+            .expect("owned retry lock copy should succeed");
+        assert!(
+            import_lock_dir(&staging_root, "GOOD")
+                .join("999_ready.status")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn post_processing_rejects_preterminal_imports_even_with_partial_results() {
+        for lifecycle in [ImportLifecycle::Preparing, ImportLifecycle::Running] {
+            let workspace = tempdir().expect("workspace should be created");
+            let project_root = workspace.path().join("project");
+            let state = state_with_active_project(&project_root);
+            let staging_root = project_root.join(".easl_staging");
+            fs::create_dir_all(staging_root.join("rawdata").join("sub-A")).expect("staging output");
+            fs::write(
+                staging_root
+                    .join("rawdata")
+                    .join("sub-A")
+                    .join("sentinel.txt"),
+                "A",
+            )
+            .expect("staging sentinel");
+            write_status_files(&staging_root, "A");
+            set_import_ownership(&state, &project_root, &["A", "B"], &["B"], &["A"]);
+            set_import_lifecycle(&state, lifecycle, 42);
+
+            assert!(
+                clean_import_status_for_state(&state).is_err(),
+                "{lifecycle:?}"
+            );
+            assert!(
+                move_import_output_for_state(&state, false, true).is_err(),
+                "{lifecycle:?}"
+            );
+            assert!(
+                copy_lock_files_for_state(&state, &["A".to_string()]).is_err(),
+                "{lifecycle:?}"
+            );
+            assert_eq!(
+                fs::read_to_string(
+                    staging_root
+                        .join("rawdata")
+                        .join("sub-A")
+                        .join("sentinel.txt")
+                )
+                .expect("preterminal move must preserve staging"),
+                "A"
+            );
+            assert!(
+                import_lock_dir(&staging_root, "A")
+                    .join("999_ready.status")
+                    .exists(),
+                "preterminal status cleanup must not mutate"
+            );
+        }
+    }
+
+    #[test]
+    fn terminal_transition_allows_post_processing_before_terminal_event_delivery() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(staging_root.join("rawdata").join("sub-A")).expect("staging output");
+        fs::write(
+            staging_root.join("rawdata").join("sub-A").join("image.nii"),
+            "A",
+        )
+        .expect("staging output");
+        set_import_ownership(&state, &project_root, &["A"], &[], &["A"]);
+        {
+            let mut import_state = state.import_state.lock().expect("import state");
+            import_state.lifecycle = ImportLifecycle::Running;
+            import_state.child_pid = Some(42);
+            import_state.ownership_generation = 7;
+            assert!(mark_import_terminal_if_matches(&mut import_state, 7, 42));
+        }
+
+        move_import_output_for_state(&state, false, false)
+            .expect("terminal state permits frontend post-processing invoke");
+        assert!(
+            project_root
+                .join("rawdata")
+                .join("sub-A")
+                .join("image.nii")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn successful_terminal_cleanup_resets_full_import_ownership() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(staging_root.join("rawdata").join("sub-A")).expect("staging output");
+        fs::write(
+            staging_root.join("rawdata").join("sub-A").join("image.nii"),
+            "A",
+        )
+        .expect("staging output");
+        set_import_ownership(&state, &project_root, &["A"], &[], &["A"]);
+
+        move_import_output_for_state(&state, false, true).expect("terminal cleanup should succeed");
+
+        let import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.lifecycle, ImportLifecycle::Idle);
+        assert_eq!(import_state.child_pid, None);
+        assert_eq!(import_state.ownership_generation, 0);
+        assert!(import_state.project_root.as_os_str().is_empty());
+        assert!(import_state.staging_root.as_os_str().is_empty());
+        assert!(import_state.subject_list.is_empty());
+        assert!(import_state.failed_subjects.is_empty());
+        assert!(import_state.succeeded_subjects.is_empty());
+    }
+
+    #[test]
+    fn debug_terminal_relocation_retains_ownership_for_inspection() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(staging_root.join("rawdata").join("sub-A")).expect("staging output");
+        fs::write(
+            staging_root.join("rawdata").join("sub-A").join("image.nii"),
+            "A",
+        )
+        .expect("staging output");
+        set_import_ownership(&state, &project_root, &["A"], &[], &["A"]);
+
+        move_import_output_for_state(&state, true, true)
+            .expect("debug relocation should preserve ownership");
+
+        let import_state = state.import_state.lock().expect("import state");
+        assert_eq!(import_state.lifecycle, ImportLifecycle::Terminal);
+        assert_eq!(
+            import_state.project_root,
+            fs::canonicalize(&project_root).unwrap()
+        );
+        assert_eq!(import_state.succeeded_subjects, ["A"]);
+        assert!(staging_root.exists());
+    }
+
+    #[test]
+    fn terminal_ownership_is_replaced_and_late_generation_cannot_mutate_new_import() {
+        let state = AppState::default();
+        let root = unique_temp_path("generation-replacement");
+        let staging_root = root.join(".easl_staging");
+        let first_generation = reserve_import_state(
+            &state,
+            staging_root.clone(),
+            root.clone(),
+            "request-first".to_string(),
+            vec!["A".to_string()],
+        )
+        .expect("first reservation");
+        {
+            let mut import_state = state.import_state.lock().expect("import state");
+            import_state.lifecycle = ImportLifecycle::Running;
+            import_state.child_pid = Some(41);
+            assert!(mark_import_terminal_if_matches(
+                &mut import_state,
+                first_generation,
+                41
+            ));
+        }
+        let second_generation = reserve_import_state(
+            &state,
+            staging_root,
+            root,
+            "request-second".to_string(),
+            vec!["B".to_string()],
+        )
+        .expect("terminal ownership permits replacement");
+        assert!(second_generation > first_generation);
+
+        let mut import_state = state.import_state.lock().expect("import state");
+        import_state.lifecycle = ImportLifecycle::Running;
+        import_state.child_pid = Some(42);
+        assert!(!mark_import_terminal_if_matches(
+            &mut import_state,
+            first_generation,
+            41
+        ));
+        assert_eq!(import_state.ownership_generation, second_generation);
+        assert_eq!(import_state.lifecycle, ImportLifecycle::Running);
+        assert_eq!(import_state.child_pid, Some(42));
+        assert_eq!(import_state.subject_list, ["B"]);
+    }
+
+    #[test]
+    fn retry_preserve_authorization_rejects_unowned_failed_and_traversal_subjects_before_mutation()
+    {
+        let workspace = tempdir().expect("workspace");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(&staging_root).expect("staging");
+        fs::write(staging_root.join("sentinel.txt"), "unchanged").expect("sentinel");
+        set_import_ownership(
+            &state,
+            &project_root,
+            &["GOOD", "FAILED"],
+            &["FAILED"],
+            &["GOOD"],
+        );
+
+        for subjects in [
+            vec!["UNKNOWN".to_string()],
+            vec!["FAILED".to_string()],
+            vec!["../escape".to_string()],
+        ] {
+            assert!(
+                reserve_import_state_for_run(
+                    &state,
+                    staging_root.clone(),
+                    fs::canonicalize(&project_root).expect("project"),
+                    "retry".to_string(),
+                    vec!["FAILED".to_string()],
+                    Some(subjects),
+                )
+                .is_err()
+            );
+            let import_state = state.import_state.lock().expect("import state");
+            assert_eq!(import_state.lifecycle, ImportLifecycle::Terminal);
+            assert_eq!(import_state.succeeded_subjects, ["GOOD"]);
+            drop(import_state);
+            assert_eq!(
+                fs::read_to_string(staging_root.join("sentinel.txt")).expect("sentinel"),
+                "unchanged"
+            );
+        }
+    }
+
+    #[test]
+    fn retry_preserve_authorization_rejects_exact_and_portable_run_subject_overlap_before_replacement()
+     {
+        let workspace = tempdir().expect("workspace");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(&staging_root).expect("staging");
+        fs::write(staging_root.join("sentinel.txt"), "unchanged").expect("sentinel");
+        set_import_ownership(&state, &project_root, &["GOOD", "FAILED"], &[], &["GOOD"]);
+
+        for (run_subject, preserved_subject) in [("GOOD", "GOOD"), ("good", "GOOD")] {
+            let error = reserve_import_state_for_run(
+                &state,
+                staging_root.clone(),
+                fs::canonicalize(&project_root).expect("project"),
+                "retry".to_string(),
+                vec![run_subject.to_string()],
+                Some(vec![preserved_subject.to_string()]),
+            )
+            .expect_err("a preserved subject cannot be selected for rerun");
+            assert_eq!(
+                error,
+                "Retry preserve subjects overlap subjects selected for import"
+            );
+            let import_state = state.import_state.lock().expect("import state");
+            assert_eq!(import_state.lifecycle, ImportLifecycle::Terminal);
+            assert_eq!(import_state.subject_list, ["GOOD", "FAILED"]);
+            assert_eq!(import_state.succeeded_subjects, ["GOOD"]);
+            drop(import_state);
+            assert_eq!(
+                fs::read_to_string(staging_root.join("sentinel.txt")).expect("sentinel"),
+                "unchanged"
+            );
+        }
+    }
+
+    #[test]
+    fn retry_preserve_authorization_rejects_foreign_and_nonterminal_ownership_before_replacement() {
+        let workspace = tempdir().expect("workspace");
+        let active_project = workspace.path().join("active-project");
+        let foreign_project = workspace.path().join("foreign-project");
+        let state = state_with_active_project(&active_project);
+        let active_staging = active_project.join(".easl_staging");
+        let foreign_staging = foreign_project.join(".easl_staging");
+        fs::create_dir_all(&foreign_staging).expect("foreign staging");
+        fs::write(foreign_staging.join("sentinel.txt"), "foreign").expect("sentinel");
+        set_import_ownership(&state, &foreign_project, &["GOOD"], &[], &["GOOD"]);
+
+        assert!(
+            reserve_import_state_for_run(
+                &state,
+                active_staging.clone(),
+                fs::canonicalize(&active_project).expect("active project"),
+                "retry".to_string(),
+                vec!["GOOD".to_string()],
+                Some(vec!["GOOD".to_string()]),
+            )
+            .is_err()
+        );
+        assert_eq!(
+            fs::read_to_string(foreign_staging.join("sentinel.txt")).expect("sentinel"),
+            "foreign"
+        );
+        assert_eq!(
+            state
+                .import_state
+                .lock()
+                .expect("import state")
+                .project_root,
+            fs::canonicalize(&foreign_project).expect("foreign project")
+        );
+
+        set_import_ownership(&state, &active_project, &["GOOD"], &[], &["GOOD"]);
+        set_import_lifecycle(&state, ImportLifecycle::Running, 42);
+        assert!(
+            reserve_import_state_for_run(
+                &state,
+                active_staging,
+                fs::canonicalize(&active_project).expect("active project"),
+                "retry".to_string(),
+                vec!["GOOD".to_string()],
+                Some(vec!["GOOD".to_string()]),
+            )
+            .is_err()
+        );
+        assert_eq!(
+            state.import_state.lock().expect("import state").lifecycle,
+            ImportLifecycle::Running
+        );
+    }
+
+    #[test]
+    fn disjoint_partial_success_retry_copies_only_authorized_native_success_locks_after_recreation()
+    {
+        let workspace = tempdir().expect("workspace");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(&staging_root).expect("staging");
+        fs::write(staging_root.join("old.txt"), "old staging").expect("sentinel");
+        write_status_files(&project_root, "GOOD");
+        set_import_ownership(
+            &state,
+            &project_root,
+            &["GOOD", "FAILED"],
+            &["FAILED"],
+            &["GOOD"],
+        );
+
+        let reservation = reserve_import_state_for_run(
+            &state,
+            staging_root.clone(),
+            fs::canonicalize(&project_root).expect("project"),
+            "retry".to_string(),
+            vec!["FAILED".to_string()],
+            Some(vec!["GOOD".to_string()]),
+        )
+        .expect("terminal native success authorizes preservation");
+
+        cleanup_staging_root(&staging_root).expect("recreate staging");
+        copy_lock_files_paths(
+            &project_root,
+            &staging_root,
+            &reservation.preserved_subjects,
+        )
+        .expect("copy only authorized locks");
+        assert!(
+            import_lock_dir(&staging_root, "GOOD")
+                .join("999_ready.status")
+                .exists()
+        );
+        assert!(!import_lock_dir(&staging_root, "FAILED").exists());
+        let import_state = state.import_state.lock().expect("new ownership");
+        assert_eq!(import_state.lifecycle, ImportLifecycle::Preparing);
+        assert_eq!(import_state.subject_list, ["FAILED"]);
+        assert!(import_state.succeeded_subjects.is_empty());
+    }
+
+    #[test]
+    fn post_processing_commands_reject_traversal_and_non_owned_subjects() {
+        let workspace = tempdir().expect("workspace should be created");
+        let project_root = workspace.path().join("project");
+        let state = state_with_active_project(&project_root);
+        let staging_root = project_root.join(".easl_staging");
+        fs::create_dir_all(&staging_root).expect("staging root should be created");
+        fs::write(staging_root.join("sentinel.txt"), "owned sentinel")
+            .expect("staging sentinel should be written");
+
+        set_import_ownership(&state, &project_root, &["GOOD"], &["../FOREIGN"], &[]);
+        assert!(clean_import_status_for_state(&state).is_err());
+
+        set_import_ownership(&state, &project_root, &["GOOD"], &[], &["../FOREIGN"]);
+        assert!(move_import_output_for_state(&state, false, false).is_err());
+
+        set_import_ownership(&state, &project_root, &["GOOD"], &[], &["GOOD"]);
+        assert!(copy_lock_files_for_state(&state, &["../FOREIGN".to_string()]).is_err());
+        assert!(copy_lock_files_for_state(&state, &["OTHER".to_string()]).is_err());
+        assert_eq!(
+            fs::read_to_string(staging_root.join("sentinel.txt"))
+                .expect("staging sentinel should remain"),
+            "owned sentinel"
+        );
     }
 
     #[test]
@@ -881,10 +1836,50 @@ mod tests {
 
     #[test]
     fn matlab_exit_error_serializes_exit_code() {
-        let value = serde_json::to_value(MatlabExitError { exit_code: 42 })
-            .expect("MatlabExitError should serialize");
+        let value = serde_json::to_value(MatlabExitError {
+            exit_code: 42,
+            run_request_id: "request-42".to_string(),
+            ownership_generation: 7,
+        })
+        .expect("MatlabExitError should serialize");
 
-        assert_eq!(value, serde_json::json!({ "exitCode": 42 }));
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "exitCode": 42,
+                "runRequestId": "request-42",
+                "ownershipGeneration": 7,
+            })
+        );
+    }
+
+    #[test]
+    fn import_event_payloads_serialize_request_and_ownership_correlation() {
+        let readiness = serde_json::to_value(ImportPrepareComplete {
+            run_request_id: "request-42".to_string(),
+            ownership_generation: 7,
+        })
+        .expect("readiness should serialize");
+        let raw = serde_json::to_value(ImportRawEventPayload {
+            line: "MATLAB output".to_string(),
+            run_request_id: "request-42".to_string(),
+            ownership_generation: 7,
+        })
+        .expect("raw event should serialize");
+        let structured = serde_json::to_value(ImportStructuredEventPayload {
+            event: ImportStructuredEvent::SubjectStart {
+                subject: "GOOD".to_string(),
+                step: "DCM2NII".to_string(),
+            },
+            run_request_id: "request-42".to_string(),
+            ownership_generation: 7,
+        })
+        .expect("structured event should serialize");
+
+        for payload in [readiness, raw, structured] {
+            assert_eq!(payload["runRequestId"], "request-42");
+            assert_eq!(payload["ownershipGeneration"], 7);
+        }
     }
 
     #[test]

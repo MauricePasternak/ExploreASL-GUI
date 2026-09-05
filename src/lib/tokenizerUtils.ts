@@ -236,6 +236,7 @@ export function buildStagingMapping(
   subjectRenames: Record<string, string>,
   sessionRenames: Record<string, string>,
   modalityAliases: Record<string, string | null>,
+  runAliases: Record<string, string>,
   tokenSubDelimiters: string[] = ["_"],
 ): StagingEntry[] {
   const entries: StagingEntry[] = [];
@@ -276,7 +277,11 @@ export function buildStagingMapping(
       subject,
       session,
       run: rawRun,
-      modality: mappedModality,
+      runAlias: runAliases[rawRun] ?? (rawRun === "01" ? "ASL_1" : rawRun),
+      modality: mappedModality as StagingEntry["modality"],
+      originalSubject: rawSubject,
+      originalSession: rawSession,
+      originalRun: rawRun,
       sourcePath: fullPath,
     });
   }

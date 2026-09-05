@@ -16,6 +16,7 @@ export function buildAllStagingMappings(
   tokenizerConfigs: Record<string, TokenAssignment[]>,
   subjectRenames: Record<string, string>,
   sessionAliases: SessionAlias[],
+  runAliases: SessionAlias[],
   modalityAliases: ModalityAlias[],
   tokenSubDelimiters: string[] = ["_"],
 ): StagingMappingByPattern[] {
@@ -27,6 +28,11 @@ export function buildAllStagingMappings(
   const sessionRenamesMap: Record<string, string> = {};
   for (const alias of sessionAliases) {
     sessionRenamesMap[alias.captured] = alias.alias;
+  }
+
+  const runAliasesMap: Record<string, string> = {};
+  for (const alias of runAliases) {
+    runAliasesMap[alias.captured] = alias.alias;
   }
 
   const results: StagingMappingByPattern[] = [];
@@ -48,6 +54,7 @@ export function buildAllStagingMappings(
       subjectRenames,
       sessionRenamesMap,
       aliasMap,
+      runAliasesMap,
       tokenSubDelimiters,
     ).map((entry) => ({
       ...entry,

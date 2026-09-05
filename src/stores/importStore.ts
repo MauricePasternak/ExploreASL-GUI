@@ -7,6 +7,12 @@ import { formatBidsScanValidationError } from "../lib/bids/errorFormatter";
 import { logAction } from "../lib/debug";
 import { type ImportSubjectStatus } from "../lib/importStatus";
 import { getMaxRestorableImportStep } from "../lib/importStepAccess";
+import {
+  isCurrentProjectLease,
+  isProjectWorkAccepted,
+  type ProjectLease,
+} from "../lib/projectLifecycle";
+import type { StagingValidationIssue } from "../lib/stagingValidation";
 import { useGlobalStore } from "./globalStore";
 
 import type {
@@ -40,6 +46,18 @@ import {
 // =============================================================================
 
 export type ImportPhase = "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled";
+
+export type StagingPreflightStatus = "idle" | "pending" | "valid" | "invalid" | "failed";
+
+/** Runtime-only native staging validation. Never serialized into project.easl. */
+export interface StagingPreflightState {
+  status: StagingPreflightStatus;
+  fingerprint: string | null;
+  requestId: number;
+  lease: ProjectLease | null;
+  issues: StagingValidationIssue[];
+  error: string | null;
+}
 
 /** Session-only BIDS review scan state. Not persisted to .easl. */
 export interface BidsReviewState {
@@ -102,6 +120,7 @@ export interface ImportState {
   bidsReview: BidsReviewState;
   sourceAvailability: DicomSourceAvailability;
   requiresManualSave: boolean;
+  stagingPreflight: StagingPreflightState;
 
   // Execution profile selection (persisted to .easl via uiState.import.selectedProfileId)
   selectedProfileId: string | null;
@@ -118,6 +137,21 @@ export interface ImportState {
   relinkIncompatibleSource: (path: string, paths: string[], patterns: PathPattern[]) => void;
   setSourceAvailability: (availability: DicomSourceAvailability) => void;
   clearManualSaveRequirement: () => void;
+  beginStagingPreflight: (fingerprint: string, lease: ProjectLease | null) => number;
+  resolveStagingPreflight: (
+    requestId: number,
+    fingerprint: string,
+    lease: ProjectLease | null,
+    result: { valid: boolean; issues: StagingValidationIssue[] },
+  ) => void;
+  failStagingPreflight: (
+    requestId: number,
+    fingerprint: string,
+    lease: ProjectLease | null,
+    error: string,
+  ) => void;
+  resetStagingPreflight: () => void;
+  setStagingPreflightIssues: (issues: StagingValidationIssue[]) => void;
   setIngestionResults: (paths: string[], patterns: PathPattern[]) => void;
   setBMatchDirectories: (value: boolean) => void;
   setTokenAssignment: (
@@ -216,6 +250,14 @@ const INITIAL_STATE = {
     message: null,
   } as DicomSourceAvailability,
   requiresManualSave: false,
+  stagingPreflight: {
+    status: "idle" as StagingPreflightStatus,
+    fingerprint: null,
+    requestId: 0,
+    lease: null,
+    issues: [] as StagingValidationIssue[],
+    error: null,
+  },
 };
 
 export function createInitialImportState() {
@@ -353,6 +395,81 @@ export const useImportStore = create<ImportState>((set, get) => ({
 
   setSourceAvailability: (sourceAvailability) => set({ sourceAvailability }),
   clearManualSaveRequirement: () => set({ requiresManualSave: false }),
+
+  beginStagingPreflight: (fingerprint, lease) => {
+    const requestId = get().stagingPreflight.requestId + 1;
+    set({
+      stagingPreflight: {
+        status: "pending",
+        fingerprint,
+        requestId,
+        lease,
+        issues: [],
+        error: null,
+      },
+    });
+    return requestId;
+  },
+
+  resolveStagingPreflight: (requestId, fingerprint, lease, result) => {
+    const current = get().stagingPreflight;
+    if (
+      current.requestId !== requestId ||
+      current.fingerprint !== fingerprint ||
+      current.lease !== lease ||
+      !isCurrentProjectLease(lease) ||
+      !isProjectWorkAccepted()
+    ) {
+      return;
+    }
+    set({
+      stagingPreflight: {
+        ...current,
+        status: result.valid ? "valid" : "invalid",
+        issues: result.issues,
+        error: null,
+      },
+    });
+  },
+
+  failStagingPreflight: (requestId, fingerprint, lease, error) => {
+    const current = get().stagingPreflight;
+    if (
+      current.requestId !== requestId ||
+      current.fingerprint !== fingerprint ||
+      current.lease !== lease ||
+      !isCurrentProjectLease(lease) ||
+      !isProjectWorkAccepted()
+    ) {
+      return;
+    }
+    set({ stagingPreflight: { ...current, status: "failed", error } });
+  },
+
+  resetStagingPreflight: () => {
+    const current = get().stagingPreflight;
+    set({
+      stagingPreflight: {
+        status: "idle",
+        fingerprint: null,
+        requestId: current.requestId + 1,
+        lease: null,
+        issues: [],
+        error: null,
+      },
+    });
+  },
+
+  setStagingPreflightIssues: (issues) => {
+    set((state) => ({
+      stagingPreflight: {
+        ...state.stagingPreflight,
+        status: "invalid",
+        issues,
+        error: null,
+      },
+    }));
+  },
 
   setIngestionResults: (paths, patterns) => {
     set({

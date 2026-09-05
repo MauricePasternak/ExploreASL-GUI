@@ -6,7 +6,12 @@ import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import {
   loadSubjects,
   loadLockStatus,
+  reserveProcessingRun,
+  failProcessingRun,
+  getActiveRun,
+  attachRun,
   runProcessingPipeline,
+  reconcileAndFinalizeIfNeeded,
   setupProcessingListeners,
   stopWatcher,
   stopProcessingPipeline,
@@ -28,11 +33,36 @@ const { mockSetPopulationCompleted, mockSetLastRunProfileId, mockSetLastPopulati
     mockSetLastPopulationRunMtime: vi.fn(),
   }));
 
+const { RUN } = vi.hoisted(() => ({
+  RUN: {
+    runId: "processing-run-test",
+    projectRoot: "/test/project",
+    selectedModules: ["structural"],
+    selectedSubjectSessions: ["sub-001_01"],
+    startTime: 1,
+    workers: [1234],
+    exitEvidence: [],
+    watcherOwned: false,
+  },
+}));
+
 vi.mock("../lib/processingEvents", () => ({
-  runProcessingPipeline: vi.fn().mockResolvedValue([1234]),
-  stopProcessingPipeline: vi.fn().mockResolvedValue(undefined),
-  setupProcessingListeners: vi.fn().mockReturnValue(() => {}),
-  watchLockDir: vi.fn().mockResolvedValue(undefined),
+  reserveProcessingRun: vi.fn().mockResolvedValue({ ...RUN, lifecycle: "preparing", workers: [] }),
+  failProcessingRun: vi
+    .fn()
+    .mockResolvedValue({ ...RUN, lifecycle: "failed", workers: [], terminalResult: "failed" }),
+  getActiveRun: vi.fn().mockResolvedValue(null),
+  attachRun: vi.fn().mockResolvedValue({ ...RUN, lifecycle: "running" }),
+  runProcessingPipeline: vi.fn().mockResolvedValue({ ...RUN, lifecycle: "running" }),
+  reconcileAndFinalizeIfNeeded: vi.fn().mockResolvedValue(undefined),
+  stopProcessingPipeline: vi.fn().mockResolvedValue({
+    ...RUN,
+    lifecycle: "cancelled",
+    workers: [],
+    terminalResult: "cancelled",
+  }),
+  setupProcessingListeners: vi.fn().mockResolvedValue(() => {}),
+  watchLockDir: vi.fn().mockResolvedValue({ ...RUN, lifecycle: "preparing", workers: [] }),
   stopWatcher: vi.fn().mockResolvedValue(undefined),
   loadSubjects: vi.fn().mockResolvedValue([]),
   loadLockStatus: vi.fn().mockResolvedValue([]),
@@ -55,9 +85,9 @@ vi.mock("./projectStore", () => ({
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn((cmd: string) => {
-    if (cmd === "capture_environment_versions")
+    if (cmd === "capture_environment_versions_for_run")
       return Promise.resolve({ explore_asl: "1.0.0", matlab: "R2023b" });
-    if (cmd === "read_population_ready_mtime") return Promise.resolve(1700000000000);
+    if (cmd === "read_population_ready_mtime_for_run") return Promise.resolve(1700000000000);
     return Promise.resolve(null);
   }),
 }));
@@ -78,6 +108,360 @@ beforeEach(() => {
   });
 });
 
+describe("processing-run protocol state", () => {
+  beforeEach(() => {
+    useProcessingStore.setState({
+      processingPhase: "idle",
+      config: null,
+      availableSubjects: [
+        {
+          subjectSession: "sub-001_01",
+          subject: "001",
+          session: "01",
+          hasStructural: true,
+          hasASL: true,
+          aslRuns: [],
+        },
+        {
+          subjectSession: "sub-002_02",
+          subject: "002",
+          session: "02",
+          hasStructural: true,
+          hasASL: true,
+          aslRuns: [],
+        },
+      ],
+      subjectStatuses: [],
+      activeRunId: null,
+      workerPids: [],
+    });
+  });
+
+  it("keeps activeRunId session-only, reconciles authoritative snapshots, and hydrates v1 active text as idle", () => {
+    useProcessingStore.getState().bindRunSnapshot({ ...RUN, lifecycle: "running" });
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: RUN.runId,
+      workerPids: [1234],
+      processingPhase: "running",
+    });
+    useProcessingStore
+      .getState()
+      .reconcileRunSnapshot({ ...RUN, runId: "old", lifecycle: "failed", workers: [] });
+    expect(useProcessingStore.getState().activeRunId).toBe(RUN.runId);
+    useProcessingStore.getState().reconcileRunSnapshot({
+      ...RUN,
+      lifecycle: "completed",
+      workers: [],
+      terminalResult: "completed",
+    });
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: null,
+      workerPids: [],
+      processingPhase: "completed",
+    });
+    useProcessingStore.getState().hydrateProcessing({ currentPhase: "running" });
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: null,
+      processingPhase: "idle",
+    });
+    useProcessingStore.getState().hydrateProcessing({ currentPhase: "interrupted" });
+    expect(useProcessingStore.getState().processingPhase).toBe("interrupted");
+  });
+
+  it("reserves before watcher and launch mutation", async () => {
+    const order: string[] = [];
+    vi.mocked(reserveProcessingRun).mockImplementationOnce(async () => {
+      order.push("reserve");
+      return { ...RUN, lifecycle: "preparing", workers: [] };
+    });
+    vi.mocked(watchLockDir).mockImplementationOnce(async () => {
+      order.push("watch");
+      return { ...RUN, lifecycle: "preparing", workers: [] };
+    });
+    vi.mocked(runProcessingPipeline).mockImplementationOnce(async () => {
+      order.push("launch");
+      return { ...RUN, lifecycle: "running" };
+    });
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    await useProcessingStore.getState().startProcessing();
+    expect(order).toEqual(["reserve", "watch", "launch"]);
+  });
+
+  it("reports a preparation failure against only its reservation", async () => {
+    const participants = await import("../lib/participantsUtils");
+    const spy = vi
+      .spyOn(participants, "ensureParticipantsFiles")
+      .mockRejectedValueOnce(new Error("participants failed"));
+    vi.mocked(reserveProcessingRun).mockResolvedValueOnce({
+      ...RUN,
+      lifecycle: "preparing",
+      workers: [],
+    });
+    vi.mocked(attachRun).mockResolvedValueOnce({
+      ...RUN,
+      lifecycle: "preparing",
+      workers: [],
+    });
+    vi.mocked(failProcessingRun).mockResolvedValueOnce({
+      ...RUN,
+      lifecycle: "failed",
+      workers: [],
+      terminalResult: "failed",
+    });
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    try {
+      await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
+        "participants failed",
+      );
+      expect(failProcessingRun).toHaveBeenCalledWith(RUN.runId);
+      expect(useProcessingStore.getState()).toMatchObject({
+        activeRunId: null,
+        processingPhase: "failed",
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("reports watcher startup failure and waits for matching native Failed", async () => {
+    vi.mocked(watchLockDir).mockRejectedValueOnce(new Error("watcher failed"));
+    vi.mocked(attachRun).mockResolvedValueOnce({ ...RUN, lifecycle: "preparing", workers: [] });
+    vi.mocked(failProcessingRun).mockResolvedValueOnce({
+      ...RUN,
+      lifecycle: "failed",
+      workers: [],
+      terminalResult: "failed",
+    });
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+
+    await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow("watcher failed");
+
+    expect(failProcessingRun).toHaveBeenCalledWith(RUN.runId);
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: null,
+      terminalRunId: RUN.runId,
+      processingPhase: "failed",
+    });
+  });
+
+  it("ignores delayed failure confirmation after a replacement attaches", async () => {
+    vi.mocked(watchLockDir).mockRejectedValueOnce(new Error("watcher failed"));
+    vi.mocked(attachRun).mockResolvedValueOnce({ ...RUN, lifecycle: "preparing", workers: [] });
+    let resolveFailure!: (
+      snapshot: typeof RUN & { lifecycle: "failed"; workers: []; terminalResult: "failed" },
+    ) => void;
+    vi.mocked(failProcessingRun).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFailure = resolve;
+        }),
+    );
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    const pending = useProcessingStore.getState().startProcessing();
+    await vi.waitFor(() => expect(resolveFailure).toBeTypeOf("function"));
+
+    useProcessingStore.getState().bindRunSnapshot({
+      ...RUN,
+      runId: "processing-run-2",
+      lifecycle: "running",
+      workers: [2222],
+    });
+    resolveFailure({
+      ...RUN,
+      lifecycle: "failed",
+      workers: [],
+      terminalResult: "failed",
+    });
+    await expect(pending).rejects.toThrow("watcher failed");
+
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: "processing-run-2",
+      processingPhase: "running",
+      workerPids: [2222],
+    });
+  });
+
+  it("observes and attaches an in-memory run once without launching workers", async () => {
+    activateProjectLease("project-1", "/test/project");
+    vi.mocked(getActiveRun).mockResolvedValue({ ...RUN, lifecycle: "running" });
+    vi.mocked(attachRun).mockResolvedValueOnce({ ...RUN, lifecycle: "running" });
+    await useProcessingStore.getState().synchronizeProcessingRun();
+    await useProcessingStore.getState().synchronizeProcessingRun();
+    expect(attachRun).toHaveBeenCalledTimes(1);
+    expect(runProcessingPipeline).not.toHaveBeenCalled();
+    expect(useProcessingStore.getState().activeRunId).toBe(RUN.runId);
+  });
+
+  it("adopts an early-exit Finalizing launch snapshot without re-adding workers", () => {
+    useProcessingStore.getState().bindRunSnapshot({ ...RUN, lifecycle: "preparing", workers: [] });
+    useProcessingStore.getState().reconcileRunSnapshot({
+      ...RUN,
+      lifecycle: "finalizing",
+      workers: [],
+      exitEvidence: [{ pid: 1234, exitCode: 0 }],
+    });
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: RUN.runId,
+      processingPhase: "finalizing",
+      workerPids: [],
+    });
+  });
+
+  it("runs provisional finalization once for a Finalizing launch response", async () => {
+    activateProjectLease("project-1", "/test/project");
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    vi.mocked(runProcessingPipeline).mockResolvedValueOnce({
+      ...RUN,
+      lifecycle: "finalizing",
+      workers: [],
+      exitEvidence: [{ pid: 1234, exitCode: 0 }],
+    });
+
+    await useProcessingStore.getState().startProcessing();
+
+    expect(reconcileAndFinalizeIfNeeded).toHaveBeenCalledTimes(1);
+    expect(reconcileAndFinalizeIfNeeded).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: RUN.runId, lifecycle: "finalizing", workers: [] }),
+      expect.objectContaining({ projectId: "project-1" }),
+    );
+    expect(useProcessingStore.getState().workerPids).toEqual([]);
+  });
+
+  it("attaches a Finalizing launch error without reporting failure twice", async () => {
+    activateProjectLease("project-1", "/test/project");
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    vi.mocked(runProcessingPipeline).mockRejectedValueOnce(new Error("worker 2 spawn failed"));
+    vi.mocked(attachRun).mockResolvedValueOnce({
+      ...RUN,
+      lifecycle: "finalizing",
+      workers: [],
+      exitEvidence: [{ pid: 1234, exitCode: 0 }],
+    });
+
+    await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
+      "worker 2 spawn failed",
+    );
+    expect(attachRun).toHaveBeenCalledWith(RUN.runId);
+    expect(failProcessingRun).not.toHaveBeenCalled();
+    expect(reconcileAndFinalizeIfNeeded).toHaveBeenCalledTimes(1);
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: RUN.runId,
+      processingPhase: "finalizing",
+      workerPids: [],
+    });
+  });
+
+  it("keeps a partial live launch attached, locked, and killable", async () => {
+    activateProjectLease("project-1", "/test/project");
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    vi.mocked(runProcessingPipeline).mockRejectedValueOnce(new Error("worker 2 spawn failed"));
+    vi.mocked(attachRun).mockResolvedValueOnce({
+      ...RUN,
+      lifecycle: "running",
+      workers: [1234],
+      pendingLaunchFailure: "worker 2 spawn failed",
+    });
+
+    await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
+      "worker 2 spawn failed",
+    );
+    expect(failProcessingRun).not.toHaveBeenCalled();
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: RUN.runId,
+      processingPhase: "running",
+      workerPids: [1234],
+    });
+    await useProcessingStore.getState().killProcessing();
+    expect(stopProcessingPipeline).toHaveBeenCalledWith(RUN.runId);
+  });
+
+  it("does not report failure after launch-error attachment becomes stale", async () => {
+    activateProjectLease("project-1", "/test/project");
+    useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
+    vi.mocked(runProcessingPipeline).mockRejectedValueOnce(new Error("launch failed"));
+    let resolveAttach!: (snapshot: typeof RUN & { lifecycle: "preparing"; workers: [] }) => void;
+    vi.mocked(attachRun).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveAttach = resolve;
+        }),
+    );
+
+    const pending = useProcessingStore.getState().startProcessing();
+    await vi.waitFor(() => expect(resolveAttach).toBeTypeOf("function"));
+    useProcessingStore.getState().bindRunSnapshot({
+      ...RUN,
+      runId: "processing-run-2",
+      lifecycle: "running",
+      workers: [2222],
+    });
+    resolveAttach({ ...RUN, lifecycle: "preparing", workers: [] });
+    await expect(pending).rejects.toThrow("launch failed");
+
+    expect(failProcessingRun).not.toHaveBeenCalled();
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: "processing-run-2",
+      processingPhase: "running",
+      workerPids: [2222],
+    });
+  });
+
+  it("ignores stale cancellation completion and retains failed cancellation ownership", async () => {
+    useProcessingStore.getState().bindRunSnapshot({ ...RUN, lifecycle: "running" });
+    let resolveKill!: (
+      snapshot: typeof RUN & { lifecycle: "cancelled"; workers: []; terminalResult: "cancelled" },
+    ) => void;
+    vi.mocked(stopProcessingPipeline).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveKill = resolve;
+        }),
+    );
+    const killing = useProcessingStore.getState().killProcessing();
+    await vi.waitFor(() => expect(resolveKill).toBeTypeOf("function"));
+    useProcessingStore
+      .getState()
+      .bindRunSnapshot({ ...RUN, runId: "processing-run-2", lifecycle: "running" });
+    resolveKill({ ...RUN, lifecycle: "cancelled", workers: [], terminalResult: "cancelled" });
+    await killing;
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: "processing-run-2",
+      processingPhase: "running",
+    });
+
+    vi.mocked(stopProcessingPipeline).mockRejectedValueOnce(new Error("still reaping"));
+    await expect(useProcessingStore.getState().killProcessing()).rejects.toThrow("still reaping");
+    expect(useProcessingStore.getState()).toMatchObject({
+      activeRunId: "processing-run-2",
+      processingPhase: "running",
+    });
+  });
+
+  it("keeps persisted active-looking phase idle without a native run and drops pending old attachment", async () => {
+    activateProjectLease("project-1", "/test/project");
+    useProcessingStore.setState({ processingPhase: "running", activeRunId: null });
+    vi.mocked(getActiveRun).mockResolvedValueOnce(null);
+    await useProcessingStore.getState().synchronizeProcessingRun();
+    expect(useProcessingStore.getState().processingPhase).toBe("idle");
+
+    let resolveAttach!: (snapshot: typeof RUN & { lifecycle: "running" }) => void;
+    vi.mocked(getActiveRun).mockResolvedValueOnce({ ...RUN, lifecycle: "running" });
+    vi.mocked(attachRun).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveAttach = resolve;
+        }),
+    );
+    const pending = useProcessingStore.getState().synchronizeProcessingRun();
+    await vi.waitFor(() => expect(resolveAttach).toBeTypeOf("function"));
+    invalidateProjectLease();
+    activateProjectLease("project-2", "/test/project-2");
+    resolveAttach({ ...RUN, lifecycle: "running" });
+    await pending;
+    expect(useProcessingStore.getState().activeRunId).toBeNull();
+  });
+});
+
 afterEach(async () => {
   resetProjectLifecycleForTests();
   await useProcessingStore.getState().resetProcessing();
@@ -89,9 +473,9 @@ afterEach(async () => {
   // setLastRunProfileId resolve to "unknown" and the test at line ~1085
   // to fail. This is a TEST ISOLATION fix, not a BIDS-direct bug.
   vi.mocked(invoke).mockImplementation((cmd: string) => {
-    if (cmd === "capture_environment_versions")
+    if (cmd === "capture_environment_versions_for_run")
       return Promise.resolve({ explore_asl: "1.0.0", matlab: "R2023b" });
-    if (cmd === "read_population_ready_mtime") return Promise.resolve(1700000000000);
+    if (cmd === "read_population_ready_mtime_for_run") return Promise.resolve(1700000000000);
     return Promise.resolve(null);
   });
 });
@@ -273,7 +657,7 @@ describe("processingStore setConfig", () => {
 
       // Mock invoke to handle ensure_rawdata_dir
       vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir")
+        if (cmd === "ensure_rawdata_dir_for_run")
           return Promise.resolve({ created: true, warning: null, bidsignoreUpdated: true });
         return Promise.resolve(null);
       });
@@ -286,7 +670,7 @@ describe("processingStore setConfig", () => {
 
       expect(runProcessingPipeline).toHaveBeenCalled();
       const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
-      const dataParJson = lastCall?.[2];
+      const dataParJson = lastCall?.[3];
       expect(dataParJson.x.opts).toEqual({ subjectFolder: "/home/user/ds000240" });
     });
 
@@ -296,7 +680,7 @@ describe("processingStore setConfig", () => {
 
       expect(runProcessingPipeline).toHaveBeenCalled();
       const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
-      const dataParJson = lastCall?.[2];
+      const dataParJson = lastCall?.[3];
       expect(dataParJson.x.opts?.subjectFolder).toBeUndefined();
     });
 
@@ -313,7 +697,7 @@ describe("processingStore setConfig", () => {
       });
 
       vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir")
+        if (cmd === "ensure_rawdata_dir_for_run")
           return Promise.resolve({ created: true, warning: null, bidsignoreUpdated: true });
         return Promise.resolve(null);
       });
@@ -321,14 +705,16 @@ describe("processingStore setConfig", () => {
       useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
       await useProcessingStore.getState().startProcessing();
 
-      expect(invoke).toHaveBeenCalledWith("ensure_rawdata_dir", { rootPath: "/test/bids" });
+      expect(invoke).toHaveBeenCalledWith("ensure_rawdata_dir_for_run", {
+        runId: "processing-run-test",
+      });
     });
 
     it("does NOT call invoke('ensure_rawdata_dir') when dataSource is dicom", async () => {
       useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
       await useProcessingStore.getState().startProcessing();
 
-      expect(invoke).not.toHaveBeenCalledWith("ensure_rawdata_dir", expect.any(Object));
+      expect(invoke).not.toHaveBeenCalledWith("ensure_rawdata_dir_for_run", expect.any(Object));
     });
   });
 
@@ -378,7 +764,7 @@ describe("processingStore setConfig", () => {
       });
 
       vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir")
+        if (cmd === "ensure_rawdata_dir_for_run")
           return Promise.resolve({
             created: false,
             warning: "rawdata/ already contains 5 sub-directories",
@@ -416,7 +802,7 @@ describe("processingStore setConfig", () => {
       });
 
       vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir")
+        if (cmd === "ensure_rawdata_dir_for_run")
           return Promise.resolve({
             created: false,
             warning: "rawdata/ already contains 5 sub-directories",
@@ -439,6 +825,47 @@ describe("processingStore setConfig", () => {
       expect(runProcessingPipeline).toHaveBeenCalled();
     });
 
+    it("admits only one continuation when rawdata confirmation is submitted twice", async () => {
+      const { useProjectStore } = await import("./projectStore");
+      (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+        project: {
+          projectMeta: { rootPath: "/test/bids", dataSource: "bids" as const },
+          mappingState: {},
+        },
+        setPopulationCompleted: mockSetPopulationCompleted,
+        setLastRunProfileId: mockSetLastRunProfileId,
+        setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
+      });
+      vi.mocked(invoke).mockImplementation((cmd: string) => {
+        if (cmd === "ensure_rawdata_dir_for_run") {
+          return Promise.resolve({
+            created: false,
+            warning: "rawdata/ already contains data",
+            bidsignoreUpdated: false,
+          });
+        }
+        return Promise.resolve(null);
+      });
+      vi.mocked(reserveProcessingRun).mockResolvedValue({
+        ...RUN,
+        lifecycle: "preparing",
+        workers: [],
+      });
+      vi.mocked(runProcessingPipeline).mockResolvedValue({ ...RUN, lifecycle: "running" });
+      useProcessingStore.getState().setConfig({
+        ...STRUCTURAL_ASL_CONFIG,
+        subjects: ["sub-001_01"],
+      });
+      await useProcessingStore.getState().startProcessing();
+
+      await Promise.all([
+        useProcessingStore.getState().startProcessing(true),
+        useProcessingStore.getState().startProcessing(true),
+      ]);
+
+      expect(runProcessingPipeline).toHaveBeenCalledTimes(1);
+    });
+
     it("clearPendingRawdataWarning resets the warning state", async () => {
       const { useProjectStore } = await import("./projectStore");
       (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -452,7 +879,7 @@ describe("processingStore setConfig", () => {
       });
 
       vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir")
+        if (cmd === "ensure_rawdata_dir_for_run")
           return Promise.resolve({
             created: false,
             warning: "rawdata/ already contains 5 sub-directories",
@@ -485,7 +912,7 @@ describe("processingStore setConfig", () => {
       });
 
       vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir")
+        if (cmd === "ensure_rawdata_dir_for_run")
           return Promise.resolve({ created: true, warning: null, bidsignoreUpdated: true });
         return Promise.resolve(null);
       });
@@ -835,6 +1262,7 @@ describe("processingStore Tauri integration: startProcessing", () => {
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
     await useProcessingStore.getState().startProcessing();
     expect(runProcessingPipeline).toHaveBeenCalledWith(
+      "processing-run-test",
       STRUCTURAL_ASL_CONFIG,
       MATLAB_PROFILE,
       expect.any(Object),
@@ -844,7 +1272,7 @@ describe("processingStore Tauri integration: startProcessing", () => {
   it("calls watchLockDir with project root", async () => {
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
     await useProcessingStore.getState().startProcessing();
-    expect(watchLockDir).toHaveBeenCalledWith("/test/project");
+    expect(watchLockDir).toHaveBeenCalledWith("processing-run-test");
   });
 
   it("calls setupProcessingListeners", async () => {
@@ -869,7 +1297,7 @@ describe("processingStore Tauri integration: startProcessing", () => {
     const phases: string[] = [];
     (runProcessingPipeline as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       phases.push(useProcessingStore.getState().processingPhase);
-      return [5678];
+      return { ...RUN, lifecycle: "running", workers: [5678] };
     });
 
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
@@ -877,7 +1305,10 @@ describe("processingStore Tauri integration: startProcessing", () => {
     expect(phases).toContain("preparing");
 
     // Restore default mock
-    (runProcessingPipeline as ReturnType<typeof vi.fn>).mockResolvedValue([1234]);
+    (runProcessingPipeline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...RUN,
+      lifecycle: "running",
+    });
   });
 
   it("throws when no config is set", async () => {
@@ -907,9 +1338,9 @@ describe("processingStore Tauri integration: startProcessing", () => {
     await useProcessingStore.getState().startProcessing();
     expect(runProcessingPipeline).toHaveBeenCalled();
     const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
-    expect(lastCall?.[0]).toEqual(STRUCTURAL_ASL_CONFIG);
-    expect(lastCall?.[1]).toEqual(MATLAB_PROFILE);
-    expect(lastCall?.[2].x.dataset).toEqual({
+    expect(lastCall?.[1]).toEqual(STRUCTURAL_ASL_CONFIG);
+    expect(lastCall?.[2]).toEqual(MATLAB_PROFILE);
+    expect(lastCall?.[3].x.dataset).toEqual({
       subjectRegexp: "^(sub-001_01|sub-002_02)$",
       ForceInclusionList: STRUCTURAL_ASL_CONFIG.subjects,
     });
@@ -921,11 +1352,11 @@ describe("processingStore Tauri integration: startProcessing", () => {
     expect(runProcessingPipeline).toHaveBeenCalled();
     const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
     const expectedConfig = { ...POPULATION_CONFIG, workers: 1 };
-    expect(lastCall?.[0]).toEqual(expectedConfig);
-    expect(lastCall?.[2].x.dataset).toEqual({
+    expect(lastCall?.[1]).toEqual(expectedConfig);
+    expect(lastCall?.[3].x.dataset).toEqual({
       subjectRegexp: "^sub-.*$",
     });
-    expect(lastCall?.[2].x.dataset.ForceInclusionList).toBeUndefined();
+    expect(lastCall?.[3].x.dataset.ForceInclusionList).toBeUndefined();
   });
 
   it("throws an error when configured subjects are not present in scanned availableSubjects", async () => {
@@ -993,7 +1424,7 @@ describe("processingStore startProcessing profile gating", () => {
     await useProcessingStore.getState().startProcessing();
 
     const lastCall = (runProcessingPipeline as ReturnType<typeof vi.fn>).mock.lastCall;
-    expect(lastCall?.[1]).toEqual(MATLAB_PROFILE);
+    expect(lastCall?.[2]).toEqual(MATLAB_PROFILE);
     expect(useProcessingStore.getState().profileError).toBeNull();
   });
 
@@ -1239,6 +1670,7 @@ describe("processingStore Tauri integration: event listener cleanup", () => {
         }),
     );
     const resetProcessing = useProcessingStore.getState().resetProcessing;
+    useProcessingStore.setState({ activeRunId: "processing-run-test", processingPhase: "running" });
     useProcessingStore.getState().setAvailableSubjects([
       {
         subjectSession: "sub-001_01",
@@ -1301,7 +1733,7 @@ describe("processingStore manifest version capture", () => {
     let participantsStartedWhileVersionsPending = false;
 
     vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "capture_environment_versions") return versionsGate;
+      if (cmd === "capture_environment_versions_for_run") return versionsGate;
       return Promise.resolve(null);
     });
 
@@ -1318,7 +1750,10 @@ describe("processingStore manifest version capture", () => {
     const startPromise = useProcessingStore.getState().startProcessing();
 
     await vi.waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("capture_environment_versions", expect.any(Object));
+      expect(invoke).toHaveBeenCalledWith(
+        "capture_environment_versions_for_run",
+        expect.any(Object),
+      );
     });
     await vi.waitFor(() => {
       expect(participantsStartedWhileVersionsPending).toBe(true);
@@ -1336,7 +1771,7 @@ describe("processingStore manifest version capture", () => {
     activateProjectLease("same-id", "/test/project");
     let resolveVersions!: (value: { explore_asl: string; matlab: string }) => void;
     vi.mocked(invoke).mockImplementation((command: string) => {
-      if (command === "capture_environment_versions") {
+      if (command === "capture_environment_versions_for_run") {
         return new Promise((resolve) => {
           resolveVersions = resolve;
         });
@@ -1360,7 +1795,7 @@ describe("processingStore manifest version capture", () => {
     useProcessingStore.getState().setConfig(POPULATION_CONFIG);
     await useProcessingStore.getState().startProcessing();
     expect(invoke).toHaveBeenCalledWith(
-      "capture_environment_versions",
+      "capture_environment_versions_for_run",
       expect.objectContaining({
         exploreAslPath: "/opt/ExploreASL",
         matlabPath: "/usr/local/bin/matlab",
@@ -1371,7 +1806,10 @@ describe("processingStore manifest version capture", () => {
   it("does not call capture_environment_versions when population is not in modules", async () => {
     useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
     await useProcessingStore.getState().startProcessing();
-    expect(invoke).not.toHaveBeenCalledWith("capture_environment_versions", expect.any(Object));
+    expect(invoke).not.toHaveBeenCalledWith(
+      "capture_environment_versions_for_run",
+      expect.any(Object),
+    );
   });
 
   it("calls setLastRunProfileId after version capture with profileId and mapped fields", async () => {
@@ -1396,7 +1834,7 @@ describe("processingStore manifest version capture", () => {
 
   it("falls back to unknown versions when capture_environment_versions throws", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "capture_environment_versions")
+      if (cmd === "capture_environment_versions_for_run")
         return Promise.reject(new Error("MATLAB not found"));
       return Promise.resolve(null);
     });
@@ -1418,9 +1856,9 @@ describe("processingStore manifest version capture", () => {
 
     // Restore default invoke mock
     vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "capture_environment_versions")
+      if (cmd === "capture_environment_versions_for_run")
         return Promise.resolve({ explore_asl: "1.0.0", matlab: "R2023b" });
-      if (cmd === "read_population_ready_mtime") return Promise.resolve(1700000000000);
+      if (cmd === "read_population_ready_mtime_for_run") return Promise.resolve(1700000000000);
       return Promise.resolve(null);
     });
   });

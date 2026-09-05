@@ -72,6 +72,7 @@ describe("buildAllStagingMappings", () => {
       },
       {},
       [],
+      [],
       MODALITY_ALIASES,
       ["_", "-"],
     );
@@ -86,6 +87,7 @@ describe("buildAllStagingMappings", () => {
       [PATTERN_3DASH],
       { [PATTERN_3DASH.signature]: CONFIGS_3DASH },
       {},
+      [],
       [],
       MODALITY_ALIASES,
       ["_", "-"],
@@ -109,6 +111,7 @@ describe("buildAllStagingMappings", () => {
       [PATTERN_2DASH],
       { [PATTERN_2DASH.signature]: CONFIGS_2DASH },
       {},
+      [],
       [],
       MODALITY_ALIASES,
       ["_", "-"],
@@ -136,6 +139,7 @@ describe("buildAllStagingMappings", () => {
       [PATTERN_3DASH],
       { [PATTERN_3DASH.signature]: CONFIGS_3DASH },
       {},
+      [],
       [],
       aliasesWithIgnore,
       ["_", "-"],
@@ -167,6 +171,7 @@ describe("buildAllStagingMappings", () => {
       { [simplePattern.signature]: noSession },
       {},
       [],
+      [],
       [{ captured: "ASL", mapped: "ASL4D" }],
     );
 
@@ -184,6 +189,7 @@ describe("buildAllStagingMappings", () => {
       { [PATTERN_2DASH.signature]: CONFIGS_2DASH },
       {},
       [{ captured: "11", alias: "visit_11", index: 1 }],
+      [],
       MODALITY_ALIASES,
       ["_", "-"],
     );

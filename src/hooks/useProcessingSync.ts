@@ -18,21 +18,23 @@ export function useProcessingSync() {
 
   // Hydrate from project store on mount
   useEffect(() => {
-    const project = useProjectStore.getState().project;
-    if (!project) return;
-
-    const processing = project.uiState.processing;
-
-    if (processing?.config) {
-      useProcessingStore.getState().setConfig(processing.config);
+    let cancelled = false;
+    async function synchronize() {
+      // Async boundary avoids a synchronous external-store mutation in an effect.
+      await Promise.resolve();
+      const project = useProjectStore.getState().project;
+      if (!project || cancelled) return;
+      useProcessingStore.getState().hydrateProcessing(project.uiState.processing);
+      await useProcessingStore.getState().synchronizeProcessingRun();
+      if (cancelled) return;
+      await useProcessingStore.getState().scanAvailableSubjects();
+      if (cancelled || useProcessingStore.getState().activeRunId) return;
+      await useProcessingStore.getState().loadLockFileStatus();
     }
-    if (processing?.currentPhase !== undefined) {
-      useProcessingStore.getState().setPhase(processing.currentPhase);
-    }
-
-    // Scan subjects and load lock file statuses
-    useProcessingStore.getState().scanAvailableSubjects();
-    useProcessingStore.getState().loadLockFileStatus();
+    void synchronize();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Subscribe to processing store changes → sync to project store.

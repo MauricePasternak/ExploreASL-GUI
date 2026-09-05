@@ -1,5 +1,4 @@
 import { Center, Loader, Stack, Text } from "@mantine/core";
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
@@ -25,7 +24,9 @@ export default function ProjectPage() {
   const setPhase = useProjectStore((state) => state.setPhase);
   const saveProject = useProjectStore((state) => state.saveProject);
   const processingPhase = useProcessingStore((state) => state.processingPhase);
-  const isProcessingActive = processingPhase === "running" || processingPhase === "preparing";
+  const isProcessingActive = ["preparing", "running", "finalizing", "cancelling"].includes(
+    processingPhase,
+  );
   const [restoring, setRestoring] = useState(() => !useProjectStore.getState().project);
   const restoreInFlight = useRef(false);
   const hadProjectRef = useRef(Boolean(useProjectStore.getState().project));
@@ -131,16 +132,6 @@ export default function ProjectPage() {
       void saveProject();
     }
   }, [navigate, params.phase, project, saveProject, setPhase, isProcessingActive]);
-
-  // Register active project root for niivue:// protocol
-  const rootPath = project?.projectMeta.rootPath;
-  useEffect(() => {
-    if (!rootPath) return;
-    invoke("set_active_project", { rootPath }).catch(console.error);
-    return () => {
-      invoke("clear_active_project").catch(console.error);
-    };
-  }, [rootPath]);
 
   if (!project) {
     if (restoring) {

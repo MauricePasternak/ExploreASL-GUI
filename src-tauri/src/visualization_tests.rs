@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::import::AppState;
+    use crate::processing::{ProcessingLifecycle, ProcessingRun};
     use crate::visualization::*;
     use std::fs;
     use std::path::PathBuf;
@@ -121,6 +122,32 @@ mod tests {
         assert!(state.active_data.lock().unwrap().is_some());
         set_active_project_impl(temp.path().to_string_lossy().to_string(), &state).unwrap();
         assert!(state.active_data.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn active_project_changes_reject_live_processing_ownership() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let state = AppState::default();
+        let first_root = first.path().canonicalize().unwrap();
+        *state.active_project_root.lock().unwrap() = Some(first_root.clone());
+        let mut run = ProcessingRun::new(
+            "run-1".to_string(),
+            first_root.clone(),
+            vec!["asl".to_string()],
+            vec![],
+        );
+        run.lifecycle = ProcessingLifecycle::Running;
+        state.processing_state.lock().unwrap().current_run = Some(run);
+
+        assert!(
+            set_active_project_impl(second.path().to_string_lossy().to_string(), &state).is_err()
+        );
+        assert!(clear_active_project_impl(&state).is_err());
+        assert_eq!(
+            state.active_project_root.lock().unwrap().as_deref(),
+            Some(first_root.as_path())
+        );
     }
 
     #[test]

@@ -90,7 +90,7 @@ const ControlButtons = memo(function ControlButtons({
   const handleClick = useCallback(() => {
     if (action === "kill") {
       setConfirmOpen(true);
-    } else {
+    } else if (action === "start") {
       const { config, subjectStatuses } = useProcessingStore.getState();
       if (!config) return;
 
@@ -124,7 +124,7 @@ const ControlButtons = memo(function ControlButtons({
 
   const handleRawdataWarningCancel = useCallback(() => {
     // User declined — abort processing; do NOT call startProcessing(true)
-    clearPendingRawdataWarning();
+    void clearPendingRawdataWarning();
   }, [clearPendingRawdataWarning]);
 
   const handleRawdataWarningConfirm = useCallback(() => {
@@ -141,7 +141,7 @@ const ControlButtons = memo(function ControlButtons({
           leftSection={<Icon size={16} />}
           color={color}
           onClick={handleClick}
-          disabled={phase === "preparing" || (isStartAction && startDisabled)}
+          disabled={action === "wait" || (isStartAction && startDisabled)}
           data-testid={isStartAction ? "start-btn" : "stop-btn"}
         >
           {label}

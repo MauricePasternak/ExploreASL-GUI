@@ -49,11 +49,26 @@ export function reopenProjectWorkAdmission(): void {
   if (activeLease) acceptingWork = true;
 }
 
-export function registerProjectTask<T>(task: Promise<T>): Promise<T> {
-  if (!acceptingWork || !activeLease) {
+export function registerProjectTask<T>(task: Promise<T> | (() => Promise<T>)): Promise<T> {
+  if (activeLease && !acceptingWork) {
+    // Thunks are preferred: admission is decided before any reservation or
+    // mutation starts. Promise arguments may already be running and therefore
+    // cannot receive the same start barrier.
+    if (typeof task !== "function") void task.catch(() => undefined);
     throw new Error("Project transition is in progress; new project work is not accepted.");
   }
-  const tracked = Promise.resolve(task);
+  if (!activeLease) {
+    // Store actions may still perform local validation in unit/test contexts
+    // without a hydrated project. Production processing uses the admitted
+    // thunk path below once a project lease exists.
+    if (typeof task === "function") return Promise.resolve().then(task);
+    void task.catch(() => undefined);
+    throw new Error("Project transition is in progress; new project work is not accepted.");
+  }
+  // A thunk is admitted before it begins. Long preparation flows use this form
+  // so a transition cannot close admission between task creation and native
+  // reservation.
+  const tracked = Promise.resolve().then(() => (typeof task === "function" ? task() : task));
   projectTasks.add(tracked);
   void tracked.then(
     () => projectTasks.delete(tracked),

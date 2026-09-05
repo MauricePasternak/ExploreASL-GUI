@@ -109,8 +109,17 @@ beforeEach(() => {
       return null;
     }
     if (command === "run_pipeline" || command === "watch_lock_dir") {
-      accessedPaths.push((args as { projectRoot: string }).projectRoot);
-      return command === "run_pipeline" ? [1234] : null;
+      return {
+        runId: "processing-run-relocation",
+        lifecycle: "running",
+        projectRoot: "/native-derived-root",
+        selectedModules: ["structural"],
+        selectedSubjectSessions: ["sub-01_01"],
+        startTime: 1,
+        workers: [1234],
+        exitEvidence: [],
+        watcherOwned: command === "watch_lock_dir",
+      };
     }
     return null;
   });
@@ -137,6 +146,7 @@ describe.each(["bids", "dicom"] as const)("%s project relocation", (dataSource) 
     await useProjectStore.getState().saveProject();
     const profile = useGlobalStore.getState().settings.executionProfiles[0];
     await runProcessingPipeline(
+      "processing-run-relocation",
       {
         subjects: ["sub-01_01"],
         modules: ["structural"],
@@ -145,11 +155,13 @@ describe.each(["bids", "dicom"] as const)("%s project relocation", (dataSource) 
       },
       profile,
     );
-    await watchLockDir(newRoot);
+    await watchLockDir("processing-run-relocation");
 
     expect(JSON.parse(await readFile(easlPath, "utf8")).projectMeta.rootPath).toBeUndefined();
     expect(accessedPaths).toContain(easlPath);
-    expect(accessedPaths).toContain(newRoot);
+    // Processing and watcher IPC now carry native run identity, not a renderer
+    // project root. Root authority remains in the active native project record.
+    expect(accessedPaths).not.toContain(oldRoot);
     expect(accessedPaths.every((path) => !path.startsWith(oldRoot))).toBe(true);
   });
 });

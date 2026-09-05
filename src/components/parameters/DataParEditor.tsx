@@ -72,7 +72,9 @@ export default function DataParEditor() {
         }
       />
 
-      {(processingPhase === "running" || processingPhase === "preparing") && (
+      {(["preparing", "running", "finalizing", "cancelling"] as string[]).includes(
+        processingPhase,
+      ) && (
         <Alert
           color="yellow"
           icon={<IconAlertTriangle size={16} />}

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import {
   BidsAslMetadataBaseSchema,
@@ -11,6 +13,9 @@ import {
   PathPatternSchema,
   SessionAliasSchema,
   SourcestructureJsonSchema,
+  StagingModalitySchema,
+  StagingSubjectSchema,
+  PortableStagingComponentSchema,
   StagingEntrySchema,
   StudyParEntrySchema,
   StudyParJsonSchema,
@@ -20,6 +25,14 @@ import {
   TokenizerConfigSchema,
   validateBidsMetadataGroup,
 } from "./importSchemas";
+
+const stagingVectors = JSON.parse(
+  readFileSync(resolve(process.cwd(), "test/fixtures/staging_identifier_vectors.json"), "utf8"),
+) as {
+  components: Array<{ value: string; valid: boolean }>;
+  subjects: Array<{ value: string; valid: boolean }>;
+  modalities: Array<{ value: string; valid: boolean }>;
+};
 
 // ---------------------------------------------------------------------------
 // PathPatternSchema
@@ -969,13 +982,35 @@ describe("SubjectRowSchema", () => {
 // ---------------------------------------------------------------------------
 // StagingEntrySchema
 // ---------------------------------------------------------------------------
+describe("staging identifier schemas", () => {
+  it("matches shared component, subject, and modality vectors", () => {
+    for (const vector of stagingVectors.components) {
+      expect(PortableStagingComponentSchema.safeParse(vector.value).success, vector.value).toBe(
+        vector.valid,
+      );
+    }
+    for (const vector of stagingVectors.subjects) {
+      expect(StagingSubjectSchema.safeParse(vector.value).success, vector.value).toBe(vector.valid);
+    }
+    for (const vector of stagingVectors.modalities) {
+      expect(StagingModalitySchema.safeParse(vector.value).success, vector.value).toBe(
+        vector.valid,
+      );
+    }
+  });
+});
+
 describe("StagingEntrySchema", () => {
   it("accepts valid staging entry", () => {
     const data = {
       subject: "BAR",
       session: "01",
       run: "01",
+      runAlias: "ASL1",
       modality: "T1w",
+      originalSubject: "BAR",
+      originalSession: "01",
+      originalRun: "01",
       sourcePath: "/path/to/BAR/05022026_01/sernum-0024_ser-t1_mpr_tra_iso",
     };
     expect(StagingEntrySchema.parse(data)).toEqual(data);

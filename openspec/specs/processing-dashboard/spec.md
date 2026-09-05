@@ -127,31 +127,53 @@ Before transitioning from `idle` to `preparing`, the store SHALL validate the fo
 
 ### Requirement: Execution Dashboard
 
-The execution dashboard SHALL display module-grouped collapsible sections (Structural, ASL, Population). Each section SHALL show module-level progress summary. Inside Structural/ASL sections, one row per SubjectSession with step timeline. Inside Population section, one single row. Population rows SHALL not be grouped by subject since Population is study-level. The execution dashboard SHALL only be visible during active pipeline runs (preparing and running phases) and hidden upon completion, failure, or cancellation.
+The execution dashboard SHALL display module-grouped collapsible sections for Structural, ASL, and Population. Each section SHALL show module-level progress. Structural and ASL sections SHALL show one row per selected SubjectSession with a step timeline; Population SHALL show one study-level row. The dashboard SHALL render only information admitted for the attached native `runId`.
+
+The active dashboard SHALL remain visible during `preparing`, `running`, `finalizing`, and `cancelling`. It SHALL be hidden after `completed`, `failed`, `cancelled`, or `interrupted`, while the terminal result remains available through existing status/error UI. Controls and labels SHALL reflect the attached native lifecycle rather than a frontend-inferred worker count.
 
 #### Scenario: Structural module section expanded
 
-- **WHEN** the user expands the Structural section during processing
-- **THEN** one row per SubjectSession SHALL be shown with columns: subject, session, step progress bar, current step name, elapsed time
+- **WHEN** the user expands Structural during an attached active run
+- **THEN** one row per selected SubjectSession SHALL show subject, session, step progress, current step, and elapsed time for that run only
 
 #### Scenario: ASL module with multiple runs
 
-- **WHEN** a SubjectSession has `ASL_1` and `ASL_2` runs under `xASL_module_ASL/`
-- **THEN** the ASL row for that SubjectSession SHALL show sub-rows for each run
+- **WHEN** the attached run has ASL progress for `ASL_1` and `ASL_2` under one SubjectSession
+- **THEN** its ASL row SHALL show sub-rows for each ExploreASL ASL run
+
+#### Scenario: Finalizing remains visible
+
+- **WHEN** native workers have exited and the attached run is `Finalizing`
+- **THEN** the active dashboard SHALL remain visible while final status is reconciled
+
+#### Scenario: Stale progress hidden
+
+- **WHEN** a progress event belongs to an obsolete run ID
+- **THEN** no row, summary, phase, or terminal message SHALL change
 
 ### Requirement: Start and Kill Controls
 
-The UI SHALL have a Start button that transitions to a Kill button while processing is active. After completion, failure, or cancellation, Start SHALL become available again. No separate Pause or Restart button.
+The UI SHALL show Start only when no nonterminal native run is attached. After local validation, Start SHALL first reserve a native run; the control SHALL become active-run UI only after reservation succeeds. During `preparing`, `running`, `finalizing`, or `cancelling`, configuration and duplicate Start actions SHALL remain locked. Kill SHALL invoke `kill_pipeline` with the attached `runId` only when that lifecycle is cancellable. Start SHALL become available after a native terminal snapshot or when no active run exists. No separate Pause or Restart button SHALL be added.
 
 #### Scenario: Start button transitions
 
 - **WHEN** the user clicks Start after validation passes
-- **THEN** the button SHALL change to "Kill" and the processing phase SHALL transition to `preparing` then `running`
+- **THEN** the UI SHALL obtain and bind a native run ID before run-specific mutation and display the authoritative `preparing` state
+
+#### Scenario: Concurrent start rejected
+
+- **WHEN** reservation reports an existing nonterminal run
+- **THEN** duplicate preparation SHALL not begin and the UI SHALL attach to or report the existing run without clearing its state
 
 #### Scenario: Kill button
 
-- **WHEN** the user clicks Kill during active processing
-- **THEN** `kill_pipeline` SHALL be invoked, all workers SHALL be terminated, and the phase SHALL transition to `cancelled`
+- **WHEN** the user confirms Kill for attached cancellable run `R1`
+- **THEN** `kill_pipeline(R1)` SHALL be invoked and the UI SHALL render `cancelling` then `cancelled` from native snapshots
+
+#### Scenario: Obsolete kill response
+
+- **WHEN** a Kill response for `R1` arrives after `R2` is attached
+- **THEN** the response SHALL not unlock, cancel, or otherwise mutate `R2`
 
 ### Requirement: Rawdata Sanity Check
 
@@ -202,3 +224,17 @@ Population module lock files SHALL be read from `lock/xASL_module_Population/xAS
 
 - **WHEN** `010_CreatePopulationTemplates.status` is created under `xASL_module_Population/xASL_module_Population/`
 - **THEN** the event SHALL have `subject_session: undefined` and `module: "population"` and `run: undefined`
+
+### Requirement: Attached Run Presentation
+
+The processing route SHALL discover and attach to the current in-memory native run for the active project before treating persisted active-looking phase text or historical lock files as a live run. Attachment SHALL not launch duplicate workers or duplicate event listeners. If no active native run exists, historical progress MAY still be reconstructed under existing behavior but SHALL not be presented as current worker activity.
+
+#### Scenario: Route re-entry during current run
+
+- **WHEN** the user leaves and re-enters the processing route while the same native run remains active
+- **THEN** the dashboard SHALL attach to that run once and SHALL not launch workers or install duplicate listeners
+
+#### Scenario: Persisted running phase without native run
+
+- **WHEN** project data says `running` but `get_active_run` returns no current in-memory run
+- **THEN** the dashboard SHALL not display historical lock state as an active attached run

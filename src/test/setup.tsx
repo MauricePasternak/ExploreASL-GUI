@@ -157,8 +157,6 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (cmd) {
       case "walk_directory":
         return Promise.resolve([]);
-      case "create_symlink_tree":
-        return Promise.resolve(null);
       case "which_matlab":
         return Promise.resolve([]);
       case "which_apptainer":
@@ -167,6 +165,43 @@ vi.mock("@tauri-apps/api/core", () => ({
         return Promise.resolve(true);
       case "run_import_pipeline":
         return Promise.resolve(12345);
+      case "get_active_run":
+        return Promise.resolve(null);
+      case "reserve_processing_run":
+      case "watch_lock_dir":
+      case "run_pipeline":
+      case "attach_run":
+      case "fail_processing_run":
+      case "finalize_processing_run":
+      case "kill_pipeline": {
+        const args = _args ?? {};
+        const lifecycle =
+          cmd === "reserve_processing_run" || cmd === "watch_lock_dir"
+            ? "preparing"
+            : cmd === "fail_processing_run"
+              ? "failed"
+              : cmd === "kill_pipeline"
+                ? "cancelled"
+                : cmd === "finalize_processing_run"
+                  ? ((args.outcome as string | undefined) ?? "completed")
+                  : "running";
+        return Promise.resolve({
+          runId: (args.runId as string | undefined) ?? "test-processing-run",
+          lifecycle,
+          projectRoot: "/test/project",
+          selectedModules: (args.selectedModules as string[] | undefined) ?? [],
+          selectedSubjectSessions: (args.selectedSubjectSessions as string[] | undefined) ?? [],
+          startTime: 1,
+          workers: lifecycle === "running" ? [12345] : [],
+          exitEvidence: [],
+          watcherOwned: cmd === "watch_lock_dir",
+          ...(lifecycle === "failed" || lifecycle === "completed" || lifecycle === "cancelled"
+            ? { terminalResult: lifecycle }
+            : {}),
+        });
+      }
+      case "preflight_staging_plan":
+        return Promise.resolve({ valid: true, issues: [] });
       case "stop_import":
       case "stop_active_import":
       case "clean_import_status":

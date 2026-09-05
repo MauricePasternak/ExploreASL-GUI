@@ -250,6 +250,7 @@ export default function AliasResolution() {
             description="Assign display aliases and chronological ordering to each captured session value."
             emptyTestId="session-order-empty"
             tableTestId="session-order-table"
+            validationField="session"
           />
         </Tabs.Panel>
 
@@ -261,6 +262,7 @@ export default function AliasResolution() {
             description="Assign ASL run aliases and chronological ordering to each captured run value."
             emptyTestId="run-order-empty"
             tableTestId="run-order-table"
+            validationField="runAlias"
           />
         </Tabs.Panel>
 

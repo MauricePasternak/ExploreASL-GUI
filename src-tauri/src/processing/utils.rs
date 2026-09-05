@@ -295,7 +295,11 @@ pub(crate) fn parse_module_log_file(
     })
 }
 
-pub(crate) fn parse_lock_path(lock_root: &Path, path: &Path) -> Option<StatusFileCreated> {
+pub(crate) fn parse_lock_path(
+    lock_root: &Path,
+    path: &Path,
+    run_id: &str,
+) -> Option<StatusFileCreated> {
     let relative = path.strip_prefix(lock_root).ok()?;
     let parts: Vec<&str> = relative.iter().map(|p| p.to_str().unwrap_or("")).collect();
 
@@ -319,6 +323,7 @@ pub(crate) fn parse_lock_path(lock_root: &Path, path: &Path) -> Option<StatusFil
             }
             let subject_session = Some(parts[1].to_string());
             Some(StatusFileCreated {
+                run_id: run_id.to_string(),
                 module,
                 subject_session,
                 step_code,
@@ -339,6 +344,7 @@ pub(crate) fn parse_lock_path(lock_root: &Path, path: &Path) -> Option<StatusFil
                 None
             };
             Some(StatusFileCreated {
+                run_id: run_id.to_string(),
                 module,
                 subject_session,
                 step_code,
@@ -346,6 +352,7 @@ pub(crate) fn parse_lock_path(lock_root: &Path, path: &Path) -> Option<StatusFil
             })
         }
         "xASL_module_Population" => Some(StatusFileCreated {
+            run_id: run_id.to_string(),
             module,
             subject_session: None,
             step_code,
@@ -355,7 +362,11 @@ pub(crate) fn parse_lock_path(lock_root: &Path, path: &Path) -> Option<StatusFil
     }
 }
 
-pub(crate) fn parse_lock_dir_path(lock_root: &Path, path: &Path) -> Option<LockCreated> {
+pub(crate) fn parse_lock_dir_path(
+    lock_root: &Path,
+    path: &Path,
+    run_id: &str,
+) -> Option<LockCreated> {
     let relative = path.strip_prefix(lock_root).ok()?;
     let parts: Vec<&str> = relative.iter().map(|p| p.to_str().unwrap_or("")).collect();
 
@@ -372,6 +383,7 @@ pub(crate) fn parse_lock_dir_path(lock_root: &Path, path: &Path) -> Option<LockC
             }
             let subject_session = Some(parts[1].to_string());
             Some(LockCreated {
+                run_id: run_id.to_string(),
                 module,
                 subject_session,
                 run: None,
@@ -391,12 +403,14 @@ pub(crate) fn parse_lock_dir_path(lock_root: &Path, path: &Path) -> Option<LockC
                 None
             };
             Some(LockCreated {
+                run_id: run_id.to_string(),
                 module,
                 subject_session,
                 run,
             })
         }
         "xASL_module_Population" => Some(LockCreated {
+            run_id: run_id.to_string(),
             module,
             subject_session: None,
             run: None,

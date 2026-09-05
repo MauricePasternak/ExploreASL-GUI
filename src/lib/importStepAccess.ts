@@ -3,6 +3,7 @@ import type { GlobalSettings } from "../schemas/globalSettings";
 import type { TokenAssignment, TokenTag } from "../schemas/importSchemas";
 import { SourcestructureJsonSchema, StudyParJsonSchema } from "../schemas/importSchemas";
 import { assembleSourcestructure, assembleStudyPar } from "./tokenizerUtils";
+import type { StagingPreflightState } from "../stores/importStore";
 
 export const TOTAL_IMPORT_STEPS = 6;
 
@@ -22,6 +23,11 @@ type Step5State = StepPrerequisiteState &
 type ImportExecutionGate = {
   executionProfiles: GlobalSettings["executionProfiles"];
   profileValidationState: Record<string, { valid: boolean; errors: string[] }>;
+};
+
+export type StagingValidationGate = Pick<StagingPreflightState, "status" | "fingerprint"> & {
+  currentFingerprint: string;
+  localIssueCount: number;
 };
 
 export function hasValidExecutionProfile(gate: ImportExecutionGate): boolean {
@@ -71,7 +77,11 @@ export function isAliasResolutionComplete(state: Pick<ImportState, "modalityAlia
  * Highest import wizard step index the user may jump to via the stepper.
  * Mirrors the gates on each step's "Next" button.
  */
-export function getMaxUnlockedImportStep(state: Step5State, gate?: ImportExecutionGate): number {
+export function getMaxUnlockedImportStep(
+  state: Step5State,
+  gate?: ImportExecutionGate,
+  stagingGate?: StagingValidationGate,
+): number {
   if (!isIngestionComplete(state)) {
     return 0;
   }
@@ -84,7 +94,7 @@ export function getMaxUnlockedImportStep(state: Step5State, gate?: ImportExecuti
     return 2;
   }
 
-  if (!gate || !canEnterStep5(state, gate)) {
+  if (!gate || !stagingGate || !canEnterStep5(state, gate, stagingGate)) {
     return 4;
   }
 
@@ -104,22 +114,24 @@ export function getMaxRestorableImportStep(state: Step5State): number {
     return 2;
   }
 
-  if (!hasValidStep5ProjectPrerequisites(state)) {
-    return 4;
-  }
-
-  return 5;
+  // Native preflight is session-only, so restored projects always return to Preview.
+  return 4;
 }
 
 export function canSelectImportStep(
   stepIndex: number,
   state: Step5State,
   gate?: ImportExecutionGate,
+  stagingGate?: StagingValidationGate,
 ): boolean {
-  return stepIndex >= 0 && stepIndex <= getMaxUnlockedImportStep(state, gate);
+  return stepIndex >= 0 && stepIndex <= getMaxUnlockedImportStep(state, gate, stagingGate);
 }
 
-export function canEnterStep5(state: Step5State, gate: ImportExecutionGate): boolean {
+export function canEnterStep5(
+  state: Step5State,
+  gate: ImportExecutionGate,
+  stagingGate: StagingValidationGate,
+): boolean {
   if (
     !isIngestionComplete(state) ||
     !isTokenizerComplete(state) ||
@@ -132,7 +144,12 @@ export function canEnterStep5(state: Step5State, gate: ImportExecutionGate): boo
     return false;
   }
 
-  return hasValidStep5ProjectPrerequisites(state);
+  return (
+    hasValidStep5ProjectPrerequisites(state) &&
+    stagingGate.localIssueCount === 0 &&
+    stagingGate.status === "valid" &&
+    stagingGate.fingerprint === stagingGate.currentFingerprint
+  );
 }
 
 function hasValidStep5ProjectPrerequisites(state: Step5State): boolean {
