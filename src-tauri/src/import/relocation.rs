@@ -246,8 +246,32 @@ fn rollback_interrupt_is_active() -> bool {
     false
 }
 
-fn fail_if_interrupted(point: &str) -> Result<(), String> {
-    fail_if_injected(point).map_err(|_| format!("Injected relocation interruption at {point}"))
+#[derive(Debug, thiserror::Error)]
+enum RelocationTransactionError {
+    #[error("Injected relocation interruption at {point}")]
+    Interrupted { point: String },
+    #[error("{0}")]
+    Operational(String),
+}
+
+impl From<String> for RelocationTransactionError {
+    fn from(error: String) -> Self {
+        Self::Operational(error)
+    }
+}
+
+impl From<RelocationTransactionError> for String {
+    fn from(error: RelocationTransactionError) -> Self {
+        error.to_string()
+    }
+}
+
+type RelocationTransactionResult<T> = Result<T, RelocationTransactionError>;
+
+fn fail_if_interrupted(point: &str) -> RelocationTransactionResult<()> {
+    fail_if_injected(point).map_err(|_| RelocationTransactionError::Interrupted {
+        point: point.to_string(),
+    })
 }
 
 #[cfg(test)]
@@ -736,7 +760,7 @@ pub fn create_plan(
     let mut seen = BTreeSet::new();
     let mut inventories = Vec::new();
     for subject in subjects {
-        let key = crate::staging::portable_key(subject);
+        let key = crate::import::staging::portable_key(subject);
         if !seen.insert(key) {
             return Err("Relocation plan subjects must be portable-unique".to_string());
         }
@@ -773,11 +797,11 @@ pub fn validate_plan_scope(
     let planned = plan
         .subjects
         .iter()
-        .map(|inventory| crate::staging::portable_key(&inventory.subject))
+        .map(|inventory| crate::import::staging::portable_key(&inventory.subject))
         .collect::<Vec<_>>();
     let requested = subjects
         .iter()
-        .map(|subject| crate::staging::portable_key(subject))
+        .map(|subject| crate::import::staging::portable_key(subject))
         .collect::<Vec<_>>();
     if planned != requested {
         return Err("Relocation plan does not match the selected subject scope".to_string());
@@ -1058,7 +1082,7 @@ fn validate_journal(root: &Path, journal: &RelocationJournal) -> Result<(), Stri
     let mut subjects = BTreeSet::new();
     for subject in &journal.subjects {
         crate::import::validate_subject_components(std::slice::from_ref(&subject.subject))?;
-        if !subjects.insert(crate::staging::portable_key(&subject.subject)) {
+        if !subjects.insert(crate::import::staging::portable_key(&subject.subject)) {
             return Err("Relocation journal repeats a subject".to_string());
         }
         let mut destinations = BTreeSet::new();
@@ -1129,12 +1153,12 @@ fn validate_journal(root: &Path, journal: &RelocationJournal) -> Result<(), Stri
         let recorded = journal
             .subjects
             .iter()
-            .map(|subject| crate::staging::portable_key(&subject.subject))
+            .map(|subject| crate::import::staging::portable_key(&subject.subject))
             .collect::<Vec<_>>();
         let terminal = outcome
             .subjects
             .iter()
-            .map(|subject| crate::staging::portable_key(&subject.subject))
+            .map(|subject| crate::import::staging::portable_key(&subject.subject))
             .collect::<Vec<_>>();
         if recorded != terminal {
             return Err(
@@ -1791,7 +1815,7 @@ fn prepare_dataset(
     root: &Path,
     staging: &Path,
     journal: &mut RelocationJournal,
-) -> Result<(), String> {
+) -> RelocationTransactionResult<()> {
     if journal.dataset.phase != DatasetPhase::Planned {
         return Ok(());
     }
@@ -1870,7 +1894,8 @@ fn prepare_dataset(
         Err(error) => {
             return Err(format!(
                 "Failed to atomically install dataset description without replacement: {error}"
-            ));
+            )
+            .into());
         }
     }
     write_journal(root, journal)?;
@@ -1882,7 +1907,7 @@ fn prepare_subject(
     staging: &Path,
     journal: &mut RelocationJournal,
     index: usize,
-) -> Result<(), String> {
+) -> RelocationTransactionResult<()> {
     let subject_name = journal.subjects[index].subject.clone();
     let current_sources = source_artifacts(root, staging, &subject_name)?
         .into_iter()
@@ -1897,7 +1922,8 @@ fn prepare_subject(
     if current_sources != planned_sources {
         return Err(format!(
             "Staged ancillary artifact set changed before relocation for {subject_name}"
-        ));
+        )
+        .into());
     }
     for artifact_index in 0..journal.subjects[index].artifacts.len() {
         if journal.subjects[index].artifacts[artifact_index].role != ArtifactRole::Replacement {
@@ -1924,22 +1950,21 @@ fn prepare_subject(
         };
         if destination == root.join("rawdata").join(subject_dir(&subject_name)) {
             if !path_exists(&source)? {
-                return Err(format!(
-                    "Missing staged rawdata directory for {subject_name}"
-                ));
+                return Err(format!("Missing staged rawdata directory for {subject_name}").into());
             }
             let metadata = fs::symlink_metadata(&source).map_err(|error| error.to_string())?;
             if !metadata.is_dir() || metadata.file_type().is_symlink() {
                 return Err(format!(
                     "Staged rawdata for {subject_name} must be a regular directory"
-                ));
+                )
+                .into());
             }
             if fs::read_dir(&source)
                 .map_err(|error| error.to_string())?
                 .next()
                 .is_none()
             {
-                return Err(format!("Empty staged rawdata directory for {subject_name}"));
+                return Err(format!("Empty staged rawdata directory for {subject_name}").into());
             }
         }
         let token = reservation_token(&candidate);
@@ -1992,7 +2017,7 @@ fn commit_subject(
     journal: &mut RelocationJournal,
     index: usize,
     failure_phase: &mut &'static str,
-) -> Result<(), String> {
+) -> RelocationTransactionResult<()> {
     *failure_phase = "journal";
     journal.subjects[index].phase = SubjectPhase::Committing;
     write_journal(root, journal)?;
@@ -2047,7 +2072,8 @@ fn commit_subject(
                 return Err(format!(
                     "Destination changed after relocation preflight: {}",
                     journal.subjects[index].artifacts[artifact_index].destination
-                ));
+                )
+                .into());
             }
             fail_if_interrupted("interrupt-after-backup-operation")?;
         }
@@ -2105,7 +2131,9 @@ fn commit_subject(
         fail_if_interrupted("interrupt-after-install")?;
     }
     if rollback_interrupt_is_active() {
-        return Err("Injected pre-commit failure for rollback interruption".to_string());
+        return Err("Injected pre-commit failure for rollback interruption"
+            .to_string()
+            .into());
     }
     *failure_phase = "commitVerification";
     for artifact in &journal.subjects[index].artifacts {
@@ -2248,7 +2276,7 @@ fn rollback_artifact(
     journal: &mut RelocationJournal,
     subject_index: usize,
     artifact_index: usize,
-) -> Result<(), String> {
+) -> RelocationTransactionResult<()> {
     if journal.subjects[subject_index].artifacts[artifact_index].phase
         != ArtifactPhase::RollbackIntent
     {
@@ -2283,7 +2311,8 @@ fn rollback_artifact(
                     return Err(format!(
                         "Unowned destination prevents rollback for {}",
                         artifact.destination
-                    ));
+                    )
+                    .into());
                 }
                 remove_proven(
                     &destination,
@@ -2312,11 +2341,14 @@ fn rollback_artifact(
             return Err(format!(
                 "Rollback cannot prove restored destination for {}",
                 artifact.destination
-            ));
+            )
+            .into());
         }
     } else {
         if backup_exists {
-            return Err("Unexpected backup exists for originally absent destination".to_string());
+            return Err("Unexpected backup exists for originally absent destination"
+                .to_string()
+                .into());
         }
         if destination_exists {
             if artifact.role != ArtifactRole::Replacement
@@ -2328,7 +2360,8 @@ fn rollback_artifact(
                 return Err(format!(
                     "Unowned destination prevents restoring prior absence for {}",
                     artifact.destination
-                ));
+                )
+                .into());
             }
             remove_proven(
                 &destination,
@@ -2348,20 +2381,22 @@ fn rollback_artifact(
     }
     fail_if_interrupted("interrupt-rollback-after-candidate-cleanup")?;
     journal.subjects[subject_index].artifacts[artifact_index].phase = ArtifactPhase::RolledBack;
-    write_journal(root, journal)
+    write_journal(root, journal)?;
+    Ok(())
 }
 
 fn rollback_subject(
     root: &Path,
     journal: &mut RelocationJournal,
     index: usize,
-) -> Result<(), String> {
+) -> RelocationTransactionResult<()> {
     fail_if_injected("rollback")?;
     for artifact_index in (0..journal.subjects[index].artifacts.len()).rev() {
         rollback_artifact(root, journal, index, artifact_index)?;
     }
     journal.subjects[index].phase = SubjectPhase::RolledBack;
-    write_journal(root, journal)
+    write_journal(root, journal)?;
+    Ok(())
 }
 
 fn dataset_should_remain(journal: &RelocationJournal) -> bool {
@@ -2472,7 +2507,10 @@ fn cleanup_dataset_candidate(root: &Path, dataset: &JournalDataset) -> Result<()
     sync_parent(candidate.parent().expect("dataset candidate parent"))
 }
 
-fn rollback_dataset(root: &Path, journal: &mut RelocationJournal) -> Result<(), String> {
+fn rollback_dataset(
+    root: &Path,
+    journal: &mut RelocationJournal,
+) -> RelocationTransactionResult<()> {
     if matches!(
         journal.dataset.phase,
         DatasetPhase::NotRequired | DatasetPhase::RolledBack
@@ -2491,7 +2529,9 @@ fn rollback_dataset(root: &Path, journal: &mut RelocationJournal) -> Result<(), 
     let destination = safe_join(root, &journal.dataset.destination)?;
     if path_exists(&destination)? {
         if journal.dataset.destination_existed {
-            return Err("Dataset rollback cannot alter the pre-existing destination".to_string());
+            return Err("Dataset rollback cannot alter the pre-existing destination"
+                .to_string()
+                .into());
         }
         require_owned_fingerprint(
             &destination,
@@ -2511,10 +2551,14 @@ fn rollback_dataset(root: &Path, journal: &mut RelocationJournal) -> Result<(), 
     }
     fail_if_interrupted("interrupt-dataset-rollback-after-candidate-cleanup")?;
     journal.dataset.phase = DatasetPhase::RolledBack;
-    write_journal(root, journal)
+    write_journal(root, journal)?;
+    Ok(())
 }
 
-fn cleanup_after_terminal(root: &Path, journal: &mut RelocationJournal) -> Result<(), String> {
+fn cleanup_after_terminal(
+    root: &Path,
+    journal: &mut RelocationJournal,
+) -> RelocationTransactionResult<()> {
     fail_if_injected("cleanup")?;
     // Validate every installed replacement and retained backup before deleting
     // any old authoritative copy.
@@ -2527,7 +2571,9 @@ fn cleanup_after_terminal(root: &Path, journal: &mut RelocationJournal) -> Resul
             match artifact.role {
                 ArtifactRole::Replacement => {
                     if artifact.phase != ArtifactPhase::Installed {
-                        return Err("Committed replacement has no installed state".to_string());
+                        return Err("Committed replacement has no installed state"
+                            .to_string()
+                            .into());
                     }
                     require_owned_fingerprint(
                         &destination,
@@ -2537,7 +2583,9 @@ fn cleanup_after_terminal(root: &Path, journal: &mut RelocationJournal) -> Resul
                     validate_candidate_for_phase(root, artifact)?;
                 }
                 ArtifactRole::Removal if path_exists(&destination)? => {
-                    return Err("Committed removal destination reappeared".to_string());
+                    return Err("Committed removal destination reappeared"
+                        .to_string()
+                        .into());
                 }
                 ArtifactRole::Removal => {}
             }
@@ -2636,11 +2684,11 @@ pub fn relocate(
     let planned_keys = plan
         .subjects
         .iter()
-        .map(|inventory| crate::staging::portable_key(&inventory.subject))
+        .map(|inventory| crate::import::staging::portable_key(&inventory.subject))
         .collect::<BTreeSet<_>>();
     let succeeded_keys = succeeded_subjects
         .iter()
-        .map(|subject| crate::staging::portable_key(subject))
+        .map(|subject| crate::import::staging::portable_key(subject))
         .collect::<BTreeSet<_>>();
     if !succeeded_keys.is_subset(&planned_keys) {
         return Err(
@@ -2665,7 +2713,7 @@ pub fn relocate(
         .subjects
         .iter()
         .filter(|inventory| {
-            succeeded_keys.contains(&crate::staging::portable_key(&inventory.subject))
+            succeeded_keys.contains(&crate::import::staging::portable_key(&inventory.subject))
         })
         .collect::<Vec<_>>();
     let dataset = planned_dataset(&root, staging, plan)?;
@@ -2712,36 +2760,37 @@ pub fn relocate(
                 phase: "committed".to_string(),
                 message: None,
             }),
-            Err(error) if error.starts_with("Injected relocation interruption") => {
-                return Err(error);
+            Err(error @ RelocationTransactionError::Interrupted { .. }) => {
+                return Err(error.into());
             }
-            Err(error) => match rollback_subject(&root, &mut journal, index) {
-                Ok(()) => outcomes.push(SubjectRelocationOutcome {
-                    subject,
-                    status: RelocationSubjectStatus::RolledBack,
-                    phase: failure_phase.to_string(),
-                    message: Some(error),
-                }),
-                Err(recovery_error)
-                    if recovery_error.starts_with("Injected relocation interruption") =>
-                {
-                    return Err(recovery_error);
-                }
-                Err(recovery_error) => {
-                    journal.subjects[index].phase = SubjectPhase::RecoveryRequired;
-                    // Best effort only: failed persistence itself is another reason to retain journal.
-                    let _ = write_journal(&root, &journal);
-                    outcomes.push(SubjectRelocationOutcome {
+            Err(error) => {
+                let error = error.to_string();
+                match rollback_subject(&root, &mut journal, index) {
+                    Ok(()) => outcomes.push(SubjectRelocationOutcome {
                         subject,
-                        status: RelocationSubjectStatus::RecoveryRequired,
-                        phase: "recovery".to_string(),
-                        message: Some(format!(
-                            "{failure_phase} failed: {error}; rollback failed: {recovery_error}"
-                        )),
-                    });
-                    stop_after_recovery_required = true;
+                        status: RelocationSubjectStatus::RolledBack,
+                        phase: failure_phase.to_string(),
+                        message: Some(error),
+                    }),
+                    Err(recovery_error @ RelocationTransactionError::Interrupted { .. }) => {
+                        return Err(recovery_error.into());
+                    }
+                    Err(recovery_error) => {
+                        journal.subjects[index].phase = SubjectPhase::RecoveryRequired;
+                        // Best effort only: failed persistence itself is another reason to retain journal.
+                        let _ = write_journal(&root, &journal);
+                        outcomes.push(SubjectRelocationOutcome {
+                            subject,
+                            status: RelocationSubjectStatus::RecoveryRequired,
+                            phase: "recovery".to_string(),
+                            message: Some(format!(
+                                "{failure_phase} failed: {error}; rollback failed: {recovery_error}"
+                            )),
+                        });
+                        stop_after_recovery_required = true;
+                    }
                 }
-            },
+            }
         }
     }
     let mut outcome = RelocationOutcome {
@@ -2769,8 +2818,8 @@ pub fn relocate(
         return Ok(outcome);
     }
     if let Err(error) = cleanup_after_terminal(&root, &mut journal) {
-        if error.starts_with("Injected relocation interruption") {
-            return Err(error);
+        if matches!(error, RelocationTransactionError::Interrupted { .. }) {
+            return Err(error.into());
         }
         // Authoritative subject outcomes are durable. Retain journal and staging;
         // activation recovery can finish cleanup and surface a warning.
@@ -2779,7 +2828,7 @@ pub fn relocate(
     }
     if all_committed && cleanup_staging && !debug_mode {
         if let Err(error) = crate::import::cleanup_staging_root(staging) {
-            log::warn!("Relocation staging cleanup deferred: {error}");
+            log::warn!("Relocation staging cleanup deferred: {error:#}");
             return Ok(outcome);
         }
         outcome.staging_cleanup_complete = true;
@@ -3311,6 +3360,9 @@ pub fn recover(project_root: &Path) -> Result<RelocationRecoverySummary, String>
 pub fn transaction_test_fingerprint(path: &Path) -> Result<String, String> {
     tree_fingerprint(path)
 }
+
+#[cfg(test)]
+mod relocation_tests;
 
 #[cfg(test)]
 mod journal_tests {

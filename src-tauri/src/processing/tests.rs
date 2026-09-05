@@ -107,14 +107,14 @@ fn processing_run_snapshot_serializes_authoritative_camel_case_fields() {
     assert_eq!(json["terminalResult"], "failed");
 }
 
-fn state_with_active_project(root: &Path) -> Arc<crate::import::AppState> {
-    let state = Arc::new(crate::import::AppState::default());
+fn state_with_active_project(root: &Path) -> Arc<crate::app_state::AppState> {
+    let state = Arc::new(crate::app_state::AppState::default());
     *state.active_project_root.lock().unwrap() = Some(root.canonicalize().unwrap());
     state
 }
 
 fn invoke_launch_expected_before_profile_validation(
-    state: &crate::import::AppState,
+    state: &crate::app_state::AppState,
     run_id: &str,
     b_process: &[bool],
     workers: u32,
@@ -175,7 +175,7 @@ fn processing_reservation_is_atomic_and_never_mutates_rejected_fixture() {
     assert!(rejected.is_err());
     assert_eq!(fs::read(&sentinel).unwrap(), before);
 
-    let no_active = crate::import::AppState::default();
+    let no_active = crate::app_state::AppState::default();
     assert!(reserve_processing_run_impl(&no_active, vec!["asl".to_string()], vec![]).is_err());
 
     {

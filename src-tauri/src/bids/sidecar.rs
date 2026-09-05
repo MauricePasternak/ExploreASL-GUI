@@ -8,6 +8,7 @@
 //! `sub-*/perf/` and longitudinal `sub-*/ses-*/perf/`) and is synchronous
 //! for v1 — progress reporting for 1000+ subject datasets is out of scope.
 
+use anyhow::{Context, Result as AnyResult};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -105,13 +106,14 @@ fn collect_asl_jsons(dir: &Path, result: &mut Vec<PathBuf>) {
 }
 
 /// Parse a JSON sidecar file.
-pub fn parse_sidecar(path: &Path) -> Result<Value, String> {
+pub fn parse_sidecar(path: &Path) -> AnyResult<Value> {
     let file = std::fs::File::open(path)
-        .map_err(|e| format!("Failed to open sidecar {}: {}", path.display(), e))?;
-    let parsed: Value = serde_json::from_reader(file).map_err(|e| {
-        log::warn!("Failed to parse sidecar JSON {}: {}", path.display(), e);
-        format!("Failed to parse sidecar JSON {}: {}", path.display(), e)
-    })?;
+        .with_context(|| format!("Failed to open sidecar {}", path.display()))?;
+    let parsed: Value = serde_json::from_reader(file)
+        .inspect_err(|error| {
+            log::warn!("Failed to parse sidecar JSON {}: {}", path.display(), error);
+        })
+        .with_context(|| format!("Failed to parse sidecar JSON {}", path.display()))?;
     Ok(parsed)
 }
 
@@ -136,9 +138,9 @@ pub fn find_asl_context_for(sidecar_path: &Path) -> Option<PathBuf> {
 /// Parse an ASL context TSV file.
 ///
 /// Reads the TSV, skips the header row, and comma-joins the `volume_type` values (2nd column).
-pub fn parse_asl_context(path: &Path) -> Result<String, String> {
+pub fn parse_asl_context(path: &Path) -> AnyResult<String> {
     let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read ASL context {}: {}", path.display(), e))?;
+        .with_context(|| format!("Failed to read ASL context {}", path.display()))?;
 
     let mut volume_types = Vec::new();
     for (i, line) in content.lines().enumerate() {
@@ -165,9 +167,9 @@ pub fn parse_asl_context(path: &Path) -> Result<String, String> {
 pub fn inject_asl_context(
     sidecar_path: &Path,
     params: &mut serde_json::Map<String, Value>,
-) -> Result<(), String> {
+) -> AnyResult<()> {
     let ctx_path = find_asl_context_for(sidecar_path)
-        .ok_or_else(|| format!("Missing aslcontext.tsv for {}", sidecar_path.display()))?;
+        .with_context(|| format!("Missing aslcontext.tsv for {}", sidecar_path.display()))?;
     let context_str = parse_asl_context(&ctx_path)?;
     params.insert("ASLContext".to_string(), Value::String(context_str));
     Ok(())

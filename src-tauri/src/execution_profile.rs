@@ -183,7 +183,7 @@ fn validate_apptainer_profile(sif_path: &str, apptainer_path: &str) -> InternalV
         Ok(path) => match validate_apptainer_executable(&path) {
             Ok(()) => Some(path),
             Err(error) => {
-                errors.push(error);
+                errors.push(format!("{error:#}"));
                 None
             }
         },
@@ -197,7 +197,7 @@ fn validate_apptainer_profile(sif_path: &str, apptainer_path: &str) -> InternalV
         (Some(apptainer), Some(sif)) => match detect_apptainer_version(apptainer, sif) {
             Ok(version) => Some(version),
             Err(error) => {
-                errors.push(error);
+                errors.push(format!("{error:#}"));
                 None
             }
         },

@@ -3,18 +3,20 @@ use super::locks::{
 };
 use super::logs::delete_module_log_files;
 use super::runs::{
-    attach_run_impl, matching_run_for_active_project, record_launch_failure_impl,
-    record_worker_exit, validate_launch_admission, validate_launch_request,
+    attach_run_impl, lock_processing_state, lock_project_transition,
+    matching_run_for_active_project, record_launch_failure_impl, record_worker_exit,
+    validate_launch_admission, validate_launch_request,
 };
 use super::types::{ProcessingLifecycle, ProcessingRunSnapshot, WorkerExited, WorkerSupervisor};
 use super::utils::{ensure_lock_dir, escape_matlab_string};
+use crate::app_state::AppState;
 use crate::apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH, ensure_mcr_cache};
 use crate::execution_profile::{ExecutionProfile, InternalValidation, get_exploreasl_version};
-use crate::import::AppState;
 use crate::process_control::{
     force_kill_process, process_exists, send_termination_signal, validate_process_ids,
 };
 use crate::tracing::CommandTrace;
+use anyhow::{Context, Result as AnyResult};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
@@ -22,18 +24,18 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-fn write_data_par_json(project_root: &Path, data_par_json: &str) -> Result<(), String> {
+fn write_data_par_json(project_root: &Path, data_par_json: &str) -> AnyResult<()> {
     let data_par_dir = project_root.join("derivatives").join("ExploreASL");
-    fs::create_dir_all(&data_par_dir).map_err(|e| {
+    fs::create_dir_all(&data_par_dir).with_context(|| {
         format!(
-            "Failed to create ExploreASL derivatives dir {}: {}",
-            data_par_dir.display(),
-            e
+            "Failed to create ExploreASL derivatives dir {}",
+            data_par_dir.display()
         )
     })?;
     let data_par_path = data_par_dir.join("dataPar.json");
     fs::write(&data_par_path, data_par_json)
-        .map_err(|e| format!("Failed to write {}: {}", data_par_path.display(), e))
+        .with_context(|| format!("Failed to write {}", data_par_path.display()))?;
+    Ok(())
 }
 
 fn spawn_matlab_processing_process(matlab_path: &str, batch: &str) -> std::io::Result<Child> {
@@ -374,16 +376,20 @@ pub(crate) fn join_worker_supervisors(state: &AppState, run_id: &str) -> Result<
             pending.push(supervisor);
             continue;
         }
-        supervisor
-            .handle
-            .join()
-            .map_err(|_| "Processing worker supervisor failed while joining".to_string())?;
+        join_worker_supervisor(supervisor)?;
     }
     if !pending.is_empty() {
         let (mut processing_state, _) = matching_run_for_active_project(state, run_id)?;
         processing_state.worker_supervisors.extend(pending);
     }
     Ok(())
+}
+
+fn join_worker_supervisor(supervisor: WorkerSupervisor) -> Result<(), String> {
+    supervisor
+        .handle
+        .join()
+        .map_err(|_| "Processing worker supervisor failed while joining".to_string())
 }
 
 /// Reap only completed supervisors for one run. Terminal launch/finalization
@@ -401,10 +407,7 @@ pub(crate) fn reap_completed_worker_supervisors(
         .into_iter()
         .partition(|supervisor| supervisor.run_id == run_id && supervisor.handle.is_finished());
     for supervisor in completed {
-        supervisor
-            .handle
-            .join()
-            .map_err(|_| "Processing worker supervisor failed while joining".to_string())?;
+        join_worker_supervisor(supervisor)?;
     }
     if !pending.is_empty() {
         let (mut processing_state, _) = matching_run_for_active_project(state, run_id)?;
@@ -629,31 +632,31 @@ where
     };
 
     if let Err(error) = write_data_par_json(&project_root, data_par_json) {
-        return fail_launch(error);
+        return fail_launch(format!("{error:#}"));
     }
     let lock_root = match ensure_lock_dir(&project_root) {
         Ok(lock_root) => lock_root,
-        Err(error) => return fail_launch(error),
+        Err(error) => return fail_launch(format!("{error:#}")),
     };
     if let Err(error) = clear_stale_lock_dirs(&lock_root, &reserved_b_process) {
-        return fail_launch(error);
+        return fail_launch(format!("{error:#}"));
     }
     if rerun_bids2legacy
         && let Err(error) = delete_bids2legacy_locks(&project_root, &reserved_subject_regexp)
     {
-        return fail_launch(error);
+        return fail_launch(format!("{error:#}"));
     }
     if let Err(error) = delete_status_files_for_modules(
         &project_root,
         &reserved_b_process,
         &reserved_subject_regexp,
     ) {
-        return fail_launch(error);
+        return fail_launch(format!("{error:#}"));
     }
     if let Err(error) =
         delete_module_log_files(&project_root, &reserved_b_process, &reserved_subject_regexp)
     {
-        return fail_launch(error);
+        return fail_launch(format!("{error:#}"));
     }
 
     let b_process_str = reserved_b_process
@@ -735,10 +738,7 @@ pub fn run_pipeline(
 ) -> Result<ProcessingRunSnapshot, String> {
     // Serializes direct IPC launch against project shutdown/root replacement.
     // This spans all run-scoped mutation and each spawn registration.
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     let trace = CommandTrace::new("run_pipeline");
     trace.arg("run_id", &run_id);
     trace.arg("execution_profile_id", execution_profile.id());
@@ -756,7 +756,9 @@ pub fn run_pipeline(
         &subject_regexp,
         rerun_bids2legacy,
         ExecutionProfile::validate,
-        ensure_mcr_cache,
+        |apptainer, sif, root| {
+            ensure_mcr_cache(apptainer, sif, root).map_err(|error| format!("{error:#}"))
+        },
         |command| match command {
             ProcessingWorkerCommand::Matlab {
                 executable,
@@ -809,10 +811,7 @@ pub fn kill_pipeline(
     state: State<'_, AppState>,
     run_id: String,
 ) -> Result<ProcessingRunSnapshot, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     let trace = CommandTrace::new("kill_pipeline");
 
     let pids = begin_cancellation(&state, &run_id)?;
@@ -839,10 +838,7 @@ pub fn kill_pipeline(
 pub fn stop_running_processing_for_exit(app: &AppHandle) -> Result<bool, String> {
     let state = app.state::<AppState>();
     let (pids, watcher_active): (Vec<u32>, bool) = {
-        let processing_state = state
-            .processing_state
-            .lock()
-            .map_err(|_| "Processing state lock was poisoned".to_string())?;
+        let processing_state = lock_processing_state(&state)?;
         (
             processing_state
                 .current_run
@@ -897,10 +893,7 @@ pub fn stop_running_processing_for_exit(app: &AppHandle) -> Result<bool, String>
         return Err("Processing workers could not be confirmed stopped".to_string());
     }
 
-    let mut processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let mut processing_state = lock_processing_state(&state)?;
     if let Some(run) = processing_state.current_run.as_mut() {
         run.workers.clear();
     }

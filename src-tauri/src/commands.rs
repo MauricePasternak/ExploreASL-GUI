@@ -1,9 +1,10 @@
+use anyhow::{Context, Result as AnyResult, bail};
 use serde::Serialize;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
 
-use crate::tracing::CommandTrace;
+use crate::{error::IntoCommandResult, tracing::CommandTrace};
 
 #[tauri::command]
 pub fn is_writable(path: &str) -> bool {
@@ -51,7 +52,7 @@ pub struct SourcePathInspection {
     pub project_relative_path: Option<String>,
 }
 
-fn safe_relative_path(path: &Path) -> Result<(), String> {
+fn safe_relative_path(path: &Path) -> AnyResult<()> {
     if path.is_absolute() {
         return Ok(());
     }
@@ -61,10 +62,7 @@ fn safe_relative_path(path: &Path) -> Result<(), String> {
             Component::ParentDir | Component::RootDir | Component::Prefix(_)
         )
     }) {
-        return Err(format!(
-            "Relative path cannot escape its root: {}",
-            path.display()
-        ));
+        bail!("Relative path cannot escape its root: {}", path.display());
     }
     Ok(())
 }
@@ -88,14 +86,11 @@ fn portable_relative_path(path: &Path) -> String {
 pub fn inspect_source_path_impl(
     project_root: &Path,
     source_path: &Path,
-) -> Result<SourcePathInspection, String> {
+) -> AnyResult<SourcePathInspection> {
     safe_relative_path(source_path)?;
-    let canonical_project = project_root.canonicalize().map_err(|error| {
-        format!(
-            "Failed to resolve project root {}: {error}",
-            project_root.display()
-        )
-    })?;
+    let canonical_project = project_root
+        .canonicalize()
+        .with_context(|| format!("Failed to resolve project root {}", project_root.display()))?;
     let candidate = if source_path.is_absolute() {
         source_path.to_path_buf()
     } else {
@@ -113,12 +108,9 @@ pub fn inspect_source_path_impl(
         });
     }
 
-    let canonical_source = candidate.canonicalize().map_err(|error| {
-        format!(
-            "Failed to resolve source path {}: {error}",
-            candidate.display()
-        )
-    })?;
+    let canonical_source = candidate
+        .canonicalize()
+        .with_context(|| format!("Failed to resolve source path {}", candidate.display()))?;
     let is_directory = canonical_source.is_dir();
     let readable = if is_directory {
         fs::read_dir(&canonical_source).is_ok()
@@ -158,7 +150,7 @@ pub fn inspect_source_path(
         Ok(value) => trace.success(value),
         Err(error) => trace.error(error),
     }
-    result
+    result.into_command_result()
 }
 
 #[cfg(target_os = "linux")]

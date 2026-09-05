@@ -1,8 +1,10 @@
+use anyhow::{Context, Result as AnyResult, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::error::IntoCommandResult;
 use crate::tracing::CommandTrace;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -145,19 +147,16 @@ pub fn extract_qc_measures(
     file_path: &Path,
     module: &str,
     run: Option<&str>,
-) -> Result<Vec<QcMeasure>, String> {
+) -> AnyResult<Vec<QcMeasure>> {
     if !file_path.exists() {
-        return Err(format!(
-            "QC collection file not found: {}",
-            file_path.display()
-        ));
+        bail!("QC collection file not found: {}", file_path.display());
     }
 
     let content = fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file {}: {}", file_path.display(), e))?;
+        .with_context(|| format!("Failed to read file {}", file_path.display()))?;
 
     let json: Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse JSON in {}: {}", file_path.display(), e))?;
+        .with_context(|| format!("Failed to parse JSON in {}", file_path.display()))?;
 
     let mut measures = Vec::new();
 
@@ -172,10 +171,10 @@ pub fn extract_qc_measures(
                     });
                 }
             } else {
-                return Err("Field 'Structural' in JSON is not an object".to_string());
+                bail!("Field 'Structural' in JSON is not an object");
             }
         } else {
-            return Err("Field 'Structural' not found in JSON".to_string());
+            bail!("Field 'Structural' not found in JSON");
         }
     } else if module.eq_ignore_ascii_case("asl") {
         if let Some(asl_val) = json.get("ASL") {
@@ -215,25 +214,22 @@ pub fn extract_qc_measures(
                                 });
                             }
                         } else {
-                            return Err(format!("Field 'ASL.{}' in JSON is not an object", key));
+                            bail!("Field 'ASL.{}' in JSON is not an object", key);
                         }
                     } else {
-                        return Err(format!("Field 'ASL.{}' not found in JSON", key));
+                        bail!("Field 'ASL.{}' not found in JSON", key);
                     }
                 } else {
-                    return Err(format!(
-                        "No matching ASL run found in JSON for run: {:?}",
-                        run
-                    ));
+                    bail!("No matching ASL run found in JSON for run: {:?}", run);
                 }
             } else {
-                return Err("Field 'ASL' in JSON is not an object".to_string());
+                bail!("Field 'ASL' in JSON is not an object");
             }
         } else {
-            return Err("Field 'ASL' not found in JSON".to_string());
+            bail!("Field 'ASL' not found in JSON");
         }
     } else {
-        return Err(format!("Unsupported module: {}", module));
+        bail!("Unsupported module: {}", module);
     }
 
     measures.sort_by(|a, b| a.key.cmp(&b.key));
@@ -298,7 +294,7 @@ pub fn get_subject_session_qc(
         Ok(measures) => trace.success(&format!("Found {} measures", measures.len())),
         Err(err) => trace.error(err),
     }
-    result
+    result.into_command_result()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -357,19 +353,17 @@ pub fn find_qc_collection_file(project_root: &str, subject_session: &str) -> Opt
     None
 }
 
-pub fn extract_subject_qc_outputs(file_path: &Path) -> Result<SubjectQcOutputs, String> {
+pub fn extract_subject_qc_outputs(file_path: &Path) -> AnyResult<SubjectQcOutputs> {
     let content = fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file {}: {}", file_path.display(), e))?;
+        .with_context(|| format!("Failed to read file {}", file_path.display()))?;
 
     let json: Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse JSON in {}: {}", file_path.display(), e))?;
+        .with_context(|| format!("Failed to parse JSON in {}", file_path.display()))?;
 
-    let asl_val = json
-        .get("ASL")
-        .ok_or("Field 'ASL' not found in JSON".to_string())?;
+    let asl_val = json.get("ASL").context("Field 'ASL' not found in JSON")?;
     let asl_obj = asl_val
         .as_object()
-        .ok_or("Field 'ASL' in JSON is not an object".to_string())?;
+        .context("Field 'ASL' in JSON is not an object")?;
 
     let mut coverages = Vec::new();
     let mut spatial_covs = Vec::new();
@@ -447,7 +441,7 @@ pub fn get_all_subjects_qc(
                     results.insert(ss, outputs);
                 }
                 Err(err) => {
-                    log::warn!("Failed to extract QC for {}: {}", ss, err);
+                    log::warn!("Failed to extract QC for {}: {:#}", ss, err);
                 }
             }
         }

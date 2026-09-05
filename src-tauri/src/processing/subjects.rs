@@ -26,7 +26,8 @@ pub fn list_subjects(
         return Ok(Vec::new());
     }
 
-    let bids_subjects = crate::bids::scan::parse_bids_structure(&scan_root)?;
+    let bids_subjects = crate::bids::scan::parse_bids_structure(&scan_root)
+        .map_err(|error| format!("{error:#}"))?;
 
     let mut subjects = Vec::new();
     for bids_sub in &bids_subjects {

@@ -1,4 +1,5 @@
-use crate::import::{AppState, ImportLifecycle, RESERVED_IMPORT_PID, stop_import_pid_for_exit};
+use crate::app_state::AppState;
+use crate::import::{ImportLifecycle, RESERVED_IMPORT_PID, stop_import_pid_for_exit};
 use crate::process_control::{
     force_kill_process, process_exists, send_termination_signal, validate_process_id,
     validate_process_ids,

@@ -1,8 +1,10 @@
 use crate::bids::group::{BidsSidecarScan, group_by_fingerprint};
 use crate::bids::scan::{asl_json_path_for, parse_bids_structure};
 use crate::bids::sidecar::find_asl_sidecars;
+use crate::error::IntoCommandResult;
 use crate::processing::runs::preparing_run_root;
 use crate::tracing::CommandTrace;
+use anyhow::{Context, Result as AnyResult};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -30,12 +32,12 @@ pub fn check_bids_dataset(root_path: String) -> Result<BidsCheckResult, String> 
     trace.arg("root_path", &root_path);
 
     let root = Path::new(&root_path);
-    let result = check_bids_dataset_impl(root)?;
+    let result = check_bids_dataset_impl(root).into_command_result()?;
     trace.success(&result);
     Ok(result)
 }
 
-fn check_bids_dataset_impl(root: &Path) -> Result<BidsCheckResult, String> {
+fn check_bids_dataset_impl(root: &Path) -> AnyResult<BidsCheckResult> {
     // Step 1: Check dataset_description.json
     let desc_path = root.join("dataset_description.json");
     let has_dataset_description = desc_path.exists();
@@ -186,12 +188,12 @@ pub fn scan_bids_sidecars(root_path: String) -> Result<BidsSidecarScan, String> 
     trace.arg("root_path", &root_path);
 
     let root = Path::new(&root_path);
-    let result = scan_bids_sidecars_impl(root)?;
+    let result = scan_bids_sidecars_impl(root).into_command_result()?;
     trace.success(&result);
     Ok(result)
 }
 
-fn scan_bids_sidecars_impl(root: &Path) -> Result<BidsSidecarScan, String> {
+fn scan_bids_sidecars_impl(root: &Path) -> AnyResult<BidsSidecarScan> {
     let subjects = parse_bids_structure(root)?;
     log::debug!(
         "scan_bids_sidecars: {} subjects, {} total sessions",
@@ -203,7 +205,7 @@ fn scan_bids_sidecars_impl(root: &Path) -> Result<BidsSidecarScan, String> {
         "scan_bids_sidecars: found {} sidecar paths",
         sidecar_paths.len()
     );
-    group_by_fingerprint(&sidecar_paths, &subjects)
+    group_by_fingerprint(&sidecar_paths, &subjects).map_err(anyhow::Error::msg)
 }
 
 // --- ensure_rawdata_dir command ---
@@ -222,7 +224,7 @@ pub fn ensure_rawdata_dir(root_path: String) -> Result<EnsureRawdataResult, Stri
     trace.arg("root_path", &root_path);
 
     let root = Path::new(&root_path);
-    let result = ensure_rawdata_dir_impl(root)?;
+    let result = ensure_rawdata_dir_impl(root).into_command_result()?;
     trace.success(&result);
     Ok(result)
 }
@@ -231,7 +233,7 @@ pub fn ensure_rawdata_dir(root_path: String) -> Result<EnsureRawdataResult, Stri
 /// authority, never renderer input.
 #[tauri::command]
 pub fn ensure_rawdata_dir_for_run(
-    state: tauri::State<'_, crate::import::AppState>,
+    state: tauri::State<'_, crate::app_state::AppState>,
     run_id: String,
 ) -> Result<EnsureRawdataResult, String> {
     let _transition = state
@@ -239,7 +241,7 @@ pub fn ensure_rawdata_dir_for_run(
         .lock()
         .map_err(|_| "Project transition lock was poisoned".to_string())?;
     let root = preparing_run_root(&state, &run_id)?;
-    ensure_rawdata_dir_impl(&root)
+    ensure_rawdata_dir_impl(&root).into_command_result()
 }
 
 const RAWDATA_README: &str = r#"# rawdata/
@@ -253,7 +255,7 @@ to scan subjects from the project root.
 Do not delete this directory while the project is active.
 "#;
 
-fn ensure_rawdata_dir_impl(root: &Path) -> Result<EnsureRawdataResult, String> {
+fn ensure_rawdata_dir_impl(root: &Path) -> AnyResult<EnsureRawdataResult> {
     let rawdata = root.join("rawdata");
     let created = !rawdata.exists();
 
@@ -264,23 +266,21 @@ fn ensure_rawdata_dir_impl(root: &Path) -> Result<EnsureRawdataResult, String> {
     );
 
     // Step 1: Create rawdata/ if missing (idempotent)
-    fs::create_dir_all(&rawdata).map_err(|e| format!("Failed to create rawdata dir: {}", e))?;
+    fs::create_dir_all(&rawdata).context("Failed to create rawdata dir")?;
 
     // Step 2: Write README.md (idempotent overwrite)
     fs::write(rawdata.join("README.md"), RAWDATA_README)
-        .map_err(|e| format!("Failed to write rawdata/README.md: {}", e))?;
+        .context("Failed to write rawdata/README.md")?;
 
     // Step 3: Manage .bidsignore
     let bidsignore_path = root.join(".bidsignore");
     let bidsignore_updated = if !bidsignore_path.exists() {
         // Create with "rawdata/\n"
-        fs::write(&bidsignore_path, "rawdata/\n")
-            .map_err(|e| format!("Failed to create .bidsignore: {}", e))?;
+        fs::write(&bidsignore_path, "rawdata/\n").context("Failed to create .bidsignore")?;
         true
     } else {
         // Check if "rawdata/" line already exists
-        let content = fs::read_to_string(&bidsignore_path)
-            .map_err(|e| format!("Failed to read .bidsignore: {}", e))?;
+        let content = fs::read_to_string(&bidsignore_path).context("Failed to read .bidsignore")?;
         let has_rawdata = content.lines().any(|line| line.trim() == "rawdata/");
         if !has_rawdata {
             // Append "rawdata/\n"
@@ -288,9 +288,8 @@ fn ensure_rawdata_dir_impl(root: &Path) -> Result<EnsureRawdataResult, String> {
             let mut file = fs::OpenOptions::new()
                 .append(true)
                 .open(&bidsignore_path)
-                .map_err(|e| format!("Failed to open .bidsignore for append: {}", e))?;
-            writeln!(file, "rawdata/")
-                .map_err(|e| format!("Failed to append to .bidsignore: {}", e))?;
+                .context("Failed to open .bidsignore for append")?;
+            writeln!(file, "rawdata/").context("Failed to append to .bidsignore")?;
             true
         } else {
             false

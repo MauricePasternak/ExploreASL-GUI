@@ -194,7 +194,7 @@ pub fn handle_niivue_protocol(
     }
 
     let app_handle = ctx.app_handle();
-    let state = app_handle.state::<crate::import::AppState>();
+    let state = app_handle.state::<crate::app_state::AppState>();
     let root = match state.active_project_root.lock() {
         Ok(guard) => match *guard {
             Some(ref r) => r.clone(),

@@ -20,7 +20,8 @@ pub enum WriteErrorCategory {
     Recovery,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+#[error("{message}")]
 pub struct AtomicWriteError {
     pub category: WriteErrorCategory,
     pub message: String,

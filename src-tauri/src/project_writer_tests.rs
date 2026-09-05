@@ -1,5 +1,6 @@
 use crate::project_writer::{
-    FailurePoint, WriteErrorCategory, atomic_write_project_for_test, cleanup_project_temps,
+    AtomicWriteError, FailurePoint, WriteErrorCategory, atomic_write_project_for_test,
+    cleanup_project_temps,
 };
 use std::fs;
 use tempfile::tempdir;
@@ -8,6 +9,64 @@ fn project_path() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().expect("temporary project directory");
     let project = dir.path().join("project.easl");
     (dir, project)
+}
+
+#[test]
+fn atomic_write_error_categories_serialize_for_frontend_contract() {
+    for (category, expected) in [
+        (
+            WriteErrorCategory::InvalidSerialization,
+            "invalid_serialization",
+        ),
+        (WriteErrorCategory::PermissionDenied, "permission_denied"),
+        (WriteErrorCategory::InsufficientSpace, "insufficient_space"),
+        (WriteErrorCategory::TemporaryWrite, "temporary_write"),
+        (WriteErrorCategory::FileFlush, "file_flush"),
+        (WriteErrorCategory::Backup, "backup"),
+        (
+            WriteErrorCategory::PrimaryReplacement,
+            "primary_replacement",
+        ),
+        (
+            WriteErrorCategory::DurabilityUncertain,
+            "durability_uncertain",
+        ),
+        (WriteErrorCategory::Recovery, "recovery"),
+    ] {
+        let error = AtomicWriteError {
+            category,
+            message: "native write failure".to_owned(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(error).expect("serialize atomic write error"),
+            serde_json::json!({
+                "category": expected,
+                "message": "native write failure",
+            }),
+            "unexpected frontend error contract for {category:?}"
+        );
+    }
+}
+
+#[test]
+fn recovery_error_serialization_preserves_frontend_fields() {
+    let error = AtomicWriteError {
+        category: WriteErrorCategory::Recovery,
+        message: "Project recovery failed: backup is missing, malformed, or unsupported."
+            .to_owned(),
+    };
+
+    let json = serde_json::to_value(error).expect("serialize recovery error");
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "category": "recovery",
+            "message": "Project recovery failed: backup is missing, malformed, or unsupported.",
+        })
+    );
+    assert_eq!(json.as_object().expect("error JSON object").len(), 2);
 }
 
 #[test]

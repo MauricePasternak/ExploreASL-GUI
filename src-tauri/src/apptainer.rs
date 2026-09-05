@@ -1,3 +1,4 @@
+use anyhow::{Context, Result as AnyResult, bail};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -274,10 +275,7 @@ pub(crate) fn create_system_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Co
     command
 }
 
-pub(crate) fn detect_apptainer_version(
-    apptainer_path: &str,
-    sif_path: &Path,
-) -> Result<String, String> {
+pub(crate) fn detect_apptainer_version(apptainer_path: &str, sif_path: &Path) -> AnyResult<String> {
     log::info!(
         "[APPTAINER] Detecting ExploreASL version for SIF: {} using executable: {}",
         sif_path.display(),
@@ -294,11 +292,11 @@ pub(crate) fn detect_apptainer_version(
         "/opt/xasl/xASL_latest/",
     ]);
 
-    let output = run_command_with_timeout(command, Duration::from_secs(5)).map_err(|error| {
-        let msg = format!("Version detection timed out or failed: {error}");
-        log::error!("[APPTAINER] {msg}");
-        msg
-    })?;
+    let output = run_command_with_timeout(command, Duration::from_secs(5))
+        .inspect_err(|error| {
+            log::error!("[APPTAINER] Version detection timed out or failed: {error:#}")
+        })
+        .context("Version detection timed out or failed")?;
 
     if !output.status.success() {
         let stdout_str = String::from_utf8_lossy(&output.stdout);
@@ -314,9 +312,7 @@ pub(crate) fn detect_apptainer_version(
         } else {
             format!("{}: {}", output.status, stderr_str.trim())
         };
-        return Err(format!(
-            "Failed to run apptainer exec inside SIF ({detail})"
-        ));
+        bail!("Failed to run apptainer exec inside SIF ({detail})");
     }
 
     let stdout_str = String::from_utf8_lossy(&output.stdout);
@@ -339,21 +335,21 @@ pub(crate) fn detect_apptainer_version(
                 stdout_str
             );
             log::error!("[APPTAINER] {msg}");
-            Err("Could not find VERSION_* file in container /opt/xasl/xASL_latest/".to_string())
+            bail!("Could not find VERSION_* file in container /opt/xasl/xASL_latest/")
         }
     }
 }
 
-pub(crate) fn validate_apptainer_executable(apptainer_path: &str) -> Result<(), String> {
+pub(crate) fn validate_apptainer_executable(apptainer_path: &str) -> AnyResult<()> {
     log::info!(
         "[APPTAINER] Validating Apptainer executable: {}",
         apptainer_path
     );
-    let output = run_apptainer_version_command(Path::new(apptainer_path)).map_err(|error| {
-        let msg = format!("Failed to run Apptainer executable: {error}");
-        log::error!("[APPTAINER] {msg}");
-        msg
-    })?;
+    let output = run_apptainer_version_command(Path::new(apptainer_path))
+        .inspect_err(|error| {
+            log::error!("[APPTAINER] Failed to run Apptainer executable: {error:#}")
+        })
+        .context("Failed to run Apptainer executable")?;
     if output.status.success() {
         let version_str = String::from_utf8_lossy(&output.stdout);
         log::info!(
@@ -368,14 +364,14 @@ pub(crate) fn validate_apptainer_executable(apptainer_path: &str) -> Result<(), 
             output.status,
             stderr
         );
-        Err(format!(
+        bail!(
             "Apptainer executable failed --version with status {}",
             output.status
-        ))
+        )
     }
 }
 
-fn run_apptainer_version_command(binary: &Path) -> Result<Output, String> {
+fn run_apptainer_version_command(binary: &Path) -> AnyResult<Output> {
     let mut command = create_system_command(binary);
     command.current_dir(env::temp_dir());
     command.arg("--version");
@@ -386,15 +382,15 @@ pub(crate) fn ensure_mcr_cache(
     apptainer_path: &str,
     sif_path: &Path,
     project_root: &Path,
-) -> Result<(), String> {
+) -> AnyResult<()> {
     let cache_dir = mcr_cache_path();
     if cache_dir.exists() {
         return Ok(());
     }
 
-    fs::create_dir_all(&cache_dir).map_err(|error| {
+    fs::create_dir_all(&cache_dir).with_context(|| {
         format!(
-            "Failed to create MCR cache directory {}: {error}",
+            "Failed to create MCR cache directory {}",
             cache_dir.display()
         )
     })?;
@@ -425,14 +421,14 @@ pub(crate) fn ensure_mcr_cache(
         Ok(status) => status,
         Err(error) => {
             let _ = fs::remove_dir_all(&cache_dir);
-            return Err(format!("Failed to spawn MCR warmup command: {error}"));
+            return Err(error).context("Failed to spawn MCR warmup command");
         }
     };
     if !status.success() {
         let _ = fs::remove_dir_all(&cache_dir);
-        return Err(format!(
+        bail!(
             "MCR warmup run failed with exit status {status}. Check container permissions and MCR path."
-        ));
+        );
     }
 
     Ok(())
@@ -448,12 +444,11 @@ pub(crate) fn mcr_cache_path() -> PathBuf {
 pub(crate) fn run_command_with_timeout(
     mut command: Command,
     timeout: Duration,
-) -> Result<Output, String> {
+) -> AnyResult<Output> {
     let mut child = command
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|error| error.to_string())?;
+        .spawn()?;
     let deadline = Instant::now() + timeout;
 
     loop {
@@ -461,21 +456,18 @@ pub(crate) fn run_command_with_timeout(
             Ok(Some(_)) => {
                 return child
                     .wait_with_output()
-                    .map_err(|error| format!("Failed to collect command output: {error}"));
+                    .context("Failed to collect command output");
             }
             Ok(None) if Instant::now() >= deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(format!(
-                    "command timed out after {} seconds",
-                    timeout.as_secs()
-                ));
+                bail!("command timed out after {} seconds", timeout.as_secs());
             }
             Ok(None) => thread::sleep(Duration::from_millis(10)),
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(format!("failed while waiting for command: {error}"));
+                return Err(error).context("failed while waiting for command");
             }
         }
     }

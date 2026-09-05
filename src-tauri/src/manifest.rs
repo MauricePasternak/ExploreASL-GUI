@@ -1,9 +1,13 @@
+use anyhow::{Result as AnyResult, bail};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::matlab::probe_matlab_version;
-use crate::processing::runs::{completed_population_run_root, preparing_run_root};
+use crate::processing::runs::{
+    completed_population_run_root, lock_processing_state, lock_project_transition,
+    preparing_run_root,
+};
 use crate::tracing::CommandTrace;
 
 #[path = "manifest_tests.rs"]
@@ -16,8 +20,8 @@ pub struct EnvironmentVersions {
     pub matlab: String,
 }
 
-fn read_exploreasl_version_file(explore_asl_path: &Path) -> Result<String, String> {
-    let entries = fs::read_dir(explore_asl_path).map_err(|e| e.to_string())?;
+fn read_exploreasl_version_file(explore_asl_path: &Path) -> AnyResult<String> {
+    let entries = fs::read_dir(explore_asl_path)?;
     for entry in entries.flatten() {
         let file_name = entry.file_name().to_string_lossy().to_string();
         if let Some(version) = file_name.strip_prefix("VERSION_")
@@ -26,7 +30,7 @@ fn read_exploreasl_version_file(explore_asl_path: &Path) -> Result<String, Strin
             return Ok(version.to_string());
         }
     }
-    Err("no VERSION_* file found".to_string())
+    bail!("no VERSION_* file found")
 }
 
 fn capture_environment_versions_impl(
@@ -46,6 +50,16 @@ fn capture_environment_versions_impl(
         explore_asl,
         matlab,
     }
+}
+
+fn modified_epoch_millis(path: &Path) -> Option<i64> {
+    path.metadata()
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_millis() as i64)
 }
 
 #[tauri::command]
@@ -75,20 +89,14 @@ pub async fn capture_environment_versions(
 /// attributed to a replacement project/run by the renderer.
 #[tauri::command]
 pub fn capture_environment_versions_for_run(
-    state: tauri::State<'_, crate::import::AppState>,
+    state: tauri::State<'_, crate::app_state::AppState>,
     run_id: String,
     explore_asl_path: String,
     matlab_path: String,
 ) -> Result<EnvironmentVersions, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     let _root = preparing_run_root(&state, &run_id)?;
-    let selected_population = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?
+    let selected_population = lock_processing_state(&state)?
         .current_run
         .as_ref()
         .is_some_and(|run| {
@@ -119,13 +127,7 @@ pub fn read_population_ready_mtime(project_root: String) -> Option<i64> {
         .join("xASL_module_Population")
         .join("999_ready.status");
 
-    let result = p.metadata().ok().and_then(|m| {
-        m.modified().ok().and_then(|t| {
-            t.duration_since(std::time::UNIX_EPOCH)
-                .ok()
-                .map(|d| d.as_millis() as i64)
-        })
-    });
+    let result = modified_epoch_millis(&p);
 
     trace.success(&result);
     result
@@ -133,13 +135,10 @@ pub fn read_population_ready_mtime(project_root: String) -> Option<i64> {
 
 #[tauri::command]
 pub fn read_population_ready_mtime_for_run(
-    state: tauri::State<'_, crate::import::AppState>,
+    state: tauri::State<'_, crate::app_state::AppState>,
     run_id: String,
 ) -> Result<Option<i64>, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     let root = completed_population_run_root(&state, &run_id)?;
     let p = root
         .join("derivatives")
@@ -148,13 +147,7 @@ pub fn read_population_ready_mtime_for_run(
         .join("xASL_module_Population")
         .join("xASL_module_Population")
         .join("999_ready.status");
-    Ok(p.metadata().ok().and_then(|m| {
-        m.modified().ok().and_then(|t| {
-            t.duration_since(std::time::UNIX_EPOCH)
-                .ok()
-                .map(|d| d.as_millis() as i64)
-        })
-    }))
+    Ok(modified_epoch_millis(&p))
 }
 
 #[tauri::command]

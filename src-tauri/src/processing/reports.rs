@@ -1,6 +1,8 @@
 use super::types::ReportFileInfo;
 use super::utils::normalize_asl_run_id_opt;
+use crate::error::IntoCommandResult;
 use crate::tracing::CommandTrace;
+use anyhow::{Context, Result as AnyResult, bail};
 use std::fs;
 use std::path::PathBuf;
 
@@ -102,6 +104,17 @@ pub fn read_report_image(
     run: Option<String>,
     view_type: String, // "axial" | "coronal"
 ) -> Result<Vec<u8>, String> {
+    read_report_image_impl(project_root, subject_session, module, run, view_type)
+        .into_command_result()
+}
+
+fn read_report_image_impl(
+    project_root: String,
+    subject_session: String,
+    module: String,
+    run: Option<String>,
+    view_type: String,
+) -> AnyResult<Vec<u8>> {
     let trace = CommandTrace::new("read_report_image");
     trace.arg("project_root", &project_root);
     trace.arg("subject_session", &subject_session);
@@ -120,7 +133,7 @@ pub fn read_report_image(
             let prefix = match view_type.as_str() {
                 "axial" => "Tra_Seg_rT1",
                 "coronal" => "Cor_Seg_rT1",
-                _ => return Err(format!("Unknown view type: {}", view_type)),
+                _ => bail!("Unknown view type: {}", view_type),
             };
             format!(
                 "{}_{}_rc2T1_{}.jpg",
@@ -131,7 +144,7 @@ pub fn read_report_image(
             let prefix = match view_type.as_str() {
                 "axial" => "Tra_Reg_qCBF",
                 "coronal" => "Cor_Reg_qCBF",
-                _ => return Err(format!("Unknown view type: {}", view_type)),
+                _ => bail!("Unknown view type: {}", view_type),
             };
             let run_str = normalize_asl_run_id_opt(run.as_deref());
             format!(
@@ -143,7 +156,7 @@ pub fn read_report_image(
             let prefix = match view_type.as_str() {
                 "axial" => "Tra_Reg_noSmooth_M0",
                 "coronal" => "Cor_Reg_noSmooth_M0",
-                _ => return Err(format!("Unknown view type: {}", view_type)),
+                _ => bail!("Unknown view type: {}", view_type),
             };
             let run_str = normalize_asl_run_id_opt(run.as_deref());
             format!(
@@ -151,7 +164,7 @@ pub fn read_report_image(
                 prefix, subject_session, run_str, subject_session
             )
         }
-        _ => return Err(format!("Unknown module: {}", module)),
+        _ => bail!("Unknown module: {}", module),
     };
 
     let sub_dir = match module.as_str() {
@@ -165,14 +178,14 @@ pub fn read_report_image(
 
     // Prevent directory traversal
     if !img_path.starts_with(&population) {
-        return Err("Access denied: Invalid path".to_string());
+        bail!("Access denied: Invalid path");
     }
 
     if !img_path.exists() {
-        return Err(format!("Report image not found: {}", file_name));
+        bail!("Report image not found: {}", file_name);
     }
 
-    let bytes = fs::read(&img_path).map_err(|e| format!("Failed to read image file: {}", e))?;
+    let bytes = fs::read(&img_path).context("Failed to read image file")?;
 
     trace.success(&format!("Read {} bytes", bytes.len()));
     Ok(bytes)

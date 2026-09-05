@@ -1,9 +1,12 @@
+use anyhow::{Context, Result as AnyResult, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tauri::State;
+
+use crate::error::IntoCommandResult;
 
 fn normalize_key_val(val: &str) -> String {
     let trimmed = val.trim();
@@ -83,14 +86,14 @@ pub struct StatsFileInfo {
     pub modified: String,
 }
 
-pub fn list_stats_files_impl(project_root: PathBuf) -> Result<Vec<StatsFileInfo>, String> {
+pub fn list_stats_files_impl(project_root: PathBuf) -> AnyResult<Vec<StatsFileInfo>> {
     let stats_dir = project_root.join("derivatives/ExploreASL/Population/Stats");
     if !stats_dir.exists() {
         return Ok(vec![]);
     }
     let mut files = vec![];
-    for entry in std::fs::read_dir(&stats_dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(&stats_dir)? {
+        let entry = entry?;
         let path = entry.path();
         if path.extension().map(|e| e == "tsv").unwrap_or(false) {
             let file_name = path.file_name().unwrap().to_string_lossy().to_string();
@@ -98,7 +101,7 @@ pub fn list_stats_files_impl(project_root: PathBuf) -> Result<Vec<StatsFileInfo>
                 || file_name.starts_with("median_")
                 || file_name.starts_with("CoV_")
             {
-                let meta = entry.metadata().map_err(|e| e.to_string())?;
+                let meta = entry.metadata()?;
                 files.push(StatsFileInfo {
                     file_name: file_name.clone(),
                     relative_path: file_name,
@@ -121,7 +124,7 @@ pub fn list_stats_files_impl(project_root: PathBuf) -> Result<Vec<StatsFileInfo>
 
 #[tauri::command]
 pub async fn list_stats_files(project_root: String) -> Result<Vec<StatsFileInfo>, String> {
-    list_stats_files_impl(PathBuf::from(project_root))
+    list_stats_files_impl(PathBuf::from(project_root)).into_command_result()
 }
 
 fn is_missing_value(val: &str) -> bool {
@@ -175,22 +178,20 @@ fn detect_units_row(lines: &[&str], headers: &[String]) -> bool {
 pub fn load_qcbf_data_impl(
     project_root: PathBuf,
     relative_path: String,
-    state: &crate::import::AppState,
-) -> Result<DataInspection, String> {
+    state: &crate::app_state::AppState,
+) -> AnyResult<DataInspection> {
     let stats_dir = project_root.join("derivatives/ExploreASL/Population/Stats");
     let file_path = stats_dir.join(&relative_path);
 
-    let canonical =
-        std::fs::canonicalize(&file_path).map_err(|e| format!("Path not found: {}", e))?;
-    let canonical_stats = std::fs::canonicalize(&stats_dir).map_err(|e| e.to_string())?;
+    let canonical = std::fs::canonicalize(&file_path).context("Path not found")?;
+    let canonical_stats = std::fs::canonicalize(&stats_dir)?;
     if !canonical.starts_with(&canonical_stats) {
-        return Err("Path traversal detected".to_string());
+        bail!("Path traversal detected");
     }
 
-    let mut file = std::fs::File::open(&canonical).map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::open(&canonical)?;
     let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .map_err(|e| e.to_string())?;
+    file.read_to_string(&mut contents)?;
     let contents = contents.trim_start_matches('\u{FEFF}');
 
     let mut hasher = Sha256::new();
@@ -199,7 +200,7 @@ pub fn load_qcbf_data_impl(
 
     let lines: Vec<&str> = contents.lines().collect();
     if lines.is_empty() {
-        return Err("File is empty".to_string());
+        bail!("File is empty");
     }
 
     let headers: Vec<String> = lines[0].split('\t').map(|s| s.trim().to_string()).collect();
@@ -409,7 +410,10 @@ pub fn load_qcbf_data_impl(
         external_hash: None,
         qcbf_rows: rows,
     };
-    *state.active_data.lock().map_err(|e| e.to_string())? = Some(active);
+    *state
+        .active_data
+        .lock()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))? = Some(active);
 
     Ok(DataInspection {
         columns,
@@ -424,19 +428,22 @@ pub fn load_qcbf_data_impl(
 pub async fn load_qcbf_data(
     project_root: String,
     relative_path: String,
-    state: State<'_, crate::import::AppState>,
+    state: State<'_, crate::app_state::AppState>,
 ) -> Result<DataInspection, String> {
-    load_qcbf_data_impl(PathBuf::from(project_root), relative_path, &state)
+    load_qcbf_data_impl(PathBuf::from(project_root), relative_path, &state).into_command_result()
 }
 
 pub fn read_data_columns_impl(
     column_names: Vec<String>,
-    state: &crate::import::AppState,
-) -> Result<Vec<HashMap<String, String>>, String> {
-    let guard = state.active_data.lock().map_err(|e| e.to_string())?;
+    state: &crate::app_state::AppState,
+) -> AnyResult<Vec<HashMap<String, String>>> {
+    let guard = state
+        .active_data
+        .lock()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let active = guard
         .as_ref()
-        .ok_or("No data loaded. Select a file first.")?;
+        .context("No data loaded. Select a file first.")?;
 
     let id_cols = ["participant_id", "subject", "session", "run"];
     let mut rows = Vec::with_capacity(active.rows.len());
@@ -463,68 +470,69 @@ pub fn read_data_columns_impl(
 pub async fn read_data_columns(
     _project_root: String,
     column_names: Vec<String>,
-    state: State<'_, crate::import::AppState>,
+    state: State<'_, crate::app_state::AppState>,
 ) -> Result<Vec<HashMap<String, String>>, String> {
-    read_data_columns_impl(column_names, &state)
+    read_data_columns_impl(column_names, &state).into_command_result()
 }
 
 pub fn set_active_project_impl(
     root_path: String,
-    state: &crate::import::AppState,
-) -> Result<crate::import_relocation::RelocationRecoverySummary, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    state: &crate::app_state::AppState,
+) -> Result<crate::import::relocation::RelocationRecoverySummary, String> {
+    set_active_project_inner(root_path, state).into_command_result()
+}
+
+fn set_active_project_inner(
+    root_path: String,
+    state: &crate::app_state::AppState,
+) -> AnyResult<crate::import::relocation::RelocationRecoverySummary> {
+    let _transition = lock_state(
+        &state.project_transition,
+        Some("Project transition lock was poisoned"),
+    )?;
     ensure_processing_runtime_released(state)?;
-    let path = std::fs::canonicalize(&root_path).map_err(|e| {
-        log::error!("set_active_project failed canonicalizing: {}", e);
-        format!("Invalid project path: {}", e)
-    })?;
+    let path = std::fs::canonicalize(&root_path)
+        .inspect_err(|error| log::error!("set_active_project failed canonicalizing: {error}"))
+        .context("Invalid project path")?;
     // Recovery must finish before this candidate can become observable through
     // active-root IPC or frontend hydration.
-    let recovery = crate::import_relocation::recover(&path)?;
-    *state
-        .active_project_root
-        .lock()
-        .map_err(|e| e.to_string())? = Some(path);
-    *state.active_data.lock().map_err(|e| e.to_string())? = None;
+    let recovery = crate::import::relocation::recover(&path).map_err(anyhow::Error::msg)?;
+    replace_active_project_state(state, Some(path))?;
     Ok(recovery)
 }
 
 #[tauri::command]
 pub fn set_active_project(
     root_path: String,
-    state: State<'_, crate::import::AppState>,
-) -> Result<crate::import_relocation::RelocationRecoverySummary, String> {
+    state: State<'_, crate::app_state::AppState>,
+) -> Result<crate::import::relocation::RelocationRecoverySummary, String> {
     let _trace = crate::tracing::CommandTrace::new("set_active_project");
     log::info!("set_active_project: root_path = {}", root_path);
-    let recovery = set_active_project_impl(root_path, &state)?;
+    let recovery = set_active_project_inner(root_path, &state).into_command_result()?;
     log::info!("set_active_project success");
     Ok(recovery)
 }
 
-pub fn clear_active_project_impl(state: &crate::import::AppState) -> Result<(), String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+pub fn clear_active_project_impl(state: &crate::app_state::AppState) -> Result<(), String> {
+    clear_active_project_inner(state).into_command_result()
+}
+
+fn clear_active_project_inner(state: &crate::app_state::AppState) -> AnyResult<()> {
+    let _transition = lock_state(
+        &state.project_transition,
+        Some("Project transition lock was poisoned"),
+    )?;
     ensure_processing_runtime_released(state)?;
-    *state
-        .active_project_root
-        .lock()
-        .map_err(|e| e.to_string())? = None;
-    *state.active_data.lock().map_err(|e| e.to_string())? = None;
-    Ok(())
+    replace_active_project_state(state, None)
 }
 
 /// Direct active-root IPC must not bypass project-runtime shutdown. Frontend
 /// transitions drain/stop first; callers that skip that contract fail closed.
-fn ensure_processing_runtime_released(state: &crate::import::AppState) -> Result<(), String> {
-    let processing = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+fn ensure_processing_runtime_released(state: &crate::app_state::AppState) -> AnyResult<()> {
+    let processing = lock_state(
+        &state.processing_state,
+        Some("Processing state lock was poisoned"),
+    )?;
     if processing
         .current_run
         .as_ref()
@@ -534,18 +542,38 @@ fn ensure_processing_runtime_released(state: &crate::import::AppState) -> Result
         || processing.watcher_handle.is_some()
         || !processing.worker_supervisors.is_empty()
     {
-        return Err(
-            "Processing runtime is still owned; shut it down before changing projects".to_string(),
-        );
+        bail!("Processing runtime is still owned; shut it down before changing projects");
     }
     Ok(())
 }
 
+fn replace_active_project_state(
+    state: &crate::app_state::AppState,
+    active_project_root: Option<PathBuf>,
+) -> AnyResult<()> {
+    *lock_state(&state.active_project_root, None)? = active_project_root;
+    *lock_state(&state.active_data, None)? = None;
+    Ok(())
+}
+
+fn lock_state<'a, T>(
+    mutex: &'a std::sync::Mutex<T>,
+    poison_message: Option<&str>,
+) -> AnyResult<std::sync::MutexGuard<'a, T>> {
+    mutex.lock().map_err(|error| {
+        anyhow::anyhow!(
+            poison_message
+                .map(str::to_owned)
+                .unwrap_or_else(|| error.to_string())
+        )
+    })
+}
+
 #[tauri::command]
-pub fn clear_active_project(state: State<'_, crate::import::AppState>) -> Result<(), String> {
+pub fn clear_active_project(state: State<'_, crate::app_state::AppState>) -> Result<(), String> {
     let _trace = crate::tracing::CommandTrace::new("clear_active_project");
     log::info!("clear_active_project");
-    clear_active_project_impl(&state)?;
+    clear_active_project_inner(&state).into_command_result()?;
     log::info!("clear_active_project success");
     Ok(())
 }
@@ -615,19 +643,19 @@ pub fn inspect_external_data_impl(
     absolute_path: String,
     sheet_name: Option<String>,
     delimiter: Option<String>,
-) -> Result<ExternalDataInspection, String> {
+) -> AnyResult<ExternalDataInspection> {
     let path = PathBuf::from(&absolute_path);
     if !path.exists() {
-        return Err(format!("File not found: {}", absolute_path));
+        bail!("File not found: {}", absolute_path);
     }
     let extension = path
         .extension()
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default();
 
-    let mut file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::open(&path)?;
     let mut contents = Vec::new();
-    file.read_to_end(&mut contents).map_err(|e| e.to_string())?;
+    file.read_to_end(&mut contents)?;
 
     let mut hasher = Sha256::new();
     hasher.update(&contents);
@@ -653,7 +681,7 @@ pub fn inspect_external_data_impl(
             parse_external_delimited(&contents, delim_char, file_hash)
         }
         "xlsx" => parse_external_xlsx(&path, sheet_name, file_hash),
-        _ => Err(format!("Unsupported file format: .{}", extension)),
+        _ => bail!("Unsupported file format: .{}", extension),
     }
 }
 
@@ -661,7 +689,7 @@ fn parse_external_delimited(
     contents: &[u8],
     delimiter: char,
     file_hash: String,
-) -> Result<ExternalDataInspection, String> {
+) -> AnyResult<ExternalDataInspection> {
     let text = String::from_utf8_lossy(contents);
     let text = text.trim_start_matches('\u{FEFF}');
 
@@ -672,8 +700,7 @@ fn parse_external_delimited(
         .from_reader(text.as_bytes());
 
     let headers: Vec<String> = reader
-        .headers()
-        .map_err(|e| e.to_string())?
+        .headers()?
         .iter()
         .map(|s| s.trim().to_string())
         .collect();
@@ -681,7 +708,7 @@ fn parse_external_delimited(
     let mut column_values: Vec<Vec<String>> = vec![vec![]; headers.len()];
     let mut row_count = 0;
     for result in reader.records() {
-        let record = result.map_err(|e| e.to_string())?;
+        let record = result?;
         row_count += 1;
         for (i, field) in record.iter().enumerate() {
             if i < headers.len() {
@@ -704,22 +731,19 @@ fn parse_external_xlsx(
     path: &Path,
     sheet_name: Option<String>,
     file_hash: String,
-) -> Result<ExternalDataInspection, String> {
+) -> AnyResult<ExternalDataInspection> {
     use calamine::{Reader, Xlsx, open_workbook};
 
-    let mut workbook: Xlsx<_> =
-        open_workbook(path).map_err(|e: calamine::XlsxError| e.to_string())?;
+    let mut workbook: Xlsx<_> = open_workbook(path)?;
     let sheet_names = workbook.sheet_names();
     if sheet_names.is_empty() {
-        return Err("xlsx file has no sheets".to_string());
+        bail!("xlsx file has no sheets");
     }
     let target_sheet = sheet_name.unwrap_or_else(|| sheet_names[0].clone());
-    let range = workbook
-        .worksheet_range(&target_sheet)
-        .map_err(|e| e.to_string())?;
+    let range = workbook.worksheet_range(&target_sheet)?;
 
     let mut rows_iter = range.rows();
-    let header_row = rows_iter.next().ok_or("xlsx sheet is empty")?;
+    let header_row = rows_iter.next().context("xlsx sheet is empty")?;
     let headers: Vec<String> = header_row.iter().map(|c| c.to_string()).collect();
 
     let mut column_values: Vec<Vec<String>> = vec![vec![]; headers.len()];
@@ -749,7 +773,7 @@ pub async fn inspect_external_data(
     sheet_name: Option<String>,
     delimiter: Option<String>,
 ) -> Result<ExternalDataInspection, String> {
-    inspect_external_data_impl(absolute_path, sheet_name, delimiter)
+    inspect_external_data_impl(absolute_path, sheet_name, delimiter).into_command_result()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -762,26 +786,26 @@ pub fn execute_join_impl(
     na_tokens: Vec<String>,
     sheet_name: Option<String>,
     delimiter: Option<String>,
-    state: &crate::import::AppState,
-) -> Result<DataInspection, String> {
+    state: &crate::app_state::AppState,
+) -> AnyResult<DataInspection> {
     let left_on: Vec<String> = keys.iter().map(|k| k.left.clone()).collect();
     let right_on: Vec<String> = keys.iter().map(|k| k.right.clone()).collect();
 
     let ext_path = PathBuf::from(&external_absolute_path);
     if !ext_path.exists() {
-        return Err(format!(
-            "External file not found: {}",
-            external_absolute_path
-        ));
+        bail!("External file not found: {}", external_absolute_path);
     }
 
     let qcbf_inspection = load_qcbf_data_impl(project_root, qcbf_relative_path, state)?;
     let qcbf_hash = qcbf_inspection.qcbf_hash.clone();
     let qcbf_rows = {
-        let guard = state.active_data.lock().map_err(|e| e.to_string())?;
+        let guard = state
+            .active_data
+            .lock()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
         guard
             .as_ref()
-            .ok_or("qCBF cache missing after load")?
+            .context("qCBF cache missing after load")?
             .rows
             .clone()
     };
@@ -811,14 +835,14 @@ pub fn execute_join_impl(
             let delim_char = if let Some(d) = parsed_delimiter {
                 d
             } else {
-                let text = std::fs::read_to_string(&ext_path).map_err(|e| e.to_string())?;
+                let text = std::fs::read_to_string(&ext_path)?;
                 let first_line = text.lines().next().unwrap_or("");
                 detect_delimiter(first_line)
             };
             parse_external_rows(&ext_path, delim_char, &na_tokens)?
         }
         "xlsx" => parse_external_xlsx_rows(&ext_path, sheet_name, &na_tokens)?,
-        _ => return Err(format!("Unsupported file format: .{}", extension)),
+        _ => bail!("Unsupported file format: .{}", extension),
     };
 
     let mut ext_index: HashMap<Vec<String>, Vec<&HashMap<String, String>>> = HashMap::new();
@@ -953,7 +977,10 @@ pub fn execute_join_impl(
         external_hash: Some(external_hash.clone()),
         qcbf_rows,
     };
-    *state.active_data.lock().map_err(|e| e.to_string())? = Some(active);
+    *state
+        .active_data
+        .lock()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))? = Some(active);
 
     Ok(DataInspection {
         columns: merged_columns,
@@ -977,8 +1004,8 @@ fn parse_external_rows(
     path: &Path,
     delimiter: char,
     na_tokens: &[String],
-) -> Result<Vec<HashMap<String, String>>, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+) -> AnyResult<Vec<HashMap<String, String>>> {
+    let text = std::fs::read_to_string(path)?;
     let text = text.trim_start_matches('\u{FEFF}');
 
     let mut reader = csv::ReaderBuilder::new()
@@ -988,15 +1015,14 @@ fn parse_external_rows(
         .from_reader(text.as_bytes());
 
     let headers: Vec<String> = reader
-        .headers()
-        .map_err(|e| e.to_string())?
+        .headers()?
         .iter()
         .map(|s| s.trim().to_string())
         .collect();
 
     let mut rows = Vec::new();
     for result in reader.records() {
-        let record = result.map_err(|e| e.to_string())?;
+        let record = result?;
         let mut row = HashMap::new();
         for (i, field) in record.iter().enumerate() {
             if i < headers.len() {
@@ -1012,22 +1038,19 @@ fn parse_external_xlsx_rows(
     path: &Path,
     sheet_name: Option<String>,
     na_tokens: &[String],
-) -> Result<Vec<HashMap<String, String>>, String> {
+) -> AnyResult<Vec<HashMap<String, String>>> {
     use calamine::{Reader, Xlsx, open_workbook};
 
-    let mut workbook: Xlsx<_> =
-        open_workbook(path).map_err(|e: calamine::XlsxError| e.to_string())?;
+    let mut workbook: Xlsx<_> = open_workbook(path)?;
     let sheet_names = workbook.sheet_names();
     if sheet_names.is_empty() {
-        return Err("xlsx file has no sheets".to_string());
+        bail!("xlsx file has no sheets");
     }
     let target_sheet = sheet_name.unwrap_or_else(|| sheet_names[0].clone());
-    let range = workbook
-        .worksheet_range(&target_sheet)
-        .map_err(|e| e.to_string())?;
+    let range = workbook.worksheet_range(&target_sheet)?;
 
     let mut rows_iter = range.rows();
-    let header_row = rows_iter.next().ok_or("xlsx sheet is empty")?;
+    let header_row = rows_iter.next().context("xlsx sheet is empty")?;
     let headers: Vec<String> = header_row.iter().map(|c| c.to_string()).collect();
 
     let na_set: HashSet<String> = na_tokens.iter().cloned().collect();
@@ -1069,26 +1092,26 @@ pub fn check_join_sanity_impl(
     na_tokens: Vec<String>,
     sheet_name: Option<String>,
     delimiter: Option<String>,
-    state: &crate::import::AppState,
-) -> Result<SanityCheckResult, String> {
+    state: &crate::app_state::AppState,
+) -> AnyResult<SanityCheckResult> {
     let left_on: Vec<String> = keys.iter().map(|k| k.left.clone()).collect();
     let right_on: Vec<String> = keys.iter().map(|k| k.right.clone()).collect();
 
     let qcbf_rows: Vec<HashMap<String, String>> = {
-        let guard = state.active_data.lock().map_err(|e| e.to_string())?;
+        let guard = state
+            .active_data
+            .lock()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
         guard
             .as_ref()
-            .ok_or("No qCBF data loaded. Select a file first.")?
+            .context("No qCBF data loaded. Select a file first.")?
             .qcbf_rows
             .clone()
     };
 
     let ext_path = PathBuf::from(&external_absolute_path);
     if !ext_path.exists() {
-        return Err(format!(
-            "External file not found: {}",
-            external_absolute_path
-        ));
+        bail!("External file not found: {}", external_absolute_path);
     }
     let extension = ext_path
         .extension()
@@ -1108,14 +1131,14 @@ pub fn check_join_sanity_impl(
             let delim_char = if let Some(d) = parsed_delimiter {
                 d
             } else {
-                let text = std::fs::read_to_string(&ext_path).map_err(|e| e.to_string())?;
+                let text = std::fs::read_to_string(&ext_path)?;
                 let first_line = text.lines().next().unwrap_or("");
                 detect_delimiter(first_line)
             };
             parse_external_rows(&ext_path, delim_char, &na_tokens)?
         }
         "xlsx" => parse_external_xlsx_rows(&ext_path, sheet_name, &na_tokens)?,
-        _ => return Err(format!("Unsupported file format: .{}", extension)),
+        _ => bail!("Unsupported file format: .{}", extension),
     };
 
     let mut right_key_counts: HashMap<Vec<String>, usize> = HashMap::new();
@@ -1167,7 +1190,7 @@ pub async fn check_join_sanity(
     na_tokens: Vec<String>,
     sheet_name: Option<String>,
     delimiter: Option<String>,
-    state: State<'_, crate::import::AppState>,
+    state: State<'_, crate::app_state::AppState>,
 ) -> Result<SanityCheckResult, String> {
     check_join_sanity_impl(
         PathBuf::from(project_root),
@@ -1179,6 +1202,7 @@ pub async fn check_join_sanity(
         delimiter,
         &state,
     )
+    .into_command_result()
 }
 
 #[tauri::command]
@@ -1192,7 +1216,7 @@ pub async fn execute_join(
     na_tokens: Vec<String>,
     sheet_name: Option<String>,
     delimiter: Option<String>,
-    state: State<'_, crate::import::AppState>,
+    state: State<'_, crate::app_state::AppState>,
 ) -> Result<DataInspection, String> {
     execute_join_impl(
         PathBuf::from(project_root),
@@ -1205,6 +1229,7 @@ pub async fn execute_join(
         delimiter,
         &state,
     )
+    .into_command_result()
 }
 
 #[derive(Debug, Serialize)]
@@ -1216,17 +1241,20 @@ pub struct FileStats {
 
 #[tauri::command]
 pub async fn stat_file(path: String) -> Result<FileStats, String> {
-    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
-    let mtime = meta
-        .modified()
-        .map(|t| {
-            t.duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs().to_string())
-                .unwrap_or_default()
+    (|| -> AnyResult<FileStats> {
+        let meta = std::fs::metadata(&path)?;
+        let mtime = meta
+            .modified()
+            .map(|t| {
+                t.duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs().to_string())
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        Ok(FileStats {
+            mtime,
+            size: meta.len(),
         })
-        .unwrap_or_default();
-    Ok(FileStats {
-        mtime,
-        size: meta.len(),
-    })
+    })()
+    .into_command_result()
 }

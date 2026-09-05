@@ -11,9 +11,7 @@ pub(crate) fn validate_process_id(pid: u32) -> Result<(), String> {
     }
 
     #[cfg(unix)]
-    i32::try_from(pid)
-        .map(|_| ())
-        .map_err(|_| format!("PID {pid} exceeds the Unix positive PID range"))?;
+    validate_unix_pid_range(pid)?;
 
     Ok(())
 }
@@ -23,11 +21,17 @@ pub(crate) fn validate_process_ids(pids: &[u32]) -> Result<(), String> {
 }
 
 #[cfg(unix)]
+fn validate_unix_pid_range(pid: u32) -> Result<(), String> {
+    if pid > i32::MAX as u32 {
+        return Err(format!("PID {pid} exceeds the Unix positive PID range"));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
 pub(crate) fn checked_unix_pid(pid: u32) -> Result<nix::unistd::Pid, String> {
     validate_process_id(pid)?;
-    let raw =
-        i32::try_from(pid).map_err(|_| format!("PID {pid} exceeds the Unix positive PID range"))?;
-    Ok(nix::unistd::Pid::from_raw(raw))
+    Ok(nix::unistd::Pid::from_raw(pid as i32))
 }
 
 #[cfg(unix)]

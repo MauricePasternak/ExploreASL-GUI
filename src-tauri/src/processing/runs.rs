@@ -2,18 +2,16 @@ use super::types::{
     ProcessState, ProcessingLifecycle, ProcessingRun, ProcessingRunSnapshot,
     ProcessingTerminalResult,
 };
-use crate::import::AppState;
+use crate::app_state::AppState;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard};
 use tauri::State;
 
 static NEXT_PROCESSING_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
 fn active_project_root(state: &AppState) -> Result<PathBuf, String> {
-    let root = state
-        .active_project_root
-        .lock()
-        .map_err(|_| "Active project state lock was poisoned".to_string())?
+    let root = lock_state(&state.active_project_root, "Active project state")?
         .clone()
         .ok_or_else(|| "No active project".to_string())?;
     root.canonicalize().map_err(|error| {
@@ -22,6 +20,22 @@ fn active_project_root(state: &AppState) -> Result<PathBuf, String> {
             root.display()
         )
     })
+}
+
+fn lock_state<'a, T>(mutex: &'a Mutex<T>, state_name: &str) -> Result<MutexGuard<'a, T>, String> {
+    mutex
+        .lock()
+        .map_err(|_| format!("{state_name} lock was poisoned"))
+}
+
+pub(crate) fn lock_processing_state(
+    state: &AppState,
+) -> Result<MutexGuard<'_, ProcessState>, String> {
+    lock_state(&state.processing_state, "Processing state")
+}
+
+pub(crate) fn lock_project_transition(state: &AppState) -> Result<MutexGuard<'_, ()>, String> {
+    lock_state(&state.project_transition, "Project transition")
 }
 
 fn next_run_id() -> String {
@@ -55,10 +69,7 @@ pub(crate) fn reserve_processing_run_impl(
     selected_subject_sessions: Vec<String>,
 ) -> Result<ProcessingRunSnapshot, String> {
     let project_root = active_project_root(state)?;
-    let mut processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let mut processing_state = lock_processing_state(state)?;
 
     if processing_state.watcher_run_id.is_some()
         || processing_state.watcher_stop.is_some()
@@ -92,10 +103,7 @@ pub fn reserve_processing_run(
     selected_modules: Vec<String>,
     selected_subject_sessions: Vec<String>,
 ) -> Result<ProcessingRunSnapshot, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     reserve_processing_run_impl(&state, selected_modules, selected_subject_sessions)
 }
 
@@ -105,10 +113,7 @@ pub(crate) fn fail_processing_run_impl(
 ) -> Result<ProcessingRunSnapshot, String> {
     {
         let project_root = active_project_root(state)?;
-        let mut processing_state = state
-            .processing_state
-            .lock()
-            .map_err(|_| "Processing state lock was poisoned".to_string())?;
+        let mut processing_state = lock_processing_state(state)?;
         let run = matching_run(&mut processing_state, &project_root, run_id)?;
         if run.lifecycle != ProcessingLifecycle::Preparing {
             return Err(format!(
@@ -125,10 +130,7 @@ pub(crate) fn fail_processing_run_impl(
     super::pipeline::reap_completed_worker_supervisors(state, run_id)?;
 
     let project_root = active_project_root(state)?;
-    let mut processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let mut processing_state = lock_processing_state(state)?;
     let run = matching_run(&mut processing_state, &project_root, run_id)?;
     if run.lifecycle != ProcessingLifecycle::Preparing {
         return Err(format!(
@@ -151,10 +153,7 @@ pub(crate) fn record_launch_failure_impl(
 ) -> Result<ProcessingRunSnapshot, String> {
     let should_stop_watcher = {
         let project_root = active_project_root(state)?;
-        let mut processing_state = state
-            .processing_state
-            .lock()
-            .map_err(|_| "Processing state lock was poisoned".to_string())?;
+        let mut processing_state = lock_processing_state(state)?;
         let run = matching_run(&mut processing_state, &project_root, run_id)?;
         match run.lifecycle {
             ProcessingLifecycle::Preparing => {
@@ -204,10 +203,7 @@ pub fn fail_processing_run(
     state: State<'_, AppState>,
     run_id: String,
 ) -> Result<ProcessingRunSnapshot, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     fail_processing_run_impl(&state, &run_id)
 }
 
@@ -218,10 +214,7 @@ pub(crate) fn finalize_processing_run_impl(
 ) -> Result<ProcessingRunSnapshot, String> {
     {
         let project_root = active_project_root(state)?;
-        let mut processing_state = state
-            .processing_state
-            .lock()
-            .map_err(|_| "Processing state lock was poisoned".to_string())?;
+        let mut processing_state = lock_processing_state(state)?;
         let run = matching_run(&mut processing_state, &project_root, run_id)?;
         if run.lifecycle != ProcessingLifecycle::Finalizing {
             return Err(format!(
@@ -237,10 +230,7 @@ pub(crate) fn finalize_processing_run_impl(
     // complete; never wait under a project-transition command.
     super::pipeline::reap_completed_worker_supervisors(state, run_id)?;
     let project_root = active_project_root(state)?;
-    let mut processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let mut processing_state = lock_processing_state(state)?;
     let run = matching_run(&mut processing_state, &project_root, run_id)?;
     let lifecycle = if run.pending_launch_failure.is_some() {
         ProcessingLifecycle::Failed
@@ -263,10 +253,7 @@ pub fn finalize_processing_run(
     run_id: String,
     outcome: ProcessingTerminalResult,
 ) -> Result<ProcessingRunSnapshot, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     finalize_processing_run_impl(&state, &run_id, outcome)
 }
 
@@ -274,10 +261,7 @@ pub(crate) fn get_active_run_impl(
     state: &AppState,
 ) -> Result<Option<ProcessingRunSnapshot>, String> {
     let project_root = active_project_root(state)?;
-    let processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let processing_state = lock_processing_state(state)?;
     Ok(processing_state.current_run.as_ref().and_then(|run| {
         (!run.lifecycle.is_terminal() && run.belongs_to(&project_root)).then(|| run.snapshot())
     }))
@@ -293,10 +277,7 @@ pub(crate) fn attach_run_impl(
     run_id: &str,
 ) -> Result<ProcessingRunSnapshot, String> {
     let project_root = active_project_root(state)?;
-    let mut processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let mut processing_state = lock_processing_state(state)?;
     Ok(matching_run(&mut processing_state, &project_root, run_id)?.snapshot())
 }
 
@@ -353,10 +334,7 @@ pub(crate) fn validate_launch_request(
     workers: u32,
 ) -> Result<LaunchAuthority, String> {
     let project_root = active_project_root(state)?;
-    let processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let processing_state = lock_processing_state(state)?;
     let run = processing_state
         .current_run
         .as_ref()
@@ -398,10 +376,7 @@ pub(crate) fn validate_launch_request(
 /// must not alter healthy run evidence.
 pub(crate) fn validate_launch_admission(state: &AppState, run_id: &str) -> Result<(), String> {
     let project_root = active_project_root(state)?;
-    let mut processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let mut processing_state = lock_processing_state(state)?;
     let run = matching_run(&mut processing_state, &project_root, run_id)?;
     if run.lifecycle != ProcessingLifecycle::Preparing {
         return Err(format!(
@@ -481,10 +456,7 @@ pub(crate) fn matching_run_for_active_project<'a>(
     run_id: &str,
 ) -> Result<(std::sync::MutexGuard<'a, ProcessState>, PathBuf), String> {
     let project_root = active_project_root(state)?;
-    let processing_state = state
-        .processing_state
-        .lock()
-        .map_err(|_| "Processing state lock was poisoned".to_string())?;
+    let processing_state = lock_processing_state(state)?;
     let current = processing_state
         .current_run
         .as_ref()

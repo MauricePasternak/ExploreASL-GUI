@@ -1,4 +1,5 @@
 use super::types::{LockCreated, LogFileInfo, StatusFileCreated};
+use anyhow::{Context, Result as AnyResult};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -229,18 +230,13 @@ pub(crate) fn escape_matlab_string(value: &str) -> String {
     value.replace('\'', "''")
 }
 
-pub(crate) fn ensure_lock_dir(project_root: &Path) -> Result<PathBuf, String> {
+pub(crate) fn ensure_lock_dir(project_root: &Path) -> AnyResult<PathBuf> {
     let lock_dir = project_root
         .join("derivatives")
         .join("ExploreASL")
         .join("lock");
-    fs::create_dir_all(&lock_dir).map_err(|e| {
-        format!(
-            "Failed to create lock directory {}: {}",
-            lock_dir.display(),
-            e
-        )
-    })?;
+    fs::create_dir_all(&lock_dir)
+        .with_context(|| format!("Failed to create lock directory {}", lock_dir.display()))?;
     Ok(lock_dir)
 }
 

@@ -1,7 +1,9 @@
-use super::runs::{matching_run_for_active_project, validate_watcher_request};
+use super::runs::{
+    lock_project_transition, matching_run_for_active_project, validate_watcher_request,
+};
 use super::types::{LockRemoved, ProcessingRunSnapshot};
 use super::utils::{parse_lock_dir_path, parse_lock_path};
-use crate::import::AppState;
+use crate::app_state::AppState;
 use crate::tracing::CommandTrace;
 use notify::{EventKind, RecursiveMode, Watcher};
 use std::sync::mpsc;
@@ -15,10 +17,7 @@ pub fn watch_lock_dir(
     state: State<'_, AppState>,
     run_id: String,
 ) -> Result<ProcessingRunSnapshot, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     let trace = CommandTrace::new("watch_lock_dir");
     trace.arg("run_id", &run_id);
 
@@ -181,10 +180,7 @@ fn clear_watcher_reservation(state: &AppState, run_id: &str) {
 
 #[tauri::command]
 pub fn stop_watch_lock_dir(state: State<'_, AppState>, run_id: String) -> Result<(), String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     stop_watch_lock_dir_impl(&state, &run_id)
 }
 

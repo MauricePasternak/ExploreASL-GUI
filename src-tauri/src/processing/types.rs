@@ -27,10 +27,23 @@ impl ProcessingLifecycle {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("Illegal processing lifecycle transition: {from:?} -> {to:?}")]
+pub struct ProcessingTransitionError {
+    pub from: ProcessingLifecycle,
+    pub to: ProcessingLifecycle,
+}
+
+impl From<ProcessingTransitionError> for String {
+    fn from(error: ProcessingTransitionError) -> Self {
+        error.to_string()
+    }
+}
+
 pub fn validate_processing_transition(
     from: ProcessingLifecycle,
     to: ProcessingLifecycle,
-) -> Result<(), String> {
+) -> Result<(), ProcessingTransitionError> {
     use ProcessingLifecycle::*;
     let legal = matches!(
         (from, to),
@@ -42,9 +55,7 @@ pub fn validate_processing_transition(
     if legal {
         Ok(())
     } else {
-        Err(format!(
-            "Illegal processing lifecycle transition: {from:?} -> {to:?}"
-        ))
+        Err(ProcessingTransitionError { from, to })
     }
 }
 
@@ -155,7 +166,7 @@ impl ProcessingRun {
         self.project_root == project_root
     }
 
-    pub fn transition(&mut self, to: ProcessingLifecycle) -> Result<(), String> {
+    pub fn transition(&mut self, to: ProcessingLifecycle) -> Result<(), ProcessingTransitionError> {
         validate_processing_transition(self.lifecycle, to)?;
         self.lifecycle = to;
         if to.is_terminal() {

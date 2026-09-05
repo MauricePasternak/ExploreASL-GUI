@@ -1,11 +1,11 @@
+mod app_state;
 mod apptainer;
 pub mod bids;
 pub mod bids_commands;
 mod commands;
+mod error;
 pub mod execution_profile;
 pub mod import;
-pub mod import_parser;
-pub mod import_relocation;
 pub mod manifest;
 pub mod matlab;
 mod niivue_protocol;
@@ -14,16 +14,17 @@ pub mod processing;
 mod project_runtime;
 mod project_writer;
 pub mod qc;
-mod staging;
 mod tracing;
 pub mod visualization;
 mod visualization_tests;
 
-#[cfg(test)]
-mod import_relocation_tests;
+pub use import::parser as import_parser;
+pub use import::relocation as import_relocation;
+
 #[cfg(test)]
 mod project_writer_tests;
 
+use app_state::AppState;
 use apptainer::which_apptainer;
 use bids_commands::{
     check_bids_dataset, ensure_rawdata_dir, ensure_rawdata_dir_for_run, scan_bids_sidecars,
@@ -33,7 +34,7 @@ use commands::{
 };
 use execution_profile::{validate_all_execution_profiles, validate_execution_profile};
 use import::{
-    AppState, clean_import_status, copy_lock_files, move_import_output, plan_import_relocation,
+    clean_import_status, copy_lock_files, move_import_output, plan_import_relocation,
     preflight_staging_plan, read_import_status, run_import_pipeline, stop_active_import,
     stop_import, stop_running_import_for_exit,
 };

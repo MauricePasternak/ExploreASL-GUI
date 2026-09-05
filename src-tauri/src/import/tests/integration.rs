@@ -554,12 +554,12 @@ mod tests {
             assert_eq!(normalized[0].subject, canonical);
             assert_eq!(normalized[0].original_subject, entry.original_subject);
             assert_eq!(normalized[0].source_path, entry.source_path);
-            let compiled = crate::staging::compile_staging_plan(
+            let compiled = crate::import::staging::compile_staging_plan(
                 Some(fs::canonicalize(&project_root).unwrap()),
                 &normalized,
             )
             .expect("compiled canonical staging plan");
-            crate::staging::execute_compiled_staging_plan(&compiled).unwrap();
+            crate::import::staging::execute_compiled_staging_plan(&compiled).unwrap();
             assert!(
                 compiled.records[0].destination.starts_with(
                     project_root
@@ -1032,7 +1032,7 @@ mod tests {
         let error = move_import_output_paths(&staging_root, &project_root, &[], false, false)
             .expect_err("mismatched project root should be rejected");
 
-        assert!(error.contains("project_root must be the parent of staging_root"));
+        assert!(format!("{error:#}").contains("project_root must be the parent of staging_root"));
         assert_eq!(
             fs::read_to_string(project_root.join("rawdata").join("keep.txt"))
                 .expect("project marker should remain"),
@@ -1054,7 +1054,7 @@ mod tests {
         let error = copy_lock_files_paths(&project_root, &staging_root, &["BADDIE".to_string()])
             .expect_err("mismatched project root should be rejected");
 
-        assert!(error.contains("project_root must be the parent of staging_root"));
+        assert!(format!("{error:#}").contains("project_root must be the parent of staging_root"));
         assert!(!import_lock_dir(&staging_root, "BADDIE").exists());
 
         let _ = fs::remove_dir_all(project_root);
@@ -1068,7 +1068,7 @@ mod tests {
         let error = clean_import_status_paths(&staging_root, &["../evil".to_string()])
             .expect_err("traversal subject should be rejected");
 
-        assert!(error.contains("Invalid subject"));
+        assert!(format!("{error:#}").contains("Invalid subject"));
     }
 
     #[test]
@@ -1081,7 +1081,7 @@ mod tests {
             copy_lock_files_paths(&project_root, &staging_root, &["evil/subject".to_string()])
                 .expect_err("separator subject should be rejected");
 
-        assert!(error.contains("Invalid subject"));
+        assert!(format!("{error:#}").contains("Invalid subject"));
 
         let _ = fs::remove_dir_all(project_root);
     }
@@ -1101,7 +1101,7 @@ mod tests {
         )
         .expect_err("partial move should reject traversal subjects");
 
-        assert!(error.contains("Invalid subject"));
+        assert!(format!("{error:#}").contains("Invalid subject"));
 
         let _ = fs::remove_dir_all(project_root);
     }
@@ -1726,7 +1726,7 @@ mod tests {
         let error = move_import_output_for_state(&state, true, true)
             .expect_err("debug config copy failure must be surfaced");
 
-        assert!(error.contains("Failed to copy import config"));
+        assert!(format!("{error:#}").contains("Failed to copy import config"));
         assert_eq!(
             fs::read_to_string(project_root.join("rawdata/sub-A/image.nii")).unwrap(),
             "new"
@@ -1778,7 +1778,11 @@ mod tests {
         let relocation = std::thread::spawn(move || {
             relocation_start.wait();
             relocation_sender
-                .send(move_import_output_for_state(&relocation_state, true, false).map(|_| ()))
+                .send(
+                    move_import_output_for_state(&relocation_state, true, false)
+                        .map(|_| ())
+                        .map_err(|error| format!("{error:#}")),
+                )
                 .unwrap();
         });
         let activation_state = Arc::clone(&state);
@@ -1931,7 +1935,7 @@ mod tests {
             )
             .expect_err("a preserved subject cannot be selected for rerun");
             assert_eq!(
-                error,
+                format!("{error:#}"),
                 "Retry preserve subjects overlap subjects selected for import"
             );
             let import_state = state.import_state.lock().expect("import state");
@@ -2389,7 +2393,7 @@ mod tests {
         )
         .expect_err("non .easl_staging roots should be rejected");
 
-        assert!(error.contains("staging_root must end with .easl_staging"));
+        assert!(format!("{error:#}").contains("staging_root must end with .easl_staging"));
         let _ = fs::remove_dir_all(project_root);
     }
 

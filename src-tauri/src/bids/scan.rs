@@ -1,4 +1,5 @@
 use crate::bids::path::{is_subject_dir, resolve_sessions};
+use anyhow::{Context, Result as AnyResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -36,11 +37,11 @@ pub struct AslFile {
 ///
 /// Path-agnostic: scans whatever path it receives for `sub-*/` directories.
 /// Handles cross-sectional (sub-*/perf/) and longitudinal (sub-*/ses-*/perf/) layouts.
-pub fn parse_bids_structure(bids_root: &Path) -> Result<Vec<BidsSubject>, String> {
+pub fn parse_bids_structure(bids_root: &Path) -> AnyResult<Vec<BidsSubject>> {
     let mut subjects = Vec::new();
 
     let entries = std::fs::read_dir(bids_root)
-        .map_err(|e| format!("Failed to read BIDS root {}: {}", bids_root.display(), e))?;
+        .with_context(|| format!("Failed to read BIDS root {}", bids_root.display()))?;
 
     for entry in entries.flatten() {
         if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {

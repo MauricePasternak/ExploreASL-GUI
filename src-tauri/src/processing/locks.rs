@@ -1,18 +1,24 @@
-use super::runs::finalizing_run_root;
+use super::runs::{finalizing_run_root, lock_project_transition};
 use super::types::SubjectModuleStatus;
 use super::utils::{
     check_log_for_error, determine_status, exploreasl_log_dirs, find_asl_runs_from_logs,
     get_asl_completion_time, get_structural_completion_time, module_index_to_name,
     normalize_asl_run_id,
 };
-use crate::import::AppState;
+use crate::app_state::AppState;
+use crate::error::IntoCommandResult;
 use crate::tracing::CommandTrace;
+use anyhow::{Context, Result as AnyResult, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[tauri::command]
 pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>, String> {
+    read_lock_status_impl(project_root).into_command_result()
+}
+
+fn read_lock_status_impl(project_root: String) -> AnyResult<Vec<SubjectModuleStatus>> {
     let trace = CommandTrace::new("read_lock_status");
     trace.arg("project_root", &project_root);
 
@@ -29,10 +35,10 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
     // Structural module
     let structural_lock = lock_root.join("xASL_module_Structural");
     if structural_lock.exists() {
-        for entry in std::fs::read_dir(&structural_lock)
-            .map_err(|e| format!("Failed to read structural lock: {}", e))?
+        for entry in
+            std::fs::read_dir(&structural_lock).context("Failed to read structural lock")?
         {
-            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            let entry = entry.context("Failed to read entry")?;
             if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
                 continue;
             }
@@ -62,10 +68,8 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
     // ASL module
     let asl_lock = lock_root.join("xASL_module_ASL");
     if asl_lock.exists() {
-        for entry in
-            std::fs::read_dir(&asl_lock).map_err(|e| format!("Failed to read ASL lock: {}", e))?
-        {
-            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        for entry in std::fs::read_dir(&asl_lock).context("Failed to read ASL lock")? {
+            let entry = entry.context("Failed to read entry")?;
             if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
                 continue;
             }
@@ -243,7 +247,7 @@ pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>
     Ok(statuses)
 }
 
-pub(crate) fn clear_stale_lock_dirs(lock_root: &Path, b_process: &[bool]) -> Result<(), String> {
+pub(crate) fn clear_stale_lock_dirs(lock_root: &Path, b_process: &[bool]) -> AnyResult<()> {
     for (i, &enabled) in b_process.iter().enumerate() {
         if !enabled {
             continue;
@@ -253,7 +257,7 @@ pub(crate) fn clear_stale_lock_dirs(lock_root: &Path, b_process: &[bool]) -> Res
     Ok(())
 }
 
-fn clear_module_locked_dirs(lock_root: &Path, module_name: &str) -> Result<(), String> {
+fn clear_module_locked_dirs(lock_root: &Path, module_name: &str) -> AnyResult<()> {
     let module_lock = lock_root.join(module_name);
     if !module_lock.exists() {
         return Ok(());
@@ -269,11 +273,7 @@ fn clear_module_locked_dirs(lock_root: &Path, module_name: &str) -> Result<(), S
                 && let Err(e) = fs::remove_dir_all(path)
                 && e.kind() != std::io::ErrorKind::NotFound
             {
-                return Err(format!(
-                    "Failed to clear stale locked dir {}: {}",
-                    path.display(),
-                    e
-                ));
+                bail!("Failed to clear stale locked dir {}: {}", path.display(), e);
             }
         }
     }
@@ -294,7 +294,7 @@ pub fn clear_stale_locks(project_root: String) -> Result<(), String> {
         "xASL_module_ASL",
         "xASL_module_Population",
     ] {
-        clear_module_locked_dirs(&lock_root, module_name)?;
+        clear_module_locked_dirs(&lock_root, module_name).into_command_result()?;
     }
     Ok(())
 }
@@ -307,10 +307,7 @@ pub fn clear_stale_locks_for_run(
     state: tauri::State<'_, AppState>,
     run_id: String,
 ) -> Result<(), String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    let _transition = lock_project_transition(&state)?;
     let root = finalizing_run_root(&state, &run_id)?;
     let lock_root = root.join("derivatives").join("ExploreASL").join("lock");
     if !lock_root.exists() {
@@ -321,15 +318,12 @@ pub fn clear_stale_locks_for_run(
         "xASL_module_ASL",
         "xASL_module_Population",
     ] {
-        clear_module_locked_dirs(&lock_root, module_name)?;
+        clear_module_locked_dirs(&lock_root, module_name).into_command_result()?;
     }
     Ok(())
 }
 
-pub(crate) fn delete_bids2legacy_locks(
-    project_root: &Path,
-    subject_regexp: &str,
-) -> Result<(), String> {
+pub(crate) fn delete_bids2legacy_locks(project_root: &Path, subject_regexp: &str) -> AnyResult<()> {
     let lock_root = project_root
         .join("derivatives")
         .join("ExploreASL")
@@ -344,18 +338,17 @@ pub(crate) fn delete_bids2legacy_locks(
     } else {
         Some(
             regex::Regex::new(subject_regexp)
-                .map_err(|e| format!("Invalid subject regexp '{}': {}", subject_regexp, e))?,
+                .with_context(|| format!("Invalid subject regexp '{subject_regexp}'"))?,
         )
     };
 
-    for entry in fs::read_dir(&bids2legacy_dir).map_err(|e| {
+    for entry in fs::read_dir(&bids2legacy_dir).with_context(|| {
         format!(
-            "Failed to read BIDS2Legacy lock dir {}: {}",
-            bids2legacy_dir.display(),
-            e
+            "Failed to read BIDS2Legacy lock dir {}",
+            bids2legacy_dir.display()
         )
     })? {
-        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let entry = entry.context("Failed to read entry")?;
         if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
             continue;
         }
@@ -370,11 +363,11 @@ pub(crate) fn delete_bids2legacy_locks(
         if let Err(e) = fs::remove_dir_all(entry.path())
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            return Err(format!(
+            bail!(
                 "Failed to delete BIDS2Legacy lock dir {}: {}",
                 entry.path().display(),
                 e
-            ));
+            );
         }
     }
 
@@ -385,7 +378,7 @@ pub(crate) fn delete_status_files_for_modules(
     project_root: &Path,
     b_process: &[bool],
     subject_regexp: &str,
-) -> Result<(), String> {
+) -> AnyResult<()> {
     let lock_root = project_root
         .join("derivatives")
         .join("ExploreASL")
@@ -399,7 +392,7 @@ pub(crate) fn delete_status_files_for_modules(
     } else {
         Some(
             regex::Regex::new(subject_regexp)
-                .map_err(|e| format!("Invalid subject regexp '{}': {}", subject_regexp, e))?,
+                .with_context(|| format!("Invalid subject regexp '{subject_regexp}'"))?,
         )
     };
 
@@ -421,14 +414,10 @@ pub(crate) fn delete_status_files_for_modules(
             continue;
         }
 
-        for entry in fs::read_dir(&module_lock_dir).map_err(|e| {
-            format!(
-                "Failed to read lock dir {}: {}",
-                module_lock_dir.display(),
-                e
-            )
-        })? {
-            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        for entry in fs::read_dir(&module_lock_dir)
+            .with_context(|| format!("Failed to read lock dir {}", module_lock_dir.display()))?
+        {
+            let entry = entry.context("Failed to read entry")?;
             if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
                 continue;
             }
@@ -441,11 +430,10 @@ pub(crate) fn delete_status_files_for_modules(
             }
 
             if module_name == "xASL_module_ASL" {
-                for run_entry in fs::read_dir(entry.path())
-                    .map_err(|e| format!("Failed to read ASL subject lock dir: {}", e))?
+                for run_entry in
+                    fs::read_dir(entry.path()).context("Failed to read ASL subject lock dir")?
                 {
-                    let run_entry =
-                        run_entry.map_err(|e| format!("Failed to read run entry: {}", e))?;
+                    let run_entry = run_entry.context("Failed to read run entry")?;
                     if !run_entry.file_type().is_ok_and(|ft| ft.is_dir()) {
                         continue;
                     }
@@ -466,9 +454,9 @@ pub(crate) fn delete_status_files_for_modules(
     Ok(())
 }
 
-fn delete_status_files_in_dir(dir: &Path) -> Result<(), String> {
+fn delete_status_files_in_dir(dir: &Path) -> AnyResult<()> {
     for entry in WalkDir::new(dir).min_depth(1) {
-        let entry = entry.map_err(|e| format!("WalkDir error: {}", e))?;
+        let entry = entry.context("WalkDir error")?;
         let path = entry.path();
         if path.is_file()
             && let Some(file_name) = path.file_name().and_then(|f| f.to_str())
@@ -478,11 +466,7 @@ fn delete_status_files_in_dir(dir: &Path) -> Result<(), String> {
                 Ok(()) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => {
-                    return Err(format!(
-                        "Failed to delete status file {}: {}",
-                        path.display(),
-                        e
-                    ));
+                    bail!("Failed to delete status file {}: {}", path.display(), e);
                 }
             }
         }

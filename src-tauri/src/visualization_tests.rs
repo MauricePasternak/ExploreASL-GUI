@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::import::AppState;
+    use crate::app_state::AppState;
     use crate::processing::{ProcessingLifecycle, ProcessingRun};
     use crate::visualization::*;
     use std::fs;
@@ -242,7 +242,7 @@ mod tests {
         let state = AppState::default();
         let result = read_data_columns_impl(vec!["GM_vol".to_string()], &state);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("No data loaded"));
+        assert!(result.unwrap_err().to_string().contains("No data loaded"));
     }
 
     #[test]

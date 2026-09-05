@@ -587,5 +587,4 @@ pub fn parse_import_stream_lines(
 }
 
 #[cfg(test)]
-#[path = "import_parser_tests.rs"]
-mod import_parser_tests;
+mod parser_tests;

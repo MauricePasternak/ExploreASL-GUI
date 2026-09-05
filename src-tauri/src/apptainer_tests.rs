@@ -25,7 +25,7 @@ mod tests {
         let error = run_command_with_timeout(command, Duration::from_millis(20))
             .expect_err("long-running command should time out");
 
-        assert!(error.contains("timed out"));
+        assert!(error.to_string().contains("timed out"));
     }
 
     #[test]

@@ -1113,6 +1113,7 @@ dependencies = [
 name = "exploreasl_gui"
 version = "0.1.2"
 dependencies = [
+ "anyhow",
  "calamine",
  "csv",
  "libc",
@@ -1137,6 +1138,7 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-updater",
  "tempfile",
+ "thiserror 2.0.18",
  "unicode-casefold",
  "unicode-normalization",
  "walkdir",

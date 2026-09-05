@@ -1,11 +1,17 @@
 use super::types::LogFileInfo;
 use super::utils::{exploreasl_log_dirs, module_index_to_name, parse_module_log_file};
+use crate::error::IntoCommandResult;
 use crate::tracing::CommandTrace;
+use anyhow::{Context, Result as AnyResult, bail};
 use std::fs;
 use std::path::PathBuf;
 
 #[tauri::command]
 pub fn list_module_logs(project_root: String) -> Result<Vec<LogFileInfo>, String> {
+    list_module_logs_impl(project_root).into_command_result()
+}
+
+fn list_module_logs_impl(project_root: String) -> AnyResult<Vec<LogFileInfo>> {
     let trace = CommandTrace::new("list_module_logs");
     trace.arg("project_root", &project_root);
 
@@ -30,10 +36,10 @@ pub fn list_module_logs(project_root: String) -> Result<Vec<LogFileInfo>, String
 
     for log_dir in log_dirs {
         let entries = fs::read_dir(&log_dir)
-            .map_err(|e| format!("Failed to read log dir {}: {}", log_dir.display(), e))?;
+            .with_context(|| format!("Failed to read log dir {}", log_dir.display()))?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+            let entry = entry.context("Failed to read log entry")?;
             let file_name = entry.file_name().to_string_lossy().to_string();
 
             if seen_filenames.contains(&file_name) {
@@ -65,6 +71,14 @@ pub fn read_module_logs(
     subject_session: String,
     module: String,
 ) -> Result<std::collections::HashMap<String, String>, String> {
+    read_module_logs_impl(project_root, subject_session, module).into_command_result()
+}
+
+fn read_module_logs_impl(
+    project_root: String,
+    subject_session: String,
+    module: String,
+) -> AnyResult<std::collections::HashMap<String, String>> {
     let trace = CommandTrace::new("read_module_logs");
     trace.arg("project_root", &project_root);
     trace.arg("subject_session", &subject_session);
@@ -83,7 +97,7 @@ pub fn read_module_logs(
         "asl" => "xASL_module_ASL",
         "import" => "xASL_module_Import",
         "population" => "xASL_module_Population",
-        _ => return Err(format!("Unknown module: {}", module)),
+        _ => bail!("Unknown module: {}", module),
     };
 
     let search_prefix = if module == "population" {
@@ -96,10 +110,10 @@ pub fn read_module_logs(
 
     for log_dir in log_dirs {
         let entries = fs::read_dir(&log_dir)
-            .map_err(|e| format!("Failed to read log dir {}: {}", log_dir.display(), e))?;
+            .with_context(|| format!("Failed to read log dir {}", log_dir.display()))?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+            let entry = entry.context("Failed to read log entry")?;
             let file_name = entry.file_name().to_string_lossy().to_string();
 
             if !file_name.starts_with(&search_prefix) || results.contains_key(&file_name) {
@@ -111,9 +125,7 @@ pub fn read_module_logs(
                 Err(_) => {
                     let bytes = match fs::read(entry.path()) {
                         Ok(b) => b,
-                        Err(e) => {
-                            return Err(format!("Failed to read log file {}: {}", file_name, e));
-                        }
+                        Err(e) => bail!("Failed to read log file {}: {}", file_name, e),
                     };
                     String::from_utf8_lossy(&bytes).to_string()
                 }
@@ -131,7 +143,7 @@ pub(crate) fn delete_module_log_files(
     project_root: &std::path::Path,
     b_process: &[bool],
     subject_regexp: &str,
-) -> Result<(), String> {
+) -> AnyResult<()> {
     let log_dir = project_root
         .join("derivatives")
         .join("ExploreASL")
@@ -145,7 +157,7 @@ pub(crate) fn delete_module_log_files(
     } else {
         Some(
             regex::Regex::new(subject_regexp)
-                .map_err(|e| format!("Invalid subject regexp '{}': {}", subject_regexp, e))?,
+                .with_context(|| format!("Invalid subject regexp '{subject_regexp}'"))?,
         )
     };
 
@@ -160,9 +172,9 @@ pub(crate) fn delete_module_log_files(
         let prefix = module_name.to_string();
 
         for entry in fs::read_dir(&log_dir)
-            .map_err(|e| format!("Failed to read log dir {}: {}", log_dir.display(), e))?
+            .with_context(|| format!("Failed to read log dir {}", log_dir.display()))?
         {
-            let entry = entry.map_err(|e| format!("Failed to read log entry: {}", e))?;
+            let entry = entry.context("Failed to read log entry")?;
             let file_name = entry.file_name().to_string_lossy().to_string();
 
             if !file_name.starts_with(&prefix) {
@@ -185,11 +197,11 @@ pub(crate) fn delete_module_log_files(
                     Ok(()) => {}
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                     Err(e) => {
-                        return Err(format!(
+                        bail!(
                             "Failed to delete log file {}: {}",
                             entry.path().display(),
                             e
-                        ));
+                        );
                     }
                 }
             }
