@@ -1,3 +1,4 @@
+pub mod commands;
 pub mod group;
 pub mod path;
 pub mod scan;

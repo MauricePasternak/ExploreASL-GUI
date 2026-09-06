@@ -1,7 +1,6 @@
 mod app_state;
 mod apptainer;
 pub mod bids;
-pub mod bids_commands;
 mod commands;
 mod error;
 pub mod execution_profile;
@@ -18,6 +17,7 @@ mod tracing;
 pub mod visualization;
 mod visualization_tests;
 
+pub use bids::commands as bids_commands;
 pub use import::parser as import_parser;
 pub use import::relocation as import_relocation;
 
@@ -26,7 +26,7 @@ mod project_writer_tests;
 
 use app_state::AppState;
 use apptainer::which_apptainer;
-use bids_commands::{
+use bids::commands::{
     check_bids_dataset, ensure_rawdata_dir, ensure_rawdata_dir_for_run, scan_bids_sidecars,
 };
 use commands::{
