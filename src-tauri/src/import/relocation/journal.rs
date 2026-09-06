@@ -165,8 +165,7 @@ pub(super) fn validate_journal(root: &Path, journal: &RelocationJournal) -> AnyR
     }
     let mut subjects = BTreeSet::new();
     for subject in &journal.subjects {
-        crate::import::validate_subject_components(std::slice::from_ref(&subject.subject))
-            .map_err(anyhow::Error::msg)?;
+        crate::import::validate_subject_components(std::slice::from_ref(&subject.subject))?;
         if !subjects.insert(crate::import::staging::portable_key(&subject.subject)) {
             bail!("Relocation journal repeats a subject");
         }

@@ -133,7 +133,7 @@ fn plan_rejects_foreign_scope_and_stale_destination_before_relocation() {
     fs::write(staging.join("rawdata/sub-A/new.nii"), "new").expect("new");
     let error =
         relocate(&bound, 7, &staging, &["A".to_string()], false, false).expect_err("stale plan");
-    assert!(error.contains("stale"));
+    assert!(error.to_string().contains("stale"));
     assert_eq!(
         fs::read_to_string(project.join("rawdata/sub-A/old.nii")).expect("old"),
         "old"

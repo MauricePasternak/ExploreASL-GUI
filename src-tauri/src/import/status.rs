@@ -30,7 +30,7 @@ pub(crate) fn import_lock_dir_for_relocation(root: &Path, subject: &str) -> Path
 }
 
 pub fn clean_import_status_paths(staging_root: &Path, subjects: &[String]) -> AnyResult<()> {
-    validate_subject_components(subjects).map_err(anyhow::Error::msg)?;
+    validate_subject_components(subjects)?;
 
     for subject in subjects {
         let lock_dir = import_lock_dir(staging_root, subject);
@@ -55,18 +55,15 @@ pub fn clean_import_status_paths(staging_root: &Path, subjects: &[String]) -> An
 
 pub(super) fn clean_import_status_for_state(state: &AppState) -> AnyResult<()> {
     with_owned_import_roots(state, |import_state, _, staging_root| {
-        validate_owned_subjects(&import_state.subject_list, &import_state.failed_subjects)
-            .map_err(anyhow::Error::msg)?;
+        validate_owned_subjects(&import_state.subject_list, &import_state.failed_subjects)?;
         clean_import_status_paths(staging_root, &import_state.failed_subjects)
     })
 }
 
 pub(super) fn copy_lock_files_for_state(state: &AppState, subjects: &[String]) -> AnyResult<()> {
     with_owned_import_roots(state, |import_state, project_root, staging_root| {
-        validate_owned_subjects(&import_state.subject_list, &import_state.succeeded_subjects)
-            .map_err(anyhow::Error::msg)?;
-        validate_owned_subjects(&import_state.succeeded_subjects, subjects)
-            .map_err(anyhow::Error::msg)?;
+        validate_owned_subjects(&import_state.subject_list, &import_state.succeeded_subjects)?;
+        validate_owned_subjects(&import_state.succeeded_subjects, subjects)?;
         copy_lock_files_paths(project_root, staging_root, subjects)
     })
 }
@@ -76,9 +73,9 @@ pub fn copy_lock_files_paths(
     staging_root: &Path,
     subjects: &[String],
 ) -> AnyResult<()> {
-    validate_staging_root(staging_root).map_err(anyhow::Error::msg)?;
-    validate_project_root_for_staging(staging_root, project_root).map_err(anyhow::Error::msg)?;
-    validate_subject_components(subjects).map_err(anyhow::Error::msg)?;
+    validate_staging_root(staging_root)?;
+    validate_project_root_for_staging(staging_root, project_root)?;
+    validate_subject_components(subjects)?;
 
     for subject in subjects {
         let source_dir = import_lock_dir(project_root, subject);

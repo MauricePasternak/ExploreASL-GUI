@@ -5,9 +5,9 @@ use super::error::{
 };
 use super::fault_injection::{FaultPoint, fail};
 use super::filesystem::path_exists;
-use super::inventory::create_plan_result;
+use super::inventory::create_plan;
 use super::journal::{JOURNAL_VERSION, journal_path, remove_journal_owned, write_journal};
-use super::paths::{canonical_project_root_result, project_identity, reject_symlink_components};
+use super::paths::{canonical_project_root, project_identity, reject_symlink_components};
 use super::planning::{planned_dataset, planned_subject};
 use super::prepare::{prepare_dataset, prepare_subject};
 use super::rollback::rollback_subject;
@@ -25,7 +25,7 @@ pub fn relocate(
     succeeded_subjects: &[String],
     cleanup_staging: bool,
     debug_mode: bool,
-) -> Result<RelocationOutcome, String> {
+) -> anyhow::Result<RelocationOutcome> {
     relocate_result(
         plan,
         generation,
@@ -34,7 +34,7 @@ pub fn relocate(
         cleanup_staging,
         debug_mode,
     )
-    .map_err(Into::into)
+    .map_err(anyhow::Error::from)
 }
 
 fn relocate_result(
@@ -46,21 +46,17 @@ fn relocate_result(
     debug_mode: bool,
 ) -> RelocationTransactionResult<RelocationOutcome> {
     if plan.bound_generation != Some(generation) {
-        return Err("Relocation plan is not bound to this import generation"
-            .to_string()
-            .into());
+        return Err("Relocation plan is not bound to this import generation".into());
     }
-    let root = canonical_project_root_result(&plan.project_root)?;
+    let root = canonical_project_root(&plan.project_root)?;
     if project_identity(&root) != plan.project_identity {
-        return Err("Relocation plan belongs to another project"
-            .to_string()
-            .into());
+        return Err("Relocation plan belongs to another project".into());
     }
     reject_symlink_components(&root, staging)?;
     if !staging.is_dir() {
-        return Err("Import staging root is missing".to_string().into());
+        return Err("Import staging root is missing".into());
     }
-    let current = create_plan_result(
+    let current = create_plan(
         &root,
         &plan
             .subjects
@@ -70,11 +66,7 @@ fn relocate_result(
         plan.plan_id.clone(),
     )?;
     if current.fingerprint != plan.fingerprint {
-        return Err(
-            "Relocation plan is stale; project output changed after confirmation"
-                .to_string()
-                .into(),
-        );
+        return Err("Relocation plan is stale; project output changed after confirmation".into());
     }
     crate::import::validate_subject_components(succeeded_subjects)?;
     let planned_keys = plan
@@ -87,11 +79,7 @@ fn relocate_result(
         .map(|subject| crate::import::staging::portable_key(subject))
         .collect::<BTreeSet<_>>();
     if !succeeded_keys.is_subset(&planned_keys) {
-        return Err(
-            "Succeeded import subjects do not match the confirmed relocation plan"
-                .to_string()
-                .into(),
-        );
+        return Err("Succeeded import subjects do not match the confirmed relocation plan".into());
     }
     if succeeded_keys.is_empty() {
         return Ok(RelocationOutcome {
@@ -102,9 +90,7 @@ fn relocate_result(
         });
     }
     if path_exists(&journal_path(&root))? {
-        return Err("An import relocation journal already requires recovery"
-            .to_string()
-            .into());
+        return Err("An import relocation journal already requires recovery".into());
     }
 
     // Full run preflight. No project mutation may happen before every persisted

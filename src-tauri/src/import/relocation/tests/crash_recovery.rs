@@ -59,7 +59,7 @@ fn activation_recovery_resolves_every_interrupted_subject_phase() {
 
         let error = relocate(&plan, 1, &staging, &["A".to_string()], false, false)
             .expect_err("simulated interruption");
-        assert!(error.contains("interruption"));
+        assert!(error.to_string().contains("interruption"));
         assert!(
             project
                 .join(crate::import_relocation::JOURNAL_FILE)

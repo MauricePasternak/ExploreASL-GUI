@@ -82,7 +82,7 @@ mod tests {
             validate_staging_root(&invalid_root).expect_err("non-staging root should be rejected");
 
         assert_eq!(
-            error,
+            error.to_string(),
             format!(
                 "staging_root must end with .easl_staging: {}",
                 invalid_root.display()
@@ -356,7 +356,7 @@ mod tests {
             .expect_err("empty staging entries should be rejected");
 
         assert_eq!(
-            error,
+            error.to_string(),
             "staging_entries must contain at least one staging entry"
         );
     }
@@ -378,7 +378,10 @@ mod tests {
         let error = validate_non_empty_inputs(&entries, &[])
             .expect_err("empty subject list should be rejected");
 
-        assert_eq!(error, "subject_list must contain at least one subject");
+        assert_eq!(
+            error.to_string(),
+            "subject_list must contain at least one subject"
+        );
     }
 
     fn scoped_entry(subject: &str, source_path: &str) -> StagingEntry {
@@ -417,8 +420,16 @@ mod tests {
         let error = validate_subject_scope(&entries, &["A".to_string(), "MISSING".to_string()])
             .expect_err("undeclared staging subject should be rejected");
 
-        assert!(error.contains("undeclared staging subjects: EXTRA"));
-        assert!(error.contains("declared subjects without staging entries: MISSING"));
+        assert!(
+            error
+                .to_string()
+                .contains("undeclared staging subjects: EXTRA")
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("declared subjects without staging entries: MISSING")
+        );
     }
 
     #[test]
@@ -428,7 +439,11 @@ mod tests {
         let error = validate_subject_scope(&entries, &["A".to_string(), "MISSING".to_string()])
             .expect_err("declared subject without entries should be rejected");
 
-        assert!(error.contains("declared subjects without staging entries: MISSING"));
+        assert!(
+            error
+                .to_string()
+                .contains("declared subjects without staging entries: MISSING")
+        );
     }
 
     #[test]
@@ -791,7 +806,7 @@ mod tests {
         let error = validate_matlab_executable(&missing.to_string_lossy())
             .expect_err("missing matlab path should be rejected");
 
-        assert!(error.contains("MATLAB executable not found"));
+        assert!(error.to_string().contains("MATLAB executable not found"));
     }
 
     #[test]
@@ -802,7 +817,7 @@ mod tests {
         let error = validate_matlab_executable(&matlab_dir.to_string_lossy())
             .expect_err("directory should not be accepted as matlab executable");
 
-        assert!(error.contains("MATLAB path is not a file"));
+        assert!(error.to_string().contains("MATLAB path is not a file"));
 
         let _ = fs::remove_dir_all(matlab_dir);
     }
@@ -820,7 +835,11 @@ mod tests {
         let error = validate_matlab_executable(&matlab.to_string_lossy())
             .expect_err("non-executable matlab file should be rejected");
 
-        assert!(error.contains("MATLAB executable is not executable"));
+        assert!(
+            error
+                .to_string()
+                .contains("MATLAB executable is not executable")
+        );
 
         let _ = fs::remove_file(matlab);
     }
@@ -879,7 +898,10 @@ mod tests {
         let error = validate_import_not_running(&state)
             .expect_err("active import pid should reject a new import");
 
-        assert_eq!(error, "An import is already running with process PID 42");
+        assert_eq!(
+            error.to_string(),
+            "An import is already running with process PID 42"
+        );
     }
 
     #[test]
@@ -976,7 +998,7 @@ mod tests {
             let error = validate_subject_components(&[invalid_subject.to_string()])
                 .expect_err("invalid subject path component should be rejected");
 
-            assert!(error.contains("Invalid subject"));
+            assert!(error.to_string().contains("Invalid subject"));
         }
     }
 
@@ -996,7 +1018,11 @@ mod tests {
         let error = validate_project_root_for_staging(&staging_root, &project_root)
             .expect_err("project root must be the staging parent");
 
-        assert!(error.contains("project_root must be the parent of staging_root"));
+        assert!(
+            error
+                .to_string()
+                .contains("project_root must be the parent of staging_root")
+        );
 
         let _ = fs::remove_dir_all(
             staging_root

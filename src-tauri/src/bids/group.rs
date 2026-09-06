@@ -205,7 +205,7 @@ fn derive_bids_metadata(
 pub fn group_by_fingerprint(
     sidecar_paths: &[PathBuf],
     subjects: &[BidsSubject],
-) -> Result<BidsSidecarScan, String> {
+) -> BidsSidecarScan {
     // Map: hash → (SidecarGroup-under-construction, first sidecar JSON)
     use std::collections::BTreeMap;
 
@@ -468,7 +468,7 @@ pub fn group_by_fingerprint(
         sidecar_paths.len()
     );
 
-    Ok(BidsSidecarScan { groups, skipped })
+    BidsSidecarScan { groups, skipped }
 }
 
 /// Merge duplicate GroupSubject entries, accumulating session_labels.
@@ -709,7 +709,7 @@ mod tests {
             },
         ];
 
-        let result = group_by_fingerprint(&sidecar_paths, &subjects).unwrap();
+        let result = group_by_fingerprint(&sidecar_paths, &subjects);
         assert_eq!(result.groups.len(), 1);
         assert_eq!(result.groups[0].subjects.len(), 2);
         assert!(result.skipped.is_empty());
@@ -793,7 +793,7 @@ mod tests {
             },
         ];
 
-        let result = group_by_fingerprint(&sidecar_paths, &subjects).unwrap();
+        let result = group_by_fingerprint(&sidecar_paths, &subjects);
         assert_eq!(result.groups.len(), 2);
         assert!(result.skipped.is_empty());
     }
@@ -866,7 +866,7 @@ mod tests {
             },
         ];
 
-        let result = group_by_fingerprint(&sidecar_paths, &subjects).unwrap();
+        let result = group_by_fingerprint(&sidecar_paths, &subjects);
         assert_eq!(result.groups.len(), 1);
         assert_eq!(result.groups[0].subjects.len(), 1);
         assert_eq!(result.skipped.len(), 1);
@@ -934,7 +934,7 @@ mod tests {
             }],
         }];
 
-        let result = group_by_fingerprint(&sidecar_paths, &subjects).unwrap();
+        let result = group_by_fingerprint(&sidecar_paths, &subjects);
         assert_eq!(result.groups.len(), 0);
         assert_eq!(result.skipped.len(), 1);
         assert_eq!(result.skipped[0], "sub-01_1");
@@ -1044,7 +1044,7 @@ mod tests {
             },
         ];
 
-        let result = group_by_fingerprint(&sidecar_paths, &subjects).unwrap();
+        let result = group_by_fingerprint(&sidecar_paths, &subjects);
         // Both subjects have identical other-14 fingerprint fields and both
         // derive M0Type=Separate (m0scan file present). MUST group together
         // despite raw sidecar M0Type differing ("Included" vs "Absent").

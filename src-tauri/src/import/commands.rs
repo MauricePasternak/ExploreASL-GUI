@@ -29,7 +29,7 @@ pub fn plan_import_relocation(
     state: State<'_, AppState>,
     subject_list: Vec<String>,
 ) -> Result<RelocationPlan, String> {
-    plan_import_relocation_for_state(&state, &subject_list)
+    plan_import_relocation_for_state(&state, &subject_list).into_command_result()
 }
 
 #[tauri::command]
@@ -91,6 +91,6 @@ pub fn copy_lock_files(state: State<'_, AppState>, subjects: Vec<String>) -> Res
 
 #[tauri::command]
 pub async fn read_import_status(project_root: String) -> Result<Vec<ImportSubjectStatus>, String> {
-    let project_root = validate_path_input("project_root", &project_root)?;
+    let project_root = validate_path_input("project_root", &project_root).into_command_result()?;
     read_import_status_impl(project_root).into_command_result()
 }

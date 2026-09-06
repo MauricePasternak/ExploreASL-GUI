@@ -1,7 +1,7 @@
 use super::filesystem::path_exists;
 use super::paths::{
-    canonical_project_root_result, log_matches_subject, project_identity,
-    reject_symlink_components, relative_path, safe_join, subject_dir,
+    canonical_project_root, log_matches_subject, project_identity, reject_symlink_components,
+    relative_path, safe_join, subject_dir,
 };
 use super::types::{RelocationEntry, RelocationEntryKind, RelocationPlan, SubjectInventory};
 use anyhow::{Context, Result as AnyResult, bail};
@@ -139,17 +139,9 @@ fn fingerprint_entries(root: &Path, entries: &[RelocationEntry]) -> AnyResult<St
     Ok(format!("{:x}", hash.finalize()))
 }
 
-pub fn inventory_subject(project_root: &Path, subject: &str) -> Result<SubjectInventory, String> {
-    inventory_subject_result(project_root, subject).map_err(|error| format!("{error:#}"))
-}
-
-pub(super) fn inventory_subject_result(
-    project_root: &Path,
-    subject: &str,
-) -> AnyResult<SubjectInventory> {
-    crate::import::validate_subject_components(&[subject.to_string()])
-        .map_err(anyhow::Error::msg)?;
-    let root = canonical_project_root_result(project_root)?;
+pub fn inventory_subject(project_root: &Path, subject: &str) -> AnyResult<SubjectInventory> {
+    crate::import::validate_subject_components(&[subject.to_string()])?;
+    let root = canonical_project_root(project_root)?;
     let sub = subject_dir(subject);
     let mut paths = vec![
         root.join("rawdata").join(&sub),
@@ -196,7 +188,7 @@ pub(super) fn inventory_subject_result(
     inventory_paths(&root, paths, subject)
 }
 
-pub fn plan_relocation(project_root: &Path, subjects: &[String]) -> Result<RelocationPlan, String> {
+pub fn plan_relocation(project_root: &Path, subjects: &[String]) -> AnyResult<RelocationPlan> {
     create_plan(project_root, subjects, "test-plan".to_string())
 }
 
@@ -204,20 +196,12 @@ pub fn create_plan(
     project_root: &Path,
     subjects: &[String],
     plan_id: String,
-) -> Result<RelocationPlan, String> {
-    create_plan_result(project_root, subjects, plan_id).map_err(|error| format!("{error:#}"))
-}
-
-pub(super) fn create_plan_result(
-    project_root: &Path,
-    subjects: &[String],
-    plan_id: String,
 ) -> AnyResult<RelocationPlan> {
-    crate::import::validate_subject_components(subjects).map_err(anyhow::Error::msg)?;
+    crate::import::validate_subject_components(subjects)?;
     if subjects.is_empty() {
         bail!("Relocation plan requires at least one subject");
     }
-    let root = canonical_project_root_result(project_root)?;
+    let root = canonical_project_root(project_root)?;
     let mut seen = BTreeSet::new();
     let mut inventories = Vec::new();
     for subject in subjects {
@@ -225,7 +209,7 @@ pub(super) fn create_plan_result(
         if !seen.insert(key) {
             bail!("Relocation plan subjects must be portable-unique");
         }
-        inventories.push(inventory_subject_result(&root, subject)?);
+        inventories.push(inventory_subject(&root, subject)?);
     }
     let mut hash = Sha256::new();
     for inventory in &inventories {
@@ -247,16 +231,8 @@ pub fn validate_plan_scope(
     plan: &RelocationPlan,
     project_root: &Path,
     subjects: &[String],
-) -> Result<(), String> {
-    validate_plan_scope_result(plan, project_root, subjects).map_err(|error| format!("{error:#}"))
-}
-
-pub(super) fn validate_plan_scope_result(
-    plan: &RelocationPlan,
-    project_root: &Path,
-    subjects: &[String],
 ) -> AnyResult<()> {
-    let root = canonical_project_root_result(project_root)?;
+    let root = canonical_project_root(project_root)?;
     if plan.project_root != root || plan.project_identity != project_identity(&root) {
         bail!("Relocation plan belongs to another project");
     }
@@ -283,17 +259,8 @@ pub fn bind_plan(
     project_root: &Path,
     subjects: &[String],
     generation: u64,
-) -> Result<(), String> {
-    bind_plan_result(plan, project_root, subjects, generation).map_err(|error| format!("{error:#}"))
-}
-
-pub(super) fn bind_plan_result(
-    plan: &mut RelocationPlan,
-    project_root: &Path,
-    subjects: &[String],
-    generation: u64,
 ) -> AnyResult<()> {
-    validate_plan_scope_result(plan, project_root, subjects)?;
+    validate_plan_scope(plan, project_root, subjects)?;
     plan.bound_generation = Some(generation);
     Ok(())
 }

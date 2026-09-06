@@ -11,7 +11,7 @@ pub(crate) const CONTAINER_DATA_ROOT: &str = "/data";
 pub(crate) const EXPLOREASL_SCRIPT: &str = "/opt/xasl/xASL_latest/run_xASL_latest.sh";
 pub(crate) const MCR_PATH: &str = "/opt/mcr/v97/";
 
-pub(crate) fn resolve_apptainer_executable(command: &str) -> Result<String, String> {
+pub(crate) fn resolve_apptainer_executable(command: &str) -> AnyResult<String> {
     let path_var = env::var_os("PATH").unwrap_or_default();
     resolve_apptainer_executable_with_path(command, &path_var.to_string_lossy())
 }
@@ -19,10 +19,10 @@ pub(crate) fn resolve_apptainer_executable(command: &str) -> Result<String, Stri
 pub(crate) fn resolve_apptainer_executable_with_path(
     command: &str,
     path_var: &str,
-) -> Result<String, String> {
+) -> AnyResult<String> {
     let command = command.trim();
     if command.is_empty() {
-        return Err("Apptainer executable path must not be empty".to_string());
+        bail!("Apptainer executable path must not be empty");
     }
 
     if is_path_like(command) {
@@ -40,9 +40,7 @@ pub(crate) fn resolve_apptainer_executable_with_path(
         return Ok(path.to_string_lossy().to_string());
     }
 
-    Err(format!(
-        "Apptainer executable not found on system PATH: {command}"
-    ))
+    bail!("Apptainer executable not found on system PATH: {command}")
 }
 
 #[tauri::command]
@@ -479,21 +477,15 @@ fn find_executable_on_path(command: &str, path_var: &str) -> Option<PathBuf> {
         .find(|candidate| candidate.is_file() && is_executable(candidate))
 }
 
-fn validate_executable_path(path: &Path) -> Result<(), String> {
+fn validate_executable_path(path: &Path) -> AnyResult<()> {
     if !path.exists() {
-        return Err(format!(
-            "Apptainer executable not found: {}",
-            path.display()
-        ));
+        bail!("Apptainer executable not found: {}", path.display());
     }
     if !path.is_file() {
-        return Err(format!("Apptainer path is not a file: {}", path.display()));
+        bail!("Apptainer path is not a file: {}", path.display());
     }
     if !is_executable(path) {
-        return Err(format!(
-            "Apptainer executable is not executable: {}",
-            path.display()
-        ));
+        bail!("Apptainer executable is not executable: {}", path.display());
     }
     Ok(())
 }

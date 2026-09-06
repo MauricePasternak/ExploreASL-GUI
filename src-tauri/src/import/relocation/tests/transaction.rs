@@ -363,7 +363,7 @@ fn unowned_reserved_candidate_collision_preserves_destination() {
     let error = relocate(&plan, 1, &staging, &["A".to_string()], false, false)
         .expect_err("preflight collision");
 
-    assert!(error.contains("collision"));
+    assert!(error.to_string().contains("collision"));
     assert_eq!(
         fs::read_to_string(project.join("rawdata/sub-A/old.nii")).expect("old"),
         "old"
@@ -564,7 +564,7 @@ fn relocation_rejects_symlink_path_components_before_destination_mutation() {
     let error = relocate(&plan, 1, &staging, &["A".to_string()], false, false)
         .expect_err("symlink component must block relocation");
 
-    assert!(error.contains("Symlink"));
+    assert!(error.to_string().contains("Symlink"));
     assert_eq!(
         fs::read_to_string(project.join("rawdata/sub-A/old.nii")).expect("old"),
         "old"
@@ -628,7 +628,7 @@ fn dataset_description_failure_happens_before_any_subject_commit() {
     let error = relocate(&plan, 1, &staging, &["A".to_string()], false, false)
         .expect_err("dataset failure");
 
-    assert!(error.contains("Dataset description"));
+    assert!(error.to_string().contains("Dataset description"));
     assert_eq!(
         fs::read_to_string(project.join("rawdata/sub-A/old.nii")).expect("old"),
         "old"

@@ -6,7 +6,8 @@ use super::state::validate_terminal_import_ownership;
 use super::types::ImportState;
 use super::validation::validate_staging_root;
 use crate::app_state::AppState;
-use anyhow::{Context, Result as AnyResult, anyhow, bail};
+use crate::error::MutexExt;
+use anyhow::{Context, Result as AnyResult, bail};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -23,19 +24,19 @@ pub fn cleanup_staging_root(staging_root: &Path) -> AnyResult<()> {
     Ok(())
 }
 
-pub fn validate_subject_components(subjects: &[String]) -> Result<(), String> {
+pub fn validate_subject_components(subjects: &[String]) -> AnyResult<()> {
     for subject in subjects {
         if subject.is_empty() || subject == "." || subject == ".." {
-            return Err(format!("Invalid subject path component: {subject:?}"));
+            bail!("Invalid subject path component: {subject:?}");
         }
         if subject.contains('/') || subject.contains('\\') {
-            return Err(format!("Invalid subject path component: {subject:?}"));
+            bail!("Invalid subject path component: {subject:?}");
         }
 
         let mut components = Path::new(subject).components();
         match (components.next(), components.next()) {
             (Some(Component::Normal(_)), None) => {}
-            _ => return Err(format!("Invalid subject path component: {subject:?}")),
+            _ => bail!("Invalid subject path component: {subject:?}"),
         }
     }
 
@@ -45,18 +46,16 @@ pub fn validate_subject_components(subjects: &[String]) -> Result<(), String> {
 pub(super) fn validate_owned_subjects(
     owned_subjects: &[String],
     subjects: &[String],
-) -> Result<(), String> {
+) -> AnyResult<()> {
     if owned_subjects.is_empty() {
-        return Err("Import ownership has no subjects".to_string());
+        bail!("Import ownership has no subjects");
     }
     validate_subject_components(owned_subjects)?;
     validate_subject_components(subjects)?;
 
     for subject in subjects {
         if owned_subject_spelling(owned_subjects, subject).is_none() {
-            return Err(format!(
-                "Subject is not owned by the active import: {subject}"
-            ));
+            bail!("Subject is not owned by the active import: {subject}");
         }
     }
 
@@ -81,7 +80,7 @@ pub(super) fn contains_portable_subject(subjects: &[String], subject: &str) -> b
 pub(super) fn validate_preserved_subjects_are_disjoint(
     subject_list: &[String],
     preserved_subjects: &[String],
-) -> Result<(), String> {
+) -> AnyResult<()> {
     let run_subject_keys = subject_list
         .iter()
         .map(|subject| portable_key(subject))
@@ -90,7 +89,7 @@ pub(super) fn validate_preserved_subjects_are_disjoint(
         .iter()
         .any(|subject| run_subject_keys.contains(&portable_key(subject)))
     {
-        return Err("Retry preserve subjects overlap subjects selected for import".to_string());
+        bail!("Retry preserve subjects overlap subjects selected for import");
     }
 
     Ok(())
@@ -102,11 +101,10 @@ pub(super) fn with_owned_import_roots<T>(
 ) -> AnyResult<T> {
     let active_project_root_guard = state
         .active_project_root
-        .lock()
-        .map_err(|_| anyhow!("Active project state lock was poisoned"))?;
+        .lock_or_bail("Active project state")?;
     let active_project_root = active_project_root_guard
         .as_ref()
-        .ok_or_else(|| anyhow!("No active project root"))?;
+        .context("No active project root")?;
     let active_project_root = fs::canonicalize(active_project_root).with_context(|| {
         format!(
             "Failed to canonicalize active project root {}",
@@ -114,10 +112,7 @@ pub(super) fn with_owned_import_roots<T>(
         )
     })?;
 
-    let mut import_state = state
-        .import_state
-        .lock()
-        .map_err(|_| anyhow!("Import state lock was poisoned"))?;
+    let mut import_state = state.import_state.lock_or_bail("Import state")?;
     let expected_staging_root = active_project_root.join(staging::STAGING_DIRECTORY);
     validate_terminal_import_ownership(
         &import_state,
@@ -142,22 +137,19 @@ pub(super) fn move_import_output_for_state(
 ) -> AnyResult<RelocationOutcome> {
     let _transition = state
         .project_transition
-        .lock()
-        .map_err(|_| anyhow!("Project transition lock was poisoned"))?;
+        .lock_or_bail("Project transition")?;
     with_owned_import_roots(state, |import_state, project_root, staging_root| {
-        validate_owned_subjects(&import_state.subject_list, &import_state.succeeded_subjects)
-            .map_err(anyhow::Error::msg)?;
+        validate_owned_subjects(&import_state.subject_list, &import_state.succeeded_subjects)?;
         let plan_id = import_state
             .relocation_plan_id
             .as_ref()
-            .ok_or_else(|| anyhow!("Import ownership has no confirmed relocation plan"))?;
+            .context("Import ownership has no confirmed relocation plan")?;
         let plan = state
             .relocation_plans
-            .lock()
-            .map_err(|_| anyhow!("Relocation plan state lock was poisoned"))?
+            .lock_or_bail("Relocation plan state")?
             .get(plan_id)
             .cloned()
-            .ok_or_else(|| anyhow!("Confirmed relocation plan is unavailable"))?;
+            .context("Confirmed relocation plan is unavailable")?;
         let outcome = relocate(
             &plan,
             import_state.ownership_generation,
@@ -165,8 +157,7 @@ pub(super) fn move_import_output_for_state(
             &import_state.succeeded_subjects,
             cleanup_staging,
             debug_mode,
-        )
-        .map_err(anyhow::Error::msg)?;
+        )?;
 
         if debug_mode
             && cleanup_staging
@@ -196,17 +187,16 @@ pub fn move_import_output_paths(
     debug_mode: bool,
     cleanup_staging: bool,
 ) -> AnyResult<()> {
-    validate_staging_root(staging_root).map_err(anyhow::Error::msg)?;
-    validate_project_root_for_staging(staging_root, project_root).map_err(anyhow::Error::msg)?;
-    validate_subject_components(succeeded_subjects).map_err(anyhow::Error::msg)?;
+    validate_staging_root(staging_root)?;
+    validate_project_root_for_staging(staging_root, project_root)?;
+    validate_subject_components(succeeded_subjects)?;
 
     let mut plan = create_plan(
         project_root,
         succeeded_subjects,
         "direct-test-plan".to_string(),
-    )
-    .map_err(anyhow::Error::msg)?;
-    bind_plan(&mut plan, project_root, succeeded_subjects, 0).map_err(anyhow::Error::msg)?;
+    )?;
+    bind_plan(&mut plan, project_root, succeeded_subjects, 0)?;
     let outcome = relocate(
         &plan,
         0,
@@ -214,8 +204,7 @@ pub fn move_import_output_paths(
         succeeded_subjects,
         cleanup_staging,
         debug_mode,
-    )
-    .map_err(anyhow::Error::msg)?;
+    )?;
     if debug_mode
         && cleanup_staging
         && !outcome.subjects.is_empty()
@@ -243,26 +232,24 @@ pub fn move_import_output_paths(
 pub fn validate_project_root_for_staging(
     staging_root: &Path,
     project_root: &Path,
-) -> Result<(), String> {
+) -> AnyResult<()> {
     validate_staging_root(staging_root)?;
 
-    let normalized_staging_root =
-        normalize_path_for_validation(staging_root).map_err(|error| format!("{error:#}"))?;
-    let normalized_project_root =
-        normalize_path_for_validation(project_root).map_err(|error| format!("{error:#}"))?;
+    let normalized_staging_root = normalize_path_for_validation(staging_root)?;
+    let normalized_project_root = normalize_path_for_validation(project_root)?;
     let staging_parent = normalized_staging_root.parent().ok_or_else(|| {
-        format!(
+        anyhow::anyhow!(
             "staging_root must have a parent directory: {}",
             staging_root.display()
         )
     })?;
 
     if staging_parent != normalized_project_root {
-        return Err(format!(
+        bail!(
             "project_root must be the parent of staging_root: project_root={}, staging_root={}",
             project_root.display(),
             staging_root.display()
-        ));
+        );
     }
 
     Ok(())
@@ -274,22 +261,22 @@ pub(super) fn normalize_path_for_validation(path: &Path) -> AnyResult<PathBuf> {
             .with_context(|| format!("Failed to canonicalize {}", path.display()));
     }
 
-    let (parent, file_name) = validation_path_components(path).map_err(anyhow::Error::msg)?;
+    let (parent, file_name) = validation_path_components(path)?;
     let parent = fs::canonicalize(parent)
         .with_context(|| format!("Failed to canonicalize parent {}", parent.display()))?;
 
     Ok(parent.join(file_name))
 }
 
-pub(super) fn validation_path_components(path: &Path) -> Result<(&Path, &std::ffi::OsStr), String> {
+pub(super) fn validation_path_components(path: &Path) -> AnyResult<(&Path, &std::ffi::OsStr)> {
     let parent = path.parent().ok_or_else(|| {
-        format!(
+        anyhow::anyhow!(
             "Path must have an existing parent for validation: {}",
             path.display()
         )
     })?;
     let file_name = path.file_name().ok_or_else(|| {
-        format!(
+        anyhow::anyhow!(
             "Path must have a final component for validation: {}",
             path.display()
         )

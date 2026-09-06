@@ -1,6 +1,7 @@
 use super::output::cleanup_staging_root;
 use super::staging::{StagingEntry, portable_key};
 use super::types::{ImportLifecycle, ImportState};
+use anyhow::{Result as AnyResult, anyhow, bail};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -11,24 +12,24 @@ pub fn rollback_preparation_failure(staging_root: &Path, error: String) -> Strin
     error
 }
 
-pub fn validate_staging_root(staging_root: &Path) -> Result<(), String> {
+pub fn validate_staging_root(staging_root: &Path) -> AnyResult<()> {
     if staging_root.file_name().and_then(|name| name.to_str()) != Some(".easl_staging") {
-        return Err(format!(
+        bail!(
             "staging_root must end with .easl_staging: {}",
             staging_root.display()
-        ));
+        );
     }
 
     Ok(())
 }
 
-pub fn validate_import_not_running(state: &ImportState) -> Result<(), String> {
+pub fn validate_import_not_running(state: &ImportState) -> AnyResult<()> {
     match state.lifecycle {
-        ImportLifecycle::Preparing => Err("An import is already preparing".to_string()),
-        ImportLifecycle::Running => Err(match state.child_pid {
-            Some(pid) => format!("An import is already running with process PID {pid}"),
-            None => "An import is already running".to_string(),
-        }),
+        ImportLifecycle::Preparing => bail!("An import is already preparing"),
+        ImportLifecycle::Running => match state.child_pid {
+            Some(pid) => bail!("An import is already running with process PID {pid}"),
+            None => bail!("An import is already running"),
+        },
         ImportLifecycle::Idle | ImportLifecycle::Terminal => Ok(()),
     }
 }
@@ -36,12 +37,12 @@ pub fn validate_import_not_running(state: &ImportState) -> Result<(), String> {
 pub fn validate_non_empty_inputs(
     staging_entries: &[StagingEntry],
     subject_list: &[String],
-) -> Result<(), String> {
+) -> AnyResult<()> {
     if staging_entries.is_empty() {
-        return Err("staging_entries must contain at least one staging entry".to_string());
+        bail!("staging_entries must contain at least one staging entry");
     }
     if subject_list.is_empty() {
-        return Err("subject_list must contain at least one subject".to_string());
+        bail!("subject_list must contain at least one subject");
     }
 
     Ok(())
@@ -50,7 +51,7 @@ pub fn validate_non_empty_inputs(
 pub fn validate_subject_scope(
     staging_entries: &[StagingEntry],
     subject_list: &[String],
-) -> Result<(), String> {
+) -> AnyResult<()> {
     let mut staging_subjects = BTreeMap::new();
     for entry in staging_entries {
         staging_subjects
@@ -94,16 +95,13 @@ pub fn validate_subject_scope(
         ));
     }
 
-    Err(format!(
-        "Import subject scope mismatch: {}",
-        details.join("; ")
-    ))
+    bail!("Import subject scope mismatch: {}", details.join("; "))
 }
 
 pub fn validate_import_request_inputs(
     staging_entries: &[StagingEntry],
     subject_list: &[String],
-) -> Result<(), String> {
+) -> AnyResult<()> {
     validate_non_empty_inputs(staging_entries, subject_list)?;
     validate_subject_scope(staging_entries, subject_list)
 }
@@ -111,12 +109,12 @@ pub fn validate_import_request_inputs(
 pub(super) fn normalize_staging_subject_spelling(
     staging_entries: &[StagingEntry],
     subject_list: &[String],
-) -> Result<Vec<StagingEntry>, String> {
+) -> AnyResult<Vec<StagingEntry>> {
     let mut owned_by_key = BTreeMap::new();
     for subject in subject_list {
         let key = portable_key(subject);
         if owned_by_key.insert(key, subject.as_str()).is_some() {
-            return Err("Import subject list contains portable-equivalent duplicates".to_string());
+            bail!("Import subject list contains portable-equivalent duplicates");
         }
     }
 
@@ -126,7 +124,7 @@ pub(super) fn normalize_staging_subject_spelling(
             let canonical = owned_by_key
                 .get(&portable_key(&entry.subject))
                 .ok_or_else(|| {
-                    format!(
+                    anyhow!(
                         "Staging entry subject is not in the declared import scope: {}",
                         entry.subject
                     )
@@ -138,7 +136,7 @@ pub(super) fn normalize_staging_subject_spelling(
         .collect()
 }
 
-pub fn validate_matlab_executable(matlab_path: &str) -> Result<String, String> {
+pub fn validate_matlab_executable(matlab_path: &str) -> AnyResult<String> {
     let matlab_path = validate_string_input("matlab_path", matlab_path)?;
 
     if is_path_like(&matlab_path) {
@@ -152,7 +150,7 @@ pub fn validate_matlab_executable(matlab_path: &str) -> Result<String, String> {
         .unwrap_or_default();
     find_executable_on_path(&matlab_path, &path_var)
         .map(|path| path.to_string_lossy().to_string())
-        .ok_or_else(|| format!("MATLAB executable not found on PATH: {}", matlab_path))
+        .ok_or_else(|| anyhow!("MATLAB executable not found on PATH: {}", matlab_path))
 }
 
 pub(super) fn is_path_like(value: &str) -> bool {
@@ -160,18 +158,15 @@ pub(super) fn is_path_like(value: &str) -> bool {
     path.is_absolute() || value.contains('/') || value.contains('\\')
 }
 
-pub(super) fn validate_executable_file(path: &Path) -> Result<(), String> {
+pub(super) fn validate_executable_file(path: &Path) -> AnyResult<()> {
     if !path.exists() {
-        return Err(format!("MATLAB executable not found: {}", path.display()));
+        bail!("MATLAB executable not found: {}", path.display());
     }
     if !path.is_file() {
-        return Err(format!("MATLAB path is not a file: {}", path.display()));
+        bail!("MATLAB path is not a file: {}", path.display());
     }
     if !is_executable_file(path) {
-        return Err(format!(
-            "MATLAB executable is not executable: {}",
-            path.display()
-        ));
+        bail!("MATLAB executable is not executable: {}", path.display());
     }
 
     Ok(())
@@ -233,15 +228,15 @@ pub(super) fn executable_candidates(dir: &Path, command: &str) -> Vec<PathBuf> {
     vec![dir.join(command)]
 }
 
-pub(super) fn validate_string_input(name: &str, value: &str) -> Result<String, String> {
+pub(super) fn validate_string_input(name: &str, value: &str) -> AnyResult<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        return Err(format!("{} must not be empty", name));
+        bail!("{} must not be empty", name);
     }
 
     Ok(trimmed.to_string())
 }
 
-pub(super) fn validate_path_input(name: &str, value: &str) -> Result<PathBuf, String> {
+pub(super) fn validate_path_input(name: &str, value: &str) -> AnyResult<PathBuf> {
     validate_string_input(name, value).map(PathBuf::from)
 }

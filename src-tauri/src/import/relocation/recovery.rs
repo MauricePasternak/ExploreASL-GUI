@@ -5,7 +5,7 @@ use super::cleanup::cleanup_after_terminal;
 use super::error::{RelocationTransactionResult, format_transaction_error};
 use super::filesystem::{path_exists, rename_no_replace};
 use super::journal::{read_journal, remove_journal_owned, validate_journal, write_journal};
-use super::paths::{candidate_record_path, canonical_project_root_result, safe_join};
+use super::paths::{candidate_record_path, canonical_project_root, safe_join};
 use super::rollback::{
     dataset_should_remain, rollback_dataset, rollback_subject, validate_candidate_for_phase,
     validate_dataset_candidate_for_phase,
@@ -412,12 +412,12 @@ fn preserve_ambiguous_reservation_wrappers(
     Ok(())
 }
 
-pub fn recover(project_root: &Path) -> Result<RelocationRecoverySummary, String> {
-    recover_result(project_root).map_err(Into::into)
+pub fn recover(project_root: &Path) -> anyhow::Result<RelocationRecoverySummary> {
+    recover_result(project_root).map_err(anyhow::Error::from)
 }
 
 fn recover_result(project_root: &Path) -> RelocationTransactionResult<RelocationRecoverySummary> {
-    let root = canonical_project_root_result(project_root)?;
+    let root = canonical_project_root(project_root)?;
     let Some(mut journal) = read_journal(&root)? else {
         return Ok(RelocationRecoverySummary::default());
     };

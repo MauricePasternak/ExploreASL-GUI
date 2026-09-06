@@ -13,11 +13,7 @@ pub(super) fn subject_dir(subject: &str) -> String {
     }
 }
 
-pub fn canonical_project_root(project_root: &Path) -> Result<PathBuf, String> {
-    canonical_project_root_result(project_root).map_err(|error| format!("{error:#}"))
-}
-
-pub(super) fn canonical_project_root_result(project_root: &Path) -> AnyResult<PathBuf> {
+pub fn canonical_project_root(project_root: &Path) -> AnyResult<PathBuf> {
     let root = fs::canonicalize(project_root).with_context(|| {
         format!(
             "Failed to canonicalize project root {}",
@@ -48,15 +44,11 @@ pub(super) fn relative_path(root: &Path, path: &Path) -> AnyResult<String> {
     let relative = path
         .strip_prefix(root)
         .context("Path escapes project root")?;
-    validate_relative_path_result(relative)?;
+    validate_relative_path(relative)?;
     Ok(relative.to_string_lossy().replace('\\', "/"))
 }
 
-pub fn validate_relative_path(path: &Path) -> Result<(), String> {
-    validate_relative_path_result(path).map_err(|error| format!("{error:#}"))
-}
-
-pub(super) fn validate_relative_path_result(path: &Path) -> AnyResult<()> {
+pub fn validate_relative_path(path: &Path) -> AnyResult<()> {
     if path.as_os_str().is_empty() || path.is_absolute() {
         bail!("Journal path must be a nonempty relative path");
     }
@@ -70,7 +62,7 @@ pub(super) fn validate_relative_path_result(path: &Path) -> AnyResult<()> {
 
 pub(super) fn safe_join(root: &Path, relative: &str) -> AnyResult<PathBuf> {
     let relative = Path::new(relative);
-    validate_relative_path_result(relative)?;
+    validate_relative_path(relative)?;
     let path = root.join(relative);
     reject_symlink_components(root, &path)?;
     if path.parent().is_some_and(|parent| parent.exists()) {
@@ -90,7 +82,7 @@ pub(super) fn safe_join(root: &Path, relative: &str) -> AnyResult<PathBuf> {
 
 pub(super) fn candidate_record_path(root: &Path, relative: &str) -> AnyResult<PathBuf> {
     let relative = Path::new(relative);
-    validate_relative_path_result(relative)?;
+    validate_relative_path(relative)?;
     let path = root.join(relative);
     let parent = path.parent().context("Candidate path has no parent")?;
     reject_symlink_components(root, parent)?;

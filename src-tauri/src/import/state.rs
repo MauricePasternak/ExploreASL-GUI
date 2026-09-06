@@ -8,7 +8,8 @@ use super::staging;
 use super::types::{ImportCommandError, ImportLifecycle, ImportPrepareComplete, ImportState};
 use super::validation::{rollback_preparation_failure, validate_import_not_running};
 use crate::app_state::AppState;
-use anyhow::{Context, Result as AnyResult, anyhow, bail};
+use crate::error::MutexExt;
+use anyhow::{Context, Result as AnyResult, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -20,14 +21,13 @@ pub(crate) const RESERVED_IMPORT_PID: u32 = 0;
 pub(super) fn plan_import_relocation_for_state(
     state: &AppState,
     subject_list: &[String],
-) -> Result<RelocationPlan, String> {
+) -> AnyResult<RelocationPlan> {
     validate_subject_components(subject_list)?;
     let root = state
         .active_project_root
-        .lock()
-        .map_err(|_| "Active project state lock was poisoned".to_string())?
+        .lock_or_bail("Active project state")?
         .clone()
-        .ok_or_else(|| "No active project root".to_string())?;
+        .context("No active project root")?;
     let sequence = state
         .relocation_plan_sequence
         .fetch_add(1, Ordering::Relaxed)
@@ -40,8 +40,7 @@ pub(super) fn plan_import_relocation_for_state(
     let plan = relocation::create_plan(&root, subject_list, plan_id.clone())?;
     state
         .relocation_plans
-        .lock()
-        .map_err(|_| "Relocation plan state lock was poisoned".to_string())?
+        .lock_or_bail("Relocation plan state")?
         .insert(plan_id, plan.clone());
     Ok(plan)
 }
@@ -53,11 +52,8 @@ pub(super) fn reserve_import_state(
     project_root: PathBuf,
     run_request_id: String,
     subject_list: Vec<String>,
-) -> Result<u64, String> {
-    let mut import_state = state
-        .import_state
-        .lock()
-        .map_err(|_| "Import state lock was poisoned".to_string())?;
+) -> AnyResult<u64> {
+    let mut import_state = state.import_state.lock_or_bail("Import state")?;
     validate_import_not_running(&import_state)?;
     *import_state = ImportState::new(staging_root, project_root, subject_list);
     import_state.run_request_id = run_request_id;
@@ -132,11 +128,10 @@ pub(super) fn reserve_import_state_for_run(
     // the supervisor uses import ownership, so neither can interleave here.
     let active_project_root_guard = state
         .active_project_root
-        .lock()
-        .map_err(|_| anyhow!("Active project state lock was poisoned"))?;
+        .lock_or_bail("Active project state")?;
     let active_project_root = active_project_root_guard
         .as_ref()
-        .ok_or_else(|| anyhow!("No active project root"))?;
+        .context("No active project root")?;
     let active_project_root = fs::canonicalize(active_project_root).with_context(|| {
         format!(
             "Failed to canonicalize active project root {}",
@@ -148,33 +143,27 @@ pub(super) fn reserve_import_state_for_run(
         bail!("Compiled staging plan does not match the active project root");
     }
 
-    let mut import_state = state
-        .import_state
-        .lock()
-        .map_err(|_| anyhow!("Import state lock was poisoned"))?;
-    validate_import_not_running(&import_state).map_err(anyhow::Error::msg)?;
+    let mut import_state = state.import_state.lock_or_bail("Import state")?;
+    validate_import_not_running(&import_state)?;
 
     let requested_preserved_subjects = subjects_to_preserve.unwrap_or_default();
     let mut preserved_subjects = requested_preserved_subjects.clone();
     if !preserved_subjects.is_empty() {
-        validate_subject_components(&preserved_subjects).map_err(anyhow::Error::msg)?;
-        validate_preserved_subjects_are_disjoint(&subject_list, &preserved_subjects)
-            .map_err(anyhow::Error::msg)?;
+        validate_subject_components(&preserved_subjects)?;
+        validate_preserved_subjects_are_disjoint(&subject_list, &preserved_subjects)?;
         validate_terminal_import_ownership(
             &import_state,
             &active_project_root,
             &expected_staging_root,
         )?;
-        validate_owned_subjects(&import_state.subject_list, &preserved_subjects)
-            .map_err(anyhow::Error::msg)?;
+        validate_owned_subjects(&import_state.subject_list, &preserved_subjects)?;
         if preserved_subjects
             .iter()
             .any(|subject| contains_portable_subject(&import_state.failed_subjects, subject))
         {
             bail!("Retry preserve subjects include a failed subject");
         }
-        validate_owned_subjects(&import_state.succeeded_subjects, &preserved_subjects)
-            .map_err(anyhow::Error::msg)?;
+        validate_owned_subjects(&import_state.succeeded_subjects, &preserved_subjects)?;
         preserved_subjects = requested_preserved_subjects
             .iter()
             .map(|subject| {
@@ -207,12 +196,11 @@ pub(super) fn validate_relocation_plan_for_run(
 ) -> AnyResult<()> {
     let plans = state
         .relocation_plans
-        .lock()
-        .map_err(|_| anyhow!("Relocation plan state lock was poisoned"))?;
+        .lock_or_bail("Relocation plan state")?;
     let plan = plans
         .get(plan_id)
-        .ok_or_else(|| anyhow!("Confirmed relocation plan is unavailable"))?;
-    relocation::validate_plan_scope(plan, project_root, subjects).map_err(anyhow::Error::msg)
+        .context("Confirmed relocation plan is unavailable")?;
+    relocation::validate_plan_scope(plan, project_root, subjects)
 }
 
 pub(super) fn bind_relocation_plan_for_run(
@@ -224,12 +212,11 @@ pub(super) fn bind_relocation_plan_for_run(
 ) -> AnyResult<()> {
     let mut plans = state
         .relocation_plans
-        .lock()
-        .map_err(|_| anyhow!("Relocation plan state lock was poisoned"))?;
+        .lock_or_bail("Relocation plan state")?;
     let plan = plans
         .get_mut(plan_id)
-        .ok_or_else(|| anyhow!("Confirmed relocation plan is unavailable"))?;
-    relocation::bind_plan(plan, project_root, subjects, generation).map_err(anyhow::Error::msg)
+        .context("Confirmed relocation plan is unavailable")?;
+    relocation::bind_plan(plan, project_root, subjects, generation)
 }
 
 pub(super) fn clear_reserved_import(state: &AppState, generation: u64) {

@@ -205,7 +205,7 @@ fn scan_bids_sidecars_impl(root: &Path) -> AnyResult<BidsSidecarScan> {
         "scan_bids_sidecars: found {} sidecar paths",
         sidecar_paths.len()
     );
-    group_by_fingerprint(&sidecar_paths, &subjects).map_err(anyhow::Error::msg)
+    Ok(group_by_fingerprint(&sidecar_paths, &subjects))
 }
 
 // --- ensure_rawdata_dir command ---

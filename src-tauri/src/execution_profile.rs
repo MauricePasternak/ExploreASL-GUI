@@ -2,6 +2,7 @@ use crate::apptainer::{
     detect_apptainer_version, resolve_apptainer_executable, validate_apptainer_executable,
 };
 use crate::import::validate_matlab_executable;
+use anyhow::{Result as AnyResult, bail};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -99,14 +100,14 @@ impl ExecutionProfile {
     }
 }
 
-pub(crate) fn validate_exploreasl_path(path: &str) -> Result<PathBuf, String> {
+pub(crate) fn validate_exploreasl_path(path: &str) -> AnyResult<PathBuf> {
     let path = PathBuf::from(path.trim());
     if !path.exists() {
-        return Err(format!("ExploreASL path not found: {}", path.display()));
+        bail!("ExploreASL path not found: {}", path.display());
     }
     let main_file = path.join("ExploreASL.m");
     if !main_file.exists() {
-        return Err(format!("ExploreASL.m not found in {}", path.display()));
+        bail!("ExploreASL.m not found in {}", path.display());
     }
     Ok(path)
 }
@@ -134,12 +135,12 @@ fn validate_matlab_profile(matlab_path: &str, explore_asl_path: &str) -> Interna
 
     match validate_matlab_executable(matlab_path) {
         Ok(path) => validated_matlab_path = Some(path),
-        Err(error) => errors.push(error),
+        Err(error) => errors.push(format!("{error:#}")),
     }
 
     match validate_exploreasl_path(explore_asl_path) {
         Ok(path) => validated_explore_asl_path = Some(path),
-        Err(error) => errors.push(error),
+        Err(error) => errors.push(format!("{error:#}")),
     }
 
     let explore_asl_version = validated_explore_asl_path
@@ -188,7 +189,7 @@ fn validate_apptainer_profile(sif_path: &str, apptainer_path: &str) -> InternalV
             }
         },
         Err(error) => {
-            errors.push(error);
+            errors.push(format!("{error:#}"));
             None
         }
     };

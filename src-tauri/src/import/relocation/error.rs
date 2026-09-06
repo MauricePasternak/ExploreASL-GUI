@@ -6,9 +6,15 @@ pub(super) enum RelocationTransactionError {
     Operational(#[from] anyhow::Error),
 }
 
+impl From<&'static str> for RelocationTransactionError {
+    fn from(error: &'static str) -> Self {
+        Self::Operational(anyhow::anyhow!(error))
+    }
+}
+
 impl From<String> for RelocationTransactionError {
     fn from(error: String) -> Self {
-        Self::Operational(anyhow::Error::msg(error))
+        Self::Operational(anyhow::anyhow!(error))
     }
 }
 

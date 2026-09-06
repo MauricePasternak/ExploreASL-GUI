@@ -496,7 +496,7 @@ fn set_active_project_inner(
         .context("Invalid project path")?;
     // Recovery must finish before this candidate can become observable through
     // active-root IPC or frontend hydration.
-    let recovery = crate::import::relocation::recover(&path).map_err(anyhow::Error::msg)?;
+    let recovery = crate::import::relocation::recover(&path)?;
     replace_active_project_state(state, Some(path))?;
     Ok(recovery)
 }

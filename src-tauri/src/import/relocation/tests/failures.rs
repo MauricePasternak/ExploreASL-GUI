@@ -152,7 +152,7 @@ fn backups_survive_until_terminal_outcome_is_durable_and_recovery_accepts_cleane
 
     let error = relocate(&plan, 1, &staging, &["A".to_string()], false, false)
         .expect_err("outcome persistence failure");
-    assert!(error.contains("outcome-persist"));
+    assert!(error.to_string().contains("outcome-persist"));
     assert!(
         backup.exists(),
         "backup must precede durable terminal outcome cleanup"

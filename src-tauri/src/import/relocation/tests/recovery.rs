@@ -64,7 +64,7 @@ fn all_run_records_are_preflighted_before_any_subject_candidate_or_backup_mutati
     )
     .expect_err("later record collision");
 
-    assert!(error.contains("collision"));
+    assert!(error.to_string().contains("collision"));
     assert_eq!(
         fs::read_to_string(project.join("rawdata/sub-A/old.nii")).unwrap(),
         "old"
@@ -147,7 +147,7 @@ fn terminal_journal_recovers_after_backups_were_already_cleaned() {
 
     let error = relocate(&plan, 1, &staging, &["A".to_string()], false, false)
         .expect_err("journal cleanup failure");
-    assert!(error.contains("journal-cleanup"));
+    assert!(error.to_string().contains("journal-cleanup"));
     assert!(
         !backup.exists(),
         "terminal cleanup removed proven backup first"
