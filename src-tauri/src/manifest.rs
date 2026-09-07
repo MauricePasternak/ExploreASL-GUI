@@ -8,6 +8,7 @@ use crate::processing::runs::{
     completed_population_run_root, lock_processing_state, lock_project_transition,
     preparing_run_root,
 };
+use crate::processing::{completion_from_lock_or_log, lock_module_roots, normalize_asl_run_id};
 use crate::tracing::CommandTrace;
 
 #[path = "manifest_tests.rs"]
@@ -62,28 +63,6 @@ fn modified_epoch_millis(path: &Path) -> Option<i64> {
         .map(|duration| duration.as_millis() as i64)
 }
 
-#[tauri::command]
-pub async fn capture_environment_versions(
-    explore_asl_path: String,
-    matlab_path: String,
-) -> EnvironmentVersions {
-    let trace = CommandTrace::new("capture_environment_versions");
-    trace.arg("explore_asl_path", &explore_asl_path);
-    trace.arg("matlab_path", &matlab_path);
-
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        capture_environment_versions_impl(explore_asl_path, matlab_path)
-    })
-    .await
-    .unwrap_or_else(|_| EnvironmentVersions {
-        explore_asl: "unknown".to_string(),
-        matlab: "unknown".to_string(),
-    });
-
-    trace.success(&result);
-    result
-}
-
 /// Capture is correlated to a current Preparing Population reservation. Holding
 /// the native transition gate makes a delayed response fail rather than being
 /// attributed to a replacement project/run by the renderer.
@@ -114,12 +93,8 @@ pub fn capture_environment_versions_for_run(
     Ok(result)
 }
 
-#[tauri::command]
-pub fn read_population_ready_mtime(project_root: String) -> Option<i64> {
-    let trace = CommandTrace::new("read_population_ready_mtime");
-    trace.arg("project_root", &project_root);
-
-    let p = PathBuf::from(&project_root)
+pub(crate) fn read_population_ready_mtime_impl(project_root: &Path) -> Option<i64> {
+    let p = project_root
         .join("derivatives")
         .join("ExploreASL")
         .join("lock")
@@ -127,10 +102,7 @@ pub fn read_population_ready_mtime(project_root: String) -> Option<i64> {
         .join("xASL_module_Population")
         .join("999_ready.status");
 
-    let result = modified_epoch_millis(&p);
-
-    trace.success(&result);
-    result
+    modified_epoch_millis(&p)
 }
 
 #[tauri::command]
@@ -140,14 +112,7 @@ pub fn read_population_ready_mtime_for_run(
 ) -> Result<Option<i64>, String> {
     let _transition = lock_project_transition(&state)?;
     let root = completed_population_run_root(&state, &run_id)?;
-    let p = root
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("lock")
-        .join("xASL_module_Population")
-        .join("xASL_module_Population")
-        .join("999_ready.status");
-    Ok(modified_epoch_millis(&p))
+    Ok(read_population_ready_mtime_impl(&root))
 }
 
 #[tauri::command]
@@ -218,7 +183,7 @@ fn read_prior_modules_mtimes_impl(
             let Some(run_str) = run_part.strip_suffix(".log") else {
                 continue;
             };
-            let run = crate::processing::normalize_asl_run_id(run_str);
+            let run = normalize_asl_run_id(run_str);
             let bucket = runs_by_subject.entry(ss_part.to_string()).or_default();
             if !bucket.contains(&run) {
                 bucket.push(run);
@@ -255,7 +220,7 @@ fn read_prior_modules_mtimes_impl(
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
                 if let Some(run_str) = name.strip_prefix("xASL_module_ASL_ASL_") {
-                    let run = crate::processing::normalize_asl_run_id(run_str);
+                    let run = normalize_asl_run_id(run_str);
                     if !all_runs.contains(&run) {
                         all_runs.push(run);
                     }
@@ -293,73 +258,4 @@ fn read_prior_modules_mtimes_impl(
     }
 
     result
-}
-
-/// Returns the two candidate lock roots (`derivatives/ExploreASL/lock/<module>`
-/// and `.easl_staging/derivatives/ExploreASL/lock/<module>`) for a given module.
-fn lock_module_roots(project_root: &Path, module: &str) -> [PathBuf; 2] {
-    [
-        project_root
-            .join("derivatives")
-            .join("ExploreASL")
-            .join("lock")
-            .join(module),
-        project_root
-            .join(".easl_staging")
-            .join("derivatives")
-            .join("ExploreASL")
-            .join("lock")
-            .join(module),
-    ]
-}
-
-/// Resolves the completion time for one module/subject/run by checking the
-/// `999_ready.status` file in each lock root first, then falling back to the
-/// matching log file in any of the log directories. Logs with detected errors
-/// are skipped. `run` is `Some(run_id)` for ASL modules, `None` for Structural.
-fn completion_from_lock_or_log(
-    lock_roots: &[PathBuf],
-    log_dirs: &[PathBuf],
-    subject_session: &str,
-    module: &str,
-    run: Option<&str>,
-) -> Option<std::time::SystemTime> {
-    // Lock ready file: <lock_root>/<subject_session>/<module_dir>/999_ready.status
-    // where <module_dir> is the module name plus an ASL run suffix for ASL.
-    let module_dir = match run {
-        Some(r) => format!("{}_ASL_{}", module, r),
-        None => module.to_string(),
-    };
-    for lock_root in lock_roots {
-        let ready = lock_root
-            .join(subject_session)
-            .join(&module_dir)
-            .join("999_ready.status");
-        if let Ok(metadata) = std::fs::metadata(&ready)
-            && let Ok(mtime) = metadata.modified()
-        {
-            return Some(mtime);
-        }
-    }
-
-    // Log fallback: <log_dir>/<module>_<subject_session>[_ASL_<run>].log
-    let log_name = match run {
-        Some(r) => format!("{}_{}_ASL_{}.log", module, subject_session, r),
-        None => format!("{}_{}.log", module, subject_session),
-    };
-    for log_dir in log_dirs {
-        let log_file = log_dir.join(&log_name);
-        if !log_file.is_file() {
-            continue;
-        }
-        if crate::processing::check_log_for_error(&log_file) {
-            continue;
-        }
-        if let Ok(metadata) = std::fs::metadata(&log_file)
-            && let Ok(mtime) = metadata.modified()
-        {
-            return Some(mtime);
-        }
-    }
-    None
 }

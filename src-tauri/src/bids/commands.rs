@@ -218,17 +218,6 @@ pub struct EnsureRawdataResult {
     pub bidsignore_updated: bool,
 }
 
-#[tauri::command]
-pub fn ensure_rawdata_dir(root_path: String) -> Result<EnsureRawdataResult, String> {
-    let trace = CommandTrace::new("ensure_rawdata_dir");
-    trace.arg("root_path", &root_path);
-
-    let root = Path::new(&root_path);
-    let result = ensure_rawdata_dir_impl(root).into_command_result()?;
-    trace.success(&result);
-    Ok(result)
-}
-
 /// Processing-only rawdata preparation. The root is native reservation
 /// authority, never renderer input.
 #[tauri::command]

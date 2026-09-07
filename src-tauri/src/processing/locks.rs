@@ -1,8 +1,8 @@
 use super::runs::{finalizing_run_root, lock_project_transition};
 use super::types::SubjectModuleStatus;
 use super::utils::{
-    check_log_for_error, determine_status, exploreasl_log_dirs, find_asl_runs_from_logs,
-    get_asl_completion_time, get_structural_completion_time, module_index_to_name,
+    determine_status, find_asl_runs_from_logs, get_asl_completion_time,
+    get_population_completion_time, get_structural_completion_time, module_index_to_name,
     normalize_asl_run_id,
 };
 use crate::app_state::AppState;
@@ -166,30 +166,7 @@ fn read_lock_status_impl(project_root: String) -> AnyResult<Vec<SubjectModuleSta
     }
 
     // Check if Population is outdated
-    let mut pop_time = None;
-    let pop_ready_file = lock_root
-        .join("xASL_module_Population")
-        .join("xASL_module_Population")
-        .join("999_ready.status");
-    if let Ok(metadata) = std::fs::metadata(&pop_ready_file)
-        && let Ok(mtime) = metadata.modified()
-    {
-        pop_time = Some(mtime);
-    }
-    if pop_time.is_none() {
-        let log_dirs = exploreasl_log_dirs(&root);
-        for log_dir in log_dirs {
-            let log_file = log_dir.join("xASL_module_Population.log");
-            if log_file.is_file()
-                && !check_log_for_error(&log_file)
-                && let Ok(metadata) = std::fs::metadata(&log_file)
-                && let Ok(mtime) = metadata.modified()
-            {
-                pop_time = Some(mtime);
-                break;
-            }
-        }
-    }
+    let pop_time = get_population_completion_time(&root);
 
     if let Some(pt) = pop_time {
         let mut is_outdated = false;
@@ -276,25 +253,6 @@ fn clear_module_locked_dirs(lock_root: &Path, module_name: &str) -> AnyResult<()
                 bail!("Failed to clear stale locked dir {}: {}", path.display(), e);
             }
         }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub fn clear_stale_locks(project_root: String) -> Result<(), String> {
-    let lock_root = PathBuf::from(&project_root)
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("lock");
-    if !lock_root.exists() {
-        return Ok(());
-    }
-    for module_name in &[
-        "xASL_module_Structural",
-        "xASL_module_ASL",
-        "xASL_module_Population",
-    ] {
-        clear_module_locked_dirs(&lock_root, module_name).into_command_result()?;
     }
     Ok(())
 }

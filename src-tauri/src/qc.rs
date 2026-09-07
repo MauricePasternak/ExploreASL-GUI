@@ -15,109 +15,21 @@ pub struct QcMeasure {
     pub value: String,
 }
 
-fn translate_key(key: &str) -> String {
-    match key {
-        // Structural measures
-        "T1w_GM_ICV_Ratio" => "Ratio of Gray Matter vs Intra-cortical Volume".to_string(),
-        "T1w_WM_ICV_Ratio" => "Ratio of White Matter vs Intra-cortical Volume".to_string(),
-        "T1w_CSF_ICV_Ratio" => "Ratio of Cerebrospinal Fluid vs Intra-cortical Volume".to_string(),
-        "T1w_GM_vol_mL" => "Gray Matter Volume (mL)".to_string(),
-        "T1w_WM_vol_mL" => "White Matter Volume (mL)".to_string(),
-        "T1w_CSF_vol_mL" => "Cerebrospinal Fluid Volume (mL)".to_string(),
-        "T1w_ICV_vol_mL" => "Total Intra-cortical Volume (mL)".to_string(),
-        "T1w_WMref_vol_mL" => "White Matter Reference Volume (mL)".to_string(),
-        "T1w_SD_WMref" => "Standard Deviation of White Matter Reference".to_string(),
-        "T1w_SNR_GM_Ratio" => "Signal-to-Noise Ratio (SNR) in Gray Matter".to_string(),
-        "T1w_CNR_GM_WM_Ratio" => {
-            "Contrast-to-Noise Ratio (CNR) between Gray and White Matter".to_string()
-        }
-        "T1w_FBER_WMref_Ratio" => {
-            "Foreground-to-Background Energy Ratio (FBER) in WM Reference".to_string()
-        }
-        "T1w_EFC_bits" => "Entropy Focus Criterion (EFC)".to_string(),
-        "T1w_Mean_AI_Perc" => "Mean Asymmetry Index (%)".to_string(),
-        "T1w_SD_AI_Perc" => "Standard Deviation of Asymmetry Index (%)".to_string(),
-        "T1w_LR_flip_YesNo" => "Left-Right Flip (Yes/No)".to_string(),
-        "T1w_IQR_Perc" => "Inter-quartile Range of T1w (%)".to_string(),
-
-        // ASL measures
-        "TC_ASL2T1w_Perc" => "Temporal Correlation of ASL to T1w (%)".to_string(),
-        "ASL_tSNR_GM_Ratio" => "Temporal SNR in Gray Matter".to_string(),
-        "ASL_tSNR_WM_Ratio" => "Temporal SNR in White Matter".to_string(),
-        "ASL_tSNR_CSF_Ratio" => "Temporal SNR in Cerebrospinal Fluid".to_string(),
-        "ASL_tSNR_WMref_Ratio" => "Temporal SNR in White Matter Reference".to_string(),
-        "ASL_tSNR_GMWM_Ratio" => "Temporal SNR in Gray and White Matter".to_string(),
-        "ASL_tSNR_GMWM_WMref_Ratio" => "Temporal SNR in GM/WM vs WM Reference".to_string(),
-        "ASL_tSNR_Physio2Thermal_Ratio" => "Physiological to Thermal Noise Ratio".to_string(),
-        "ASL_tSNR_Slope_Corr" => "tSNR Slope Correction".to_string(),
-        "ASL_Coverage_Perc" => "ASL Brain Coverage (%)".to_string(),
-        "TC_CBF2template" => "Temporal Correlation of CBF to Template".to_string(),
-        "TC_M02template" => "Temporal Correlation of M0 to Template".to_string(),
-        "LR_flip_YesNo" => "Left-Right Flip (Yes/No)".to_string(),
-        "MotionMean_mm" => "Mean Subject Motion (mm)".to_string(),
-        "MotionExcl_Perc" => "Percentage of Excluded Volumes due to Motion (%)".to_string(),
-        "MotionMax_mm" => "Maximum Subject Motion (mm)".to_string(),
-        "MotionSD_mm" => "Standard Deviation of Subject Motion (mm)".to_string(),
-        "CBF_GM_Median_mL100gmin" => "Median Gray Matter CBF (mL/100g/min)".to_string(),
-        "CBF_GM_PVC2_mL100gmin" => "PVC Gray Matter CBF (mL/100g/min)".to_string(),
-        "CBF_WM_PVC2_mL100gmin" => "PVC White Matter CBF (mL/100g/min)".to_string(),
-        "CBF_GM_WM_Ratio" => "Ratio of Gray Matter vs White Matter CBF".to_string(),
-        "SpatialCoV_GM_Perc" => "Spatial Coefficient of Variation in Gray Matter (%)".to_string(),
-        "SoftwareVersions" => "Software Version".to_string(),
-        "PulseSequenceType" => "Pulse Sequence Type".to_string(),
-        "MRAcquisitionType" => "MR Acquisition Type".to_string(),
-        "EchoTime_ms" => "Echo Time (ms)".to_string(),
-        "LabelingDuration_ms" => "Labeling Duration (ms)".to_string(),
-        "BackgroundSuppressionNumberPulses" => "Background Suppression Pulses Count".to_string(),
-        "SliceReadoutTime_ms" => "Slice Readout Time (ms)".to_string(),
-        "LabelingType" => "Labeling Type".to_string(),
-        "Initial_PLD_ms" => "Initial Post-label Delay (ms)".to_string(),
-        "NumberOfAverages" => "Number of Averages".to_string(),
-        "Vendor" => "Scanner Vendor".to_string(),
-        "M0" => "M0 Calibration Method".to_string(),
-        "uniqueEchoTime" => "Unique Echo Time (ms)".to_string(),
-        "nUniqueEchoTime" => "Number of Unique Echo Times".to_string(),
-        "uniqueInitial_PLD" => "Unique Post-label Delay (ms)".to_string(),
-        "nUniqueInitial_PLD" => "Number of Unique PLDs".to_string(),
-        "uniqueLabelingDuration" => "Unique Labeling Duration (ms)".to_string(),
-        "nUniqueLabelingDuration" => "Number of Unique Labeling Durations".to_string(),
-        "Matrix" => "Imaging Matrix Size".to_string(),
-        "VoxelSize_mm" => "Voxel Size (mm)".to_string(),
-        "RigidBody2Anat_mm" => "Rigid-body Coregistration to Anatomy (mm)".to_string(),
-        "nRMSE_Perc" => "Normalized Root Mean Square Error (%)".to_string(),
-        "RMSE_Perc" => "Root Mean Square Error (%)".to_string(),
-        "Mean_SSIM_Perc" => "Mean Structural Similarity Index (SSIM) (%)".to_string(),
-        "PeakSNR_Ratio" => "Peak Signal-to-Noise Ratio (PSNR)".to_string(),
-        "AI_Perc" => "Asymmetry Index (%)".to_string(),
-
-        // General / Common keys
-        "Version_CAT12" => "CAT12 Version".to_string(),
-        "Version_LST" => "LST Version".to_string(),
-        "Version_FSL" => "FSL Version".to_string(),
-        "Version_ExploreASL" => "ExploreASL Version".to_string(),
-        "Version_ExploreASL_Git_commit" => "ExploreASL Git Commit".to_string(),
-        "Version_Matlab" => "MATLAB Version".to_string(),
-        "Version_SPM12" => "SPM12 Version".to_string(),
-        "ID" => "Subject Session ID".to_string(),
-
-        // Fallback translation
-        other => {
-            let mut label = String::new();
-            let mut capitalize = true;
-            for c in other.chars() {
-                if c == '_' {
-                    label.push(' ');
-                    capitalize = true;
-                } else if capitalize {
-                    label.push(c.to_ascii_uppercase());
-                    capitalize = false;
-                } else {
-                    label.push(c);
-                }
-            }
-            label
+fn format_qc_label(key: &str) -> String {
+    let mut label = String::new();
+    let mut capitalize = true;
+    for c in key.chars() {
+        if c == '_' {
+            label.push(' ');
+            capitalize = true;
+        } else if capitalize {
+            label.push(c.to_ascii_uppercase());
+            capitalize = false;
+        } else {
+            label.push(c);
         }
     }
+    label
 }
 
 fn format_json_value(val: &Value) -> String {
@@ -166,7 +78,7 @@ pub fn extract_qc_measures(
                 for (k, v) in obj {
                     measures.push(QcMeasure {
                         key: k.clone(),
-                        label: translate_key(k),
+                        label: format_qc_label(k),
                         value: format_json_value(v),
                     });
                 }
@@ -209,7 +121,7 @@ pub fn extract_qc_measures(
                             for (k, v) in obj {
                                 measures.push(QcMeasure {
                                     key: k.clone(),
-                                    label: translate_key(k),
+                                    label: format_qc_label(k),
                                     value: format_json_value(v),
                                 });
                             }
@@ -250,44 +162,22 @@ pub fn get_subject_session_qc(
     trace.arg("module", &module);
     trace.arg("run", &run);
 
-    let session_dir = PathBuf::from(&project_root)
-        .join("derivatives")
-        .join("ExploreASL")
-        .join(&subject_session);
-
-    if !session_dir.exists() {
-        let err = format!(
-            "Subject session directory not found: {}",
-            session_dir.display()
-        );
+    let Some(file_path) = find_qc_collection_file(&project_root, &subject_session) else {
+        let session_dir = PathBuf::from(&project_root)
+            .join("derivatives")
+            .join("ExploreASL")
+            .join(&subject_session);
+        let err = if !session_dir.exists() {
+            format!(
+                "Subject session directory not found: {}",
+                session_dir.display()
+            )
+        } else {
+            format!("No QC collection file found in {}", session_dir.display())
+        };
         trace.error(&err);
         return Err(err);
-    }
-
-    let mut file_path = session_dir.join(format!("QC_collection_{}.json", subject_session));
-
-    if !file_path.exists() {
-        let mut found = false;
-        if let Ok(entries) = fs::read_dir(&session_dir) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type()
-                    && file_type.is_file()
-                {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with("QC_collection_") && name.ends_with(".json") {
-                        file_path = entry.path();
-                        found = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if !found {
-            let err = format!("No QC collection file found in {}", session_dir.display());
-            trace.error(&err);
-            return Err(err);
-        }
-    }
+    };
 
     let result = extract_qc_measures(&file_path, &module, run.as_deref());
     match &result {
@@ -300,10 +190,10 @@ pub fn get_subject_session_qc(
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectQcOutputs {
-    pub coverage: f64,
-    pub spatial_cov: f64,
+    pub coverage: Option<f64>,
+    pub spatial_cov: Option<f64>,
     pub motion: Vec<f64>,
-    pub motion_exclusion_pct: f64,
+    pub motion_exclusion_pct: Option<f64>,
 }
 
 fn val_to_f64(val: &Value) -> Option<f64> {
@@ -398,21 +288,21 @@ pub fn extract_subject_qc_outputs(file_path: &Path) -> AnyResult<SubjectQcOutput
     }
 
     let coverage = if coverages.is_empty() {
-        0.0
+        None
     } else {
-        coverages.iter().sum::<f64>() / coverages.len() as f64
+        Some(coverages.iter().sum::<f64>() / coverages.len() as f64)
     };
 
     let spatial_cov = if spatial_covs.is_empty() {
-        0.0
+        None
     } else {
-        spatial_covs.iter().sum::<f64>() / spatial_covs.len() as f64
+        Some(spatial_covs.iter().sum::<f64>() / spatial_covs.len() as f64)
     };
 
     let motion_exclusion_pct = if motion_exclusions.is_empty() {
-        0.0
+        None
     } else {
-        motion_exclusions.iter().sum::<f64>() / motion_exclusions.len() as f64
+        Some(motion_exclusions.iter().sum::<f64>() / motion_exclusions.len() as f64)
     };
 
     Ok(SubjectQcOutputs {
@@ -458,17 +348,11 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[test]
-    fn test_translate_key() {
+    fn test_format_qc_label() {
+        assert_eq!(format_qc_label("T1w_GM_ICV_Ratio"), "T1w GM ICV Ratio");
+        assert_eq!(format_qc_label("ASL_tSNR_GM_Ratio"), "ASL TSNR GM Ratio");
         assert_eq!(
-            translate_key("T1w_GM_ICV_Ratio"),
-            "Ratio of Gray Matter vs Intra-cortical Volume"
-        );
-        assert_eq!(
-            translate_key("ASL_tSNR_GM_Ratio"),
-            "Temporal SNR in Gray Matter"
-        );
-        assert_eq!(
-            translate_key("Unrecognized_Key_Name"),
+            format_qc_label("Unrecognized_Key_Name"),
             "Unrecognized Key Name"
         );
     }
@@ -514,10 +398,7 @@ mod tests {
         let measures = extract_qc_measures(tmp_file.path(), "structural", None).unwrap();
         assert_eq!(measures.len(), 2);
         assert_eq!(measures[0].key, "T1w_GM_ICV_Ratio");
-        assert_eq!(
-            measures[0].label,
-            "Ratio of Gray Matter vs Intra-cortical Volume"
-        );
+        assert_eq!(measures[0].label, "T1w GM ICV Ratio");
         assert_eq!(measures[0].value, "0.437");
     }
 
@@ -540,7 +421,7 @@ mod tests {
         assert_eq!(measures.len(), 3);
 
         let echo_time = measures.iter().find(|m| m.key == "EchoTime_ms").unwrap();
-        assert_eq!(echo_time.label, "Echo Time (ms)");
+        assert_eq!(echo_time.label, "EchoTime Ms");
         assert_eq!(echo_time.value, "9.991");
 
         let readout_time = measures
@@ -591,9 +472,22 @@ mod tests {
         tmp_file.write_all(sample_json.as_bytes()).unwrap();
 
         let outputs = extract_subject_qc_outputs(tmp_file.path()).unwrap();
-        assert_eq!(outputs.coverage, 91.0);
-        assert_eq!(outputs.spatial_cov, 71.0);
+        assert_eq!(outputs.coverage, Some(91.0));
+        assert_eq!(outputs.spatial_cov, Some(71.0));
         assert_eq!(outputs.motion, vec![0.1, 0.2]);
-        assert_eq!(outputs.motion_exclusion_pct, 15.0);
+        assert_eq!(outputs.motion_exclusion_pct, Some(15.0));
+    }
+
+    #[test]
+    fn test_extract_subject_qc_outputs_empty_asl() {
+        let mut tmp_file = NamedTempFile::new().unwrap();
+        let sample_json = r#"{"ASL": {}}"#;
+        tmp_file.write_all(sample_json.as_bytes()).unwrap();
+
+        let outputs = extract_subject_qc_outputs(tmp_file.path()).unwrap();
+        assert_eq!(outputs.coverage, None);
+        assert_eq!(outputs.spatial_cov, None);
+        assert!(outputs.motion.is_empty());
+        assert_eq!(outputs.motion_exclusion_pct, None);
     }
 }

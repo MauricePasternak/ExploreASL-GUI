@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export interface SubjectQcOutputs {
-  coverage: number;
-  spatialCov: number;
+  coverage: number | null;
+  spatialCov: number | null;
   motion: number[];
-  motionExclusionPct: number;
+  motionExclusionPct: number | null;
 }
 
 /**
@@ -36,12 +36,12 @@ export function aggregateMotionBySubject(runMotions: number[]): number | null {
 
 export function aggregateMeanSd<T extends { verdict: string }>(
   rows: T[],
-  val: (r: T) => number | undefined,
+  val: (r: T) => number | null | undefined,
 ): { mean: number | null; sd: number | null } {
   const vals = rows
     .filter((r) => r.verdict === "pass")
     .map(val)
-    .filter((v): v is number => v !== undefined);
+    .filter((v): v is number => v !== undefined && v !== null);
   if (vals.length === 0) return { mean: null, sd: null };
   const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
   if (vals.length < 2) return { mean, sd: null };

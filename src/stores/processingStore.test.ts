@@ -66,7 +66,6 @@ vi.mock("../lib/processingEvents", () => ({
   stopWatcher: vi.fn().mockResolvedValue(undefined),
   loadSubjects: vi.fn().mockResolvedValue([]),
   loadLockStatus: vi.fn().mockResolvedValue([]),
-  clearStaleLocks: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./projectStore", () => ({

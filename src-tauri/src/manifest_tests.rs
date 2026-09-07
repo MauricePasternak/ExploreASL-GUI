@@ -51,7 +51,7 @@ fn returns_none_when_population_mtime_file_missing() {
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
 
-    let result = read_population_ready_mtime(tmp.to_string_lossy().to_string());
+    let result = read_population_ready_mtime_impl(&tmp);
     assert_eq!(result, None);
 
     let _ = fs::remove_dir_all(&tmp);
@@ -75,7 +75,7 @@ fn returns_mtime_when_population_file_present() {
     fs::create_dir_all(&pop_dir).unwrap();
     fs::write(pop_dir.join("999_ready.status"), "").unwrap();
 
-    let result = read_population_ready_mtime(tmp.to_string_lossy().to_string());
+    let result = read_population_ready_mtime_impl(&tmp);
     assert!(result.is_some());
 
     let _ = fs::remove_dir_all(&tmp);

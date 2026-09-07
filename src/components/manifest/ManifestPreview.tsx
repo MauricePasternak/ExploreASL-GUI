@@ -282,10 +282,10 @@ function useBuildManifestPayload(): ManifestPayload {
     const groupRows: Array<{
       verdict: string;
       reason?: string;
-      coverage?: number;
-      spatialCov?: number;
+      coverage?: number | null;
+      spatialCov?: number | null;
       motion?: number[];
-      motionExclusionPct?: number;
+      motionExclusionPct?: number | null;
     }> = [];
     for (const s of availableSubjects) {
       const cleanSs = s.subjectSession.replace(/^sub-/, "");
@@ -345,10 +345,10 @@ function useBuildManifestPayload(): ManifestPayload {
     const groupRows: Array<{
       verdict: string;
       reason?: string;
-      coverage?: number;
-      spatialCov?: number;
+      coverage?: number | null;
+      spatialCov?: number | null;
       motion?: number[];
-      motionExclusionPct?: number;
+      motionExclusionPct?: number | null;
     }> = [];
     for (const s of availableSubjects) {
       if (!ungroupedSs.has(s.subjectSession)) continue;

@@ -129,10 +129,6 @@ export async function loadSubjects(
   return invoke<SubjectInfo[]>("list_subjects", { projectRoot, dataSource: dataSource ?? null });
 }
 
-export async function clearStaleLocks(projectRoot: string): Promise<void> {
-  await invoke("clear_stale_locks", { projectRoot });
-}
-
 export async function clearStaleLocksForRun(runId: string): Promise<void> {
   await invoke("clear_stale_locks_for_run", { runId });
 }

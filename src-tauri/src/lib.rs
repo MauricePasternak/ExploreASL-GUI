@@ -26,9 +26,7 @@ mod project_writer_tests;
 
 use app_state::AppState;
 use apptainer::which_apptainer;
-use bids::commands::{
-    check_bids_dataset, ensure_rawdata_dir, ensure_rawdata_dir_for_run, scan_bids_sidecars,
-};
+use bids::commands::{check_bids_dataset, ensure_rawdata_dir_for_run, scan_bids_sidecars};
 use commands::{
     get_available_memory_mb, get_cpu_cores, inspect_source_path, is_writable, walk_directory,
 };
@@ -39,16 +37,15 @@ use import::{
     stop_import, stop_running_import_for_exit,
 };
 use manifest::{
-    capture_environment_versions, capture_environment_versions_for_run,
-    read_population_ready_mtime, read_population_ready_mtime_for_run, read_prior_modules_mtimes,
+    capture_environment_versions_for_run, read_population_ready_mtime_for_run,
+    read_prior_modules_mtimes,
 };
 use matlab::which_matlab;
 use processing::{
-    attach_run, clear_stale_locks, clear_stale_locks_for_run, detect_exploreasl_version,
-    fail_processing_run, finalize_processing_run, get_active_run, kill_pipeline, list_module_logs,
-    list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,
-    reserve_processing_run, run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir,
-    watch_lock_dir,
+    attach_run, clear_stale_locks_for_run, detect_exploreasl_version, fail_processing_run,
+    finalize_processing_run, get_active_run, kill_pipeline, list_module_logs, list_subject_reports,
+    list_subjects, read_lock_status, read_module_logs, read_report_image, reserve_processing_run,
+    run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir,
 };
 use project_runtime::shutdown_project_runtime;
 use project_writer::{atomic_write_project, cleanup_project_temps};
@@ -122,14 +119,11 @@ pub fn run() {
             kill_pipeline,
             watch_lock_dir,
             stop_watch_lock_dir,
-            clear_stale_locks,
             clear_stale_locks_for_run,
-            capture_environment_versions,
             capture_environment_versions_for_run,
             detect_exploreasl_version,
             list_module_logs,
             read_module_logs,
-            read_population_ready_mtime,
             read_population_ready_mtime_for_run,
             read_prior_modules_mtimes,
             list_subject_reports,
@@ -147,7 +141,6 @@ pub fn run() {
             get_all_subjects_qc,
             check_bids_dataset,
             scan_bids_sidecars,
-            ensure_rawdata_dir,
             ensure_rawdata_dir_for_run,
             atomic_write_project,
             cleanup_project_temps,

@@ -16,6 +16,7 @@ import { IconAlertCircle } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchReportImage, fetchSubjectQC, type QcMeasure } from "../../lib/reportViewer";
+import { getQcMeasureLabel } from "../../lib/qcLabels";
 
 interface ReportViewerModalProps {
   opened: boolean;
@@ -505,7 +506,7 @@ export default function ReportViewerModal({
                     <Table.Tr key={measure.key} data-testid={`qc-row-${measure.key}`}>
                       <Table.Td>
                         <Text size="sm" fw={500} data-testid={`qc-label-${measure.key}`}>
-                          {measure.label}
+                          {getQcMeasureLabel(measure.key, measure.label)}
                         </Text>
                       </Table.Td>
                       <Table.Td style={{ maxWidth: 300 }}>
