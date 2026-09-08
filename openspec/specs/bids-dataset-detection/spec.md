@@ -69,33 +69,38 @@ Result `BidsCheckResult` fields: `is_bids: bool`, `has_dataset_description: bool
 
 ### Requirement: LandingPage shows confirmation dialog on BIDS detection
 
-After the folder picker returns a path, `LandingPage.handleNewProject()` MUST invoke `check_bids_dataset`. Based on the result, a unified project import setup modal MUST always be shown:
+After the folder picker returns a path, `LandingPage.handleNewProject()` MUST invoke the read-only `check_bids_dataset`. Based on the result, a unified project import setup modal MUST always be shown:
 
-- `error == null && is_bids` → show dialog: "BIDS Dataset Detected" with both "Skip Import — review BIDS metadata" and "Import from DICOM" enabled. Dialog displays `asl_subject_count`, `asl_session_count`, and "Cross-sectional: Yes/No" from `is_cross_sectional` (longitudinal only when at least one subject has multiple explicit sessions). When `missing_aslcontext_count > 0`, show a non-blocking warning that those sessions will be skipped during review. Dialog body mentions `rawdata/` creation requirement for upstream-compat.
-- `is_bids == false && asl_subject_count == 0 && total_subject_count == 0` → show dialog: "No BIDS Subjects Found" with BIDS option disabled and "Import from DICOM" enabled/auto-selected. Display the callout: "No BIDS subjects found in the selected folder. Ensure the folder contains sub-\* directories with ASL data."
-- `is_bids == false && asl_subject_count == 0 && total_subject_count > 0` → show dialog: "No Valid ASL BIDS Data Found" with BIDS option disabled and "Import from DICOM" enabled/auto-selected. Display the callout: "The selected folder contains BIDS subjects but none have valid ASL data. Ensure at least one subject has a perf/ directory with \*\_asl.json sidecars."
+- `error == null && is_bids` → show dialog: "BIDS Dataset Detected" with both "Skip Import — review BIDS metadata" and "Import from DICOM" enabled. Dialog displays `asl_subject_count`, `asl_session_count`, and "Cross-sectional: Yes/No" from `is_cross_sectional` (longitudinal only when at least one subject has multiple explicit sessions). When `missing_aslcontext_count > 0`, show a non-blocking warning that those sessions will be skipped during review.
+- `is_bids == false && asl_subject_count == 0 && total_subject_count == 0` → show dialog: "No BIDS Subjects Found" with BIDS option disabled and "Import from DICOM" enabled/auto-selected. Display the callout: "No BIDS subjects found in the selected folder. Ensure the folder contains sub-* directories with ASL data."
+- `is_bids == false && asl_subject_count == 0 && total_subject_count > 0` → show dialog: "No Valid ASL BIDS Data Found" with BIDS option disabled and "Import from DICOM" enabled/auto-selected. Display the callout: "The selected folder contains BIDS subjects but none have valid ASL data. Ensure at least one subject has a perf/ directory with *_asl.json sidecars."
 - `dataset_desc_error != null && asl_subject_count >= 1` → show dialog: "Corrupt dataset_description.json" with both options enabled. Display the callout: "dataset_description.json is corrupt, but ASL subjects were found."
 
-In all cases, the dialog features three buttons: `[Confirm]` (disabled unless an option is selected; when BIDS is disabled, DICOM is pre-selected and `[Confirm]` is enabled), `[Choose a Different Folder]`, and `[Cancel]`.
+For the currently selected import option, the modal MUST obtain and display the read-only mutation plan before enabling `[Confirm]`. The displayed list MUST identify every applicable `create`, `update`, `no-op`, warning, and conflict for `project.easl`, `.bidsignore`, and any data-source-specific directory or marker. A blocking conflict or unavailable plan MUST disable confirmation. Changing the import option MUST replace the displayed plan rather than reusing a plan for another data source.
 
-`Cancel` or dismissed dialog → return to landing page (no project created, no state mutation). `Continue + Skip Import` → `createProject(path, name, { dataSource: "bids" })`, navigate to import. `Continue + DICOM` → `createProject(path, name, { dataSource: "dicom" })`, navigate to import.
+In all cases, the dialog features `[Confirm]` (enabled only when an option has a current conflict-free plan), `[Choose a Different Folder]`, and `[Cancel]`. Cancel, dismissal, folder reselection, scans, and plan review MUST NOT modify the selected tree. Confirm MUST submit the displayed plan identity; project creation and navigation occur only after its transaction commits.
 
 #### Scenario: BIDS folder picked → user chooses BIDS-direct
 
-- **WHEN** user picks ds000240 root, `check_bids_dataset` returns `is_bids = true, asl_subject_count = 25, is_cross_sectional = true`, user selects "Skip Import"
-- **THEN** `createProject(path, name, { dataSource: "bids" })` is called, navigation goes to `/project/:id/import`, `BIDSReviewPanel` renders
+- **WHEN** user picks ds000240, selects "Skip Import", reviews a current conflict-free mutation plan, and confirms it
+- **THEN** exactly the displayed BIDS-direct project mutations SHALL commit before navigation to `/project/:id/import` and `BIDSReviewPanel` rendering
 
 #### Scenario: BIDS folder picked → user chooses DICOM anyway
 
-- **WHEN** user picks a BIDS folder and explicitly selects "Import from DICOM"
-- **THEN** `createProject(path, name, { dataSource: "dicom" })` is called, navigation goes to DICOM import wizard (existing flow)
+- **WHEN** user picks a BIDS folder, selects "Import from DICOM", reviews its current conflict-free mutation plan, and confirms it
+- **THEN** exactly the displayed DICOM project mutations SHALL commit before navigation to the DICOM import wizard, without applying BIDS-direct-only compatibility mutations
+
+#### Scenario: Import option changes
+
+- **WHEN** the user reviews the BIDS-direct plan and then selects DICOM import
+- **THEN** confirmation SHALL remain unavailable until a DICOM-specific plan is displayed and SHALL never submit the superseded BIDS-direct plan
 
 #### Scenario: Non-BIDS folder picked → error, retry
 
-- **WHEN** user picks `<user>/Documents/` (no BIDS data), `check_bids_dataset` returns `is_bids = false`, error dialog shows
-- **THEN** `[Choose Different Folder]` reopens the folder picker; `[Cancel]` returns to landing page; no project is created in either case
+- **WHEN** `check_bids_dataset` finds no BIDS subjects and the user chooses another folder or cancels
+- **THEN** no project SHALL be created and the inspected source tree SHALL remain unchanged
 
 #### Scenario: Corrupt dataset_description but ASL present → user proceeds anyway
 
-- **WHEN** `dataset_description.json` exists with invalid JSON, 12 subjects have valid ASL sidecars
-- **THEN** corrupt warning dialog shows; `[Skip Import anyway]` creates BIDS-direct project; `[Cancel]` returns to landing
+- **WHEN** valid ASL subjects accompany a corrupt `dataset_description.json` and the user reviews the warning and current BIDS-direct mutation plan
+- **THEN** confirmation SHALL commit exactly that plan before project activation, while cancellation SHALL leave the source tree unchanged

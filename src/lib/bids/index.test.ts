@@ -11,12 +11,6 @@ describe("bids module index", () => {
     expect(typeof bids.isSessionDir).toBe("function");
   });
 
-  it("re-exports validation utilities", () => {
-    expect(typeof bids.isBidsProject).toBe("function");
-    expect(typeof bids.ensureBidsIgnore).toBe("function");
-    expect(bids.BIDS_IGNORE_ENTRIES).toBeDefined();
-  });
-
   it("re-exports sidecar utilities", () => {
     expect(typeof bids.summarizeAslContext).toBe("function");
     expect(typeof bids.parseAslContext).toBe("function");

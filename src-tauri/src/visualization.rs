@@ -494,6 +494,16 @@ fn set_active_project_inner(
     let path = std::fs::canonicalize(&root_path)
         .inspect_err(|error| log::error!("set_active_project failed canonicalizing: {error}"))
         .context("Invalid project path")?;
+    // BIDS setup recovery is separate from import relocation. A pending setup
+    // transaction must settle before this root is made observable as active.
+    if let Some(app_data) = state
+        .setup_app_data
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Setup app-data state lock was poisoned"))?
+        .clone()
+    {
+        crate::bids::setup::recover_root(&app_data, &path)?;
+    }
     // Recovery must finish before this candidate can become observable through
     // active-root IPC or frontend hydration.
     let recovery = crate::import::relocation::recover(&path)?;

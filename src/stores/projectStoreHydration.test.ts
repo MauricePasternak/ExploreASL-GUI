@@ -22,7 +22,7 @@ describe("project store replacement", () => {
       availableSubjects: [],
       subjectStatuses: [],
       workerPids: [],
-      pendingRawdataWarning: null,
+      bidsCompatibilityError: null,
       profileError: null,
       preparingMessage: null,
     });

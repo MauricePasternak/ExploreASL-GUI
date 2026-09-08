@@ -92,3 +92,22 @@ Other `mappingState` fields (`rawPaths`, `pathPatterns`, `bMatchDirectories`, `t
 
 - **WHEN** user closes app after confirming BIDS review with one skipped subject, reopens the project, navigates to Import
 - **THEN** the persisted summary renders the skipped-subjects warning block listing the persisted subject identifier (e.g., `sub-UNK001_1`)
+
+### Requirement: BIDS-direct creation uses confirmed mutation transaction
+
+A BIDS-direct project SHALL be created only by committing the current reviewed BIDS mutation plan. The canonical schema-v1 `project.easl` bytes and compatibility artifacts SHALL belong to the same transaction. The resulting project SHALL retain `projectMeta.dataSource = "bids"`, `projectMeta.currentPhase = "import"`, `uiState.import.bidsReviewConfirmed = false`, and project-root-relative BIDS source state. Independent best-effort `.bidsignore` or compatibility writes after project-file creation SHALL NOT occur.
+
+#### Scenario: Confirmed BIDS-direct creation
+
+- **WHEN** a user confirms a current BIDS-direct mutation plan
+- **THEN** project metadata and all displayed compatibility artifacts SHALL commit together before the project becomes active
+
+#### Scenario: Compatibility mutation fails
+
+- **WHEN** marker, directory, or `.bidsignore` installation fails during BIDS-direct creation
+- **THEN** `project.easl` SHALL NOT remain as a successfully created project and the GUI SHALL remain outside the import flow
+
+#### Scenario: Post-commit BIDS review scan
+
+- **WHEN** the committed BIDS-direct project opens its metadata review panel
+- **THEN** sidecar scanning SHALL read the source tree without performing project-setup mutations

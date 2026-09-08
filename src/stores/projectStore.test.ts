@@ -10,15 +10,9 @@ import { useGlobalStore } from "./globalStore";
 import { useImportStore } from "./importStore";
 import { useVisualizationStore } from "./visualizationStore";
 import { __resetProjectRevisionForTests, useProjectStore } from "./projectStore";
-import { isBidsProject, ensureBidsIgnore } from "../lib/bids/validation";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { compressSnapshot } from "../lib/snapshotCompression";
 import { resetProjectLifecycleForTests } from "../lib/projectLifecycle";
-
-vi.mock("../lib/bids/validation", () => ({
-  isBidsProject: vi.fn(),
-  ensureBidsIgnore: vi.fn(),
-}));
 
 function seedValidProfileGate() {
   const profile = makeMatlabProfile();
@@ -62,8 +56,6 @@ describe("useProjectStore", () => {
       }
       return null;
     });
-    vi.mocked(isBidsProject).mockReset();
-    vi.mocked(ensureBidsIgnore).mockReset();
   });
 
   it("creates a new project file at the project root", async () => {
@@ -178,6 +170,117 @@ describe("useProjectStore", () => {
     expect(project.projectMeta.dataSource).toBe("bids");
     expect(project.projectMeta.currentPhase).toBe("import");
     expect(project.uiState?.import?.bidsReviewConfirmed).toBe(false);
+  });
+
+  it("preflights a fully validated canonical schema-v1 project before detected-BIDS commit", async () => {
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "preflight_bids_project_mutations") {
+        const { rootPath, mode } = args as { rootPath: string; mode: "bids" | "dicom" };
+        return {
+          planId: "opaque-plan",
+          rootPath,
+          mode,
+          operations: [],
+          warnings: [],
+          conflicts: [],
+          projectSummary: null,
+          preservesReadme: true,
+          temporaryArtifacts: [],
+        };
+      }
+      return null;
+    });
+    await useProjectStore.getState().preflightProjectSetup("/dataset", "Dataset", "bids");
+
+    expect(invoke).toHaveBeenCalledWith(
+      "preflight_bids_project_mutations",
+      expect.objectContaining({
+        rootPath: "/dataset",
+        mode: "bids",
+        canonicalProjectBytes: expect.any(String),
+      }),
+    );
+    const call = vi
+      .mocked(invoke)
+      .mock.calls.find(([command]) => command === "preflight_bids_project_mutations");
+    expect(call).toBeDefined();
+    const canonical = JSON.parse(
+      (call![1] as { canonicalProjectBytes: string }).canonicalProjectBytes,
+    );
+    expect(canonical).toMatchObject({
+      schemaVersion: 1,
+      projectMeta: { name: "Dataset", dataSource: "bids", currentPhase: "import" },
+      mappingState: { sourceDataPath: "." },
+      uiState: { import: { bidsReviewConfirmed: false } },
+    });
+  });
+
+  it("hydrates only committed BIDS bytes and never separately writes the project or bidsignore", async () => {
+    const committedBytes = JSON.stringify({
+      schemaVersion: 1,
+      projectMeta: {
+        id: "committed-id",
+        name: "Committed",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastOpened: "2026-01-01T00:00:00.000Z",
+        currentPhase: "import",
+        dataSource: "bids",
+      },
+      uiState: { import: { bidsReviewConfirmed: false, skippedSubjects: [] } },
+      mappingState: { sourceDataPath: "." },
+      dataPar: {},
+    });
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "commit_bids_project_mutations") {
+        return {
+          outcome: "committed",
+          projectPath: "/canonical/project.easl",
+          canonicalProjectBytes: committedBytes,
+          directorySyncSupported: true,
+        };
+      }
+      return null;
+    });
+
+    await useProjectStore.getState().createProject("/caller-path", "Ignored draft", {
+      dataSource: "bids",
+      planId: "opaque-plan",
+    });
+
+    expect(invoke).toHaveBeenCalledWith("commit_bids_project_mutations", { planId: "opaque-plan" });
+    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("ensure_bids_ignore", expect.anything());
+    expect(useProjectStore.getState().project).toMatchObject({
+      projectMeta: { id: "committed-id", name: "Committed", rootPath: "/canonical" },
+    });
+  });
+
+  it("preserves the active project when BIDS commit fails before activation", async () => {
+    const prior = {
+      version: "0.1.0",
+      projectMeta: {
+        id: "prior",
+        name: "Prior",
+        rootPath: "/prior",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastOpened: "2026-01-01T00:00:00.000Z",
+        currentPhase: "import" as const,
+        dataSource: "dicom" as const,
+      },
+      uiState: {},
+      mappingState: {},
+      dataPar: {},
+    } as any;
+    useProjectStore.setState({ project: prior, loaded: true, isDirty: false });
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("stale plan"));
+
+    await expect(
+      useProjectStore
+        .getState()
+        .createProject("/dataset", "Dataset", { dataSource: "bids", planId: "stale" }),
+    ).rejects.toThrow("stale plan");
+    expect(useProjectStore.getState().project).toBe(prior);
+    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
   });
 
   it("missing options.dataSource throws and no project is created", async () => {
@@ -1088,7 +1191,6 @@ describe("useProjectStore", () => {
       });
 
       vi.mocked(readTextFile).mockResolvedValue(legacyJson);
-      vi.mocked(isBidsProject).mockResolvedValue(false);
 
       await useProjectStore.getState().loadProject("/tmp/legacy-snapshot/project.easl");
 
@@ -1125,32 +1227,7 @@ describe("useProjectStore", () => {
   });
 
   describe("BIDS project detection", () => {
-    it("calls ensureBidsIgnore on createProject if it is a BIDS project", async () => {
-      vi.mocked(isBidsProject).mockResolvedValue(true);
-      vi.mocked(ensureBidsIgnore).mockResolvedValue(undefined);
-
-      await useProjectStore
-        .getState()
-        .createProject("/tmp/bids-project", "BIDS Project", { dataSource: "dicom" });
-
-      expect(isBidsProject).toHaveBeenCalledWith("/tmp/bids-project");
-      expect(ensureBidsIgnore).toHaveBeenCalledWith("/tmp/bids-project");
-    });
-
-    it("does not call ensureBidsIgnore on createProject if it is not a BIDS project", async () => {
-      vi.mocked(isBidsProject).mockResolvedValue(false);
-
-      await useProjectStore
-        .getState()
-        .createProject("/tmp/non-bids-project", "Non-BIDS Project", { dataSource: "dicom" });
-
-      expect(isBidsProject).toHaveBeenCalledWith("/tmp/non-bids-project");
-      expect(ensureBidsIgnore).not.toHaveBeenCalled();
-    });
-
     it("opens BIDS projects read-only without checking or writing bidsignore", async () => {
-      vi.mocked(isBidsProject).mockResolvedValue(true);
-      vi.mocked(ensureBidsIgnore).mockResolvedValue(undefined);
       vi.mocked(readTextFile).mockResolvedValue(
         JSON.stringify({
           version: "0.1.0",
@@ -1170,13 +1247,9 @@ describe("useProjectStore", () => {
       );
 
       await useProjectStore.getState().loadProject("/tmp/bids-loaded/project.easl");
-
-      expect(isBidsProject).not.toHaveBeenCalled();
-      expect(ensureBidsIgnore).not.toHaveBeenCalled();
     });
 
     it("opens DICOM projects read-only without checking or writing bidsignore", async () => {
-      vi.mocked(isBidsProject).mockResolvedValue(false);
       vi.mocked(readTextFile).mockResolvedValue(
         JSON.stringify({
           version: "0.1.0",
@@ -1196,13 +1269,9 @@ describe("useProjectStore", () => {
       );
 
       await useProjectStore.getState().loadProject("/tmp/non-bids-loaded/project.easl");
-
-      expect(isBidsProject).not.toHaveBeenCalled();
-      expect(ensureBidsIgnore).not.toHaveBeenCalled();
     });
 
     it("does not throw or block project loading if BIDS checking throws an error", async () => {
-      vi.mocked(isBidsProject).mockRejectedValue(new Error("FS Error"));
       vi.mocked(readTextFile).mockResolvedValue(
         JSON.stringify({
           version: "0.1.0",

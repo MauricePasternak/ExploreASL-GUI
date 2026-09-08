@@ -26,7 +26,11 @@ mod project_writer_tests;
 
 use app_state::AppState;
 use apptainer::which_apptainer;
-use bids::commands::{check_bids_dataset, ensure_rawdata_dir_for_run, scan_bids_sidecars};
+use bids::commands::{
+    check_bids_dataset, commit_bids_project_mutations, preflight_bids_project_mutations,
+    preflight_bids_setup_repair, recover_bids_project_setup, scan_bids_sidecars,
+    verify_bids_compatibility_for_run,
+};
 use commands::{
     get_available_memory_mb, get_cpu_cores, inspect_source_path, is_writable, walk_directory,
 };
@@ -141,13 +145,27 @@ pub fn run() {
             get_all_subjects_qc,
             check_bids_dataset,
             scan_bids_sidecars,
-            ensure_rawdata_dir_for_run,
+            preflight_bids_project_mutations,
+            preflight_bids_setup_repair,
+            commit_bids_project_mutations,
+            recover_bids_project_setup,
+            verify_bids_compatibility_for_run,
             atomic_write_project,
             cleanup_project_temps,
             shutdown_project_runtime,
         ])
         .register_uri_scheme_protocol("niivue", niivue_protocol::handle_niivue_protocol)
         .setup(|app| {
+            let app_data = app.path().app_data_dir()?;
+            *app.state::<AppState>()
+                .setup_app_data
+                .lock()
+                .map_err(|_| anyhow::anyhow!("Setup app-data state lock was poisoned"))? =
+                Some(app_data.clone());
+            let recovery = bids::setup::recover_at_startup(&app_data)?;
+            for root in recovery.deferred_roots {
+                log::warn!("Deferred BIDS setup recovery until root is available: {root}");
+            }
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
             if let Some(window) = app.get_webview_window("main") {
                 window.set_icon(icon)?;

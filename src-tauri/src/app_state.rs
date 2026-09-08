@@ -1,3 +1,4 @@
+use crate::bids::setup::SetupPlans;
 use crate::import::{ImportState, relocation::RelocationPlan};
 use crate::processing::ProcessState;
 use crate::visualization::ActiveData;
@@ -19,6 +20,10 @@ pub struct AppState {
     pub active_data: Mutex<Option<ActiveData>>,
     pub relocation_plans: Mutex<BTreeMap<String, RelocationPlan>>,
     pub relocation_plan_sequence: AtomicU64,
+    pub setup_plans: SetupPlans,
+    /// Configured from Tauri's platform path resolver during startup. Targeted
+    /// recovery uses it before a candidate root becomes active.
+    pub setup_app_data: Mutex<Option<PathBuf>>,
 }
 
 impl Default for AppState {
@@ -32,6 +37,8 @@ impl Default for AppState {
             active_data: Mutex::new(None),
             relocation_plans: Mutex::new(BTreeMap::new()),
             relocation_plan_sequence: AtomicU64::new(0),
+            setup_plans: SetupPlans::default(),
+            setup_app_data: Mutex::new(None),
         }
     }
 }

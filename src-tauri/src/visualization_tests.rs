@@ -150,6 +150,31 @@ mod tests {
     }
 
     #[test]
+    fn setup_recovery_blocks_candidate_activation_without_replacing_active_root() {
+        let active = tempfile::tempdir().unwrap();
+        let candidate = tempfile::tempdir().unwrap();
+        let app_data = tempfile::tempdir().unwrap();
+        fs::write(
+            app_data.path().join("pending-bids-setup-transactions.json"),
+            "not a setup registry",
+        )
+        .unwrap();
+        let state = AppState::default();
+        let active_root = active.path().canonicalize().unwrap();
+        *state.active_project_root.lock().unwrap() = Some(active_root.clone());
+        *state.setup_app_data.lock().unwrap() = Some(app_data.path().to_path_buf());
+
+        let error = set_active_project_impl(candidate.path().display().to_string(), &state)
+            .expect_err("blocked setup recovery must prevent activation");
+
+        assert!(error.contains("Malformed setup pending registry"));
+        assert_eq!(
+            state.active_project_root.lock().unwrap().as_deref(),
+            Some(active_root.as_path())
+        );
+    }
+
+    #[test]
     fn active_project_changes_reject_live_processing_ownership() {
         let first = tempfile::tempdir().unwrap();
         let second = tempfile::tempdir().unwrap();

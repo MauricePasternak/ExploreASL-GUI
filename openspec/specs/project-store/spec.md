@@ -512,3 +512,27 @@ After a relocated project becomes active, project-owned reads, writes, watchers,
 
 - **WHEN** processing starts after relocation
 - **THEN** worker arguments and the lock watcher SHALL use the new project root and SHALL NOT use the former root
+
+### Requirement: BIDS project creation delegates the durable commit
+
+For a detected BIDS root, `createProject` SHALL construct and canonically validate the schema-v1 project payload before preflight, but SHALL delegate durable project creation to the native confirmed mutation transaction. It SHALL NOT write `project.easl` through a separate frontend atomic-write call and SHALL NOT perform a later best-effort `.bidsignore` write. Normal saves after successful activation SHALL continue to use validated atomic project writes and backups under the existing persistence contract.
+
+#### Scenario: Preflight receives validated canonical project
+
+- **WHEN** the landing flow requests a mutation plan for a candidate BIDS-root project
+- **THEN** the planned `project.easl` content SHALL be canonical schema-v1 bytes that have passed the complete persisted-project validation contract
+
+#### Scenario: Commit succeeds before hydration
+
+- **WHEN** native transaction commit succeeds for the current plan
+- **THEN** the project store SHALL hydrate and activate exactly the committed project payload before starting the project session
+
+#### Scenario: Commit fails before activation
+
+- **WHEN** native transaction commit fails or rolls back
+- **THEN** the project store SHALL retain its prior active state and SHALL not start a session or schedule a save for the candidate project
+
+#### Scenario: Later save behavior is unchanged
+
+- **WHEN** a successfully created BIDS project becomes dirty after activation
+- **THEN** normal Save SHALL use the existing validated atomic `project.easl` replacement, backup, ordering, and recovery behavior

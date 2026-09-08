@@ -3,6 +3,12 @@ import { memo, useCallback, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 
 import { useProcessingStore } from "../../stores/processingStore";
+import { useProjectStore } from "../../stores/projectStore";
+import {
+  commitBidsProjectMutations,
+  preflightBidsSetupRepair,
+  type SetupPlan,
+} from "../../lib/bids/setup";
 import {
   CompletedSubjectEntry,
   findCompletedSubjects,
@@ -79,10 +85,14 @@ const ControlButtons = memo(function ControlButtons({
   const phase = useProcessingStore((s) => s.processingPhase);
   const startProcessing = useProcessingStore((s) => s.startProcessing);
   const killProcessing = useProcessingStore((s) => s.killProcessing);
-  const pendingRawdataWarning = useProcessingStore((s) => s.pendingRawdataWarning);
-  const clearPendingRawdataWarning = useProcessingStore((s) => s.clearPendingRawdataWarning);
+  const bidsCompatibilityError = useProcessingStore((s) => s.bidsCompatibilityError);
+  const clearBidsCompatibilityError = useProcessingStore((s) => s.clearBidsCompatibilityError);
+  const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath ?? null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reprocessEntries, setReprocessEntries] = useState<CompletedSubjectEntry[]>([]);
+  const [repairPlan, setRepairPlan] = useState<SetupPlan | null>(null);
+  const [repairError, setRepairError] = useState<string | null>(null);
+  const [repairLoading, setRepairLoading] = useState(false);
 
   const { label, color, icon: Icon, action } = getButtonProps(phase);
   const isStartAction = action === "start";
@@ -122,17 +132,39 @@ const ControlButtons = memo(function ControlButtons({
     setReprocessEntries([]);
   }, []);
 
-  const handleRawdataWarningCancel = useCallback(() => {
-    // User declined — abort processing; do NOT call startProcessing(true)
-    void clearPendingRawdataWarning();
-  }, [clearPendingRawdataWarning]);
+  const handleCompatibilityErrorClose = useCallback(() => {
+    void clearBidsCompatibilityError();
+  }, [clearBidsCompatibilityError]);
 
-  const handleRawdataWarningConfirm = useCallback(() => {
-    // User confirmed — proceed past the warning. startProcessing(true) skips
-    // the ensure_rawdata_dir call (already invoked) and clears the warning
-    // state from inside the store on success.
-    void startProcessing(true);
-  }, [startProcessing]);
+  const handleReviewRepair = useCallback(async () => {
+    if (!projectRoot) return;
+    setRepairLoading(true);
+    setRepairError(null);
+    try {
+      setRepairPlan(await preflightBidsSetupRepair(projectRoot));
+    } catch (error) {
+      setRepairError(
+        error instanceof Error ? error.message : "Could not inspect BIDS setup repair.",
+      );
+    } finally {
+      setRepairLoading(false);
+    }
+  }, [projectRoot]);
+
+  const handleCommitRepair = useCallback(async () => {
+    if (!repairPlan || repairPlan.conflicts.length > 0) return;
+    setRepairLoading(true);
+    try {
+      await commitBidsProjectMutations(repairPlan.planId);
+      setRepairPlan(null);
+      setRepairError(null);
+      void clearBidsCompatibilityError();
+    } catch (error) {
+      setRepairError(error instanceof Error ? error.message : "BIDS setup repair failed.");
+    } finally {
+      setRepairLoading(false);
+    }
+  }, [clearBidsCompatibilityError, repairPlan]);
 
   return (
     <>
@@ -186,50 +218,97 @@ const ControlButtons = memo(function ControlButtons({
         entries={reprocessEntries}
       />
 
-      {/*
-        BIDS-direct rawdata/ warning modal — required by Phase 8.2 spec
-        ("processing MUST wait for user confirmation before proceeding").
-        Pending warning state is set by processingStore.startProcessing()
-        when ensure_rawdata_dir returns a non-empty sub-directory count.
-      */}
       <Modal
-        opened={pendingRawdataWarning != null}
-        onClose={handleRawdataWarningCancel}
-        title="Existing rawdata/ directory"
+        opened={bidsCompatibilityError != null}
+        onClose={handleCompatibilityErrorClose}
+        title="BIDS setup needs repair"
         size="lg"
-        data-testid="bids-rawdata-warning-modal"
+        data-testid="bids-compatibility-error-modal"
         returnFocus={false}
         transitionProps={{ duration: 0, exitDuration: 0 }}
       >
         <Stack gap="md">
-          <Text size="sm" ff="monospace" data-testid="bids-rawdata-warning-text">
-            {pendingRawdataWarning ?? ""}
+          <Text size="sm" ff="monospace" data-testid="bids-compatibility-error-text">
+            {bidsCompatibilityError ?? ""}
           </Text>
           <Text size="sm">
-            The{" "}
-            <Text span ff="monospace" size="xs">
-              subjectFolder
-            </Text>{" "}
-            override scans root-level subjects only; files inside{" "}
-            <Text span ff="monospace" size="xs">
-              rawdata/
-            </Text>{" "}
-            will be ignored by ExploreASL. Proceed?
+            Processing did not modify this project. Review and confirm a BIDS setup repair before
+            retrying processing.
           </Text>
           <Group justify="flex-end" gap="sm">
             <Button
               variant="default"
-              onClick={handleRawdataWarningCancel}
-              data-testid="bids-rawdata-warning-cancel-btn"
+              onClick={handleCompatibilityErrorClose}
+              data-testid="bids-compatibility-error-close-btn"
+            >
+              Close
+            </Button>
+            <Button onClick={handleReviewRepair} data-testid="bids-repair-preflight-btn">
+              Review repair
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={repairPlan !== null || repairError !== null}
+        onClose={() => {
+          setRepairPlan(null);
+          setRepairError(null);
+        }}
+        title="Review BIDS setup repair"
+        data-testid="bids-repair-review-modal"
+      >
+        <Stack gap="sm">
+          {repairError && (
+            <Text c="red" data-testid="bids-repair-error">
+              {repairError}
+            </Text>
+          )}
+          {repairLoading && !repairPlan && (
+            <Text data-testid="bids-repair-loading">Loading repair plan…</Text>
+          )}
+          {repairPlan?.operations.map((operation) => (
+            <Stack
+              key={operation.path}
+              gap={0}
+              data-testid={`bids-repair-operation-${operation.path.replace(/[/.]/g, "-")}`}
+            >
+              <Text size="sm">
+                <strong>{operation.operation}</strong> {operation.path}
+              </Text>
+              {operation.textPreview && (
+                <Text
+                  ff="monospace"
+                  size="xs"
+                  style={{ whiteSpace: "pre-wrap" }}
+                  data-testid={`bids-repair-preview-${operation.path.replace(/[/.]/g, "-")}`}
+                >
+                  {operation.textPreview}
+                </Text>
+              )}
+            </Stack>
+          ))}
+          {repairPlan?.conflicts.map((conflict) => (
+            <Text key={conflict} c="red" data-testid="bids-repair-conflict">
+              {conflict}
+            </Text>
+          ))}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => setRepairPlan(null)}
+              data-testid="bids-repair-cancel-btn"
             >
               Cancel
             </Button>
             <Button
-              color="orange"
-              onClick={handleRawdataWarningConfirm}
-              data-testid="bids-rawdata-warning-confirm-btn"
+              loading={repairLoading}
+              disabled={!repairPlan || repairPlan.conflicts.length > 0}
+              onClick={handleCommitRepair}
+              data-testid="bids-repair-confirm-btn"
             >
-              Proceed anyway
+              Confirm repair
             </Button>
           </Group>
         </Stack>

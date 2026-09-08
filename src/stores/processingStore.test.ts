@@ -466,8 +466,7 @@ afterEach(async () => {
   await useProcessingStore.getState().resetProcessing();
   vi.clearAllMocks();
   // Restore the default invoke mock implementation. Per-test overrides
-  // (e.g. Phase 8.2 `ensure_rawdata_dir` mocks returning null for unknown
-  // commands) would otherwise leak into the version-capture tests below
+  // returning null for unknown commands would otherwise leak into the version-capture tests below
   // and cause capture_environment_versions to return null — making
   // setLastRunProfileId resolve to "unknown" and the test at line ~1085
   // to fail. This is a TEST ISOLATION fix, not a BIDS-direct bug.
@@ -654,13 +653,6 @@ describe("processingStore setConfig", () => {
         setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
       });
 
-      // Mock invoke to handle ensure_rawdata_dir
-      vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir_for_run")
-          return Promise.resolve({ created: true, warning: null, bidsignoreUpdated: true });
-        return Promise.resolve(null);
-      });
-
       useProcessingStore.getState().setConfig({
         ...STRUCTURAL_ASL_CONFIG,
         subjects: ["sub-001_01", "sub-002_02"],
@@ -683,7 +675,7 @@ describe("processingStore setConfig", () => {
       expect(dataParJson.x.opts?.subjectFolder).toBeUndefined();
     });
 
-    it("calls invoke('ensure_rawdata_dir') when dataSource is bids", async () => {
+    it("verifies BIDS compatibility after reservation", async () => {
       const { useProjectStore } = await import("./projectStore");
       (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue({
         project: {
@@ -696,135 +688,19 @@ describe("processingStore setConfig", () => {
       });
 
       vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir_for_run")
-          return Promise.resolve({ created: true, warning: null, bidsignoreUpdated: true });
+        if (cmd === "verify_bids_compatibility_for_run") return Promise.resolve();
         return Promise.resolve(null);
       });
 
       useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
       await useProcessingStore.getState().startProcessing();
 
-      expect(invoke).toHaveBeenCalledWith("ensure_rawdata_dir_for_run", {
+      expect(invoke).toHaveBeenCalledWith("verify_bids_compatibility_for_run", {
         runId: "processing-run-test",
       });
     });
 
-    it("does NOT call invoke('ensure_rawdata_dir') when dataSource is dicom", async () => {
-      useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
-      await useProcessingStore.getState().startProcessing();
-
-      expect(invoke).not.toHaveBeenCalledWith("ensure_rawdata_dir_for_run", expect.any(Object));
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // Phase 8.2 — ensure_rawdata_dir warning UX
-  // ---------------------------------------------------------------------------
-
-  describe("processingStore ensure_rawdata_dir warning UX", () => {
-    const defaultProjectState = {
-      project: {
-        projectMeta: { rootPath: "/test/project", dataSource: "dicom" as const },
-        mappingState: {},
-      },
-      setPopulationCompleted: mockSetPopulationCompleted,
-      setLastRunProfileId: mockSetLastRunProfileId,
-      setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
-    };
-
-    beforeEach(() => {
-      useProcessingStore.getState().setAvailableSubjects([
-        {
-          subjectSession: "sub-001_01",
-          subject: "001",
-          session: "01",
-          hasStructural: true,
-          hasASL: true,
-          aslRuns: [],
-        },
-      ]);
-    });
-
-    afterEach(async () => {
-      const { useProjectStore } = await import("./projectStore");
-      (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue(defaultProjectState);
-    });
-
-    it("sets pendingRawdataWarning when ensure_rawdata_dir returns warning", async () => {
-      const { useProjectStore } = await import("./projectStore");
-      (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue({
-        project: {
-          projectMeta: { rootPath: "/test/bids", dataSource: "bids" as const },
-          mappingState: {},
-        },
-        setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunProfileId: mockSetLastRunProfileId,
-        setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
-      });
-
-      vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir_for_run")
-          return Promise.resolve({
-            created: false,
-            warning: "rawdata/ already contains 5 sub-directories",
-            bidsignoreUpdated: false,
-          });
-        return Promise.resolve(null);
-      });
-
-      useProcessingStore.getState().setConfig({
-        ...STRUCTURAL_ASL_CONFIG,
-        subjects: ["sub-001_01"],
-      });
-      await useProcessingStore.getState().startProcessing();
-
-      // Warning should be set
-      expect(useProcessingStore.getState().pendingRawdataWarning).toBe(
-        "rawdata/ already contains 5 sub-directories",
-      );
-      // Should NOT have reached running phase
-      expect(useProcessingStore.getState().processingPhase).not.toBe("running");
-      // runProcessingPipeline should NOT have been called
-      expect(runProcessingPipeline).not.toHaveBeenCalled();
-    });
-
-    it("clears pendingRawdataWarning and proceeds when startProcessing(true) called after warning", async () => {
-      const { useProjectStore } = await import("./projectStore");
-      (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue({
-        project: {
-          projectMeta: { rootPath: "/test/bids", dataSource: "bids" as const },
-          mappingState: {},
-        },
-        setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunProfileId: mockSetLastRunProfileId,
-        setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
-      });
-
-      vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir_for_run")
-          return Promise.resolve({
-            created: false,
-            warning: "rawdata/ already contains 5 sub-directories",
-            bidsignoreUpdated: false,
-          });
-        return Promise.resolve(null);
-      });
-
-      useProcessingStore.getState().setConfig({
-        ...STRUCTURAL_ASL_CONFIG,
-        subjects: ["sub-001_01"],
-      });
-      await useProcessingStore.getState().startProcessing();
-      expect(useProcessingStore.getState().pendingRawdataWarning).toBeTruthy();
-
-      // Now call with explicitConfirm=true
-      await useProcessingStore.getState().startProcessing(true);
-      expect(useProcessingStore.getState().pendingRawdataWarning).toBeNull();
-      expect(useProcessingStore.getState().processingPhase).toBe("running");
-      expect(runProcessingPipeline).toHaveBeenCalled();
-    });
-
-    it("admits only one continuation when rawdata confirmation is submitted twice", async () => {
+    it("fails the reserved BIDS run before Population preparation when verification rejects", async () => {
       const { useProjectStore } = await import("./projectStore");
       (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue({
         project: {
@@ -836,95 +712,48 @@ describe("processingStore setConfig", () => {
         setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
       });
       vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir_for_run") {
-          return Promise.resolve({
-            created: false,
-            warning: "rawdata/ already contains data",
-            bidsignoreUpdated: false,
-          });
+        if (cmd === "verify_bids_compatibility_for_run") {
+          return Promise.reject(new Error("marker missing; review setup repair"));
         }
         return Promise.resolve(null);
       });
-      vi.mocked(reserveProcessingRun).mockResolvedValue({
+      vi.mocked(attachRun).mockResolvedValueOnce({ ...RUN, lifecycle: "preparing", workers: [] });
+      vi.mocked(failProcessingRun).mockResolvedValueOnce({
         ...RUN,
-        lifecycle: "preparing",
+        lifecycle: "failed",
         workers: [],
+        terminalResult: "failed",
       });
-      vi.mocked(runProcessingPipeline).mockResolvedValue({ ...RUN, lifecycle: "running" });
-      useProcessingStore.getState().setConfig({
-        ...STRUCTURAL_ASL_CONFIG,
-        subjects: ["sub-001_01"],
+
+      useProcessingStore.getState().setConfig(POPULATION_CONFIG);
+      await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
+        "marker missing",
+      );
+
+      const verifyIndex = vi
+        .mocked(invoke)
+        .mock.calls.findIndex(([command]) => command === "verify_bids_compatibility_for_run");
+      expect(verifyIndex).toBeGreaterThanOrEqual(0);
+      expect(vi.mocked(reserveProcessingRun).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(invoke).mock.invocationCallOrder[verifyIndex],
+      );
+      expect(failProcessingRun).toHaveBeenCalledWith(RUN.runId);
+      expect(runProcessingPipeline).not.toHaveBeenCalled();
+      expect(mockSetPopulationCompleted).not.toHaveBeenCalled();
+      expect(useProcessingStore.getState()).toMatchObject({
+        processingPhase: "failed",
+        bidsCompatibilityError: expect.stringMatching(/marker missing/i),
       });
-      await useProcessingStore.getState().startProcessing();
-
-      await Promise.all([
-        useProcessingStore.getState().startProcessing(true),
-        useProcessingStore.getState().startProcessing(true),
-      ]);
-
-      expect(runProcessingPipeline).toHaveBeenCalledTimes(1);
     });
 
-    it("clearPendingRawdataWarning resets the warning state", async () => {
-      const { useProjectStore } = await import("./projectStore");
-      (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue({
-        project: {
-          projectMeta: { rootPath: "/test/bids", dataSource: "bids" as const },
-          mappingState: {},
-        },
-        setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunProfileId: mockSetLastRunProfileId,
-        setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
-      });
-
-      vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir_for_run")
-          return Promise.resolve({
-            created: false,
-            warning: "rawdata/ already contains 5 sub-directories",
-            bidsignoreUpdated: false,
-          });
-        return Promise.resolve(null);
-      });
-
-      useProcessingStore.getState().setConfig({
-        ...STRUCTURAL_ASL_CONFIG,
-        subjects: ["sub-001_01"],
-      });
-      await useProcessingStore.getState().startProcessing();
-      expect(useProcessingStore.getState().pendingRawdataWarning).toBeTruthy();
-
-      useProcessingStore.getState().clearPendingRawdataWarning();
-      expect(useProcessingStore.getState().pendingRawdataWarning).toBeNull();
-    });
-
-    it("does not set pendingRawdataWarning when ensure_rawdata_dir returns no warning", async () => {
-      const { useProjectStore } = await import("./projectStore");
-      (useProjectStore.getState as ReturnType<typeof vi.fn>).mockReturnValue({
-        project: {
-          projectMeta: { rootPath: "/test/bids", dataSource: "bids" as const },
-          mappingState: {},
-        },
-        setPopulationCompleted: mockSetPopulationCompleted,
-        setLastRunProfileId: mockSetLastRunProfileId,
-        setLastPopulationRunMtime: mockSetLastPopulationRunMtime,
-      });
-
-      vi.mocked(invoke).mockImplementation((cmd: string) => {
-        if (cmd === "ensure_rawdata_dir_for_run")
-          return Promise.resolve({ created: true, warning: null, bidsignoreUpdated: true });
-        return Promise.resolve(null);
-      });
-
-      useProcessingStore.getState().setConfig({
-        ...STRUCTURAL_ASL_CONFIG,
-        subjects: ["sub-001_01"],
-      });
+    it("does not verify BIDS compatibility for DICOM", async () => {
+      useProcessingStore.getState().setConfig(STRUCTURAL_ASL_CONFIG);
       await useProcessingStore.getState().startProcessing();
 
-      expect(useProcessingStore.getState().pendingRawdataWarning).toBeNull();
-      expect(useProcessingStore.getState().processingPhase).toBe("running");
-      expect(runProcessingPipeline).toHaveBeenCalled();
+      expect(invoke).not.toHaveBeenCalledWith(
+        "verify_bids_compatibility_for_run",
+        expect.any(Object),
+      );
     });
   });
 

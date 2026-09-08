@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
 import { Button, Divider, Group, Image, Modal, Radio, Stack, Text, Alert } from "@mantine/core";
@@ -18,6 +18,7 @@ import { logAction } from "../lib/debug";
 import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import appLogo from "../../src-tauri/icons/easl_gui_logo.png";
 import { resolveProjectIdentity, type DuplicateProjectChoice } from "../lib/projectIdentity";
+import type { SetupPlan } from "../lib/bids/setup";
 
 /** Shape returned by the Rust `check_bids_dataset` command. */
 interface BidsCheckResult {
@@ -58,6 +59,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const onOpenSettings = onOpenSettingsProp ?? outletContext?.onOpenSettings ?? (() => {});
   const [loading, setLoading] = useState(false);
   const createProject = useProjectStore((state) => state.createProject);
+  const preflightProjectSetup = useProjectStore((state) => state.preflightProjectSetup);
   const loadProject = useProjectStore((state) => state.loadProject);
   const confirmRecovery = useProjectStore((state) => state.confirmRecovery);
   const declineRecovery = useProjectStore((state) => state.declineRecovery);
@@ -75,7 +77,15 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const [bidsDialog, setBidsDialog] = useState<BidsDialogState>(null);
   const [bidsRadioValue, setBidsRadioValue] = useState<"bids" | "dicom" | null>(null);
   // Store the selected folder path + project name for dialog actions
-  const [pendingFolder, setPendingFolder] = useState<{ path: string; name: string } | null>(null);
+  const [pendingFolder, setPendingFolder] = useState<{
+    path: string;
+    name: string;
+    requiresSetupPlan: boolean;
+  } | null>(null);
+  const [setupPlan, setSetupPlan] = useState<SetupPlan | null>(null);
+  const [setupPlanError, setSetupPlanError] = useState<string | null>(null);
+  const [setupPlanLoading, setSetupPlanLoading] = useState(false);
+  const setupPlanRequest = useRef(0);
   const [identityPrompt, setIdentityPrompt] = useState<IdentityPrompt | null>(null);
   const recoveryPath = recovery?.easlPath ?? null;
 
@@ -99,9 +109,13 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     selected: string,
     projectName: string,
     dataSource: "dicom" | "bids",
+    planId?: string,
   ) {
     const projectPath = `${selected}/${PROJECT_FILE_NAME}`;
-    await createProject(selected, projectName, { dataSource });
+    await createProject(selected, projectName, {
+      dataSource,
+      ...(planId === undefined ? {} : { planId }),
+    });
     const project = useProjectStore.getState().project;
     addRecentProject(projectPath, project?.projectMeta.id);
     logAction("landing_new_project_created", { path: selected, name: projectName, dataSource });
@@ -110,6 +124,35 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       navigate(`/project/${project.projectMeta.id}/import`);
     }
   }
+
+  useEffect(() => {
+    if (!pendingFolder || !bidsRadioValue || !bidsDialog || !pendingFolder.requiresSetupPlan) {
+      return;
+    }
+    const requestVersion = setupPlanRequest;
+    const request = ++requestVersion.current;
+    setSetupPlanLoading(true);
+    setSetupPlanError(null);
+    void preflightProjectSetup(pendingFolder.path, pendingFolder.name, bidsRadioValue)
+      .then((plan) => {
+        if (requestVersion.current === request) setSetupPlan(plan);
+      })
+      .catch((error: unknown) => {
+        if (requestVersion.current === request) {
+          setSetupPlan(null);
+          setSetupPlanError(
+            error instanceof Error ? error.message : "Could not inspect project setup.",
+          );
+        }
+      })
+      .finally(() => {
+        if (requestVersion.current === request) setSetupPlanLoading(false);
+      });
+    return () => {
+      // Invalidate even a response that races the effect cleanup.
+      if (requestVersion.current === request) requestVersion.current++;
+    };
+  }, [bidsDialog, bidsRadioValue, pendingFolder, preflightProjectSetup]);
 
   function chooseDuplicateIdentity(oldPath: string, newPath: string) {
     return new Promise<DuplicateProjectChoice>((resolve) => {
@@ -216,7 +259,20 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         rootPath: selected,
       })) as BidsCheckResult;
 
-      setPendingFolder({ path: selected, name: projectName });
+      setPendingFolder({
+        path: selected,
+        name: projectName,
+        // A DICOM project in an ordinary non-BIDS folder retains its existing
+        // single-file create/save contract. DICOM selected on a detected BIDS
+        // root uses the reviewed native transaction.
+        requiresSetupPlan:
+          bidsResult.isBids ||
+          bidsResult.totalSubjectCount > 0 ||
+          bidsResult.hasDatasetDescription ||
+          bidsResult.datasetDescError !== null,
+      });
+      setSetupPlan(null);
+      setSetupPlanError(null);
 
       // Route to appropriate dialog
       if (bidsResult.datasetDescError != null && bidsResult.aslSubjectCount >= 1) {
@@ -259,8 +315,8 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         setBidsRadioValue("bids");
         setBidsDialog({ kind: "corrupt-desc", result: bidsResult });
       } else {
-        // Fallback: no BIDS, create DICOM project directly
-        await proceedWithProject(selected, projectName, "dicom");
+        setBidsRadioValue("dicom");
+        setBidsDialog({ kind: "no-subjects", result: bidsResult });
       }
     } catch (error) {
       showError(
@@ -357,23 +413,36 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   };
 
   function handleDialogCancel() {
+    setupPlanRequest.current++;
     setBidsDialog(null);
     setBidsRadioValue(null);
     setPendingFolder(null);
+    setSetupPlan(null);
+    setSetupPlanError(null);
     logAction("landing_bids_dialog_cancelled");
   }
 
   async function handleConfirm() {
-    if (!bidsRadioValue || !pendingFolder) return;
+    if (
+      !bidsRadioValue ||
+      !pendingFolder ||
+      (pendingFolder.requiresSetupPlan &&
+        (!setupPlan ||
+          setupPlanLoading ||
+          setupPlan.mode !== bidsRadioValue ||
+          setupPlan.conflicts.length > 0))
+    )
+      return;
     const dataSource = bidsRadioValue === "bids" ? "bids" : "dicom";
     logAction("landing_bids_detect_continue", { dataSource });
     const { path, name } = pendingFolder;
-    setBidsDialog(null);
-    setBidsRadioValue(null);
-    setPendingFolder(null);
     setLoading(true);
     try {
-      await proceedWithProject(path, name, dataSource);
+      await proceedWithProject(path, name, dataSource, setupPlan?.planId);
+      setBidsDialog(null);
+      setBidsRadioValue(null);
+      setPendingFolder(null);
+      setSetupPlan(null);
     } catch (error) {
       showError(
         "Failed to create project",
@@ -388,9 +457,12 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
 
   async function handleNoBidsChooseDifferent() {
     logAction("landing_bids_choose_different");
+    setupPlanRequest.current++;
     setBidsDialog(null);
     setBidsRadioValue(null);
     setPendingFolder(null);
+    setSetupPlan(null);
+    setSetupPlanError(null);
     // Re-trigger the new project flow (reopens folder picker)
     await handleNewProject();
   }
@@ -742,7 +814,11 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
 
             <Radio.Group
               value={bidsRadioValue ?? ""}
-              onChange={(val) => setBidsRadioValue(val as "bids" | "dicom")}
+              onChange={(val) => {
+                setSetupPlan(null);
+                setSetupPlanError(null);
+                setBidsRadioValue(val as "bids" | "dicom");
+              }}
             >
               <Stack gap="sm">
                 <Radio
@@ -788,12 +864,71 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
                   </Alert>
                 )}
                 <Text size="xs" c="dimmed">
-                  Note: A{" "}
-                  <Text span ff="monospace" size="xs">
-                    rawdata/
-                  </Text>{" "}
-                  directory will be created in this folder during processing (required for
-                  ExploreASL compatibility).
+                  Review exact setup changes before confirmation. Nothing is written during this
+                  review.
+                </Text>
+              </Stack>
+            )}
+
+            {pendingFolder?.requiresSetupPlan && (
+              <Divider label="Reviewed setup changes" labelPosition="center" />
+            )}
+            {pendingFolder?.requiresSetupPlan && setupPlanLoading && (
+              <Text data-testid="bids-setup-plan-loading">Loading setup plan…</Text>
+            )}
+            {pendingFolder?.requiresSetupPlan && setupPlanError && (
+              <Alert color="red" data-testid="bids-setup-plan-error">
+                {setupPlanError}
+              </Alert>
+            )}
+            {pendingFolder?.requiresSetupPlan && setupPlan && (
+              <Stack gap="xs" data-testid="bids-setup-plan">
+                {setupPlan.projectSummary && (
+                  <Text size="xs" data-testid="bids-setup-project-summary">
+                    Project {setupPlan.projectSummary.name} · schema{" "}
+                    {setupPlan.projectSummary.schemaVersion} · hash{" "}
+                    {setupPlan.projectSummary.contentHash} · ID {setupPlan.projectSummary.projectId}{" "}
+                    · {setupPlan.projectSummary.dataSource}
+                  </Text>
+                )}
+                {setupPlan.preservesReadme && (
+                  <Text size="xs" data-testid="bids-setup-readme-notice">
+                    rawdata/README.md is preserved.
+                  </Text>
+                )}
+                {setupPlan.operations.map((operation) => (
+                  <Stack
+                    gap={2}
+                    key={operation.path}
+                    data-testid={`bids-setup-operation-${operation.path.replace(/[/.]/g, "-")}`}
+                  >
+                    <Text size="xs">
+                      <strong>{operation.operation}</strong> {operation.path}
+                    </Text>
+                    {operation.textPreview !== undefined && operation.textPreview !== null && (
+                      <Text
+                        ff="monospace"
+                        size="xs"
+                        style={{ whiteSpace: "pre-wrap" }}
+                        data-testid={`bids-setup-operation-preview-${operation.path.replace(/[/.]/g, "-")}`}
+                      >
+                        {operation.textPreview}
+                      </Text>
+                    )}
+                  </Stack>
+                ))}
+                {setupPlan.warnings.map((warning) => (
+                  <Alert key={warning} color="yellow" data-testid="bids-setup-warning">
+                    {warning}
+                  </Alert>
+                ))}
+                {setupPlan.conflicts.map((conflict) => (
+                  <Alert key={conflict} color="red" data-testid="bids-setup-conflict">
+                    {conflict}
+                  </Alert>
+                ))}
+                <Text size="xs" c="dimmed" data-testid="bids-setup-temporary-artifacts">
+                  {setupPlan.temporaryArtifacts.join(" ")}
                 </Text>
               </Stack>
             )}
@@ -849,7 +984,14 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
                 Choose Different Folder
               </Button>
               <Button
-                disabled={!bidsRadioValue}
+                disabled={
+                  !bidsRadioValue ||
+                  (pendingFolder?.requiresSetupPlan &&
+                    (!setupPlan ||
+                      setupPlanLoading ||
+                      setupPlan.mode !== bidsRadioValue ||
+                      setupPlan.conflicts.length > 0))
+                }
                 onClick={handleConfirm}
                 data-testid={getConfirmTestId()}
               >

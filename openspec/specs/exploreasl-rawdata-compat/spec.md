@@ -15,53 +15,6 @@ For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/partic
 - **WHEN** a BIDS-direct project is created on a root with `participants.tsv` (16 clinical columns: Age, Gender, MMSE, etc.) and processing runs end-to-end
 - **THEN** root-level `participants.tsv` retains its original 16 columns throughout; GUI and ExploreASL operations target `derivatives/ExploreASL/participants.tsv` only
 
-### Requirement: ensure_rawdata_dir command creates empty rawdata directory
-
-The Rust command `ensure_rawdata_dir(root_path: String) -> Result<EnsureRawdataResult, String>` SHALL:
-
-1. Create `<root_path>/rawdata/` directory if it does not exist (idempotent — succeeds silently if already present).
-2. Write `<root_path>/rawdata/README.md` (idempotent, overwrite). Content:
-
-   ```
-   # rawdata/
-
-   This directory exists for ExploreASL compatibility.
-   The actual BIDS subjects live at the project root level.
-   ExploreASL's BIDS2Legacy module checks for this directory
-   at startup but uses the subjectFolder override in dataPar.json
-   to scan subjects from the project root.
-
-   Do not delete this directory while the project is active.
-   ```
-
-3. Manage `<root_path>/.bidsignore`:
-   - If `.bidsignore` does not exist → create with content `"rawdata/\n"`
-   - If `.bidsignore` exists but lacks `rawdata/` line → append `"rawdata/\n"`
-   - If `.bidsignore` exists with `rawdata/` line → no-op
-4. If `rawdata/` already exists AND is non-empty (contains any `sub-*/` entry): return a warning payload to frontend. Frontend shows confirmation dialog: "`rawdata/` at `<root>/rawdata/` already contains `<N>` sub-directories. `subjectFolder` override scans root-level subjects only; files in `rawdata/` will be ignored. Proceed?" Confirm/Cancel.
-
-Called at processing startup before `run_pipeline` when `dataSource === "bids"`. Single call per processing run; `rawdata/` persists across sessions.
-
-#### Scenario: Fresh project creates rawdata
-
-- **WHEN** `ensure_rawdata_dir` runs on a BIDS-direct project root with no existing `rawdata/`
-- **THEN** `<root>/rawdata/` directory is created, `rawdata/README.md` is written, `.bidsignore` is created with `"rawdata/\n"` entry
-
-#### Scenario: Idempotent re-run
-
-- **WHEN** `ensure_rawdata_dir` runs again on the same project root (after a prior successful run)
-- **THEN** no errors; `rawdata/README.md` is overwritten (same content); `.bidsignore` already contains `rawdata/` line → no-op
-
-#### Scenario: Existing non-empty rawdata warns
-
-- **WHEN** `ensure_rawdata_dir` runs on a root where `rawdata/` already exists and contains `sub-001/ses-01/perf/sub-001_asl.nii.gz` (e.g., old DICOM-import project root)
-- **THEN** command returns warning with subject count = 1; frontend shows confirmation dialog; only proceeds if user clicks Confirm
-
-#### Scenario: .bidsignore append
-
-- **WHEN** `.bidsignore` already exists with content `"derivatives/\n"` but no `rawdata/` entry
-- **THEN** `ensure_rawdata_dir` appends `"rawdata/\n"`; final content is `"derivatives/\nrawdata/\n"`
-
 ### Requirement: subjectFolder override injected into dataPar.json
 
 When `assembleDataPar` (or `rust processing.rs::write_data_par_json`) runs for a project with `dataSource === "bids"`, the resulting `dataPar.json` MUST include the absolute path to the project root directory in `x.opts.subjectFolder`:
@@ -135,3 +88,41 @@ For DICOM-import projects, the existing behavior is preserved (group labels writ
 
 - **WHEN** ds000240 (with root-level `participants.tsv` containing 16 clinical columns) is processed end-to-end as a BIDS-direct project
 - **THEN** root-level `participants.tsv` retains its original 16 columns throughout; ExploreASL-generated columns (`site`, `gm_vol`, `motion`, etc.) live in `derivatives/ExploreASL/participants.tsv` only
+
+### Requirement: BIDS compatibility setup uses owned marker
+
+Confirmed BIDS-direct project creation SHALL ensure `rawdata/` exists and SHALL create or verify `rawdata/.easl-gui-managed` with the versioned bytes defined by `bids-project-mutation-preflight`. It SHALL preserve every pre-existing entry in `rawdata/`, including `README.md`, and SHALL add `rawdata/` to `.bidsignore` through the confirmed transaction. Existing `sub-*` directories SHALL produce a pre-confirmation warning that BIDS-direct processing scans root-level subjects and ignores those directories.
+
+#### Scenario: Fresh project creates compatibility artifacts
+
+- **WHEN** a fresh BIDS-direct project mutation plan commits
+- **THEN** `rawdata/`, the GUI-owned marker, and the planned `rawdata/` ignore entry SHALL exist before import review begins
+
+#### Scenario: Existing README remains user-owned
+
+- **WHEN** `rawdata/README.md` exists before project creation or processing
+- **THEN** ExploreASL GUI SHALL never overwrite, replace, or delete it
+
+#### Scenario: Existing rawdata subjects require informed confirmation
+
+- **WHEN** preflight finds one or more `rawdata/sub-*` directories
+- **THEN** the plan SHALL disclose their count and ignored-by-BIDS-direct behavior before commit is allowed
+
+### Requirement: Processing verifies compatibility without mutation
+
+Before BIDS-direct processing starts, the system SHALL verify that `rawdata/` is a directory and `rawdata/.easl-gui-managed` is the expected regular file. Verification SHALL be read-only. Missing, altered, symbolic-link, or wrong-type compatibility artifacts SHALL block processing with an action that returns the user to a fresh mutation preflight; processing SHALL NOT silently repair them. DICOM processing SHALL not require this marker.
+
+#### Scenario: Valid setup permits BIDS processing
+
+- **WHEN** BIDS-direct processing finds the expected directory and marker
+- **THEN** compatibility verification SHALL succeed without changing source-tree entries
+
+#### Scenario: Missing marker blocks without repair
+
+- **WHEN** BIDS-direct processing finds `rawdata/` but no GUI-owned marker
+- **THEN** processing SHALL remain unstarted, report that setup must be reviewed again, and SHALL not create the marker
+
+#### Scenario: DICOM project remains marker-independent
+
+- **WHEN** processing starts for a DICOM project
+- **THEN** BIDS-direct compatibility marker verification SHALL not run

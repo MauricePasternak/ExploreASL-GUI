@@ -231,6 +231,33 @@ vi.mock("@tauri-apps/api/core", () => ({
         return Promise.resolve({ groups: [], skipped: [] });
       case "check_bids_dataset":
         return Promise.resolve({ isBids: true });
+      case "preflight_bids_project_mutations":
+        return Promise.resolve({
+          planId: "test-setup-plan",
+          rootPath: (_args?.rootPath as string | undefined) ?? "/test/project",
+          mode: (_args?.mode as string | undefined) ?? "bids",
+          operations: [],
+          warnings: [],
+          conflicts: [],
+          projectSummary: null,
+          preservesReadme: true,
+          temporaryArtifacts: [],
+        });
+      case "commit_bids_project_mutations":
+      case "verify_bids_compatibility_for_run":
+        return Promise.resolve({ directorySyncSupported: true });
+      case "preflight_bids_setup_repair":
+        return Promise.resolve({
+          planId: "test-repair-plan",
+          rootPath: "/test/project",
+          mode: "repair",
+          operations: [],
+          warnings: [],
+          conflicts: [],
+          projectSummary: null,
+          preservesReadme: true,
+          temporaryArtifacts: [],
+        });
       case "shutdown_project_runtime":
         return Promise.resolve({
           success: true,

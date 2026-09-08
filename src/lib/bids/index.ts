@@ -2,7 +2,6 @@
  * BIDS folder module — centralized BIDS utilities for the ExploreASL GUI.
  *
  * - path.ts: filename/directory name parsing
- * - validation.ts: isBidsProject, ensureBidsIgnore (migrated from bidsUtils.ts)
  * - sidecar.ts: sidecar parsing, fingerprinting, ASLContext utilities
  * - schema.ts: re-exports of BidsAslMetadata schemas and types
  * - normalize.ts: Zod transforms for PulseSequenceType and Manufacturer
@@ -16,8 +15,6 @@ export {
   isSubjectDir,
   isSessionDir,
 } from "./path";
-
-export { isBidsProject, ensureBidsIgnore, BIDS_IGNORE_ENTRIES } from "./validation";
 
 export {
   summarizeAslContext,

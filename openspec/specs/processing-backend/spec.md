@@ -285,17 +285,22 @@ The Settings modal SHALL display the detected version on each profile's ExploreA
 
 ### Requirement: startProcessing calls ensure_rawdata_dir for BIDS projects
 
-`startProcessing` SHALL invoke `ensure_rawdata_dir(project_root)` before `run_pipeline` when `project.projectMeta.dataSource === "bids"`. For `dataSource === "dicom"`, `ensure_rawdata_dir` is NOT called. If `ensure_rawdata_dir` returns a warning payload (non-empty `rawdata/`), processing MUST wait for user confirmation before proceeding.
+Before pipeline preparation mutates processing outputs, BIDS-direct `startProcessing` SHALL invoke run-scoped, read-only compatibility verification against the native active-project root. Verification SHALL require the expected `rawdata/` directory and GUI-owned marker and SHALL NOT create, update, rename, or remove source-tree entries. A verification conflict SHALL fail the reserved run before process spawn and direct the user to the explicit setup-repair preflight. DICOM processing SHALL skip this BIDS-direct verification.
 
 #### Scenario: BIDS project flow calls ensure_rawdata_dir
 
-- **WHEN** user clicks Start Processing on a BIDS-direct project (`dataSource = "bids"`)
-- **THEN** `ensure_rawdata_dir(project_root)` is invoked; on success the pipeline proceeds; on warning, user is prompted to confirm before proceeding
+- **WHEN** user clicks Start Processing on a BIDS-direct project with valid committed compatibility artifacts
+- **THEN** native verification SHALL succeed without source-tree mutation and pipeline preparation SHALL be permitted to continue
+
+#### Scenario: BIDS compatibility artifact is missing
+
+- **WHEN** verification finds a missing or invalid compatibility marker
+- **THEN** the reserved run SHALL fail before process spawn, no repair write SHALL occur, and the error SHALL request a reviewed repair preflight
 
 #### Scenario: DICOM project flow skips ensure_rawdata_dir
 
-- **WHEN** user clicks Start Processing on a DICOM project (`dataSource = "dicom"`)
-- **THEN** `ensure_rawdata_dir` is NOT invoked; existing behavior preserved
+- **WHEN** user clicks Start Processing on a DICOM project
+- **THEN** BIDS compatibility verification SHALL not run and existing DICOM behavior SHALL be preserved
 
 ### Requirement: assembleDataPar injects subjectFolder for BIDS projects
 

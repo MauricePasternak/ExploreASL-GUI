@@ -1114,8 +1114,10 @@ name = "exploreasl_gui"
 version = "0.1.2"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "calamine",
  "csv",
+ "flate2",
  "libc",
  "log",
  "nix 0.31.3",
@@ -1139,8 +1141,10 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "thiserror 2.0.18",
+ "time",
  "unicode-casefold",
  "unicode-normalization",
+ "uuid",
  "walkdir",
  "windows-sys 0.61.2",
 ]

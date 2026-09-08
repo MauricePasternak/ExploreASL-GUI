@@ -130,9 +130,31 @@ describe("LandingPage", () => {
 
   it("shows an error when project creation fails unexpectedly", async () => {
     const createProject = vi.fn().mockRejectedValue(new Error("write failed"));
-    useProjectStore.setState({ createProject });
+    useProjectStore.setState({
+      createProject,
+      preflightProjectSetup: vi.fn(async (rootPath, _name, mode) => ({
+        planId: "reviewed-plan",
+        rootPath,
+        mode,
+        operations: [],
+        warnings: [],
+        conflicts: [],
+        projectSummary: null,
+        preservesReadme: true,
+        temporaryArtifacts: [],
+      })),
+    });
     vi.mocked(open).mockResolvedValue("/tmp/new-project");
-    vi.mocked(invoke).mockResolvedValue(true);
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "is_writable"
+        ? true
+        : {
+            isBids: false,
+            aslSubjectCount: 0,
+            totalSubjectCount: 0,
+            error: "No BIDS subjects found",
+          },
+    );
 
     render(
       <MantineProvider>
@@ -143,10 +165,15 @@ describe("LandingPage", () => {
     );
 
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
+    await waitFor(() =>
+      expect(screen.getByTestId("bids-no-subjects-confirm-btn")).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByTestId("bids-no-subjects-confirm-btn"));
 
     await waitFor(() => {
       expect(createProject).toHaveBeenCalledWith("/tmp/new-project", "new-project", {
         dataSource: "dicom",
+        planId: "reviewed-plan",
       });
       expect(notifications.show).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -161,8 +188,31 @@ describe("LandingPage", () => {
     const createProject = vi
       .fn()
       .mockRejectedValue(new ProjectStorageError("insufficient_space", "temporary write failed"));
-    useProjectStore.setState({ createProject });
+    useProjectStore.setState({
+      createProject,
+      preflightProjectSetup: vi.fn(async (rootPath, _name, mode) => ({
+        planId: "reviewed-plan",
+        rootPath,
+        mode,
+        operations: [],
+        warnings: [],
+        conflicts: [],
+        projectSummary: null,
+        preservesReadme: true,
+        temporaryArtifacts: [],
+      })),
+    });
     vi.mocked(open).mockResolvedValue("/tmp/full-volume");
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "is_writable"
+        ? true
+        : {
+            isBids: false,
+            aslSubjectCount: 0,
+            totalSubjectCount: 0,
+            error: "No BIDS subjects found",
+          },
+    );
 
     render(
       <MantineProvider>
@@ -173,6 +223,10 @@ describe("LandingPage", () => {
     );
 
     fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+    await waitFor(() =>
+      expect(screen.getByTestId("bids-no-subjects-confirm-btn")).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByTestId("bids-no-subjects-confirm-btn"));
 
     await waitFor(() =>
       expect(notifications.show).toHaveBeenCalledWith(
@@ -503,7 +557,22 @@ describe("LandingPage BIDS detection dialogs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     seedValidProfileGate();
-    useProjectStore.setState({ project: null, isDirty: false, loaded: false });
+    useProjectStore.setState({
+      project: null,
+      isDirty: false,
+      loaded: false,
+      preflightProjectSetup: vi.fn(async (rootPath, _name, mode) => ({
+        planId: "reviewed-plan",
+        rootPath,
+        mode,
+        operations: [],
+        warnings: [],
+        conflicts: [],
+        projectSummary: null,
+        preservesReadme: true,
+        temporaryArtifacts: [],
+      })),
+    });
     vi.mocked(open).mockResolvedValue(null);
     vi.mocked(exists).mockResolvedValue(false);
   });
@@ -532,6 +601,161 @@ describe("LandingPage BIDS detection dialogs", () => {
     isCrossSectional: true,
     error: null,
   };
+
+  function reviewedPlan(rootPath: string, mode: "bids" | "dicom", conflicts: string[] = []) {
+    return {
+      planId: `${mode}-plan`,
+      rootPath,
+      mode,
+      operations: [
+        { path: "project.easl", operation: "create" as const, textPreview: null },
+        {
+          path: ".bidsignore",
+          operation: "update" as const,
+          textPreview: "project.easl\n.easl_staging\nrawdata/\n",
+        },
+        {
+          path: "rawdata/.easl-gui-managed",
+          operation: "create" as const,
+          textPreview: '{"kind":"bids-direct-rawdata","version":1}\n',
+        },
+      ],
+      warnings: ["rawdata/ contains 2 sub-* directories"],
+      conflicts,
+      projectSummary: {
+        schemaVersion: "1",
+        name: "Dataset",
+        projectId: "project-id",
+        dataSource: mode,
+        contentHash: "a".repeat(64),
+      },
+      preservesReadme: true,
+      temporaryArtifacts: ["Candidates and backups are removed after commit."],
+    };
+  }
+
+  it("renders every reviewed operation, exact text, summary, preservation, warnings, and temporary disclosure", async () => {
+    useProjectStore.setState({
+      preflightProjectSetup: vi.fn(async (rootPath, _name, mode) => reviewedPlan(rootPath, mode)),
+    });
+    vi.mocked(open).mockResolvedValue("/dataset");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "is_writable") return true;
+      if (command === "check_bids_dataset") return BASE_BIDS_RESULT;
+      return null;
+    });
+    renderLanding();
+    fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+    await screen.findByTestId("bids-detection-dialog");
+    fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
+    await screen.findByTestId("bids-setup-plan");
+    expect(screen.getByTestId("bids-setup-operation-project-easl")).toHaveTextContent(
+      "create project.easl",
+    );
+    expect(screen.getByTestId("bids-setup-operation--bidsignore")).toHaveTextContent(
+      "update .bidsignore",
+    );
+    expect(screen.getByTestId("bids-setup-operation-preview--bidsignore").textContent).toBe(
+      "project.easl\n.easl_staging\nrawdata/\n",
+    );
+    expect(screen.getByTestId("bids-setup-operation-rawdata--easl-gui-managed")).toHaveTextContent(
+      "create rawdata/.easl-gui-managed",
+    );
+    expect(screen.getByTestId("bids-setup-project-summary")).toHaveTextContent(
+      /Dataset.*schema 1.*project-id/i,
+    );
+    expect(screen.getByTestId("bids-setup-readme-notice")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-setup-warning")).toHaveTextContent("2 sub-*");
+    expect(screen.getByTestId("bids-setup-temporary-artifacts")).toHaveTextContent("Candidates");
+  });
+
+  it("keeps confirmation disabled for conflicts and does not commit on review cancellation or preflight failure", async () => {
+    const createProject = vi.fn();
+    useProjectStore.setState({
+      createProject,
+      preflightProjectSetup: vi.fn(async (rootPath, _name, mode) =>
+        reviewedPlan(rootPath, mode, ["foreign marker"]),
+      ),
+    });
+    vi.mocked(open).mockResolvedValue("/dataset");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "is_writable") return true;
+      if (command === "check_bids_dataset") return BASE_BIDS_RESULT;
+      return null;
+    });
+    renderLanding();
+    fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+    await screen.findByTestId("bids-detection-dialog");
+    fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
+    await screen.findByTestId("bids-setup-conflict");
+    expect(screen.getByTestId("bids-detection-dialog-continue-btn")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("bids-detection-dialog-cancel-btn"));
+    expect(createProject).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalledWith("commit_bids_project_mutations", expect.anything());
+    expect(useGlobalStore.getState().settings.recentProjects).toEqual([]);
+  });
+
+  it("keeps ordinary non-BIDS DICOM creation on the normal single-project write path", async () => {
+    const createProject = vi.fn().mockResolvedValue(undefined);
+    const preflightProjectSetup = vi.fn();
+    useProjectStore.setState({ createProject, preflightProjectSetup });
+    vi.mocked(open).mockResolvedValue("/ordinary-dicom");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "is_writable") return true;
+      if (command === "check_bids_dataset") {
+        return {
+          ...BASE_BIDS_RESULT,
+          isBids: false,
+          hasDatasetDescription: false,
+          aslSubjectCount: 0,
+          totalSubjectCount: 0,
+          error: "No BIDS subjects found",
+        };
+      }
+      return null;
+    });
+    renderLanding();
+    fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+    await screen.findByTestId("bids-no-subjects-dialog");
+    expect(preflightProjectSetup).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("bids-no-subjects-confirm-btn"));
+    await waitFor(() =>
+      expect(createProject).toHaveBeenCalledWith("/ordinary-dicom", "ordinary-dicom", {
+        dataSource: "dicom",
+      }),
+    );
+  });
+
+  it("rejects a late response for a superseded import mode", async () => {
+    let resolveBids!: (plan: ReturnType<typeof reviewedPlan>) => void;
+    const dicomPlan = reviewedPlan("/dataset", "dicom");
+    useProjectStore.setState({
+      preflightProjectSetup: vi.fn((_rootPath, _name, mode) =>
+        mode === "bids"
+          ? new Promise<ReturnType<typeof reviewedPlan>>((resolve) => {
+              resolveBids = resolve;
+            })
+          : Promise.resolve(dicomPlan),
+      ),
+    });
+    vi.mocked(open).mockResolvedValue("/dataset");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "is_writable") return true;
+      if (command === "check_bids_dataset") return BASE_BIDS_RESULT;
+      return null;
+    });
+    renderLanding();
+    fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+    await screen.findByTestId("bids-detection-dialog");
+    fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
+    await waitFor(() => expect(resolveBids).toBeTypeOf("function"));
+    fireEvent.click(screen.getByTestId("bids-detection-dialog-dicom-radio"));
+    await screen.findByText(/Project Dataset.*dicom/i);
+    resolveBids(reviewedPlan("/dataset", "bids"));
+    await Promise.resolve();
+    expect(screen.getByTestId("bids-setup-plan")).toHaveTextContent(/dicom/);
+    expect(screen.getByTestId("bids-detection-dialog-continue-btn")).not.toBeDisabled();
+  });
 
   it("shows BIDS detection dialog when a valid BIDS folder is picked", async () => {
     const createProject = vi.fn();
@@ -579,6 +803,9 @@ describe("LandingPage BIDS detection dialogs", () => {
     });
 
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
+    await waitFor(() =>
+      expect(screen.getByTestId("bids-detection-dialog-continue-btn")).not.toBeDisabled(),
+    );
 
     // Now set the project so navigation works
     const fakeProject = {
@@ -591,6 +818,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     await waitFor(() => {
       expect(createProject).toHaveBeenCalledWith("/tmp/bids-dataset", "bids-dataset", {
         dataSource: "bids",
+        planId: "reviewed-plan",
       });
     });
   });
@@ -613,6 +841,9 @@ describe("LandingPage BIDS detection dialogs", () => {
     });
 
     fireEvent.click(screen.getByTestId("bids-detection-dialog-dicom-radio"));
+    await waitFor(() =>
+      expect(screen.getByTestId("bids-detection-dialog-continue-btn")).not.toBeDisabled(),
+    );
 
     const fakeProject = {
       projectMeta: { id: "proj-1", currentPhase: "import" },
@@ -624,6 +855,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     await waitFor(() => {
       expect(createProject).toHaveBeenCalledWith("/tmp/bids-dataset", "bids-dataset", {
         dataSource: "dicom",
+        planId: "reviewed-plan",
       });
     });
   });
@@ -808,12 +1040,13 @@ describe("LandingPage BIDS detection dialogs", () => {
     expect(dicomRadio).toBeChecked(); // should be auto-selected
 
     const confirmBtn = screen.getByTestId("bids-no-subjects-confirm-btn");
-    expect(confirmBtn).not.toBeDisabled();
+    await waitFor(() => expect(confirmBtn).not.toBeDisabled());
     fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(createProject).toHaveBeenCalledWith("/tmp/no-subjects", "no-subjects", {
         dataSource: "dicom",
+        planId: "reviewed-plan",
       });
     });
   });
@@ -850,12 +1083,13 @@ describe("LandingPage BIDS detection dialogs", () => {
     expect(dicomRadio).toBeChecked(); // should be auto-selected
 
     const confirmBtn = screen.getByTestId("bids-no-asl-confirm-btn");
-    expect(confirmBtn).not.toBeDisabled();
+    await waitFor(() => expect(confirmBtn).not.toBeDisabled());
     fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(createProject).toHaveBeenCalledWith("/tmp/no-asl", "no-asl", {
         dataSource: "dicom",
+        planId: "reviewed-plan",
       });
     });
   });

@@ -269,17 +269,24 @@ The listener set SHALL also admit run-correlated `ProcessingLifecycleSnapshot` e
 
 ### Requirement: Native Reservation Before Frontend Preparation
 
-After local configuration validation and before run-specific participants generation, rawdata preparation, watcher start, status/log cleanup, or Population metadata clearing, `startProcessing` SHALL reserve a native run. The full start operation SHALL be registered as a deferred project-lifecycle thunk; if an active project's work admission has closed for close/switch, registration SHALL reject without invoking the thunk, reserving a run, or entering local `preparing`. A reservation conflict SHALL leave the store attached to the existing run or return to its prior state and SHALL cause no rejected-run filesystem or project-state mutation. Any preparation failure after reservation SHALL transition the matching native run to `Failed` before local controls unlock. A rawdata-warning confirmation SHALL atomically claim the matching pending continuation so repeated confirmation submits at most one preparation/launch continuation; native `Preparing` admission remains authoritative.
+After local configuration validation and before run-specific participants generation, BIDS compatibility verification, watcher start, status/log cleanup, or Population metadata clearing, `startProcessing` SHALL reserve a native run. The full start operation SHALL be registered as a deferred project-lifecycle thunk; if an active project's work admission has closed for close/switch, registration SHALL reject without invoking the thunk, reserving a run, or entering local `preparing`. A reservation conflict SHALL leave the store attached to the existing run or return to its prior state and SHALL cause no rejected-run filesystem or project-state mutation. Any preparation failure after reservation SHALL transition the matching native run to `Failed` before local controls unlock.
+
+For a BIDS-direct project, the store SHALL request run-scoped, read-only compatibility verification and SHALL not expose a processing-time continuation that creates or modifies `rawdata/`, a marker, or `.bidsignore`. A verification error SHALL offer navigation to a separate setup-repair preflight; only explicit confirmation in that flow can mutate project setup.
 
 #### Scenario: Concurrent frontend starts
 
 - **WHEN** two start actions race after local validation
-- **THEN** only the action holding the successful native reservation SHALL perform preparation or launch mutations
+- **THEN** only the action holding the successful native reservation SHALL perform verification, preparation, or launch operations
 
 #### Scenario: Preparation fails after reservation
 
-- **WHEN** participants generation fails for a reserved `Preparing` run
+- **WHEN** participants generation or BIDS compatibility verification fails for a reserved `Preparing` run
 - **THEN** the store SHALL request failure of that exact run and render the returned native `Failed` state without leaving an active `Preparing` reservation
+
+#### Scenario: Missing BIDS marker does not open mutating continuation
+
+- **WHEN** BIDS compatibility verification reports a missing marker
+- **THEN** the store SHALL not mutate the source tree or offer an in-place processing continuation and SHALL instead offer the reviewed repair-preflight flow
 
 ### Requirement: Run Discovery and Attachment Client
 

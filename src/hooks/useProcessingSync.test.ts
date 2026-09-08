@@ -76,7 +76,7 @@ describe("useProcessingSync", () => {
       availableSubjects: [],
       subjectStatuses: [],
       workerPids: [],
-      pendingRawdataWarning: null,
+      bidsCompatibilityError: null,
       profileError: null,
       preparingMessage: null,
     });

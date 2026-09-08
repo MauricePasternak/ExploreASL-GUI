@@ -8,8 +8,10 @@ import { findCompletedSubjects } from "./ControlButton.helpers";
 
 const mockKillProcessing = vi.fn();
 const mockStartProcessing = vi.fn();
-const mockClearPendingRawdataWarning = vi.fn();
-let mockPendingRawdataWarning: string | null = null;
+const mockClearBidsCompatibilityError = vi.fn();
+const mockPreflightBidsSetupRepair = vi.fn();
+const mockCommitBidsProjectMutations = vi.fn();
+let mockBidsCompatibilityError: string | null = null;
 
 let mockPhase:
   | "idle"
@@ -41,8 +43,8 @@ vi.mock("../../stores/processingStore", () => ({
         killProcessing: mockKillProcessing,
         config: mockConfig,
         subjectStatuses: mockSubjectStatuses,
-        pendingRawdataWarning: mockPendingRawdataWarning,
-        clearPendingRawdataWarning: mockClearPendingRawdataWarning,
+        bidsCompatibilityError: mockBidsCompatibilityError,
+        clearBidsCompatibilityError: mockClearBidsCompatibilityError,
       }),
     {
       getState: () => ({
@@ -51,11 +53,22 @@ vi.mock("../../stores/processingStore", () => ({
         killProcessing: mockKillProcessing,
         config: mockConfig,
         subjectStatuses: mockSubjectStatuses,
-        pendingRawdataWarning: mockPendingRawdataWarning,
-        clearPendingRawdataWarning: mockClearPendingRawdataWarning,
+        bidsCompatibilityError: mockBidsCompatibilityError,
+        clearBidsCompatibilityError: mockClearBidsCompatibilityError,
       }),
     },
   ),
+}));
+
+vi.mock("../../stores/projectStore", () => ({
+  useProjectStore: (
+    selector: (state: { project: { projectMeta: { rootPath: string } } }) => unknown,
+  ) => selector({ project: { projectMeta: { rootPath: "/test/bids" } } }),
+}));
+
+vi.mock("../../lib/bids/setup", () => ({
+  preflightBidsSetupRepair: mockPreflightBidsSetupRepair,
+  commitBidsProjectMutations: mockCommitBidsProjectMutations,
 }));
 
 const { default: ControlButtons } = await import("./ControlButtons");
@@ -146,7 +159,30 @@ describe("ControlButtons Start button disabled state", () => {
   afterEach(() => {
     cleanup();
     mockPhase = "running";
-    mockPendingRawdataWarning = null;
+    mockBidsCompatibilityError = null;
+    mockPreflightBidsSetupRepair.mockResolvedValue({
+      planId: "repair-plan",
+      rootPath: "/test/bids",
+      mode: "repair",
+      operations: [
+        {
+          path: "rawdata/.easl-gui-managed",
+          operation: "create",
+          textPreview: '{"kind":"bids-direct-rawdata","version":1}\n',
+        },
+      ],
+      warnings: [],
+      conflicts: [],
+      projectSummary: null,
+      preservesReadme: true,
+      temporaryArtifacts: [],
+    });
+    mockCommitBidsProjectMutations.mockResolvedValue({
+      outcome: "committed",
+      projectPath: null,
+      canonicalProjectBytes: null,
+      directorySyncSupported: true,
+    });
   });
 
   beforeEach(() => {
@@ -214,7 +250,7 @@ describe("ControlButtons re-process confirmation", () => {
     mockPhase = "idle";
     mockConfig = null;
     mockSubjectStatuses = [];
-    mockPendingRawdataWarning = null;
+    mockBidsCompatibilityError = null;
   });
 
   beforeEach(() => {
@@ -495,61 +531,63 @@ describe("findCompletedSubjects", () => {
   });
 });
 
-describe("ControlButtons rawdata warning modal (Phase 8.2)", () => {
+describe("ControlButtons BIDS compatibility repair", () => {
   afterEach(() => {
     cleanup();
     mockPhase = "idle";
-    mockPendingRawdataWarning = null;
+    mockBidsCompatibilityError = null;
     vi.clearAllMocks();
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockPhase = "idle";
-    mockPendingRawdataWarning = null;
+    mockBidsCompatibilityError = null;
   });
 
-  it("does not render the rawdata warning modal when no warning is pending", () => {
+  it("does not render setup repair error when no verification error is pending", () => {
     renderButtons();
     // Mantine 9 always renders the Modal root container in the DOM; the modal
     // is treated as closed when its inner content is absent.
-    expect(screen.queryByTestId("bids-rawdata-warning-text")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("bids-rawdata-warning-confirm-btn")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("bids-rawdata-warning-cancel-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bids-compatibility-error-text")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bids-repair-preflight-btn")).not.toBeInTheDocument();
   });
 
-  it("renders the rawdata warning modal with text and Proceed/Cancel buttons when warning set", () => {
-    mockPendingRawdataWarning = "rawdata/ already contains 5 sub-directories";
+  it("renders a repair action for a verification failure", () => {
+    mockBidsCompatibilityError = "BIDS marker is missing";
     renderButtons();
-    expect(screen.getByTestId("bids-rawdata-warning-modal")).toBeInTheDocument();
-    expect(screen.getByTestId("bids-rawdata-warning-text")).toHaveTextContent(
-      "rawdata/ already contains 5 sub-directories",
+    expect(screen.getByTestId("bids-compatibility-error-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-compatibility-error-text")).toHaveTextContent(
+      "BIDS marker is missing",
     );
-    expect(screen.getByTestId("bids-rawdata-warning-confirm-btn")).toBeInTheDocument();
-    expect(screen.getByTestId("bids-rawdata-warning-cancel-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-repair-preflight-btn")).toBeInTheDocument();
   });
 
-  it("calls clearPendingRawdataWarning when Cancel is clicked (does NOT call startProcessing)", async () => {
+  it("clears verification error when Close is clicked", async () => {
     const user = userEvent.setup();
-    mockPendingRawdataWarning = "rawdata/ already contains 5 sub-directories";
+    mockBidsCompatibilityError = "BIDS marker is missing";
     renderButtons();
 
-    await user.click(screen.getByTestId("bids-rawdata-warning-cancel-btn"));
+    await user.click(screen.getByTestId("bids-compatibility-error-close-btn"));
 
-    expect(mockClearPendingRawdataWarning).toHaveBeenCalledTimes(1);
+    expect(mockClearBidsCompatibilityError).toHaveBeenCalledTimes(1);
     expect(mockStartProcessing).not.toHaveBeenCalled();
   });
 
-  it("calls startProcessing(true) when Proceed is clicked (explicit confirmation)", async () => {
+  it("opens a read-only repair review and commits only its opaque plan after confirmation", async () => {
     const user = userEvent.setup();
-    mockPendingRawdataWarning = "rawdata/ already contains 5 sub-directories";
+    mockBidsCompatibilityError = "BIDS marker is missing";
     renderButtons();
 
-    await user.click(screen.getByTestId("bids-rawdata-warning-confirm-btn"));
+    await user.click(screen.getByTestId("bids-repair-preflight-btn"));
+    expect(mockPreflightBidsSetupRepair).toHaveBeenCalledWith("/test/bids");
+    expect(
+      await screen.findByTestId("bids-repair-operation-rawdata--easl-gui-managed"),
+    ).toHaveTextContent("rawdata/.easl-gui-managed");
+    expect(mockCommitBidsProjectMutations).not.toHaveBeenCalled();
 
-    expect(mockStartProcessing).toHaveBeenCalledWith(true);
-    // Should NOT clear warning locally — the store clears it once the
-    // explicit-confirm proceed invocation completes successfully.
-    expect(mockClearPendingRawdataWarning).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId("bids-repair-confirm-btn"));
+    expect(mockCommitBidsProjectMutations).toHaveBeenCalledWith("repair-plan");
+    expect(mockClearBidsCompatibilityError).toHaveBeenCalled();
   });
 });

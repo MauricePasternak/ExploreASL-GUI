@@ -1,13 +1,46 @@
 use crate::bids::group::{BidsSidecarScan, group_by_fingerprint};
 use crate::bids::scan::{asl_json_path_for, parse_bids_structure};
+use crate::bids::setup::{
+    self, SetupCommandError, SetupCommitResult, SetupMode, SetupPlan, SetupRecoverySummary,
+};
 use crate::bids::sidecar::find_asl_sidecars;
 use crate::error::IntoCommandResult;
 use crate::processing::runs::preparing_run_root;
 use crate::tracing::CommandTrace;
-use anyhow::{Context, Result as AnyResult};
+use anyhow::Result as AnyResult;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use tauri::Manager;
+
+fn setup_app_data(app: &tauri::AppHandle) -> Result<std::path::PathBuf, SetupCommandError> {
+    app.path()
+        .app_data_dir()
+        .map_err(|error| SetupCommandError::Failed {
+            message: format!("Could not resolve platform app-data directory: {error}"),
+        })
+}
+
+/// Repair is available only for the active project. Unlike new-project
+/// preflight, accepting a renderer-selected root here would let arbitrary IPC
+/// select a different existing source tree for a mutating repair commit.
+fn verify_active_repair_root(
+    state: &crate::app_state::AppState,
+    requested_root: &Path,
+) -> AnyResult<()> {
+    let active_root = state
+        .active_project_root
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Active project state lock was poisoned"))?
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("No active project is available for BIDS setup repair"))?
+        .canonicalize()?;
+    let requested_root = requested_root.canonicalize()?;
+    if active_root != requested_root {
+        anyhow::bail!("BIDS setup repair must target the active project root");
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,17 +60,30 @@ pub struct BidsCheckResult {
 }
 
 #[tauri::command]
-pub fn check_bids_dataset(root_path: String) -> Result<BidsCheckResult, String> {
+pub fn check_bids_dataset(
+    state: tauri::State<'_, crate::app_state::AppState>,
+    app: tauri::AppHandle,
+    root_path: String,
+) -> Result<BidsCheckResult, String> {
     let trace = CommandTrace::new("check_bids_dataset");
     trace.arg("root_path", &root_path);
 
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
     let root = Path::new(&root_path);
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve platform app-data directory: {error}"))?;
+    setup::recover_root(&app_data, root).into_command_result()?;
     let result = check_bids_dataset_impl(root).into_command_result()?;
     trace.success(&result);
     Ok(result)
 }
 
-fn check_bids_dataset_impl(root: &Path) -> AnyResult<BidsCheckResult> {
+pub(crate) fn check_bids_dataset_impl(root: &Path) -> AnyResult<BidsCheckResult> {
     // Step 1: Check dataset_description.json
     let desc_path = root.join("dataset_description.json");
     let has_dataset_description = desc_path.exists();
@@ -208,118 +254,115 @@ fn scan_bids_sidecars_impl(root: &Path) -> AnyResult<BidsSidecarScan> {
     Ok(group_by_fingerprint(&sidecar_paths, &subjects))
 }
 
-// --- ensure_rawdata_dir command ---
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EnsureRawdataResult {
-    pub created: bool,
-    pub warning: Option<String>,
-    pub bidsignore_updated: bool,
+#[tauri::command]
+pub fn preflight_bids_project_mutations(
+    state: tauri::State<'_, crate::app_state::AppState>,
+    app: tauri::AppHandle,
+    root_path: String,
+    mode: SetupMode,
+    canonical_project_bytes: String,
+) -> Result<SetupPlan, SetupCommandError> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| SetupCommandError::Failed {
+            message: "Project transition lock was poisoned".into(),
+        })?;
+    let app_data = setup_app_data(&app)?;
+    setup::recover_root(&app_data, Path::new(&root_path)).map_err(setup::command_error)?;
+    setup::preflight_for_state(
+        &state.setup_plans,
+        root_path,
+        mode,
+        Some(canonical_project_bytes),
+    )
+    .map_err(setup::command_error)
 }
 
-/// Processing-only rawdata preparation. The root is native reservation
-/// authority, never renderer input.
 #[tauri::command]
-pub fn ensure_rawdata_dir_for_run(
+pub fn preflight_bids_setup_repair(
+    state: tauri::State<'_, crate::app_state::AppState>,
+    app: tauri::AppHandle,
+    root_path: String,
+) -> Result<SetupPlan, SetupCommandError> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| SetupCommandError::Failed {
+            message: "Project transition lock was poisoned".into(),
+        })?;
+    verify_active_repair_root(&state, Path::new(&root_path)).map_err(setup::command_error)?;
+    let app_data = setup_app_data(&app)?;
+    setup::recover_root(&app_data, Path::new(&root_path)).map_err(setup::command_error)?;
+    setup::preflight_for_state(&state.setup_plans, root_path, SetupMode::Repair, None)
+        .map_err(setup::command_error)
+}
+
+#[tauri::command]
+pub fn commit_bids_project_mutations(
+    state: tauri::State<'_, crate::app_state::AppState>,
+    app: tauri::AppHandle,
+    plan_id: String,
+) -> Result<SetupCommitResult, SetupCommandError> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| SetupCommandError::Failed {
+            message: "Project transition lock was poisoned".into(),
+        })?;
+    let app_data = setup_app_data(&app)?;
+    setup::commit_for_state(&state.setup_plans, &plan_id, &app_data).map_err(setup::command_error)
+}
+
+#[tauri::command]
+pub fn recover_bids_project_setup(
+    state: tauri::State<'_, crate::app_state::AppState>,
+    app: tauri::AppHandle,
+    root_path: Option<String>,
+) -> Result<SetupRecoverySummary, SetupCommandError> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| SetupCommandError::Failed {
+            message: "Project transition lock was poisoned".into(),
+        })?;
+    let app_data = setup_app_data(&app)?;
+    match root_path {
+        Some(root) => setup::recover_root(&app_data, Path::new(&root)),
+        None => setup::recover_all(&app_data),
+    }
+    .map_err(setup::command_error)
+}
+
+/// Native run ownership determines the root. This command has no renderer path
+/// and intentionally performs no setup mutation.
+#[tauri::command]
+pub fn verify_bids_compatibility_for_run(
     state: tauri::State<'_, crate::app_state::AppState>,
     run_id: String,
-) -> Result<EnsureRawdataResult, String> {
+) -> Result<(), String> {
     let _transition = state
         .project_transition
         .lock()
         .map_err(|_| "Project transition lock was poisoned".to_string())?;
-    let root = preparing_run_root(&state, &run_id)?;
-    ensure_rawdata_dir_impl(&root).into_command_result()
+    verify_bids_compatibility_for_run_impl(&state, &run_id).into_command_result()
 }
 
-const RAWDATA_README: &str = r#"# rawdata/
-
-This directory exists for ExploreASL compatibility.
-The actual BIDS subjects live at the project root level.
-ExploreASL's BIDS2Legacy module checks for this directory
-at startup but uses the subjectFolder override in dataPar.json
-to scan subjects from the project root.
-
-Do not delete this directory while the project is active.
-"#;
-
-fn ensure_rawdata_dir_impl(root: &Path) -> AnyResult<EnsureRawdataResult> {
-    let rawdata = root.join("rawdata");
-    let created = !rawdata.exists();
-
-    log::debug!(
-        "ensure_rawdata_dir: root={} created={}",
-        root.display(),
-        created
-    );
-
-    // Step 1: Create rawdata/ if missing (idempotent)
-    fs::create_dir_all(&rawdata).context("Failed to create rawdata dir")?;
-
-    // Step 2: Write README.md (idempotent overwrite)
-    fs::write(rawdata.join("README.md"), RAWDATA_README)
-        .context("Failed to write rawdata/README.md")?;
-
-    // Step 3: Manage .bidsignore
-    let bidsignore_path = root.join(".bidsignore");
-    let bidsignore_updated = if !bidsignore_path.exists() {
-        // Create with "rawdata/\n"
-        fs::write(&bidsignore_path, "rawdata/\n").context("Failed to create .bidsignore")?;
-        true
-    } else {
-        // Check if "rawdata/" line already exists
-        let content = fs::read_to_string(&bidsignore_path).context("Failed to read .bidsignore")?;
-        let has_rawdata = content.lines().any(|line| line.trim() == "rawdata/");
-        if !has_rawdata {
-            // Append "rawdata/\n"
-            use std::io::Write;
-            let mut file = fs::OpenOptions::new()
-                .append(true)
-                .open(&bidsignore_path)
-                .context("Failed to open .bidsignore for append")?;
-            writeln!(file, "rawdata/").context("Failed to append to .bidsignore")?;
-            true
-        } else {
-            false
-        }
-    };
-
-    // Step 4: Check if rawdata/ is non-empty (contains sub-* entries)
-    let warning = if !created {
-        let mut sub_count = 0u32;
-        if let Ok(entries) = fs::read_dir(&rawdata) {
-            for entry in entries.flatten() {
-                if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with("sub-") {
-                        sub_count += 1;
-                    }
-                }
-            }
-        }
-        if sub_count > 0 {
-            Some(format!(
-                "rawdata/ already contains {} sub-directories",
-                sub_count
-            ))
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    Ok(EnsureRawdataResult {
-        created,
-        warning,
-        bidsignore_updated,
-    })
+/// Kept separate from IPC so run ownership and read-only verification have a
+/// direct native test target. Renderer input supplies only the reservation ID.
+pub(crate) fn verify_bids_compatibility_for_run_impl(
+    state: &crate::app_state::AppState,
+    run_id: &str,
+) -> AnyResult<()> {
+    let root = preparing_run_root(state, run_id).map_err(anyhow::Error::msg)?;
+    setup::verify(&root)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_state::AppState;
+    use crate::processing::runs::reserve_processing_run_impl;
     use std::fs;
     use tempfile::TempDir;
 
@@ -557,6 +600,38 @@ mod tests {
         assert_eq!(result.asl_subject_count, 1);
     }
 
+    #[test]
+    fn run_scoped_compatibility_verification_requires_the_exact_preparing_reservation() {
+        let root = TempDir::new().unwrap();
+        fs::create_dir(root.path().join("rawdata")).unwrap();
+        fs::write(
+            root.path().join(crate::bids::setup::RAWDATA_MARKER_PATH),
+            crate::bids::setup::RAWDATA_MARKER_BYTES,
+        )
+        .unwrap();
+        let state = AppState::default();
+        *state.active_project_root.lock().unwrap() = Some(root.path().canonicalize().unwrap());
+        let reserved =
+            reserve_processing_run_impl(&state, vec!["structural".into()], vec![]).unwrap();
+        verify_bids_compatibility_for_run_impl(&state, &reserved.run_id).unwrap();
+        assert!(verify_bids_compatibility_for_run_impl(&state, "obsolete-run").is_err());
+        // A replacement active root turns the original reservation foreign.
+        let other = TempDir::new().unwrap();
+        *state.active_project_root.lock().unwrap() = Some(other.path().canonicalize().unwrap());
+        assert!(verify_bids_compatibility_for_run_impl(&state, &reserved.run_id).is_err());
+    }
+
+    #[test]
+    fn repair_root_must_match_native_active_project_ownership() {
+        let active = TempDir::new().unwrap();
+        let other = TempDir::new().unwrap();
+        let state = AppState::default();
+        assert!(verify_active_repair_root(&state, active.path()).is_err());
+        *state.active_project_root.lock().unwrap() = Some(active.path().canonicalize().unwrap());
+        assert!(verify_active_repair_root(&state, active.path()).is_ok());
+        assert!(verify_active_repair_root(&state, other.path()).is_err());
+    }
+
     // --- scan_bids_sidecars tests ---
 
     fn create_ds000240_like_sidecar() -> &'static str {
@@ -686,201 +761,5 @@ mod tests {
         assert_eq!(result.groups[0].subjects[0].subject_label, "sub-01");
         assert_eq!(result.skipped.len(), 1);
         assert_eq!(result.skipped[0], "sub-05_1"); // cross-sectional = session "1"
-    }
-
-    // --- ensure_rawdata_dir tests ---
-
-    #[test]
-    fn ensure_rawdata_fresh_creates_all() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        let result = ensure_rawdata_dir_impl(root).unwrap();
-
-        assert!(result.created);
-        assert!(result.warning.is_none());
-        assert!(result.bidsignore_updated);
-        // rawdata/ exists
-        assert!(root.join("rawdata").is_dir());
-        // README.md exists with expected content
-        let readme = fs::read_to_string(root.join("rawdata").join("README.md")).unwrap();
-        assert!(readme.contains("# rawdata/"));
-        // .bidsignore exists with rawdata/
-        let bidsignore = fs::read_to_string(root.join(".bidsignore")).unwrap();
-        assert!(bidsignore.contains("rawdata/"));
-    }
-
-    #[test]
-    fn ensure_rawdata_idempotent_re_run() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        // First run
-        let result1 = ensure_rawdata_dir_impl(root).unwrap();
-        assert!(result1.created);
-        assert!(result1.bidsignore_updated);
-
-        // Second run
-        let result2 = ensure_rawdata_dir_impl(root).unwrap();
-
-        assert!(!result2.created);
-        assert!(result2.warning.is_none());
-        assert!(!result2.bidsignore_updated);
-        // README still exists
-        assert!(root.join("rawdata").join("README.md").exists());
-    }
-
-    #[test]
-    fn ensure_rawdata_non_empty_returns_warning() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        // Pre-create rawdata with sub-001
-        let rawdata = root.join("rawdata");
-        fs::create_dir_all(rawdata.join("sub-001")).unwrap();
-
-        let result = ensure_rawdata_dir_impl(root).unwrap();
-
-        assert!(!result.created); // rawdata already existed
-        assert!(result.warning.is_some());
-        assert!(result.warning.unwrap().contains("1"));
-        // .bidsignore was created (didn't exist) → bidsignore_updated is true
-        assert!(result.bidsignore_updated);
-    }
-
-    /// Spec scenario: existing non-empty rawdata warns with subject count.
-    /// 5 `sub-*` directories → warning string references "5 sub-directories"
-    /// (count of sub-* dirs, not files).
-    #[test]
-    fn ensure_rawdata_warning_counts_sub_dirs_not_files() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        let rawdata = root.join("rawdata");
-        // 5 subject dirs, each containing nested files
-        for i in 1..=5 {
-            let dir = rawdata
-                .join(format!("sub-{:03}", i))
-                .join("ses-01")
-                .join("perf");
-            fs::create_dir_all(&dir).unwrap();
-            fs::write(dir.join(format!("sub-{:03}_asl.nii.gz", i)), b"fake").unwrap();
-        }
-        // Loose files at rawdata root must NOT be counted
-        fs::write(rawdata.join("notes.txt"), b"whatever").unwrap();
-
-        let result = ensure_rawdata_dir_impl(root).unwrap();
-
-        assert!(!result.created);
-        assert!(
-            result.warning.is_some(),
-            "expected warning for non-empty rawdata"
-        );
-        let warning = result.warning.unwrap();
-        assert!(
-            warning.contains("5 sub-directories"),
-            "warning must reference parsed sub-count, got: {}",
-            warning
-        );
-    }
-
-    #[test]
-    fn ensure_rawdata_bidsignore_append_when_missing_rawdata_line() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        // Pre-create .bidsignore with existing entry but no rawdata/
-        fs::write(root.join(".bidsignore"), "derivatives/\n").unwrap();
-
-        let result = ensure_rawdata_dir_impl(root).unwrap();
-
-        assert!(result.bidsignore_updated);
-        let content = fs::read_to_string(root.join(".bidsignore")).unwrap();
-        assert!(content.contains("derivatives/"));
-        assert!(content.contains("rawdata/"));
-    }
-
-    /// Spec: `.bidsignore` already contains `rawdata/` → no-op (no append, no duplicate).
-    #[test]
-    fn ensure_rawdata_bidsignore_noop_when_rawdata_line_present() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        fs::write(root.join(".bidsignore"), "derivatives/\nrawdata/\n").unwrap();
-
-        let result = ensure_rawdata_dir_impl(root).unwrap();
-
-        assert!(!result.bidsignore_updated);
-        let content = fs::read_to_string(root.join(".bidsignore")).unwrap();
-        // Exactly one rawdata/ entry (no duplicate appended)
-        assert_eq!(
-            content.matches("rawdata/").count(),
-            1,
-            "rawdata/ must not be duplicated: {}",
-            content
-        );
-    }
-
-    /// Edge: `.bidsignore` exists without trailing newline. Appending `rawdata/`
-    /// via `writeln!` produces `rawdata/\n` (writeln adds the newline).
-    #[test]
-    fn ensure_rawdata_bidsignore_append_handles_missing_trailing_newline() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        // No trailing newline
-        fs::write(root.join(".bidsignore"), "derivatives/").unwrap();
-
-        let result = ensure_rawdata_dir_impl(root).unwrap();
-
-        assert!(result.bidsignore_updated);
-        let content = fs::read_to_string(root.join(".bidsignore")).unwrap();
-        assert!(content.contains("derivatives/"));
-        assert!(content.contains("rawdata/"));
-        // rawdata/ entry must end with a newline (writeln! contract)
-        assert!(
-            content.ends_with("rawdata/\n") || content.ends_with("rawdata/"),
-            "rawdata/ line present: {}",
-            content
-        );
-    }
-
-    /// Edge: duplicate `rawdata/` lines already present → treated as no-op
-    /// (any line matching "rawdata/" short-circuits append).
-    #[test]
-    fn ensure_rawdata_bidsignore_noop_with_duplicate_rawdata_lines() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        fs::write(root.join(".bidsignore"), "rawdata/\nrawdata/\n").unwrap();
-
-        let result = ensure_rawdata_dir_impl(root).unwrap();
-
-        assert!(!result.bidsignore_updated);
-        let content = fs::read_to_string(root.join(".bidsignore")).unwrap();
-        assert_eq!(content.matches("rawdata/").count(), 2); // unchanged
-    }
-
-    /// Phase 10.6: Idempotency — README content identical across two calls.
-    #[test]
-    fn ensure_rawdata_idempotent_readme_content_identical() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-
-        // First run
-        let _ = ensure_rawdata_dir_impl(root).unwrap();
-        let readme1 = fs::read_to_string(root.join("rawdata").join("README.md")).unwrap();
-
-        // Second run
-        let _ = ensure_rawdata_dir_impl(root).unwrap();
-        let readme2 = fs::read_to_string(root.join("rawdata").join("README.md")).unwrap();
-
-        assert_eq!(
-            readme1, readme2,
-            "README content must be identical across idempotent calls"
-        );
-        // Both runs produce no warning (fresh rawdata/ has no sub-* dirs)
-        let result2 = ensure_rawdata_dir_impl(root).unwrap();
-        assert!(result2.warning.is_none());
     }
 }

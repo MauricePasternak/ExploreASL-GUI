@@ -1,7 +1,11 @@
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { create } from "zustand";
 
-import { ensureBidsIgnore, isBidsProject } from "../lib/bids/validation";
+import {
+  commitBidsProjectMutations,
+  preflightBidsProjectMutations,
+  type SetupPlan,
+} from "../lib/bids/setup";
 import { logAction } from "../lib/debug";
 import {
   atomicWriteProject,
@@ -74,8 +78,13 @@ interface ProjectState {
   createProject: (
     rootPath: string,
     name: string,
-    options: { dataSource: "dicom" | "bids" },
+    options: { dataSource: "dicom" | "bids"; planId?: string },
   ) => Promise<void>;
+  preflightProjectSetup: (
+    rootPath: string,
+    name: string,
+    dataSource: "dicom" | "bids",
+  ) => Promise<SetupPlan>;
   saveProject: () => Promise<void>;
   setPhase: (phase: ProjectMeta["currentPhase"]) => void;
   toggleNavbar: () => void;
@@ -365,6 +374,32 @@ function serializeForStorage(project: ProjectFile): string {
   }
 }
 
+function createProjectDraft(
+  rootPath: string,
+  name: string,
+  dataSource: "dicom" | "bids",
+  global: ReturnType<typeof useGlobalStore.getState>,
+): ProjectFile {
+  const project = DEFAULT_PROJECT_FILE(crypto.randomUUID(), name, rootPath);
+  project.projectMeta.dataSource = dataSource;
+  if (dataSource === "bids") project.mappingState.sourceDataPath = ".";
+  const firstValidProfile = global.settings.executionProfiles.find(
+    (profile) => global.profileValidationState[profile.id]?.valid === true,
+  );
+  if (firstValidProfile) {
+    project.uiState = {
+      ...project.uiState,
+      import: {
+        bidsReviewConfirmed: false,
+        skippedSubjects: [],
+        ...project.uiState.import,
+        selectedProfileId: firstValidProfile.id,
+      },
+    };
+  }
+  return project;
+}
+
 function isManifestVerdict(value: unknown): value is ManifestVerdict {
   return ManifestVerdictSchema.safeParse(value).success;
 }
@@ -582,6 +617,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
    * @param options - Required. `dataSource` is immutable for the project lifetime;
    *   callers MUST NOT mutate it after creation.
    */
+  preflightProjectSetup: async (rootPath, name, dataSource) => {
+    const global = useGlobalStore.getState();
+    if (!global.hasValidProfile()) {
+      throw new Error(
+        "Cannot create a project without at least one valid execution profile. Fix a profile in Settings.",
+      );
+    }
+    const project = createProjectDraft(rootPath, name, dataSource, global);
+    return preflightBidsProjectMutations(rootPath, dataSource, serializeForStorage(project));
+  },
+
   createProject: async (rootPath, name, options) => {
     if (!options?.dataSource) {
       throw new Error("createProject requires options.dataSource");
@@ -594,37 +640,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       );
     }
 
-    const project = DEFAULT_PROJECT_FILE(crypto.randomUUID(), name, rootPath);
-    project.projectMeta.dataSource = options.dataSource;
-    if (options.dataSource === "bids") project.mappingState.sourceDataPath = ".";
-
-    const firstValidProfile = global.settings.executionProfiles.find(
-      (profile) => global.profileValidationState[profile.id]?.valid === true,
-    );
-    if (firstValidProfile) {
-      project.uiState = {
-        ...project.uiState,
-        import: {
-          bidsReviewConfirmed: false,
-          skippedSubjects: [],
-          ...project.uiState.import,
-          selectedProfileId: firstValidProfile.id,
+    let project: ProjectFile;
+    if (options.planId) {
+      const committed = await commitBidsProjectMutations(options.planId);
+      if (!committed.canonicalProjectBytes)
+        throw new Error("Setup repair plan cannot create a project.");
+      project = parseProject(committed.canonicalProjectBytes);
+      if (!committed.projectPath) throw new Error("Committed setup did not return project path.");
+      project = {
+        ...project,
+        projectMeta: {
+          ...project.projectMeta,
+          // Native has canonicalized and committed this path. Never revive the
+          // renderer's preflight spelling after success.
+          rootPath: projectRootFromEaslPath(committed.projectPath),
         },
       };
-    }
-
-    await atomicWriteProject({
-      projectPath: getProjectFilePath(rootPath),
-      canonicalBytes: serializeForStorage(project),
-      preserveBackup: false,
-    });
-
-    try {
-      if (await isBidsProject(rootPath)) {
-        await ensureBidsIgnore(rootPath);
-      }
-    } catch (e) {
-      console.warn("Failed to check BIDS project status or write .bidsignore:", e);
+    } else {
+      project = createProjectDraft(rootPath, name, options.dataSource, global);
+      await atomicWriteProject({
+        projectPath: getProjectFilePath(rootPath),
+        canonicalBytes: serializeForStorage(project),
+        preserveBackup: false,
+      });
     }
 
     await transitionProjectRuntime(project, false);

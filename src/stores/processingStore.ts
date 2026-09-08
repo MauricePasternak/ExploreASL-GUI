@@ -32,7 +32,7 @@ export interface ProcessingState {
   /** Retained only while terminal Population metadata side effects settle. */
   terminalRunId: string | null;
   workerPids: number[];
-  pendingRawdataWarning: string | null;
+  bidsCompatibilityError: string | null;
   profileError: string | null;
   preparingMessage: string | null;
 
@@ -42,7 +42,7 @@ export interface ProcessingState {
     snapshot: import("../schemas/processingSchemas").ProcessingRunSnapshot,
   ) => void;
   synchronizeProcessingRun: () => Promise<void>;
-  startProcessing: (explicitConfirm?: boolean) => Promise<void>;
+  startProcessing: () => Promise<void>;
   killProcessing: () => Promise<void>;
   updateSubjectStatus: (status: SubjectModuleStatus) => void;
   removeWorkerPid: (pid: number) => void;
@@ -55,7 +55,7 @@ export interface ProcessingState {
     currentPhase?: ProcessingPhase;
   }) => void;
   resetProcessing: () => Promise<void>;
-  clearPendingRawdataWarning: () => Promise<void>;
+  clearBidsCompatibilityError: () => Promise<void>;
   clearProfileError: () => void;
 }
 
@@ -71,7 +71,7 @@ const INITIAL_STATE = {
   activeRunId: null as string | null,
   terminalRunId: null as string | null,
   workerPids: [] as number[],
-  pendingRawdataWarning: null as string | null,
+  bidsCompatibilityError: null as string | null,
   profileError: null as string | null,
   preparingMessage: null as string | null,
 };
@@ -219,24 +219,9 @@ export const useProcessingStore = create<ProcessingState>()(
       await reconcileAndFinalizeIfNeeded(snapshot, lease);
     },
 
-    startProcessing: (explicitConfirm = false) =>
+    startProcessing: () =>
       registerProjectTask(async () => {
-        let confirmedRunId: string | null = null;
-        if (explicitConfirm) {
-          const current = useProcessingStore.getState();
-          // Claim this exact Preparing continuation synchronously before the
-          // first await. A double-click's second admitted thunk sees no pending
-          // warning and performs no preparation or launch work.
-          if (
-            current.pendingRawdataWarning === null ||
-            current.processingPhase !== "preparing" ||
-            current.activeRunId === null
-          ) {
-            return;
-          }
-          confirmedRunId = current.activeRunId;
-          set({ pendingRawdataWarning: null, preparingMessage: "Initializing processing..." });
-        }
+        const confirmedRunId: string | null = null;
         const lease = captureProjectLease();
         const isCurrent = () => !lease || isCurrentProjectLease(lease);
         const config = useProcessingStore.getState().config;
@@ -280,7 +265,7 @@ export const useProcessingStore = create<ProcessingState>()(
         }
 
         const { reserveProcessingRun } = await import("../lib/processingEvents");
-        let runId = confirmedRunId;
+        let runId: string | null = confirmedRunId;
         try {
           // Reservation is admission. Nothing filesystem-facing or project-facing
           // occurs before its authoritative Preparing snapshot wins.
@@ -298,9 +283,38 @@ export const useProcessingStore = create<ProcessingState>()(
           });
           if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
 
-          // Kick off version capture in parallel with the rest of prep so a slow
-          // MATLAB probe (older laptops) does not serialize behind / freeze the
-          // preparing UI. We only join before the pipeline actually starts.
+          const {
+            watchLockDir,
+            setupProcessingListeners,
+            runProcessingPipeline,
+            reconcileAndFinalizeIfNeeded,
+          } = await import("../lib/processingEvents");
+          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+
+          const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
+          if (!projectRoot) throw new Error("No project loaded");
+
+          const dataSource = useProjectStore.getState().project?.projectMeta.dataSource ?? "dicom";
+
+          if (dataSource === "bids") {
+            set({ preparingMessage: "Verifying BIDS compatibility setup..." });
+            try {
+              await invoke("verify_bids_compatibility_for_run", { runId });
+            } catch (error) {
+              set({
+                bidsCompatibilityError:
+                  error instanceof Error
+                    ? error.message
+                    : "BIDS compatibility setup must be reviewed before processing.",
+              });
+              throw error;
+            }
+            if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
+          }
+
+          // Verification is the first post-reservation preparation step. In
+          // particular, do not clear Population state or begin environment
+          // probes until a BIDS source has passed its read-only check.
           let versionCapture: Promise<void> = Promise.resolve();
           if (config.modules.includes("population")) {
             useProjectStore.getState().setPopulationCompleted(false);
@@ -313,11 +327,7 @@ export const useProcessingStore = create<ProcessingState>()(
               try {
                 const versions = await invoke<{ explore_asl: string; matlab: string }>(
                   "capture_environment_versions_for_run",
-                  {
-                    runId,
-                    exploreAslPath,
-                    matlabPath,
-                  },
+                  { runId, exploreAslPath, matlabPath },
                 );
                 if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
                 const gui =
@@ -339,37 +349,6 @@ export const useProcessingStore = create<ProcessingState>()(
                 });
               }
             })();
-          }
-
-          const {
-            watchLockDir,
-            setupProcessingListeners,
-            runProcessingPipeline,
-            reconcileAndFinalizeIfNeeded,
-          } = await import("../lib/processingEvents");
-          if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
-
-          const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
-          if (!projectRoot) throw new Error("No project loaded");
-
-          const dataSource = useProjectStore.getState().project?.projectMeta.dataSource ?? "dicom";
-
-          if (dataSource === "bids") {
-            set({ preparingMessage: "Checking dataset rawdata..." });
-            if (!explicitConfirm) {
-              const result = await invoke<{
-                warning: string | null;
-                created: boolean;
-                bidsignoreUpdated: boolean;
-              }>("ensure_rawdata_dir_for_run", { runId });
-              if (!isCurrent() || useProcessingStore.getState().activeRunId !== runId) return;
-              if (result.warning) {
-                set({ pendingRawdataWarning: result.warning, preparingMessage: null });
-                // Keep preparation registered until its correlated probe settles.
-                await versionCapture;
-                return;
-              }
-            }
           }
 
           // Generate/update participants.tsv (always call to either add or strip the 'site' column)
@@ -573,9 +552,9 @@ export const useProcessingStore = create<ProcessingState>()(
       set(createInitialProcessingState());
     },
 
-    clearPendingRawdataWarning: async () => {
+    clearBidsCompatibilityError: async () => {
       const runId = useProcessingStore.getState().activeRunId;
-      set({ pendingRawdataWarning: null, preparingMessage: null });
+      set({ bidsCompatibilityError: null, preparingMessage: null });
       if (!runId) return;
       const lease = captureProjectLease();
       const { failProcessingRun } = await import("../lib/processingEvents");
