@@ -79,12 +79,7 @@ export async function launchImportRun(params: {
   subjectList: string[];
   relocationPlanId: string;
 }): Promise<ImportRunSnapshot> {
-  try {
-    return parseSnapshot(await invoke("launch_import_run", params));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(message, { cause: error });
-  }
+  return parseSnapshot(await invoke("launch_import_run", params));
 }
 
 export async function cancelImportRun(runId: string): Promise<ImportRunSnapshot> {
