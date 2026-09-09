@@ -58,17 +58,6 @@ export function getStepsForSubjectFromIndex(
   return steps;
 }
 
-export function getStatusForSubject(
-  subjectSession: string,
-  module: ModuleName,
-  statuses: SubjectModuleStatus[],
-  run?: string,
-): SubjectModuleStatus | undefined {
-  return statuses.find(
-    (s) => s.subjectSession === subjectSession && s.module === module && runMatches(s.run, run),
-  );
-}
-
 export function getStatusForSubjectFromIndex(
   index: SubjectStatusIndex,
   subjectSession: string,

@@ -18,12 +18,6 @@ export const METADATA_FIELD_HINT_TEXT: Record<MetadataFieldHint, string> = {
   conditionalRecommended: "Recommended when applicable — omitted from studyPar.json if blank",
 };
 
-export const METADATA_HINT_LEGEND = [
-  { hint: "important" as const, label: "Important" },
-  { hint: "dicomLikely" as const, label: "Usually from DICOM" },
-  { hint: "optionalOmitted" as const, label: "Optional" },
-] as const;
-
 /** Per-field hint for bidsParams keys shown in the metadata modal. */
 export const BIDS_FIELD_HINTS: Partial<Record<keyof BidsAslMetadata, MetadataFieldHint>> = {
   // ASL / M0 context

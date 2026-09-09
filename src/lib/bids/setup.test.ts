@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  SetupCommandErrorSchema,
-  SetupCommitResultSchema,
-  SetupPlanSchema,
-  SetupRecoverySummarySchema,
-} from "./setup";
+import { SetupCommandErrorSchema, SetupCommitResultSchema, SetupPlanSchema } from "./setup";
 
 describe("native BIDS setup IPC contract", () => {
   it("accepts the serialized native plan and committed outcome only", () => {
@@ -38,10 +33,7 @@ describe("native BIDS setup IPC contract", () => {
     expect(() => SetupCommitResultSchema.parse({ directorySyncSupported: true })).toThrow();
   });
 
-  it("keeps structured native errors and recovery results typed", () => {
+  it("keeps structured native errors typed", () => {
     expect(SetupCommandErrorSchema.parse({ kind: "stale", message: "changed" }).kind).toBe("stale");
-    expect(
-      SetupRecoverySummarySchema.parse({ recovered: 1, deferredRoots: [], blocked: [] }),
-    ).toMatchObject({ recovered: 1 });
   });
 });

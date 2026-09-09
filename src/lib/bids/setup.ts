@@ -53,13 +53,6 @@ export const SetupCommandErrorSchema = z.object({
 });
 export type SetupCommandError = z.infer<typeof SetupCommandErrorSchema>;
 
-export const SetupRecoverySummarySchema = z.object({
-  recovered: z.number().int().nonnegative(),
-  deferredRoots: z.array(z.string()),
-  blocked: z.array(z.string()),
-});
-export type SetupRecoverySummary = z.infer<typeof SetupRecoverySummarySchema>;
-
 export async function preflightBidsProjectMutations(
   rootPath: string,
   mode: Exclude<SetupMode, "repair">,
@@ -76,8 +69,4 @@ export async function preflightBidsSetupRepair(rootPath: string): Promise<SetupP
 
 export async function commitBidsProjectMutations(planId: string): Promise<SetupCommitResult> {
   return SetupCommitResultSchema.parse(await invoke("commit_bids_project_mutations", { planId }));
-}
-
-export async function recoverBidsProjectSetup(rootPath?: string): Promise<SetupRecoverySummary> {
-  return SetupRecoverySummarySchema.parse(await invoke("recover_bids_project_setup", { rootPath }));
 }

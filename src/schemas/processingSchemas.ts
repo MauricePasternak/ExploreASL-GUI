@@ -85,7 +85,6 @@ export const ProcessingRunSnapshotSchema = z
   })
   .strict();
 
-export const ProcessingRunLaunchResponseSchema = ProcessingRunSnapshotSchema;
 /** Run-correlated native lifecycle event payload. */
 export const ProcessingLifecycleSnapshotSchema = ProcessingRunSnapshotSchema;
 
@@ -141,7 +140,6 @@ export type ProcessingLifecycle = z.infer<typeof ProcessingLifecycleSchema>;
 export type ProcessingTerminalResult = z.infer<typeof ProcessingTerminalResultSchema>;
 export type WorkerExitEvidence = z.infer<typeof WorkerExitEvidenceSchema>;
 export type ProcessingRunSnapshot = z.infer<typeof ProcessingRunSnapshotSchema>;
-export type ProcessingRunLaunchResponse = z.infer<typeof ProcessingRunLaunchResponseSchema>;
 export type ProcessingLifecycleSnapshot = z.infer<typeof ProcessingLifecycleSnapshotSchema>;
 export type StatusFileCreatedPayload = z.infer<typeof StatusFileCreatedPayloadSchema>;
 export type LockCreatedPayload = z.infer<typeof LockCreatedPayloadSchema>;

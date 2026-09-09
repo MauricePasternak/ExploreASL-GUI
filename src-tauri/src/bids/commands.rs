@@ -1,8 +1,6 @@
 use crate::bids::group::{BidsSidecarScan, group_by_fingerprint};
 use crate::bids::scan::{asl_json_path_for, parse_bids_structure};
-use crate::bids::setup::{
-    self, SetupCommandError, SetupCommitResult, SetupMode, SetupPlan, SetupRecoverySummary,
-};
+use crate::bids::setup::{self, SetupCommandError, SetupCommitResult, SetupMode, SetupPlan};
 use crate::bids::sidecar::find_asl_sidecars;
 use crate::error::IntoCommandResult;
 use crate::processing::runs::preparing_run_root;
@@ -312,26 +310,6 @@ pub fn commit_bids_project_mutations(
         })?;
     let app_data = setup_app_data(&app)?;
     setup::commit_for_state(&state.setup_plans, &plan_id, &app_data).map_err(setup::command_error)
-}
-
-#[tauri::command]
-pub fn recover_bids_project_setup(
-    state: tauri::State<'_, crate::app_state::AppState>,
-    app: tauri::AppHandle,
-    root_path: Option<String>,
-) -> Result<SetupRecoverySummary, SetupCommandError> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| SetupCommandError::Failed {
-            message: "Project transition lock was poisoned".into(),
-        })?;
-    let app_data = setup_app_data(&app)?;
-    match root_path {
-        Some(root) => setup::recover_root(&app_data, Path::new(&root)),
-        None => setup::recover_all(&app_data),
-    }
-    .map_err(setup::command_error)
 }
 
 /// Native run ownership determines the root. This command has no renderer path
