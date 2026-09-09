@@ -70,24 +70,29 @@ The `ImportProgress` type in the import store SHALL be extended to include: `err
 
 ### Requirement: Import store additions
 
-The import store SHALL add: `importCompleted: boolean` (defaults to `false`, set to `true` when all subjects complete successfully), `importLog: string[]` (accumulated raw stdout lines from `ImportRawEvent`), `importPhase: "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled"` (defaults to `"idle"`), and `mostRecentConfig: ImportSnapshot | null` (defaults to `null`, set at `startImport()` time from current import configuration).
+The import store SHALL represent `idle`, `preparing`, `running`, `finalizing`, `completed`, `failed`, `cancelling`, `cancelled`, and `interrupted` phases plus a runtime-only attached `activeRunId`. Native run snapshots SHALL be authoritative while a run is attached. The store SHALL reconcile phase, selected-subject progress, errors, and terminal result from each accepted snapshot; it SHALL NOT independently complete a run from parser events, local PID state, or frontend post-processing promises.
 
-The import store additionally SHALL support a BIDS review slice (`BidsReviewState` as specified above: `scanComplete`, `scanError`, `detectedGroups`, `skippedSubjects`, with actions `startBidsScan`, `setDetectedGroups`, `retryBidsScan`, `rescanConfirmedBidsProject`, `backToLanding`, `resetBidsReview`). The BIDS review slice is session-only; its `confirmed` equivalent is read from `project.uiState.import.bidsReviewConfirmed`.
-
-The `ImportSnapshot` type SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, `subjectRows`.
-
-The `importCompleted` flag and `mostRecentConfig` SHALL be persisted in the project file under `uiState.import.completed` and `uiState.import.mostRecentConfig` respectively.
-
-The `startImport()` action SHALL capture the current import configuration as an `ImportSnapshot` and store it in `mostRecentConfig` before transitioning to `"preparing"` phase.
-
-The store SHALL provide a `reconstructProgressFromLockFiles(progress: Record<string, ImportProgress>)` action that replaces `importProgress` with lock file scan results and preserves real-time events if an import is currently running.
-
-The store SHALL provide a `computeStaleness(currentConfig: ImportState, snapshot: ImportSnapshot | null): Record<string, boolean>` function that returns per-subject staleness. This function SHALL be called on entering step 5 and the results stored in each subject's `stale` field in `importProgress`.
+The store SHALL retain import logs, staleness state, BIDS review state, current mapping configuration, and `mostRecentConfig`. Persisted `uiState.import.completed` and `uiState.import.currentPhase` SHALL contain the latest acknowledged terminal result, not active-run identity or live process state. `activeRunId`, ownership generation, provisional parser progress, and attachment state SHALL remain session-only. `mostRecentConfig` SHALL continue to represent the configuration captured for the import attempt and SHALL be committed as the successful freshness baseline only when the authoritative run result is reconciled.
 
 #### Scenario: Starting import captures configuration
 
-- **WHEN** `startImport()` begins an import
-- **THEN** it stores the current configuration in `mostRecentConfig` before entering the `"preparing"` phase
+- **WHEN** a native run reservation succeeds for the current configuration
+- **THEN** the store SHALL retain that attempt snapshot and enter the lifecycle reported by the reserved run without claiming completion
+
+#### Scenario: Parser emits global completion
+
+- **WHEN** an attached run emits global completion text while its native lifecycle remains `Running`
+- **THEN** the store SHALL remain nonterminal
+
+#### Scenario: Native completed snapshot arrives
+
+- **WHEN** the store accepts a matching `Completed` snapshot whose selected subjects committed
+- **THEN** it SHALL set completed progress, `importPhase = "completed"`, and `importCompleted = true` before synchronizing project state
+
+#### Scenario: Native failed snapshot follows prior project completion
+
+- **WHEN** a matching rerun terminates `Failed`
+- **THEN** the store SHALL set `importPhase = "failed"` and `importCompleted = false` while preserving per-subject committed evidence reported by native state
 
 ### Requirement: Subject error detail matching
 
@@ -105,17 +110,32 @@ When an `import_failed` event is received, the system SHALL match the failure de
 
 ### Requirement: ImportProgress table population
 
-The progress table SHALL be populated immediately when `importPhase` transitions to `"preparing"`, using subject names from the staging mappings. All subjects start with `status: "pending"`. As `subject_start` events arrive, matching subjects transition to `"running"`. As `subject_complete` or `import_failed` events arrive, subjects transition to `"completed"` or `"failed"`.
+The progress table SHALL be populated from authoritative artifact reconstruction when no unacknowledged run is attached and from the matching native run snapshot while one exists. Subject-start, conversion-status, warning, and parser-failure events MAY enrich provisional running details for the attached run. Subject-completion and global-completion parser events SHALL NOT set authoritative `completed` status. A subject SHALL display completed only after native verification reports it eligible and committed, or after project artifact reconstruction verifies its committed completion evidence.
+
+#### Scenario: Table shows all subjects during preparation
+
+- **WHEN** a reserved run enters `Preparing`
+- **THEN** the table SHALL list its immutable selected subjects as pending before process output arrives
+
+#### Scenario: Subject completion output arrives early
+
+- **WHEN** a subject-completion parser event arrives while the native snapshot remains `Running`
+- **THEN** the row SHALL remain provisional and SHALL not become authoritatively completed
+
+#### Scenario: Final snapshot reconciles rows
+
+- **WHEN** native finalization reports committed, failed, cancelled, or interrupted subject outcomes
+- **THEN** the table SHALL replace provisional states with those authoritative outcomes
 
 #### Scenario: Table shows all subjects before MATLAB starts
 
-- **WHEN** the user clicks "Run Import" and import phase enters `"preparing"`
-- **THEN** the progress table lists all subjects with status "pending" before any MATLAB output arrives
+- **WHEN** the reserved run enters `Preparing`
+- **THEN** the progress table SHALL list every selected subject as pending before process output arrives
 
 #### Scenario: Subject starts processing
 
-- **WHEN** a `subject_start` event arrives for subject "GOOD"
-- **THEN** `importProgress["GOOD"].status` transitions from `"pending"` to `"running"`
+- **WHEN** a matching run event reports subject `GOOD` started
+- **THEN** its provisional row SHALL transition from pending to running without changing terminal authority
 
 ### Requirement: DataPar state in project file schema
 
@@ -226,14 +246,48 @@ A missing or unreadable DICOM source SHALL NOT prevent the project from opening.
 
 ### Requirement: Complete import hydration
 
-Opening a project SHALL replace the complete import runtime slice with validated project values over import defaults. Missing optional mapping or UI fields SHALL apply defaults. Session-only BIDS review state, logs, errors, progress, running flags, and selections SHALL reset before the new project's values are exposed.
+Opening a project SHALL first reset the complete import runtime slice, then hydrate validated project values, then reconcile any native replayable import run before controls become available. Missing optional mapping or UI fields SHALL apply defaults. Session-only logs, parser errors, provisional progress, run identity, and listener state SHALL not leak from a prior project. Persisted `preparing`, `running`, `finalizing`, or `cancelling` phases SHALL not be trusted without a matching native run.
+
+#### Scenario: Persisted running phase has no native run
+
+- **WHEN** a project hydrates with a legacy nonterminal phase but native discovery finds no matching run or recovery record
+- **THEN** runtime state SHALL normalize to `interrupted` or `idle` as reported by native reconciliation and SHALL not claim active work
+
+#### Scenario: Terminal replay overrides stale persistence
+
+- **WHEN** project persistence says running or failed but native discovery returns a matching replayable completed run
+- **THEN** the store SHALL reconcile to completed and persist that exact terminal result before acknowledgement
 
 #### Scenario: Sparse project follows populated import state
 
-- **WHEN** project A has populated mappings, logs, progress, and BIDS review state and project B omits optional import fields
-- **THEN** project B SHALL expose import defaults and SHALL contain none of A's state
+- **WHEN** project A has attached run state, logs, and progress and project B omits optional import fields
+- **THEN** project B SHALL expose defaults plus only its own native reconciliation result and SHALL contain none of A's state
 
 #### Scenario: Persisted import state belongs to project B
 
-- **WHEN** project B contains valid persisted mappings and import UI state
-- **THEN** the import store SHALL replace its persisted slice with B's values and reset all non-persisted fields
+- **WHEN** project B contains valid persisted import mapping and terminal UI state
+- **THEN** hydration SHALL expose B's values plus only B's native reconciliation and SHALL retain no project-A runtime fields
+
+### Requirement: Import run discovery and attachment reconciliation
+
+The import store SHALL expose typed discovery, attachment, launch, cancellation, and acknowledgement clients. On Import Step 5 entry or route remount, it SHALL install one run-scoped listener set, discover native work for the active project, bind the returned run identity, and perform a post-listener attachment read. It SHALL accept updates only for the bound run and current ProjectLease. A terminal snapshot SHALL remain correlated through project synchronization and save; acknowledgement SHALL occur only after that exact terminal result persists successfully.
+
+#### Scenario: WebView reloads during running import
+
+- **WHEN** native ownership remains `Running` after frontend runtime state is reset
+- **THEN** discovery and attachment SHALL restore the running phase and subject progress without starting another run
+
+#### Scenario: Run exits during attachment
+
+- **WHEN** exit occurs between discovery and the post-listener attachment read
+- **THEN** the later snapshot SHALL reconcile `Finalizing` or terminal state and no completion shall be missed
+
+#### Scenario: Delayed old snapshot arrives
+
+- **WHEN** a snapshot belongs to another run or an expired ProjectLease
+- **THEN** the store SHALL discard it without changing progress, phase, persistence, or controls
+
+#### Scenario: Terminal save and acknowledgement succeed
+
+- **WHEN** a matching terminal snapshot is synchronized and saved successfully
+- **THEN** the store SHALL acknowledge that run and retain the persisted terminal UI state

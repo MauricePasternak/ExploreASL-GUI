@@ -69,99 +69,137 @@ The serialized frontend project transition SHALL set the candidate native active
 
 ### Requirement: Native-owned staging post-processing
 
-Every public IPC command that mutates import staging or relocates import output SHALL derive canonical project and staging roots from the current `AppState.active_project_root` and the current `ImportState.project_root`/`ImportState.staging_root` ownership record created by a successful import reservation. `clean_import_status` SHALL derive failed subjects from native import results; `move_import_output` SHALL derive succeeded subjects from native import results; neither command SHALL accept project-root, staging-root, or subject-list fields from IPC. `copy_lock_files` SHALL accept only a retry subset after validating safe subject components and membership in native succeeded subjects. For nonempty `run_import_pipeline.subjectsToPreserve`, a single reservation operation SHALL hold current active-project and import ownership while it requires matching retained `Terminal` ownership, safe components, owned/non-failed subjects, membership in native `succeeded_subjects`, and portable-key disjointness from the current run `subjectList`, then replaces ownership. The system SHALL copy only its authorized immutable subset after staging recreation. All three commands and the reservation operation SHALL reject no active project, absent or malformed ownership, active/import canonical-root mismatch, staging-root symlinks, unsafe subjects, retry-preserve/current-run overlap, and subjects outside the owned result set before filesystem mutation.
+Every public operation that mutates import staging, verifies completion, cleans failed status, or relocates import output SHALL derive canonical project and staging roots from the active project and the matching native import run. Caller-supplied roots, result subject lists, frontend progress, persisted UI phase, and parser-only completion events SHALL NOT authorize mutation or success. Retry preservation SHALL accept only a safe subset of subjects verified as committed by the prior terminal run and disjoint from the current selected subject scope.
 
-Native import ownership SHALL expose explicit `Idle`, `Preparing`, `Running`, and `Terminal` lifecycle states. Reservation SHALL enter `Preparing`; successful spawn SHALL atomically enter `Running` before native emits `ImportPrepareComplete`. A spawned child SHALL be supervisor-owned before that event; if readiness emission fails, native SHALL terminate and reap the matching child, remove prepared staging, and reset only matching generation ownership. Stop SHALL validate a matching Running PID and hold matching ownership through platform signal, bounded SIGTERM wait, optional force-kill, and final wait. It SHALL set `termination_requested_for` only after signal success and retain it only when the complete Stop operation succeeds; any signal, force-kill, or timeout failure SHALL clear only the matching generation/PID marker before releasing ownership, preserving a later correlated nonzero `MatlabExitError`. The process supervisor SHALL confirm process exit and atomically enter `Terminal` for the matching ownership generation before emitting a frontend terminal event that can invoke post-processing. Raw output, parser events, readiness, completion, and exit-error emissions SHALL check matching generation while ownership remains locked through emission. `clean_import_status`, `move_import_output`, and `copy_lock_files` SHALL reject `Preparing` and `Running` ownership regardless of any partial succeeded/failed result lists. `move_import_output` with non-debug staging cleanup SHALL delete staging only in `Terminal`, then reset the complete ownership record to `Idle` only after successful relocation and deletion. Debug preservation and no-cleanup relocation SHALL retain terminal ownership for retry/inspection. A later reservation SHALL be permitted to replace retained terminal ownership; each reservation SHALL have a monotonic generation, and late supervisor/stop cleanup from an older generation SHALL not mutate newer ownership. Preparation/spawn rollback and successful project shutdown SHALL reset ownership coherently.
+Native import ownership SHALL expose `Idle`, `Preparing`, `Running`, `Finalizing`, `Completed`, `Failed`, `Cancelling`, `Cancelled`, and `Interrupted` lifecycle states. Reservation SHALL enter `Preparing`; successful spawn SHALL enter `Running`; confirmed process exit SHALL leave `Running` before finalization begins. The native supervisor SHALL own output draining, process wait, completion verification, failed-lock cleanup, transactional relocation, and terminal classification. Every state mutation, event, cancellation, finalization step, and cleanup SHALL require the matching native run identity and ownership generation. Public post-processing commands that let the frontend initiate or classify finalization SHALL be removed.
 
-Before listener setup and invocation, the frontend SHALL generate a non-empty `runRequestId` and submit it with `run_import_pipeline`. Native SHALL retain that opaque correlation value with its authoritative ownership generation. Every import event capable of mutating frontend run state—`ImportPrepareComplete`, raw output, structured parser status/progress/failure/completion, terminal success, and `MatlabExitError`—SHALL carry camelCase `runRequestId` and `ownershipGeneration`. Frontend listeners SHALL reject missing or mismatched correlation fields, bind a native generation only from a matching request ID, reject later generation mismatches, and clear the binding on terminal or listener teardown. A frontend PID cache SHALL be scoped to that request ID, cleared at start and terminal/cancel teardown, populated only by a current running request response, and never authorize a later run's Stop action.
+Finalization SHALL process only subjects from the immutable selected scope. A failed run MAY commit subjects with verified fresh completion evidence, but the run SHALL become `Completed` only when process exit is successful, every selected subject has verified fresh completion evidence, every selected subject relocation commits, and required staging cleanup completes. Otherwise it SHALL expose a structured `Failed`, `Cancelled`, or `Interrupted` result while retaining staging and recovery evidence required for retry or diagnosis. Debug preservation SHALL retain staging after success without weakening completion verification.
 
-#### Scenario: Foreign post-processing root is submitted
+#### Scenario: Frontend submits post-processing authority
 
-- **WHEN** a caller invokes public post-processing IPC while native active-project and import ownership roots do not canonically match
-- **THEN** the command SHALL reject before mutation and foreign staging/project sentinel content SHALL remain unchanged
+- **WHEN** a caller supplies a project root, staging root, subject result list, or requested terminal outcome
+- **THEN** native import APIs SHALL reject or ignore that authority and SHALL derive finalization only from the matching run record and owned filesystem evidence
 
-#### Scenario: Retry subject is not owned
+#### Scenario: A subject completes before process exit
 
-- **WHEN** a retry lock-copy request contains traversal syntax or a subject not recorded as succeeded by the owned import
-- **THEN** the command SHALL reject before creating or copying lock files
+- **WHEN** progress output or a completion lock appears for one selected subject while the import process is still running
+- **THEN** the run SHALL remain `Running` and project output SHALL remain unchanged
 
-#### Scenario: Run retry preserve authorization fails
+#### Scenario: Process exits and finalization begins
 
-- **WHEN** `subjectsToPreserve` is nonempty but no matching retained terminal ownership exists, ownership belongs to another project or a nonterminal run, any requested subject is traversal, failed, unowned, or not in native succeeded results, or it equals a current `subjectList` item under portable comparison
-- **THEN** Run Import SHALL reject before replacing ownership or changing staging content
+- **WHEN** the matching import process exit is confirmed
+- **THEN** native ownership SHALL enter `Finalizing` before completion verification, cleanup, or relocation and SHALL emit an authoritative run snapshot
 
-#### Scenario: Stop signal fails
+#### Scenario: Partial process success
 
-- **WHEN** a matching Running import PID cannot receive its platform termination signal
-- **THEN** native SHALL retain matching Running ownership without termination intent, and a later nonzero exit SHALL emit its correlated `MatlabExitError`
-
-#### Scenario: Stop timeout or force-kill fails
-
-- **WHEN** SIGTERM times out and force-kill fails, or force-kill cannot be confirmed before its final timeout
-- **THEN** native SHALL clear only the matching generation/PID termination intent before the supervisor can decide process exit, and a later nonzero exit SHALL emit its correlated `MatlabExitError`
-
-#### Scenario: A subject completes before sibling process exit
-
-- **WHEN** native results record a completed subject while the import lifecycle remains `Preparing` or `Running`
-- **THEN** every public post-processing command SHALL reject and `move_import_output(cleanupStaging=true, debugMode=false)` SHALL leave the staging tree unchanged
-
-#### Scenario: Terminal event reaches frontend
-
-- **WHEN** the import process exits and native output indicates completion or failure
-- **THEN** native ownership SHALL transition to `Terminal` before the terminal frontend event is emitted, allowing its post-processing invoke to pass lifecycle gating
-
-#### Scenario: Readiness event races command response
-
-- **WHEN** native has spawned and entered `Running`, `ImportPrepareComplete` reaches the frontend, and the Run command response carrying the PID is still pending
-- **THEN** Stop SHALL invoke native active-import cancellation; the frontend SHALL remain running and locked until native cancellation succeeds
-
-#### Scenario: Replaced generation finishes late
-
-- **WHEN** a previous generation's supervisor exits after newer ownership has reserved the import state
-- **THEN** it SHALL not emit raw, parsed, completion, or exit-error events to the newer frontend run
-
-#### Scenario: Queued prior request readiness reaches a same-project rerun
-
-- **WHEN** an old `ImportPrepareComplete` is queued behind a newer same-project Run Import request
-- **THEN** the newer listener SHALL reject it because its `runRequestId` differs and SHALL not bind its `ownershipGeneration` or change frontend phase
-
-#### Scenario: Delayed old PID response follows cancellation and rerun
-
-- **WHEN** a cancelled run's command response returns after a newer Run Import request has started
-- **THEN** the frontend SHALL not cache that PID, and Stop on the newer run SHALL use native active-import cancellation until a PID carrying the newer request ID is received
+- **WHEN** some selected subjects have verified fresh completion evidence and others do not
+- **THEN** native finalization SHALL relocate only verified subjects, preserve failed-subject staging, and record a failed terminal result with per-subject outcomes
 
 #### Scenario: Terminal cleanup succeeds
 
-- **WHEN** terminal non-debug output relocation with staging cleanup succeeds
-- **THEN** native ownership SHALL reset all roots, subjects, results, PID, lifecycle, and generation fields to idle defaults
+- **WHEN** all selected subjects verify and commit, required non-debug staging cleanup succeeds, and the terminal record is durably written
+- **THEN** the run SHALL become `Completed` while retaining a replayable terminal snapshot until acknowledgement
+
+#### Scenario: Replaced run finishes late
+
+- **WHEN** an obsolete supervisor, event, cancellation response, or finalization callback runs after a newer terminal run has been acknowledged and replaced
+- **THEN** its run identity mismatch SHALL prevent every lifecycle, result, filesystem, and frontend-visible mutation
+
+#### Scenario: Foreign post-processing root is submitted
+
+- **WHEN** a caller attempts finalization or mutation against a root that does not match native active-project and run ownership
+- **THEN** native code SHALL reject it before mutation and foreign project or staging content SHALL remain unchanged
+
+#### Scenario: Retry subject is not owned
+
+- **WHEN** retry preservation names an unsafe subject or one not verified and committed by the prior owned run
+- **THEN** native code SHALL reject the request before copying lock files
+
+#### Scenario: Run retry preserve authorization fails
+
+- **WHEN** preserved subjects are failed, unverified, unowned, overlap the selected run scope, or belong to another project/run
+- **THEN** reservation SHALL fail before ownership replacement, staging mutation, or process spawn
+
+#### Scenario: Stop signal fails
+
+- **WHEN** native cancellation cannot signal the process owned by the matching `Running` run
+- **THEN** the run SHALL retain actionable ownership, SHALL not claim cancellation, and a later exit SHALL remain eligible for normal finalization
+
+#### Scenario: Stop timeout or force-kill fails
+
+- **WHEN** graceful termination times out and force termination fails or cannot be confirmed
+- **THEN** the run SHALL remain nonterminal with structured cancellation failure and SHALL preserve matching supervisor ownership
+
+#### Scenario: A subject completes before sibling process exit
+
+- **WHEN** one selected subject produces completion evidence while the process remains active for sibling subjects
+- **THEN** the run SHALL remain `Running` and every public project-output mutation SHALL remain unavailable
+
+#### Scenario: Terminal event reaches frontend
+
+- **WHEN** native finalization durably reaches a terminal result
+- **THEN** native code SHALL update ownership before emitting the terminal snapshot so frontend reconciliation observes the authoritative state
+
+#### Scenario: Readiness event races command response
+
+- **WHEN** `Running` readiness is emitted before the launch response reaches the frontend
+- **THEN** attachment or the launch snapshot SHALL reconcile the same run and cancellation SHALL use its native run identity rather than a PID cache
+
+#### Scenario: Replaced generation finishes late
+
+- **WHEN** a previous generation's supervisor finishes after a newer run becomes current
+- **THEN** generation and run identity guards SHALL prevent it from changing the newer run or emitting accepted events
+
+#### Scenario: Queued prior request readiness reaches a same-project rerun
+
+- **WHEN** queued readiness from an obsolete request reaches listeners bound to a newer same-project run
+- **THEN** the listener SHALL reject its run identity and SHALL not change lifecycle or controls
+
+#### Scenario: Delayed old PID response follows cancellation and rerun
+
+- **WHEN** a delayed legacy launch response or obsolete run snapshot arrives after cancellation and a newer reservation
+- **THEN** the frontend SHALL ignore it and Stop SHALL remain bound to the newer native run identity
 
 #### Scenario: Previous supervisor finishes after a new reservation
 
-- **WHEN** a retained terminal ownership is replaced and a previous supervisor later finishes cleanup
-- **THEN** its generation mismatch SHALL prevent it from changing the newer import lifecycle, PID, roots, or results
+- **WHEN** an obsolete supervisor completes cleanup after a newer reservation exists
+- **THEN** it SHALL not change newer lifecycle, subject evidence, process ownership, staging ownership, or terminal result
 
 ### Requirement: Import execution pipeline
 
-The system SHALL provide a single Rust command `run_import_pipeline(staging_root, staging_entries, sourcestructure_json, studypar_json, execution_profile, subject_list, subjects_to_preserve)` that atomically performs: (1) call `execution_profile.validate()` — if validation fails, return an error without performing any destructive operations; (2) delete `.easl_staging/` if it exists; (3) create the standardized 4-level symlink tree at `.easl_staging/sourcedata/` from `staging_entries`; (4) write clean ExploreASL `sourcestructure.json` and `studyPar.json` configs to `.easl_staging/`; (5) dispatch on the profile `type` and spawn the appropriate command (for `matlab` type: `matlab -batch "addpath('<exploreAslPath>'); ExploreASL('<staging_root>', [1,1,0], 0, 0)"` using the profile's `matlabPath` and `exploreAslPath`); (6) return the process PID on success or an error string on failure. The `staging_entries` parameter contains the GUI staging mappings with subject, session, run, modality, and source path. The `subject_list` parameter provides known subject names for stdout pattern matching. The command SHALL emit a `ImportPrepareComplete` event after steps 2-4 succeed and before the subprocess is spawned.
+Import execution SHALL use a native-generated run identity. Reservation SHALL atomically bind the active project, immutable selected subjects, confirmed relocation plan, execution policy, and a durable preparation record before staging mutation. Launch SHALL accept that exact `Preparing` run identity, repeat authoritative staging preflight, rebuild the standardized four-level staging tree, write validated ExploreASL configuration, establish a fresh staging-generation marker and absent selected-subject completion baseline, preserve only authorized unselected locks, spawn the selected execution profile, and return an authoritative run snapshot. Invalid, stale, foreign-project, duplicate, or non-`Preparing` run identities SHALL be rejected without mutating files or another run.
 
-**Preparation-phase validation**: Before performing any destructive operations (deleting `.easl_staging/`, creating symlinks, writing configs), the command SHALL call `execution_profile.validate()`. Only after validation passes SHALL the command proceed to staging directory setup. This provides a final safety net even though the frontend validates profiles on selection and before calling the command.
-
-Prior to spawning the subprocess, lock files for selected subjects SHALL be deleted and lock files for unselected fresh subjects SHALL be preserved via `copyLockFilesForRetry`.
+Frontend listener registration SHALL occur after reservation and before launch. Attachment after listener registration SHALL return a fresh snapshot so preparation, launch, or exit that races listener setup cannot be missed. Launch failures after exact admission SHALL be recorded against that run and returned as authoritative failed snapshots.
 
 #### Scenario: Successful pipeline start
 
-- **WHEN** `run_import_pipeline` is called with valid paths and a valid execution profile
-- **THEN** the staging directory is created, configs are written, MATLAB is spawned, and the PID is returned
+- **WHEN** a reserved run with valid staging input and execution profile is launched
+- **THEN** native code SHALL prepare staging, spawn the process, transition the run to `Running`, and return the matching snapshot
+
+#### Scenario: Authoritative preflight fails at launch
+
+- **WHEN** current staging input no longer passes preflight for the reserved run
+- **THEN** the run SHALL become `Failed`, no process SHALL spawn, and existing project output SHALL remain unchanged
+
+#### Scenario: Launch uses an obsolete run
+
+- **WHEN** launch names a missing, acknowledged, replaced, or foreign-project run identity
+- **THEN** native code SHALL reject it without changing current ownership, staging, project output, or process state
+
+#### Scenario: Process exits during listener setup
+
+- **WHEN** the process reaches finalization between frontend listener registration and attachment
+- **THEN** the post-listener attachment snapshot SHALL expose `Finalizing` or the resulting terminal state
 
 #### Scenario: Symlink creation failure
 
-- **WHEN** `run_import_pipeline` is called and symlink creation fails (e.g., permission denied)
-- **THEN** the command returns an error string, no MATLAB process is spawned, and the frontend stays in `idle` state
+- **WHEN** staging tree creation fails for an admitted run
+- **THEN** native code SHALL durably fail that run, spawn no process, and preserve existing project output
 
 #### Scenario: MATLAB not found
 
-- **WHEN** `run_import_pipeline` is called with an execution profile whose `matlabPath` does not exist
-- **THEN** the command returns an error string describing the missing executable
+- **WHEN** the selected MATLAB execution profile points to a missing executable
+- **THEN** launch SHALL return a structured failed snapshot describing the missing executable and SHALL spawn no process
 
 ### Requirement: Import run subject scope integrity
 
@@ -189,28 +227,37 @@ Each import execution request SHALL declare a non-empty subject list and SHALL c
 
 ### Requirement: Real-time stdout streaming
 
-The system SHALL stream MATLAB subprocess stdout and stderr to the frontend via Tauri events. Two event types SHALL be emitted: `ImportStructuredEvent` with typed payloads (`subject_start`, `subject_complete`, `import_failed`, `import_complete`, `dcm2nii_status`) and `ImportRawEvent` with the raw line string. Every line from MATLAB stdout and stderr SHALL be emitted as `ImportRawEvent`. Structured events SHALL be parsed from stdout using the following regex patterns:
-
-- `subject_start`: `Subject: (\w+), Module: xASL_module_Import`
-- `subject_complete`: `Job-iteration \d+ stopped at .+ and took \d+ seconds`
-- `import_failed`: `NII2BIDS failed for (.+)|DCM2NII failed for (.+)`
-- `import_complete`: `xASL_module_Import completed 100%`
-- `dcm2nii_status`: `status: (\d+)`
+The system SHALL stream import stdout and stderr as run-correlated raw and structured events. Subject start, subject completion, parser failure, global completion text, and conversion status SHALL update diagnostics or provisional progress only. Every event SHALL identify the matching native run and ownership generation, and the frontend SHALL discard events that do not match its attached run. No stdout text, including `xASL_module_Import completed 100%`, SHALL independently transition a subject or run to authoritative completion.
 
 #### Scenario: Subject starts processing
 
-- **WHEN** MATLAB outputs `Subject: BADDIE, Module: xASL_module_Import`
-- **THEN** a `subject_start` event is emitted with `subject: "BADDIE"`
+- **WHEN** matching run output identifies a selected subject entering Import
+- **THEN** a run-correlated progress event SHALL report that subject as running
+
+#### Scenario: Parser reports subject completion
+
+- **WHEN** output contains a subject completion line before native finalization
+- **THEN** the event MAY update provisional progress but SHALL NOT establish completed status or authorize relocation
+
+#### Scenario: Global completion text is missing
+
+- **WHEN** the process exits successfully and every selected subject has valid fresh completion artifacts but the global completion text was not captured
+- **THEN** native finalization SHALL determine the result from process and artifact evidence rather than fail solely because a parser event was absent
+
+#### Scenario: Stale event reaches a replacement run
+
+- **WHEN** a queued raw or structured event identifies an obsolete run or ownership generation
+- **THEN** native and frontend state SHALL remain unchanged
 
 #### Scenario: NII2BIDS failure detected
 
-- **WHEN** MATLAB outputs `NII2BIDS failed for perfusion image of BADDIE_ses-01_run-1` followed by `Message: The length of the vector LabelingDuration...`
-- **THEN** a `import_failed` event is emitted with the subject matched against the known subject list and the full message captured
+- **WHEN** matching output reports NII2BIDS failure for a selected subject
+- **THEN** a run-correlated diagnostic event SHALL capture the subject, step, and message while native artifact verification retains terminal authority
 
 #### Scenario: Import completes
 
-- **WHEN** MATLAB outputs `xASL_module_Import completed 100%`
-- **THEN** an `import_complete` event is emitted
+- **WHEN** matching output contains `xASL_module_Import completed 100%`
+- **THEN** a run-correlated diagnostic event SHALL be emitted without independently completing the run
 
 ### Requirement: Process lifecycle management
 
@@ -388,17 +435,27 @@ On retry, the system SHALL: (1) delete `.easl_staging/` entirely, (2) rebuild sy
 
 ### Requirement: MATLAB exit code handling
 
-If the MATLAB process exits with a non-zero exit code, all subjects currently in `"running"` status SHALL be marked as failed. This catches crashes where no per-subject failure pattern was parsed from stdout.
+The native supervisor SHALL record the matching process exit status before completion classification. A nonzero exit SHALL prevent a fully successful run even if parser output claimed completion. A zero exit SHALL NOT establish success unless every selected subject also passes fresh completion verification and required relocation commits. Per-subject parser failures SHALL enrich diagnostics but SHALL NOT substitute for native artifact verification.
 
 #### Scenario: MATLAB crashes mid-import
 
-- **WHEN** MATLAB exits with code 1 during import (e.g., out of memory)
-- **THEN** any subject with `importProgress` status `"running"` is marked as `"failed"` with error "MATLAB process exited unexpectedly"
+- **WHEN** the process exits nonzero with some subjects lacking verified completion evidence
+- **THEN** those subjects and the run SHALL be failed, while any independently verified subject MAY be relocated under the partial-success contract
+
+#### Scenario: MATLAB exits zero without complete targets
+
+- **WHEN** the process exits successfully but any selected subject lacks valid fresh completion evidence
+- **THEN** the run SHALL become `Failed` and SHALL identify each missing or invalid target
+
+#### Scenario: MATLAB exits zero with complete targets
+
+- **WHEN** the process exits successfully and all selected subjects verify and relocate successfully
+- **THEN** the run SHALL become `Completed`
 
 #### Scenario: MATLAB exits normally with zero code
 
-- **WHEN** MATLAB exits with code 0 after processing all subjects
-- **THEN** normal completion flow proceeds; failure detection relies on per-subject stdout parsing
+- **WHEN** the process exits with code zero
+- **THEN** native finalization SHALL verify every selected target and relocation outcome before choosing `Completed` or `Failed`
 
 ### Requirement: Subprocess kill on app exit
 
@@ -528,3 +585,77 @@ When `uiState.import.bidsReviewConfirmed = true` and user revisits Import on a B
 
 - **WHEN** user with `bidsReviewConfirmed = true` navigates back to Import on a BIDS-direct project
 - **THEN** `ImportPage` renders `BIDSReviewPanel` with persisted summary and `[Re-scan BIDS]`
+
+### Requirement: Authoritative import run snapshot
+
+Native state SHALL own at most one current import run containing a session-unique `runId`, canonical project ownership, immutable selected subjects, lifecycle, start and update times, execution profile identity, ownership generation, per-subject evidence and outcome, process-exit evidence, relocation outcome, structured errors, and terminal result. Snapshots and lifecycle events SHALL use camelCase fields and SHALL not expose absolute project paths. Frontend PID caches, listener presence, parser state, and persisted project UI fields SHALL NOT be authoritative run identity or lifecycle sources.
+
+#### Scenario: Current run is queried
+
+- **WHEN** the frontend queries import work for the active project
+- **THEN** native code SHALL return the matching non-acknowledged run snapshot or no run without mutating lifecycle or files
+
+#### Scenario: Snapshot reports finalization failure
+
+- **WHEN** completion verification or relocation fails for a matching run
+- **THEN** its terminal snapshot SHALL include failed subject evidence and an actionable structured error without claiming completion
+
+#### Scenario: Foreign project queries a run
+
+- **WHEN** attachment names a run not owned by the active project
+- **THEN** native code SHALL reject attachment without revealing absolute path data or mutating either project
+
+### Requirement: Fresh import completion verification
+
+For each selected subject, native finalization SHALL verify a regular, non-symlink `999_ready.status` under the canonically owned staging lock directory, prove that it belongs to the current rebuilt staging generation and was absent before launch, and require the nonempty staged subject rawdata needed by relocation. Completion artifacts copied for unselected retry subjects SHALL never satisfy a selected subject. Missing, stale, malformed, symlinked, escaping, or wrong-generation evidence SHALL fail that subject without deleting project output.
+
+#### Scenario: Fresh selected-subject artifact exists
+
+- **WHEN** a selected subject produces an owned completion artifact in the current staging generation and nonempty staged rawdata
+- **THEN** native finalization SHALL classify it as eligible for relocation
+
+#### Scenario: Stale completion artifact survives unexpectedly
+
+- **WHEN** a selected subject's completion path predates the current baseline or belongs to another staging generation
+- **THEN** native finalization SHALL reject it as stale and SHALL not use it to authorize relocation or completion
+
+#### Scenario: Completion artifact is a symlink
+
+- **WHEN** a selected subject's completion path or parent resolves through a symlink
+- **THEN** verification SHALL fail closed without following or deleting the unsafe path
+
+#### Scenario: Ready lock lacks staged rawdata
+
+- **WHEN** a fresh ready lock exists but the selected subject has no nonempty staged rawdata replacement
+- **THEN** that subject and the run SHALL fail before its project destination changes
+
+### Requirement: Durable finalization and terminal replay
+
+Before import preparation mutates staging, native code SHALL atomically persist a versioned project-local run record containing enough relative, validated ownership and plan evidence to classify interrupted work and resume idempotent finalization. It SHALL durably record process exit evidence before treating it as finalization authority and durably record terminal outcome before notifying the frontend. Live PID values SHALL NOT be trusted after native application restart.
+
+On project activation, a `Preparing` or `Running` record without a still-owned in-process supervisor SHALL become `Interrupted` and preserve staging. A valid `Finalizing` record with durable exit and completion evidence SHALL resume safe cleanup/relocation using the existing relocation journal. A terminal record SHALL be replayed until the frontend has reconciled and successfully persisted matching project state, then explicitly acknowledges that exact run. Acknowledgement SHALL be idempotent and SHALL never remove unresolved recovery evidence.
+
+#### Scenario: Application stops during running import
+
+- **WHEN** activation finds a durable `Running` record but no trustworthy native supervisor ownership remains
+- **THEN** the run SHALL become `Interrupted`, staging SHALL remain available, and no completion SHALL be inferred from leftover output alone
+
+#### Scenario: Application stops during finalization
+
+- **WHEN** activation finds valid durable process-exit and finalization evidence for an unfinished run
+- **THEN** native recovery SHALL resume or complete idempotent verification and relocation before exposing the authoritative result
+
+#### Scenario: Frontend misses terminal event
+
+- **WHEN** finalization reaches a durable terminal result while no frontend listener is active
+- **THEN** later discovery or attachment SHALL return the same terminal snapshot without repeating committed relocation
+
+#### Scenario: Project persistence fails
+
+- **WHEN** the frontend applies a terminal snapshot but saving matching project completion state fails
+- **THEN** it SHALL not acknowledge the run and the terminal snapshot SHALL remain replayable
+
+#### Scenario: Matching terminal result is acknowledged
+
+- **WHEN** matching terminal state has been persisted and the frontend acknowledges the exact run
+- **THEN** native code SHALL safely retire replay metadata while preserving committed project artifacts and any required diagnostic or recovery data

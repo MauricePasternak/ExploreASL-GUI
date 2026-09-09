@@ -39,81 +39,128 @@ Step 4 "Preview Import" SHALL display the staging mapping table, config JSON pre
 
 ### Requirement: Step locking during execution
 
-When step 5 is in `preparing` or `running` state, step 4 SHALL be locked (user cannot navigate back), navigation to Parameters SHALL be locked, and execution profile, subject selection, Start, and retry controls SHALL be disabled. When step 5 transitions to `failed` or `cancelled`, step 4 and those controls SHALL unlock so the user can edit metadata before retrying. When step 5 is `completed`, steps 0-4 remain accessible but re-running import requires explicit confirmation.
+When the attached native import run is `preparing`, `running`, `finalizing`, or `cancelling`, Step 4, navigation to Parameters, execution profile, subject selection, Start, and retry controls SHALL remain locked. Stop SHALL be available only for a cancellable matching run. Finalization SHALL show non-cancellable verification/relocation progress and SHALL not unlock controls because the child process exited. `Failed`, `Cancelled`, and `Interrupted` outcomes SHALL unlock correction and retry controls after authoritative reconciliation. `Completed` SHALL allow earlier steps while requiring existing explicit re-run confirmation.
 
 #### Scenario: Import running, user tries to go back
 
-- **WHEN** step 5 is in `running` state and user clicks "Back: Preview"
-- **THEN** navigation is blocked, the button is disabled or shows a warning
+- **WHEN** the attached run is `Running` and the user tries to leave Step 5
+- **THEN** navigation SHALL remain blocked
+
+#### Scenario: Process exits into finalization
+
+- **WHEN** the attached run changes from `Running` to `Finalizing`
+- **THEN** Step 5 SHALL remain locked and SHALL show native verification/relocation activity rather than success
+
+#### Scenario: Import fails authoritatively
+
+- **WHEN** the attached run reaches `Failed`
+- **THEN** Step 4 and retry controls SHALL unlock and structured native failure details SHALL remain visible
+
+#### Scenario: Import is interrupted
+
+- **WHEN** project recovery classifies a prior run as `Interrupted`
+- **THEN** Step 5 SHALL show the interruption, preserve available diagnostics, and permit a safe new attempt
 
 #### Scenario: Import failed, user edits metadata
 
-- **WHEN** step 5 transitions to `failed` state
-- **THEN** step 4 is unlocked and the user can navigate back to edit metadata
+- **WHEN** the attached run reaches `Failed`
+- **THEN** Step 4 SHALL unlock and the user SHALL be able to edit metadata before retrying
 
 #### Scenario: Import completed, user goes back to step 0
 
-- **WHEN** step 5 is `completed` and user navigates to step 0
-- **THEN** navigation is allowed, but step 5 shows a summary with "Next: Parameters" button
+- **WHEN** the attached run is `Completed` and the user navigates to step 0
+- **THEN** navigation SHALL be allowed and Step 5 SHALL retain its terminal summary and Parameters action
 
 #### Scenario: Import preparation locks Step 5 controls
 
-- **WHEN** step 5 is in `preparing` state while native staging and listener setup are deferred
-- **THEN** Back, Next, execution-profile, subject-selection, Start, and retry controls SHALL remain disabled until preparation fails, is cancelled, or transitions to `running`
+- **WHEN** the reserved native run is `Preparing`
+- **THEN** Back, Next, profile, subject selection, Start, and retry controls SHALL remain disabled until authoritative transition or failure
 
 ### Requirement: Field-level staging validation feedback
 
-The Import mapping and preview UI SHALL show an aggregate blocking summary and field-level feedback for staging validation issues. Each issue SHALL identify a stable error code, the affected staging entry when applicable, the affected Subject, Session, Run, Modality, source, or destination field, a corrective message, and any conflicting entry. Suggested values SHALL require explicit user acceptance. The summary, inline errors, and suggestion controls SHALL expose stable `data-testid` attributes.
+The Import mapping and preview UI SHALL show aggregate and field-level staging validation feedback with stable error codes, affected entries and fields, corrective messages, conflicting entries, explicit suggestion acceptance, and stable `data-testid` attributes. Native preflight state SHALL remain session-only and scoped to the current ProjectLease and plan fingerprint.
 
-Native preflight state SHALL remain session-only. Each request SHALL use a monotonic requestId, captured ProjectLease, and current plan fingerprint. Step 5 SHALL unlock only for the newest request whose fingerprint and lease remain current while work admission is open. Run Import SHALL capture the same lifecycle context before asynchronous setup, register its complete asynchronous operation as project work, and gate post-await PID, log, preflight-issue, and failure mutations on current lease, admission, and plan fingerprint. Restored projects SHALL return to Preview until a fresh native preflight succeeds.
-
-Run Import SHALL also create a distinct frontend `runRequestId` before listener setup and invocation. Listener correlation and the cached PID SHALL be scoped to that nonce: setup SHALL reject old queued events before binding native generation, and late responses from stopped or replaced runs SHALL not change phase, logs, validation, or PID state. Stop SHALL retain the locked running state until native stop succeeds.
-
-#### Scenario: Subject rename target is unsafe
-
-- **WHEN** a user enters an unsafe or BIDS-incompatible subject rename target
-- **THEN** the subject row SHALL display an inline correction message and the aggregate summary SHALL report that staging is blocked
-
-#### Scenario: Alias collision spans rows
-
-- **WHEN** two session or run aliases are collision-equivalent under portable comparison
-- **THEN** both affected rows SHALL identify the conflict and the summary SHALL explain that the destinations would collide
+Run Import SHALL first reserve a native run, then install run-scoped listeners, attach to close listener races, and launch only the exact reservation. Post-await responses and events SHALL mutate validation, logs, phase, and controls only when their native run identity and ProjectLease remain current. Restored projects SHALL return to Preview for new execution unless discovery finds matching active or replayable native work. Stop SHALL retain native lifecycle state until matching cancellation is confirmed.
 
 #### Scenario: Native preflight reports a source collision
 
-- **WHEN** native preflight finds two source files that resolve to one portable destination
-- **THEN** the preview SHALL identify both conflicting entries and SHALL keep execution disabled
+- **WHEN** launch-time preflight finds two source files resolving to one portable destination
+- **THEN** Step 5 SHALL show both current conflicts, remain non-running, and preserve project output
+
+#### Scenario: Reservation is replaced before launch
+
+- **WHEN** launch or its response names a stale native run
+- **THEN** Step 5 SHALL ignore the response and reconcile from current native discovery
 
 #### Scenario: User accepts a suggested correction
 
 - **WHEN** the user explicitly accepts a safe suggested identifier
-- **THEN** the editor SHALL apply that value and revalidate the complete staging plan
+- **THEN** the editor SHALL apply that value and revalidate the complete staging plan before another reservation
+
+#### Scenario: Subject rename target is unsafe
+
+- **WHEN** a subject rename target violates portable or BIDS label rules
+- **THEN** its row and aggregate summary SHALL show correction guidance and execution SHALL remain blocked
+
+#### Scenario: Alias collision spans rows
+
+- **WHEN** two session or run aliases collide under portable comparison
+- **THEN** both rows SHALL identify the conflict and execution SHALL remain blocked
 
 ### Requirement: Step 5 ImportExecution component
 
-Step 5 "Run Import Module" SHALL be implemented by a new `ImportExecution` component with the following sub-components: `ImportExecutionHeader` (state badge), `ImportExecutionControls` (Run/Stop/Retry buttons gated by state), `ImportProgressTable` (per-subject rows with status, step, duration, error), `ImportLogPanel` (scrollable monospace stdout log always visible below the table), and `ImportSummary` (succeeded/failed counts, "Next: Parameters" button on success).
+Step 5 SHALL display an authoritative lifecycle badge, run controls, per-subject status table, log panel, and terminal summary using the attached native run snapshot. It SHALL represent `Preparing`, `Running`, `Finalizing`, `Cancelling`, `Completed`, `Failed`, `Cancelled`, and `Interrupted` distinctly. Terminal summaries SHALL show verified/committed and failed subject counts plus structured completion-verification or relocation errors. Every component and state-specific control SHALL expose stable `data-testid` attributes.
 
-#### Scenario: Step 5 idle state
+#### Scenario: Step 5 has no native run
 
-- **WHEN** user first navigates to step 5
-- **THEN** the component shows "Run Import" button (enabled if MATLAB + ExploreASL configured), empty progress table, and empty log panel
+- **WHEN** discovery returns no active or replayable run
+- **THEN** Step 5 SHALL show idle reconstruction and permit Start only when existing validation and selection gates pass
 
-#### Scenario: Step 5 preparing state
+#### Scenario: Step 5 finalizing state
 
-- **WHEN** user clicks "Run Import" and Rust is creating staging tree and writing configs
-- **THEN** the state badge shows "Preparing...", "Run Import" and "Stop" buttons are disabled, log panel shows "Creating staging tree..."
-
-#### Scenario: Step 5 running state
-
-- **WHEN** MATLAB subprocess is active
-- **THEN** "Stop" button is enabled, progress table updates per subject in real-time, log panel scrolls with live stdout
+- **WHEN** the native run is verifying targets or relocating output
+- **THEN** the badge SHALL show finalization, mutation controls SHALL remain disabled, and the UI SHALL not present import as complete
 
 #### Scenario: Step 5 failed state
 
-- **WHEN** import completes with one or more subject failures
-- **THEN** progress table shows failed subjects with error details, "Retry Import" button is enabled, "Back: Metadata" button is enabled
+- **WHEN** native finalization returns failed subject evidence or relocation failure
+- **THEN** the table and summary SHALL show authoritative per-subject details and safe retry controls
 
 #### Scenario: Step 5 completed state
 
-- **WHEN** all subjects succeed
-- **THEN** progress table shows all subjects as succeeded, "Next: Parameters" button is enabled, summary shows success count
+- **WHEN** native finalization and project-state reconciliation complete successfully
+- **THEN** all selected subjects SHALL show committed completion and the Parameters action SHALL be enabled
+
+#### Scenario: Step 5 idle state
+
+- **WHEN** discovery completes with no native run and artifact reconstruction is ready
+- **THEN** Step 5 SHALL show Start, the reconstructed table, and logs with existing validation gates
+
+#### Scenario: Step 5 preparing state
+
+- **WHEN** a reserved run is preparing durable state and staging
+- **THEN** the badge SHALL show preparation and mutation/navigation controls SHALL remain disabled
+
+#### Scenario: Step 5 running state
+
+- **WHEN** the attached native run is `Running`
+- **THEN** Stop SHALL be enabled, matching progress SHALL update in real time, and logs SHALL remain visible
+
+### Requirement: Import Step 5 reattachment
+
+Entering or remounting Step 5 SHALL discover and attach to current native import work before enabling Start. A matching `Preparing`, `Running`, `Finalizing`, or `Cancelling` run SHALL restore locked active presentation. A replayable terminal run SHALL restore its terminal summary and complete persistence/acknowledgement. The UI SHALL never offer a second start merely because local listener or PID state was lost.
+
+#### Scenario: Route remount during running import
+
+- **WHEN** Step 5 remounts while native discovery reports a matching `Running` run
+- **THEN** it SHALL attach to that run, restore controls and progress, and SHALL not reserve another run
+
+#### Scenario: Route remount after missed completion event
+
+- **WHEN** Step 5 remounts after native finalization reached a replayable terminal result
+- **THEN** it SHALL render and reconcile that result without repeating relocation
+
+#### Scenario: Discovery is unresolved
+
+- **WHEN** native discovery or attachment fails
+- **THEN** Start SHALL remain disabled and the UI SHALL show an actionable reconciliation error rather than assume idle

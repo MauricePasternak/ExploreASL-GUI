@@ -51,22 +51,29 @@ If the recovery record is malformed, references an unsafe path that could affect
 
 ### Requirement: Transactional project transition
 
-The system SHALL validate a candidate project and classify its recoverable source references before changing the active project. If candidate validation fails, the current project and its runtime state SHALL remain active. After validation, the system SHALL stop project-owned work and listeners before resetting or hydrating state. If confirmed shutdown fails, the transition SHALL fail and the candidate SHALL NOT become active.
+The system SHALL validate a candidate project and classify its recoverable source references before changing the active project. After candidate validation and import-relocation recovery, it SHALL reconcile any durable native import run record before frontend hydration or normal output access. If candidate validation or authoritative recovery fails, the current project and runtime state SHALL remain active.
+
+Before replacing or closing an active project, the system SHALL prevent new project work, request cancellation of cancellable import/processing execution, wait for non-cancellable native finalization and registered persistence/acknowledgement work, stop listeners and watchers, and verify every owned resource outcome. A failed stop, unresolved finalization, unsafe recovery state, or unpersisted authoritative terminal result SHALL block transition rather than discard ownership or activate another project.
 
 #### Scenario: Candidate project is invalid
 
 - **WHEN** project A is active and the user tries to open malformed, unsupported, or unreadable project B
-- **THEN** project A and its runtime state SHALL remain active and project B SHALL NOT be hydrated
+- **THEN** project A and its runtime state SHALL remain active and project B SHALL not hydrate
+
+#### Scenario: Prior import is finalizing
+
+- **WHEN** project A has native import finalization in progress and the user requests project B
+- **THEN** the transition SHALL wait for finalization plus terminal reconciliation or fail without activating B
 
 #### Scenario: Prior work cannot stop
 
-- **WHEN** project A is active, project B is valid, and an import worker, processing worker, or lock watcher cannot be confirmed stopped
-- **THEN** project B SHALL NOT become active and the system SHALL show an actionable shutdown error
+- **WHEN** project A owns work that cannot be confirmed stopped, finalized, reconciled, or safely recoverable
+- **THEN** project B SHALL not become active and the system SHALL show an actionable transition error
 
 #### Scenario: Valid candidate replaces active project
 
-- **WHEN** project B validates and all project-A work and listeners stop successfully
-- **THEN** the system SHALL reset all project-scoped state before fully hydrating project B
+- **WHEN** project B validates, its durable recovery completes, and all project-A work and terminal persistence settle successfully
+- **THEN** the system SHALL reset all project-scoped state before fully hydrating and reconciling project B
 
 ### Requirement: Complete project-scoped reset and hydration
 
@@ -129,3 +136,34 @@ Recent-project state SHALL associate known project paths with project IDs while 
 
 - **WHEN** a path-only recent entry is missing and its project identity cannot be established
 - **THEN** the system SHALL leave it as a stale manually removable entry and SHALL NOT guess which project replaced it
+
+### Requirement: Durable import run recovery before hydration
+
+Project activation SHALL inspect native import run metadata after import-relocation recovery and before frontend hydration, status reconstruction, output access, or new subprocess admission. Recovery SHALL validate version, project identity, relative paths, staging generation, relocation-plan binding, lifecycle transitions, and terminal evidence. It SHALL never trust a persisted PID, absolute path, caller-selected outcome, or unverified completion artifact.
+
+A valid unfinished finalization SHALL complete idempotently before hydration. A former preparing/running run without current native supervisor ownership SHALL become interrupted and preserve staging. A terminal run SHALL remain replayable to the frontend. Malformed, foreign, escaping, symlinked, contradictory, or ambiguous evidence that prevents safe classification SHALL block activation without mutating project output; safely isolated cleanup residue MAY produce an actionable warning under existing recovery rules.
+
+#### Scenario: Activation finds running record after restart
+
+- **WHEN** a valid durable run says `Running` but no current native supervisor owns the process
+- **THEN** activation SHALL classify it `Interrupted`, preserve staging, and expose that result during hydration
+
+#### Scenario: Activation finds resumable finalization
+
+- **WHEN** durable exit, completion, and relocation evidence identify a valid unfinished `Finalizing` run
+- **THEN** activation SHALL resume idempotent finalization before project data becomes available
+
+#### Scenario: Activation finds replayable terminal result
+
+- **WHEN** a valid terminal run has not been acknowledged
+- **THEN** hydration SHALL receive that authoritative result and project state SHALL reconcile before acknowledgement
+
+#### Scenario: Recovery metadata is unsafe
+
+- **WHEN** import run metadata contains an escaping path, foreign identity, invalid transition, or contradictory completion evidence
+- **THEN** activation SHALL fail without following unsafe paths, deleting staging, changing project output, or hydrating frontend stores
+
+#### Scenario: No durable import run exists
+
+- **WHEN** a valid project has no native import run metadata
+- **THEN** activation SHALL continue to normal hydration and committed-artifact status reconstruction

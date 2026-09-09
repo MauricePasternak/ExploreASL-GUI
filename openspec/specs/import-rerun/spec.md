@@ -87,33 +87,52 @@ On entering import step 5, the system SHALL compare the current import configura
 
 ### Requirement: Import progress reconstruction from lock files
 
-The system SHALL provide a Rust command `read_import_status(project_root: string)` that scans `<project_root>/derivatives/ExploreASL/lock/xASL_module_Import/` and returns per-subject status. For each subject directory found:
+When no active or replayable native run supplies progress, the system SHALL reconstruct per-subject status through an active-project-owned native audit of committed import artifacts. The audit SHALL reject unsafe roots and symlinks and SHALL report a subject completed only when its canonical project import lock contains a regular `999_ready.status` committed by native relocation and its project rawdata subject directory is present and nonempty. Partial status files without a valid ready artifact SHALL report failed. Subjects with no verified artifact SHALL remain pending. Configuration staleness SHALL be computed separately from `mostRecentConfig` and SHALL not convert an unverified subject into completed.
 
-- If `999_ready.status` exists → status `"completed"`, step `null`
-- If any other `.status` file exists but no `999_ready.status` → status `"failed"`, step `null`
-- If the subject directory does not exist in lock path → the subject is not included in results
+#### Scenario: Completed subject reconstructs from committed artifacts
 
-The system SHALL call `read_import_status` on entering import step 5 and populate `importProgress` from the results. Subjects not found in lock files SHALL be set to status `"pending"` (never attempted) if no prior `mostRecentConfig` exists, or status `"stale-not-found"` if a snapshot exists (indicating the subject's output was moved but config has since changed).
+- **WHEN** a subject has a safe committed ready lock and nonempty project rawdata
+- **THEN** native audit SHALL report it completed and the progress table SHALL show completed before staleness overlay is applied
+
+#### Scenario: Ready lock lacks project rawdata
+
+- **WHEN** a project ready lock exists but its subject rawdata is missing or empty
+- **THEN** native audit SHALL report an invalid or failed status and SHALL not classify the subject completed
+
+#### Scenario: Failed subject reconstructs from partial locks
+
+- **WHEN** a subject has import status files but no valid committed ready artifact
+- **THEN** native audit SHALL report it failed
+
+#### Scenario: Subject has no committed evidence
+
+- **WHEN** a current subject has no audited import artifacts
+- **THEN** it SHALL show pending regardless of whether a prior configuration snapshot exists
+
+#### Scenario: Artifact path is unsafe
+
+- **WHEN** the lock or rawdata path resolves through a symlink or outside the active project
+- **THEN** audit SHALL fail closed with an actionable error and SHALL not follow the path
 
 #### Scenario: Completed subject reconstructed from lock files
 
-- **WHEN** the user navigates to step 5 after a successful import of subject "sub-001"
-- **THEN** `read_import_status` returns `{ subject: "sub-001", status: "completed" }` and the progress table shows subject "sub-001" as completed
+- **WHEN** committed audit finds a regular ready lock and nonempty rawdata for subject `sub-001`
+- **THEN** it SHALL return `{ subject: "sub-001", status: "completed" }`
 
 #### Scenario: Failed subject reconstructed from lock files
 
-- **WHEN** subject "sub-BADDIE" failed during import with `010_DCM2NII.status` present but no `999_ready.status`
-- **THEN** `read_import_status` returns `{ subject: "sub-BADDIE", status: "failed" }`
+- **WHEN** committed audit finds partial import status for `sub-BADDIE` without valid ready evidence
+- **THEN** it SHALL return `{ subject: "sub-BADDIE", status: "failed" }`
 
 #### Scenario: Subject not in lock files with no snapshot
 
-- **WHEN** the user opens step 5 for the first time and subject "sub-NEW" has no lock directory
-- **THEN** subject "sub-NEW" shows status "pending" (never attempted)
+- **WHEN** a current subject has no committed audit evidence and no prior configuration snapshot
+- **THEN** it SHALL show pending as never attempted
 
 #### Scenario: Subject not in lock files but snapshot exists
 
-- **WHEN** a subject was completed in a prior run (lock files exist in project derivatives), config changed structurally, and now the subject name has changed due to a rename
-- **THEN** the renamed subject has no matching lock directory and shows status "pending"; the old-name lock directory still exists but no longer corresponds to a current subject
+- **WHEN** a renamed current subject has no matching committed artifact while a prior snapshot exists
+- **THEN** the current subject SHALL show pending and an old-name artifact SHALL not be attributed to it
 
 ### Requirement: Import progress table with subject selection
 
@@ -331,3 +350,27 @@ For BIDS-direct projects (`dataSource === "bids"`):
 
 - **WHEN** a DICOM-import project is revisited for import
 - **THEN** its staleness detection, lock-file reconstruction, and delta re-import behavior remain available
+
+### Requirement: Authoritative retry source selection
+
+Selective retry defaults and retry-lock preservation SHALL use reconciled native terminal outcomes or verified committed project artifacts. Provisional parser completion, persisted frontend completion flags, interrupted staging locks, and stale run snapshots SHALL not qualify a subject as fresh completed or preservable. Configuration staleness SHALL remain an independent overlay on verified completion.
+
+#### Scenario: Parser completed subject lacks verified result
+
+- **WHEN** a prior run emitted subject-completion output but native finalization did not commit that subject
+- **THEN** the subject SHALL remain selected for retry and its locks SHALL not be preserved as successful evidence
+
+#### Scenario: Partial failed run committed one subject
+
+- **WHEN** a failed terminal run reports subject A committed and subject B failed verification
+- **THEN** A MAY be deselected and preserved while B SHALL be selected for retry
+
+#### Scenario: Completed subject becomes stale
+
+- **WHEN** a verified committed subject's relevant configuration changes
+- **THEN** it SHALL remain completed with a stale overlay and SHALL be preselected under existing selective re-run behavior
+
+#### Scenario: Interrupted run leaves staging locks
+
+- **WHEN** application recovery reports `Interrupted` with uncommitted staging artifacts
+- **THEN** those artifacts SHALL not qualify any selected subject as fresh completed for retry planning
