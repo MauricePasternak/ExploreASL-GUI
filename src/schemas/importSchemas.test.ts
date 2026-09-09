@@ -7,6 +7,7 @@ import {
   BidsAslMetadataSchema,
   DerivedMetadataGroupSchema,
   ImportProgressSchema,
+  ImportRunSnapshotSchema,
   ImportSnapshotSchema,
   MetadataGroupSchema,
   ModalityAliasSchema,
@@ -76,6 +77,117 @@ describe("PathPatternSchema", () => {
       depth: 0,
     };
     expect(() => PathPatternSchema.parse(data)).toThrow();
+  });
+});
+
+describe("ImportRunSnapshotSchema", () => {
+  const snapshot = {
+    runId: "import-run-1",
+    lifecycle: "failed",
+    ownershipGeneration: 1,
+    profileId: "profile-1",
+    selectedSubjects: ["ONE"],
+    createdAtMs: 1,
+    updatedAtMs: 2,
+    exitEvidence: { exitCode: 1, successful: false },
+    subjectOutcomes: [
+      {
+        subject: "ONE",
+        outcome: "failed",
+        readyLockVerified: false,
+        rawdataVerified: false,
+        committed: false,
+        error: { code: "readyLockMissing", message: "missing", subject: "ONE" },
+      },
+    ],
+    error: { code: "finalization", message: "failed" },
+    terminalResult: "failed",
+  };
+  it("accepts camelCase authoritative terminal snapshots", () => {
+    expect(ImportRunSnapshotSchema.parse(snapshot)).toMatchObject({
+      runId: "import-run-1",
+      lifecycle: "failed",
+    });
+  });
+
+  it("accepts structured launch-time staging issues", () => {
+    const value = {
+      ...snapshot,
+      lifecycle: "failed",
+      terminalResult: "failed",
+      error: {
+        code: "preflight",
+        message: "Import staging preflight failed",
+        stagingIssues: [
+          {
+            code: "PORTABLE_COLLISION",
+            field: "destination",
+            entryIndex: 0,
+            conflictingEntryIndex: 1,
+            message: "Two entries collide",
+          },
+        ],
+      },
+    };
+    expect(ImportRunSnapshotSchema.parse(value).error?.stagingIssues).toHaveLength(1);
+  });
+  it("rejects PID/path/unknown wire authority", () => {
+    expect(ImportRunSnapshotSchema.safeParse({ ...snapshot, pid: 1 })).toMatchObject({
+      success: false,
+    });
+  });
+  it.each([
+    "preparing",
+    "running",
+    "finalizing",
+    "completed",
+    "failed",
+    "cancelling",
+    "cancelled",
+    "interrupted",
+  ] as const)("accepts lifecycle %s with matching terminal authority", (lifecycle) => {
+    const terminal = ["completed", "failed", "cancelled", "interrupted"].includes(lifecycle);
+    expect(
+      ImportRunSnapshotSchema.safeParse({
+        ...snapshot,
+        lifecycle,
+        terminalResult: terminal ? lifecycle : undefined,
+      }).success,
+    ).toBe(true);
+  });
+  it.each(["verified", "committed", "failed", "cancelled", "interrupted"] as const)(
+    "accepts subject outcome %s",
+    (outcome) => {
+      expect(
+        ImportRunSnapshotSchema.safeParse({
+          ...snapshot,
+          subjectOutcomes: [
+            {
+              ...snapshot.subjectOutcomes[0],
+              outcome,
+              committed: outcome === "committed",
+            },
+          ],
+        }).success,
+      ).toBe(true);
+    },
+  );
+  it("rejects mismatched terminal and subject authority", () => {
+    expect(
+      ImportRunSnapshotSchema.safeParse({ ...snapshot, terminalResult: "completed" }).success,
+    ).toBe(false);
+    expect(
+      ImportRunSnapshotSchema.safeParse({
+        ...snapshot,
+        subjectOutcomes: [{ ...snapshot.subjectOutcomes[0], subject: "OTHER" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ImportRunSnapshotSchema.safeParse({
+        ...snapshot,
+        subjectOutcomes: [{ ...snapshot.subjectOutcomes[0], committed: true }],
+      }).success,
+    ).toBe(false);
   });
 });
 

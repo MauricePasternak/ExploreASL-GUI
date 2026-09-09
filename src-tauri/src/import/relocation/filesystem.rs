@@ -20,7 +20,7 @@ pub(super) fn is_already_exists(error: &io::Error) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn rename_no_replace(source: &Path, destination: &Path) -> io::Result<()> {
+pub(crate) fn rename_no_replace(source: &Path, destination: &Path) -> io::Result<()> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
     let source = CString::new(source.as_os_str().as_bytes())
@@ -105,7 +105,7 @@ pub(super) fn rename_no_replace(source: &Path, destination: &Path) -> io::Result
 #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 compile_error!("import relocation requires an atomic no-replace rename implementation");
 
-pub(super) fn atomic_replace(source: &Path, destination: &Path) -> io::Result<()> {
+pub(crate) fn atomic_replace(source: &Path, destination: &Path) -> io::Result<()> {
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStrExt;
@@ -143,7 +143,7 @@ pub(super) fn sync_parent(path: &Path) -> AnyResult<()> {
     sync_parent_durable(path)
 }
 
-pub(super) fn sync_parent_durable(path: &Path) -> AnyResult<()> {
+pub(crate) fn sync_parent_durable(path: &Path) -> AnyResult<()> {
     #[cfg(unix)]
     File::open(path)
         .and_then(|file| file.sync_all())

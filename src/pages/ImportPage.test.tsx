@@ -718,11 +718,15 @@ describe("ImportPage import runner step", () => {
     store.setSubjectRows([
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
     ]);
-    store.updateImportProgress("BAR", {
-      subject: "BAR",
-      session: "01",
-      status: "running",
-      currentStep: "DCM2NII",
+    useImportStore.setState({
+      importProgress: {
+        BAR: {
+          subject: "BAR",
+          session: "01",
+          status: "running",
+          currentStep: "DCM2NII",
+        },
+      },
     });
 
     const profile = makeMatlabProfile({
@@ -779,14 +783,14 @@ describe("ImportPage import runner step", () => {
   it("locks step 5 back navigation while import is running and unlocks it after failure", () => {
     const store = useImportStore.getState();
     store.setActiveStep(5);
-    store.setImportPhase("running");
+    useImportStore.setState({ importPhase: "running" });
 
     const { rerender } = renderWithProviders();
 
     const runningBackButtons = screen.getAllByRole("button", { name: /back: preview/i });
     expect(runningBackButtons[runningBackButtons.length - 1]).toBeDisabled();
 
-    store.setImportPhase("failed");
+    useImportStore.setState({ importPhase: "failed" });
     rerender(
       <MantineProvider>
         <MemoryRouter>

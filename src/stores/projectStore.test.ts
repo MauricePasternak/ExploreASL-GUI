@@ -54,6 +54,8 @@ describe("useProjectStore", () => {
           lockWatcher: { success: true },
         };
       }
+      if (command === "get_active_import_run") return null;
+      if (command === "read_import_status") return [];
       return null;
     });
   });
@@ -1101,6 +1103,23 @@ describe("useProjectStore", () => {
     });
     expect(project?.mappingState).not.toHaveProperty("importPhase");
     expect(project?.mappingState).not.toHaveProperty("importCompleted");
+  });
+
+  it("does not persist runtime-only import lifecycle authority", async () => {
+    await useProjectStore
+      .getState()
+      .createProject("/tmp/import-runtime", "Import Runtime", { dataSource: "dicom" });
+    useProjectStore.getState().syncImportState({
+      ...useImportStore.getState(),
+      importPhase: "running",
+      importCompleted: false,
+      activeRunId: "import-run-1",
+      ownershipGeneration: 4,
+    });
+    const persisted = useProjectStore.getState().project?.uiState.import;
+    expect(persisted?.currentPhase).toBe("idle");
+    expect(persisted).not.toHaveProperty("activeRunId");
+    expect(persisted).not.toHaveProperty("ownershipGeneration");
   });
 
   it("persists selectedProfileId into uiState.import (not mappingState)", async () => {

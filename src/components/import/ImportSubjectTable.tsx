@@ -83,6 +83,16 @@ function StatusIcon({ status, stale }: { status: ImportProgress["status"]; stale
             />
           </Tooltip>
         );
+      case "interrupted":
+        return (
+          <Tooltip label="Interrupted">
+            <IconAlertTriangle
+              size={18}
+              color="var(--mantine-color-yellow-7)"
+              data-testid="status-interrupted"
+            />
+          </Tooltip>
+        );
     }
   })();
 
@@ -121,7 +131,8 @@ function StatusIcon({ status, stale }: { status: ImportProgress["status"]; stale
 function deriveFilterStatus(row: ImportProgress): FilterValue {
   if (row.stale) return "stale";
   if (row.status === "completed") return "completed";
-  if (row.status === "failed" || row.status === "cancelled") return "failed";
+  if (row.status === "failed" || row.status === "cancelled" || row.status === "interrupted")
+    return "failed";
   return "pending";
 }
 

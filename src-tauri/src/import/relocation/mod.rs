@@ -22,11 +22,13 @@ pub use fault_injection::{
 };
 #[cfg(test)]
 pub use filesystem::transaction_test_fingerprint;
+pub(crate) use filesystem::{atomic_replace, rename_no_replace, sync_parent_durable};
 pub use inventory::{
     bind_plan, create_plan, inventory_subject, plan_relocation, validate_plan_scope,
 };
 pub use journal::JOURNAL_FILE;
 pub use paths::{canonical_project_root, validate_relative_path};
+pub(crate) use paths::{log_matches_subject, project_identity};
 pub use recovery::recover;
 pub use transaction::relocate;
 pub use types::{

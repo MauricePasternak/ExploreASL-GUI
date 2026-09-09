@@ -1,12 +1,5 @@
-use super::relocation::{
-    RelocationOutcome, RelocationSubjectStatus, bind_plan, create_plan, relocate,
-};
-use super::staging::{self, portable_key};
-use super::state::validate_terminal_import_ownership;
-use super::types::ImportState;
+use super::staging::portable_key;
 use super::validation::validate_staging_root;
-use crate::app_state::AppState;
-use crate::error::MutexExt;
 use anyhow::{Context, Result as AnyResult, bail};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -43,25 +36,6 @@ pub fn validate_subject_components(subjects: &[String]) -> AnyResult<()> {
     Ok(())
 }
 
-pub(super) fn validate_owned_subjects(
-    owned_subjects: &[String],
-    subjects: &[String],
-) -> AnyResult<()> {
-    if owned_subjects.is_empty() {
-        bail!("Import ownership has no subjects");
-    }
-    validate_subject_components(owned_subjects)?;
-    validate_subject_components(subjects)?;
-
-    for subject in subjects {
-        if owned_subject_spelling(owned_subjects, subject).is_none() {
-            bail!("Subject is not owned by the active import: {subject}");
-        }
-    }
-
-    Ok(())
-}
-
 pub(super) fn owned_subject_spelling<'a>(
     owned_subjects: &'a [String],
     subject: &str,
@@ -71,10 +45,6 @@ pub(super) fn owned_subject_spelling<'a>(
         .iter()
         .find(|owned| portable_key(owned) == key)
         .map(String::as_str)
-}
-
-pub(super) fn contains_portable_subject(subjects: &[String], subject: &str) -> bool {
-    owned_subject_spelling(subjects, subject).is_some()
 }
 
 pub(super) fn validate_preserved_subjects_are_disjoint(
@@ -90,140 +60,6 @@ pub(super) fn validate_preserved_subjects_are_disjoint(
         .any(|subject| run_subject_keys.contains(&portable_key(subject)))
     {
         bail!("Retry preserve subjects overlap subjects selected for import");
-    }
-
-    Ok(())
-}
-
-pub(super) fn with_owned_import_roots<T>(
-    state: &AppState,
-    operation: impl FnOnce(&mut ImportState, &Path, &Path) -> AnyResult<T>,
-) -> AnyResult<T> {
-    let active_project_root_guard = state
-        .active_project_root
-        .lock_or_bail("Active project state")?;
-    let active_project_root = active_project_root_guard
-        .as_ref()
-        .context("No active project root")?;
-    let active_project_root = fs::canonicalize(active_project_root).with_context(|| {
-        format!(
-            "Failed to canonicalize active project root {}",
-            active_project_root.display()
-        )
-    })?;
-
-    let mut import_state = state.import_state.lock_or_bail("Import state")?;
-    let expected_staging_root = active_project_root.join(staging::STAGING_DIRECTORY);
-    validate_terminal_import_ownership(
-        &import_state,
-        &active_project_root,
-        &expected_staging_root,
-    )?;
-
-    let result = operation(
-        &mut import_state,
-        &active_project_root,
-        &expected_staging_root,
-    );
-    drop(import_state);
-    drop(active_project_root_guard);
-    result
-}
-
-pub(super) fn move_import_output_for_state(
-    state: &AppState,
-    debug_mode: bool,
-    cleanup_staging: bool,
-) -> AnyResult<RelocationOutcome> {
-    let _transition = state
-        .project_transition
-        .lock_or_bail("Project transition")?;
-    with_owned_import_roots(state, |import_state, project_root, staging_root| {
-        validate_owned_subjects(&import_state.subject_list, &import_state.succeeded_subjects)?;
-        let plan_id = import_state
-            .relocation_plan_id
-            .as_ref()
-            .context("Import ownership has no confirmed relocation plan")?;
-        let plan = state
-            .relocation_plans
-            .lock_or_bail("Relocation plan state")?
-            .get(plan_id)
-            .cloned()
-            .context("Confirmed relocation plan is unavailable")?;
-        let outcome = relocate(
-            &plan,
-            import_state.ownership_generation,
-            staging_root,
-            &import_state.succeeded_subjects,
-            cleanup_staging,
-            debug_mode,
-        )?;
-
-        if debug_mode
-            && cleanup_staging
-            && !outcome.subjects.is_empty()
-            && outcome
-                .subjects
-                .iter()
-                .all(|subject| matches!(subject.status, RelocationSubjectStatus::Committed))
-        {
-            // Debug runs retain staging. Copy configs only after every subject
-            // has durably committed; any copy failure remains visible to the
-            // frontend and leaves terminal ownership/staging available.
-            copy_import_configs(staging_root, project_root)?;
-        }
-
-        if outcome.staging_cleanup_complete {
-            *import_state = ImportState::default();
-        }
-        Ok(outcome)
-    })
-}
-
-pub fn move_import_output_paths(
-    staging_root: &Path,
-    project_root: &Path,
-    succeeded_subjects: &[String],
-    debug_mode: bool,
-    cleanup_staging: bool,
-) -> AnyResult<()> {
-    validate_staging_root(staging_root)?;
-    validate_project_root_for_staging(staging_root, project_root)?;
-    validate_subject_components(succeeded_subjects)?;
-
-    let mut plan = create_plan(
-        project_root,
-        succeeded_subjects,
-        "direct-test-plan".to_string(),
-    )?;
-    bind_plan(&mut plan, project_root, succeeded_subjects, 0)?;
-    let outcome = relocate(
-        &plan,
-        0,
-        staging_root,
-        succeeded_subjects,
-        cleanup_staging,
-        debug_mode,
-    )?;
-    if debug_mode
-        && cleanup_staging
-        && !outcome.subjects.is_empty()
-        && outcome
-            .subjects
-            .iter()
-            .all(|subject| matches!(subject.status, RelocationSubjectStatus::Committed))
-    {
-        copy_import_configs(staging_root, project_root)?;
-    }
-    if !outcome
-        .subjects
-        .iter()
-        .all(|subject| matches!(subject.status, RelocationSubjectStatus::Committed))
-    {
-        bail!(
-            "One or more subject relocations failed: {:?}",
-            outcome.subjects
-        );
     }
 
     Ok(())

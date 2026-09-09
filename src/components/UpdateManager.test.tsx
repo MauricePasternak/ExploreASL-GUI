@@ -188,17 +188,40 @@ describe("UpdateManager", () => {
     await waitFor(() => expect(available.install).toHaveBeenCalledOnce());
   });
 
-  it("aborts import through stop_active_import before installing", async () => {
+  it("cancels import through exact native run identity before installing", async () => {
     const available = update();
     vi.mocked(check).mockResolvedValue(available as never);
-    useImportStore.setState({ importPhase: "running", importRunning: true });
+    useImportStore.setState({
+      importPhase: "running",
+      importRunning: true,
+      activeRunId: "import-run-1",
+      ownershipGeneration: 1,
+    });
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "cancel_import_run") {
+        return {
+          runId: "import-run-1",
+          lifecycle: "cancelled",
+          ownershipGeneration: 1,
+          profileId: "profile-1",
+          selectedSubjects: ["ONE"],
+          createdAtMs: 1,
+          updatedAtMs: 2,
+          subjectOutcomes: [],
+          terminalResult: "cancelled",
+        };
+      }
+      return null;
+    });
     renderManager();
 
     await waitFor(() => availableNotification());
     await openAvailableUpdate();
     await userEvent.setup().click(await screen.findByTestId("update-confirmation-confirm"));
 
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("stop_active_import"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("cancel_import_run", { runId: "import-run-1" }),
+    );
     await waitFor(() => expect(available.install).toHaveBeenCalledOnce());
   });
 

@@ -1,6 +1,5 @@
 use super::output::cleanup_staging_root;
 use super::staging::{StagingEntry, portable_key};
-use super::types::{ImportLifecycle, ImportState};
 use anyhow::{Result as AnyResult, anyhow, bail};
 use std::collections::BTreeMap;
 use std::env;
@@ -21,17 +20,6 @@ pub fn validate_staging_root(staging_root: &Path) -> AnyResult<()> {
     }
 
     Ok(())
-}
-
-pub fn validate_import_not_running(state: &ImportState) -> AnyResult<()> {
-    match state.lifecycle {
-        ImportLifecycle::Preparing => bail!("An import is already preparing"),
-        ImportLifecycle::Running => match state.child_pid {
-            Some(pid) => bail!("An import is already running with process PID {pid}"),
-            None => bail!("An import is already running"),
-        },
-        ImportLifecycle::Idle | ImportLifecycle::Terminal => Ok(()),
-    }
 }
 
 pub fn validate_non_empty_inputs(
@@ -235,8 +223,4 @@ pub(super) fn validate_string_input(name: &str, value: &str) -> AnyResult<String
     }
 
     Ok(trimmed.to_string())
-}
-
-pub(super) fn validate_path_input(name: &str, value: &str) -> AnyResult<PathBuf> {
-    validate_string_input(name, value).map(PathBuf::from)
 }

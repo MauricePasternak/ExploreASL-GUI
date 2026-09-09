@@ -17,7 +17,9 @@ import { useGlobalStore } from "./globalStore";
 
 import type {
   DerivedMetadataGroup,
+  ImportLifecycle,
   ImportProgress,
+  ImportRunSnapshot,
   ImportSnapshot,
   MetadataGroup,
   ModalityAlias,
@@ -45,7 +47,7 @@ import {
 // State Interface
 // =============================================================================
 
-export type ImportPhase = "idle" | "preparing" | "running" | "completed" | "failed" | "cancelled";
+export type ImportPhase = ImportLifecycle;
 
 export type StagingPreflightStatus = "idle" | "pending" | "valid" | "invalid" | "failed";
 
@@ -104,7 +106,6 @@ export interface ImportState {
   importPhase: ImportPhase;
   importCompleted: boolean;
   importLog: string[];
-  failedSubjects: string[];
   importProgress: Record<string, ImportProgress>;
   importRunning: boolean;
   importSummary: {
@@ -112,9 +113,18 @@ export interface ImportState {
     failed: number;
     errors: string[];
   } | null;
+  /** Session-only native attachment. Never persisted to project.easl. */
+  activeRunId: string | null;
+  ownershipGeneration: number | null;
+  /** Session-only ordering guard for delayed command responses/events. */
+  nativeSnapshotUpdatedAtMs: number | null;
+  terminalRunId: string | null;
+  importRunError: string | null;
 
   // Snapshot
   mostRecentConfig: ImportSnapshot | null;
+  /** Runtime-only configuration captured for current native reservation. */
+  pendingImportConfig: ImportSnapshot | null;
 
   // BIDS review (session-only, not persisted)
   bidsReview: BidsReviewState;
@@ -151,7 +161,6 @@ export interface ImportState {
     error: string,
   ) => void;
   resetStagingPreflight: () => void;
-  setStagingPreflightIssues: (issues: StagingValidationIssue[]) => void;
   setIngestionResults: (paths: string[], patterns: PathPattern[]) => void;
   setBMatchDirectories: (value: boolean) => void;
   setTokenAssignment: (
@@ -178,20 +187,11 @@ export interface ImportState {
   setSubjectRows: (rows: SubjectRow[]) => void;
   updateSubjectRowGroup: (rowIds: string[], groupId: string) => void;
   startImport: (subjects?: string[]) => void;
-  setImportPhase: (phase: ImportPhase) => void;
-  addLogLine: (line: string) => void;
   addLogLines: (lines: string[]) => void;
   markSubjectRunning: (subject: string, step?: "DCM2NII" | "NII2BIDS") => void;
-  markSubjectCompleted: (subject: string, duration: number) => void;
-  markSubjectFailed: (subject: string, step: "DCM2NII" | "NII2BIDS", message: string) => void;
-  markSubjectCancelled: (subject: string) => void;
-  completeImport: () => void;
-  failImport: () => void;
-  cancelImport: () => void;
-  resetImportPhase: () => void;
-  setImportRunning: (running: boolean) => void;
-  updateImportProgress: (subject: string, progress: ImportProgress) => void;
-  setImportSummary: (summary: ImportState["importSummary"]) => void;
+  bindImportRunSnapshot: (snapshot: ImportRunSnapshot) => void;
+  reconcileImportRunSnapshot: (snapshot: ImportRunSnapshot, lease?: ProjectLease | null) => void;
+  markSubjectDiagnosticFailure: (subject: string, message: string) => void;
   setMostRecentConfig: (snapshot: ImportSnapshot) => void;
   applyStaleness: (staleness: Record<string, boolean>) => void;
   reconstructProgressFromLockFiles: (
@@ -231,11 +231,16 @@ const INITIAL_STATE = {
   importPhase: "idle" as ImportPhase,
   importCompleted: false,
   importLog: [] as string[],
-  failedSubjects: [] as string[],
   importProgress: {} as Record<string, ImportProgress>,
   importRunning: false,
   importSummary: null as ImportState["importSummary"],
+  activeRunId: null as string | null,
+  ownershipGeneration: null as number | null,
+  nativeSnapshotUpdatedAtMs: null as number | null,
+  terminalRunId: null as string | null,
+  importRunError: null as string | null,
   mostRecentConfig: null as ImportSnapshot | null,
+  pendingImportConfig: null as ImportSnapshot | null,
   bidsReview: {
     scanComplete: false,
     scanError: null,
@@ -260,7 +265,27 @@ const INITIAL_STATE = {
   },
 };
 
-export function createInitialImportState() {
+const NATIVE_PHASE_ORDER: Record<ImportPhase, number> = {
+  idle: 0,
+  preparing: 1,
+  running: 2,
+  finalizing: 3,
+  cancelling: 3,
+  completed: 4,
+  failed: 4,
+  cancelled: 4,
+  interrupted: 4,
+};
+
+function snapshotRegressesLifecycle(current: ImportPhase, incoming: ImportPhase): boolean {
+  // Cancelling -> Running is the one intentional rollback: native cancellation
+  // failure restores actionable process ownership. Every other lower phase is
+  // an obsolete response/event, including equal-millisecond readiness races.
+  if (current === "cancelling" && incoming === "running") return false;
+  return NATIVE_PHASE_ORDER[incoming] < NATIVE_PHASE_ORDER[current];
+}
+
+function createInitialImportState() {
   return {
     ...INITIAL_STATE,
     rawPaths: [],
@@ -295,11 +320,22 @@ function subjectProgress(subject: string, existing?: ImportProgress): ImportProg
 }
 
 function normalizePersistedImportPhase(phase: unknown): ImportPhase {
-  if (phase === "preparing" || phase === "running") {
-    return "failed";
+  if (
+    phase === "preparing" ||
+    phase === "running" ||
+    phase === "finalizing" ||
+    phase === "cancelling"
+  ) {
+    return "interrupted";
   }
 
-  if (phase === "idle" || phase === "completed" || phase === "failed" || phase === "cancelled") {
+  if (
+    phase === "idle" ||
+    phase === "completed" ||
+    phase === "failed" ||
+    phase === "cancelled" ||
+    phase === "interrupted"
+  ) {
     return phase;
   }
 
@@ -384,7 +420,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
       importPhase: "idle",
       importCompleted: false,
       importLog: [],
-      failedSubjects: [],
       importRunning: false,
       importSummary: null,
       mostRecentConfig: null,
@@ -458,17 +493,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
         error: null,
       },
     });
-  },
-
-  setStagingPreflightIssues: (issues) => {
-    set((state) => ({
-      stagingPreflight: {
-        ...state.stagingPreflight,
-        status: "invalid",
-        issues,
-        error: null,
-      },
-    }));
   },
 
   setIngestionResults: (paths, patterns) => {
@@ -673,30 +697,11 @@ export const useImportStore = create<ImportState>((set, get) => ({
         importPhase: "preparing",
         importCompleted: false,
         importLog: [],
-        failedSubjects: [],
         importProgress,
         importRunning: false,
         importSummary: null,
-        mostRecentConfig: snapshot,
+        pendingImportConfig: snapshot,
         profileError: null,
-      };
-    });
-  },
-
-  setImportPhase: (phase) => {
-    set({
-      importPhase: phase,
-      importRunning: phase === "running",
-    });
-  },
-
-  addLogLine: (line) => {
-    set((state) => {
-      const trimmed = line.trim();
-      const isDup = state.importLog.slice(-40).some((l) => l.trim() === trimmed);
-      if (isDup) return {};
-      return {
-        importLog: [...state.importLog, line],
       };
     });
   },
@@ -724,9 +729,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
 
   markSubjectRunning: (subject, step) => {
     set((state) => {
-      if (state.failedSubjects.includes(subject)) {
-        return {};
-      }
       const current = subjectProgress(subject, state.importProgress[subject]);
       return {
         importProgress: {
@@ -741,128 +743,115 @@ export const useImportStore = create<ImportState>((set, get) => ({
     });
   },
 
-  markSubjectCompleted: (subject, duration) => {
+  markSubjectDiagnosticFailure: (subject, message) => {
     set((state) => {
-      if (state.failedSubjects.includes(subject)) {
+      const current = subjectProgress(subject, state.importProgress[subject]);
+      if (current.status === "completed") return {};
+      return {
+        importProgress: { ...state.importProgress, [subject]: { ...current, error: message } },
+      };
+    });
+  },
+
+  bindImportRunSnapshot: (snapshot) => {
+    const terminal = ["completed", "failed", "cancelled", "interrupted"].includes(
+      snapshot.lifecycle,
+    );
+    set({
+      activeRunId: terminal ? null : snapshot.runId,
+      terminalRunId: terminal ? snapshot.runId : null,
+      ownershipGeneration: snapshot.ownershipGeneration,
+      nativeSnapshotUpdatedAtMs: snapshot.updatedAtMs,
+      importPhase: snapshot.lifecycle,
+      importRunning: snapshot.lifecycle === "running" || snapshot.lifecycle === "cancelling",
+      importRunError: snapshot.error?.message ?? null,
+    });
+    useImportStore.getState().reconcileImportRunSnapshot(snapshot);
+  },
+
+  reconcileImportRunSnapshot: (snapshot, lease) => {
+    if (lease && (!isCurrentProjectLease(lease) || !isProjectWorkAccepted())) return;
+    set((state) => {
+      const known = state.activeRunId ?? state.terminalRunId;
+      if (
+        known !== snapshot.runId ||
+        (state.ownershipGeneration !== null &&
+          state.ownershipGeneration !== snapshot.ownershipGeneration) ||
+        (state.nativeSnapshotUpdatedAtMs !== null &&
+          snapshot.updatedAtMs < state.nativeSnapshotUpdatedAtMs) ||
+        snapshotRegressesLifecycle(state.importPhase, snapshot.lifecycle) ||
+        ((["completed", "failed", "cancelled", "interrupted"] as ImportPhase[]).includes(
+          state.importPhase,
+        ) &&
+          !["completed", "failed", "cancelled", "interrupted"].includes(snapshot.lifecycle))
+      )
         return {};
-      }
-      const current = subjectProgress(subject, state.importProgress[subject]);
-      return {
-        importProgress: {
-          ...state.importProgress,
-          [subject]: {
-            ...current,
-            status: "completed",
-            duration,
-            error: undefined,
-            errorStep: undefined,
-          },
-        },
-      };
-    });
-  },
-
-  markSubjectFailed: (subject, step, message) => {
-    set((state) => {
-      const current = subjectProgress(subject, state.importProgress[subject]);
-      return {
-        failedSubjects: state.failedSubjects.includes(subject)
-          ? state.failedSubjects
-          : [...state.failedSubjects, subject],
-        importProgress: {
-          ...state.importProgress,
-          [subject]: {
-            ...current,
-            status: "failed",
-            errorStep: step,
-            error: message,
-          },
-        },
-      };
-    });
-  },
-
-  markSubjectCancelled: (subject) => {
-    set((state) => {
-      const current = subjectProgress(subject, state.importProgress[subject]);
-      return {
-        failedSubjects: state.failedSubjects.filter((failed) => failed !== subject),
-        importProgress: {
-          ...state.importProgress,
-          [subject]: {
-            ...current,
-            status: "cancelled",
-          },
-        },
-      };
-    });
-  },
-
-  completeImport: () => {
-    set({
-      importPhase: "completed",
-      importCompleted: true,
-      importRunning: false,
-    });
-  },
-
-  failImport: () => {
-    set({
-      importPhase: "failed",
-      importCompleted: false,
-      importRunning: false,
-    });
-  },
-
-  cancelImport: () => {
-    set((state) => {
-      const importProgress = Object.fromEntries(
-        Object.entries(state.importProgress).map(([subject, progress]) => [
-          subject,
-          progress.status === "running" || progress.status === "pending"
-            ? { ...progress, status: "cancelled" as const }
-            : progress,
-        ]),
+      const terminal = ["completed", "failed", "cancelled", "interrupted"].includes(
+        snapshot.lifecycle,
       );
-
+      const outcomes = new Map(
+        snapshot.subjectOutcomes.map((outcome) => [outcome.subject, outcome]),
+      );
+      const importProgress = { ...state.importProgress };
+      for (const subject of snapshot.selectedSubjects) {
+        const current = subjectProgress(subject, importProgress[subject]);
+        const outcome = outcomes.get(subject);
+        const status = outcome?.committed
+          ? "completed"
+          : outcome?.outcome === "failed"
+            ? "failed"
+            : outcome?.outcome === "cancelled"
+              ? "cancelled"
+              : outcome?.outcome === "interrupted"
+                ? "interrupted"
+                : snapshot.lifecycle === "cancelled"
+                  ? "cancelled"
+                  : snapshot.lifecycle === "interrupted"
+                    ? "interrupted"
+                    : snapshot.lifecycle === "running"
+                      ? current.status === "completed"
+                        ? "pending"
+                        : current.status
+                      : "pending";
+        importProgress[subject] = {
+          ...current,
+          status,
+          error: outcome?.error?.message ?? current.error,
+        };
+      }
+      const committed = snapshot.subjectOutcomes.filter((outcome) => outcome.committed).length;
       return {
-        importPhase: "cancelled",
-        importCompleted: false,
-        importRunning: false,
-        failedSubjects: state.failedSubjects.filter(
-          (subject) => importProgress[subject]?.status === "failed",
-        ),
+        activeRunId: terminal ? null : snapshot.runId,
+        terminalRunId: terminal ? snapshot.runId : null,
+        ownershipGeneration: snapshot.ownershipGeneration,
+        nativeSnapshotUpdatedAtMs: snapshot.updatedAtMs,
+        importPhase: snapshot.lifecycle,
+        importCompleted: snapshot.lifecycle === "completed",
+        importRunning: snapshot.lifecycle === "running" || snapshot.lifecycle === "cancelling",
         importProgress,
+        importSummary: terminal
+          ? {
+              succeeded: committed,
+              failed: snapshot.selectedSubjects.length - committed,
+              errors: snapshot.error ? [snapshot.error.message] : [],
+            }
+          : state.importSummary,
+        importRunError: snapshot.error?.message ?? null,
+        stagingPreflight: snapshot.error?.stagingIssues
+          ? {
+              ...state.stagingPreflight,
+              status: "invalid",
+              issues: snapshot.error.stagingIssues,
+              error: null,
+            }
+          : state.stagingPreflight,
+        mostRecentConfig:
+          snapshot.lifecycle === "completed" && state.pendingImportConfig
+            ? state.pendingImportConfig
+            : state.mostRecentConfig,
+        pendingImportConfig: terminal ? null : state.pendingImportConfig,
       };
     });
-  },
-
-  resetImportPhase: () => {
-    set({
-      importPhase: "idle",
-      importCompleted: false,
-      importLog: [],
-      failedSubjects: [],
-      importRunning: false,
-      importSummary: null,
-    });
-  },
-
-  setImportRunning: (running) => {
-    set({ importRunning: running });
-  },
-
-  updateImportProgress: (subject, progress) => {
-    set((state) => ({
-      importProgress: {
-        ...state.importProgress,
-        [subject]: progress,
-      },
-    }));
-  },
-
-  setImportSummary: (summary) => {
-    set({ importSummary: summary });
   },
 
   setMostRecentConfig: (snapshot) => {
@@ -902,7 +891,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
 
   reconstructProgressFromLockFiles: (statuses, subjects, staleness) => {
     set((state) => {
-      if (state.importPhase === "running" || state.importPhase === "preparing") {
+      if (["running", "preparing", "finalizing", "cancelling"].includes(state.importPhase)) {
         return {};
       }
 
@@ -972,7 +961,10 @@ export const useImportStore = create<ImportState>((set, get) => ({
     const parsed = schema.parse(persisted);
 
     const importPhase = normalizePersistedImportPhase(parsed.importPhase);
-    const importCompleted = importPhase === "failed" ? false : parsed.importCompleted;
+    const importCompleted =
+      parsed.importCompleted && (importPhase === "completed" || importPhase === "idle");
+    const persistedPhase: ImportPhase =
+      importCompleted && importPhase === "idle" ? "completed" : importPhase;
 
     const partialState = {
       sourceDataPath: parsed.sourceDataPath,
@@ -989,9 +981,15 @@ export const useImportStore = create<ImportState>((set, get) => ({
       subjectRows: parsed.subjectRows,
       mostRecentConfig: parsed.mostRecentConfig,
       selectedProfileId: parsed.selectedProfileId,
-      importPhase,
+      importPhase: persistedPhase,
       importCompleted,
       importRunning: false,
+      activeRunId: null,
+      ownershipGeneration: null,
+      nativeSnapshotUpdatedAtMs: null,
+      terminalRunId: null,
+      importRunError: null,
+      pendingImportConfig: null,
     };
 
     const requestedStep = parsed.activeStep;

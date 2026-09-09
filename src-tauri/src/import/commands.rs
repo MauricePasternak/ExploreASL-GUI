@@ -1,13 +1,14 @@
-use super::output::move_import_output_for_state;
-use super::pipeline::{self, stop_active_import_for_state, stop_import_pid};
-use super::relocation::{RelocationOutcome, RelocationPlan};
+use super::pipeline::{self, stop_import_run_for_state};
+use super::relocation::RelocationPlan;
 use super::staging::{StagingEntry, StagingPreflightResult, preflight_staging_plan_for_state};
-use super::state::plan_import_relocation_for_state;
-use super::status::{
-    clean_import_status_for_state, copy_lock_files_for_state, read_import_status_impl,
+use super::state::{
+    acknowledge_import_run_for_state, attach_import_run_for_state, fail_preparing_run_for_id,
+    get_active_import_run_for_state, plan_import_relocation_for_state,
+    reserve_import_run_for_state,
 };
-use super::types::{ImportCommandError, ImportSubjectStatus};
-use super::validation::validate_path_input;
+use super::types::{
+    ImportCommandError, ImportRunSnapshot, ImportStructuredError, ImportSubjectStatus,
+};
 use crate::app_state::AppState;
 use crate::error::IntoCommandResult;
 use crate::execution_profile::ExecutionProfile;
@@ -22,8 +23,6 @@ pub fn preflight_staging_plan(
     Ok(preflight_staging_plan_for_state(&state, &staging_entries))
 }
 
-/// Read-only destination inventory. Root and scope come only from native active
-/// project ownership; frontend receives no absolute filesystem paths.
 #[tauri::command]
 pub fn plan_import_relocation(
     state: State<'_, AppState>,
@@ -32,21 +31,61 @@ pub fn plan_import_relocation(
     plan_import_relocation_for_state(&state, &subject_list).into_command_result()
 }
 
+/// Admission only.  This persists Preparing before any staging filesystem work.
+#[tauri::command]
+pub fn reserve_import_run(
+    state: State<'_, AppState>,
+    subject_list: Vec<String>,
+    relocation_plan_id: String,
+    profile_id: String,
+    subjects_to_preserve: Option<Vec<String>>,
+    preserve_staging: bool,
+) -> Result<ImportRunSnapshot, String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    reserve_import_run_for_state(
+        &state,
+        subject_list,
+        relocation_plan_id,
+        profile_id,
+        subjects_to_preserve.unwrap_or_default(),
+        preserve_staging,
+    )
+    .into_command_result()
+}
+
+#[tauri::command]
+pub fn get_active_import_run(
+    state: State<'_, AppState>,
+) -> Result<Option<ImportRunSnapshot>, String> {
+    get_active_import_run_for_state(&state).into_command_result()
+}
+
+#[tauri::command]
+pub fn attach_import_run(
+    state: State<'_, AppState>,
+    run_id: String,
+) -> Result<ImportRunSnapshot, String> {
+    attach_import_run_for_state(&state, &run_id).into_command_result()
+}
+
+/// Launch is exact-run scoped.  It returns a snapshot, never a PID.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn run_import_pipeline<R: Runtime>(
+pub fn launch_import_run<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
+    run_id: String,
     staging_entries: Vec<StagingEntry>,
     sourcestructure_json: Value,
     studypar_json: Value,
     execution_profile: ExecutionProfile,
     subject_list: Vec<String>,
-    subjects_to_preserve: Option<Vec<String>>,
-    run_request_id: String,
     relocation_plan_id: String,
-) -> Result<u32, ImportCommandError> {
-    pipeline::run_import_pipeline_impl(
+) -> Result<ImportRunSnapshot, ImportCommandError> {
+    let launch_result = pipeline::run_import_pipeline_impl(
         app,
         &state,
         staging_entries,
@@ -54,43 +93,67 @@ pub fn run_import_pipeline<R: Runtime>(
         studypar_json,
         execution_profile,
         subject_list,
-        subjects_to_preserve,
-        run_request_id,
+        None,
+        run_id.clone(),
         relocation_plan_id,
-    )
+    );
+    settle_launch_result(&state, &run_id, launch_result)
+}
+
+pub(super) fn settle_launch_result(
+    state: &AppState,
+    run_id: &str,
+    launch_result: Result<u32, ImportCommandError>,
+) -> Result<ImportRunSnapshot, ImportCommandError> {
+    match launch_result {
+        Ok(_) => attach_import_run_for_state(state, run_id).map_err(ImportCommandError::from),
+        Err(error) => match attach_import_run_for_state(state, run_id) {
+            Ok(snapshot) if snapshot.lifecycle == super::types::ImportLifecycle::Failed => {
+                Ok(snapshot)
+            }
+            _ => match fail_preparing_run_for_id(
+                state,
+                run_id,
+                ImportStructuredError {
+                    code: match &error {
+                        ImportCommandError::Preflight { .. } => "preflight",
+                        ImportCommandError::Operational { .. } => "launch",
+                    }
+                    .to_string(),
+                    message: format!("{error}"),
+                    subject: None,
+                    staging_issues: match &error {
+                        ImportCommandError::Preflight { issues } => Some(issues.clone()),
+                        ImportCommandError::Operational { .. } => None,
+                    },
+                },
+            ) {
+                Ok(Some(snapshot)) => Ok(snapshot),
+                Ok(None) => Err(error),
+                Err(persist_error) => Err(ImportCommandError::from(persist_error)),
+            },
+        },
+    }
 }
 
 #[tauri::command]
-pub fn stop_import(state: State<'_, AppState>, pid: u32) -> Result<(), String> {
-    stop_import_pid(&state, pid)
-}
-
-#[tauri::command]
-pub fn stop_active_import(state: State<'_, AppState>) -> Result<(), String> {
-    stop_active_import_for_state(&state)
-}
-
-#[tauri::command]
-pub fn clean_import_status(state: State<'_, AppState>) -> Result<(), String> {
-    clean_import_status_for_state(&state).into_command_result()
-}
-
-#[tauri::command]
-pub fn move_import_output(
+pub fn cancel_import_run(
     state: State<'_, AppState>,
-    debug_mode: bool,
-    cleanup_staging: bool,
-) -> Result<RelocationOutcome, String> {
-    move_import_output_for_state(&state, debug_mode, cleanup_staging).into_command_result()
+    run_id: String,
+) -> Result<ImportRunSnapshot, String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned".to_string())?;
+    stop_import_run_for_state(&state, &run_id)
 }
 
 #[tauri::command]
-pub fn copy_lock_files(state: State<'_, AppState>, subjects: Vec<String>) -> Result<(), String> {
-    copy_lock_files_for_state(&state, &subjects).into_command_result()
+pub fn acknowledge_import_run(state: State<'_, AppState>, run_id: String) -> Result<(), String> {
+    acknowledge_import_run_for_state(&state, &run_id).into_command_result()
 }
 
 #[tauri::command]
-pub async fn read_import_status(project_root: String) -> Result<Vec<ImportSubjectStatus>, String> {
-    let project_root = validate_path_input("project_root", &project_root).into_command_result()?;
-    read_import_status_impl(project_root).into_command_result()
+pub fn read_import_status(state: State<'_, AppState>) -> Result<Vec<ImportSubjectStatus>, String> {
+    super::status::read_import_status_for_state(&state).into_command_result()
 }

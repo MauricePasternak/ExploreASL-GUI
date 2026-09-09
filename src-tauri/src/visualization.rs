@@ -507,6 +507,9 @@ fn set_active_project_inner(
     // Recovery must finish before this candidate can become observable through
     // active-root IPC or frontend hydration.
     let recovery = crate::import::relocation::recover(&path)?;
+    // Import authority is recovered after the relocation journal but before
+    // this candidate root becomes observable to normal output/status calls.
+    crate::import::recover_import_run_for_project(state, &path)?;
     replace_active_project_state(state, Some(path))?;
     Ok(recovery)
 }
@@ -539,6 +542,13 @@ fn clear_active_project_inner(state: &crate::app_state::AppState) -> AnyResult<(
 /// Direct active-root IPC must not bypass project-runtime shutdown. Frontend
 /// transitions drain/stop first; callers that skip that contract fail closed.
 fn ensure_processing_runtime_released(state: &crate::app_state::AppState) -> AnyResult<()> {
+    let import = lock_state(&state.import_state, Some("Import state lock was poisoned"))?;
+    if !import.run_id.is_empty() && !import.acknowledged {
+        bail!(
+            "Import runtime is still owned; reconcile and acknowledge it before changing projects"
+        );
+    }
+    drop(import);
     let processing = lock_state(
         &state.processing_state,
         Some("Processing state lock was poisoned"),

@@ -6,30 +6,32 @@ import {
   IconPlayerPlay,
   IconPlayerStop,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Virtuoso } from "react-virtuoso";
 import { invoke } from "@tauri-apps/api/core";
+import { Virtuoso } from "react-virtuoso";
 
 import {
-  ImportPipelineError,
-  runImportPipeline,
+  attachImportRun,
+  cancelImportRun,
+  getActiveImportRun,
+  launchImportRun,
+  reserveImportRun,
+  setupImportDiscoveryListeners,
   setupImportListeners,
-  stopActiveImport,
-  stopImportProcess,
 } from "../../lib/importEvents";
 import { buildImportPlan, selectImportEntries } from "../../lib/importPlan";
-import { computeStaleness } from "../../lib/importStaleness";
-import { readImportStatus } from "../../lib/importStatus";
 import {
   captureProjectLease,
   isCurrentProjectLease,
   isProjectWorkAccepted,
   registerProjectTask,
 } from "../../lib/projectLifecycle";
+import {
+  reconcileCommittedImportStatus,
+  reconcileImportTerminal,
+} from "../../lib/importTerminalCoordinator";
 import { resolveLogicalSource } from "../../lib/projectPaths";
-import { fingerprintImportPlan } from "../../lib/stagingPreflight";
-import { portableKey } from "../../lib/stagingValidation";
 import { useGlobalStore } from "../../stores/globalStore";
 import { type ImportPhase, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -37,274 +39,18 @@ import HeaderCard from "../common/HeaderCard";
 import ProfileSelector from "../common/ProfileSelector";
 import ImportSubjectTable from "./ImportSubjectTable";
 
-const PHASE_META: Record<
-  ImportPhase,
-  { label: string; color: string; variant?: "light" | "filled" }
-> = {
+const PHASE_META: Record<ImportPhase, { label: string; color: string }> = {
   idle: { label: "Idle", color: "gray" },
   preparing: { label: "Preparing", color: "blue" },
-  running: { label: "Running", color: "blue", variant: "filled" },
+  running: { label: "Running", color: "blue" },
+  finalizing: { label: "Finalizing", color: "violet" },
   completed: { label: "Completed", color: "green" },
   failed: { label: "Failed", color: "red" },
+  cancelling: { label: "Cancelling", color: "orange" },
   cancelled: { label: "Cancelled", color: "orange" },
+  interrupted: { label: "Interrupted", color: "yellow" },
 };
-
-let nextRunRequestSequence = 0;
-
-function createRunRequestId(): string {
-  const randomId = globalThis.crypto?.randomUUID?.();
-  if (randomId) return randomId;
-  nextRunRequestSequence += 1;
-  return `import-${Date.now()}-${nextRunRequestSequence}`;
-}
-
-function ImportExecutionHeader({ phase }: { phase: ImportPhase }) {
-  const meta = PHASE_META[phase];
-
-  return (
-    <HeaderCard
-      icon={IconPlayerPlay}
-      title="Run Import Module"
-      subtitle="Execute the ExploreASL import module and track per-subject progress."
-      color="blue"
-      dataTestId="import-execution-header"
-      rightSection={
-        <Badge
-          color={meta.color}
-          variant={meta.variant ?? "light"}
-          size="lg"
-          style={
-            phase === "running"
-              ? { boxShadow: "0 0 0 3px var(--mantine-color-blue-light)" }
-              : undefined
-          }
-        >
-          {meta.label}
-        </Badge>
-      }
-    />
-  );
-}
-
-function ImportExecutionControls({
-  phase,
-  canRun,
-  onStart,
-  onStop,
-  noProfiles,
-  selectedProfileId,
-  onProfileChange,
-  hasSelectedSubjects,
-  profileError,
-  stopping,
-  stopError,
-}: {
-  phase: ImportPhase;
-  canRun: boolean;
-  onStart: () => void;
-  onStop: () => void;
-  noProfiles: boolean;
-  selectedProfileId: string;
-  onProfileChange: (id: string) => void;
-  hasSelectedSubjects: boolean;
-  profileError: string | null;
-  stopping: boolean;
-  stopError: string | null;
-}) {
-  return (
-    <Stack gap="sm" data-testid="import-execution-controls">
-      <Group align="flex-end">
-        <ProfileSelector
-          value={selectedProfileId}
-          onChange={onProfileChange}
-          disabled={phase === "preparing" || phase === "running"}
-          minWidth={300}
-        />
-        <Button
-          leftSection={<IconPlayerPlay size={16} />}
-          disabled={
-            phase === "preparing" ||
-            phase === "running" ||
-            !canRun ||
-            !hasSelectedSubjects ||
-            noProfiles
-          }
-          onClick={onStart}
-          data-testid="start-import-btn"
-        >
-          Start Import
-        </Button>
-        <Button
-          leftSection={<IconPlayerStop size={16} />}
-          color="red"
-          variant="light"
-          disabled={phase !== "running" || stopping}
-          onClick={onStop}
-          data-testid="stop-import-btn"
-        >
-          Stop
-        </Button>
-      </Group>
-      {noProfiles ? (
-        <Alert
-          color="red"
-          icon={<IconAlertTriangle size={16} />}
-          p="xs"
-          data-testid="no-profiles-alert"
-        >
-          <Text size="sm">No execution profiles configured. Add one in Settings.</Text>
-        </Alert>
-      ) : null}
-      {profileError ? (
-        <Alert
-          color="red"
-          icon={<IconAlertTriangle size={16} />}
-          p="xs"
-          data-testid="profile-error-alert"
-        >
-          <Text size="sm">{profileError}</Text>
-        </Alert>
-      ) : null}
-      {stopError ? (
-        <Alert
-          color="red"
-          icon={<IconAlertTriangle size={16} />}
-          p="xs"
-          data-testid="stop-import-error-alert"
-        >
-          <Text size="sm">{stopError}</Text>
-        </Alert>
-      ) : null}
-    </Stack>
-  );
-}
-
-function ImportLogPanel({ lines }: { lines: string[] }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    const text = lines.join("\n");
-    try {
-      const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
-      await writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }, [lines]);
-
-  if (lines.length === 0) {
-    return (
-      <Paper withBorder p="md" data-testid="import-log-empty">
-        <Stack gap="xs">
-          <Group justify="space-between">
-            <Text fw={600}>Import log</Text>
-            <Button
-              variant="subtle"
-              size="compact-sm"
-              leftSection={<IconCopy size={14} />}
-              disabled
-            >
-              Copy
-            </Button>
-          </Group>
-          <Text c="dimmed" size="sm">
-            Waiting for import output...
-          </Text>
-        </Stack>
-      </Paper>
-    );
-  }
-
-  return (
-    <Paper withBorder p="md" data-testid="import-log-panel">
-      <Stack gap="xs">
-        <Group justify="space-between">
-          <Text fw={600}>Import log</Text>
-          <Button
-            variant="subtle"
-            size="compact-sm"
-            leftSection={<IconCopy size={14} />}
-            onClick={handleCopy}
-          >
-            {copied ? "Copied" : "Copy"}
-          </Button>
-        </Group>
-        <div style={{ height: 300 }}>
-          <Virtuoso
-            data={lines}
-            followOutput="smooth"
-            itemContent={(_index, line) => (
-              <div
-                style={{
-                  fontFamily: "var(--mantine-font-family-monospace)",
-                  fontSize: "var(--mantine-font-size-xs)",
-                  lineHeight: 1.4,
-                  whiteSpace: "pre",
-                  minHeight: "1.4em",
-                }}
-              >
-                {line || "\u00A0"}
-              </div>
-            )}
-          />
-        </div>
-      </Stack>
-    </Paper>
-  );
-}
-
-function ConfirmReimportDialog({
-  opened,
-  onClose,
-  onConfirm,
-  plan,
-}: {
-  opened: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  plan: RelocationPlan | null;
-}) {
-  return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title="Replace existing imported data?"
-      data-testid="confirm-reimport-dialog"
-    >
-      <Text size="sm">
-        Re-importing replaces each complete selected subject. Older sessions and files absent from
-        the new import will be removed; this does not merge existing subject output.
-      </Text>
-      <Stack gap="xs" mt="sm" data-testid="relocation-inventory">
-        {plan?.subjects.map((subject) => (
-          <details key={subject.subject} data-testid={`relocation-inventory-${subject.subject}`}>
-            <summary>
-              {subject.subject}: {subject.fileCount} files, {subject.byteTotal} bytes
-              {subject.sessions.length > 0 ? `, ${subject.sessions.join(", ")}` : ""}
-            </summary>
-            <ul>
-              {subject.entries.map((entry) => (
-                <li key={entry.path}>{entry.path}</li>
-              ))}
-            </ul>
-          </details>
-        ))}
-      </Stack>
-      <Group justify="flex-end" mt="md">
-        <Button variant="default" onClick={onClose} data-testid="confirm-reimport-cancel">
-          Cancel
-        </Button>
-        <Button color="orange" onClick={onConfirm} data-testid="confirm-reimport-confirm">
-          Replace and import
-        </Button>
-      </Group>
-    </Modal>
-  );
-}
+const ACTIVE: ImportPhase[] = ["preparing", "running", "finalizing", "cancelling"];
 
 interface RelocationPlan {
   planId: string;
@@ -319,9 +65,8 @@ interface RelocationPlan {
   fingerprint: string;
 }
 
-function currentImportPlan(projectRoot: string) {
+function importPlan(projectRoot: string) {
   const store = useImportStore.getState();
-  const globalSettings = useGlobalStore.getState().settings;
   const sourceRoot = resolveLogicalSource(projectRoot, store.sourceDataPath, "dicom");
   return buildImportPlan({
     rawPaths: store.rawPaths,
@@ -332,472 +77,485 @@ function currentImportPlan(projectRoot: string) {
     sessionAliases: store.sessionAliases,
     runAliases: store.runAliases,
     modalityAliases: store.modalityAliases,
-    tokenSubDelimiters: globalSettings.tokenSubDelimiters,
+    tokenSubDelimiters: useGlobalStore.getState().settings.tokenSubDelimiters,
     bMatchDirectories: store.bMatchDirectories,
     metadataGroups: store.metadataGroups,
     subjectRows: store.subjectRows,
   });
 }
 
+function ImportLogPanel({ lines }: { lines: string[] }) {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(async () => {
+    const text = lines.join("\n");
+    try {
+      const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+      await writeText(text);
+    } catch {
+      await navigator.clipboard.writeText(text);
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }, [lines]);
+
+  return (
+    <Paper withBorder p="sm" data-testid="import-log-panel">
+      <Group justify="space-between">
+        <Text fw={600}>Import log</Text>
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          leftSection={<IconCopy size={14} />}
+          onClick={() => void copy()}
+          disabled={lines.length === 0}
+          data-testid="copy-import-log"
+        >
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </Group>
+      {lines.length === 0 ? (
+        <Text c="dimmed" size="sm" data-testid="import-log-empty">
+          Waiting for import output…
+        </Text>
+      ) : (
+        <div style={{ height: 300 }} data-testid="import-log-lines">
+          <Virtuoso
+            data={lines}
+            followOutput="smooth"
+            itemContent={(_index, line) => (
+              <Text size="xs" ff="monospace" style={{ whiteSpace: "pre" }}>
+                {line || "\u00a0"}
+              </Text>
+            )}
+          />
+        </div>
+      )}
+    </Paper>
+  );
+}
+
 export default function ImportExecution() {
   const navigate = useNavigate();
-  const importPhase = useImportStore((state) => state.importPhase);
-  const importProgress = useImportStore((state) => state.importProgress);
-  const importLog = useImportStore((state) => state.importLog);
+  const phase = useImportStore((state) => state.importPhase);
+  const progress = useImportStore((state) => state.importProgress);
+  const log = useImportStore((state) => state.importLog);
+  const activeRunId = useImportStore((state) => state.activeRunId);
+  const terminalRunId = useImportStore((state) => state.terminalRunId);
+  const runError = useImportStore((state) => state.importRunError);
+  const summary = useImportStore((state) => state.importSummary);
+  const stagingIssues = useImportStore((state) => state.stagingPreflight.issues);
   const subjectRows = useImportStore((state) => state.subjectRows);
   const selectedProfileId = useImportStore((state) => state.selectedProfileId);
   const setSelectedProfileId = useImportStore((state) => state.setSelectedProfileId);
-  const autoSelectProfile = useImportStore((state) => state.autoSelectProfile);
   const profileError = useImportStore((state) => state.profileError);
-  const clearProfileError = useImportStore((state) => state.clearProfileError);
-  const setActiveStep = useImportStore((state) => state.setActiveStep);
-  const startImport = useImportStore((state) => state.startImport);
-  const cancelImportAction = useImportStore((state) => state.cancelImport);
-  const resetImportPhase = useImportStore((state) => state.resetImportPhase);
-  const addLogLine = useImportStore((state) => state.addLogLine);
-  const failImport = useImportStore((state) => state.failImport);
   const sourceAvailability = useImportStore((state) => state.sourceAvailability);
-  const setStagingPreflightIssues = useImportStore((state) => state.setStagingPreflightIssues);
+  const setActiveStep = useImportStore((state) => state.setActiveStep);
+  const validation = useGlobalStore((state) => state.profileValidationState);
   const executionProfiles = useGlobalStore((state) => state.settings.executionProfiles);
-  const profileValidationState = useGlobalStore((state) => state.profileValidationState);
-  const executionLocked = importPhase === "preparing" || importPhase === "running";
-  const progressRows = Object.values(importProgress).sort((left, right) =>
-    left.subject.localeCompare(right.subject),
+  const effectiveProfileId =
+    selectedProfileId ??
+    executionProfiles.find((profile) => validation[profile.id]?.valid)?.id ??
+    null;
+  const [discovery, setDiscovery] = useState<"loading" | "ready" | "error">(() =>
+    captureProjectLease() ? "loading" : "ready",
   );
-  const hasSubjects = subjectRows.length > 0;
-  const selectedId = selectedProfileId ?? "";
-  const selectedProfileValid =
-    selectedId.length > 0 && profileValidationState[selectedId]?.valid === true;
-  const noProfiles = executionProfiles.length === 0;
-  const sourceAvailable = ["available", "unconfigured"].includes(sourceAvailability.status);
-  const canRun = selectedProfileValid && hasSubjects && sourceAvailable;
-
-  const [prevImportProgress, setPrevImportProgress] = useState(importProgress);
-  const [prevImportPhase, setPrevImportPhase] = useState(importPhase);
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>(() => {
-    const subjects = Object.values(importProgress);
-    if (subjects.length === 0) return [];
-    if (importPhase === "idle" || importPhase === "failed" || importPhase === "cancelled") {
-      const hasCompleted = subjects.some((s) => s.status === "completed");
-      if (!hasCompleted) {
-        return subjects.map((s) => s.subject);
-      }
-      const toSelect = subjects
-        .filter(
-          (s) =>
-            s.stale ||
-            s.status === "failed" ||
-            s.status === "pending" ||
-            s.status === "running" ||
-            s.status === "cancelled",
-        )
-        .map((s) => s.subject);
-      return toSelect.length > 0 ? toSelect : subjects.map((s) => s.subject);
-    }
-    return [];
-  });
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [selectedSubjectOverride, setSelectedSubjectOverride] = useState<string[] | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<{
-    runSubjects: string[];
+    subjects: string[];
     plan: RelocationPlan;
   } | null>(null);
-  const [planningError, setPlanningError] = useState<string | null>(null);
-  const [planning, setPlanning] = useState(false);
-  const [stopping, setStopping] = useState(false);
-  const [stopError, setStopError] = useState<string | null>(null);
-
-  if (importProgress !== prevImportProgress || importPhase !== prevImportPhase) {
-    setPrevImportProgress(importProgress);
-    setPrevImportPhase(importPhase);
-
-    const subjects = Object.values(importProgress);
-    if (subjects.length > 0) {
-      if (importPhase === "idle" || importPhase === "failed" || importPhase === "cancelled") {
-        const hasCompleted = subjects.some((s) => s.status === "completed");
-
-        if (!hasCompleted) {
-          setSelectedSubjects(subjects.map((s) => s.subject));
-        } else {
-          const toSelect = subjects
-            .filter(
-              (s) =>
-                s.stale ||
-                s.status === "failed" ||
-                s.status === "pending" ||
-                s.status === "running" ||
-                s.status === "cancelled",
-            )
-            .map((s) => s.subject);
-          setSelectedSubjects(toSelect.length > 0 ? toSelect : subjects.map((s) => s.subject));
-        }
-      }
-    }
-  }
-
-  useEffect(() => {
-    autoSelectProfile();
-  }, [autoSelectProfile, executionProfiles, profileValidationState]);
-
-  useEffect(() => {
-    clearProfileError();
-  }, [selectedProfileId, clearProfileError]);
-
-  const pidRef = useRef<{ runRequestId: string; pid: number } | null>(null);
-  const runRequestIdRef = useRef<string | null>(null);
+  const rows = useMemo(
+    () => Object.values(progress).sort((a, b) => a.subject.localeCompare(b.subject)),
+    [progress],
+  );
+  const selectedSubjects = useMemo(
+    () =>
+      selectedSubjectOverride ??
+      (rows.length > 0
+        ? rows
+            .filter((row) => row.status !== "completed" || row.stale === true)
+            .map((row) => row.subject)
+        : [...new Set(subjectRows.map((row) => row.subject))]),
+    [rows, selectedSubjectOverride, subjectRows],
+  );
   const cleanupRef = useRef<(() => void) | null>(null);
-  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      cleanupRef.current?.();
-      cleanupRef.current = null;
-      pidRef.current = null;
-      runRequestIdRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (importPhase === "preparing" || importPhase === "running") return;
-    pidRef.current = null;
-    runRequestIdRef.current = null;
+  const bindListeners = useCallback(async (runId: string) => {
     cleanupRef.current?.();
-    cleanupRef.current = null;
-  }, [importPhase]);
+    const cleanup = await setupImportListeners(runId);
+    cleanupRef.current = cleanup;
+    return cleanup;
+  }, []);
 
   useEffect(() => {
-    if (importPhase === "running" || importPhase === "preparing") {
-      return;
-    }
-
-    let cancelled = false;
-    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
-    if (!projectRoot) return;
-
-    const store = useImportStore.getState();
-    const subjects = [...new Set(store.subjectRows.map((r) => r.subject))];
-    if (subjects.length === 0) return;
-
-    readImportStatus(projectRoot)
-      .then((statuses) => {
-        if (cancelled) return;
-        const currentStore = useImportStore.getState();
-        if (currentStore.importPhase === "running" || currentStore.importPhase === "preparing")
-          return;
-        const staleness = computeStaleness(currentStore, currentStore.mostRecentConfig);
-        currentStore.reconstructProgressFromLockFiles(statuses, subjects, staleness);
-      })
-      .catch((err) => {
-        console.debug(
-          "[ImportExecution] readImportStatus failed (stale reconstruction is best-effort):",
-          err,
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [importPhase]);
-
-  const doRunImport = useCallback(
-    (subjectsToImport: string[], relocationPlanId: string) => {
-      const lease = captureProjectLease();
-      const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
-      const plan = currentImportPlan(projectRoot);
-      const fingerprint = fingerprintImportPlan(projectRoot, plan);
-      const store = useImportStore.getState();
-      const executionProfile = store.selectedProfileId
-        ? useGlobalStore.getState().getProfileById(store.selectedProfileId)
-        : undefined;
-      const subjectsToImportKeys = new Set(subjectsToImport.map(portableKey));
-      const stagingEntries = selectImportEntries(plan.entries, subjectsToImport);
-      const succeededForRetry = Object.values(store.importProgress)
-        .filter(
-          (progress) =>
-            progress.status === "completed" &&
-            !subjectsToImportKeys.has(portableKey(progress.subject)),
-        )
-        .map((progress) => progress.subject);
-      const runRequestId = createRunRequestId();
-      const isCurrentOperation = () => {
-        if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return false;
-        const currentProjectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
-        if (currentProjectRoot !== projectRoot) return false;
-        try {
-          return (
-            fingerprintImportPlan(currentProjectRoot, currentImportPlan(currentProjectRoot)) ===
-            fingerprint
-          );
-        } catch {
-          return false;
-        }
+    let disposed = false;
+    const lease = captureProjectLease();
+    if (!lease)
+      return () => {
+        disposed = true;
       };
-
-      const isCurrentRun = () => runRequestIdRef.current === runRequestId && isCurrentOperation();
-
-      if (!isCurrentOperation()) return;
-      if (store.importPhase === "failed" || store.importPhase === "cancelled") {
-        resetImportPhase();
-      }
-      pidRef.current = null;
-      runRequestIdRef.current = runRequestId;
-      startImport(subjectsToImport);
-
-      const operation = (async () => {
-        cleanupRef.current?.();
-        cleanupRef.current = null;
-
-        try {
-          const cleanup = await setupImportListeners(runRequestId, {
-            onTerminal: () => {
-              if (runRequestIdRef.current === runRequestId) {
-                pidRef.current = null;
-                runRequestIdRef.current = null;
-              }
-            },
-          });
-          if (!isMountedRef.current || !isCurrentRun()) {
-            cleanup();
+    const discover = async () => {
+      try {
+        const listeners = await setupImportDiscoveryListeners(lease);
+        cleanupRef.current = listeners.cleanup;
+        if (disposed || !isCurrentProjectLease(lease)) {
+          listeners.cleanup();
+          return;
+        }
+        const run = await getActiveImportRun();
+        if (disposed || !lease || !isCurrentProjectLease(lease)) return;
+        if (run) {
+          useImportStore.getState().bindImportRunSnapshot(run);
+          listeners.bindRun(run.runId);
+          const attached = await attachImportRun(run.runId);
+          if (disposed || !isCurrentProjectLease(lease)) {
+            listeners.cleanup();
             return;
           }
-          cleanupRef.current = cleanup;
-
-          if (!executionProfile) {
-            throw new Error("No execution profile selected.");
+          useImportStore.getState().reconcileImportRunSnapshot(attached, lease);
+          if (["completed", "failed", "cancelled", "interrupted"].includes(attached.lifecycle)) {
+            void reconcileImportTerminal(attached.runId, lease).catch(() => undefined);
           }
-          if (succeededForRetry.length > 0) {
-            addLogLine(
-              `Preserving lock files for previously-completed subjects: ${succeededForRetry.join(", ")}`,
-            );
-          }
-
-          const pid = await runImportPipeline({
-            runRequestId,
-            stagingEntries,
-            sourcestructureJson: plan.sourcestructureJson,
-            studyparJson: plan.studyparJson,
-            executionProfile,
-            subjectList: subjectsToImport,
-            subjectsToPreserve: succeededForRetry.length > 0 ? succeededForRetry : undefined,
-            relocationPlanId,
-          });
-          if (isCurrentRun() && useImportStore.getState().importPhase === "running") {
-            pidRef.current = { runRequestId, pid };
-          }
-        } catch (err) {
-          if (!isCurrentRun()) return;
-          if (err instanceof ImportPipelineError && err.failure.kind === "preflight") {
-            setStagingPreflightIssues(err.failure.issues);
-          }
-          const message = err instanceof Error ? err.message : "Failed to start import";
-          addLogLine(message);
-          failImport();
-          pidRef.current = null;
-          runRequestIdRef.current = null;
-          cleanupRef.current?.();
-          cleanupRef.current = null;
+        } else {
+          await reconcileCommittedImportStatus(lease);
         }
-      })();
+        if (!disposed) setDiscovery("ready");
+      } catch (error) {
+        if (!disposed) {
+          setDiscoveryError(error instanceof Error ? error.message : String(error));
+          setDiscovery("error");
+        }
+      }
+    };
+    void discover();
+    return () => {
+      disposed = true;
+      cleanupRef.current?.();
+      cleanupRef.current = null;
+    };
+  }, [bindListeners]);
+
+  const startAttempt = useCallback(
+    async (confirmed?: { subjects: string[]; plan: RelocationPlan }) => {
+      if (starting || discovery !== "ready" || activeRunId) return;
+      const lease = captureProjectLease();
+      if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
+      if (!useImportStore.getState().selectedProfileId) {
+        useImportStore.getState().autoSelectProfile();
+      }
+      const profile = effectiveProfileId
+        ? useGlobalStore.getState().getProfileById(effectiveProfileId)
+        : undefined;
+      if (!profile || !validation[profile.id]?.valid) return;
+      const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath;
+      if (!projectRoot) return;
+      const subjects =
+        confirmed?.subjects ??
+        (selectedSubjects.length > 0
+          ? selectedSubjects
+          : [...new Set(subjectRows.map((row) => row.subject))]);
+      if (subjects.length === 0) return;
+      setStarting(true);
       try {
-        registerProjectTask(operation);
-      } catch {
-        // Admission closed after synchronous setup. The operation self-gates after every await.
+        const relocation =
+          confirmed?.plan ??
+          (await invoke<RelocationPlan>("plan_import_relocation", { subjectList: subjects }));
+        if (!isCurrentProjectLease(lease)) return;
+        const selectedFreshSubject = subjects.some((subject) => {
+          const entry = useImportStore.getState().importProgress[subject];
+          return entry?.status === "completed" && entry.stale !== true;
+        });
+        if (
+          !confirmed &&
+          (selectedFreshSubject || relocation.subjects.some((subject) => subject.fileCount > 0))
+        ) {
+          setPendingConfirmation({ subjects: [...subjects], plan: relocation });
+          return;
+        }
+        const preservedSubjects = Object.values(useImportStore.getState().importProgress)
+          .filter((entry) => entry.status === "completed" && !subjects.includes(entry.subject))
+          .map((entry) => entry.subject);
+        const reserved = await reserveImportRun({
+          subjectList: subjects,
+          relocationPlanId: relocation.planId,
+          profileId: profile.id,
+          subjectsToPreserve: preservedSubjects,
+          preserveStaging: useGlobalStore.getState().settings.import.preserveStagingDir,
+        });
+        if (!isCurrentProjectLease(lease)) return;
+        useImportStore.getState().startImport(subjects);
+        useImportStore.getState().bindImportRunSnapshot(reserved);
+        await bindListeners(reserved.runId);
+        if (!isCurrentProjectLease(lease)) return;
+        const attached = await attachImportRun(reserved.runId);
+        if (!isCurrentProjectLease(lease)) return;
+        useImportStore.getState().reconcileImportRunSnapshot(attached);
+        const plan = importPlan(projectRoot);
+        const launched = await launchImportRun({
+          runId: reserved.runId,
+          stagingEntries: selectImportEntries(plan.entries, subjects),
+          sourcestructureJson: plan.sourcestructureJson,
+          studyparJson: plan.studyparJson,
+          executionProfile: profile,
+          subjectList: subjects,
+          relocationPlanId: relocation.planId,
+        });
+        if (!isCurrentProjectLease(lease)) return;
+        useImportStore.getState().reconcileImportRunSnapshot(launched);
+        if (["completed", "failed", "cancelled", "interrupted"].includes(launched.lifecycle)) {
+          void reconcileImportTerminal(launched.runId, lease).catch(() => undefined);
+        }
+      } catch (error) {
+        useImportStore.setState({
+          importRunError: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setStarting(false);
       }
     },
-    [resetImportPhase, startImport, addLogLine, failImport, setStagingPreflightIssues],
+    [
+      activeRunId,
+      bindListeners,
+      discovery,
+      effectiveProfileId,
+      selectedSubjects,
+      starting,
+      subjectRows,
+      validation,
+    ],
   );
 
-  const handleStartImport = useCallback(async () => {
-    const progress = useImportStore.getState().importProgress;
-    const subjectsToImport =
-      selectedSubjects.length > 0
-        ? [...selectedSubjects]
-        : Object.keys(progress).length === 0
-          ? [...new Set(useImportStore.getState().subjectRows.map((r) => r.subject))]
-          : [];
+  // Admission and launch span several awaits. Track the whole sequence so a
+  // project transition drains it before native root replacement.
+  const start = useCallback(
+    (confirmed?: { subjects: string[]; plan: RelocationPlan }) => {
+      try {
+        return registerProjectTask(() => startAttempt(confirmed));
+      } catch (error) {
+        useImportStore.setState({
+          importRunError: error instanceof Error ? error.message : String(error),
+        });
+        return Promise.resolve();
+      }
+    },
+    [startAttempt],
+  );
 
-    if (subjectsToImport.length === 0 || planning) return;
-
+  const stop = useCallback(async () => {
+    if (!activeRunId) return;
     const lease = captureProjectLease();
-    const projectRoot = useProjectStore.getState().project?.projectMeta.rootPath ?? "";
-    setPlanning(true);
-    setPlanningError(null);
-    let plan: RelocationPlan;
-    try {
-      plan = await invoke<RelocationPlan>("plan_import_relocation", {
-        subjectList: subjectsToImport,
-      });
-    } catch (error) {
-      if (!lease || (isCurrentProjectLease(lease) && isProjectWorkAccepted())) {
-        setPlanningError(error instanceof Error ? error.message : String(error));
-      }
-      return;
-    } finally {
-      if (!lease || (isCurrentProjectLease(lease) && isProjectWorkAccepted())) setPlanning(false);
-    }
-    if (
-      (lease && (!isCurrentProjectLease(lease) || !isProjectWorkAccepted())) ||
-      (useProjectStore.getState().project?.projectMeta.rootPath ?? "") !== projectRoot
-    )
-      return;
-
-    const freshlyCompleted = subjectsToImport.filter(
-      (s) => progress[s]?.status === "completed" && progress[s]?.stale !== true,
-    );
-
-    if (
-      freshlyCompleted.length > 0 ||
-      plan.subjects.some((subject) => subject.entries.length > 0)
-    ) {
-      setPendingConfirmation({
-        runSubjects: subjectsToImport,
-        plan,
-      });
-    } else {
-      doRunImport(subjectsToImport, plan.planId);
-    }
-  }, [selectedSubjects, doRunImport, planning]);
-
-  const handleConfirmReimport = useCallback(() => {
-    const subjectsToImport = pendingConfirmation?.runSubjects;
-    const relocationPlanId = pendingConfirmation?.plan.planId;
-    setPendingConfirmation(null);
-    if (subjectsToImport && relocationPlanId) void doRunImport(subjectsToImport, relocationPlanId);
-  }, [pendingConfirmation, doRunImport]);
-
-  const handleCancelReimport = useCallback(() => {
-    setPendingConfirmation(null);
-  }, []);
-
-  const handleStop = useCallback(async () => {
-    const runRequestId = runRequestIdRef.current;
-    const pid = pidRef.current;
+    if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
     setStopping(true);
-    setStopError(null);
     try {
-      if (runRequestId && pid?.runRequestId === runRequestId) {
-        await stopImportProcess(pid.pid);
-      } else {
-        await stopActiveImport();
-      }
-      if (runRequestIdRef.current === runRequestId) {
-        pidRef.current = null;
-        runRequestIdRef.current = null;
-        cleanupRef.current?.();
-        cleanupRef.current = null;
-      }
-      if (isMountedRef.current && useImportStore.getState().importPhase === "running") {
-        cancelImportAction();
-      }
+      await registerProjectTask(async () => {
+        const snapshot = await cancelImportRun(activeRunId);
+        if (!isCurrentProjectLease(lease)) return;
+        useImportStore.getState().reconcileImportRunSnapshot(snapshot, lease);
+        if (["completed", "failed", "cancelled", "interrupted"].includes(snapshot.lifecycle)) {
+          await reconcileImportTerminal(snapshot.runId, lease);
+        }
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to stop import.";
-      addLogLine(`Failed to stop import: ${message}`);
-      if (isMountedRef.current) setStopError(message);
+      if (isCurrentProjectLease(lease)) {
+        useImportStore.setState({
+          importRunError: error instanceof Error ? error.message : String(error),
+        });
+      }
     } finally {
-      if (isMountedRef.current) setStopping(false);
+      setStopping(false);
     }
-  }, [addLogLine, cancelImportAction]);
+  }, [activeRunId]);
 
-  const advanceToParameters = () => {
-    const project = useProjectStore.getState().project;
-    if (project) {
-      useProjectStore.getState().setPhase("parameters");
-      void useProjectStore.getState().saveProject();
-      navigate(`/project/${project.projectMeta.id}/parameters`);
-    }
-  };
-
+  const locked = ACTIVE.includes(phase) || discovery !== "ready";
+  const runAdmissionLocked = locked || terminalRunId !== null;
+  const profileValid = Boolean(effectiveProfileId && validation[effectiveProfileId]?.valid);
+  const sourceAvailable = ["available", "unconfigured"].includes(sourceAvailability.status);
+  const meta = PHASE_META[phase];
   return (
     <Stack gap="md" data-testid="import-execution">
-      <ImportExecutionHeader phase={importPhase} />
-
-      <ImportExecutionControls
-        phase={importPhase}
-        canRun={canRun && !planning}
-        onStart={handleStartImport}
-        onStop={handleStop}
-        noProfiles={noProfiles}
-        selectedProfileId={selectedId}
-        onProfileChange={setSelectedProfileId}
-        profileError={profileError}
-        stopping={stopping}
-        stopError={stopError}
-        hasSelectedSubjects={
-          selectedSubjects.length > 0 ||
-          (Object.keys(importProgress).length === 0 && subjectRows.length > 0)
+      <HeaderCard
+        icon={IconPlayerPlay}
+        title="Run Import Module"
+        subtitle="Native verification and relocation determine completion."
+        color="blue"
+        dataTestId="import-execution-header"
+        rightSection={
+          <Badge color={meta.color} size="lg" data-testid="import-lifecycle-badge">
+            {meta.label}
+          </Badge>
         }
       />
-      {planningError ? (
+      {discovery === "loading" ? (
+        <Alert data-testid="import-discovery-loading">Checking native import work…</Alert>
+      ) : null}
+      {discoveryError ? (
         <Alert
           color="red"
           icon={<IconAlertTriangle size={16} />}
-          p="xs"
-          data-testid="relocation-planning-error"
+          data-testid="import-discovery-error"
         >
-          <Text size="sm">{planningError}</Text>
+          {discoveryError}
         </Alert>
       ) : null}
-
-      {!canRun ? (
-        <Text c="dimmed" size="sm">
-          {selectedProfileValid
-            ? "Stage at least one subject before running import."
-            : "Select a valid execution profile in Settings before running import."}
-        </Text>
+      {runError ? (
+        <Alert color="red" icon={<IconAlertTriangle size={16} />} data-testid="import-run-error">
+          {runError}
+        </Alert>
       ) : null}
-
-      {subjectRows.length === 0 ? (
-        <Paper withBorder p="md">
-          <Text c="dimmed" size="sm">
-            No subjects are staged for import yet.
+      {stagingIssues.length > 0 ? (
+        <Alert
+          color="red"
+          icon={<IconAlertTriangle size={16} />}
+          data-testid="import-staging-issues"
+        >
+          <Stack gap={2}>
+            {stagingIssues.map((issue, index) => (
+              <Text key={`${issue.code}-${issue.entryIndex ?? index}`} size="sm">
+                {issue.field}: {issue.message}
+              </Text>
+            ))}
+          </Stack>
+        </Alert>
+      ) : null}
+      {phase === "finalizing" ? (
+        <Alert color="violet" data-testid="import-finalizing-message">
+          Verifying completion evidence and relocating output. Do not close this project.
+        </Alert>
+      ) : null}
+      {phase === "interrupted" ? (
+        <Alert color="yellow" data-testid="import-interrupted-message">
+          Previous native import was interrupted. Staging was preserved for diagnosis or retry.
+        </Alert>
+      ) : null}
+      {summary ? (
+        <Paper withBorder p="sm" data-testid="import-terminal-summary">
+          <Text>
+            Committed: {summary.succeeded}; failed: {summary.failed}
           </Text>
         </Paper>
       ) : null}
-
+      <Group align="flex-end" data-testid="import-execution-controls">
+        <ProfileSelector
+          value={effectiveProfileId ?? ""}
+          onChange={setSelectedProfileId}
+          disabled={runAdmissionLocked}
+          minWidth={300}
+        />
+        <Button
+          leftSection={<IconPlayerPlay size={16} />}
+          onClick={() => void start()}
+          disabled={
+            runAdmissionLocked ||
+            starting ||
+            !profileValid ||
+            !sourceAvailable ||
+            selectedSubjects.length === 0
+          }
+          data-testid="start-import-btn"
+        >
+          Start Import
+        </Button>
+        <Button
+          leftSection={<IconPlayerStop size={16} />}
+          color="red"
+          variant="light"
+          onClick={() => void stop()}
+          disabled={phase !== "running" || stopping}
+          data-testid="stop-import-btn"
+        >
+          Stop
+        </Button>
+      </Group>
+      {profileError ? (
+        <Alert color="red" data-testid="profile-error-alert">
+          {profileError}
+        </Alert>
+      ) : null}
+      {executionProfiles.length === 0 ? (
+        <Alert color="red" icon={<IconAlertTriangle size={16} />} data-testid="no-profiles-alert">
+          No execution profiles configured. Add one in Settings.
+        </Alert>
+      ) : null}
+      {!sourceAvailable ? (
+        <Alert color="red" data-testid="import-source-unavailable-alert">
+          Saved DICOM source is unavailable. Relink it before starting import.
+        </Alert>
+      ) : null}
       <ImportSubjectTable
-        rows={progressRows}
+        rows={rows}
         selectedSubjects={selectedSubjects}
-        onSelectedSubjectsChange={setSelectedSubjects}
-        selectionLocked={executionLocked}
+        onSelectedSubjectsChange={setSelectedSubjectOverride}
+        selectionLocked={runAdmissionLocked}
       />
-      <ImportLogPanel lines={importLog} />
-
-      <ConfirmReimportDialog
+      <ImportLogPanel lines={log} />
+      <Modal
         opened={pendingConfirmation !== null}
-        onClose={handleCancelReimport}
-        onConfirm={handleConfirmReimport}
-        plan={pendingConfirmation?.plan ?? null}
-      />
-
-      <Group
-        justify="space-between"
-        pos="sticky"
-        bottom={40}
-        style={{
-          zIndex: 2,
-          paddingTop: "var(--mantine-spacing-md)",
-          paddingBottom: "var(--mantine-spacing-md)",
-          backgroundColor: "var(--mantine-color-body)",
-          boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.06)",
-        }}
-        data-testid="import-execution-nav"
+        onClose={() => setPendingConfirmation(null)}
+        title="Replace existing imported data?"
+        data-testid="confirm-reimport-dialog"
       >
+        <Text size="sm">
+          Re-importing replaces complete selected subject output. Native verification still decides
+          which replacements commit.
+        </Text>
+        <Stack gap="xs" mt="sm" data-testid="relocation-inventory">
+          {pendingConfirmation?.plan.subjects.map((subject) => (
+            <details key={subject.subject} data-testid={`relocation-inventory-${subject.subject}`}>
+              <summary>
+                {subject.subject}: {subject.fileCount} files, {subject.byteTotal} bytes
+                {subject.sessions.length > 0 ? `, ${subject.sessions.join(", ")}` : ""}
+              </summary>
+              <ul>
+                {subject.entries.map((entry) => (
+                  <li key={entry.path}>{entry.path}</li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </Stack>
+        <Group justify="flex-end" mt="md">
+          <Button
+            variant="default"
+            onClick={() => setPendingConfirmation(null)}
+            data-testid="confirm-reimport-cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            color="orange"
+            onClick={() => {
+              const confirmation = pendingConfirmation;
+              setPendingConfirmation(null);
+              if (confirmation) void start(confirmation);
+            }}
+            data-testid="confirm-reimport-confirm"
+          >
+            Replace and import
+          </Button>
+        </Group>
+      </Modal>
+      <Group justify="space-between" data-testid="import-execution-nav">
         <Button
           leftSection={<IconArrowLeft size={16} />}
-          variant="light"
-          disabled={executionLocked}
+          disabled={locked}
           onClick={() => setActiveStep(4)}
           data-testid="import-back-btn"
         >
           Back: Preview
         </Button>
         <Button
-          onClick={advanceToParameters}
-          disabled={executionLocked}
+          disabled={locked}
+          onClick={() => {
+            const project = useProjectStore.getState().project;
+            if (project) {
+              useProjectStore.getState().setPhase("parameters");
+              void useProjectStore.getState().saveProject();
+              navigate(`/project/${project.projectMeta.id}/parameters`);
+            }
+          }}
           data-testid="import-next-params-btn"
         >
           Next: Parameters

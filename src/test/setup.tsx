@@ -163,8 +163,31 @@ vi.mock("@tauri-apps/api/core", () => ({
         return Promise.resolve([]);
       case "is_writable":
         return Promise.resolve(true);
-      case "run_import_pipeline":
-        return Promise.resolve(12345);
+      case "get_active_import_run":
+        return Promise.resolve(null);
+      case "reserve_import_run":
+      case "attach_import_run":
+      case "launch_import_run":
+      case "cancel_import_run": {
+        const args = _args ?? {};
+        const lifecycle =
+          cmd === "reserve_import_run"
+            ? "preparing"
+            : cmd === "cancel_import_run"
+              ? "cancelled"
+              : "running";
+        return Promise.resolve({
+          runId: (args.runId as string | undefined) ?? "test-import-run",
+          lifecycle,
+          ownershipGeneration: 1,
+          profileId: "test-profile",
+          selectedSubjects: (args.subjectList as string[] | undefined) ?? [],
+          createdAtMs: 1,
+          updatedAtMs: 1,
+          subjectOutcomes: [],
+          ...(lifecycle === "cancelled" ? { terminalResult: "cancelled" } : {}),
+        });
+      }
       case "get_active_run":
         return Promise.resolve(null);
       case "reserve_processing_run":
@@ -208,10 +231,6 @@ vi.mock("@tauri-apps/api/core", () => ({
           subjects: [],
           fingerprint: "test",
         });
-      case "stop_import":
-      case "stop_active_import":
-      case "clean_import_status":
-      case "copy_lock_files":
       case "validate_all_execution_profiles":
       case "read_import_status":
       case "list_subject_reports":
@@ -220,13 +239,6 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "list_subjects":
       case "list_stats_files":
         return Promise.resolve([]);
-      case "move_import_output":
-        return Promise.resolve({
-          planId: "test-relocation-plan",
-          generation: 1,
-          stagingCleanupComplete: true,
-          subjects: [],
-        });
       case "scan_bids_sidecars":
         return Promise.resolve({ groups: [], skipped: [] });
       case "check_bids_dataset":
@@ -308,12 +320,6 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
-}));
-
-vi.mock("@tauri-apps/plugin-opener", () => ({
-  openPath: vi.fn(),
-  openUrl: vi.fn(),
-  revealItemInDir: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-store", () => {

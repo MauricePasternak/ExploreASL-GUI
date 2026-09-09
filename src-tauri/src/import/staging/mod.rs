@@ -26,7 +26,7 @@ pub struct StagingEntry {
     pub source_path: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum StagingIssueCode {
     EmptyComponent,
@@ -51,7 +51,7 @@ pub enum StagingIssueCode {
     DestinationOutsideStaging,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum StagingField {
     Subject,
@@ -63,8 +63,8 @@ pub enum StagingField {
     Destination,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StagingValidationIssue {
     pub code: StagingIssueCode,
     pub field: StagingField,

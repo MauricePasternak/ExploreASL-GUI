@@ -423,6 +423,12 @@ fn recover_result(project_root: &Path) -> RelocationTransactionResult<Relocation
     };
     // Preflight every record and all actual evidence before first mutation.
     validate_recovery_preflight(&root, &journal)?;
+    crate::import::journal::validate_relocation_recovery_authority(
+        &root,
+        journal.generation,
+        &journal.plan_id,
+        journal.terminal_outcome.as_ref(),
+    )?;
     let mut summary = RelocationRecoverySummary::default();
     preserve_ambiguous_reservation_wrappers(&root, &mut journal, &mut summary)?;
     for index in 0..journal.subjects.len() {
@@ -505,6 +511,9 @@ fn recover_result(project_root: &Path) -> RelocationTransactionResult<Relocation
                 {
                     summary.cleaned_subjects.push(subject.subject.clone());
                 }
+            }
+            if let Some(outcome) = &journal.terminal_outcome {
+                crate::import::journal::checkpoint_relocation_outcome(&root, outcome)?;
             }
             if let Err(error) = remove_journal_owned(&root, &journal) {
                 summary

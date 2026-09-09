@@ -1,553 +1,295 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
-import { useGlobalStore } from "../stores/globalStore";
-import { useImportStore } from "../stores/importStore";
+const mocks = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  listen: vi.fn(),
+  listeners: new Map<string, (event: { payload: unknown }) => void>(),
+  order: [] as string[],
+}));
+const { invoke, listeners } = mocks;
+vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: mocks.listen,
+}));
+
 import {
-  copyLockFilesForRetry,
-  decodeImportPipelineError,
+  attachImportRun,
+  clearImportListeners,
+  getActiveImportRun,
+  launchImportRun,
+  reserveImportRun,
+  setupImportDiscoveryListeners,
   setupImportListeners,
-  type ImportStructuredEventPayload,
 } from "./importEvents";
-import {
-  activateProjectLease,
-  invalidateProjectLease,
-  resetProjectLifecycleForTests,
-} from "./projectLifecycle";
+import { useImportStore } from "../stores/importStore";
+import { activateProjectLease, resetProjectLifecycleForTests } from "./projectLifecycle";
 
-type EventHandler = (event: { payload: unknown }) => void;
-
-const handlers: Record<string, EventHandler> = {};
-const RUN_REQUEST_ID = "run-request-a";
-const OWNERSHIP_GENERATION = 1;
-
-function emitStructured(
-  payload: Omit<ImportStructuredEventPayload, "runRequestId" | "ownershipGeneration">,
-  runRequestId = RUN_REQUEST_ID,
-  ownershipGeneration = OWNERSHIP_GENERATION,
-) {
-  handlers["import-structured-event"]?.({
-    payload: { ...payload, runRequestId, ownershipGeneration },
-  });
-}
-
-function emitRaw(
-  line: string,
-  runRequestId = RUN_REQUEST_ID,
-  ownershipGeneration = OWNERSHIP_GENERATION,
-) {
-  handlers["import-raw-event"]?.({ payload: { line, runRequestId, ownershipGeneration } });
-}
-
-function emitPrepareComplete(
-  runRequestId = RUN_REQUEST_ID,
-  ownershipGeneration = OWNERSHIP_GENERATION,
-) {
-  handlers.ImportPrepareComplete?.({ payload: { runRequestId, ownershipGeneration } });
-}
-
-function emitMatlabExitError(
-  exitCode: number,
-  runRequestId = RUN_REQUEST_ID,
-  ownershipGeneration = OWNERSHIP_GENERATION,
-) {
-  handlers.MatlabExitError?.({ payload: { exitCode, runRequestId, ownershipGeneration } });
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  resetProjectLifecycleForTests();
-  activateProjectLease("project-a", "/tmp/project");
-  useImportStore.getState().resetImport();
-  useGlobalStore.setState({
-    loaded: true,
-    settings: {
-      ...DEFAULT_SETTINGS,
-      import: { preserveStagingDir: true },
-      executionProfiles: [
-        {
-          id: "profile-1",
-          type: "matlab",
-          label: "MATLAB R2023b",
-          matlabPath: "/usr/local/bin/matlab",
-          exploreAslPath: "/opt/ExploreASL",
-        },
-      ],
-    },
-    profileValidationState: { "profile-1": { valid: true, errors: [] } },
-  });
-  useImportStore.setState({ selectedProfileId: "profile-1" });
-
-  Object.keys(handlers).forEach((key) => delete handlers[key]);
-
-  vi.mocked(listen).mockImplementation(async (event, handler) => {
-    handlers[event] = handler as EventHandler;
-    return () => {};
-  });
-
-  vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-    switch (cmd) {
-      case "run_import_pipeline":
-        return 12345;
-      case "move_import_output":
-        return {
-          planId: "test-plan",
-          generation: 1,
-          stagingCleanupComplete: true,
-          subjects: [],
-        };
-      default:
-        return null;
-    }
-  });
+const snapshot = (
+  lifecycle: "preparing" | "running" | "finalizing" | "completed" = "preparing",
+  updatedAtMs = 2,
+) => ({
+  runId: "import-run-1",
+  lifecycle,
+  ownershipGeneration: 1,
+  profileId: "profile-1",
+  selectedSubjects: ["ONE"],
+  createdAtMs: 1,
+  updatedAtMs,
+  subjectOutcomes: [],
 });
 
-afterEach(() => {
-  resetProjectLifecycleForTests();
-  useImportStore.getState().resetImport();
-});
-
-describe("setupImportListeners", () => {
-  it("rejects stale structured events and queued raw log batches", async () => {
-    vi.useFakeTimers();
-    useImportStore.getState().startImport();
-    await setupImportListeners(RUN_REQUEST_ID);
-    emitRaw("project A log");
-
-    invalidateProjectLease();
-    activateProjectLease("project-b", "/tmp/project-b");
-    emitStructured({ type: "subject_start", subject: "GOOD" });
-    vi.advanceTimersByTime(16);
-
-    expect(useImportStore.getState().importLog).toEqual([]);
-    expect(useImportStore.getState().importProgress.GOOD).toBeUndefined();
-    vi.useRealTimers();
+describe("import run protocol", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    mocks.listen.mockReset();
+    mocks.listen.mockImplementation(
+      async (name: string, callback: (event: { payload: unknown }) => void) => {
+        mocks.listeners.set(name, callback);
+        return () => mocks.listeners.delete(name);
+      },
+    );
+    listeners.clear();
+    mocks.order.length = 0;
+    resetProjectLifecycleForTests();
+    activateProjectLease("project-1", "/project");
+    useImportStore.getState().resetImport();
   });
+  it("uses native reservation snapshots", async () => {
+    invoke.mockResolvedValue(snapshot());
+    await expect(
+      reserveImportRun({
+        subjectList: ["ONE"],
+        relocationPlanId: "plan",
+        profileId: "profile-1",
+        preserveStaging: false,
+      }),
+    ).resolves.toMatchObject({ runId: "import-run-1" });
+    expect(invoke).toHaveBeenCalledWith("reserve_import_run", expect.any(Object));
+  });
+  it("rejects malformed snapshot wire data", async () => {
+    invoke.mockResolvedValue({ ...snapshot(), pid: 4 });
+    await expect(attachImportRun("import-run-1")).rejects.toThrow();
+  });
+  it("ignores parser completion and accepts matching authoritative snapshot", async () => {
+    useImportStore.getState().bindImportRunSnapshot(snapshot("running"));
+    const cleanup = await setupImportListeners("import-run-1");
+    listeners.get("import-structured-event")?.({
+      payload: { runId: "import-run-1", ownershipGeneration: 1, type: "import_complete" },
+    });
+    expect(useImportStore.getState().importPhase).toBe("running");
+    cleanup();
+  });
+  it("rejects stale run and ownership-generation diagnostics", async () => {
+    useImportStore.getState().bindImportRunSnapshot(snapshot("running"));
+    await setupImportListeners("import-run-1");
+    listeners.get("import-raw-event")?.({
+      payload: { runId: "other", ownershipGeneration: 1, line: "foreign" },
+    });
+    listeners.get("import-raw-event")?.({
+      payload: { runId: "import-run-1", ownershipGeneration: 2, line: "stale" },
+    });
+    listeners.get("import-raw-event")?.({
+      payload: { runId: "import-run-1", ownershipGeneration: 1, line: "current" },
+    });
+    await vi.waitFor(() => expect(useImportStore.getState().importLog).toEqual(["current"]));
+  });
+  it("batches raw logs, flushes section dividers immediately, and flushes remaining lines on cleanup", async () => {
+    useImportStore.getState().bindImportRunSnapshot(snapshot("running"));
+    const cleanup = await setupImportListeners("import-run-1");
+    const raw = listeners.get("import-raw-event")!;
+    raw({ payload: { runId: "import-run-1", ownershipGeneration: 1, line: "first" } });
+    raw({
+      payload: {
+        runId: "import-run-1",
+        ownershipGeneration: 1,
+        line: "[ ===== section",
+      },
+    });
+    expect(useImportStore.getState().importLog).toEqual(["first", "[ ===== section"]);
 
-  it("abandons listener setup that resolves after project replacement", async () => {
-    let resolveFirst!: (unlisten: () => void) => void;
-    const unlisten = vi.fn();
-    vi.mocked(listen).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveFirst = resolve;
+    raw({ payload: { runId: "import-run-1", ownershipGeneration: 1, line: "last" } });
+    cleanup();
+    expect(useImportStore.getState().importLog).toEqual(["first", "[ ===== section", "last"]);
+  });
+  it("replaces listener sets and cleans partial registration failures", async () => {
+    useImportStore.getState().bindImportRunSnapshot(snapshot("running"));
+    const first = await setupImportListeners("import-run-1");
+    expect(listeners.size).toBe(3);
+    await setupImportListeners("import-run-1");
+    expect(listeners.size).toBe(3);
+    first();
+    clearImportListeners();
+    expect(listeners.size).toBe(0);
+
+    const partialUnlisten = vi.fn();
+    mocks.listen
+      .mockImplementationOnce(async () => partialUnlisten)
+      .mockRejectedValueOnce(new Error("listener denied"));
+    await expect(setupImportListeners("import-run-1")).rejects.toThrow("listener denied");
+    expect(partialUnlisten).toHaveBeenCalledOnce();
+  });
+  it("prevents duplicate listener ownership when setup calls resolve out of order", async () => {
+    const registrations: Array<{
+      name: string;
+      resolve: (unlisten: () => void) => void;
+      unlisten: () => void;
+    }> = [];
+    mocks.listen.mockImplementation(
+      (name: string) =>
+        new Promise<() => void>((resolve) => {
+          registrations.push({ name, resolve, unlisten: vi.fn<() => void>() });
         }),
     );
 
-    const setup = setupImportListeners(RUN_REQUEST_ID);
-    invalidateProjectLease();
-    activateProjectLease("project-b", "/tmp/project-b");
-    resolveFirst(unlisten);
-    await setup;
+    const first = setupImportListeners("import-run-1");
+    await vi.waitFor(() => expect(registrations).toHaveLength(1));
+    const second = setupImportListeners("import-run-1");
+    await vi.waitFor(() => expect(registrations).toHaveLength(2));
 
-    expect(unlisten).toHaveBeenCalled();
-    expect(listen).toHaveBeenCalledTimes(1);
+    // Resolve second setup completely before allowing obsolete first setup to
+    // continue. First's installed listener must self-retire.
+    registrations[1].resolve(registrations[1].unlisten);
+    await vi.waitFor(() => expect(registrations).toHaveLength(3));
+    registrations[2].resolve(registrations[2].unlisten);
+    await vi.waitFor(() => expect(registrations).toHaveLength(4));
+    registrations[3].resolve(registrations[3].unlisten);
+    const secondCleanup = await second;
+    registrations[0].resolve(registrations[0].unlisten);
+    await vi.waitFor(() => expect(registrations).toHaveLength(5));
+    registrations[4].resolve(registrations[4].unlisten);
+    await vi.waitFor(() => expect(registrations).toHaveLength(6));
+    registrations[5].resolve(registrations[5].unlisten);
+    await vi.waitFor(() => expect(registrations[0].unlisten).toHaveBeenCalledOnce());
+    await first;
+    secondCleanup();
+    expect(registrations[1].unlisten).toHaveBeenCalledOnce();
+    expect(registrations[2].unlisten).toHaveBeenCalledOnce();
+    expect(registrations[3].unlisten).toHaveBeenCalledOnce();
+    expect(registrations[4].unlisten).toHaveBeenCalledOnce();
+    expect(registrations[5].unlisten).toHaveBeenCalledOnce();
+  });
+  it("uses reserve, attach, and launch commands without frontend finalization authority", async () => {
+    invoke.mockResolvedValue(snapshot());
+    await reserveImportRun({
+      subjectList: ["ONE"],
+      relocationPlanId: "plan-1",
+      profileId: "profile-1",
+      preserveStaging: false,
+    });
+    await attachImportRun("import-run-1");
+    await launchImportRun({
+      runId: "import-run-1",
+      stagingEntries: [],
+      sourcestructureJson: {},
+      studyparJson: {},
+      executionProfile: {} as never,
+      subjectList: ["ONE"],
+      relocationPlanId: "plan-1",
+    });
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      "reserve_import_run",
+      "attach_import_run",
+      "launch_import_run",
+    ]);
   });
 
-  it("rejects queued events from a same-project rerun before they bind a generation", async () => {
-    const prepareHandlers: EventHandler[] = [];
-    vi.mocked(listen).mockImplementation(async (event, handler) => {
-      if (event === "ImportPrepareComplete") prepareHandlers.push(handler as EventHandler);
-      return () => {};
-    });
-    useImportStore.getState().startImport();
-
-    await setupImportListeners("run-old");
-    await setupImportListeners("run-new");
-
-    prepareHandlers[0]?.({
-      payload: { runRequestId: "run-old", ownershipGeneration: 1 },
-    });
-    expect(useImportStore.getState().importPhase).toBe("preparing");
-
-    prepareHandlers[1]?.({
-      payload: { runRequestId: "run-new", ownershipGeneration: 2 },
+  it("uses discover-listen-attach race closure and rejects delayed old snapshots", async () => {
+    invoke.mockResolvedValue(snapshot("running"));
+    const discovered = await getActiveImportRun();
+    expect(discovered?.runId).toBe("import-run-1");
+    useImportStore.getState().bindImportRunSnapshot(discovered!);
+    const cleanup = await setupImportListeners(discovered!.runId);
+    await attachImportRun(discovered!.runId);
+    listeners.get("import-run-snapshot")?.({
+      payload: { ...snapshot("completed"), runId: "old-run", terminalResult: "completed" },
     });
     expect(useImportStore.getState().importPhase).toBe("running");
-  });
-
-  it("fails closed for missing, mismatched, and changed event correlation", async () => {
-    useImportStore.getState().startImport();
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    handlers.ImportPrepareComplete?.({ payload: {} });
-    emitStructured({ type: "subject_start", subject: "OLD" }, "old-request", 1);
-    emitRaw("old output", "old-request", 1);
-    emitMatlabExitError(1, "old-request", 1);
-    expect(useImportStore.getState().importPhase).toBe("preparing");
-    expect(useImportStore.getState().importProgress.OLD).toBeUndefined();
-    expect(useImportStore.getState().importLog).toEqual([]);
-
-    emitRaw("current output", RUN_REQUEST_ID, 7);
-    emitStructured({ type: "subject_start", subject: "WRONG_GENERATION" }, RUN_REQUEST_ID, 8);
-    emitPrepareComplete(RUN_REQUEST_ID, 7);
-
-    expect(useImportStore.getState().importPhase).toBe("running");
-    expect(useImportStore.getState().importProgress.WRONG_GENERATION).toBeUndefined();
-  });
-
-  it("stops late post-processing before moving output or mutating the replacement project", async () => {
-    useImportStore.getState().startImport();
-    useImportStore.getState().markSubjectFailed("BAD", "NII2BIDS", "bad metadata");
-    let releaseClean!: () => void;
-    vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "clean_import_status") {
-        await new Promise<void>((resolve) => {
-          releaseClean = resolve;
-        });
-      }
-      return null;
-    });
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    emitStructured({ type: "import_complete" });
-    await vi.waitFor(() => expect(releaseClean).toBeTypeOf("function"));
-    invalidateProjectLease();
-    activateProjectLease("project-b", "/tmp/project-b");
-    useImportStore.getState().resetImport();
-    releaseClean();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(invoke).not.toHaveBeenCalledWith("move_import_output", expect.anything());
-    expect(useImportStore.getState()).toMatchObject({
-      importPhase: "idle",
-      importSummary: null,
-      importProgress: {},
-    });
-  });
-  it("maps structured events to import store actions", async () => {
-    useImportStore.getState().startImport();
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    emitStructured({ type: "subject_start", subject: "GOOD" });
-    expect(useImportStore.getState().importProgress.GOOD.status).toBe("running");
-
-    emitStructured({ type: "subject_complete", subject: "GOOD", duration_secs: 42 });
-    expect(useImportStore.getState().importProgress.GOOD).toMatchObject({
-      status: "completed",
-      duration: 42,
-    });
-
-    emitStructured({
-      type: "import_failed",
-      subject: "BADDIE",
-      step: "NII2BIDS",
-      message: "LabelingDuration has invalid value",
-    });
-    expect(useImportStore.getState().importProgress.BADDIE).toMatchObject({
-      status: "failed",
-      errorStep: "NII2BIDS",
-      error: "LabelingDuration has invalid value",
-    });
-    expect(useImportStore.getState().failedSubjects).toEqual(["BADDIE"]);
-  });
-
-  it("accumulates raw log lines and transitions preparing to running", async () => {
-    vi.useFakeTimers();
-    useImportStore.getState().setImportPhase("preparing");
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    emitRaw("ExploreASL import started");
-    vi.advanceTimersByTime(16);
-
-    expect(useImportStore.getState().importLog).toEqual(["ExploreASL import started"]);
-
-    emitPrepareComplete();
-    expect(useImportStore.getState().importPhase).toBe("running");
-
-    vi.useRealTimers();
-  });
-
-  it("flushes section dividers immediately without waiting for rAF", async () => {
-    vi.useFakeTimers();
-    useImportStore.getState().startImport();
-    const cleanup = await setupImportListeners(RUN_REQUEST_ID);
-
-    emitRaw(
-      "[ ======================================== ExploreASL Settings ==================================]",
-    );
-    expect(useImportStore.getState().importLog).toEqual([
-      "[ ======================================== ExploreASL Settings ==================================]",
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      "get_active_import_run",
+      "attach_import_run",
     ]);
-
-    emitRaw("some regular line");
-    expect(useImportStore.getState().importLog).toEqual([
-      "[ ======================================== ExploreASL Settings ==================================]",
-    ]);
-
-    vi.advanceTimersByTime(16);
-    expect(useImportStore.getState().importLog).toEqual([
-      "[ ======================================== ExploreASL Settings ==================================]",
-      "some regular line",
-    ]);
-
-    cleanup();
-    vi.useRealTimers();
-  });
-
-  it("flushes remaining buffered lines on cleanup", async () => {
-    vi.useFakeTimers();
-    useImportStore.getState().startImport();
-    const cleanup = await setupImportListeners(RUN_REQUEST_ID);
-
-    emitRaw("buffered line 1");
-    emitRaw("buffered line 2");
-
-    expect(useImportStore.getState().importLog).toEqual([]);
-
-    cleanup();
-
-    expect(useImportStore.getState().importLog).toEqual(["buffered line 1", "buffered line 2"]);
-    vi.useRealTimers();
-  });
-
-  it("runs post-processing on import_complete with partial success", async () => {
-    useImportStore.getState().startImport();
-    useImportStore.getState().markSubjectCompleted("GOOD", 10);
-    useImportStore.getState().markSubjectFailed("BADDIE", "NII2BIDS", "Bad metadata");
-
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    emitStructured({ type: "import_complete" });
-    await vi.waitFor(() => {
-      expect(useImportStore.getState().importPhase).toBe("failed");
-    });
-
-    expect(vi.mocked(invoke).mock.calls).toEqual(
-      expect.arrayContaining([
-        ["clean_import_status", {}],
-        [
-          "move_import_output",
-          {
-            debugMode: true,
-            cleanupStaging: false,
-          },
-        ],
-      ]),
-    );
-  });
-
-  it("runs post-processing on import_complete with full success using subject-scoped merge", async () => {
-    useImportStore.getState().startImport();
-    useImportStore.getState().markSubjectCompleted("GOOD", 10);
-    useImportStore.getState().markSubjectCompleted("BADDIE", 20);
-
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    vi.mocked(invoke).mockClear();
-    emitStructured({ type: "import_complete" });
-    await vi.waitFor(() => {
-      expect(useImportStore.getState().importPhase).toBe("completed");
-    });
-
-    expect(vi.mocked(invoke).mock.calls).toEqual(
-      expect.arrayContaining([
-        [
-          "move_import_output",
-          {
-            debugMode: true,
-            cleanupStaging: true,
-          },
-        ],
-      ]),
-    );
-    expect(vi.mocked(invoke).mock.calls.some((call) => call[0] === "clean_import_status")).toBe(
+    expect(invoke.mock.calls.some(([command]) => /clean|move|post.?process/i.test(command))).toBe(
       false,
     );
+    cleanup();
   });
 
-  it("keeps committed evidence but fails visible partial relocation outcomes", async () => {
-    useImportStore.getState().startImport();
-    useImportStore.getState().markSubjectCompleted("GOOD", 10);
-    useImportStore.getState().markSubjectCompleted("BAD", 10);
-    vi.mocked(invoke).mockImplementation(async (command: string) => {
-      if (command === "move_import_output") {
-        return {
-          planId: "plan-a",
-          generation: 1,
-          stagingCleanupComplete: false,
-          subjects: [
-            { subject: "GOOD", status: "committed", phase: "committed", message: null },
-            {
-              subject: "BAD",
-              status: "rolledBack",
-              phase: "install",
-              message: "Candidate install failed",
-            },
-          ],
-        };
-      }
-      return null;
-    });
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    emitStructured({ type: "import_complete" });
-    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("failed"));
-    expect(useImportStore.getState().importProgress.GOOD.status).toBe("completed");
-    expect(useImportStore.getState().importProgress.BAD).toMatchObject({
-      status: "failed",
-      error: expect.stringContaining("Relocation install failed"),
-    });
-    expect(useImportStore.getState().importLog).toContain("Relocation committed for GOOD.");
-  });
-
-  it("fails visibly when committed relocation cleanup remains pending", async () => {
-    useGlobalStore.setState((state) => ({
-      settings: {
-        ...state.settings,
-        import: { preserveStagingDir: false },
+  it("installs the full listener set before discovery and replays matching raced diagnostics", async () => {
+    mocks.listen.mockImplementation(
+      async (name: string, callback: (event: { payload: unknown }) => void) => {
+        mocks.order.push(`listen:${name}`);
+        mocks.listeners.set(name, callback);
+        return () => mocks.listeners.delete(name);
       },
-    }));
-    useImportStore.getState().startImport();
-    useImportStore.getState().markSubjectCompleted("GOOD", 10);
-    vi.mocked(invoke).mockImplementation(async (command: string) => {
-      if (command === "move_import_output") {
-        return {
-          planId: "plan-a",
-          generation: 1,
-          stagingCleanupComplete: false,
-          subjects: [{ subject: "GOOD", status: "committed", phase: "committed", message: null }],
-        };
-      }
-      return null;
+    );
+    invoke.mockImplementation(async (command: string) => {
+      mocks.order.push(command);
+      return snapshot("running");
     });
-    await setupImportListeners(RUN_REQUEST_ID);
 
-    emitStructured({ type: "import_complete" });
+    const controller = await setupImportDiscoveryListeners();
+    listeners.get("import-raw-event")?.({
+      payload: { runId: "import-run-1", ownershipGeneration: 1, line: "raced" },
+    });
+    const discovered = await getActiveImportRun();
+    useImportStore.getState().bindImportRunSnapshot(discovered!);
+    controller.bindRun(discovered!.runId);
+    await attachImportRun(discovered!.runId);
 
-    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("failed"));
-    expect(useImportStore.getState().importProgress.GOOD.status).toBe("completed");
+    expect(mocks.order).toEqual([
+      "listen:import-run-snapshot",
+      "listen:import-raw-event",
+      "listen:import-structured-event",
+      "get_active_import_run",
+      "attach_import_run",
+    ]);
+    await vi.waitFor(() => expect(useImportStore.getState().importLog).toEqual(["raced"]));
+    controller.cleanup();
+  });
+
+  it("buffers setup-raced snapshots, rejects delayed old responses, and never invokes post-processing", async () => {
+    mocks.listen.mockImplementation(
+      async (name: string, callback: (event: { payload: unknown }) => void) => {
+        mocks.order.push(`listen:${name}`);
+        mocks.listeners.set(name, callback);
+        return () => mocks.listeners.delete(name);
+      },
+    );
+    const controller = await setupImportDiscoveryListeners();
+    listeners.get("import-run-snapshot")?.({ payload: snapshot("running") });
+    // A discovery response from a replaced run must not become bound merely
+    // because it arrives after listeners have started buffering.
+    const current = snapshot("running");
+    useImportStore.getState().bindImportRunSnapshot(current);
+    controller.bindRun(current.runId);
+    listeners.get("import-run-snapshot")?.({
+      payload: { ...snapshot("completed"), runId: "old-run", terminalResult: "completed" },
+    });
+
+    expect(useImportStore.getState()).toMatchObject({
+      activeRunId: "import-run-1",
+      importPhase: "running",
+    });
     expect(
-      useImportStore
-        .getState()
-        .importLog.some((line) => line.includes("durable cleanup remains pending")),
-    ).toBe(true);
+      invoke.mock.calls.some(([command]) => /clean|move|relocat|post.?process/i.test(command)),
+    ).toBe(false);
+    controller.cleanup();
   });
 
-  it("does not swallow a stale relocation command error", async () => {
-    useImportStore.getState().startImport();
-    useImportStore.getState().markSubjectCompleted("GOOD", 10);
-    vi.mocked(invoke).mockImplementation(async (command: string) => {
-      if (command === "move_import_output") {
-        throw new Error("Relocation plan is stale; project output changed after confirmation");
-      }
-      return null;
+  it("replays process exit during setup and rejects delayed pre-exit attachment state", async () => {
+    const controller = await setupImportDiscoveryListeners();
+    const discovered = snapshot("running", 2);
+    useImportStore.getState().bindImportRunSnapshot(discovered);
+    listeners.get("import-run-snapshot")?.({ payload: snapshot("finalizing", 4) });
+    controller.bindRun(discovered.runId);
+    // Attachment response was produced before process exit but arrived later.
+    useImportStore.getState().reconcileImportRunSnapshot(snapshot("running", 4));
+
+    expect(useImportStore.getState()).toMatchObject({
+      activeRunId: "import-run-1",
+      importPhase: "finalizing",
+      nativeSnapshotUpdatedAtMs: 4,
     });
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    emitStructured({ type: "import_complete" });
-    await vi.waitFor(() => expect(useImportStore.getState().importPhase).toBe("failed"));
-    expect(useImportStore.getState().importLog.join("\n")).toContain("plan is stale");
-  });
-
-  it("marks running subjects failed and post-processes on MatlabExitError", async () => {
-    useImportStore.getState().startImport();
-    useImportStore.getState().setImportPhase("running");
-    useImportStore.getState().markSubjectRunning("GOOD");
-    useImportStore.getState().markSubjectCompleted("DONE", 5);
-
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    emitMatlabExitError(1);
-    await vi.waitFor(() => {
-      expect(useImportStore.getState().importProgress.GOOD.status).toBe("failed");
-    });
-
-    expect(useImportStore.getState().importProgress.GOOD.error).toBe(
-      "MATLAB process exited unexpectedly",
-    );
-    expect(useImportStore.getState().importProgress.DONE.status).toBe("completed");
-  });
-
-  it("marks pending subjects failed and sets importPhase to failed on MatlabExitError during initialization", async () => {
-    useImportStore.setState({
-      subjectRows: [
-        { id: "GOOD/01", subject: "GOOD", session: "01", groupId: "global-defaults" },
-        {
-          id: "PENDING_SUBJ/01",
-          subject: "PENDING_SUBJ",
-          session: "01",
-          groupId: "global-defaults",
-        },
-      ],
-    });
-    useImportStore.getState().startImport();
-    useImportStore.getState().setImportPhase("running");
-    // All subjects are still in "pending" status on initialization failure
-
-    await setupImportListeners(RUN_REQUEST_ID);
-
-    emitMatlabExitError(1);
-    await vi.waitFor(() => {
-      expect(useImportStore.getState().importProgress.GOOD.status).toBe("failed");
-      expect(useImportStore.getState().importProgress.PENDING_SUBJ.status).toBe("failed");
-    });
-
-    await vi.waitFor(() => {
-      expect(useImportStore.getState().importPhase).toBe("failed");
-    });
-
-    expect(useImportStore.getState().importProgress.GOOD.error).toBe(
-      "MATLAB process exited unexpectedly",
-    );
-    expect(useImportStore.getState().importProgress.PENDING_SUBJ.error).toBe(
-      "MATLAB process exited unexpectedly",
-    );
-  });
-});
-
-describe("copyLockFilesForRetry", () => {
-  it("invokes copy_lock_files when retry subjects are provided", async () => {
-    await copyLockFilesForRetry({
-      subjects: ["GOOD"],
-    });
-
-    expect(vi.mocked(invoke)).toHaveBeenCalledWith("copy_lock_files", {
-      subjects: ["GOOD"],
-    });
-    const copyPayload = vi
-      .mocked(invoke)
-      .mock.calls.find(([command]) => command === "copy_lock_files")?.[1] as Record<
-      string,
-      unknown
-    >;
-    expect(copyPayload).not.toHaveProperty("projectRoot");
-    expect(copyPayload).not.toHaveProperty("stagingRoot");
-  });
-
-  it("skips invoke when there are no retry subjects", async () => {
-    vi.mocked(invoke).mockClear();
-
-    await copyLockFilesForRetry({
-      subjects: [],
-    });
-
-    expect(vi.mocked(invoke)).not.toHaveBeenCalled();
-  });
-});
-
-describe("decodeImportPipelineError", () => {
-  it("keeps structured preflight issues for current Rust command failures", () => {
-    expect(
-      decodeImportPipelineError({
-        kind: "preflight",
-        issues: [
-          { code: "PORTABLE_COLLISION", field: "subject", entryIndex: 1, message: "collision" },
-        ],
-      }),
-    ).toMatchObject({
-      kind: "preflight",
-      issues: [{ code: "PORTABLE_COLLISION", entryIndex: 1 }],
-    });
-  });
-
-  it("falls back to legacy string operational errors", () => {
-    expect(decodeImportPipelineError("legacy import failed")).toEqual({
-      kind: "operational",
-      message: "legacy import failed",
-    });
+    controller.cleanup();
   });
 });

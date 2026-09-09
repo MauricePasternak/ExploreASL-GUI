@@ -150,6 +150,33 @@ mod tests {
     }
 
     #[test]
+    fn import_run_recovery_blocks_candidate_activation_without_replacing_active_root() {
+        let active = tempfile::tempdir().unwrap();
+        let candidate = tempfile::tempdir().unwrap();
+        let record = candidate
+            .path()
+            .join("derivatives/ExploreASL_GUI/import-run.json");
+        fs::create_dir_all(record.parent().unwrap()).unwrap();
+        fs::write(&record, "not an import run record").unwrap();
+        let state = AppState::default();
+        let active_root = active.path().canonicalize().unwrap();
+        *state.active_project_root.lock().unwrap() = Some(active_root.clone());
+
+        let error = set_active_project_impl(candidate.path().display().to_string(), &state)
+            .expect_err("malformed import authority must block activation");
+
+        assert!(error.contains("Malformed import run record"));
+        assert_eq!(
+            state.active_project_root.lock().unwrap().as_deref(),
+            Some(active_root.as_path())
+        );
+        assert_eq!(
+            state.import_state.lock().unwrap().lifecycle,
+            crate::import::ImportLifecycle::Idle
+        );
+    }
+
+    #[test]
     fn setup_recovery_blocks_candidate_activation_without_replacing_active_root() {
         let active = tempfile::tempdir().unwrap();
         let candidate = tempfile::tempdir().unwrap();

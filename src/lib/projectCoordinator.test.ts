@@ -18,6 +18,17 @@ afterEach(() => {
   useImportStore.getState().resetImport();
   useProjectStore.setState({ project: null, loaded: false, isDirty: false });
   vi.mocked(notifications.show).mockClear();
+  vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command === "shutdown_project_runtime") {
+      return {
+        success: true,
+        importProcess: { success: true },
+        processingWorkers: { success: true },
+        lockWatcher: { success: true },
+      };
+    }
+    return null;
+  });
 });
 
 describe("project coordinator", () => {
@@ -168,6 +179,23 @@ describe("project coordinator", () => {
       }),
     );
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("b");
+  });
+
+  it("hydrates only after native recovery then reconciles import authority", async () => {
+    const order: string[] = [];
+    const unsubscribe = useProjectStore.subscribe((state) => {
+      if (state.project?.projectMeta.id === "b") order.push("hydrate");
+    });
+    await transitionProjectRuntime(DEFAULT_PROJECT_FILE("b", "B", "/b"), false, {
+      setActiveProject: async () => {
+        order.push("native-recovery");
+      },
+      reconcileImportRun: async () => {
+        order.push("import-reconcile");
+      },
+    });
+    unsubscribe();
+    expect(order).toEqual(["native-recovery", "hydrate", "import-reconcile"]);
   });
 
   it("clears native root before resetting project stores", async () => {

@@ -109,6 +109,43 @@ describe("ImportSubjectTable", () => {
     expect(screen.getByText("SUB04")).toBeInTheDocument();
   });
 
+  it("keeps only committed partial success eligible for preservation; failed and interrupted rows remain selected", () => {
+    const rows = [
+      makeProgress("COMMITTED", "completed", false),
+      makeProgress("STALE", "completed", true),
+      makeProgress("INVALID", "failed", false, undefined, "NII2BIDS"),
+      makeProgress("INTERRUPTED", "interrupted"),
+    ];
+    renderWithProviders(rows, ["STALE", "INVALID", "INTERRUPTED"]);
+    expect(screen.getByText("COMMITTED")).toBeInTheDocument();
+    expect(screen.getByText("INVALID")).toBeInTheDocument();
+    expect(screen.getByText("INTERRUPTED")).toBeInTheDocument();
+    expect(screen.getByTestId("status-failed")).toBeInTheDocument();
+    expect(screen.getByTestId("status-interrupted")).toBeInTheDocument();
+  });
+
+  it("renders authoritative retry matrix rather than frontend completion flags", () => {
+    const rows = [
+      makeProgress("COMMITTED", "completed"),
+      makeProgress("STALE-COMMITTED", "completed", true),
+      makeProgress("INVALID-AUDIT", "failed", false, undefined, "NII2BIDS"),
+      makeProgress("INTERRUPTED-STAGING", "interrupted"),
+      makeProgress("CANCELLED", "cancelled"),
+    ];
+    renderWithProviders(rows, [
+      "STALE-COMMITTED",
+      "INVALID-AUDIT",
+      "INTERRUPTED-STAGING",
+      "CANCELLED",
+    ]);
+
+    expect(screen.getAllByTestId("status-completed")).toHaveLength(2);
+    expect(screen.getByTestId("status-stale-wrapper")).toHaveTextContent("");
+    expect(screen.getByTestId("status-failed")).toBeInTheDocument();
+    expect(screen.getByTestId("status-interrupted")).toBeInTheDocument();
+    expect(screen.getByTestId("status-cancelled")).toBeInTheDocument();
+  });
+
   it("renders stale overlay on completed-but-stale subjects", () => {
     const rows = [
       makeProgress("SUB01", "completed", true),

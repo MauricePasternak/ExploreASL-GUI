@@ -36,9 +36,9 @@ use commands::{
 };
 use execution_profile::{validate_all_execution_profiles, validate_execution_profile};
 use import::{
-    clean_import_status, copy_lock_files, move_import_output, plan_import_relocation,
-    preflight_staging_plan, read_import_status, run_import_pipeline, stop_active_import,
-    stop_import, stop_running_import_for_exit,
+    acknowledge_import_run, attach_import_run, cancel_import_run, get_active_import_run,
+    launch_import_run, plan_import_relocation, preflight_staging_plan, read_import_status,
+    reserve_import_run, stop_running_import_for_exit,
 };
 use manifest::{
     capture_environment_versions_for_run, read_population_ready_mtime_for_run,
@@ -105,12 +105,12 @@ pub fn run() {
             inspect_source_path,
             preflight_staging_plan,
             plan_import_relocation,
-            run_import_pipeline,
-            stop_import,
-            stop_active_import,
-            clean_import_status,
-            move_import_output,
-            copy_lock_files,
+            reserve_import_run,
+            get_active_import_run,
+            attach_import_run,
+            launch_import_run,
+            cancel_import_run,
+            acknowledge_import_run,
             read_import_status,
             list_subjects,
             read_lock_status,

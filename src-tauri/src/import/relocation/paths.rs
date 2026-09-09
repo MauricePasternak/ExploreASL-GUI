@@ -33,7 +33,7 @@ pub fn canonical_project_root(project_root: &Path) -> AnyResult<PathBuf> {
     Ok(root)
 }
 
-pub(super) fn project_identity(root: &Path) -> String {
+pub(crate) fn project_identity(root: &Path) -> String {
     sha256_bytes(root.to_string_lossy().as_bytes())
 }
 pub(super) fn sha256_bytes(bytes: &[u8]) -> String {
@@ -161,7 +161,7 @@ pub(super) fn relative_owned(root: &Path, path: &Path) -> AnyResult<String> {
     relative_path(root, path)
 }
 
-pub(super) fn log_matches_subject(name: &str, sub: &str) -> bool {
+pub(crate) fn log_matches_subject(name: &str, sub: &str) -> bool {
     name.match_indices(sub).any(|(index, _)| {
         let before = name[..index].chars().next_back();
         let after = name[index + sub.len()..].chars().next();

@@ -3,6 +3,11 @@ import { notifications } from "@mantine/notifications";
 
 import type { ProjectFile } from "../schemas/project";
 import { clearProcessingListeners } from "../stores/processingStore";
+import { clearImportListeners } from "./importEvents";
+import {
+  reconcileImportRunAfterShutdown,
+  reconcileImportRunForActivation,
+} from "./importTerminalCoordinator";
 import { hydrateProjectStores, resetProjectStores } from "../stores/projectStoreHydration";
 import { useProjectStore } from "../stores/projectStore";
 import { clearSessionCheckpoint, syncSessionCheckpointFromProject } from "./sessionCheckpoint";
@@ -32,6 +37,8 @@ export interface TransitionDependencies {
   cleanupListeners?: () => void;
   setActiveProject?: (rootPath: string) => Promise<RelocationRecoverySummary | void>;
   clearActiveProject?: () => Promise<void>;
+  reconcileImportRun?: () => Promise<unknown>;
+  reconcileImportAfterShutdown?: () => Promise<void>;
 }
 
 export interface RelocationRecoverySummary {
@@ -46,10 +53,7 @@ export async function shutdownProjectRuntime(): Promise<ProjectRuntimeShutdownRe
 }
 
 function cleanupProjectListeners(): void {
-  if (typeof window !== "undefined" && window.__IMPORT_CLEANUP__) {
-    window.__IMPORT_CLEANUP__();
-    window.__IMPORT_CLEANUP__ = undefined;
-  }
+  clearImportListeners();
   clearProcessingListeners();
 }
 
@@ -95,6 +99,7 @@ export function transitionProjectRuntime(
         reopenProjectWorkAdmission();
         throw shutdownError(result);
       }
+      await (dependencies.reconcileImportAfterShutdown ?? reconcileImportRunAfterShutdown)();
     }
 
     (dependencies.cleanupListeners ?? cleanupProjectListeners)();
@@ -136,6 +141,16 @@ export function transitionProjectRuntime(
     hydrateProjectStores(candidate, isDirty);
     activateProjectLease(candidate.projectMeta.id, candidate.projectMeta.rootPath);
     syncSessionCheckpointFromProject(candidate);
+    try {
+      await (dependencies.reconcileImportRun ?? reconcileImportRunForActivation)();
+    } catch (error) {
+      closeProjectWorkAdmission();
+      throw new Error(
+        `Failed to reconcile native import authority: ${error instanceof Error ? error.message : String(error)}`,
+        // @ts-expect-error ErrorOptions is absent from the ES2020 target library.
+        { cause: error },
+      );
+    }
   });
 }
 
@@ -151,6 +166,7 @@ export function closeProjectRuntime(dependencies: TransitionDependencies = {}): 
         reopenProjectWorkAdmission();
         throw shutdownError(result);
       }
+      await (dependencies.reconcileImportAfterShutdown ?? reconcileImportRunAfterShutdown)();
     }
 
     (dependencies.cleanupListeners ?? cleanupProjectListeners)();

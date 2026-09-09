@@ -158,7 +158,7 @@ fn reservation_intent_unknown_subject_wrappers_do_not_block_or_get_deleted() {
             .unwrap();
         }
 
-        let state = crate::import::AppState::default();
+        let state = crate::app_state::AppState::default();
         let summary = crate::visualization::set_active_project_impl(
             project.to_string_lossy().to_string(),
             &state,
@@ -215,7 +215,7 @@ fn reservation_intent_unknown_dataset_wrappers_do_not_block_or_get_deleted() {
             .unwrap();
         }
 
-        let state = crate::import::AppState::default();
+        let state = crate::app_state::AppState::default();
         let summary = crate::visualization::set_active_project_impl(
             project.to_string_lossy().to_string(),
             &state,
@@ -262,7 +262,7 @@ fn reservation_intent_unknown_wrapper_preserves_authoritative_subject_absence() 
     );
     fs::create_dir_all(&candidate).unwrap();
 
-    let state = crate::import::AppState::default();
+    let state = crate::app_state::AppState::default();
     let summary = crate::visualization::set_active_project_impl(
         project.to_string_lossy().to_string(),
         &state,

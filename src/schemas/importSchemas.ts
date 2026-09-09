@@ -93,7 +93,7 @@ export type PathPattern = z.infer<typeof PathPatternSchema>;
 
 /** Semantic tag for a path block */
 export const TOKEN_TAGS = ["Subject", "Session", "Run", "Modality", "Ignore"] as const;
-export const TokenTagSchema = z.enum(TOKEN_TAGS);
+const TokenTagSchema = z.enum(TOKEN_TAGS);
 export type TokenTag = z.infer<typeof TokenTagSchema>;
 
 /**
@@ -591,15 +591,153 @@ export type SourcestructureJson = z.infer<typeof SourcestructureJsonSchema>;
 // =============================================================================
 
 export const IMPORT_STEPS = ["DCM2NII", "NII2BIDS"] as const;
-export const IMPORT_STATUSES = ["pending", "running", "completed", "failed", "cancelled"] as const;
-export const IMPORT_EXECUTION_PHASES = [
-  "idle",
-  "preparing",
+const IMPORT_STATUSES = [
+  "pending",
   "running",
   "completed",
   "failed",
   "cancelled",
+  "interrupted",
 ] as const;
+export const IMPORT_EXECUTION_PHASES = [
+  "idle",
+  "preparing",
+  "running",
+  "finalizing",
+  "completed",
+  "failed",
+  "cancelling",
+  "cancelled",
+  "interrupted",
+] as const;
+
+export const ImportLifecycleSchema = z.enum([
+  "idle",
+  "preparing",
+  "running",
+  "finalizing",
+  "completed",
+  "failed",
+  "cancelling",
+  "cancelled",
+  "interrupted",
+]);
+export type ImportLifecycle = z.infer<typeof ImportLifecycleSchema>;
+
+export const ImportStructuredErrorSchema = z
+  .object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+    subject: z.string().min(1).optional(),
+    stagingIssues: z
+      .array(
+        z
+          .object({
+            code: z.string().min(1),
+            field: z.enum([
+              "subject",
+              "session",
+              "run",
+              "runAlias",
+              "modality",
+              "sourcePath",
+              "destination",
+            ]),
+            entryIndex: z.number().int().nonnegative().optional(),
+            conflictingEntryIndex: z.number().int().nonnegative().optional(),
+            message: z.string().min(1),
+            suggestion: z.string().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+export const ImportExitEvidenceSchema = z
+  .object({ exitCode: z.number().int(), successful: z.boolean() })
+  .strict();
+export const ImportSubjectOutcomeSchema = z
+  .object({
+    subject: z.string().min(1),
+    outcome: z.enum(["verified", "committed", "failed", "cancelled", "interrupted"]),
+    readyLockVerified: z.boolean(),
+    rawdataVerified: z.boolean(),
+    committed: z.boolean(),
+    error: ImportStructuredErrorSchema.optional(),
+  })
+  .strict();
+export const ImportRelocationSubjectSchema = z
+  .object({
+    subject: z.string(),
+    status: z.enum(["committed", "rolledBack", "recoveryRequired"]),
+    phase: z.string(),
+    message: z.string().nullable(),
+  })
+  .strict();
+export const ImportRelocationOutcomeSchema = z
+  .object({
+    planId: z.string(),
+    generation: z.number().int().nonnegative(),
+    subjects: z.array(ImportRelocationSubjectSchema),
+    stagingCleanupComplete: z.boolean(),
+  })
+  .strict();
+export const ImportRunSnapshotSchema = z
+  .object({
+    runId: z.string().min(1),
+    lifecycle: ImportLifecycleSchema.exclude(["idle"]),
+    ownershipGeneration: z.number().int().nonnegative(),
+    profileId: z.string(),
+    selectedSubjects: z.array(z.string().min(1)),
+    createdAtMs: z.number().nonnegative(),
+    updatedAtMs: z.number().nonnegative(),
+    exitEvidence: ImportExitEvidenceSchema.optional(),
+    subjectOutcomes: z.array(ImportSubjectOutcomeSchema),
+    relocationOutcome: ImportRelocationOutcomeSchema.optional(),
+    error: ImportStructuredErrorSchema.optional(),
+    terminalResult: z.enum(["completed", "failed", "cancelled", "interrupted"]).optional(),
+  })
+  .strict()
+  .superRefine((snapshot, context) => {
+    const terminal = ["completed", "failed", "cancelled", "interrupted"].includes(
+      snapshot.lifecycle,
+    );
+    if (terminal !== (snapshot.terminalResult !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["terminalResult"],
+        message: "Terminal lifecycle and terminalResult must appear together.",
+      });
+    }
+    if (snapshot.terminalResult && snapshot.terminalResult !== snapshot.lifecycle) {
+      context.addIssue({
+        code: "custom",
+        path: ["terminalResult"],
+        message: "terminalResult must match lifecycle.",
+      });
+    }
+    const selected = new Set(snapshot.selectedSubjects.map((subject) => subject.toLowerCase()));
+    const outcomes = new Set<string>();
+    for (const outcome of snapshot.subjectOutcomes) {
+      const key = outcome.subject.toLowerCase();
+      if (!selected.has(key) || outcomes.has(key)) {
+        context.addIssue({
+          code: "custom",
+          path: ["subjectOutcomes"],
+          message: "Subject outcomes must be unique and within selectedSubjects.",
+        });
+      }
+      outcomes.add(key);
+      if (outcome.committed !== (outcome.outcome === "committed")) {
+        context.addIssue({
+          code: "custom",
+          path: ["subjectOutcomes"],
+          message: "Committed flag and outcome disagree.",
+        });
+      }
+    }
+  });
+export type ImportRunSnapshot = z.infer<typeof ImportRunSnapshotSchema>;
 
 export const ImportProgressSchema = z.object({
   subject: z.string(),

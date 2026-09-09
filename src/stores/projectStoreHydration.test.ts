@@ -163,4 +163,27 @@ describe("project store replacement", () => {
     });
     expect(useProjectStore.getState().isDirty).toBe(true);
   });
+
+  it.each(["preparing", "running", "finalizing", "cancelling"])(
+    "does not trust persisted nonterminal %s without native reconciliation",
+    (phase) => {
+      const project = {
+        ...DEFAULT_PROJECT_FILE("legacy", "Legacy", "/legacy"),
+        uiState: {
+          import: {
+            currentPhase: phase as any,
+            completed: false,
+            bidsReviewConfirmed: false,
+            skippedSubjects: [],
+          },
+        },
+      };
+      hydrateProjectStores(project, false);
+      expect(useImportStore.getState()).toMatchObject({
+        importPhase: "interrupted",
+        activeRunId: null,
+        terminalRunId: null,
+      });
+    },
+  );
 });

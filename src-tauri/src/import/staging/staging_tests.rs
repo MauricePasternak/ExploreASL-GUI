@@ -410,4 +410,62 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn generation_preparation_matrix_isolated_retry_only_and_rolls_back() {
+        use crate::import::status::copy_lock_files_paths;
+        use crate::import::verification::{STAGING_GENERATION_MARKER, prepare_generation};
+        use crate::import::{import_lock_dir_for_relocation, rollback_preparation_failure};
+
+        let workspace = tempdir().expect("workspace");
+        let project = workspace.path().join("project");
+        let staging = project.join(STAGING_DIRECTORY);
+        fs::create_dir_all(&staging).expect("staging");
+        let selected = "SELECTED".to_string();
+        let preserved = "PRESERVED".to_string();
+
+        // A fresh marker is durable, selected evidence starts absent, and a
+        // copied retry lock stays in its unselected, explicitly-authorized scope.
+        let marker = prepare_generation(&staging, std::slice::from_ref(&selected))
+            .expect("fresh generation");
+        assert_eq!(
+            fs::read_to_string(staging.join(STAGING_GENERATION_MARKER)).unwrap(),
+            marker
+        );
+        assert!(
+            !import_lock_dir_for_relocation(&staging, &selected)
+                .join("999_ready.status")
+                .exists()
+        );
+        let prior = import_lock_dir_for_relocation(&project, &preserved);
+        fs::create_dir_all(&prior).unwrap();
+        fs::write(prior.join("010_DCM2NII.status"), "converted").unwrap();
+        fs::write(prior.join("020_NII2BIDS.status"), "bids").unwrap();
+        fs::write(prior.join("999_ready.status"), "prior committed").unwrap();
+        copy_lock_files_paths(&project, &staging, std::slice::from_ref(&preserved)).unwrap();
+        assert!(
+            import_lock_dir_for_relocation(&staging, &preserved)
+                .join("999_ready.status")
+                .is_file()
+        );
+        assert!(
+            !import_lock_dir_for_relocation(&staging, &selected)
+                .join("999_ready.status")
+                .exists()
+        );
+
+        // A stale selected lock rejects preparation before another marker can
+        // be issued, and preparation failure removes only owned staging.
+        fs::remove_file(staging.join(STAGING_GENERATION_MARKER)).unwrap();
+        let selected_lock = import_lock_dir_for_relocation(&staging, &selected);
+        fs::create_dir_all(&selected_lock).unwrap();
+        fs::write(selected_lock.join("999_ready.status"), "stale").unwrap();
+        assert!(prepare_generation(&staging, std::slice::from_ref(&selected)).is_err());
+        assert_eq!(
+            rollback_preparation_failure(&staging, "write failed".to_string()),
+            "write failed"
+        );
+        assert!(!staging.exists());
+        assert!(prior.join("999_ready.status").is_file());
+    }
 }

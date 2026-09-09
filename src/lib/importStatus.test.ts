@@ -5,7 +5,7 @@ import type { ImportSubjectStatus } from "./importStatus";
 import { readImportStatus } from "./importStatus";
 
 describe("readImportStatus", () => {
-  it("invokes read_import_status with projectRoot and returns parsed statuses", async () => {
+  it("invokes active-project-owned read_import_status and returns parsed statuses", async () => {
     const mockStatuses: ImportSubjectStatus[] = [
       { subject: "sub-01", status: "completed" },
       { subject: "sub-02", status: "failed" },
@@ -13,18 +13,16 @@ describe("readImportStatus", () => {
 
     vi.mocked(invoke).mockResolvedValueOnce(mockStatuses);
 
-    const result = await readImportStatus("/tmp/project");
+    const result = await readImportStatus();
 
-    expect(invoke).toHaveBeenCalledWith("read_import_status", {
-      projectRoot: "/tmp/project",
-    });
+    expect(invoke).toHaveBeenCalledWith("read_import_status");
     expect(result).toEqual(mockStatuses);
   });
 
   it("returns empty array when no subjects have lock files", async () => {
     vi.mocked(invoke).mockResolvedValueOnce([]);
 
-    const result = await readImportStatus("/tmp/empty_project");
+    const result = await readImportStatus();
 
     expect(result).toEqual([]);
   });

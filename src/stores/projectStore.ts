@@ -85,7 +85,7 @@ interface ProjectState {
     name: string,
     dataSource: "dicom" | "bids",
   ) => Promise<SetupPlan>;
-  saveProject: () => Promise<void>;
+  saveProject: (options?: { allowClosedAdmission?: boolean }) => Promise<void>;
   setPhase: (phase: ProjectMeta["currentPhase"]) => void;
   toggleNavbar: () => void;
   syncImportState: (importState: ImportState) => void;
@@ -497,11 +497,6 @@ function startProjectSession() {
 }
 
 /** @internal Exposed for unit tests only. */
-export function __getProjectRevisionForTests() {
-  return projectRevision;
-}
-
-/** @internal Exposed for unit tests only. */
 export function __resetProjectRevisionForTests() {
   projectRevision = 0;
   projectSession = 0;
@@ -673,9 +668,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
   },
 
-  saveProject: async () => {
+  saveProject: async (options) => {
     const lease = captureProjectLease();
-    if (lease && (!isCurrentProjectLease(lease) || !isProjectWorkAccepted())) {
+    if (
+      lease &&
+      (!isCurrentProjectLease(lease) ||
+        (!isProjectWorkAccepted() && options?.allowClosedAdmission !== true))
+    ) {
       throw new Error("Project transition is in progress; save was not started.");
     }
     const runSave = async () => {
@@ -713,7 +712,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     const queuedSave = saveChain.then(runSave, runSave);
     saveChain = queuedSave;
-    return lease ? registerProjectTask(queuedSave) : queuedSave;
+    return lease && options?.allowClosedAdmission !== true
+      ? registerProjectTask(queuedSave)
+      : queuedSave;
   },
 
   setPhase: (phase) => {
@@ -1138,6 +1139,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         importPhase,
         importCompleted,
         mostRecentConfig,
+        pendingImportConfig: _pendingImportConfig,
         selectedProfileId,
         ...runtimeState
       } = importState;
@@ -1152,12 +1154,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
       const nextSelectedProfileId =
         selectedProfileId ?? project.uiState?.import?.selectedProfileId ?? undefined;
+      const terminal = ["completed", "failed", "cancelled", "interrupted"].includes(importPhase);
+      const persistedPhase = terminal
+        ? importPhase
+        : (project.uiState?.import?.currentPhase ?? "idle");
+      const persistedCompleted = terminal
+        ? importCompleted
+        : (project.uiState?.import?.completed ?? false);
 
       if (
         !mappingChanged &&
         project.uiState?.import?.activeStep === activeStep &&
-        project.uiState?.import?.currentPhase === importPhase &&
-        project.uiState?.import?.completed === importCompleted &&
+        project.uiState?.import?.currentPhase === persistedPhase &&
+        project.uiState?.import?.completed === persistedCompleted &&
         project.uiState?.import?.selectedProfileId === nextSelectedProfileId &&
         JSON.stringify(project.uiState?.import?.mostRecentConfig) ===
           JSON.stringify(mostRecentConfig ?? project.uiState?.import?.mostRecentConfig ?? null)
@@ -1173,8 +1182,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           import: {
             ...project.uiState?.import,
             activeStep,
-            currentPhase: importPhase,
-            completed: importCompleted,
+            currentPhase: persistedPhase,
+            completed: persistedCompleted,
             bidsReviewConfirmed: project.uiState?.import?.bidsReviewConfirmed ?? false,
             skippedSubjects: project.uiState?.import?.skippedSubjects ?? [],
             selectedProfileId: nextSelectedProfileId,

@@ -48,7 +48,7 @@ impl OwnedPathRole {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelocationEntry {
     pub path: String,
     pub kind: RelocationEntryKind,
@@ -63,7 +63,7 @@ pub enum RelocationEntryKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SubjectInventory {
     pub subject: String,
     pub entries: Vec<RelocationEntry>,
@@ -74,7 +74,7 @@ pub struct SubjectInventory {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelocationPlan {
     pub plan_id: String,
     pub subjects: Vec<SubjectInventory>,
@@ -88,7 +88,7 @@ pub struct RelocationPlan {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SubjectRelocationOutcome {
     pub subject: String,
     pub status: RelocationSubjectStatus,
@@ -105,7 +105,7 @@ pub enum RelocationSubjectStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelocationOutcome {
     pub plan_id: String,
     pub generation: u64,

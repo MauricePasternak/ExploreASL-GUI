@@ -120,8 +120,10 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   );
   const isProcessRunning =
     ["preparing", "running", "finalizing", "cancelling"].includes(processingPhase) ||
-    importPhase === "running" ||
+    ["preparing", "running", "finalizing", "cancelling"].includes(importPhase) ||
     importRunning;
+  const isImportActive =
+    ["preparing", "running", "finalizing", "cancelling"].includes(importPhase) || importRunning;
   const isProcessingActive = ["preparing", "running", "finalizing", "cancelling"].includes(
     processingPhase,
   );
@@ -139,7 +141,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           const currentImportRunning = useImportStore.getState().importRunning;
           const activeProcess =
             ["preparing", "running", "finalizing", "cancelling"].includes(currentProcessingPhase) ||
-            currentImportPhase === "running" ||
+            ["preparing", "running", "finalizing", "cancelling"].includes(currentImportPhase) ||
             currentImportRunning;
 
           if (!currentProject) return;
@@ -188,6 +190,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     if (
       !project ||
       !canAccessPhase(project, phase) ||
+      (isImportActive && phase !== "import") ||
       (isProcessingActive && (phase === "visualization" || phase === "manifest"))
     ) {
       return;
@@ -251,7 +254,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     const currentImportRunning = useImportStore.getState().importRunning;
     const activeProcess =
       ["preparing", "running", "finalizing", "cancelling"].includes(currentProcessingPhase) ||
-      currentImportPhase === "running" ||
+      ["preparing", "running", "finalizing", "cancelling"].includes(currentImportPhase) ||
       currentImportRunning;
 
     if (!currentProject) {
@@ -389,6 +392,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                 const active = project.projectMeta.currentPhase === phase;
                 const disabled =
                   !canAccessPhase(project, phase) ||
+                  (isImportActive && phase !== "import") ||
                   (isProcessingActive && (phase === "visualization" || phase === "manifest"));
 
                 const iconElement = (

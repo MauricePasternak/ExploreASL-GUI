@@ -1,489 +1,249 @@
-/**
- * Tauri event listener glue for the import module.
- *
- * Bridges Rust backend events → Zustand store actions.
- * Also exposes thin wrappers around Tauri `invoke` for running/stopping the import.
- *
- * Raw log lines are batched before flushing to the store:
- * - Section dividers (e.g. "[ ======...") flush immediately for atomic rendering
- * - All other lines accumulate and flush once per animation frame
- */
+/** Native import-run protocol clients and run-scoped diagnostic listeners. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { z } from "zod";
 
-import type { StagingEntry } from "../schemas/importSchemas";
 import type { ExecutionProfile } from "../schemas/executionProfile";
-import type { StagingValidationIssue } from "./stagingValidation";
-import { useGlobalStore } from "../stores/globalStore";
-import { useImportStore } from "../stores/importStore";
 import {
-  captureProjectLease,
-  isCurrentProjectLease,
-  isProjectWorkAccepted,
-  registerProjectTask,
-  type ProjectLease,
-} from "./projectLifecycle";
+  ImportRunSnapshotSchema,
+  type ImportRunSnapshot,
+  type StagingEntry,
+} from "../schemas/importSchemas";
+import { captureProjectLease, isCurrentProjectLease, type ProjectLease } from "./projectLifecycle";
+import { reconcileImportTerminal } from "./importTerminalCoordinator";
+import { useImportStore } from "../stores/importStore";
 
-declare global {
-  interface Window {
-    __IMPORT_CLEANUP__?: () => void;
-  }
-}
-
-// =============================================================================
-// Log batching
-// =============================================================================
-
-/**
- * Matches ExploreASL section dividers like:
- *   [ ==============================================================================================]
- *   [ ======================================== ExploreASL Settings ==================================]
- *
- * The character after `[` may be a regular space, non-breaking space (\\u00A0),
- * or other whitespace — the \\s pattern handles all of these.
- * The line must contain 5+ `=` chars to qualify as a divider.
- */
+let activeListenerCleanup: (() => void) | null = null;
+let listenerSetupGeneration = 0;
 const SECTION_DIVIDER_RE = /^\[\s={5,}/;
 
-type LogFlusher = (lines: string[]) => void;
-
-function createLogBatcher(flusher: LogFlusher) {
-  let buffer: string[] = [];
-  let rafId: number | null = null;
-
-  function flush() {
-    if (buffer.length > 0) {
-      flusher([...buffer]);
-      buffer = [];
-    }
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-  }
-
-  function push(line: string) {
-    buffer.push(line);
+function createLogBatcher(flushLines: (lines: string[]) => void) {
+  let lines: string[] = [];
+  let frame: number | null = null;
+  const flush = () => {
+    if (lines.length > 0) flushLines(lines.splice(0));
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+  };
+  const cancel = () => {
+    lines = [];
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+  };
+  const push = (line: string) => {
+    lines.push(line);
     if (SECTION_DIVIDER_RE.test(line)) {
       flush();
-    } else if (rafId === null) {
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        flush();
-      });
-    }
-  }
-
-  return { push, flush };
-}
-
-// =============================================================================
-// Event Payload Types (matching Rust event shapes)
-// =============================================================================
-
-const ImportEventCorrelationSchema = z.object({
-  runRequestId: z.string().min(1),
-  ownershipGeneration: z.number().int().nonnegative(),
-});
-
-export type ImportEventCorrelation = z.infer<typeof ImportEventCorrelationSchema>;
-
-export interface ImportStructuredEventPayload extends ImportEventCorrelation {
-  type:
-    "subject_start" | "subject_complete" | "import_failed" | "import_complete" | "dcm2nii_status";
-  subject?: string;
-  duration_secs?: number;
-  step?: string;
-  message?: string;
-  exit_code?: number;
-}
-
-export interface ImportRawEventPayload extends ImportEventCorrelation {
-  line: string;
-}
-
-export type ImportPrepareCompletePayload = ImportEventCorrelation;
-
-export interface MatlabExitErrorPayload extends ImportEventCorrelation {
-  exitCode: number;
-}
-
-export type ImportPipelineFailure =
-  | { kind: "preflight"; issues: StagingValidationIssue[]; message: string }
-  | { kind: "operational"; message: string };
-
-export class ImportPipelineError extends Error {
-  constructor(public readonly failure: ImportPipelineFailure) {
-    super(failure.message);
-    this.name = "ImportPipelineError";
-  }
-}
-
-export interface RelocationOutcome {
-  planId: string;
-  generation: number;
-  stagingCleanupComplete: boolean;
-  subjects: Array<{
-    subject: string;
-    status: "committed" | "rolledBack" | "recoveryRequired";
-    phase: string;
-    message: string | null;
-  }>;
-}
-
-/** Decode current tagged Rust errors and old string-only command errors. */
-export function decodeImportPipelineError(error: unknown): ImportPipelineFailure {
-  let value = error;
-  if (typeof value === "string") {
-    const legacyMessage = value;
-    try {
-      value = JSON.parse(value) as unknown;
-    } catch {
-      return { kind: "operational", message: legacyMessage };
-    }
-  }
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if (record.kind === "preflight" && Array.isArray(record.issues)) {
-      return {
-        kind: "preflight",
-        issues: record.issues as StagingValidationIssue[],
-        message: "Import staging preflight failed.",
-      };
-    }
-    if (record.kind === "operational" && typeof record.message === "string") {
-      return { kind: "operational", message: record.message };
-    }
-    if (typeof record.message === "string") {
-      return { kind: "operational", message: record.message };
-    }
-  }
-  return { kind: "operational", message: "Import preparation failed." };
-}
-
-// =============================================================================
-// Internal helpers
-// =============================================================================
-
-/**
- * Normalise the lowercase step field from Rust to the uppercase enum expected by the store.
- */
-function normalizeStep(step?: string): "DCM2NII" | "NII2BIDS" {
-  const upper = (step ?? "").toUpperCase();
-  if (upper === "DCM2NII") return "DCM2NII";
-  return "NII2BIDS";
-}
-
-/**
- * Post-processing logic shared by `import_complete` and `MatlabExitError`.
- *
- * 1. Clean up staging status for failed subjects
- * 2. Move successfully imported output to the project root
- * 3. Mark the import as completed or failed in the store
- */
-async function runPostProcessing(
-  isExitError = false,
-  lease: ProjectLease | null = captureProjectLease(),
-): Promise<void> {
-  if (lease && !isCurrentProjectLease(lease)) return;
-  const { failedSubjects, completeImport, failImport, markSubjectFailed, addLogLine } =
-    useImportStore.getState();
-  const debugMode = useGlobalStore.getState().settings.import.preserveStagingDir;
-
-  // 1. Clean import status for failed subjects
-  if (failedSubjects.length > 0) {
-    try {
-      await invoke("clean_import_status", {});
-      if (lease && !isCurrentProjectLease(lease)) return;
-    } catch {
-      // Best-effort — don't block the rest of post-processing
-    }
-  }
-
-  // 2. Determine succeeded vs failed
-  const allSucceeded = failedSubjects.length === 0 && !isExitError;
-
-  // 3. Move output and update store
-  if (!isExitError || failedSubjects.length > 0) {
-    try {
-      const outcome = await invoke<RelocationOutcome>("move_import_output", {
-        debugMode,
-        cleanupStaging: allSucceeded,
-      });
-      if (lease && !isCurrentProjectLease(lease)) return;
-      const failedRelocations = outcome.subjects.filter(
-        (subject) => subject.status !== "committed",
-      );
-      for (const subject of outcome.subjects) {
-        if (subject.status === "committed") {
-          addLogLine(`Relocation committed for ${subject.subject}.`);
-          continue;
-        }
-        const message = subject.message ?? "Relocation did not complete safely.";
-        const detail = `Relocation ${subject.phase} failed for ${subject.subject}: ${message}`;
-        addLogLine(detail);
-        markSubjectFailed(subject.subject, "NII2BIDS", detail);
-      }
-      if (failedRelocations.length > 0) {
-        failImport();
-        return;
-      }
-      if (allSucceeded && !debugMode && !outcome.stagingCleanupComplete) {
-        addLogLine(
-          "Relocation committed, but durable cleanup remains pending. Reopen the project to finish recovery before retrying import.",
-        );
-        failImport();
-        return;
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      addLogLine(`Relocation failed: ${message}`);
-      failImport();
-      return;
-    }
-  }
-
-  if (allSucceeded) {
-    completeImport();
-  } else {
-    failImport();
-  }
-}
-
-// =============================================================================
-// Public API
-// =============================================================================
-
-/**
- * Set up all Tauri event listeners for the import pipeline.
- *
- * Returns a cleanup function that removes every listener.
- */
-export async function setupImportListeners(
-  runRequestId: string,
-  options: { onTerminal?: () => void } = {},
-): Promise<() => void> {
-  const lease = captureProjectLease();
-  const isCurrent = () => !lease || isCurrentProjectLease(lease);
-  if (typeof window !== "undefined" && window.__IMPORT_CLEANUP__) {
-    try {
-      window.__IMPORT_CLEANUP__();
-    } catch (e) {
-      console.warn("Failed to run previous import cleanup:", e);
-    }
-    window.__IMPORT_CLEANUP__ = undefined;
-  }
-
-  const {
-    addLogLines,
-    setImportPhase,
-    markSubjectRunning,
-    markSubjectCompleted,
-    markSubjectFailed,
-  } = useImportStore.getState();
-
-  let listenerActive = true;
-  let ownershipGeneration: number | null = null;
-  const acceptsEvent = (payload: unknown): payload is ImportEventCorrelation => {
-    if (!listenerActive || !isCurrent()) return false;
-    const parsed = ImportEventCorrelationSchema.safeParse(payload);
-    if (!parsed.success || parsed.data.runRequestId !== runRequestId) return false;
-    if (ownershipGeneration === null) {
-      ownershipGeneration = parsed.data.ownershipGeneration;
-    }
-    return ownershipGeneration === parsed.data.ownershipGeneration;
-  };
-  const deactivate = () => {
-    listenerActive = false;
-    ownershipGeneration = null;
-  };
-  const logBatcher = createLogBatcher((lines) => {
-    if (listenerActive && isCurrent()) addLogLines(lines);
-  });
-  const unlisteners: Array<() => void> = [];
-  const acceptListener = (unlisten: () => void) => {
-    if (!isCurrent()) {
-      unlisten();
-      for (const prior of unlisteners) prior();
-      return false;
-    }
-    unlisteners.push(unlisten);
-    return true;
-  };
-
-  // 1. import-structured-event
-  const unlistenStructured = await listen<ImportStructuredEventPayload>(
-    "import-structured-event",
-    (event) => {
-      const payload = event.payload;
-      if (!acceptsEvent(payload)) return;
-
-      switch (payload.type) {
-        case "subject_start":
-          if (payload.subject) {
-            markSubjectRunning(payload.subject, payload.step as "DCM2NII" | "NII2BIDS");
-          }
-          break;
-
-        case "subject_complete":
-          if (payload.subject) {
-            markSubjectCompleted(payload.subject, payload.duration_secs ?? 0);
-          }
-          break;
-
-        case "import_failed":
-          if (payload.subject) {
-            markSubjectFailed(
-              payload.subject,
-              normalizeStep(payload.step),
-              payload.message ?? "Unknown error",
-            );
-          }
-          break;
-
-        case "import_complete":
-          {
-            deactivate();
-            options.onTerminal?.();
-            if (lease && !isProjectWorkAccepted()) break;
-            const task = runPostProcessing(false, lease);
-            if (lease) {
-              try {
-                void registerProjectTask(task);
-              } catch {
-                // Transition admission closed before post-processing started.
-              }
-            } else {
-              void task;
-            }
-          }
-          break;
-
-        case "dcm2nii_status":
-          // Currently informational — no store action needed
-          break;
-      }
-    },
-  );
-  if (!acceptListener(unlistenStructured)) return () => {};
-
-  // 2. import-raw-event (batched)
-  const unlistenRaw = await listen<ImportRawEventPayload>("import-raw-event", (event) => {
-    if (!acceptsEvent(event.payload)) return;
-    logBatcher.push(event.payload.line);
-  });
-  if (!acceptListener(unlistenRaw)) return () => {};
-
-  // 3. ImportPrepareComplete
-  const unlistenPrepare = await listen<ImportPrepareCompletePayload>(
-    "ImportPrepareComplete",
-    (event) => {
-      if (!acceptsEvent(event.payload)) return;
-      setImportPhase("running");
-    },
-  );
-  if (!acceptListener(unlistenPrepare)) return () => {};
-
-  // 4. MatlabExitError
-  const unlistenExitError = await listen<MatlabExitErrorPayload>("MatlabExitError", (event) => {
-    if (!acceptsEvent(event.payload)) return;
-    deactivate();
-    options.onTerminal?.();
-    // Mark all currently-running or pending subjects as failed
-    const { importProgress } = useImportStore.getState();
-    for (const [subject, progress] of Object.entries(importProgress)) {
-      if (progress.status === "running" || progress.status === "pending") {
-        markSubjectFailed(subject, "DCM2NII", "MATLAB process exited unexpectedly");
-      }
-    }
-
-    if (lease && !isProjectWorkAccepted()) return;
-    const task = runPostProcessing(true, lease);
-    if (lease) {
-      try {
-        void registerProjectTask(task);
-      } catch {
-        // Transition admission closed before post-processing started.
-      }
-    } else {
-      void task;
-    }
-  });
-  if (!acceptListener(unlistenExitError)) return () => {};
-
-  // Return cleanup function
-  const cleanup = () => {
-    logBatcher.flush();
-    deactivate();
-    unlistenStructured();
-    unlistenRaw();
-    unlistenPrepare();
-    unlistenExitError();
-    if (typeof window !== "undefined" && window.__IMPORT_CLEANUP__ === cleanup) {
-      window.__IMPORT_CLEANUP__ = undefined;
+    } else if (frame === null) {
+      frame = requestAnimationFrame(flush);
     }
   };
-
-  if (typeof window !== "undefined") {
-    window.__IMPORT_CLEANUP__ = cleanup;
-  }
-
-  return cleanup;
+  return { push, flush, cancel };
 }
 
-/**
- * Invoke the Rust `run_import_pipeline` command.
- *
- * Returns the PID of the spawned MATLAB process.
- */
-export async function runImportPipeline(params: {
-  runRequestId: string;
+export function clearImportListeners() {
+  listenerSetupGeneration += 1;
+  activeListenerCleanup?.();
+  activeListenerCleanup = null;
+}
+
+function parseSnapshot(value: unknown): ImportRunSnapshot {
+  return ImportRunSnapshotSchema.parse(value);
+}
+
+export async function reserveImportRun(params: {
+  subjectList: string[];
+  relocationPlanId: string;
+  profileId: string;
+  subjectsToPreserve?: string[];
+  preserveStaging: boolean;
+}): Promise<ImportRunSnapshot> {
+  return parseSnapshot(await invoke("reserve_import_run", params));
+}
+
+export async function getActiveImportRun(): Promise<ImportRunSnapshot | null> {
+  const response = await invoke<unknown>("get_active_import_run");
+  return response == null ? null : parseSnapshot(response);
+}
+
+export async function attachImportRun(runId: string): Promise<ImportRunSnapshot> {
+  return parseSnapshot(await invoke("attach_import_run", { runId }));
+}
+
+export async function launchImportRun(params: {
+  runId: string;
   stagingEntries: StagingEntry[];
   sourcestructureJson: Record<string, unknown>;
   studyparJson: Record<string, unknown>;
   executionProfile: ExecutionProfile;
   subjectList: string[];
-  subjectsToPreserve?: string[];
   relocationPlanId: string;
-}): Promise<number> {
+}): Promise<ImportRunSnapshot> {
   try {
-    return await invoke<number>("run_import_pipeline", {
-      runRequestId: params.runRequestId,
-      stagingEntries: params.stagingEntries,
-      sourcestructureJson: params.sourcestructureJson,
-      studyparJson: params.studyparJson,
-      executionProfile: params.executionProfile,
-      subjectList: params.subjectList,
-      subjectsToPreserve: params.subjectsToPreserve ?? null,
-      relocationPlanId: params.relocationPlanId,
-    });
+    return parseSnapshot(await invoke("launch_import_run", params));
   } catch (error) {
-    throw new ImportPipelineError(decodeImportPipelineError(error));
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(message, { cause: error });
   }
 }
 
-/**
- * Invoke the Rust `stop_import` command to kill the MATLAB process.
- */
-export async function stopImportProcess(pid: number): Promise<void> {
-  await invoke("stop_import", { pid });
+export async function cancelImportRun(runId: string): Promise<ImportRunSnapshot> {
+  return parseSnapshot(await invoke("cancel_import_run", { runId }));
 }
 
-/** Stop the native-owned import when the frontend has not received its PID yet. */
-export async function stopActiveImport(): Promise<void> {
-  await invoke("stop_active_import");
+const SnapshotEventSchema = z.object({ payload: ImportRunSnapshotSchema }).strict();
+const RawEventSchema = z
+  .object({
+    line: z.string(),
+    runId: z.string().min(1),
+    ownershipGeneration: z.number().int().nonnegative(),
+  })
+  .strict();
+const StructuredEventSchema = z
+  .object({
+    runId: z.string().min(1),
+    ownershipGeneration: z.number().int().nonnegative(),
+    type: z.string(),
+    subject: z.string().optional(),
+    step: z.string().optional(),
+    message: z.string().optional(),
+  })
+  .passthrough();
+
+export interface ImportListenerController {
+  bindRun: (runId: string) => void;
+  cleanup: () => void;
 }
 
-/**
- * Copy succeeded subjects' lock files from project root back into staging before retry.
- */
-export async function copyLockFilesForRetry(params: { subjects: string[] }): Promise<void> {
-  if (params.subjects.length === 0) {
-    return;
-  }
+type ImportEventChannel = "snapshot" | "raw" | "structured";
 
-  await invoke("copy_lock_files", {
-    subjects: params.subjects,
+/** Install before discovery, then bind native identity and replay events that
+ * raced discovery. Listeners never call staging/finalization authority IPC. */
+async function createImportListeners(
+  initialRunId: string | null,
+  lease: ProjectLease | null = captureProjectLease(),
+): Promise<ImportListenerController> {
+  clearImportListeners();
+  const setupGeneration = listenerSetupGeneration;
+  let boundRunId = initialRunId;
+  let cleaned = false;
+  const queued: Array<{ channel: ImportEventChannel; payload: unknown }> = [];
+  const isCurrent = (runId: string, generation?: number) =>
+    Boolean(
+      lease &&
+      isCurrentProjectLease(lease) &&
+      (useImportStore.getState().activeRunId ?? useImportStore.getState().terminalRunId) ===
+        runId &&
+      (generation === undefined || useImportStore.getState().ownershipGeneration === generation),
+    );
+  const logBatcher = createLogBatcher((lines) => {
+    const runId = boundRunId;
+    if (!cleaned && runId && isCurrent(runId)) useImportStore.getState().addLogLines(lines);
   });
+  const dispatch = (channel: ImportEventChannel, payload: unknown) => {
+    const runId = boundRunId;
+    if (!runId) {
+      if (queued.length < 256) queued.push({ channel, payload });
+      return;
+    }
+    if (channel === "snapshot") {
+      const parsed = SnapshotEventSchema.safeParse({ payload });
+      if (
+        !parsed.success ||
+        !isCurrent(runId, parsed.data.payload.ownershipGeneration) ||
+        parsed.data.payload.runId !== runId
+      )
+        return;
+      useImportStore.getState().reconcileImportRunSnapshot(parsed.data.payload, lease);
+      if (
+        ["completed", "failed", "cancelled", "interrupted"].includes(parsed.data.payload.lifecycle)
+      ) {
+        void reconcileImportTerminal(runId, lease).catch(() => undefined);
+      }
+      return;
+    }
+    if (channel === "raw") {
+      const parsed = RawEventSchema.safeParse(payload);
+      if (
+        !parsed.success ||
+        !isCurrent(runId, parsed.data.ownershipGeneration) ||
+        parsed.data.runId !== runId
+      )
+        return;
+      logBatcher.push(parsed.data.line);
+      return;
+    }
+    const parsed = StructuredEventSchema.safeParse(payload);
+    if (
+      !parsed.success ||
+      !isCurrent(runId, parsed.data.ownershipGeneration) ||
+      parsed.data.runId !== runId
+    )
+      return;
+    // Completion parser output is diagnostic only. Subject starts/failures
+    // decorate provisional rows, then snapshots replace them.
+    if (parsed.data.type === "subject_start" && parsed.data.subject) {
+      useImportStore.getState().markSubjectRunning(parsed.data.subject);
+    }
+    if (parsed.data.type === "import_failed" && parsed.data.subject) {
+      useImportStore
+        .getState()
+        .markSubjectDiagnosticFailure(
+          parsed.data.subject,
+          parsed.data.message ?? "Import diagnostic failure",
+        );
+    }
+  };
+  const unlisteners: Array<() => void> = [];
+  try {
+    unlisteners.push(
+      await listen<unknown>("import-run-snapshot", (event) => dispatch("snapshot", event.payload)),
+    );
+    unlisteners.push(
+      await listen<unknown>("import-raw-event", (event) => dispatch("raw", event.payload)),
+    );
+    unlisteners.push(
+      await listen<unknown>("import-structured-event", (event) =>
+        dispatch("structured", event.payload),
+      ),
+    );
+  } catch (error) {
+    unlisteners.forEach((unlisten) => unlisten());
+    throw error;
+  }
+  if (setupGeneration !== listenerSetupGeneration) {
+    logBatcher.cancel();
+    unlisteners.forEach((unlisten) => unlisten());
+    return { bindRun: () => undefined, cleanup: () => undefined };
+  }
+  const cleanup = () => {
+    if (cleaned) return;
+    logBatcher.flush();
+    cleaned = true;
+    queued.length = 0;
+    unlisteners.forEach((unlisten) => unlisten());
+    if (activeListenerCleanup === cleanup) activeListenerCleanup = null;
+  };
+  activeListenerCleanup = cleanup;
+  const bindRun = (runId: string) => {
+    if (cleaned) return;
+    boundRunId = runId;
+    const raced = queued.splice(0);
+    for (const event of raced) dispatch(event.channel, event.payload);
+  };
+  return { bindRun, cleanup };
+}
+
+export async function setupImportDiscoveryListeners(
+  lease: ProjectLease | null = captureProjectLease(),
+): Promise<ImportListenerController> {
+  return createImportListeners(null, lease);
+}
+
+export async function setupImportListeners(
+  runId: string,
+  lease: ProjectLease | null = captureProjectLease(),
+): Promise<() => void> {
+  const controller = await createImportListeners(runId, lease);
+  return controller.cleanup;
 }

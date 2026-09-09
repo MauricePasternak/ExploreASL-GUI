@@ -1,6 +1,5 @@
 import { Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { invoke } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
@@ -10,6 +9,8 @@ import { useImportStore } from "../stores/importStore";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { claimStartupUpdateCheck } from "../lib/updateStartup";
+import { cancelImportRun } from "../lib/importEvents";
+import { reconcileImportTerminal } from "../lib/importTerminalCoordinator";
 
 const UPDATE_AVAILABLE_NOTIFICATION_ID = "application-update-available";
 const UPDATE_PROGRESS_NOTIFICATION_ID = "application-update-progress";
@@ -45,7 +46,8 @@ function activeWork() {
   const { importPhase, importRunning } = useImportStore.getState();
   return {
     processing: ["preparing", "running", "finalizing", "cancelling"].includes(processingPhase),
-    importing: importPhase === "preparing" || importPhase === "running" || importRunning,
+    importing:
+      ["preparing", "running", "finalizing", "cancelling"].includes(importPhase) || importRunning,
   };
 }
 
@@ -190,8 +192,16 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
         await useProcessingStore.getState().killProcessing();
       }
       if (importing) {
-        await invoke("stop_active_import");
-        useImportStore.getState().cancelImport();
+        const importState = useImportStore.getState();
+        if (
+          !importState.activeRunId ||
+          !["preparing", "running"].includes(importState.importPhase)
+        ) {
+          throw new Error("Import finalization must finish before installing an update.");
+        }
+        const snapshot = await cancelImportRun(importState.activeRunId);
+        useImportStore.getState().reconcileImportRunSnapshot(snapshot);
+        await reconcileImportTerminal(snapshot.runId);
       }
       if (useProjectStore.getState().isDirty) {
         await useProjectStore.getState().saveProject();
@@ -286,7 +296,8 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
   const importRunning = useImportStore((state) => state.importRunning);
   const dirty = useProjectStore((state) => state.isDirty);
   const processing = ["preparing", "running", "finalizing", "cancelling"].includes(processingPhase);
-  const importing = importPhase === "preparing" || importPhase === "running" || importRunning;
+  const importing =
+    ["preparing", "running", "finalizing", "cancelling"].includes(importPhase) || importRunning;
   const confirmationAction =
     processing || importing
       ? dirty

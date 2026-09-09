@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MetadataGroup, PathPattern, ImportSnapshot } from "../schemas/importSchemas";
+import type {
+  MetadataGroup,
+  PathPattern,
+  ImportSnapshot,
+  ImportRunSnapshot,
+  ImportProgress,
+} from "../schemas/importSchemas";
 import type { ExecutionProfile } from "../schemas/executionProfile";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { computeStaleness } from "../lib/importStaleness";
@@ -19,6 +25,36 @@ const MATLAB_PROFILE: ExecutionProfile = {
   matlabPath: "/usr/local/bin/matlab",
   exploreAslPath: "/opt/ExploreASL",
 };
+
+const nativeSnapshot = (
+  lifecycle: ImportRunSnapshot["lifecycle"],
+  runId = "import-run-1",
+): ImportRunSnapshot => ({
+  runId,
+  lifecycle,
+  ownershipGeneration: 4,
+  profileId: "profile-1",
+  selectedSubjects: ["BAR", "FOO"],
+  createdAtMs: 1,
+  updatedAtMs: 2,
+  subjectOutcomes: [],
+  ...(["completed", "failed", "cancelled", "interrupted"].includes(lifecycle)
+    ? { terminalResult: lifecycle as "completed" | "failed" | "cancelled" | "interrupted" }
+    : {}),
+});
+
+function updateImportProgress(subject: string, progress: ImportProgress) {
+  useImportStore.setState((state) => ({
+    importProgress: { ...state.importProgress, [subject]: progress },
+  }));
+}
+
+function setImportPhase(importPhase: ReturnType<typeof useImportStore.getState>["importPhase"]) {
+  useImportStore.setState({
+    importPhase,
+    importRunning: importPhase === "running" || importPhase === "cancelling",
+  });
+}
 
 // A valid, selected profile is the default precondition for import runs. Tests
 // that exercise the missing/invalid-profile blocking paths override this.
@@ -111,7 +147,6 @@ describe("importStore initial state", () => {
     expect(state.importPhase).toBe("idle");
     expect(state.importCompleted).toBe(false);
     expect(state.importLog).toEqual([]);
-    expect(state.failedSubjects).toEqual([]);
   });
 });
 
@@ -361,33 +396,6 @@ describe("importStore metadata group actions", () => {
 // Step 5: Import Execution
 // ---------------------------------------------------------------------------
 describe("importStore import execution actions", () => {
-  it("setImportRunning updates running state", () => {
-    const { setImportRunning } = useImportStore.getState();
-    setImportRunning(true);
-    expect(useImportStore.getState().importRunning).toBe(true);
-  });
-
-  it("updateImportProgress updates specific subject", () => {
-    const { updateImportProgress } = useImportStore.getState();
-    updateImportProgress("BAR", {
-      subject: "BAR",
-      session: "01",
-      status: "running",
-      currentStep: "DCM2NII",
-    });
-
-    const progress = useImportStore.getState().importProgress;
-    expect(progress["BAR"].status).toBe("running");
-    expect(progress["BAR"].currentStep).toBe("DCM2NII");
-  });
-
-  it("setImportSummary stores summary", () => {
-    const { setImportSummary } = useImportStore.getState();
-    const summary = { succeeded: 5, failed: 1, errors: ["Error for BAR"] };
-    setImportSummary(summary);
-    expect(useImportStore.getState().importSummary).toEqual(summary);
-  });
-
   it("startImport prepares progress rows from subject rows", () => {
     const store = useImportStore.getState();
     store.setSubjectRows([
@@ -404,8 +412,18 @@ describe("importStore import execution actions", () => {
         groupId: "global",
       },
     ]);
-    store.addLogLine("stale line");
-    store.markSubjectFailed("OLD", "DCM2NII", "stale failure");
+    useImportStore.setState({
+      importLog: ["stale line"],
+      importProgress: {
+        OLD: {
+          subject: "OLD",
+          session: "01",
+          status: "failed",
+          errorStep: "DCM2NII",
+          error: "stale failure",
+        },
+      },
+    });
 
     store.startImport();
 
@@ -413,7 +431,6 @@ describe("importStore import execution actions", () => {
     expect(state.importPhase).toBe("preparing");
     expect(state.importCompleted).toBe(false);
     expect(state.importLog).toEqual([]);
-    expect(state.failedSubjects).toEqual([]);
     expect(state.importProgress).toEqual({
       BAR: {
         subject: "BAR",
@@ -430,7 +447,7 @@ describe("importStore import execution actions", () => {
 
   it("startImport clears progress when no subject rows exist", () => {
     const store = useImportStore.getState();
-    store.updateImportProgress("STALE", {
+    updateImportProgress("STALE", {
       subject: "STALE",
       session: "01",
       status: "failed",
@@ -441,7 +458,6 @@ describe("importStore import execution actions", () => {
 
     expect(useImportStore.getState()).toMatchObject({
       importPhase: "preparing",
-      failedSubjects: [],
       importLog: [],
     });
     expect(useImportStore.getState().importProgress).toEqual({});
@@ -451,11 +467,11 @@ describe("importStore import execution actions", () => {
     const store = useImportStore.getState();
 
     expect(store.importPhase).toBe("idle");
-    store.setImportPhase("preparing");
+    store.bindImportRunSnapshot(nativeSnapshot("preparing"));
     expect(useImportStore.getState().importPhase).toBe("preparing");
-    store.setImportPhase("running");
+    store.reconcileImportRunSnapshot(nativeSnapshot("running"));
     expect(useImportStore.getState().importPhase).toBe("running");
-    store.completeImport();
+    store.reconcileImportRunSnapshot(nativeSnapshot("completed"));
 
     expect(useImportStore.getState()).toMatchObject({
       importPhase: "completed",
@@ -464,11 +480,25 @@ describe("importStore import execution actions", () => {
     });
   });
 
+  it("rejects delayed nonterminal command responses after a newer terminal snapshot", () => {
+    const store = useImportStore.getState();
+    store.bindImportRunSnapshot({ ...nativeSnapshot("running"), updatedAtMs: 10 });
+    store.reconcileImportRunSnapshot({ ...nativeSnapshot("completed"), updatedAtMs: 12 });
+    store.reconcileImportRunSnapshot({ ...nativeSnapshot("running"), updatedAtMs: 12 });
+
+    expect(useImportStore.getState()).toMatchObject({
+      activeRunId: null,
+      terminalRunId: "import-run-1",
+      importPhase: "completed",
+      nativeSnapshotUpdatedAtMs: 12,
+    });
+  });
+
   it("tracks failed import transitions", () => {
     const store = useImportStore.getState();
 
-    store.setImportPhase("running");
-    store.failImport();
+    store.bindImportRunSnapshot(nativeSnapshot("running"));
+    store.reconcileImportRunSnapshot(nativeSnapshot("failed"));
 
     expect(useImportStore.getState()).toMatchObject({
       importPhase: "failed",
@@ -479,21 +509,38 @@ describe("importStore import execution actions", () => {
 
   it("cancels running imports and running subjects", () => {
     const store = useImportStore.getState();
-    store.updateImportProgress("BAR", {
+    updateImportProgress("BAR", {
       subject: "BAR",
       session: "01",
       status: "running",
       currentStep: "DCM2NII",
     });
-    store.updateImportProgress("FOO", {
+    updateImportProgress("FOO", {
       subject: "FOO",
       session: "01",
       status: "completed",
       duration: 12,
     });
-    store.setImportPhase("running");
-
-    store.cancelImport();
+    store.bindImportRunSnapshot(nativeSnapshot("running"));
+    store.reconcileImportRunSnapshot({
+      ...nativeSnapshot("cancelled"),
+      subjectOutcomes: [
+        {
+          subject: "BAR",
+          outcome: "cancelled",
+          readyLockVerified: false,
+          rawdataVerified: false,
+          committed: false,
+        },
+        {
+          subject: "FOO",
+          outcome: "committed",
+          readyLockVerified: true,
+          rawdataVerified: true,
+          committed: true,
+        },
+      ],
+    });
 
     const state = useImportStore.getState();
     expect(state.importPhase).toBe("cancelled");
@@ -502,9 +549,9 @@ describe("importStore import execution actions", () => {
     expect(state.importProgress.FOO.status).toBe("completed");
   });
 
-  it("updates subject running, completed, failed, and cancelled status", () => {
+  it("updates provisional running and failure diagnostics without terminal authority", () => {
     const store = useImportStore.getState();
-    store.updateImportProgress("BAR", {
+    updateImportProgress("BAR", {
       subject: "BAR",
       session: "01",
       status: "pending",
@@ -515,106 +562,14 @@ describe("importStore import execution actions", () => {
       status: "running",
     });
 
-    store.markSubjectCompleted("BAR", 42);
+    store.markSubjectDiagnosticFailure("BAR", "Bad metadata");
     expect(useImportStore.getState().importProgress.BAR).toMatchObject({
-      status: "completed",
-      duration: 42,
-    });
-    expect(useImportStore.getState().failedSubjects).toEqual([]);
-
-    store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
-    expect(useImportStore.getState().importProgress.BAR).toMatchObject({
-      status: "failed",
-      errorStep: "NII2BIDS",
+      status: "running",
       error: "Bad metadata",
     });
-    expect(useImportStore.getState().failedSubjects).toEqual(["BAR"]);
-
-    store.markSubjectCancelled("BAR");
-    expect(useImportStore.getState().importProgress.BAR.status).toBe("cancelled");
-    expect(useImportStore.getState().failedSubjects).toEqual([]);
   });
 
-  it("does not remove subjects from failedSubjects or mark them completed if they already failed", () => {
-    const store = useImportStore.getState();
-    store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
-    store.markSubjectFailed("FOO", "DCM2NII", "Conversion failed");
-
-    store.markSubjectCompleted("BAR", 9);
-
-    expect(useImportStore.getState().failedSubjects).toEqual(["BAR", "FOO"]);
-    expect(useImportStore.getState().importProgress.BAR.status).toBe("failed");
-  });
-
-  it("removes subjects from failedSubjects when they are cancelled", () => {
-    const store = useImportStore.getState();
-    store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
-    store.markSubjectFailed("FOO", "DCM2NII", "Conversion failed");
-
-    store.markSubjectCancelled("BAR");
-
-    expect(useImportStore.getState().failedSubjects).toEqual(["FOO"]);
-  });
-
-  it("does not allow failed subjects to transition to running during the run", () => {
-    const store = useImportStore.getState();
-    store.markSubjectFailed("BAR", "NII2BIDS", "Bad metadata");
-    store.markSubjectFailed("FOO", "DCM2NII", "Conversion failed");
-    store.markSubjectRunning("BAR");
-    store.setImportPhase("running");
-
-    store.cancelImport();
-
-    // Since BAR remained failed (not running), cancelImport keeps it in failedSubjects.
-    expect(useImportStore.getState().failedSubjects).toEqual(["BAR", "FOO"]);
-  });
-
-  it("accumulates import log lines", () => {
-    const store = useImportStore.getState();
-
-    store.addLogLine("first line");
-    store.addLogLine("second line");
-
-    expect(useImportStore.getState().importLog).toEqual(["first line", "second line"]);
-  });
-
-  it("filters out duplicate log lines", () => {
-    const store = useImportStore.getState();
-
-    store.addLogLine("first line");
-    store.addLogLine("first line");
-    store.addLogLines(["second line", "first line", "third line", "second line"]);
-
-    expect(useImportStore.getState().importLog).toEqual([
-      "first line",
-      "second line",
-      "third line",
-    ]);
-  });
-
-  it("resetImportPhase returns execution state to idle", () => {
-    const store = useImportStore.getState();
-    store.updateImportProgress("BAR", {
-      subject: "BAR",
-      session: "01",
-      status: "running",
-    });
-    store.addLogLine("line");
-    store.markSubjectFailed("BAR", "DCM2NII", "Conversion failed");
-    store.setImportPhase("failed");
-
-    store.resetImportPhase();
-
-    expect(useImportStore.getState()).toMatchObject({
-      importPhase: "idle",
-      importCompleted: false,
-      importLog: [],
-      failedSubjects: [],
-      importRunning: false,
-    });
-  });
-
-  it("normalizes persisted preparing imports to failed on hydration", () => {
+  it("normalizes persisted preparing imports to interrupted on hydration", () => {
     const store = useImportStore.getState();
 
     store.loadPersistedState({
@@ -623,13 +578,13 @@ describe("importStore import execution actions", () => {
     });
 
     expect(useImportStore.getState()).toMatchObject({
-      importPhase: "failed",
+      importPhase: "interrupted",
       importCompleted: false,
       importRunning: false,
     });
   });
 
-  it("normalizes persisted running imports to failed on hydration", () => {
+  it("normalizes persisted running imports to interrupted on hydration", () => {
     const store = useImportStore.getState();
 
     store.loadPersistedState({
@@ -638,7 +593,7 @@ describe("importStore import execution actions", () => {
     });
 
     expect(useImportStore.getState()).toMatchObject({
-      importPhase: "failed",
+      importPhase: "interrupted",
       importCompleted: false,
       importRunning: false,
     });
@@ -731,7 +686,7 @@ describe("importStore execution profile selection", () => {
 
     store.startImport();
 
-    expect(useImportStore.getState().mostRecentConfig?.selectedProfileId).toBe("profile-1");
+    expect(useImportStore.getState().pendingImportConfig?.selectedProfileId).toBe("profile-1");
   });
 
   it("startImport blocks with an inline error when no profile is selected (no failed transition)", () => {
@@ -784,7 +739,7 @@ describe("importStore reset", () => {
     store.setIngestionResults(SAMPLE_PATHS, SAMPLE_PATTERNS);
     store.setTokenAssignment("sig", 0, null, "Subject");
     store.setModalityAliases([{ captured: "t1", mapped: "T1w" }]);
-    store.setImportRunning(true);
+    useImportStore.setState({ importRunning: true });
 
     // Reset
     store.resetImport();
@@ -802,7 +757,6 @@ describe("importStore reset", () => {
     expect(state.importPhase).toBe("idle");
     expect(state.importCompleted).toBe(false);
     expect(state.importLog).toEqual([]);
-    expect(state.failedSubjects).toEqual([]);
   });
 });
 
@@ -857,7 +811,6 @@ describe("importStore mostRecentConfig", () => {
       importPhase: "completed",
       importCompleted: true,
       importLog: ["old log"],
-      failedSubjects: ["OLD"],
       importRunning: false,
       importProgress: {
         OLD: { subject: "OLD", session: "01", status: "completed" },
@@ -892,7 +845,6 @@ describe("importStore mostRecentConfig", () => {
       importPhase: "idle",
       importCompleted: false,
       importLog: [],
-      failedSubjects: [],
       importProgress: {},
       mostRecentConfig: null,
       selectedProfileId: "profile-1",
@@ -920,7 +872,7 @@ describe("importStore mostRecentConfig", () => {
     expect(useImportStore.getState().mostRecentConfig).toEqual(snapshot);
   });
 
-  it("startImport captures current config as mostRecentConfig", () => {
+  it("startImport captures current config as a pending attempt", () => {
     const store = useImportStore.getState();
     store.setSourceDataPath("/scan/data");
     store.setIngestionResults(SAMPLE_PATHS, SAMPLE_PATTERNS);
@@ -931,14 +883,14 @@ describe("importStore mostRecentConfig", () => {
 
     store.startImport();
 
-    const { mostRecentConfig } = useImportStore.getState();
-    expect(mostRecentConfig).not.toBeNull();
-    expect(mostRecentConfig!.sourceDataPath).toBe("/scan/data");
-    expect(mostRecentConfig!.pathPatterns).toEqual(SAMPLE_PATTERNS);
-    expect(mostRecentConfig!.tokenizerConfigs).toEqual({
+    const { pendingImportConfig } = useImportStore.getState();
+    expect(pendingImportConfig).not.toBeNull();
+    expect(pendingImportConfig!.sourceDataPath).toBe("/scan/data");
+    expect(pendingImportConfig!.pathPatterns).toEqual(SAMPLE_PATTERNS);
+    expect(pendingImportConfig!.tokenizerConfigs).toEqual({
       "VARYING/VARYING/VARYING": [{ blockIndex: 0, subBlockIndex: null, tag: "Subject" }],
     });
-    expect(mostRecentConfig!.subjectRows).toEqual([
+    expect(pendingImportConfig!.subjectRows).toEqual([
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
     ]);
   });
@@ -1010,8 +962,8 @@ describe("importStore mostRecentConfig", () => {
 describe("importStore applyStaleness", () => {
   it("applies stale flag to matching subjects in importProgress", () => {
     const store = useImportStore.getState();
-    store.updateImportProgress("BAR", { subject: "BAR", session: "01", status: "completed" });
-    store.updateImportProgress("FOO", { subject: "FOO", session: "01", status: "completed" });
+    updateImportProgress("BAR", { subject: "BAR", session: "01", status: "completed" });
+    updateImportProgress("FOO", { subject: "FOO", session: "01", status: "completed" });
 
     store.applyStaleness({ BAR: true, FOO: false });
 
@@ -1021,7 +973,7 @@ describe("importStore applyStaleness", () => {
 
   it("ignores subjects not present in importProgress", () => {
     const store = useImportStore.getState();
-    store.updateImportProgress("BAR", { subject: "BAR", session: "01", status: "completed" });
+    updateImportProgress("BAR", { subject: "BAR", session: "01", status: "completed" });
 
     store.applyStaleness({ BAR: true, MISSING: true });
 
@@ -1159,8 +1111,8 @@ describe("importStore reconstructProgressFromLockFiles", () => {
     store.setSubjectRows([
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
     ]);
-    store.updateImportProgress("BAR", { subject: "BAR", session: "01", status: "running" });
-    store.setImportPhase("running");
+    updateImportProgress("BAR", { subject: "BAR", session: "01", status: "running" });
+    setImportPhase("running");
 
     const statuses: import("../lib/importStatus").ImportSubjectStatus[] = [
       { subject: "BAR", status: "completed" },
@@ -1176,8 +1128,8 @@ describe("importStore reconstructProgressFromLockFiles", () => {
     store.setSubjectRows([
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
     ]);
-    store.updateImportProgress("BAR", { subject: "BAR", session: "01", status: "pending" });
-    store.setImportPhase("preparing");
+    updateImportProgress("BAR", { subject: "BAR", session: "01", status: "pending" });
+    setImportPhase("preparing");
 
     const statuses: import("../lib/importStatus").ImportSubjectStatus[] = [
       { subject: "BAR", status: "completed" },
@@ -1203,17 +1155,16 @@ describe("importStore reconstructProgressFromLockFiles", () => {
     // startImport captures snapshot, sets phase to preparing
     store.startImport();
     expect(useImportStore.getState().importPhase).toBe("preparing");
-    expect(useImportStore.getState().mostRecentConfig).not.toBeNull();
+    expect(useImportStore.getState().pendingImportConfig).not.toBeNull();
 
-    const snapshot = useImportStore.getState().mostRecentConfig!;
+    const snapshot = useImportStore.getState().pendingImportConfig!;
     expect(snapshot.sourceDataPath).toBe("/data/project/sourcedata");
 
     // Mark subjects running, then completed
     store.markSubjectRunning("BAR");
     store.markSubjectRunning("FOO");
-    store.markSubjectCompleted("BAR", 42);
-    store.markSubjectCompleted("FOO", 55);
-    store.completeImport();
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
+    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("completed"));
 
     expect(useImportStore.getState().importCompleted).toBe(true);
     expect(useImportStore.getState().importPhase).toBe("completed");
@@ -1263,15 +1214,14 @@ describe("importStore reconstructProgressFromLockFiles", () => {
     ]);
 
     store.startImport();
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
+    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("completed"));
     const oldSnapshot = useImportStore.getState().mostRecentConfig;
     expect(oldSnapshot!.sourceDataPath).toBe("/data/project/sourcedata");
 
     // Mark completed, then re-visit
     store.markSubjectRunning("BAR");
-    store.markSubjectCompleted("BAR", 42);
     store.markSubjectRunning("FOO");
-    store.markSubjectCompleted("FOO", 55);
-    store.completeImport();
 
     // Change sourceDataPath (structural change)
     store.setSourceDataPath("/data/new-project/sourcedata");
@@ -1284,7 +1234,7 @@ describe("importStore reconstructProgressFromLockFiles", () => {
 
     // re-run: startImport captures new snapshot
     store.startImport();
-    const newSnapshot = useImportStore.getState().mostRecentConfig;
+    const newSnapshot = useImportStore.getState().pendingImportConfig;
 
     expect(newSnapshot).not.toBeNull();
     expect(newSnapshot!.sourceDataPath).toBe("/data/new-project/sourcedata");
@@ -1350,8 +1300,8 @@ describe("importStore reconstructProgressFromLockFiles", () => {
     store.setSubjectRows([
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
     ]);
-    store.updateImportProgress("BAR", { subject: "BAR", session: "01", status: "running" });
-    store.setImportPhase("idle");
+    updateImportProgress("BAR", { subject: "BAR", session: "01", status: "running" });
+    setImportPhase("idle");
 
     const statuses: import("../lib/importStatus").ImportSubjectStatus[] = [
       { subject: "BAR", status: "completed" },
@@ -1553,5 +1503,199 @@ describe("importStore BIDS review slice", () => {
     expect(state.bidsReview.scanError).toBeNull();
     expect(state.bidsReview.detectedGroups).toEqual([]);
     expect(state.bidsReview.skippedSubjects).toEqual([]);
+  });
+});
+
+describe("authoritative import snapshot reconciliation", () => {
+  beforeEach(() => {
+    useImportStore.getState().resetImport();
+    resetProjectLifecycleForTests();
+    activateProjectLease("project-1", "/project");
+  });
+
+  it("binds runtime-only identity and populates selected subjects before output", () => {
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("preparing"));
+    expect(useImportStore.getState()).toMatchObject({
+      activeRunId: "import-run-1",
+      ownershipGeneration: 4,
+      importPhase: "preparing",
+      importCompleted: false,
+      importProgress: {
+        BAR: { subject: "BAR", status: "pending" },
+        FOO: { subject: "FOO", status: "pending" },
+      },
+    });
+  });
+
+  it("native running snapshots erase parser-only completion authority", () => {
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
+    updateImportProgress("BAR", {
+      subject: "BAR",
+      session: "01",
+      status: "completed",
+      duration: 9,
+    });
+    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("running"));
+    expect(useImportStore.getState().importProgress.BAR.status).toBe("pending");
+    expect(useImportStore.getState().importPhase).toBe("running");
+  });
+
+  it("terminal outcomes replace provisional progress while preserving partial commits", () => {
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
+    useImportStore.getState().markSubjectRunning("BAR");
+    useImportStore.getState().reconcileImportRunSnapshot({
+      ...nativeSnapshot("failed"),
+      subjectOutcomes: [
+        {
+          subject: "BAR",
+          outcome: "committed",
+          readyLockVerified: true,
+          rawdataVerified: true,
+          committed: true,
+        },
+        {
+          subject: "FOO",
+          outcome: "failed",
+          readyLockVerified: false,
+          rawdataVerified: false,
+          committed: false,
+          error: { code: "readyLockMissing", message: "missing", subject: "FOO" },
+        },
+      ],
+    });
+    expect(useImportStore.getState()).toMatchObject({
+      activeRunId: null,
+      terminalRunId: "import-run-1",
+      importPhase: "failed",
+      importCompleted: false,
+      importProgress: {
+        BAR: { status: "completed" },
+        FOO: { status: "failed", error: "missing" },
+      },
+      importSummary: { succeeded: 1, failed: 1 },
+    });
+  });
+
+  it("retains structured launch preflight issues from an authoritative failed snapshot", () => {
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("preparing"));
+    useImportStore.getState().reconcileImportRunSnapshot({
+      ...nativeSnapshot("failed"),
+      error: {
+        code: "preflight",
+        message: "Import staging preflight failed",
+        stagingIssues: [
+          {
+            code: "PORTABLE_COLLISION",
+            field: "destination",
+            entryIndex: 0,
+            conflictingEntryIndex: 1,
+            message: "Two entries collide",
+          },
+        ],
+      },
+    });
+
+    expect(useImportStore.getState().stagingPreflight).toMatchObject({
+      status: "invalid",
+      issues: [{ code: "PORTABLE_COLLISION", field: "destination" }],
+    });
+  });
+
+  it("keeps invalid, parser-only, and interrupted evidence retryable while staleness overlays committed work", () => {
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
+    useImportStore.getState().markSubjectRunning("BAR");
+    // Parser optimism cannot deselect BAR from retry.
+    updateImportProgress("BAR", {
+      subject: "BAR",
+      session: "01",
+      status: "completed",
+    });
+    useImportStore.getState().reconcileImportRunSnapshot({
+      ...nativeSnapshot("failed"),
+      subjectOutcomes: [
+        {
+          subject: "BAR",
+          outcome: "failed",
+          readyLockVerified: false,
+          rawdataVerified: false,
+          committed: false,
+          error: { code: "readyLockMissing", message: "missing", subject: "BAR" },
+        },
+        {
+          subject: "FOO",
+          outcome: "committed",
+          readyLockVerified: true,
+          rawdataVerified: true,
+          committed: true,
+        },
+      ],
+    });
+    useImportStore.getState().applyStaleness({ BAR: false, FOO: true });
+    const progress = useImportStore.getState().importProgress;
+    expect(progress.BAR).toMatchObject({ status: "failed", stale: false });
+    expect(progress.FOO).toMatchObject({ status: "completed", stale: true });
+    useImportStore
+      .getState()
+      .bindImportRunSnapshot(nativeSnapshot("interrupted", "interrupted-run"));
+    expect(useImportStore.getState().importProgress.BAR.status).toBe("interrupted");
+  });
+
+  it("rejects stale run, generation, lease, and closed-admission snapshots", () => {
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
+    const lease = activateProjectLease("project-1", "/project");
+    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("finalizing", "other"));
+    useImportStore.getState().reconcileImportRunSnapshot({
+      ...nativeSnapshot("finalizing"),
+      ownershipGeneration: 5,
+    });
+    activateProjectLease("project-2", "/other");
+    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("finalizing"), lease);
+    expect(useImportStore.getState().importPhase).toBe("running");
+    closeProjectWorkAdmission();
+  });
+
+  it.each(["cancelled", "interrupted"] as const)(
+    "maps missing %s subject outcomes to retryable rows",
+    (lifecycle) => {
+      useImportStore.getState().bindImportRunSnapshot(nativeSnapshot(lifecycle));
+      expect(useImportStore.getState().importProgress.BAR.status).toBe(lifecycle);
+    },
+  );
+
+  it("commits attempted configuration only for authoritative completion", () => {
+    const oldConfig = {
+      sourceDataPath: "/old",
+      pathPatterns: [],
+      tokenizerConfigs: {},
+      bMatchDirectories: true,
+      modalityAliases: [],
+      sessionAliases: [],
+      runAliases: [],
+      subjectRenames: [],
+      metadataGroups: [],
+      subjectRows: [],
+    };
+    useImportStore.setState({
+      sourceDataPath: "/new",
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" }],
+      mostRecentConfig: oldConfig,
+    });
+    useImportStore.getState().startImport(["BAR"]);
+    expect(useImportStore.getState().mostRecentConfig).toBe(oldConfig);
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
+    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("failed"));
+    expect(useImportStore.getState().mostRecentConfig).toBe(oldConfig);
+
+    useImportStore.getState().resetImport();
+    useImportStore.setState({
+      selectedProfileId: "profile-1",
+      sourceDataPath: "/new",
+      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" }],
+      mostRecentConfig: oldConfig,
+    });
+    useImportStore.getState().startImport(["BAR"]);
+    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
+    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("completed"));
+    expect(useImportStore.getState().mostRecentConfig?.sourceDataPath).toBe("/new");
   });
 });
