@@ -44,3 +44,4 @@ GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agen
 - No ref update/access in render. Use `useEffect` to update refs.
 - Complete hook dependencies. Use Ref Sync pattern for non-reactive reads.
 - Never hardcode `"/tmp/"` or other filepaths. Make use of the correct tauri/rust filesystem functions.
+- Rust backend test structure: For small modules, put tests in `<module_name>_test.rs` (or `<module_name>_tests.rs`). For large sub-packages, they should be located in `<sub-package>/tests/<module_name>.rs`. Never embed large test suites directly into production implementation files.
