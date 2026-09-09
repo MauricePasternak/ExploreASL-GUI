@@ -26,8 +26,6 @@ export {
   deriveInjectedFields,
 } from "./sidecar";
 
-export { flattenBidsGroupsToSubjectRows, stripSubjectPrefix } from "./subjectRows";
-
 export {
   BidsAslMetadataSchema,
   BidsAslMetadataBaseSchema,
@@ -36,4 +34,4 @@ export {
   type DerivedMetadataGroup,
 } from "./schema";
 
-export { normalizePulseSequenceType, normalizeManufacturer, sanitizeLabel } from "./normalize";
+export { normalizePulseSequenceType, normalizeManufacturer } from "./normalize";

@@ -254,7 +254,7 @@ const INITIAL_EPHEMERAL: EphemeralState = {
   requiresManualSave: false,
 };
 
-export function createInitialVisualizationState() {
+function createInitialVisualizationState() {
   return {
     ...INITIAL_PERSISTED,
     axisAssignment: { ...INITIAL_PERSISTED.axisAssignment },

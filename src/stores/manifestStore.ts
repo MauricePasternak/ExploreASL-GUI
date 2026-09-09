@@ -52,7 +52,7 @@ interface ManifestState {
   loadDataPar: (projectRoot: string) => Promise<void>;
 }
 
-export function createInitialManifestState() {
+function createInitialManifestState() {
   return {
     step: 0 as const,
     filter: "all" as const,

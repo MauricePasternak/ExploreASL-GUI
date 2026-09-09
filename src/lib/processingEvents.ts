@@ -46,7 +46,7 @@ const RUST_MODULE_MAP: Record<string, (typeof PROCESSING_MODULES)[number]> = {
   xASL_module_Population: "population",
 };
 
-export function mapModuleName(rustName: string): (typeof PROCESSING_MODULES)[number] | undefined {
+function mapModuleName(rustName: string): (typeof PROCESSING_MODULES)[number] | undefined {
   if (rustName in RUST_MODULE_MAP) return RUST_MODULE_MAP[rustName];
   if ((PROCESSING_MODULES as readonly string[]).includes(rustName)) {
     return rustName as (typeof PROCESSING_MODULES)[number];

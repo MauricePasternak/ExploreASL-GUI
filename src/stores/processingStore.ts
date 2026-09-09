@@ -76,7 +76,7 @@ const INITIAL_STATE = {
   preparingMessage: null as string | null,
 };
 
-export function createInitialProcessingState() {
+function createInitialProcessingState() {
   return {
     ...INITIAL_STATE,
     availableSubjects: [],
