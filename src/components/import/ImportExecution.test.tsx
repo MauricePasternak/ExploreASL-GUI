@@ -35,6 +35,78 @@ function renderExecution() {
 }
 
 describe("ImportExecution authoritative lifecycle", () => {
+  it("confirms the exact interrupted run once, disables while pending, and ignores a stale response", async () => {
+    let resolveConfirmation!: (snapshot: Record<string, unknown>) => void;
+    const confirmation = new Promise<Record<string, unknown>>((resolve) => {
+      resolveConfirmation = resolve;
+    });
+    const interrupted = {
+      runId: "interrupted-run",
+      lifecycle: "interrupted" as const,
+      ownershipGeneration: 1,
+      profileId: "profile-1",
+      selectedSubjects: ["ONE"],
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      subjectOutcomes: [],
+      terminalResult: "interrupted" as const,
+      confirmationRequired: true,
+    };
+    useProjectStore.setState({
+      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project"),
+      loaded: true,
+      saveProject: vi.fn().mockResolvedValue(undefined),
+    });
+    activateProjectLease("project-1", "/project");
+    useImportStore.getState().bindImportRunSnapshot(interrupted);
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "get_active_import_run") return null;
+      if (command === "read_import_status") return [];
+      if (command === "confirm_import_worker_stopped") return confirmation;
+      return undefined;
+    });
+    const user = userEvent.setup();
+    const execution = renderExecution();
+
+    const confirm = await screen.findByTestId("confirm-import-stopped-btn");
+    await user.click(confirm);
+    expect(invoke).toHaveBeenCalledWith("confirm_import_worker_stopped", {
+      runId: "interrupted-run",
+    });
+    expect(confirm).toBeDisabled();
+    await user.click(confirm);
+    expect(
+      vi
+        .mocked(invoke)
+        .mock.calls.filter(([command]) => command === "confirm_import_worker_stopped"),
+    ).toHaveLength(1);
+
+    execution.unmount();
+    renderExecution();
+    await user.click(await screen.findByTestId("confirm-import-stopped-btn"));
+    expect(
+      vi
+        .mocked(invoke)
+        .mock.calls.filter(([command]) => command === "confirm_import_worker_stopped"),
+    ).toHaveLength(1);
+
+    // A project replacement makes the pending response stale. It must neither
+    // replace the new terminal authority nor acknowledge either run.
+    useImportStore.setState({
+      importPhase: "interrupted",
+      terminalRunId: "replacement-run",
+      confirmationRequired: true,
+    });
+    useProjectStore.setState({
+      project: DEFAULT_PROJECT_FILE("project-2", "Project 2", "/project-2"),
+    });
+    activateProjectLease("project-2", "/project-2");
+    resolveConfirmation({ ...interrupted, confirmationRequired: false, updatedAtMs: 3 });
+
+    await vi.waitFor(() => expect(useImportStore.getState().terminalRunId).toBe("replacement-run"));
+    expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
+  });
+
   it.each([
     ["preparing", "Preparing"],
     ["running", "Running"],

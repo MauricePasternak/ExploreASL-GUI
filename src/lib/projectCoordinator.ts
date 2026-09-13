@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
 
 import type { ProjectFile } from "../schemas/project";
+import { reconcileProcessingRunAfterShutdown } from "./processingTerminalCoordinator";
+import { useProcessingStore } from "../stores/processingStore";
 import { clearProcessingListeners } from "../stores/processingStore";
 import { clearImportListeners } from "./importEvents";
 import {
@@ -39,6 +41,8 @@ export interface TransitionDependencies {
   clearActiveProject?: () => Promise<void>;
   reconcileImportRun?: () => Promise<unknown>;
   reconcileImportAfterShutdown?: () => Promise<void>;
+  reconcileProcessingRun?: () => Promise<unknown>;
+  reconcileProcessingAfterShutdown?: () => Promise<void>;
 }
 
 export interface RelocationRecoverySummary {
@@ -100,6 +104,9 @@ export function transitionProjectRuntime(
         throw shutdownError(result);
       }
       await (dependencies.reconcileImportAfterShutdown ?? reconcileImportRunAfterShutdown)();
+      await (
+        dependencies.reconcileProcessingAfterShutdown ?? reconcileProcessingRunAfterShutdown
+      )();
     }
 
     (dependencies.cleanupListeners ?? cleanupProjectListeners)();
@@ -143,10 +150,14 @@ export function transitionProjectRuntime(
     syncSessionCheckpointFromProject(candidate);
     try {
       await (dependencies.reconcileImportRun ?? reconcileImportRunForActivation)();
+      await (
+        dependencies.reconcileProcessingRun ??
+        useProcessingStore.getState().synchronizeProcessingRun
+      )();
     } catch (error) {
       closeProjectWorkAdmission();
       throw new Error(
-        `Failed to reconcile native import authority: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to reconcile native execution authority: ${error instanceof Error ? error.message : String(error)}`,
         // @ts-expect-error ErrorOptions is absent from the ES2020 target library.
         { cause: error },
       );
@@ -167,6 +178,9 @@ export function closeProjectRuntime(dependencies: TransitionDependencies = {}): 
         throw shutdownError(result);
       }
       await (dependencies.reconcileImportAfterShutdown ?? reconcileImportRunAfterShutdown)();
+      await (
+        dependencies.reconcileProcessingAfterShutdown ?? reconcileProcessingRunAfterShutdown
+      )();
     }
 
     (dependencies.cleanupListeners ?? cleanupProjectListeners)();

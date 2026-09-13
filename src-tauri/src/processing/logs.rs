@@ -1,5 +1,5 @@
 use super::types::LogFileInfo;
-use super::utils::{exploreasl_log_dirs, module_index_to_name, parse_module_log_file};
+use super::utils::{exploreasl_log_dirs, parse_module_log_file};
 use crate::error::IntoCommandResult;
 use crate::tracing::CommandTrace;
 use anyhow::{Context, Result as AnyResult, bail};
@@ -137,76 +137,4 @@ fn read_module_logs_impl(
 
     trace.success(&results);
     Ok(results)
-}
-
-pub(crate) fn delete_module_log_files(
-    project_root: &std::path::Path,
-    b_process: &[bool],
-    subject_regexp: &str,
-) -> AnyResult<()> {
-    let log_dir = project_root
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("log");
-    if !log_dir.exists() {
-        return Ok(());
-    }
-
-    let subject_re = if subject_regexp.is_empty() {
-        None
-    } else {
-        Some(
-            regex::Regex::new(subject_regexp)
-                .with_context(|| format!("Invalid subject regexp '{subject_regexp}'"))?,
-        )
-    };
-
-    let subject_session_re =
-        regex::Regex::new(r"sub-[^_]+_\d+").expect("subject_session pattern should compile");
-
-    for (i, &enabled) in b_process.iter().enumerate() {
-        if !enabled {
-            continue;
-        }
-        let module_name = module_index_to_name(i);
-        let prefix = module_name.to_string();
-
-        for entry in fs::read_dir(&log_dir)
-            .with_context(|| format!("Failed to read log dir {}", log_dir.display()))?
-        {
-            let entry = entry.context("Failed to read log entry")?;
-            let file_name = entry.file_name().to_string_lossy().to_string();
-
-            if !file_name.starts_with(&prefix) {
-                continue;
-            }
-
-            let should_delete = match &subject_re {
-                Some(re) => {
-                    if let Some(mat) = subject_session_re.find(&file_name) {
-                        re.is_match(mat.as_str())
-                    } else {
-                        true
-                    }
-                }
-                None => true,
-            };
-
-            if should_delete {
-                match fs::remove_file(entry.path()) {
-                    Ok(()) => {}
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => {
-                        bail!(
-                            "Failed to delete log file {}: {}",
-                            entry.path().display(),
-                            e
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
 }

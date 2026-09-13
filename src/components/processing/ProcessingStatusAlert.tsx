@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Alert, List, Text } from "@mantine/core";
 import {
   IconAlertTriangle,
   IconCircleCheck,
   IconInfoCircle,
-  IconLoader,
   IconCircleMinus,
 } from "@tabler/icons-react";
-import { exists } from "@tauri-apps/plugin-fs";
 
 import { useGlobalStore } from "../../stores/globalStore";
 import { useProcessingStore } from "../../stores/processingStore";
-import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingEnvironment } from "../../hooks/useProcessingEnvironment";
 
 export interface PreflightResult {
@@ -20,7 +17,7 @@ export interface PreflightResult {
   ready: boolean;
 }
 
-type AlertState = "idle" | "checking" | "error" | "warning" | "ready";
+type AlertState = "idle" | "error" | "warning" | "ready";
 
 interface ProcessingStatusAlertProps {
   onResult?: (result: PreflightResult) => void;
@@ -32,31 +29,10 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   const profileValidationState = useGlobalStore((s) => s.profileValidationState);
   const hasValidProfile = useGlobalStore((s) => s.hasValidProfile);
   const getProfileById = useGlobalStore((s) => s.getProfileById);
-  const projectRootPath = useProjectStore((s) => s.project?.projectMeta.rootPath);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
 
-  const [dataParDirExists, setDataParDirExists] = useState<boolean | null>(null);
-
   const { systemCores } = useProcessingEnvironment();
-
-  useEffect(() => {
-    if (!projectRootPath) {
-      Promise.resolve().then(() => setDataParDirExists(false));
-      return;
-    }
-    Promise.resolve().then(() => setDataParDirExists(null));
-    const dataParDir = `${projectRootPath}/derivatives/ExploreASL`;
-    exists(dataParDir)
-      .then(setDataParDirExists)
-      .catch((err) => {
-        console.warn(
-          `[ProcessingStatusAlert] Failed to check dataPar directory existence (${dataParDir}):`,
-          err,
-        );
-        setDataParDirExists(false);
-      });
-  }, [projectRootPath]);
 
   const orphanedSubjects = useMemo(() => {
     const subjectSet = new Set(availableSubjects.map((s) => s.subjectSession));
@@ -145,12 +121,6 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
       );
     }
 
-    if (dataParDirExists === false) {
-      warnings.push(
-        "derivatives/ExploreASL/ directory does not exist yet. It will be created during processing.",
-      );
-    }
-
     if (orphanedSubjects.length > 0) {
       warnings.push(
         `Found ${orphanedSubjects.length} orphaned lock file entr${orphanedSubjects.length === 1 ? "y" : "ies"} with no matching rawdata subject: ${orphanedSubjects.slice(0, 5).join(", ")}${orphanedSubjects.length > 5 ? ` (+${orphanedSubjects.length - 5} more)` : ""}`,
@@ -168,29 +138,19 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     hasValidProfile,
     getProfileById,
     systemCores,
-    dataParDirExists,
     orphanedSubjects,
     availableSubjects,
   ]);
 
   const state: AlertState = useMemo(() => {
     const hasSelection = (configModules?.length ?? 0) > 0 || (configSubjects?.length ?? 0) > 0;
-    const fsPending = dataParDirExists === null;
-    if (fsPending && hasSelection) return "checking";
     if (!hasSelection) return "idle";
     if (result.errors.length > 0) return "error";
     if (result.warnings.length > 0) return "warning";
     return "ready";
-  }, [
-    configModules,
-    configSubjects,
-    dataParDirExists,
-    result.errors.length,
-    result.warnings.length,
-  ]);
+  }, [configModules, configSubjects, result.errors.length, result.warnings.length]);
 
   useEffect(() => {
-    if (state === "checking") return;
     onResult?.(result);
   }, [state, result, onResult]);
 
@@ -215,7 +175,6 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
       data-state={state}
     >
       {state === "idle" && <Text size="sm">Select the Modules and Subject/Sessions to run</Text>}
-      {state === "checking" && <Text size="sm">Checking environment...</Text>}
       {state === "error" && renderMessageList(result.errors)}
       {state === "warning" && renderMessageList(result.warnings)}
       {state === "ready" && <Text size="sm">All checks passed. Ready to process.</Text>}
@@ -227,8 +186,6 @@ function renderIcon(state: AlertState) {
   switch (state) {
     case "idle":
       return <IconCircleMinus size={16} />;
-    case "checking":
-      return <IconLoader size={16} />;
     case "error":
       return <IconAlertTriangle size={16} />;
     case "warning":

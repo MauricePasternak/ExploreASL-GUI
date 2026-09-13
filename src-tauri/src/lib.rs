@@ -1,18 +1,21 @@
 mod app_state;
 mod apptainer;
+pub(crate) use easl_execution_runtime::fs_safety;
 pub mod bids;
 mod commands;
 mod error;
+mod execution_managed;
 pub mod execution_profile;
 pub mod import;
 pub mod manifest;
 pub mod matlab;
 mod niivue_protocol;
-mod process_control;
 pub mod processing;
+mod project_ownership;
 mod project_runtime;
 mod project_writer;
 pub mod qc;
+mod single_instance;
 mod tracing;
 pub mod visualization;
 mod visualization_tests;
@@ -35,20 +38,17 @@ use commands::{
 };
 use execution_profile::{validate_all_execution_profiles, validate_execution_profile};
 use import::{
-    acknowledge_import_run, attach_import_run, cancel_import_run, get_active_import_run,
-    launch_import_run, plan_import_relocation, preflight_staging_plan, read_import_status,
-    reserve_import_run, stop_running_import_for_exit,
+    acknowledge_import_run, attach_import_run, cancel_import_run, confirm_import_worker_stopped,
+    get_active_import_run, launch_import_run, plan_import_relocation, preflight_staging_plan,
+    read_import_status, reserve_import_run, stop_running_import_for_exit,
 };
-use manifest::{
-    capture_environment_versions_for_run, read_population_ready_mtime_for_run,
-    read_prior_modules_mtimes,
-};
+use manifest::read_prior_modules_mtimes;
 use matlab::which_matlab;
 use processing::{
-    attach_run, clear_stale_locks_for_run, detect_exploreasl_version, fail_processing_run,
-    finalize_processing_run, get_active_run, kill_pipeline, list_module_logs, list_subject_reports,
-    list_subjects, read_lock_status, read_module_logs, read_report_image, reserve_processing_run,
-    run_pipeline, stop_running_processing_for_exit, stop_watch_lock_dir, watch_lock_dir,
+    acknowledge_processing_run, attach_run, confirm_processing_workers_stopped,
+    detect_exploreasl_version, get_active_run, kill_pipeline, list_module_logs,
+    list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,
+    reserve_processing_run, run_pipeline, stop_running_processing_for_exit,
 };
 use project_runtime::shutdown_project_runtime;
 use project_writer::{atomic_write_project, cleanup_project_temps};
@@ -65,6 +65,11 @@ use visualization::{
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
+        // Must remain first: second instances exit before any other plugin can
+        // initialize project-facing behavior.
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            single_instance::handle_second_instance(app, &args, &cwd);
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -109,25 +114,21 @@ pub fn run() {
             attach_import_run,
             launch_import_run,
             cancel_import_run,
+            confirm_import_worker_stopped,
             acknowledge_import_run,
             read_import_status,
             list_subjects,
             read_lock_status,
             reserve_processing_run,
-            fail_processing_run,
-            finalize_processing_run,
+            acknowledge_processing_run,
+            confirm_processing_workers_stopped,
             get_active_run,
             attach_run,
             run_pipeline,
             kill_pipeline,
-            watch_lock_dir,
-            stop_watch_lock_dir,
-            clear_stale_locks_for_run,
-            capture_environment_versions_for_run,
             detect_exploreasl_version,
             list_module_logs,
             read_module_logs,
-            read_population_ready_mtime_for_run,
             read_prior_modules_mtimes,
             list_subject_reports,
             read_report_image,
@@ -179,35 +180,29 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-                let mut should_prevent = false;
-
-                match stop_running_import_for_exit(app_handle) {
-                    Ok(true) => {
-                        should_prevent = true;
-                    }
-                    Ok(false) => {}
-                    Err(error) => {
-                        log::error!("Failed to stop running import during app exit: {}", error);
-                    }
+                let import = stop_running_import_for_exit(app_handle);
+                if let Err(error) = &import {
+                    log::error!("Failed to stop running import during app exit: {}", error);
+                }
+                let processing = stop_running_processing_for_exit(app_handle);
+                if let Err(error) = &processing {
+                    log::error!(
+                        "Failed to stop running processing during app exit: {}",
+                        error
+                    );
                 }
 
-                match stop_running_processing_for_exit(app_handle) {
-                    Ok(true) => {
-                        should_prevent = true;
+                match project_runtime::native_exit_decision(&import, &processing) {
+                    project_runtime::NativeExitDecision::Allow => {}
+                    project_runtime::NativeExitDecision::Prevent => api.prevent_exit(),
+                    project_runtime::NativeExitDecision::PreventThenExit => {
+                        api.prevent_exit();
+                        app_handle.exit(code.unwrap_or(0));
                     }
-                    Ok(false) => {}
-                    Err(error) => {
-                        log::error!(
-                            "Failed to stop running processing during app exit: {}",
-                            error
-                        );
-                    }
-                }
-
-                if should_prevent {
-                    api.prevent_exit();
-                    app_handle.exit(code.unwrap_or(0));
                 }
             }
         });
 }
+
+#[cfg(test)]
+mod project_ownership_tests;

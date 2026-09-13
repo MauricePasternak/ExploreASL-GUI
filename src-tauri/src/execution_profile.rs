@@ -1,7 +1,7 @@
 use crate::apptainer::{
     detect_apptainer_version, resolve_apptainer_executable, validate_apptainer_executable,
 };
-use crate::import::validate_matlab_executable;
+use crate::execution_managed::validate_matlab_executable;
 use anyhow::{Result as AnyResult, bail};
 use serde::{Deserialize, Serialize};
 use std::fs;

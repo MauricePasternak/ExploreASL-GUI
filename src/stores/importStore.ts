@@ -118,7 +118,11 @@ export interface ImportState {
   ownershipGeneration: number | null;
   /** Session-only ordering guard for delayed command responses/events. */
   nativeSnapshotUpdatedAtMs: number | null;
+  confirmationRequired: boolean;
   terminalRunId: string | null;
+  /** Session-only ownership guard for an in-flight native stop confirmation. */
+  confirmingStoppedRunId: string | null;
+  confirmingStoppedGeneration: number | null;
   importRunError: string | null;
 
   // Snapshot
@@ -237,7 +241,10 @@ const INITIAL_STATE = {
   activeRunId: null as string | null,
   ownershipGeneration: null as number | null,
   nativeSnapshotUpdatedAtMs: null as number | null,
+  confirmationRequired: false,
   terminalRunId: null as string | null,
+  confirmingStoppedRunId: null as string | null,
+  confirmingStoppedGeneration: null as number | null,
   importRunError: null as string | null,
   mostRecentConfig: null as ImportSnapshot | null,
   pendingImportConfig: null as ImportSnapshot | null,
@@ -762,6 +769,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
       terminalRunId: terminal ? snapshot.runId : null,
       ownershipGeneration: snapshot.ownershipGeneration,
       nativeSnapshotUpdatedAtMs: snapshot.updatedAtMs,
+      confirmationRequired: snapshot.confirmationRequired,
       importPhase: snapshot.lifecycle,
       importRunning: snapshot.lifecycle === "running" || snapshot.lifecycle === "cancelling",
       importRunError: snapshot.error?.message ?? null,
@@ -825,6 +833,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
         terminalRunId: terminal ? snapshot.runId : null,
         ownershipGeneration: snapshot.ownershipGeneration,
         nativeSnapshotUpdatedAtMs: snapshot.updatedAtMs,
+        confirmationRequired: snapshot.confirmationRequired,
         importPhase: snapshot.lifecycle,
         importCompleted: snapshot.lifecycle === "completed",
         importRunning: snapshot.lifecycle === "running" || snapshot.lifecycle === "cancelling",
@@ -987,7 +996,10 @@ export const useImportStore = create<ImportState>((set, get) => ({
       activeRunId: null,
       ownershipGeneration: null,
       nativeSnapshotUpdatedAtMs: null,
+      confirmationRequired: false,
       terminalRunId: null,
+      confirmingStoppedRunId: null,
+      confirmingStoppedGeneration: null,
       importRunError: null,
       pendingImportConfig: null,
     };

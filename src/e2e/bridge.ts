@@ -154,7 +154,6 @@ async function seedManifestDisagreements() {
       },
     ],
     subjectStatuses: [],
-    workerPids: [],
     bidsCompatibilityError: null,
     profileError: null,
     preparingMessage: null,

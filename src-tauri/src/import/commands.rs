@@ -2,7 +2,8 @@ use super::pipeline::{self, stop_import_run_for_state};
 use super::relocation::RelocationPlan;
 use super::staging::{StagingEntry, StagingPreflightResult, preflight_staging_plan_for_state};
 use super::state::{
-    acknowledge_import_run_for_state, attach_import_run_for_state, fail_preparing_run_for_id,
+    acknowledge_import_run_for_state, attach_import_run_for_state,
+    confirm_import_worker_stopped_for_state, fail_preparing_run_for_id,
     get_active_import_run_for_state, plan_import_relocation_for_state,
     reserve_import_run_for_state,
 };
@@ -41,10 +42,6 @@ pub fn reserve_import_run(
     subjects_to_preserve: Option<Vec<String>>,
     preserve_staging: bool,
 ) -> Result<ImportRunSnapshot, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
     reserve_import_run_for_state(
         &state,
         subject_list,
@@ -103,7 +100,7 @@ pub fn launch_import_run<R: Runtime>(
 pub(super) fn settle_launch_result(
     state: &AppState,
     run_id: &str,
-    launch_result: Result<u32, ImportCommandError>,
+    launch_result: Result<(), ImportCommandError>,
 ) -> Result<ImportRunSnapshot, ImportCommandError> {
     match launch_result {
         Ok(_) => attach_import_run_for_state(state, run_id).map_err(ImportCommandError::from),
@@ -141,11 +138,15 @@ pub fn cancel_import_run(
     state: State<'_, AppState>,
     run_id: String,
 ) -> Result<ImportRunSnapshot, String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
     stop_import_run_for_state(&state, &run_id)
+}
+
+#[tauri::command]
+pub fn confirm_import_worker_stopped(
+    state: State<'_, AppState>,
+    run_id: String,
+) -> Result<ImportRunSnapshot, String> {
+    confirm_import_worker_stopped_for_state(&state, &run_id).into_command_result()
 }
 
 #[tauri::command]

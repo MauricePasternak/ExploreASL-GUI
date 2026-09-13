@@ -85,6 +85,10 @@ const ControlButtons = memo(function ControlButtons({
   const phase = useProcessingStore((s) => s.processingPhase);
   const startProcessing = useProcessingStore((s) => s.startProcessing);
   const killProcessing = useProcessingStore((s) => s.killProcessing);
+  const confirmProcessingStopped = useProcessingStore((s) => s.confirmProcessingStopped);
+  const availableAction = useProcessingStore((s) => s.availableAction);
+  const actionPending = useProcessingStore((s) => s.actionPending);
+  const terminalRunId = useProcessingStore((s) => s.terminalRunId);
   const bidsCompatibilityError = useProcessingStore((s) => s.bidsCompatibilityError);
   const clearBidsCompatibilityError = useProcessingStore((s) => s.clearBidsCompatibilityError);
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath ?? null);
@@ -94,7 +98,7 @@ const ControlButtons = memo(function ControlButtons({
   const [repairError, setRepairError] = useState<string | null>(null);
   const [repairLoading, setRepairLoading] = useState(false);
 
-  const { label, color, icon: Icon, action } = getButtonProps(phase);
+  const { label, color, icon: Icon, action } = getButtonProps(phase, availableAction);
   const isStartAction = action === "start";
 
   const handleClick = useCallback(() => {
@@ -173,12 +177,31 @@ const ControlButtons = memo(function ControlButtons({
           leftSection={<Icon size={16} />}
           color={color}
           onClick={handleClick}
-          disabled={action === "wait" || (isStartAction && startDisabled)}
+          disabled={
+            action === "wait" || (isStartAction && (startDisabled || terminalRunId !== null))
+          }
           data-testid={isStartAction ? "start-btn" : "stop-btn"}
         >
           {label}
         </Button>
       </Group>
+
+      {availableAction === "confirmStopped" ? (
+        <Stack gap="xs" data-testid="processing-interruption-confirmation">
+          <Text size="sm">
+            ExploreASL GUI stopped unexpectedly. MATLAB or Apptainer may still be running. Check
+            operating-system process tools, stop any remaining worker, then confirm.
+          </Text>
+          <Button
+            color="yellow"
+            onClick={() => void confirmProcessingStopped()}
+            disabled={actionPending}
+            data-testid="confirm-processing-stopped-btn"
+          >
+            I confirmed workers stopped
+          </Button>
+        </Stack>
+      ) : null}
 
       <Modal
         opened={confirmOpen}

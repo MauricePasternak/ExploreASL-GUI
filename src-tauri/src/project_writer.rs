@@ -1,3 +1,4 @@
+use crate::fs_safety::atomic_replace;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -52,13 +53,37 @@ struct WriteOptions {
 
 #[tauri::command]
 pub fn atomic_write_project(
+    state: tauri::State<'_, crate::app_state::AppState>,
     project_path: String,
     canonical_bytes: String,
     preserve_backup: bool,
 ) -> Result<AtomicWriteOutcome, AtomicWriteError> {
-    atomic_write(
+    atomic_write_project_for_state(
+        &state,
         Path::new(&project_path),
         canonical_bytes.as_bytes(),
+        preserve_backup,
+    )
+}
+
+pub(crate) fn atomic_write_project_for_state(
+    state: &crate::app_state::AppState,
+    project_path: &Path,
+    canonical_bytes: &[u8],
+    preserve_backup: bool,
+) -> Result<AtomicWriteOutcome, AtomicWriteError> {
+    let _transition = state.project_transition.lock().map_err(|_| {
+        error(
+            WriteErrorCategory::PermissionDenied,
+            "Project transition lock was poisoned",
+        )
+    })?;
+    let paths = ProjectPaths::new(project_path)?;
+    let _ownership = crate::project_ownership::for_root(state, &paths.parent)
+        .map_err(|message| error(WriteErrorCategory::PermissionDenied, &message))?;
+    atomic_write(
+        project_path,
+        canonical_bytes,
         WriteOptions {
             preserve_backup,
             failure: None,
@@ -67,14 +92,25 @@ pub fn atomic_write_project(
 }
 
 #[tauri::command]
-pub fn cleanup_project_temps(project_path: String) {
-    match ProjectPaths::new(Path::new(&project_path)) {
-        Ok(paths) => cleanup_stale_temps(&paths),
-        Err(err) => log::debug!(
-            "Could not derive project temporary-file paths: {}",
-            err.message
-        ),
-    }
+pub fn cleanup_project_temps(
+    state: tauri::State<'_, crate::app_state::AppState>,
+    project_path: String,
+) -> Result<(), String> {
+    cleanup_project_temps_for_state(&state, Path::new(&project_path))
+}
+
+pub(crate) fn cleanup_project_temps_for_state(
+    state: &crate::app_state::AppState,
+    project_path: &Path,
+) -> Result<(), String> {
+    let _transition = state
+        .project_transition
+        .lock()
+        .map_err(|_| "Project transition lock was poisoned")?;
+    let paths = ProjectPaths::new(project_path).map_err(|e| e.to_string())?;
+    let _ownership = crate::project_ownership::for_root(state, &paths.parent)?;
+    cleanup_stale_temps(&paths);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -273,58 +309,13 @@ fn replace_backup(paths: &ProjectPaths) -> Result<(), AtomicWriteError> {
 }
 
 fn replace_primary(temp: &Path, primary: &Path) -> Result<(), AtomicWriteError> {
-    #[cfg(windows)]
-    return replace_primary_windows(temp, primary);
-
-    #[cfg(not(windows))]
-    fs::rename(temp, primary).map_err(|err| {
+    atomic_replace(temp, primary).map_err(|err| {
         storage_error(
             WriteErrorCategory::PrimaryReplacement,
             err,
             "primary replacement failed",
         )
     })
-}
-
-/// Windows `std::fs::rename` refuses an existing destination. Removing the
-/// primary first creates a destructive gap, particularly in recovery mode
-/// where that primary is retained for inspection until replacement succeeds.
-#[cfg(windows)]
-fn replace_primary_windows(temp: &Path, primary: &Path) -> Result<(), AtomicWriteError> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-    };
-
-    let temp: Vec<u16> = temp
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    let primary: Vec<u16> = primary
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-
-    // Same-directory MoveFileExW replacement avoids the delete-then-rename
-    // gap required by std::fs::rename on Windows. WRITE_THROUGH requests that
-    // the move not return before the system has flushed it.
-    if unsafe {
-        MoveFileExW(
-            temp.as_ptr(),
-            primary.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    } == 0
-    {
-        return Err(storage_error(
-            WriteErrorCategory::PrimaryReplacement,
-            io::Error::last_os_error(),
-            "primary replacement failed",
-        ));
-    }
-    Ok(())
 }
 
 fn sync_backup_rotation(

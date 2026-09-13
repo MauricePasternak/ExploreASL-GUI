@@ -34,6 +34,7 @@ export function reconcileImportTerminal(
     !lease ||
     !isCurrentProjectLease(lease) ||
     !isProjectWorkAccepted() ||
+    useImportStore.getState().confirmationRequired ||
     pending.has(key) ||
     !ownsTerminal(runId, lease)
   )
@@ -86,7 +87,10 @@ export async function reconcileImportRunForActivation(): Promise<ImportRunSnapsh
   }
   const snapshot = ImportRunSnapshotSchema.parse(raw);
   useImportStore.getState().bindImportRunSnapshot(snapshot);
-  if (["completed", "failed", "cancelled", "interrupted"].includes(snapshot.lifecycle)) {
+  if (
+    ["completed", "failed", "cancelled", "interrupted"].includes(snapshot.lifecycle) &&
+    !snapshot.confirmationRequired
+  ) {
     await reconcileImportTerminal(snapshot.runId, lease);
   }
   return snapshot;
@@ -101,6 +105,7 @@ export async function reconcileImportRunAfterShutdown(): Promise<void> {
   const raw = await invoke<unknown>("get_active_import_run");
   if (!isCurrentProjectLease(lease) || raw == null) return;
   const snapshot = ImportRunSnapshotSchema.parse(raw);
+  if (snapshot.confirmationRequired) return;
   if (!["completed", "failed", "cancelled", "interrupted"].includes(snapshot.lifecycle)) {
     throw new Error(`Native import remained ${snapshot.lifecycle} after shutdown.`);
   }

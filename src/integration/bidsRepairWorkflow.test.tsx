@@ -21,6 +21,12 @@ import { useGlobalStore } from "../stores/globalStore";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { seedValidProfileGate } from "../test/landingProfileGate";
+import {
+  processingReplay,
+  processingSnapshot,
+  processingTerminal,
+} from "../test/processingFixtures";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 
 type Snapshot = Record<string, { type: string; size: number; hash?: string }>;
 
@@ -54,26 +60,11 @@ function changed(before: Snapshot, after: Snapshot) {
     .sort();
 }
 
-function runSnapshot(lifecycle: "preparing" | "failed") {
-  return {
-    runId: "repair-run",
-    lifecycle,
-    projectRoot: "/native-owned-root",
-    selectedModules: ["asl"],
-    selectedSubjectSessions: ["sub-01_01"],
-    startTime: 1,
-    workers: [],
-    exitEvidence: [],
-    watcherOwned: false,
-    ...(lifecycle === "failed" ? { terminalResult: "failed" as const } : {}),
-  };
-}
-
 describe("existing BIDS project repair and retry integration", () => {
   let root = "";
   let projectBytes = "";
   let reviewedPlan: ReturnType<typeof repairPlan> | null = null;
-  let verifyCalls = 0;
+  let runCalls = 0;
 
   function repairPlan(rootPath: string) {
     return {
@@ -141,6 +132,7 @@ describe("existing BIDS project repair and retry integration", () => {
       project: { ...opened, projectMeta: { ...opened.projectMeta, rootPath: root } },
       loaded: true,
     });
+    activateProjectLease("11111111-1111-4111-8111-111111111111", root);
     const profile = useGlobalStore.getState().settings.executionProfiles[0]!;
     useProcessingStore.setState({
       config: {
@@ -160,17 +152,66 @@ describe("existing BIDS project repair and retry integration", () => {
         },
       ],
     });
-    verifyCalls = 0;
+    runCalls = 0;
     reviewedPlan = null;
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "scan_bids_sidecars") return { groups: [], skipped: [] };
-      if (command === "reserve_processing_run") return runSnapshot("preparing");
-      if (command === "verify_bids_compatibility_for_run") {
-        verifyCalls++;
-        await readFile(join(root, "rawdata", ".easl-gui-managed"));
-        return undefined;
+      if (command === "reserve_processing_run")
+        return {
+          kind: "current",
+          snapshot: processingSnapshot({
+            projectRoot: root,
+            runId: "12345678-1234-4234-8234-123456789011",
+          }),
+        };
+      if (command === "run_pipeline") {
+        runCalls++;
+        return runCalls === 1
+          ? processingSnapshot({
+              projectRoot: root,
+              runId: "12345678-1234-4234-8234-123456789011",
+              lifecycle: "failed",
+              revision: 2,
+              terminalResult: "failed",
+              terminalRevision: 2,
+              availableAction: "acknowledge",
+              error: { code: "bidsCompatibility", message: "Review BIDS setup before processing." },
+              terminalSummary: {
+                result: "failed",
+                executionCommitted: false,
+                populationCompleted: false,
+                profileId: profile.id,
+                exploreAslVersion: null,
+              },
+            })
+          : processingSnapshot({
+              projectRoot: root,
+              runId: "12345678-1234-4234-8234-123456789011",
+              lifecycle: "running",
+              revision: 3,
+            });
       }
-      if (command === "fail_processing_run") return runSnapshot("failed");
+      if (command === "attach_run")
+        return processingSnapshot({
+          projectRoot: root,
+          runId: "12345678-1234-4234-8234-123456789011",
+          lifecycle: "preparing",
+        });
+      if (command === "acknowledge_processing_run")
+        return processingReplay(
+          processingTerminal({
+            runId: "12345678-1234-4234-8234-123456789011",
+            terminalRevision: 2,
+            terminalResult: "failed",
+            terminalSummary: {
+              result: "failed",
+              executionCommitted: false,
+              populationCompleted: false,
+              profileId: profile.id,
+              exploreAslVersion: null,
+            },
+          }),
+        );
       if (command === "preflight_bids_setup_repair") {
         reviewedPlan = repairPlan(root);
         return reviewedPlan;
@@ -195,6 +236,7 @@ describe("existing BIDS project repair and retry integration", () => {
 
   afterEach(async () => {
     cleanup();
+    resetProjectLifecycleForTests();
     await rm(root, { recursive: true, force: true });
   });
 
@@ -213,7 +255,7 @@ describe("existing BIDS project repair and retry integration", () => {
       .startProcessing()
       .catch(() => {});
     await screen.findByTestId("bids-compatibility-error-text");
-    expect(verifyCalls).toBe(1);
+    expect(runCalls).toBe(1);
     expect(await snapshot(root)).toEqual(openedBefore);
 
     fireEvent.click(screen.getByTestId("bids-repair-preflight-btn"));
@@ -245,14 +287,11 @@ describe("existing BIDS project repair and retry integration", () => {
       }
     }
 
-    // Stop at preparation in this supported Vitest layer. The stateful IPC
-    // fake intentionally has no watcher/spawn implementation; the assertion
-    // is that retry reaches read-only verification without touching source.
     await useProcessingStore
       .getState()
       .startProcessing()
       .catch(() => {});
-    await waitFor(() => expect(verifyCalls).toBe(2));
+    await waitFor(() => expect(runCalls).toBe(2));
     expect(await snapshot(root)).toEqual(afterRepair);
   });
 });

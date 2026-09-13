@@ -153,27 +153,42 @@ The active dashboard SHALL remain visible during `preparing`, `running`, `finali
 
 ### Requirement: Start and Kill Controls
 
-The UI SHALL show Start only when no nonterminal native run is attached. After local validation, Start SHALL first reserve a native run; the control SHALL become active-run UI only after reservation succeeds. During `preparing`, `running`, `finalizing`, or `cancelling`, configuration and duplicate Start actions SHALL remain locked. Kill SHALL invoke `kill_pipeline` with the attached `runId` only when that lifecycle is cancellable. Start SHALL become available after a native terminal snapshot or when no active run exists. No separate Pause or Restart button SHALL be added.
+Start SHALL be available only when native admission is free, including completed terminal save/acknowledgement, interruption confirmation, and cleanup. A terminal snapshot alone SHALL NOT unlock replacement execution. Start SHALL build a pure request and bind the current reservation response; historical replay SHALL NOT become the attached run. Preparing, Running, Finalizing, Cancelling, `confirmStopped`, and `retryCleanup` SHALL lock duplicate Start and configuration changes. Stop, confirmation, and cleanup retry SHALL invoke only the attached run's exact native action. Stale responses SHALL NOT alter another run. No separate Pause or Restart control SHALL be added.
 
-#### Scenario: Start button transitions
+#### Scenario: Terminal snapshot awaits acknowledgement
 
-- **WHEN** the user clicks Start after validation passes
-- **THEN** the UI SHALL obtain and bind a native run ID before run-specific mutation and display the authoritative `preparing` state
-
-#### Scenario: Concurrent start rejected
-
-- **WHEN** reservation reports an existing nonterminal run
-- **THEN** duplicate preparation SHALL not begin and the UI SHALL attach to or report the existing run without clearing its state
+- **WHEN** native terminal execution is settled but presentation metadata save or acknowledgement remains incomplete
+- **THEN** Start SHALL remain blocked and the UI SHALL display the persistence/recovery action
 
 #### Scenario: Kill button
 
-- **WHEN** the user confirms Kill for attached cancellable run `R1`
-- **THEN** `kill_pipeline(R1)` SHALL be invoked and the UI SHALL render `cancelling` then `cancelled` from native snapshots
+- **WHEN** the user requests Stop for an attached run whose native action permits it
+- **THEN** the UI SHALL request exact-run cancellation and project native snapshots without choosing a terminal outcome
+
+#### Scenario: Confirmation button
+
+- **WHEN** the user accepts the external-stop warning for an exact interrupted run
+- **THEN** the UI SHALL send that run ID and revision once and project only the returned increasing native snapshot
+
+#### Scenario: Start button transitions
+
+- **WHEN** the user clicks Start after validation and native replacement admission permits it
+- **THEN** the UI SHALL obtain and bind the current reservation before displaying its Preparing state
+
+#### Scenario: Concurrent start rejected
+
+- **WHEN** reservation reports existing native ownership or an unacknowledged terminal run
+- **THEN** duplicate preparation SHALL NOT begin and the UI SHALL attach or report the existing authority without clearing it
+
+#### Scenario: Obsolete action response
+
+- **WHEN** a Stop, confirmation, or cleanup response for an old run arrives after another run is attached
+- **THEN** the response SHALL NOT unlock, cancel, confirm, or otherwise mutate the new run
 
 #### Scenario: Obsolete kill response
 
-- **WHEN** a Kill response for `R1` arrives after `R2` is attached
-- **THEN** the response SHALL not unlock, cancel, or otherwise mutate `R2`
+- **WHEN** a Stop response for an old run arrives after another run is attached
+- **THEN** the response SHALL NOT unlock, cancel, or otherwise mutate the new run
 
 ### Requirement: Rawdata Sanity Check
 
@@ -227,14 +242,45 @@ Population module lock files SHALL be read from `lock/xASL_module_Population/xAS
 
 ### Requirement: Attached Run Presentation
 
-The processing route SHALL discover and attach to the current in-memory native run for the active project before treating persisted active-looking phase text or historical lock files as a live run. Attachment SHALL not launch duplicate workers or duplicate event listeners. If no active native run exists, historical progress MAY still be reconstructed under existing behavior but SHALL not be presented as current worker activity.
+Project activation SHALL reconcile durable native execution and terminal replay before processing route presentation. Route entry SHALL consume that coordinated attachment without launching workers or becoming a second recovery owner. Persisted active-looking UI phases and historical lock files SHALL NOT prove current execution. If no current native run exists, historical progress MAY be displayed separately from live activity. Attachment/listener ownership SHALL avoid duplication across route re-entry. Renderer reload while native supervision remains alive SHALL attach to the existing run; native restart with a nonterminal record SHALL attach Interrupted confirmation state instead.
 
 #### Scenario: Route re-entry during current run
 
-- **WHEN** the user leaves and re-enters the processing route while the same native run remains active
-- **THEN** the dashboard SHALL attach to that run once and SHALL not launch workers or install duplicate listeners
+- **WHEN** the processing route remounts after activation attached a native run
+- **THEN** it SHALL project that attachment without duplicate workers, finalization, or recovery coordination
 
 #### Scenario: Persisted running phase without native run
 
-- **WHEN** project data says `running` but `get_active_run` returns no current in-memory run
-- **THEN** the dashboard SHALL not display historical lock state as an active attached run
+- **WHEN** saved UI state says running but activation finds no current native run or durable interrupted record
+- **THEN** the dashboard SHALL NOT present historical lock state as active worker execution
+
+### Requirement: Native recovery action presentation
+
+Processing controls SHALL use the exact snapshot's available action. `stop` SHALL request cancellation once, `retryCleanup` SHALL retry native cleanup once, `confirmStopped` SHALL display explicit abnormal-crash guidance and require user confirmation once, `acknowledge` SHALL be coordinated through terminal persistence, and `none` SHALL disable resource actions. Start SHALL remain blocked while native ownership, interruption confirmation, cleanup, or unacknowledged terminal persistence prevents replacement.
+
+Controls SHALL display logical worker progress and actionable errors without exposing PIDs, process-group IDs, Job handles, journal destinations, or transaction internals. A committed startup failure SHALL explain that prepared configuration remains and prior completion status was not restored. No platform execution lockout, storage qualification, guardian proof, force-unlock, or diagnostic-capacity control SHALL be presented.
+
+#### Scenario: Cleanup retry remains unresolved
+
+- **WHEN** retry returns the same run with `retryCleanup` still available
+- **THEN** the control SHALL re-enable cleanup retry after the request settles without renderer-local rollback ownership
+
+#### Scenario: Terminal metadata remains unsaved
+
+- **WHEN** native execution settled but terminal metadata persistence fails
+- **THEN** the dashboard SHALL display the persistence error and SHALL NOT launch a replacement run that discards terminal authority
+
+#### Scenario: Committed startup fails before first worker
+
+- **WHEN** native reports startup failure after execution commit
+- **THEN** the dashboard SHALL display the retained prepared-state consequence and SHALL NOT offer historical-status rollback
+
+#### Scenario: Interrupted run needs external confirmation
+
+- **WHEN** native reports `availableAction: confirmStopped`
+- **THEN** the dashboard SHALL explain that abrupt app death may have left MATLAB/Apptainer running, direct the user to operating-system process tools, and require confirmation before cleanup or replacement execution
+
+#### Scenario: Confirmation is pending
+
+- **WHEN** the user has not confirmed the exact interrupted run
+- **THEN** Start and automatic terminal acknowledgement SHALL remain disabled while project viewing remains available

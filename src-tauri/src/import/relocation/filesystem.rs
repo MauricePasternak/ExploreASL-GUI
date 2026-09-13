@@ -1,4 +1,5 @@
 use super::fault_injection::{FaultPoint, fail, take};
+pub(crate) use crate::fs_safety::{atomic_replace, rename_no_replace, sync_directory};
 use anyhow::{Context, Result as AnyResult, bail};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
@@ -19,140 +20,18 @@ pub(super) fn is_already_exists(error: &io::Error) -> bool {
         || cfg!(windows) && matches!(error.raw_os_error(), Some(80) | Some(183))
 }
 
-#[cfg(target_os = "linux")]
-pub(crate) fn rename_no_replace(source: &Path, destination: &Path) -> io::Result<()> {
-    use std::ffi::CString;
-    use std::os::unix::ffi::OsStrExt;
-    let source = CString::new(source.as_os_str().as_bytes())
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "source path contains NUL"))?;
-    let destination = CString::new(destination.as_os_str().as_bytes()).map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidInput, "destination path contains NUL")
-    })?;
-    let result = unsafe {
-        libc::syscall(
-            libc::SYS_renameat2,
-            libc::AT_FDCWD,
-            source.as_ptr(),
-            libc::AT_FDCWD,
-            destination.as_ptr(),
-            libc::RENAME_NOREPLACE,
-        )
-    };
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[cfg(target_os = "macos")]
-pub(super) fn rename_no_replace(source: &Path, destination: &Path) -> io::Result<()> {
-    use std::ffi::CString;
-    use std::os::unix::ffi::OsStrExt;
-    unsafe extern "C" {
-        fn renameatx_np(fromfd: i32, from: *const i8, tofd: i32, to: *const i8, flags: u32) -> i32;
-    }
-    const RENAME_EXCL: u32 = 0x0000_0004;
-    let source = CString::new(source.as_os_str().as_bytes())
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "source path contains NUL"))?;
-    let destination = CString::new(destination.as_os_str().as_bytes()).map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidInput, "destination path contains NUL")
-    })?;
-    let result = unsafe {
-        renameatx_np(
-            libc::AT_FDCWD,
-            source.as_ptr(),
-            libc::AT_FDCWD,
-            destination.as_ptr(),
-            RENAME_EXCL,
-        )
-    };
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[cfg(windows)]
-pub(super) fn rename_no_replace(source: &Path, destination: &Path) -> io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{MOVEFILE_WRITE_THROUGH, MoveFileExW};
-    let source = source
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let destination = destination
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    if unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            destination.as_ptr(),
-            MOVEFILE_WRITE_THROUGH,
-        )
-    } == 0
-    {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-compile_error!("import relocation requires an atomic no-replace rename implementation");
-
-pub(crate) fn atomic_replace(source: &Path, destination: &Path) -> io::Result<()> {
-    #[cfg(windows)]
-    {
-        use std::os::windows::ffi::OsStrExt;
-        use windows_sys::Win32::Storage::FileSystem::{
-            MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-        };
-        let source = source
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect::<Vec<_>>();
-        let destination = destination
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect::<Vec<_>>();
-        if unsafe {
-            MoveFileExW(
-                source.as_ptr(),
-                destination.as_ptr(),
-                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-            )
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        return Ok(());
-    }
-    #[cfg(not(windows))]
-    fs::rename(source, destination)
-}
-
 pub(super) fn sync_parent(path: &Path) -> AnyResult<()> {
     fail(FaultPoint::ParentSync)?;
     sync_parent_durable(path)
 }
 
 pub(crate) fn sync_parent_durable(path: &Path) -> AnyResult<()> {
-    #[cfg(unix)]
-    File::open(path)
-        .and_then(|file| file.sync_all())
-        .with_context(|| {
-            format!(
-                "Failed to synchronize transaction directory {}",
-                path.display()
-            )
-        })?;
+    sync_directory(path).with_context(|| {
+        format!(
+            "Failed to synchronize transaction directory {}",
+            path.display()
+        )
+    })?;
     Ok(())
 }
 

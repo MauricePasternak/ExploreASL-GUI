@@ -247,7 +247,6 @@ describe("project coordinator", () => {
       activeRunId: null,
       terminalRunId: null,
       processingPhase: "idle",
-      workerPids: [],
     });
 
     const transition = transitionProjectRuntime(DEFAULT_PROJECT_FILE("b", "B", "/b"), false, {

@@ -71,7 +71,6 @@ describe("ProjectPage", () => {
     });
     useProcessingStore.setState({
       processingPhase: "idle",
-      workerPids: [],
     });
   });
 

@@ -9,11 +9,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { Virtuoso } from "react-virtuoso";
 
 import {
   attachImportRun,
   cancelImportRun,
+  confirmImportWorkerStopped,
   getActiveImportRun,
   launchImportRun,
   reserveImportRun,
@@ -89,7 +91,6 @@ function ImportLogPanel({ lines }: { lines: string[] }) {
   const copy = useCallback(async () => {
     const text = lines.join("\n");
     try {
-      const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
       await writeText(text);
     } catch {
       await navigator.clipboard.writeText(text);
@@ -141,6 +142,7 @@ export default function ImportExecution() {
   const log = useImportStore((state) => state.importLog);
   const activeRunId = useImportStore((state) => state.activeRunId);
   const terminalRunId = useImportStore((state) => state.terminalRunId);
+  const confirmationRequired = useImportStore((state) => state.confirmationRequired);
   const runError = useImportStore((state) => state.importRunError);
   const summary = useImportStore((state) => state.importSummary);
   const stagingIssues = useImportStore((state) => state.stagingPreflight.issues);
@@ -163,6 +165,8 @@ export default function ImportExecution() {
   const [selectedSubjectOverride, setSelectedSubjectOverride] = useState<string[] | null>(null);
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const confirmingStoppedRunId = useImportStore((state) => state.confirmingStoppedRunId);
+  const confirmingStoppedGeneration = useImportStore((state) => state.confirmingStoppedGeneration);
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     subjects: string[];
     plan: RelocationPlan;
@@ -369,6 +373,51 @@ export default function ImportExecution() {
     }
   }, [activeRunId]);
 
+  const confirmStopped = useCallback(async () => {
+    if (!terminalRunId || !confirmationRequired) return;
+    const lease = captureProjectLease();
+    if (!lease || !isCurrentProjectLease(lease)) return;
+    const runId = terminalRunId;
+    if (confirmingStoppedRunId === runId && confirmingStoppedGeneration === lease.generation)
+      return;
+    useImportStore.setState({
+      confirmingStoppedRunId: runId,
+      confirmingStoppedGeneration: lease.generation,
+    });
+    try {
+      await registerProjectTask(async () => {
+        const snapshot = await confirmImportWorkerStopped(runId);
+        if (!isCurrentProjectLease(lease)) return;
+        const current = useImportStore.getState();
+        if (current.terminalRunId !== runId || !current.confirmationRequired) return;
+        useImportStore.getState().reconcileImportRunSnapshot(snapshot, lease);
+        await reconcileImportTerminal(snapshot.runId, lease);
+      });
+    } catch (error) {
+      const current = useImportStore.getState();
+      if (
+        isCurrentProjectLease(lease) &&
+        current.terminalRunId === runId &&
+        current.confirmationRequired
+      ) {
+        useImportStore.setState({
+          importRunError: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } finally {
+      const current = useImportStore.getState();
+      if (
+        current.confirmingStoppedRunId === runId &&
+        current.confirmingStoppedGeneration === lease.generation
+      ) {
+        useImportStore.setState({
+          confirmingStoppedRunId: null,
+          confirmingStoppedGeneration: null,
+        });
+      }
+    }
+  }, [confirmationRequired, confirmingStoppedGeneration, confirmingStoppedRunId, terminalRunId]);
+
   const locked = ACTIVE.includes(phase) || discovery !== "ready";
   const runAdmissionLocked = locked || terminalRunId !== null;
   const profileValid = Boolean(effectiveProfileId && validation[effectiveProfileId]?.valid);
@@ -427,7 +476,22 @@ export default function ImportExecution() {
       ) : null}
       {phase === "interrupted" ? (
         <Alert color="yellow" data-testid="import-interrupted-message">
-          Previous native import was interrupted. Staging was preserved for diagnosis or retry.
+          Previous native import was interrupted. Check operating-system process tools for MATLAB or
+          Apptainer before confirming workers stopped. Staging remains preserved.
+          {confirmationRequired ? (
+            <Button
+              mt="sm"
+              color="yellow"
+              onClick={() => void confirmStopped()}
+              disabled={
+                confirmingStoppedRunId === terminalRunId &&
+                confirmingStoppedGeneration === captureProjectLease()?.generation
+              }
+              data-testid="confirm-import-stopped-btn"
+            >
+              I confirmed worker stopped
+            </Button>
+          ) : null}
         </Alert>
       ) : null}
       {summary ? (

@@ -86,6 +86,14 @@ export async function cancelImportRun(runId: string): Promise<ImportRunSnapshot>
   return parseSnapshot(await invoke("cancel_import_run", { runId }));
 }
 
+export async function confirmImportWorkerStopped(runId: string): Promise<ImportRunSnapshot> {
+  const snapshot = parseSnapshot(await invoke("confirm_import_worker_stopped", { runId }));
+  if (snapshot.runId !== runId || snapshot.confirmationRequired) {
+    throw new Error("Import confirmation did not settle the exact interrupted run");
+  }
+  return snapshot;
+}
+
 const SnapshotEventSchema = z.object({ payload: ImportRunSnapshotSchema }).strict();
 const RawEventSchema = z
   .object({

@@ -75,7 +75,6 @@ describe("useProcessingSync", () => {
       config: null,
       availableSubjects: [],
       subjectStatuses: [],
-      workerPids: [],
       bidsCompatibilityError: null,
       profileError: null,
       preparingMessage: null,

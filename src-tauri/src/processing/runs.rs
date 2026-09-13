@@ -4,22 +4,13 @@ use super::types::{
 };
 use crate::app_state::AppState;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use tauri::State;
 
-static NEXT_PROCESSING_RUN_ID: AtomicU64 = AtomicU64::new(1);
-
 fn active_project_root(state: &AppState) -> Result<PathBuf, String> {
-    let root = lock_state(&state.active_project_root, "Active project state")?
-        .clone()
-        .ok_or_else(|| "No active project".to_string())?;
-    root.canonicalize().map_err(|error| {
-        format!(
-            "Failed to canonicalize active project root {}: {error}",
-            root.display()
-        )
-    })
+    Ok(crate::project_ownership::active(state)?
+        .root()
+        .to_path_buf())
 }
 
 fn lock_state<'a, T>(mutex: &'a Mutex<T>, state_name: &str) -> Result<MutexGuard<'a, T>, String> {
@@ -38,11 +29,9 @@ pub(crate) fn lock_project_transition(state: &AppState) -> Result<MutexGuard<'_,
     lock_state(&state.project_transition, "Project transition")
 }
 
+#[cfg(test)]
 fn next_run_id() -> String {
-    format!(
-        "processing-run-{}",
-        NEXT_PROCESSING_RUN_ID.fetch_add(1, Ordering::Relaxed)
-    )
+    uuid::Uuid::new_v4().to_string()
 }
 
 fn matching_run<'a>(
@@ -63,11 +52,14 @@ fn matching_run<'a>(
     Ok(run)
 }
 
+#[cfg(test)]
 pub(crate) fn reserve_processing_run_impl(
     state: &AppState,
     selected_modules: Vec<String>,
     selected_subject_sessions: Vec<String>,
 ) -> Result<ProcessingRunSnapshot, String> {
+    let _transition = lock_project_transition(state)?;
+    crate::project_ownership::ensure_import_released(state)?;
     let project_root = active_project_root(state)?;
     let mut processing_state = lock_processing_state(state)?;
 
@@ -78,7 +70,7 @@ pub(crate) fn reserve_processing_run_impl(
         return Err("A lock watcher already owns processing state".to_string());
     }
     if let Some(run) = &processing_state.current_run
-        && !run.lifecycle.is_terminal()
+        && (!run.lifecycle.is_terminal() || run.unacknowledged())
     {
         return Err(format!(
             "Processing run {} is still {:?}",
@@ -97,164 +89,247 @@ pub(crate) fn reserve_processing_run_impl(
     Ok(snapshot)
 }
 
+pub(crate) fn reserve_request_impl(
+    state: &AppState,
+    mut request: super::record::ProcessingRequest,
+    admission: super::record::ProcessingAdmission,
+) -> Result<super::record::ProcessingReservation, String> {
+    let _transition = lock_project_transition(state)?;
+    crate::project_ownership::ensure_import_released(state)?;
+    let project_root = active_project_root(state)?;
+    let mut processing = lock_processing_state(state)?;
+    let admitted_root = admission
+        .project_root
+        .canonicalize()
+        .map_err(|error| format!("Invalid processing admission root: {error}"))?;
+    if admitted_root != project_root {
+        return Err("Processing admission root differs from active native project".into());
+    }
+    request.canonicalize().map_err(|e| e.to_string())?;
+    if request.project_id
+        != super::record::current_project_id(&project_root).map_err(|e| e.to_string())?
+    {
+        return Err("Processing request identifies a different project".into());
+    }
+    if let Some(replay) = super::record::lookup_request(&project_root, request.request_id)
+        .map_err(|e| e.to_string())?
+    {
+        if replay.request_digest
+            != super::record::request_digest(&request).map_err(|e| e.to_string())?
+        {
+            return Err("Processing request identity reused with different content".into());
+        }
+        let replay = acknowledge_locked(
+            &project_root,
+            &mut processing,
+            replay.run_id,
+            replay.terminal_revision,
+        )?;
+        return Ok(super::record::ProcessingReservation::Historical { replay });
+    }
+    request.project_root = project_root.clone();
+    // Duplicate replies never replace a newer in-memory execution.
+    if let Some(existing) =
+        super::record::read(&project_root, request.request_id).map_err(|e| e.to_string())?
+    {
+        if !existing
+            .request
+            .same_content(&request)
+            .map_err(|e| e.to_string())?
+        {
+            return Err("Processing request identity reused with different content".into());
+        }
+        if existing.acknowledged {
+            let replay = acknowledge_locked(
+                &project_root,
+                &mut processing,
+                existing.run_id,
+                existing
+                    .terminal_revision
+                    .ok_or("Missing terminal revision")?,
+            )?;
+            return Ok(super::record::ProcessingReservation::Historical { replay });
+        }
+        return Ok(super::record::ProcessingReservation::Current {
+            snapshot: existing.snapshot(),
+        });
+    }
+    // Resume durable acknowledgement before replacement, including unlink
+    // uncertainty that left only the in-memory terminal pin.
+    if let Some(current) = super::record::records(&project_root)
+        .map_err(|e| e.to_string())?
+        .pop()
+    {
+        if current.acknowledged {
+            acknowledge_locked(
+                &project_root,
+                &mut processing,
+                current.run_id,
+                current
+                    .terminal_revision
+                    .ok_or("Missing terminal revision")?,
+            )?;
+        }
+    } else if let Some(record) = processing
+        .current_run
+        .as_ref()
+        .and_then(|run| run.durable.as_ref())
+        && let Some(replay) =
+            super::record::lookup_run(&project_root, record.run_id).map_err(|e| e.to_string())?
+    {
+        acknowledge_locked(
+            &project_root,
+            &mut processing,
+            replay.run_id,
+            replay.terminal_revision,
+        )?;
+    }
+    if processing.cancellation.is_some()
+        || processing.launch_in_progress
+        || processing
+            .supervisor_handle
+            .as_ref()
+            .is_some_and(|h| !h.is_finished())
+        || processing
+            .current_run
+            .as_ref()
+            .is_some_and(|r| !r.lifecycle.is_terminal() || r.unacknowledged())
+        || processing.watcher_run_id.is_some()
+        || processing.watcher_stop.is_some()
+        || processing.watcher_handle.is_some()
+    {
+        return Err("Processing runtime still owns execution artifacts".into());
+    }
+    let record = super::record::admit(&project_root, request).map_err(|e| e.to_string())?;
+    let snapshot = record.snapshot();
+    processing.current_run = Some(ProcessingRun::from_record(record));
+    Ok(super::record::ProcessingReservation::Current { snapshot })
+}
 #[tauri::command]
 pub fn reserve_processing_run(
     state: State<'_, AppState>,
-    selected_modules: Vec<String>,
-    selected_subject_sessions: Vec<String>,
-) -> Result<ProcessingRunSnapshot, String> {
-    let _transition = lock_project_transition(&state)?;
-    reserve_processing_run_impl(&state, selected_modules, selected_subject_sessions)
+    request: super::record::ProcessingRequest,
+    admission: super::record::ProcessingAdmission,
+) -> Result<super::record::ProcessingReservation, String> {
+    reserve_request_impl(&state, request, admission)
 }
-
-pub(crate) fn fail_processing_run_impl(
-    state: &AppState,
-    run_id: &str,
-) -> Result<ProcessingRunSnapshot, String> {
-    {
-        let project_root = active_project_root(state)?;
-        let mut processing_state = lock_processing_state(state)?;
-        let run = matching_run(&mut processing_state, &project_root, run_id)?;
-        if run.lifecycle != ProcessingLifecycle::Preparing {
-            return Err(format!(
-                "Processing run {run_id} cannot fail preparation from {:?}",
-                run.lifecycle
-            ));
-        }
-    }
-
-    // Preparation failure is a public renderer operation, separate from
-    // post-spawn launch failure recording. Release exact-run watcher ownership
-    // before making the record terminal and replaceable.
-    super::watcher::stop_watch_lock_dir_impl(state, run_id)?;
-    super::pipeline::reap_completed_worker_supervisors(state, run_id)?;
-
-    let project_root = active_project_root(state)?;
-    let mut processing_state = lock_processing_state(state)?;
-    let run = matching_run(&mut processing_state, &project_root, run_id)?;
-    if run.lifecycle != ProcessingLifecycle::Preparing {
-        return Err(format!(
-            "Processing run {run_id} cannot fail preparation from {:?}",
-            run.lifecycle
-        ));
-    }
-    run.transition(ProcessingLifecycle::Failed)?;
-    Ok(run.snapshot())
-}
-
-/// Record a launch failure without abandoning workers already registered for
-/// this run. This function deliberately never waits on worker supervisors:
-/// `run_pipeline` holds the project transition gate, while a supervisor needs
-/// only the processing-state lock to reap and mutate worker membership.
-pub(crate) fn record_launch_failure_impl(
-    state: &AppState,
-    run_id: &str,
-    error: String,
-) -> Result<ProcessingRunSnapshot, String> {
-    let should_stop_watcher = {
-        let project_root = active_project_root(state)?;
-        let mut processing_state = lock_processing_state(state)?;
-        let run = matching_run(&mut processing_state, &project_root, run_id)?;
-        match run.lifecycle {
-            ProcessingLifecycle::Preparing => {
-                run.transition(ProcessingLifecycle::Failed)?;
-                true
-            }
-            ProcessingLifecycle::Running if run.workers.is_empty() => {
-                // The first native spawn error identifies the failed launch.
-                // A renderer catch can race this path; retain that evidence
-                // rather than replacing it with a less-specific second report.
-                run.pending_launch_failure.get_or_insert(error);
-                run.transition(ProcessingLifecycle::Failed)?;
-                true
-            }
-            ProcessingLifecycle::Running => {
-                run.pending_launch_failure.get_or_insert(error);
-                return Ok(run.snapshot());
-            }
-            ProcessingLifecycle::Finalizing if run.workers.is_empty() => {
-                // Final worker exit can win the state lock after a later spawn
-                // already failed. Launch failure remains authoritative: this
-                // run never reached its requested worker set.
-                run.pending_launch_failure.get_or_insert(error);
-                run.transition(ProcessingLifecycle::Failed)?;
-                true
-            }
-            _ => {
-                return Err(format!(
-                    "Processing run {run_id} cannot fail from {:?}",
-                    run.lifecycle
-                ));
-            }
-        }
-    };
-
-    if should_stop_watcher {
-        // No worker remains. Watcher stop releases its lock before a terminal
-        // record can be replaced; supervisor handles are reaped nonblocking.
-        super::watcher::stop_watch_lock_dir_impl(state, run_id)?;
-        super::pipeline::reap_completed_worker_supervisors(state, run_id)?;
-    }
-    attach_run_impl(state, run_id)
-}
-
 #[tauri::command]
-pub fn fail_processing_run(
+pub fn acknowledge_processing_run(
     state: State<'_, AppState>,
-    run_id: String,
-) -> Result<ProcessingRunSnapshot, String> {
+    run_id: uuid::Uuid,
+    terminal_revision: u64,
+) -> Result<super::record::HistoricalReplayEnvelope, String> {
+    super::pipeline::reap_finished_supervisor(&state)?;
     let _transition = lock_project_transition(&state)?;
-    fail_processing_run_impl(&state, &run_id)
+    let root = active_project_root(&state)?;
+    let mut processing = lock_processing_state(&state)?;
+    let replay = acknowledge_locked(&root, &mut processing, run_id, terminal_revision)?;
+    let live_owner = processing.cancellation.is_some() || processing.launch_in_progress;
+    drop(processing);
+    // Exact historical acknowledgement is read-only while another run owns
+    // execution. Its retirement already happened; next admission retries limits.
+    if live_owner {
+        return Ok(replay);
+    }
+    Ok(replay)
 }
 
-pub(crate) fn finalize_processing_run_impl(
+/// Accepts only the currently interrupted durable record. No persisted process
+/// identity is consulted or signalled; confirmation authorizes journal policy.
+pub(crate) fn confirm_processing_workers_stopped_impl(
     state: &AppState,
-    run_id: &str,
-    outcome: ProcessingTerminalResult,
+    run_id: uuid::Uuid,
+    revision: u64,
 ) -> Result<ProcessingRunSnapshot, String> {
+    let _transition = lock_project_transition(state)?;
+    let root = active_project_root(state)?;
+    let previous = super::record::records(&root)
+        .map_err(|e| e.to_string())?
+        .pop()
+        .ok_or("No current processing run")?;
+    if previous.run_id != run_id
+        || previous.revision != revision
+        || previous.available_action != super::record::AvailableAction::ConfirmStopped
     {
-        let project_root = active_project_root(state)?;
-        let mut processing_state = lock_processing_state(state)?;
-        let run = matching_run(&mut processing_state, &project_root, run_id)?;
-        if run.lifecycle != ProcessingLifecycle::Finalizing {
-            return Err(format!(
-                "Processing run {run_id} cannot finalize from {:?}",
-                run.lifecycle
-            ));
+        return Err("Stale or foreign processing confirmation".into());
+    }
+    // A missing journal is already-cleaned authority, not a reason to strand an
+    // exact Interrupted record. Existing journals select the only allowed
+    // mutation: rollback before commit, cleanup after commit.
+    if super::recovery::journal_exists(&previous).map_err(|e| e.to_string())? {
+        let mut transaction =
+            super::transaction::LaunchTransaction::reopen_confirmed(&root, &run_id.to_string())
+                .map_err(|e| e.to_string())?;
+        if previous.execution_committed {
+            if transaction.cleanup_pending() {
+                transaction.cleanup().map_err(|e| e.to_string())?;
+            }
+        } else if transaction.rollback_pending() {
+            transaction.rollback().map_err(|e| e.to_string())?;
         }
     }
-    // A terminal record may be replaced only after its watcher has stopped.
-    // Keep Finalizing ownership actionable if stop/join fails.
-    super::watcher::stop_watch_lock_dir_impl(state, run_id)?;
-    // A Finalizing run has no owned workers. Reap only handles already proven
-    // complete; never wait under a project-transition command.
-    super::pipeline::reap_completed_worker_supervisors(state, run_id)?;
-    let project_root = active_project_root(state)?;
-    let mut processing_state = lock_processing_state(state)?;
-    let run = matching_run(&mut processing_state, &project_root, run_id)?;
-    let lifecycle = if run.pending_launch_failure.is_some() {
-        ProcessingLifecycle::Failed
-    } else {
-        match outcome {
-            ProcessingTerminalResult::Completed => ProcessingLifecycle::Completed,
-            ProcessingTerminalResult::Failed => ProcessingLifecycle::Failed,
-            ProcessingTerminalResult::Cancelled | ProcessingTerminalResult::Interrupted => {
-                return Err("Finalization outcome must be Completed or Failed".to_string());
-            }
-        }
-    };
-    run.transition(lifecycle)?;
-    Ok(run.snapshot())
+    let mut next = previous.clone();
+    next.revision += 1;
+    next.lifecycle = ProcessingLifecycle::Interrupted;
+    next.available_action = super::record::AvailableAction::Acknowledge;
+    next.terminal_revision = Some(next.revision);
+    next.terminal_summary = Some(super::record::ProcessingTerminalSummary {
+        result: ProcessingTerminalResult::Interrupted,
+        execution_committed: next.execution_committed,
+        population_completed: false,
+        profile_id: next.request.execution_profile.id().into(),
+        explore_asl_version: next.versions.as_ref().map(|v| v.explore_asl.clone()),
+    });
+    super::record::persist(&next, Some(&previous)).map_err(|e| e.to_string())?;
+    let mut processing = lock_processing_state(state)?;
+    processing.current_run = Some(ProcessingRun::from_record(next));
+    Ok(processing.current_run.as_ref().unwrap().snapshot())
+}
+#[tauri::command]
+pub fn confirm_processing_workers_stopped(
+    state: State<'_, AppState>,
+    run_id: uuid::Uuid,
+    revision: u64,
+) -> Result<ProcessingRunSnapshot, String> {
+    confirm_processing_workers_stopped_impl(&state, run_id, revision)
 }
 
-#[tauri::command]
-pub fn finalize_processing_run(
-    state: State<'_, AppState>,
-    run_id: String,
-    outcome: ProcessingTerminalResult,
-) -> Result<ProcessingRunSnapshot, String> {
-    let _transition = lock_project_transition(&state)?;
-    finalize_processing_run_impl(&state, &run_id, outcome)
+fn acknowledge_locked(
+    root: &std::path::Path,
+    processing: &mut ProcessState,
+    run_id: uuid::Uuid,
+    terminal_revision: u64,
+) -> Result<super::record::HistoricalReplayEnvelope, String> {
+    if processing.current_run.as_ref().is_some_and(|r| {
+        r.run_id == run_id.to_string()
+            && (processing.cancellation.is_some()
+                || processing.launch_in_progress
+                || r.watcher_owned)
+    }) || processing.watcher_run_id.as_deref() == Some(&run_id.to_string())
+    {
+        return Err("Processing resources remain unsettled".into());
+    }
+    if let Some(record) = super::record::records(root)
+        .map_err(|e| e.to_string())?
+        .pop()
+        .filter(|r| r.run_id == run_id)
+    {
+        if !record.lifecycle.is_terminal() || record.terminal_revision != Some(terminal_revision) {
+            return Err("Stale processing terminal revision".into());
+        }
+        super::recovery::cleanup_archive(&record)
+            .map_err(|e| format!("Processing archive cleanup requires retry: {e:#}"))?;
+    }
+    let replay =
+        super::record::acknowledge(root, run_id, terminal_revision).map_err(|e| e.to_string())?;
+    if processing
+        .current_run
+        .as_ref()
+        .is_some_and(|run| run.run_id == run_id.to_string())
+    {
+        processing.current_run = None;
+    }
+    Ok(replay)
 }
 
 pub(crate) fn get_active_run_impl(
@@ -262,9 +337,16 @@ pub(crate) fn get_active_run_impl(
 ) -> Result<Option<ProcessingRunSnapshot>, String> {
     let project_root = active_project_root(state)?;
     let processing_state = lock_processing_state(state)?;
-    Ok(processing_state.current_run.as_ref().and_then(|run| {
-        (!run.lifecycle.is_terminal() && run.belongs_to(&project_root)).then(|| run.snapshot())
-    }))
+    if let Some(run) = processing_state.current_run.as_ref().filter(|r| {
+        (!r.lifecycle.is_terminal() || r.unacknowledged()) && r.belongs_to(&project_root)
+    }) {
+        return Ok(Some(run.snapshot()));
+    }
+    Ok(super::record::records(&project_root)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|r| !r.acknowledged)
+        .map(|r| r.snapshot()))
 }
 
 #[tauri::command]
@@ -276,6 +358,7 @@ pub(crate) fn attach_run_impl(
     state: &AppState,
     run_id: &str,
 ) -> Result<ProcessingRunSnapshot, String> {
+    super::pipeline::reconcile_idle(state, run_id).map_err(|e| e.to_string())?;
     let project_root = active_project_root(state)?;
     let mut processing_state = lock_processing_state(state)?;
     Ok(matching_run(&mut processing_state, &project_root, run_id)?.snapshot())
@@ -320,98 +403,6 @@ pub(crate) fn selected_subject_sessions_regexp(selected_subject_sessions: &[Stri
     format!("^(?:{values})$")
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct LaunchAuthority {
-    pub project_root: PathBuf,
-    pub b_process: Vec<bool>,
-    pub subject_regexp: String,
-}
-
-pub(crate) fn validate_launch_request(
-    state: &AppState,
-    run_id: &str,
-    requested_b_process: &[bool],
-    workers: u32,
-) -> Result<LaunchAuthority, String> {
-    let project_root = active_project_root(state)?;
-    let processing_state = lock_processing_state(state)?;
-    let run = processing_state
-        .current_run
-        .as_ref()
-        .ok_or_else(|| "No processing run is active".to_string())?;
-    if !run.belongs_to(&project_root) || run.run_id != run_id {
-        return Err(
-            "Processing run ID is obsolete, unknown, or belongs to another project".to_string(),
-        );
-    }
-    if run.lifecycle != ProcessingLifecycle::Preparing {
-        return Err(format!(
-            "Processing run {run_id} must be Preparing, found {:?}",
-            run.lifecycle
-        ));
-    }
-    let b_process = selected_modules_to_b_process(&run.selected_modules)?;
-    if requested_b_process != b_process {
-        return Err("Selected modules do not match the processing reservation".to_string());
-    }
-    if workers == 0 {
-        return Err("workers must be at least 1".to_string());
-    }
-    if processing_state
-        .watcher_run_id
-        .as_deref()
-        .is_some_and(|owner| owner != run_id)
-    {
-        return Err("Lock watcher belongs to another processing run".to_string());
-    }
-    Ok(LaunchAuthority {
-        project_root,
-        b_process,
-        subject_regexp: selected_subject_sessions_regexp(&run.selected_subject_sessions),
-    })
-}
-
-/// Read-only command admission. Call before routing any later validation or
-/// launch error into run-owned failure recording. Stale and wrong-state IPC
-/// must not alter healthy run evidence.
-pub(crate) fn validate_launch_admission(state: &AppState, run_id: &str) -> Result<(), String> {
-    let project_root = active_project_root(state)?;
-    let mut processing_state = lock_processing_state(state)?;
-    let run = matching_run(&mut processing_state, &project_root, run_id)?;
-    if run.lifecycle != ProcessingLifecycle::Preparing {
-        return Err(format!(
-            "Processing run {run_id} must be Preparing, found {:?}",
-            run.lifecycle
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn record_worker_exit(
-    processing_state: &mut ProcessState,
-    run_id: &str,
-    pid: u32,
-    exit_code: i32,
-) -> bool {
-    let Some(run) = processing_state.current_run.as_mut() else {
-        return false;
-    };
-    if run.run_id != run_id || !run.workers.remove(&pid) {
-        return false;
-    }
-    run.exit_evidence
-        .push(super::types::WorkerExitEvidence { pid, exit_code });
-    if run.lifecycle == ProcessingLifecycle::Running && run.workers.is_empty() {
-        let terminal = if run.pending_launch_failure.is_some() {
-            ProcessingLifecycle::Failed
-        } else {
-            ProcessingLifecycle::Finalizing
-        };
-        let _ = run.transition(terminal);
-    }
-    true
-}
-
 #[derive(Debug)]
 pub(crate) struct WatcherAdmission {
     pub lock_root: PathBuf,
@@ -419,10 +410,12 @@ pub(crate) struct WatcherAdmission {
     pub already_owned: bool,
 }
 
+/// Resource admission caller holds project_transition through watcher installation.
 pub(crate) fn validate_watcher_request(
     state: &AppState,
     run_id: &str,
 ) -> Result<WatcherAdmission, String> {
+    crate::project_ownership::ensure_not_shutting_down(state)?;
     let (processing_state, project_root) = matching_run_for_active_project(state, run_id)?;
     let run = processing_state
         .current_run
@@ -482,43 +475,6 @@ pub(crate) fn preparing_run_root(state: &AppState, run_id: &str) -> Result<PathB
         return Err(format!(
             "Processing run {run_id} must be Preparing, found {:?}",
             run.lifecycle
-        ));
-    }
-    Ok(project_root)
-}
-
-pub(crate) fn finalizing_run_root(state: &AppState, run_id: &str) -> Result<PathBuf, String> {
-    let (processing_state, project_root) = matching_run_for_active_project(state, run_id)?;
-    let run = processing_state
-        .current_run
-        .as_ref()
-        .expect("matching run exists");
-    if run.lifecycle != ProcessingLifecycle::Finalizing {
-        return Err(format!(
-            "Processing run {run_id} must be Finalizing, found {:?}",
-            run.lifecycle
-        ));
-    }
-    Ok(project_root)
-}
-
-pub(crate) fn completed_population_run_root(
-    state: &AppState,
-    run_id: &str,
-) -> Result<PathBuf, String> {
-    let (processing_state, project_root) = matching_run_for_active_project(state, run_id)?;
-    let run = processing_state
-        .current_run
-        .as_ref()
-        .expect("matching run exists");
-    if run.lifecycle != ProcessingLifecycle::Completed
-        || !run
-            .selected_modules
-            .iter()
-            .any(|module| module == "population")
-    {
-        return Err(format!(
-            "Processing run {run_id} is not a completed Population run"
         ));
     }
     Ok(project_root)

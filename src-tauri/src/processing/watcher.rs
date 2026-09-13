@@ -1,33 +1,25 @@
-use super::runs::{
-    lock_project_transition, matching_run_for_active_project, validate_watcher_request,
-};
+use super::runs::{matching_run_for_active_project, validate_watcher_request};
 use super::types::{LockRemoved, ProcessingRunSnapshot};
 use super::utils::{parse_lock_dir_path, parse_lock_path};
 use crate::app_state::AppState;
-use crate::tracing::CommandTrace;
 use notify::{EventKind, RecursiveMode, Watcher};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter};
 
-#[tauri::command]
-pub fn watch_lock_dir(
-    app: AppHandle,
-    state: State<'_, AppState>,
+pub(crate) fn start<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: &AppState,
     run_id: String,
 ) -> Result<ProcessingRunSnapshot, String> {
-    let _transition = lock_project_transition(&state)?;
-    let trace = CommandTrace::new("watch_lock_dir");
-    trace.arg("run_id", &run_id);
-
-    let admission = validate_watcher_request(&state, &run_id)?;
+    let admission = validate_watcher_request(state, &run_id)?;
     if admission.already_owned {
         return Ok(admission.snapshot);
     }
     let lock_root = admission.lock_root;
     {
-        let (mut processing_state, _) = matching_run_for_active_project(&state, &run_id)?;
+        let (mut processing_state, _) = matching_run_for_active_project(state, &run_id)?;
         if processing_state
             .current_run
             .as_ref()
@@ -50,8 +42,15 @@ pub fn watch_lock_dir(
         processing_state.watcher_run_id = Some(run_id.clone());
     }
 
-    if let Err(error) = std::fs::create_dir_all(&lock_root) {
-        clear_watcher_reservation(&state, &run_id);
+    if let Err(error) = crate::fs_safety::ProjectDirectory::open(
+        lock_root.ancestors().nth(3).expect("native lock root"),
+    )
+    .and_then(|directory| {
+        directory.create_dir_all_durable(&crate::fs_safety::ProjectRelativePath::new(
+            "derivatives/ExploreASL/lock",
+        )?)
+    }) {
+        clear_watcher_reservation(state, &run_id);
         return Err(format!(
             "Failed to create lock directory {}: {error}",
             lock_root.display()
@@ -66,17 +65,20 @@ pub fn watch_lock_dir(
     let mut watcher = match notify::recommended_watcher(tx) {
         Ok(watcher) => watcher,
         Err(error) => {
-            clear_watcher_reservation(&state, &run_id);
+            clear_watcher_reservation(state, &run_id);
             return Err(format!("Failed to create file watcher: {error}"));
         }
     };
     if let Err(error) = watcher.watch(&lock_root, RecursiveMode::Recursive) {
-        clear_watcher_reservation(&state, &run_id);
+        clear_watcher_reservation(state, &run_id);
         return Err(format!("Failed to watch lock directory: {error}"));
     }
 
     let watcher_thread = thread::spawn(move || {
         loop {
+            if !matches!(stop_rx.try_recv(), Err(mpsc::TryRecvError::Empty)) {
+                break;
+            }
             match rx.recv_timeout(Duration::from_millis(50)) {
                 Ok(Ok(event)) => match event.kind {
                     EventKind::Create(_) => {
@@ -138,7 +140,7 @@ pub fn watch_lock_dir(
     });
 
     let snapshot = {
-        let (mut processing_state, _) = matching_run_for_active_project(&state, &run_id)?;
+        let (mut processing_state, _) = matching_run_for_active_project(state, &run_id)?;
         let run_is_terminal = processing_state
             .current_run
             .as_ref()
@@ -160,7 +162,6 @@ pub fn watch_lock_dir(
         run.watcher_owned = true;
         run.snapshot()
     };
-    trace.success(&snapshot);
     Ok(snapshot)
 }
 
@@ -176,12 +177,6 @@ fn clear_watcher_reservation(state: &AppState, run_id: &str) {
             run.watcher_owned = false;
         }
     }
-}
-
-#[tauri::command]
-pub fn stop_watch_lock_dir(state: State<'_, AppState>, run_id: String) -> Result<(), String> {
-    let _transition = lock_project_transition(&state)?;
-    stop_watch_lock_dir_impl(&state, &run_id)
 }
 
 pub(crate) fn stop_watch_lock_dir_impl(state: &AppState, run_id: &str) -> Result<(), String> {

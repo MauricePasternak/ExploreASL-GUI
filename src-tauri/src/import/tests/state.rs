@@ -7,13 +7,15 @@ use crate::import::state::{
     get_active_import_run_for_state, persist, plan_import_relocation_for_state,
     reserve_import_run_for_state,
 };
-use crate::import::types::{ImportExitEvidence, ImportLifecycle, ImportTerminalResult};
+use crate::import::types::{
+    ImportExitEvidence, ImportLifecycle, ImportState, ImportTerminalResult,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 fn active_state(root: &Path) -> AppState {
     let state = AppState::default();
-    *state.active_project_root.lock().unwrap() = Some(root.to_path_buf());
+    crate::project_ownership_tests::own_project(&state, root);
     state
 }
 
@@ -200,7 +202,7 @@ fn discovery_and_attachment_distinguish_absent_and_true_foreign_project_ownershi
         false,
     )
     .unwrap();
-    *state.active_project_root.lock().unwrap() = Some(project_b.path().canonicalize().unwrap());
+    crate::project_ownership_tests::own_project(&state, &project_b.path().canonicalize().unwrap());
 
     assert_eq!(get_active_import_run_for_state(&state).unwrap(), None);
     assert!(attach_import_run_for_state(&state, &snapshot.run_id).is_err());
@@ -399,5 +401,164 @@ fn unresolved_relocation_evidence_blocks_acknowledgement() {
             .unwrap()
             .run_id,
         snapshot.run_id
+    );
+}
+
+fn cross_workflow_admission(import_first: bool) {
+    for phase in 0..4 {
+        let root = tempfile::tempdir().unwrap();
+        let state = active_state(root.path());
+        let plan = plan_import_relocation_for_state(&state, &["ONE".to_string()]).unwrap();
+        let reserve_import = || {
+            reserve_import_run_for_state(
+                &state,
+                vec!["ONE".into()],
+                plan.plan_id.clone(),
+                "profile".into(),
+                vec![],
+                false,
+            )
+        };
+        let reserve_processing = || {
+            crate::processing::runs::reserve_processing_run_impl(&state, vec!["asl".into()], vec![])
+        };
+        if import_first {
+            reserve_import().unwrap();
+            state.import_state.lock().unwrap().lifecycle = [
+                ImportLifecycle::Preparing,
+                ImportLifecycle::Running,
+                ImportLifecycle::Finalizing,
+                ImportLifecycle::Cancelling,
+            ][phase];
+            assert!(
+                reserve_processing().is_err(),
+                "processing must reject import ownership"
+            );
+        } else {
+            reserve_processing().unwrap();
+            use crate::processing::ProcessingLifecycle;
+            state
+                .processing_state
+                .lock()
+                .unwrap()
+                .current_run
+                .as_mut()
+                .unwrap()
+                .lifecycle = [
+                ProcessingLifecycle::Preparing,
+                ProcessingLifecycle::Running,
+                ProcessingLifecycle::Finalizing,
+                ProcessingLifecycle::Cancelling,
+            ][phase];
+            assert!(
+                reserve_import().is_err(),
+                "import must reject processing ownership"
+            );
+        }
+    }
+}
+
+#[test]
+fn processing_admission_rejects_import_execution_phases() {
+    cross_workflow_admission(true);
+}
+#[test]
+fn import_admission_rejects_processing_execution_phases() {
+    cross_workflow_admission(false);
+}
+
+#[test]
+fn import_admission_requires_held_native_ownership() {
+    let root = tempfile::tempdir().unwrap();
+    let state = active_state(root.path());
+    let plan = plan_import_relocation_for_state(&state, &["ONE".into()]).unwrap();
+    state.active_project.lock().unwrap().take();
+    assert!(
+        reserve_import_run_for_state(
+            &state,
+            vec!["ONE".into()],
+            plan.plan_id,
+            "profile".into(),
+            vec![],
+            false
+        )
+        .is_err()
+    );
+    assert!(!record_path(root.path()).exists());
+}
+
+#[test]
+fn concurrent_import_processing_admission_has_one_winner() {
+    let root = tempfile::tempdir().unwrap();
+    let state = active_state(root.path());
+    let plan = plan_import_relocation_for_state(&state, &["ONE".into()]).unwrap();
+    let barrier = std::sync::Barrier::new(2);
+    let (import, processing) = std::thread::scope(|scope| {
+        let import = scope.spawn(|| {
+            barrier.wait();
+            reserve_import_run_for_state(
+                &state,
+                vec!["ONE".into()],
+                plan.plan_id,
+                "profile".into(),
+                vec![],
+                false,
+            )
+        });
+        let processing = scope.spawn(|| {
+            barrier.wait();
+            crate::processing::runs::reserve_processing_run_impl(&state, vec!["asl".into()], vec![])
+        });
+        (import.join().unwrap(), processing.join().unwrap())
+    });
+    assert_ne!(import.is_ok(), processing.is_ok());
+}
+
+#[test]
+fn interruption_confirmation_is_exact_and_rolls_back_when_persistence_fails() {
+    let root = tempfile::tempdir().unwrap();
+    let state = active_state(root.path());
+    let mut run = ImportState::new(
+        root.path().join(".easl_staging"),
+        root.path().to_path_buf(),
+        vec!["ONE".into()],
+    );
+    run.run_id = "import-run-interrupted".into();
+    run.profile_id = "profile".into();
+    run.lifecycle = ImportLifecycle::Interrupted;
+    run.terminal_result = Some(crate::import::ImportTerminalResult::Interrupted);
+    run.confirmation_required = true;
+    crate::import::journal::write_record(
+        root.path(),
+        &crate::import::journal::record_from_state(&run).unwrap(),
+    )
+    .unwrap();
+    *state.import_state.lock().unwrap() = run;
+
+    assert!(
+        crate::import::state::confirm_import_worker_stopped_for_state(&state, "stale").is_err()
+    );
+    crate::import::journal::fail_next_record_write();
+    assert!(
+        crate::import::state::confirm_import_worker_stopped_for_state(
+            &state,
+            "import-run-interrupted"
+        )
+        .is_err()
+    );
+    assert!(state.import_state.lock().unwrap().confirmation_required);
+
+    let confirmed = crate::import::state::confirm_import_worker_stopped_for_state(
+        &state,
+        "import-run-interrupted",
+    )
+    .unwrap();
+    assert!(!confirmed.confirmation_required);
+    assert!(
+        crate::import::state::confirm_import_worker_stopped_for_state(
+            &state,
+            "import-run-interrupted"
+        )
+        .is_err()
     );
 }

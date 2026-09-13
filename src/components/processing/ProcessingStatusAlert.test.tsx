@@ -37,23 +37,11 @@ vi.mock("../../stores/globalStore", () => ({
     }),
 }));
 
-vi.mock("../../stores/projectStore", () => ({
-  useProjectStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({
-      project: { projectMeta: { rootPath: "/test/project" } },
-    }),
-}));
-
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn((cmd: string) => {
     if (cmd === "get_cpu_cores") return Promise.resolve(8);
     return Promise.resolve(null);
   }),
-}));
-
-let mockExistsResult: boolean = true;
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  exists: vi.fn().mockImplementation(() => Promise.resolve(mockExistsResult)),
 }));
 
 const ProcessingStatusAlertModule = await import("./ProcessingStatusAlert");
@@ -69,7 +57,6 @@ function renderAlert(onResult?: (r: PreflightResult) => void) {
 
 afterEach(() => {
   cleanup();
-  mockExistsResult = true;
 });
 
 describe("ProcessingStatusAlert", () => {
@@ -94,23 +81,6 @@ describe("ProcessingStatusAlert", () => {
       const alert = screen.getByTestId("processing-status-alert");
       expect(alert.getAttribute("data-state")).toBe("idle");
       expect(alert).toHaveTextContent(/Select the Modules and Subject\/Sessions to run/i);
-    });
-  });
-
-  describe("checking state", () => {
-    it("shows grey checking state while async fs checks pending", async () => {
-      mockConfig = {
-        subjects: ["sub-001_01"],
-        modules: ["structural"],
-        selectedProfileId: validProfile.id,
-        workers: 1,
-      };
-      const { exists } = await import("@tauri-apps/plugin-fs");
-      vi.mocked(exists).mockImplementationOnce(() => new Promise<boolean>(() => undefined));
-      renderAlert();
-      const alert = screen.getByTestId("processing-status-alert");
-      expect(alert.getAttribute("data-state")).toBe("checking");
-      expect(alert).toHaveTextContent(/Checking environment/i);
     });
   });
 
@@ -274,25 +244,6 @@ describe("ProcessingStatusAlert", () => {
   });
 
   describe("warning state", () => {
-    it("shows yellow warning when dataPar.json dir missing", async () => {
-      mockConfig = {
-        subjects: ["sub-001_01"],
-        modules: ["structural"],
-        selectedProfileId: validProfile.id,
-        workers: 1,
-      };
-      mockExistsResult = false;
-      renderAlert();
-      await waitFor(() => {
-        expect(screen.getByTestId("processing-status-alert").getAttribute("data-state")).toBe(
-          "warning",
-        );
-      });
-      expect(
-        screen.getByText(/derivatives\/ExploreASL\/ directory does not exist/i),
-      ).toBeInTheDocument();
-    });
-
     it("shows yellow warning when workers > subjects", async () => {
       mockConfig = {
         subjects: ["sub-001_01"],

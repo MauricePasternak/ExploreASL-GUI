@@ -261,27 +261,27 @@ The system SHALL stream import stdout and stderr as run-correlated raw and struc
 
 ### Requirement: Process lifecycle management
 
-The system SHALL store the import child process identity in native app state. User Stop, project close, project switch, and normal app exit SHALL request platform-appropriate graceful termination, wait up to five seconds, and force termination if the process remains alive. The shutdown operation SHALL report whether the process actually stopped. Project close, project switch, and normal app exit SHALL remain blocked if termination cannot be confirmed. A successful project transition SHALL unregister import listeners, cancel queued log batches, and invalidate post-processing owned by the prior project before another project is hydrated.
+The system SHALL store the active import process scope in native app state; remembered child PIDs SHALL NOT grant termination or recovery authority. User Stop, project close, project switch, and normal app exit SHALL request platform-appropriate graceful termination, wait up to five seconds, then force remaining members of the supported process group or Job Object. Graceful signaling failure SHALL be recorded; successful delivery SHALL only be claimed for validated platform/workload combinations. The shutdown operation SHALL report whether the supported process scope settled. Project close, project switch, and normal app exit SHALL remain blocked if termination cannot be confirmed. A successful project transition SHALL unregister import listeners, cancel queued log batches, and invalidate post-processing owned by the prior project before another project is hydrated.
 
 #### Scenario: User stops import mid-run
 
-- **WHEN** the user clicks "Stop" during a running import
-- **THEN** graceful termination SHALL be requested, force termination SHALL follow after five seconds if needed, and all in-progress subjects SHALL be marked cancelled
+- **WHEN** the user clicks Stop during a running import
+- **THEN** graceful termination SHALL be requested, force termination SHALL follow after five seconds if needed, and all in-progress subjects SHALL be marked cancelled after supported-scope settlement
 
 #### Scenario: User switches project during import
 
-- **WHEN** the user requests project B while project A has an active import
+- **WHEN** project B activation is requested while project A has an active import
 - **THEN** the system SHALL terminate A's import and unregister its listeners before B becomes active
 
 #### Scenario: Import cannot stop during switch
 
-- **WHEN** project A's import cannot be confirmed stopped
+- **WHEN** project A's supported process scope cannot be confirmed stopped
 - **THEN** project switching SHALL fail, project B SHALL NOT become active, and an actionable error SHALL be shown
 
 #### Scenario: App closes during import
 
 - **WHEN** the user closes the app while an import is running
-- **THEN** the app SHALL block exit until termination succeeds and SHALL remain open with an error if termination cannot be confirmed
+- **THEN** the app SHALL block normal exit until supported-scope termination succeeds and SHALL remain open with an error if termination cannot be confirmed
 
 #### Scenario: Prior post-processing resolves late
 
@@ -459,17 +459,22 @@ The native supervisor SHALL record the matching process exit status before compl
 
 ### Requirement: Subprocess kill on app exit
 
-The Rust backend SHALL register a cleanup handler that prevents orphan MATLAB processes. When the Tauri app receives an exit request, the handler SHALL terminate the running MATLAB process using the platform-appropriate signal sequence before allowing exit.
+The Rust backend SHALL retain its normal-exit cleanup handler. On an exit request it SHALL invoke the same in-process process-scope shutdown used by Stop and project transitions, preserving the five-second scientific-worker grace and blocking exit when supported-scope settlement cannot be confirmed. Abrupt native-process death is outside this handler and SHALL use interrupted-run confirmation on restart.
 
 #### Scenario: MATLAB process running on app exit
 
-- **WHEN** the Tauri window is closed while MATLAB is running
-- **THEN** the MATLAB process receives SIGTERM (or CTRL_BREAK_EVENT on Windows), followed by SIGKILL after 5s if still alive, then the app exits
+- **WHEN** the Tauri application receives a normal exit request while MATLAB is running
+- **THEN** native shutdown SHALL signal its process group or Job Object, preserve the five-second grace, force remaining supported-scope members, and allow exit only after settlement
 
 #### Scenario: No MATLAB process running on app exit
 
-- **WHEN** the Tauri window is closed and no MATLAB process is running
-- **THEN** the app exits immediately without delay
+- **WHEN** the Tauri window is closed and no import process scope is active
+- **THEN** the app SHALL exit immediately without delay
+
+#### Scenario: Native process exits abnormally
+
+- **WHEN** the native application dies without running its exit handler
+- **THEN** the system SHALL make no automatic worker-termination claim and SHALL require interruption confirmation on the next activation
 
 ### Requirement: Debug mode (Preserve staging directory)
 
@@ -633,16 +638,16 @@ For each selected subject, native finalization SHALL verify a regular, non-symli
 
 Before import preparation mutates staging, native code SHALL atomically persist a versioned project-local run record containing enough relative, validated ownership and plan evidence to classify interrupted work and resume idempotent finalization. It SHALL durably record process exit evidence before treating it as finalization authority and durably record terminal outcome before notifying the frontend. Live PID values SHALL NOT be trusted after native application restart.
 
-On project activation, a `Preparing` or `Running` record without a still-owned in-process supervisor SHALL become `Interrupted` and preserve staging. A valid `Finalizing` record with durable exit and completion evidence SHALL resume safe cleanup/relocation using the existing relocation journal. A terminal record SHALL be replayed until the frontend has reconciled and successfully persisted matching project state, then explicitly acknowledges that exact run. Acknowledgement SHALL be idempotent and SHALL never remove unresolved recovery evidence.
+On project activation, a Preparing, Running, or Cancelling record without a matching in-process supervisor SHALL become Interrupted, preserve staging, and require external-stop confirmation before new execution. It SHALL NOT resume mutation or infer completion from process absence. After confirmation, a valid Finalizing record with durable exit and completion evidence SHALL resume safe cleanup/relocation using the existing relocation journal. A terminal record SHALL be replayed until the frontend has reconciled and successfully persisted matching project state, then explicitly acknowledges that exact run. Acknowledgement SHALL be idempotent and SHALL never remove unresolved recovery evidence.
 
 #### Scenario: Application stops during running import
 
-- **WHEN** activation finds a durable `Running` record but no trustworthy native supervisor ownership remains
-- **THEN** the run SHALL become `Interrupted`, staging SHALL remain available, and no completion SHALL be inferred from leftover output alone
+- **WHEN** activation finds a durable Running record but no current in-process supervisor
+- **THEN** the run SHALL become Interrupted, staging SHALL remain available, replacement execution SHALL require confirmation, and no completion SHALL be inferred from leftover output
 
 #### Scenario: Application stops during finalization
 
-- **WHEN** activation finds valid durable process-exit and finalization evidence for an unfinished run
+- **WHEN** activation finds valid durable process-exit and finalization evidence for an unfinished run after external-stop confirmation
 - **THEN** native recovery SHALL resume or complete idempotent verification and relocation before exposing the authoritative result
 
 #### Scenario: Frontend misses terminal event
@@ -653,9 +658,41 @@ On project activation, a `Preparing` or `Running` record without a still-owned i
 #### Scenario: Project persistence fails
 
 - **WHEN** the frontend applies a terminal snapshot but saving matching project completion state fails
-- **THEN** it SHALL not acknowledge the run and the terminal snapshot SHALL remain replayable
+- **THEN** it SHALL NOT acknowledge the run and the terminal snapshot SHALL remain replayable
 
 #### Scenario: Matching terminal result is acknowledged
 
 - **WHEN** matching terminal state has been persisted and the frontend acknowledges the exact run
-- **THEN** native code SHALL safely retire replay metadata while preserving committed project artifacts and any required diagnostic or recovery data
+- **THEN** native code SHALL safely retire replay metadata while preserving committed project artifacts and unresolved recovery data
+
+### Requirement: In-process import supervision
+
+Import SHALL use the same native in-process process-scope mechanism as processing while retaining import-specific verification, relocation, cancellation, released journal compatibility, and terminal replay. Linux and macOS SHALL use POSIX process groups; Windows SHALL use Job Objects. Renderer death SHALL NOT stop native import completion. Native process death SHALL follow Honest abnormal-interruption recovery and SHALL NOT trigger persisted-PID adoption.
+
+Import stdout and stderr SHALL be drained concurrently into the existing parser and run-correlated event path. Captured output SHALL remain transient; no guardian spool, diagnostic-capacity authority, retention receipt, or durable quiescence record SHALL be created.
+
+#### Scenario: Renderer reloads during import
+
+- **WHEN** the renderer reloads while native import supervision remains alive
+- **THEN** import SHALL continue and the renderer SHALL attach to the current run without launching another worker
+
+#### Scenario: Import output uses both streams
+
+- **WHEN** an import worker writes stdout and stderr while running
+- **THEN** both streams SHALL continue draining without pipe deadlock and parser events SHALL remain correlated to the exact import run
+
+### Requirement: Interrupted import requires confirmation
+
+An import record found in Preparing, Running, or Cancelling without matching in-process ownership SHALL become Interrupted and preserve staging, captured domain evidence, verified commits, and relocation state. Project viewing MAY continue, but import and processing admission SHALL remain blocked until the user confirms the external worker has stopped. Confirmation SHALL NOT signal a persisted PID and SHALL NOT infer successful import.
+
+Unshipped import records containing guardian containment fields SHALL reject without mutation and direct the user to settle them with the checkpoint build or restore a verified clean project copy. Released pre-guardian records without those fields SHALL retain existing readability.
+
+#### Scenario: App restarts after import interruption
+
+- **WHEN** activation finds a nonterminal import record without a current native supervisor
+- **THEN** it SHALL publish Interrupted, preserve staging, and require external-stop confirmation before replacement execution
+
+#### Scenario: User confirms interrupted import stopped
+
+- **WHEN** the user confirms the exact interrupted import after checking operating-system process tools
+- **THEN** native recovery SHALL continue import-owned cleanup/replay without signaling a remembered process identity

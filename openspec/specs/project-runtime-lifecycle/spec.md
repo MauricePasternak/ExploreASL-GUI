@@ -167,3 +167,55 @@ A valid unfinished finalization SHALL complete idempotently before hydration. A 
 
 - **WHEN** a valid project has no native import run metadata
 - **THEN** activation SHALL continue to normal hydration and committed-artifact status reconstruction
+
+### Requirement: Single-instance project activation
+
+The application SHALL establish single-instance ownership before other plugins initialize. Native project activation SHALL create one confined active-project capability before recovery and hydration, then reconcile processing and import records before publishing the project as active. Existing project-transition shutdown and stale-generation isolation SHALL remain enforced. A second matching application launch SHALL focus or restore the existing main window and exit before activation or mutation.
+
+The product SHALL support one application process and one active project per user session. Concurrent access from another login, host, shared mount, differently identified build, or unsupported package sandbox SHALL remain outside the contract; no cross-process project file lease SHALL be claimed.
+
+#### Scenario: Second application launch
+
+- **WHEN** the user starts a matching application while one is already running in the same user session
+- **THEN** the existing main window SHALL receive focus and the second process SHALL exit before project work
+
+#### Scenario: Project switch waits for old runtime
+
+- **WHEN** project B activation starts while project A owns import, processing, watcher, save, or asynchronous presentation work
+- **THEN** project B SHALL NOT hydrate until project A's supported in-process resources settle or shutdown rejects
+
+### Requirement: Interrupted execution before activation
+
+Activation SHALL distinguish current in-process ownership from a durable nonterminal record left by a prior native process. Current ownership SHALL remain attachable across renderer reload. Prior-process work SHALL become Interrupted, preserve scientific and recovery artifacts, allow project viewing, and block import/processing admission until exact user confirmation that external MATLAB/Apptainer work has stopped. Activation SHALL NOT signal remembered process identities.
+
+Settled moved projects SHALL bind stable project identity to the newly opened root without consulting the old path. Copied unresolved records SHALL follow the same confirmation-required interruption policy and SHALL NOT authorize automatic mutation from matching UUIDs alone. Unsupported durable versions or guardian-bound development records SHALL preserve their bytes and reject writable recovery with checkpoint-build or verified-copy guidance.
+
+#### Scenario: Processing interruption discovered
+
+- **WHEN** a candidate project has a nonterminal processing record but no current in-process supervisor
+- **THEN** activation SHALL expose Interrupted confirmation state, preserve files, allow viewing, and block replacement execution
+
+#### Scenario: Renderer reload retains active native run
+
+- **WHEN** the renderer reloads while the native supervisor still owns the run
+- **THEN** activation/attachment SHALL keep the active lifecycle and SHALL NOT require external-stop confirmation
+
+#### Scenario: Project switched after terminal publication
+
+- **WHEN** project transition begins with unacknowledged terminal state
+- **THEN** transition SHALL coordinate metadata save/acknowledgement and resource settlement before clearing the old active-project capability
+
+#### Scenario: Moved project contains acknowledged history
+
+- **WHEN** a settled project opens from a new root with acknowledged processing request bindings
+- **THEN** activation SHALL use the new root and stable project identity without treating old paths as authority
+
+#### Scenario: Copied project contains unresolved run
+
+- **WHEN** a copied project retains a nonterminal run with no current in-process owner
+- **THEN** activation SHALL preserve it and require external-stop confirmation before recovery or execution
+
+#### Scenario: Version-aware build cannot read active authority
+
+- **WHEN** a candidate contains a durable format unsupported by the opening build
+- **THEN** writable recovery/execution SHALL fail with compatible-build guidance without deleting the record

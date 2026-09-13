@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../lib/processingEvents", () => ({
-  stopWatcher: vi.fn(() => Promise.resolve()),
-}));
-
 import { ProjectFileSchema } from "../schemas/project";
 import { deriveDisagreements, useManifestStore } from "../stores/manifestStore";
 import { useProjectStore } from "../stores/projectStore";

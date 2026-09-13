@@ -185,29 +185,23 @@ vi.mock("@tauri-apps/api/core", () => ({
           createdAtMs: 1,
           updatedAtMs: 1,
           subjectOutcomes: [],
+          confirmationRequired: false,
           ...(lifecycle === "cancelled" ? { terminalResult: "cancelled" } : {}),
         });
       }
       case "get_active_run":
         return Promise.resolve(null);
       case "reserve_processing_run":
-      case "watch_lock_dir":
       case "run_pipeline":
       case "attach_run":
-      case "fail_processing_run":
-      case "finalize_processing_run":
       case "kill_pipeline": {
         const args = _args ?? {};
         const lifecycle =
-          cmd === "reserve_processing_run" || cmd === "watch_lock_dir"
+          cmd === "reserve_processing_run"
             ? "preparing"
-            : cmd === "fail_processing_run"
-              ? "failed"
-              : cmd === "kill_pipeline"
-                ? "cancelled"
-                : cmd === "finalize_processing_run"
-                  ? ((args.outcome as string | undefined) ?? "completed")
-                  : "running";
+            : cmd === "kill_pipeline"
+              ? "cancelled"
+              : "running";
         return Promise.resolve({
           runId: (args.runId as string | undefined) ?? "test-processing-run",
           lifecycle,
@@ -215,12 +209,29 @@ vi.mock("@tauri-apps/api/core", () => ({
           selectedModules: (args.selectedModules as string[] | undefined) ?? [],
           selectedSubjectSessions: (args.selectedSubjectSessions as string[] | undefined) ?? [],
           startTime: 1,
-          workers: lifecycle === "running" ? [12345] : [],
-          exitEvidence: [],
-          watcherOwned: cmd === "watch_lock_dir",
-          ...(lifecycle === "failed" || lifecycle === "completed" || lifecycle === "cancelled"
-            ? { terminalResult: lifecycle }
-            : {}),
+          revision: 1,
+          requestId: "12345678-1234-4234-8234-123456789002",
+          expectedTargets: [],
+          logicalExits: [],
+          workerCount: 1,
+          error: null,
+          availableAction: lifecycle === "cancelled" ? "acknowledge" : "stop",
+          terminalSummary:
+            lifecycle === "cancelled"
+              ? {
+                  result: "cancelled",
+                  executionCommitted: true,
+                  populationCompleted: false,
+                  profileId: "test-profile",
+                  exploreAslVersion: null,
+                }
+              : null,
+          terminalRevision: lifecycle === "cancelled" ? 1 : null,
+          executionCommitted: true,
+          populationExecutionCommitted: false,
+          versions: null,
+          populationReadyMtimeMs: null,
+          ...(lifecycle === "cancelled" ? { terminalResult: lifecycle } : {}),
         });
       }
       case "preflight_staging_plan":

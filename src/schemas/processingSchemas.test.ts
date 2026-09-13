@@ -329,9 +329,19 @@ describe("native processing-run wire schemas", () => {
     selectedModules: ["structural", "asl"],
     selectedSubjectSessions: ["sub-001_01"],
     startTime: 1_700_000_000_000,
-    workers: [101, 202],
-    exitEvidence: [{ pid: 99, exitCode: 1 }],
-    watcherOwned: true,
+    revision: 1,
+    requestId: "12345678-1234-4234-8234-123456789002",
+    expectedTargets: [],
+    logicalExits: [],
+    workerCount: 2,
+    error: null,
+    availableAction: "stop",
+    terminalSummary: null,
+    terminalRevision: null,
+    executionCommitted: false,
+    populationExecutionCommitted: false,
+    versions: null,
+    populationReadyMtimeMs: null,
   };
 
   it.each([
@@ -356,6 +366,9 @@ describe("native processing-run wire schemas", () => {
       }),
     ).toMatchObject({ terminalResult: "completed" });
     expect(() => ProcessingRunSnapshotSchema.parse({ ...snapshot, unexpected: true })).toThrow();
+    expect(() =>
+      ProcessingRunSnapshotSchema.parse({ ...snapshot, pendingLaunchFailure: "obsolete" }),
+    ).toThrow();
   });
 
   it.each([StatusFileCreatedPayloadSchema, LockCreatedPayloadSchema, LockRemovedPayloadSchema])(
@@ -364,6 +377,16 @@ describe("native processing-run wire schemas", () => {
       expect(() => schema.parse({ module: "xASL_module_ASL" })).toThrow();
     },
   );
+
+  it("accepts interrupted recovery confirmation", () => {
+    expect(
+      ProcessingRunSnapshotSchema.parse({
+        ...snapshot,
+        lifecycle: "interrupted",
+        availableAction: "confirmStopped",
+      }).availableAction,
+    ).toBe("confirmStopped");
+  });
 });
 
 // ---------------------------------------------------------------------------

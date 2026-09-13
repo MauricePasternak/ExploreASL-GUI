@@ -118,17 +118,19 @@ pub struct ImportRunSnapshot {
     pub error: Option<ImportStructuredError>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_result: Option<ImportTerminalResult>,
+    #[serde(default)]
+    pub confirmation_required: bool,
 }
 
-#[derive(Debug)]
 pub struct ImportState {
     pub lifecycle: ImportLifecycle,
     pub ownership_generation: u64,
     /// Native generated ID. PID and frontend request IDs are never authority.
     pub run_id: String,
-    pub child_pid: Option<u32>,
+    pub launch_in_progress: bool,
+    /// Transient only. No process identity or containment proof enters records.
+    pub cancellation: Option<easl_execution_runtime::process::CancellationToken>,
     pub supervisor_handle: Option<thread::JoinHandle<()>>,
-    pub termination_requested_for: Option<u32>,
     pub staging_root: PathBuf,
     pub project_root: PathBuf,
     pub subject_list: Vec<String>,
@@ -147,6 +149,7 @@ pub struct ImportState {
     pub relocation_outcome: Option<super::relocation::RelocationOutcome>,
     pub error: Option<ImportStructuredError>,
     pub terminal_result: Option<ImportTerminalResult>,
+    pub confirmation_required: bool,
     pub acknowledged: bool,
 }
 
@@ -156,9 +159,9 @@ impl ImportState {
             lifecycle: ImportLifecycle::Preparing,
             ownership_generation: 0,
             run_id: String::new(),
-            child_pid: None,
+            launch_in_progress: false,
+            cancellation: None,
             supervisor_handle: None,
-            termination_requested_for: None,
             staging_root,
             project_root,
             subject_list,
@@ -175,6 +178,7 @@ impl ImportState {
             relocation_outcome: None,
             error: None,
             terminal_result: None,
+            confirmation_required: false,
             acknowledged: false,
         }
     }
@@ -186,9 +190,9 @@ impl Default for ImportState {
             lifecycle: ImportLifecycle::Idle,
             ownership_generation: 0,
             run_id: String::new(),
-            child_pid: None,
+            launch_in_progress: false,
+            cancellation: None,
             supervisor_handle: None,
-            termination_requested_for: None,
             staging_root: PathBuf::new(),
             project_root: PathBuf::new(),
             subject_list: Vec::new(),
@@ -205,6 +209,7 @@ impl Default for ImportState {
             relocation_outcome: None,
             error: None,
             terminal_result: None,
+            confirmation_required: false,
             acknowledged: false,
         }
     }
@@ -232,6 +237,7 @@ impl ImportState {
             relocation_outcome: self.relocation_outcome.clone(),
             error: self.error.clone(),
             terminal_result: self.terminal_result.clone(),
+            confirmation_required: self.confirmation_required,
         }
     }
 

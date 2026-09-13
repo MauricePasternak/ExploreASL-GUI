@@ -1,9 +1,9 @@
 use super::*;
-use crate::import::{ImportLifecycle, RESERVED_IMPORT_PID};
+use crate::import::ImportLifecycle;
 use crate::processing::{ProcessState, ProcessingLifecycle, ProcessingRun};
-use std::cell::Cell;
 use std::path::PathBuf;
 use std::sync::mpsc;
+use std::{thread, time::Duration};
 
 fn run(root: &str, lifecycle: ProcessingLifecycle) -> ProcessingRun {
     let mut run = ProcessingRun::new(
@@ -17,12 +17,8 @@ fn run(root: &str, lifecycle: ProcessingLifecycle) -> ProcessingRun {
 }
 
 #[test]
-fn shutdown_releases_preparing_and_terminal_run_records() {
-    for lifecycle in [
-        ProcessingLifecycle::Preparing,
-        ProcessingLifecycle::Completed,
-        ProcessingLifecycle::Failed,
-    ] {
+fn shutdown_releases_settled_unpinned_terminal_run_records() {
+    for lifecycle in [ProcessingLifecycle::Completed, ProcessingLifecycle::Failed] {
         let state = AppState::default();
         state.processing_state.lock().unwrap().current_run = Some(run("/project", lifecycle));
         let result = shutdown_project_runtime_impl(&state);
@@ -38,7 +34,7 @@ fn watcher_shutdown_joins_thread_and_releases_watcher_owned_run() {
     let handle = thread::spawn(move || {
         let _ = stop_rx.recv();
     });
-    let mut processing_run = run("/project-a", ProcessingLifecycle::Running);
+    let mut processing_run = run("/project-a", ProcessingLifecycle::Completed);
     processing_run.watcher_owned = true;
     let mut processing_state = state.processing_state.lock().unwrap();
     processing_state.current_run = Some(processing_run);
@@ -96,82 +92,18 @@ fn watcher_failure_retains_run_ownership_for_retry() {
 }
 
 #[test]
-fn pending_launch_failure_shutdown_releases_processing_ownership() {
+fn shutdown_without_owned_resources_succeeds() {
     let state = AppState::default();
-    let mut pending = run("/project-a", ProcessingLifecycle::Running);
-    pending.pending_launch_failure = Some("worker 2 spawn failed".to_string());
-    state.processing_state.lock().unwrap().current_run = Some(pending);
-
-    let result = shutdown_project_runtime_impl(&state);
-    assert!(result.success);
+    assert!(shutdown_project_runtime_impl(&state).success);
     assert!(state.processing_state.lock().unwrap().current_run.is_none());
 }
 
 #[cfg(unix)]
 #[test]
-fn invalid_worker_pid_fails_without_process_operations_and_retains_ownership() {
-    let state = AppState::default();
-    let mut processing_run = run("/project-a", ProcessingLifecycle::Running);
-    processing_run.workers.insert(u32::MAX);
-    state.processing_state.lock().unwrap().current_run = Some(processing_run);
-    let existence_called = Cell::new(false);
-    let signal_called = Cell::new(false);
-    let force_called = Cell::new(false);
-
-    let result = shutdown_project_runtime_with(
-        &state,
-        |_| ResourceShutdown::success(),
-        |state| {
-            shutdown_workers_with(
-                state,
-                |_| {
-                    existence_called.set(true);
-                    Ok(true)
-                },
-                |_| {
-                    signal_called.set(true);
-                    Ok(())
-                },
-                |_| {
-                    force_called.set(true);
-                    Ok(())
-                },
-            )
-        },
-        |_| ResourceShutdown::success(),
-    );
-
-    assert!(!result.success);
-    assert!(!result.processing_workers.success);
-    assert!(
-        result
-            .processing_workers
-            .error
-            .unwrap()
-            .contains("exceeds the Unix positive PID range")
-    );
-    assert!(!existence_called.get());
-    assert!(!signal_called.get());
-    assert!(!force_called.get());
-    let processing_state = state.processing_state.lock().unwrap();
-    assert_eq!(
-        processing_state
-            .current_run
-            .as_ref()
-            .unwrap()
-            .workers
-            .iter()
-            .copied()
-            .collect::<Vec<_>>(),
-        vec![u32::MAX]
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn invalid_import_pid_fails_without_stop_call_and_retains_ownership() {
+fn unmanaged_import_fails_shutdown_and_retains_ownership() {
     let state = AppState::default();
     let workspace = tempfile::tempdir().unwrap();
+    crate::project_ownership_tests::own_project(&state, workspace.path());
     {
         let mut import_state = state.import_state.lock().unwrap();
         import_state.run_id = "import-run-1".to_string();
@@ -179,7 +111,7 @@ fn invalid_import_pid_fails_without_stop_call_and_retains_ownership() {
         import_state.staging_generation = "staging-gen-1".to_string();
         import_state.subject_list = vec!["sub-01".to_string()];
         import_state.lifecycle = ImportLifecycle::Running;
-        import_state.child_pid = Some(u32::MAX);
+
         import_state.project_root = workspace.path().to_path_buf();
     }
 
@@ -197,47 +129,15 @@ fn invalid_import_pid_fails_without_stop_call_and_retains_ownership() {
             .import_process
             .error
             .unwrap()
-            .contains("exceeds the Unix positive PID range")
+            .contains("external-stop confirmation")
     );
     let import_state = state.import_state.lock().unwrap();
-    assert_eq!(import_state.child_pid, Some(u32::MAX));
+    assert!(import_state.cancellation.is_none());
     assert_eq!(import_state.project_root, workspace.path().to_path_buf());
-    assert_eq!(import_state.lifecycle, ImportLifecycle::Running);
+    assert_eq!(import_state.lifecycle, ImportLifecycle::Cancelling);
 }
 
 #[cfg(unix)]
-#[test]
-fn pending_launch_failure_shutdown_reaps_live_worker_and_supervisor() {
-    let state = AppState::default();
-    let mut child = std::process::Command::new("sleep")
-        .arg("60")
-        .spawn()
-        .expect("sleep worker should spawn");
-    let pid = child.id();
-    let supervisor = thread::spawn(move || {
-        let _ = child.wait();
-    });
-    let mut pending = run("/project-a", ProcessingLifecycle::Running);
-    pending.workers.insert(pid);
-    pending.pending_launch_failure = Some("worker 2 spawn failed".to_string());
-    let mut processing_state = state.processing_state.lock().unwrap();
-    processing_state.current_run = Some(pending);
-    processing_state
-        .worker_supervisors
-        .push(crate::processing::WorkerSupervisor {
-            run_id: "run-1".to_string(),
-            handle: supervisor,
-        });
-    drop(processing_state);
-
-    let result = shutdown_project_runtime_impl(&state);
-    assert!(result.success, "{result:?}");
-    let processing_state = state.processing_state.lock().unwrap();
-    assert!(processing_state.current_run.is_none());
-    assert!(processing_state.worker_supervisors.is_empty());
-    assert!(!process_exists(pid).expect("owned child existence check should succeed"));
-}
-
 #[test]
 fn process_state_retains_run_not_pid_or_project_fields() {
     let state = ProcessState::default();
@@ -260,10 +160,25 @@ fn shutdown_result_serializes_command_contract_in_camel_case() {
 }
 
 #[test]
+fn native_exit_decision_covers_idle_success_intercepted_success_and_failure() {
+    for (import, processing, expected) in [
+        (Ok(false), Ok(false), NativeExitDecision::Allow),
+        (Ok(true), Ok(false), NativeExitDecision::PreventThenExit),
+        (
+            Err("cannot stop import".to_string()),
+            Ok(false),
+            NativeExitDecision::Prevent,
+        ),
+    ] {
+        assert_eq!(native_exit_decision(&import, &processing), expected);
+    }
+}
+
+#[test]
 fn preparing_import_failure_retains_import_ownership_for_retry() {
     let state = AppState::default();
     let mut import_state = state.import_state.lock().unwrap();
-    import_state.child_pid = Some(RESERVED_IMPORT_PID);
+    import_state.launch_in_progress = true;
     import_state.project_root = PathBuf::from("/project-a");
     drop(import_state);
     let result = shutdown_project_runtime_impl(&state);
@@ -310,4 +225,57 @@ fn shutdown_waits_for_native_finalization_before_succeeding() {
         state.import_state.lock().unwrap().lifecycle,
         ImportLifecycle::Completed
     );
+}
+
+#[test]
+fn shutdown_reservation_blocks_idle_project_replacement_without_holding_transition_lock() {
+    let state = std::sync::Arc::new(AppState::default());
+    let root = tempfile::tempdir().unwrap();
+    let replacement = tempfile::tempdir().unwrap();
+    crate::project_ownership_tests::own_project(&state, root.path());
+    let (stop, stopped) = mpsc::channel();
+    let (entered, observed) = mpsc::channel();
+    let (release, wait_release) = mpsc::channel();
+    {
+        let mut processing = state.processing_state.lock().unwrap();
+        processing.watcher_stop = Some(stop);
+        processing.watcher_handle = Some(thread::spawn(move || {
+            stopped.recv().unwrap();
+            entered.send(()).unwrap();
+            wait_release.recv().unwrap();
+        }));
+    }
+    let stopping = state.clone();
+    let shutdown = thread::spawn(move || shutdown_project_runtime_impl(&stopping));
+    observed.recv_timeout(Duration::from_secs(3)).unwrap();
+    assert!(state.project_transition.try_lock().is_ok());
+    let error = crate::visualization::set_active_project_impl(
+        replacement.path().display().to_string(),
+        &state,
+    )
+    .unwrap_err();
+    assert!(error.contains("shutdown"));
+    assert!(
+        crate::visualization::clear_active_project_impl(&state)
+            .unwrap_err()
+            .contains("shutdown")
+    );
+    assert!(
+        crate::project_ownership::for_setup(&state, replacement.path())
+            .unwrap_err()
+            .contains("shutdown")
+    );
+    assert_eq!(
+        crate::project_ownership::active(&state).unwrap().root(),
+        root.path()
+    );
+    release.send(()).unwrap();
+    assert!(shutdown.join().unwrap().success);
+    assert!(
+        !state
+            .runtime_shutdown_in_progress
+            .load(std::sync::atomic::Ordering::Acquire)
+    );
+    crate::visualization::set_active_project_impl(replacement.path().display().to_string(), &state)
+        .unwrap();
 }

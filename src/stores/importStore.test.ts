@@ -38,6 +38,7 @@ const nativeSnapshot = (
   createdAtMs: 1,
   updatedAtMs: 2,
   subjectOutcomes: [],
+  confirmationRequired: false,
   ...(["completed", "failed", "cancelled", "interrupted"].includes(lifecycle)
     ? { terminalResult: lifecycle as "completed" | "failed" | "cancelled" | "interrupted" }
     : {}),

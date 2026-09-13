@@ -15,6 +15,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 import {
   attachImportRun,
   clearImportListeners,
+  confirmImportWorkerStopped,
   getActiveImportRun,
   launchImportRun,
   reserveImportRun,
@@ -36,6 +37,7 @@ const snapshot = (
   createdAtMs: 1,
   updatedAtMs,
   subjectOutcomes: [],
+  confirmationRequired: false,
 });
 
 describe("import run protocol", () => {
@@ -69,6 +71,27 @@ describe("import run protocol", () => {
   it("rejects malformed snapshot wire data", async () => {
     invoke.mockResolvedValue({ ...snapshot(), pid: 4 });
     await expect(attachImportRun("import-run-1")).rejects.toThrow();
+  });
+  it("confirms only the exact interrupted import run", async () => {
+    invoke.mockResolvedValue({
+      ...snapshot("completed"),
+      lifecycle: "interrupted",
+      terminalResult: "interrupted",
+      confirmationRequired: false,
+    });
+
+    await expect(confirmImportWorkerStopped("import-run-1")).resolves.toMatchObject({
+      runId: "import-run-1",
+      confirmationRequired: false,
+    });
+    expect(invoke).toHaveBeenCalledWith("confirm_import_worker_stopped", { runId: "import-run-1" });
+
+    invoke.mockResolvedValue({
+      ...snapshot("completed"),
+      runId: "other-run",
+      terminalResult: "completed",
+    });
+    await expect(confirmImportWorkerStopped("import-run-1")).rejects.toThrow("exact interrupted");
   });
   it("ignores parser completion and accepts matching authoritative snapshot", async () => {
     useImportStore.getState().bindImportRunSnapshot(snapshot("running"));

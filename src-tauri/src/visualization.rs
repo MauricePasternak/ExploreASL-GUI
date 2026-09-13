@@ -494,6 +494,8 @@ fn set_active_project_inner(
     let path = std::fs::canonicalize(&root_path)
         .inspect_err(|error| log::error!("set_active_project failed canonicalizing: {error}"))
         .context("Invalid project path")?;
+    let ownership = crate::project_ownership::for_root(state, &path).map_err(anyhow::Error::msg)?;
+    crate::import::recover_processing_before_import(&path)?;
     // BIDS setup recovery is separate from import relocation. A pending setup
     // transaction must settle before this root is made observable as active.
     if let Some(app_data) = state
@@ -502,15 +504,37 @@ fn set_active_project_inner(
         .map_err(|_| anyhow::anyhow!("Setup app-data state lock was poisoned"))?
         .clone()
     {
-        crate::bids::setup::recover_root(&app_data, &path)?;
+        crate::bids::setup::recover_root_after_processing_recovery(&app_data, &ownership)?;
     }
     // Recovery must finish before this candidate can become observable through
     // active-root IPC or frontend hydration.
     let recovery = crate::import::relocation::recover(&path)?;
-    // Import authority is recovered after the relocation journal but before
-    // this candidate root becomes observable to normal output/status calls.
-    crate::import::recover_import_run_for_project(state, &path)?;
-    replace_active_project_state(state, Some(path))?;
+    // Recovery temporarily installs candidate import state for native
+    // finalization. Retain the previous state until every admission gate and
+    // root publication succeeds; a rejected candidate must remain retryable.
+    let (previous_import, previous_processing) = {
+        let mut import = lock_state(&state.import_state, None)?;
+        let mut processing = lock_state(&state.processing_state, None)?;
+        (
+            std::mem::take(&mut *import),
+            std::mem::take(&mut *processing),
+        )
+    };
+    let activation = (|| -> AnyResult<()> {
+        crate::import::recover_import_run_after_processing_recovery(state, &path)?;
+        let record = crate::processing::record::records(&path)?.pop();
+        lock_state(&state.processing_state, None)?.current_run = record
+            .filter(|r| !r.acknowledged)
+            .map(crate::processing::ProcessingRun::from_record);
+        replace_active_project_state(state, Some(ownership.clone()))
+    })();
+    if let Err(error) = activation {
+        let mut import = lock_state(&state.import_state, None)?;
+        let mut processing = lock_state(&state.processing_state, None)?;
+        *import = previous_import;
+        *processing = previous_processing;
+        return Err(error);
+    }
     Ok(recovery)
 }
 
@@ -542,37 +566,21 @@ fn clear_active_project_inner(state: &crate::app_state::AppState) -> AnyResult<(
 /// Direct active-root IPC must not bypass project-runtime shutdown. Frontend
 /// transitions drain/stop first; callers that skip that contract fail closed.
 fn ensure_processing_runtime_released(state: &crate::app_state::AppState) -> AnyResult<()> {
-    let import = lock_state(&state.import_state, Some("Import state lock was poisoned"))?;
-    if !import.run_id.is_empty() && !import.acknowledged {
-        bail!(
-            "Import runtime is still owned; reconcile and acknowledge it before changing projects"
-        );
-    }
-    drop(import);
-    let processing = lock_state(
-        &state.processing_state,
-        Some("Processing state lock was poisoned"),
-    )?;
-    if processing
-        .current_run
-        .as_ref()
-        .is_some_and(|run| !run.lifecycle.is_terminal())
-        || processing.watcher_run_id.is_some()
-        || processing.watcher_stop.is_some()
-        || processing.watcher_handle.is_some()
-        || !processing.worker_supervisors.is_empty()
-    {
-        bail!("Processing runtime is still owned; shut it down before changing projects");
-    }
-    Ok(())
+    crate::project_ownership::ensure_import_released(state).map_err(anyhow::Error::msg)?;
+    crate::project_ownership::ensure_processing_released(state).map_err(anyhow::Error::msg)
 }
 
 fn replace_active_project_state(
     state: &crate::app_state::AppState,
-    active_project_root: Option<PathBuf>,
+    ownership: Option<std::sync::Arc<easl_execution_runtime::project::ActiveProject>>,
 ) -> AnyResult<()> {
-    *lock_state(&state.active_project_root, None)? = active_project_root;
-    *lock_state(&state.active_data, None)? = None;
+    // Obtain every fallible state guard before publishing any replacement.
+    let mut root = lock_state(&state.active_project_root, None)?;
+    let mut active = lock_state(&state.active_project, None)?;
+    let mut data = lock_state(&state.active_data, None)?;
+    *root = ownership.as_ref().map(|lease| lease.root().to_path_buf());
+    *active = ownership;
+    *data = None;
     Ok(())
 }
 

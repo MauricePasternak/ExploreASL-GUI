@@ -1,6 +1,6 @@
 use crate::project_writer::{
     AtomicWriteError, FailurePoint, WriteErrorCategory, atomic_write_project_for_test,
-    cleanup_project_temps,
+    cleanup_project_temps_for_state,
 };
 use std::fs;
 use tempfile::tempdir;
@@ -218,7 +218,7 @@ fn open_time_cleanup_removes_only_writer_owned_stale_temps() {
     fs::write(&stale, b"stale").unwrap();
     fs::write(&unrelated, b"keep").unwrap();
 
-    cleanup_project_temps(project.to_string_lossy().into_owned());
+    cleanup_project_temps_for_state(&crate::app_state::AppState::default(), &project).unwrap();
 
     assert!(!stale.exists());
     assert!(unrelated.exists());

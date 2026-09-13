@@ -248,13 +248,13 @@ fn run_scoped_compatibility_verification_requires_the_exact_preparing_reservatio
     )
     .unwrap();
     let state = AppState::default();
-    *state.active_project_root.lock().unwrap() = Some(root.path().canonicalize().unwrap());
+    crate::project_ownership_tests::own_project(&state, &root.path().canonicalize().unwrap());
     let reserved = reserve_processing_run_impl(&state, vec!["structural".into()], vec![]).unwrap();
     verify_bids_compatibility_for_run_impl(&state, &reserved.run_id).unwrap();
     assert!(verify_bids_compatibility_for_run_impl(&state, "obsolete-run").is_err());
     // A replacement active root turns the original reservation foreign.
     let other = TempDir::new().unwrap();
-    *state.active_project_root.lock().unwrap() = Some(other.path().canonicalize().unwrap());
+    crate::project_ownership_tests::own_project(&state, &other.path().canonicalize().unwrap());
     assert!(verify_bids_compatibility_for_run_impl(&state, &reserved.run_id).is_err());
 }
 
@@ -264,7 +264,7 @@ fn repair_root_must_match_native_active_project_ownership() {
     let other = TempDir::new().unwrap();
     let state = AppState::default();
     assert!(verify_active_repair_root(&state, active.path()).is_err());
-    *state.active_project_root.lock().unwrap() = Some(active.path().canonicalize().unwrap());
+    crate::project_ownership_tests::own_project(&state, &active.path().canonicalize().unwrap());
     assert!(verify_active_repair_root(&state, active.path()).is_ok());
     assert!(verify_active_repair_root(&state, other.path()).is_err());
 }

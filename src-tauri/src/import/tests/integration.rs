@@ -99,7 +99,7 @@ mod tests {
                 "exitEvidence": { "exitCode": 0, "successful": true },
                 "subjectOutcomes": [{ "subject": "ONE", "outcome": "committed", "readyLockVerified": true, "rawdataVerified": true, "committed": true }],
                 "error": { "code": "verification", "message": "diagnostic only", "subject": "ONE" },
-                "terminalResult": "completed"
+                "terminalResult": "completed", "confirmationRequired": false
             })
         );
         let json = value.to_string();
@@ -133,6 +133,7 @@ mod tests {
             relocation_outcome: None,
             error: None,
             terminal_result: Some(ImportTerminalResult::Interrupted),
+            confirmation_required: true,
         };
         assert_eq!(
             snapshot.terminal_result,

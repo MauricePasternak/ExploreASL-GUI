@@ -107,7 +107,6 @@ describe("ProcessingPage", () => {
       availableSubjects: DEFAULT_SUBJECTS,
       subjectStatuses: [],
       config: DEFAULT_CONFIG,
-      workerPids: [],
     });
   });
 
@@ -260,9 +259,9 @@ describe("ProcessingPage", () => {
       });
     });
 
-    it("disables Start button until preflight reports", () => {
+    it("enables Start synchronously when pure request preflight passes", () => {
       renderPage();
-      expect(screen.getByTestId("start-btn")).toBeDisabled();
+      expect(screen.getByTestId("start-btn")).toBeEnabled();
     });
   });
 

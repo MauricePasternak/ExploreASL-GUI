@@ -6,14 +6,19 @@
 use super::relocation::project_identity;
 use super::relocation::{RelocationOutcome, RelocationPlan, RelocationSubjectStatus};
 use super::types::{ImportLifecycle, ImportRunSnapshot, ImportState};
+use crate::fs_safety::{ProjectDirectory, ProjectRelativePath};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
+#[cfg(test)]
+use std::fs;
 use std::io::Write;
-use std::path::{Component, Path, PathBuf};
+#[cfg(test)]
+use std::path::PathBuf;
+use std::path::{Component, Path};
 
 pub const IMPORT_RUN_RECORD_VERSION: u32 = 1;
 const RECORD_NAME: &str = "import-run.json";
+const RECORD_RELATIVE_PATH: &str = "derivatives/ExploreASL_GUI/import-run.json";
 
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,6 +30,7 @@ pub(crate) enum RecordFaultPoint {
     Rename,
     ParentSync,
     Remove,
+    RemoveParentSync,
 }
 
 #[cfg(test)]
@@ -33,6 +39,40 @@ thread_local! {
         std::cell::Cell::new(None)
     };
     static RECORD_FAULT_SKIPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static RECORD_PUBLISH_SWAP: std::cell::RefCell<Option<(PathBuf, PathBuf)>> = const {
+        std::cell::RefCell::new(None)
+    };
+}
+
+#[cfg(test)]
+pub(crate) fn swap_record_parent_before_publish(project_root: PathBuf, foreign_parent: PathBuf) {
+    RECORD_PUBLISH_SWAP.with(|swap| *swap.borrow_mut() = Some((project_root, foreign_parent)));
+}
+
+#[cfg(test)]
+fn apply_record_parent_swap() {
+    let Some((project_root, foreign_parent)) =
+        RECORD_PUBLISH_SWAP.with(|swap| swap.borrow_mut().take())
+    else {
+        return;
+    };
+    let live_parent = project_root.join("derivatives/ExploreASL_GUI");
+    let moved_parent = project_root.join("derivatives/.record-parent-moved");
+    fs::rename(&live_parent, &moved_parent).unwrap();
+    let candidate = fs::read_dir(&moved_parent)
+        .unwrap()
+        .map(Result::unwrap)
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(".import-run.json.") && name.ends_with(".tmp"))
+        })
+        .unwrap();
+    let candidate_name = candidate.file_name().unwrap();
+    fs::rename(&candidate, foreign_parent.join(candidate_name)).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&foreign_parent, &live_parent).unwrap();
 }
 
 #[cfg(test)]
@@ -109,88 +149,12 @@ pub fn record_path(project_root: &Path) -> PathBuf {
         .join(RECORD_NAME)
 }
 
-/// Return the record parent only after proving every component below the
-/// project root is a real directory.  Run metadata is an authority boundary;
-/// following a user-created `derivatives` symlink here could write, read, or
-/// remove a record outside the active project.
-fn ensure_record_parent(project_root: &Path) -> Result<PathBuf> {
-    let root_metadata = fs::symlink_metadata(project_root)
-        .with_context(|| format!("Failed to inspect project root {}", project_root.display()))?;
-    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
-        bail!("Import run record project root must be a real directory");
-    }
-    let root = fs::canonicalize(project_root).with_context(|| {
-        format!(
-            "Failed to canonicalize project root {}",
-            project_root.display()
-        )
-    })?;
-    let mut parent = root;
-    for component in ["derivatives", "ExploreASL_GUI"] {
-        parent.push(component);
-        match fs::symlink_metadata(&parent) {
-            Ok(metadata) if !metadata.file_type().is_symlink() && metadata.is_dir() => {}
-            Ok(_) => bail!(
-                "Import run record parent is not a real directory: {}",
-                parent.display()
-            ),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                fs::create_dir(&parent)
-                    .with_context(|| format!("Failed to create {}", parent.display()))?;
-                let metadata = fs::symlink_metadata(&parent)
-                    .with_context(|| format!("Failed to verify {}", parent.display()))?;
-                if metadata.file_type().is_symlink() || !metadata.is_dir() {
-                    bail!("Import run record parent is unsafe: {}", parent.display());
-                }
-            }
-            Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("Failed to inspect {}", parent.display()));
-            }
-        }
-    }
-    Ok(parent)
+fn record_parent_relative_path() -> Result<ProjectRelativePath> {
+    ProjectRelativePath::new("derivatives/ExploreASL_GUI").map_err(Into::into)
 }
 
-fn checked_record_path(project_root: &Path, create_parent: bool) -> Result<PathBuf> {
-    let parent = if create_parent {
-        ensure_record_parent(project_root)?
-    } else {
-        let root_metadata = fs::symlink_metadata(project_root).with_context(|| {
-            format!("Failed to inspect project root {}", project_root.display())
-        })?;
-        if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
-            bail!("Import run record project root must be a real directory");
-        }
-        let root = fs::canonicalize(project_root).with_context(|| {
-            format!(
-                "Failed to canonicalize project root {}",
-                project_root.display()
-            )
-        })?;
-        let mut parent = root;
-        for component in ["derivatives", "ExploreASL_GUI"] {
-            parent.push(component);
-            match fs::symlink_metadata(&parent) {
-                Ok(metadata) if !metadata.file_type().is_symlink() && metadata.is_dir() => {}
-                Ok(_) => {
-                    bail!(
-                        "Import run record parent is not a real directory: {}",
-                        parent.display()
-                    )
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(parent.join(RECORD_NAME));
-                }
-                Err(error) => {
-                    return Err(error)
-                        .with_context(|| format!("Failed to inspect {}", parent.display()));
-                }
-            }
-        }
-        parent
-    };
-    Ok(parent.join(RECORD_NAME))
+fn record_relative_path() -> Result<ProjectRelativePath> {
+    ProjectRelativePath::new(RECORD_RELATIVE_PATH).map_err(Into::into)
 }
 
 fn validate_component(value: &str, label: &str) -> Result<()> {
@@ -327,6 +291,11 @@ pub fn validate_record(record: &ImportRunRecord, project_root: &Path) -> Result<
     }
     if record.snapshot.lifecycle.is_terminal() != record.snapshot.terminal_result.is_some() {
         bail!("Import terminal lifecycle and terminal result disagree");
+    }
+    if record.snapshot.confirmation_required
+        && record.snapshot.lifecycle != ImportLifecycle::Interrupted
+    {
+        bail!("Import external-stop confirmation is only valid for an interrupted run");
     }
     if let Some(terminal) = &record.snapshot.terminal_result {
         let agrees = matches!(
@@ -533,33 +502,34 @@ pub(crate) fn validate_relocation_recovery_authority(
     }
 }
 
-/// Candidate + flush + verify + atomic rename.  Existing valid data remains
-/// visible if creation, writing, syncing, verification, or rename fails.
+/// Candidate + flush + verify + atomic rename. Failures before replacement
+/// preserve prior visible bytes. A parent-sync failure after replacement leaves
+/// the installed record visible and reports uncertain durability.
 pub fn write_record(project_root: &Path, record: &ImportRunRecord) -> Result<()> {
     validate_record(record, project_root)?;
-    let path = checked_record_path(project_root, true)?;
-    let parent = path.parent().context("Import record has no parent")?;
-    if let Ok(metadata) = fs::symlink_metadata(&path)
-        && (metadata.file_type().is_symlink() || !metadata.is_file())
-    {
-        bail!("Import run record must be a regular file");
-    }
-    let temp = parent.join(format!(".{RECORD_NAME}.{}.tmp", uuid::Uuid::new_v4()));
-    let prior = match fs::read(&path) {
-        Ok(bytes) => Some(bytes),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error).context("Failed to read prior import run record"),
-    };
+    let authority = ProjectDirectory::open(project_root).with_context(|| {
+        format!(
+            "Failed to open project record authority {}",
+            project_root.display()
+        )
+    })?;
+    let record_parent = record_parent_relative_path()?;
+    authority
+        .create_dir_all(&record_parent)
+        .context("Failed to create import run record parent")?;
+    let record_relative = record_relative_path()?;
+    let temp_relative = ProjectRelativePath::new(format!(
+        "derivatives/ExploreASL_GUI/.{RECORD_NAME}.{}.tmp",
+        uuid::Uuid::new_v4()
+    ))?;
     let contents =
         serde_json::to_vec_pretty(record).context("Failed to encode import run record")?;
     let write_result = (|| -> Result<()> {
         #[cfg(test)]
         fail(RecordFaultPoint::CandidateCreate)?;
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .with_context(|| format!("Failed to create {}", temp.display()))?;
+        let mut file = authority
+            .create_new_file(&temp_relative)
+            .context("Failed to create import run record candidate")?;
         #[cfg(test)]
         fail(RecordFaultPoint::Write)?;
         file.write_all(&contents)
@@ -570,104 +540,100 @@ pub fn write_record(project_root: &Path, record: &ImportRunRecord) -> Result<()>
             .context("Failed to flush import run record")?;
         #[cfg(test)]
         fail(RecordFaultPoint::Verification)?;
-        let reread = fs::read(&temp).context("Failed to verify import run record")?;
+        let reread = authority
+            .read_regular(&temp_relative)
+            .context("Failed to verify import run record")?;
         let verified: ImportRunRecord = serde_json::from_slice(&reread)
             .context("Failed to decode verified import run record")?;
         validate_record(&verified, project_root)?;
         #[cfg(test)]
         fail(RecordFaultPoint::Rename)?;
-        if path
-            .try_exists()
-            .context("Failed to inspect prior import run record")?
-        {
-            super::relocation::atomic_replace(&temp, &path)
-        } else {
-            super::relocation::rename_no_replace(&temp, &path)
-        }
-        .with_context(|| format!("Failed to replace {}", path.display()))?;
         #[cfg(test)]
-        fail(RecordFaultPoint::ParentSync).inspect_err(|_| {
-            let _ = restore_prior_record(parent, &path, prior.as_deref());
-        })?;
-        if let Err(error) = super::relocation::sync_parent_durable(parent) {
-            restore_prior_record(parent, &path, prior.as_deref()).with_context(|| {
-                format!("Parent sync failed ({error:#}) and prior record restoration failed")
-            })?;
-            return Err(error);
+        apply_record_parent_swap();
+        match authority.rename_regular_file_no_replace(&temp_relative, &record_relative) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                authority.replace_regular_file(&temp_relative, &record_relative)?;
+            }
+            Err(error) => return Err(error.into()),
         }
+        #[cfg(test)]
+        fail(RecordFaultPoint::ParentSync).context(
+            "Import run record replacement has uncertain durability after parent synchronization failure",
+        )?;
+        authority.sync_parent(&record_relative).context(
+            "Import run record replacement has uncertain durability after parent synchronization failure",
+        )?;
         Ok(())
     })();
     if write_result.is_err() {
-        let owned = fs::symlink_metadata(&temp)
-            .ok()
-            .is_some_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
-            && fs::read(&temp).is_ok_and(|bytes| bytes == contents);
+        let owned = authority
+            .read_regular(&temp_relative)
+            .is_ok_and(|bytes| bytes == contents);
         if owned {
-            let _ = fs::remove_file(&temp);
+            let _ = authority.cleanup_owned_candidate(&temp_relative);
         }
     }
     write_result
 }
 
-fn restore_prior_record(parent: &Path, path: &Path, prior: Option<&[u8]>) -> Result<()> {
-    match prior {
-        Some(bytes) => {
-            let restore = parent.join(format!(
-                ".{RECORD_NAME}.restore.{}.tmp",
-                uuid::Uuid::new_v4()
-            ));
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&restore)?;
-            file.write_all(bytes)?;
-            file.sync_all()?;
-            super::relocation::atomic_replace(&restore, path)?;
-        }
-        None => match fs::remove_file(path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
-        },
-    }
-    super::relocation::sync_parent_durable(parent)
-}
-
 pub fn load_record(project_root: &Path) -> Result<Option<ImportRunRecord>> {
-    let path = checked_record_path(project_root, false)?;
-    let metadata = match fs::symlink_metadata(&path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+    let authority = ProjectDirectory::open(project_root).with_context(|| {
+        format!(
+            "Failed to open project record authority {}",
+            project_root.display()
+        )
+    })?;
+    let relative = record_relative_path()?;
+    let bytes = match authority.read_regular(&relative) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            repair_record_parent(&authority, &relative)?;
+            return Ok(None);
+        }
         Err(error) => return Err(error).context("Failed to inspect import run record"),
     };
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        bail!("Import run record must be a regular file");
+    let value: serde_json::Value =
+        serde_json::from_slice(&bytes).context("Malformed import run record")?;
+    if value.get("containment").is_some() {
+        bail!(
+            "Guardian-bound experimental import record: use the compatible checkpoint build to settle/acknowledge it or restore a verified project copy"
+        );
     }
-    let record: ImportRunRecord = serde_json::from_slice(
-        &fs::read(&path).with_context(|| format!("Failed to read {}", path.display()))?,
-    )
-    .context("Malformed import run record")?;
+    let record: ImportRunRecord =
+        serde_json::from_slice(&bytes).context("Malformed import run record")?;
     validate_record(&record, project_root)?;
+    repair_record_parent(&authority, &relative)?;
     Ok(Some(record))
 }
 
 pub fn remove_record(project_root: &Path) -> Result<()> {
-    let path = checked_record_path(project_root, false)?;
-    if let Ok(metadata) = fs::symlink_metadata(&path)
-        && (metadata.file_type().is_symlink() || !metadata.is_file())
-    {
-        bail!("Import run record must be a regular file");
-    }
+    let authority = ProjectDirectory::open(project_root).with_context(|| {
+        format!(
+            "Failed to open project record authority {}",
+            project_root.display()
+        )
+    })?;
+    let relative = record_relative_path()?;
     #[cfg(test)]
     fail(RecordFaultPoint::Remove)?;
-    match fs::remove_file(&path) {
-        Ok(()) => {
-            if let Some(parent) = path.parent() {
-                super::relocation::sync_parent_durable(parent)?;
-            }
-            Ok(())
+    match authority.cleanup_owned_candidate(&relative) {
+        Ok(_) => {
+            #[cfg(test)]
+            fail(RecordFaultPoint::RemoveParentSync)
+                .context("Import terminal removed; durability uncertain")?;
+            repair_record_parent(&authority, &relative)
+                .context("Import terminal removed; durability uncertain")
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error).context("Failed to retire import run record"),
+    }
+}
+
+fn repair_record_parent(authority: &ProjectDirectory, path: &ProjectRelativePath) -> Result<()> {
+    match authority.sync_parent(path) {
+        Ok(_) => Ok(()),
+        // A project with no import authority directory has no record unlink to repair.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
     }
 }

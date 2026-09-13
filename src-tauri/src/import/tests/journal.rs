@@ -1,7 +1,8 @@
 use crate::import::journal::{
     ImportRunRecord, RecordFaultPoint, checkpoint_relocation_outcome, fail_next_record_removal,
-    inject_fault, load_record, record_from_state, record_path, remove_record, validate_record,
-    validate_relocation_recovery_authority, write_record,
+    inject_fault, load_record, record_from_state, record_path, remove_record,
+    swap_record_parent_before_publish, validate_record, validate_relocation_recovery_authority,
+    write_record,
 };
 use crate::import::relocation::{
     RelocationEntry, RelocationEntryKind, RelocationOutcome, RelocationPlan,
@@ -47,6 +48,35 @@ fn record_round_trip_is_strict_relative_and_path_free() {
 }
 
 #[test]
+fn guardian_bound_experimental_record_is_rejected_but_released_field_absent_record_loads() {
+    let temp = tempfile::tempdir().unwrap();
+    let released = record_from_state(&run(temp.path())).unwrap();
+    let mut guardian_bound = serde_json::to_value(&released).unwrap();
+    guardian_bound["containment"] = serde_json::json!({"legacy": true});
+    guardian_bound["snapshot"]
+        .as_object_mut()
+        .unwrap()
+        .remove("confirmationRequired");
+    let bytes = serde_json::to_vec_pretty(&guardian_bound).unwrap();
+    let path = record_path(temp.path());
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, &bytes).unwrap();
+
+    let error = load_record(temp.path()).unwrap_err().to_string();
+    assert!(error.contains("compatible checkpoint build"));
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+
+    let mut released_value = serde_json::to_value(&released).unwrap();
+    released_value["snapshot"]
+        .as_object_mut()
+        .unwrap()
+        .remove("confirmationRequired");
+    fs::write(&path, serde_json::to_vec_pretty(&released_value).unwrap()).unwrap();
+    assert!(load_record(temp.path()).unwrap().is_some());
+    assert!(validate_record(&released, temp.path()).is_ok());
+}
+
+#[test]
 fn record_round_trip_preserves_all_recovery_checkpoints_and_rejects_each_authority_violation() {
     let temp = tempfile::tempdir().unwrap();
     let mut record = finalizing_record(temp.path());
@@ -84,6 +114,9 @@ fn record_round_trip_preserves_all_recovery_checkpoints_and_rejects_each_authori
     r.snapshot.exit_evidence = None;
     invalid.push(r);
     let mut r = record.clone();
+    r.snapshot.confirmation_required = true;
+    invalid.push(r);
+    let mut r = record.clone();
     r.acknowledged = true;
     r.snapshot.lifecycle = ImportLifecycle::Running;
     r.snapshot.terminal_result = None;
@@ -110,8 +143,27 @@ fn failed_replacement_preserves_prior_valid_record() {
     );
 }
 
+#[cfg(unix)]
 #[test]
-fn every_atomic_write_failure_preserves_prior_record_and_foreign_temps() {
+fn record_publish_component_swap_never_writes_foreign_parent() {
+    let project = tempfile::tempdir().unwrap();
+    let foreign = tempfile::tempdir().unwrap();
+    let prior = record_from_state(&run(project.path())).unwrap();
+    write_record(project.path(), &prior).unwrap();
+    fs::write(foreign.path().join("import-run.json"), b"foreign").unwrap();
+    let mut replacement = prior.clone();
+    replacement.snapshot.profile_id = "replacement".to_string();
+    swap_record_parent_before_publish(project.path().to_path_buf(), foreign.path().to_path_buf());
+
+    assert!(write_record(project.path(), &replacement).is_err());
+    assert_eq!(
+        fs::read(foreign.path().join("import-run.json")).unwrap(),
+        b"foreign"
+    );
+}
+
+#[test]
+fn atomic_write_failures_preserve_the_authoritative_visible_record_and_foreign_temps() {
     for point in [
         RecordFaultPoint::CandidateCreate,
         RecordFaultPoint::Write,
@@ -132,17 +184,21 @@ fn every_atomic_write_failure_preserves_prior_record_and_foreign_temps() {
         replacement.snapshot.profile_id = "profile-2".to_string();
         inject_fault(point);
 
-        assert!(
-            write_record(temp.path(), &replacement).is_err(),
-            "{point:?}"
-        );
+        let error = write_record(temp.path(), &replacement).unwrap_err();
+        if point == RecordFaultPoint::ParentSync {
+            assert!(error.to_string().contains("uncertain durability"));
+        }
         assert_eq!(
             load_record(temp.path())
                 .unwrap()
                 .unwrap()
                 .snapshot
                 .profile_id,
-            "profile-1",
+            if point == RecordFaultPoint::ParentSync {
+                "profile-2"
+            } else {
+                "profile-1"
+            },
             "{point:?}"
         );
         assert_eq!(fs::read_to_string(foreign_temp).unwrap(), "foreign");
@@ -151,6 +207,7 @@ fn every_atomic_write_failure_preserves_prior_record_and_foreign_temps() {
 
 fn finalizing_record(root: &Path) -> ImportRunRecord {
     let mut state = run(root);
+    state.run_id = format!("import-run-{}", uuid::Uuid::new_v4());
     state.lifecycle = ImportLifecycle::Finalizing;
     state.staging_generation = "generation-1".to_string();
     state.exit_evidence = Some(ImportExitEvidence {
@@ -355,7 +412,7 @@ fn impossible_exit_and_completed_subject_evidence_is_rejected() {
 }
 
 #[test]
-fn recovery_matrix_interrupts_orphans_and_replays_terminal_records() {
+fn recovery_matrix_blocks_legacy_orphans_and_replays_terminal_records() {
     for lifecycle in [
         ImportLifecycle::Preparing,
         ImportLifecycle::Running,
@@ -376,10 +433,7 @@ fn recovery_matrix_interrupts_orphans_and_replays_terminal_records() {
             .unwrap()
             .unwrap();
         assert_eq!(recovered.lifecycle, ImportLifecycle::Interrupted);
-        assert_eq!(
-            recovered.terminal_result,
-            Some(crate::import::types::ImportTerminalResult::Interrupted)
-        );
+        assert!(recovered.confirmation_required);
     }
 
     let temp = tempfile::tempdir().unwrap();
@@ -441,7 +495,8 @@ fn recovery_matrix_leaves_missing_records_alone_and_fails_closed_on_foreign_or_u
         crate::import::state::recover_import_run_for_project(&state, missing.path()).unwrap(),
         None
     );
-    assert!(missing.path().read_dir().unwrap().next().is_none());
+    assert!(!record_path(missing.path()).exists());
+    assert!(!missing.path().join(".easl_staging").exists());
 
     let foreign = tempfile::tempdir().unwrap();
     let mut record = record_from_state(&run(foreign.path())).unwrap();
@@ -647,7 +702,7 @@ fn acknowledgement_record_removal_failure_retains_replayable_memory_and_record()
     run.terminal_result = Some(crate::import::types::ImportTerminalResult::Interrupted);
     write_record(temp.path(), &record_from_state(&run).unwrap()).unwrap();
     let state = crate::app_state::AppState::default();
-    *state.active_project_root.lock().unwrap() = Some(temp.path().to_path_buf());
+    crate::project_ownership_tests::own_project(&state, temp.path());
     *state.import_state.lock().unwrap() = run;
     fail_next_record_removal();
 

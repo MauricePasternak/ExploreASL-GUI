@@ -1,13 +1,28 @@
 import { IconPlayerPlay, IconPlayerStop } from "@tabler/icons-react";
 
-import type { ProcessingPhase, SubjectModuleStatus } from "../../schemas/processingSchemas";
+import type {
+  ProcessingAvailableAction,
+  ProcessingPhase,
+  SubjectModuleStatus,
+} from "../../schemas/processingSchemas";
 
 export interface CompletedSubjectEntry {
   subjectSession: string;
   modules: string[];
 }
 
-export function getButtonProps(phase: ProcessingPhase) {
+export function getButtonProps(
+  phase: ProcessingPhase,
+  availableAction: ProcessingAvailableAction = "none",
+) {
+  if ((phase === "cancelling" || phase === "finalizing") && availableAction === "retryCleanup") {
+    return {
+      label: "Retry cleanup",
+      color: "red",
+      icon: IconPlayerStop,
+      action: "kill" as const,
+    };
+  }
   switch (phase) {
     case "running":
       return { label: "Stop", color: "red", icon: IconPlayerStop, action: "kill" as const };
@@ -17,11 +32,17 @@ export function getButtonProps(phase: ProcessingPhase) {
       return { label: "Finalizing", color: "gray", icon: IconPlayerStop, action: "wait" as const };
     case "cancelling":
       return { label: "Cancelling", color: "gray", icon: IconPlayerStop, action: "wait" as const };
+    case "interrupted":
+      return {
+        label: "Confirmation required",
+        color: "yellow",
+        icon: IconPlayerStop,
+        action: "wait" as const,
+      };
     case "idle":
     case "completed":
     case "failed":
     case "cancelled":
-    case "interrupted":
     default:
       return { label: "Start", color: "teal", icon: IconPlayerPlay, action: "start" as const };
   }

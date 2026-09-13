@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
@@ -47,10 +46,10 @@ pub fn validate_processing_transition(
     use ProcessingLifecycle::*;
     let legal = matches!(
         (from, to),
-        (Preparing, Running | Failed)
+        (Preparing, Running | Cancelling | Failed | Interrupted)
             | (Running, Finalizing | Cancelling | Failed | Interrupted)
-            | (Cancelling, Cancelled | Failed)
-            | (Finalizing, Completed | Failed)
+            | (Cancelling, Cancelled | Failed | Interrupted)
+            | (Finalizing, Completed | Failed | Cancelling | Interrupted)
     );
     if legal {
         Ok(())
@@ -80,10 +79,11 @@ impl ProcessingTerminalResult {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkerExitEvidence {
-    pub pid: u32,
-    pub exit_code: i32,
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ProcessingVersions {
+    pub explore_asl: String,
+    pub matlab: String,
+    pub gui: String,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -95,15 +95,23 @@ pub struct ProcessingRunSnapshot {
     pub selected_modules: Vec<String>,
     pub selected_subject_sessions: Vec<String>,
     pub start_time: u64,
-    pub workers: Vec<u32>,
-    pub exit_evidence: Vec<WorkerExitEvidence>,
+    #[serde(skip_serializing)]
     pub watcher_owned: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_result: Option<ProcessingTerminalResult>,
-    /// Launch may fail after earlier workers have started. This evidence keeps
-    /// the nonterminal run actionable until its remaining workers exit.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pending_launch_failure: Option<String>,
+    pub revision: u64,
+    pub request_id: Option<String>,
+    pub expected_targets: Vec<super::record::ExpectedTarget>,
+    pub logical_exits: Vec<super::record::LogicalWorkerExit>,
+    pub worker_count: u32,
+    pub error: Option<super::record::ProcessingError>,
+    pub available_action: super::record::AvailableAction,
+    pub terminal_summary: Option<super::record::ProcessingTerminalSummary>,
+    pub terminal_revision: Option<u64>,
+    pub execution_committed: bool,
+    pub population_execution_committed: bool,
+    pub versions: Option<Box<ProcessingVersions>>,
+    pub population_ready_mtime_ms: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -114,11 +122,9 @@ pub struct ProcessingRun {
     pub selected_subject_sessions: Vec<String>,
     pub lifecycle: ProcessingLifecycle,
     pub start_time: u64,
-    pub workers: BTreeSet<u32>,
-    pub exit_evidence: Vec<WorkerExitEvidence>,
     pub watcher_owned: bool,
     pub terminal_result: Option<ProcessingTerminalResult>,
-    pub pending_launch_failure: Option<String>,
+    pub(crate) durable: Option<super::record::ProcessingRecord>,
 }
 
 impl ProcessingRun {
@@ -138,15 +144,16 @@ impl ProcessingRun {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as u64,
-            workers: BTreeSet::new(),
-            exit_evidence: Vec::new(),
             watcher_owned: false,
             terminal_result: None,
-            pending_launch_failure: None,
+            durable: None,
         }
     }
 
     pub fn snapshot(&self) -> ProcessingRunSnapshot {
+        if let Some(record) = &self.durable {
+            return record.snapshot();
+        }
         ProcessingRunSnapshot {
             run_id: self.run_id.clone(),
             lifecycle: self.lifecycle,
@@ -154,20 +161,53 @@ impl ProcessingRun {
             selected_modules: self.selected_modules.clone(),
             selected_subject_sessions: self.selected_subject_sessions.clone(),
             start_time: self.start_time,
-            workers: self.workers.iter().copied().collect(),
-            exit_evidence: self.exit_evidence.clone(),
             watcher_owned: self.watcher_owned,
             terminal_result: self.terminal_result,
-            pending_launch_failure: self.pending_launch_failure.clone(),
+            revision: 0,
+            request_id: None,
+            expected_targets: Vec::new(),
+            logical_exits: Vec::new(),
+            worker_count: 0,
+            error: None,
+            available_action: super::record::AvailableAction::None,
+            terminal_summary: None,
+            terminal_revision: None,
+            execution_committed: false,
+            population_execution_committed: false,
+            versions: None,
+            population_ready_mtime_ms: None,
         }
+    }
+
+    pub(crate) fn from_record(record: super::record::ProcessingRecord) -> Self {
+        let mut run = Self::new(
+            record.run_id.to_string(),
+            record.project_root.clone(),
+            record.request.selected_modules.clone(),
+            record.request.selected_subject_sessions.clone(),
+        );
+        run.lifecycle = record.lifecycle;
+        run.start_time = record.start_time;
+        run.terminal_result = record.terminal_summary.as_ref().map(|s| s.result);
+        run.durable = Some(record);
+        run
+    }
+    pub(crate) fn unacknowledged(&self) -> bool {
+        self.durable.as_ref().is_some_and(|r| !r.acknowledged)
     }
 
     pub fn belongs_to(&self, project_root: &Path) -> bool {
         self.project_root == project_root
     }
 
-    pub fn transition(&mut self, to: ProcessingLifecycle) -> Result<(), ProcessingTransitionError> {
+    pub fn transition(&mut self, to: ProcessingLifecycle) -> Result<(), String> {
         validate_processing_transition(self.lifecycle, to)?;
+        if let Some(previous) = self.durable.as_ref() {
+            let mut next = previous.clone();
+            next.set_lifecycle(to).map_err(|e| e.to_string())?;
+            super::record::persist(&next, Some(previous)).map_err(|e| e.to_string())?;
+            self.durable = Some(next);
+        }
         self.lifecycle = to;
         if to.is_terminal() {
             self.terminal_result = Some(match to {
@@ -182,19 +222,16 @@ impl ProcessingRun {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ProcessState {
+    pub(crate) settlement: std::sync::Arc<std::sync::Mutex<()>>,
+    pub(crate) cancellation: Option<easl_execution_runtime::process::CancellationToken>,
+    pub(crate) supervisor_handle: Option<thread::JoinHandle<()>>,
+    pub(crate) launch_in_progress: bool,
     pub current_run: Option<ProcessingRun>,
-    pub worker_supervisors: Vec<WorkerSupervisor>,
     pub watcher_handle: Option<thread::JoinHandle<()>>,
     pub watcher_stop: Option<mpsc::Sender<()>>,
     pub watcher_run_id: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct WorkerSupervisor {
-    pub run_id: String,
-    pub handle: thread::JoinHandle<()>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -230,14 +267,6 @@ pub struct LogFileInfo {
     pub subject_session: String,
     pub run: Option<String>,
     pub has_error: bool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkerExited {
-    pub run_id: String,
-    pub pid: u32,
-    pub exit_code: i32,
 }
 
 #[derive(Clone, Debug, Serialize)]

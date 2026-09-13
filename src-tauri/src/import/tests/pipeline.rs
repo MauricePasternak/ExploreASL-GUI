@@ -1,33 +1,25 @@
 use crate::app_state::AppState;
 #[cfg(unix)]
 use crate::execution_profile::ExecutionProfile;
-use crate::import::parser::{ImportOutputLineSource, ImportStructuredEvent};
+use crate::import::parser::ImportStructuredEvent;
 use crate::import::pipeline::{
     accepts_import_diagnostic, canonicalize_import_event_subject, complete_finalizing_import,
-    confirm_import_termination_with, read_pipe_lines, record_import_process_exit,
-    run_import_pipeline_impl, stop_import_run_with,
+    record_import_process_exit, run_import_pipeline_impl,
 };
-use crate::import::state::{
-    RESERVED_IMPORT_PID, reserve_import_run_for_state, set_reserved_import_pid,
-};
-use crate::import::types::{
-    ImportCommandError, ImportLifecycle, ImportRunSnapshot, ImportState, ImportTerminalResult,
-};
+use crate::import::state::{reserve_import_run_for_state, set_reserved_import_running};
+use crate::import::types::{ImportLifecycle, ImportRunSnapshot, ImportState, ImportTerminalResult};
 use crate::import::{StagingEntry, journal};
 use anyhow::Result as AnyResult;
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::sync::mpsc;
+use std::path::Path;
 use tauri::Manager;
 
 fn finalize_import_process(
     state: &AppState,
     generation: u64,
-    child_pid: u32,
     exit_code: i32,
 ) -> AnyResult<ImportRunSnapshot> {
-    let snapshot = record_import_process_exit(state, generation, child_pid, exit_code)?;
+    let snapshot = record_import_process_exit(state, generation, exit_code)?;
     if snapshot.lifecycle == ImportLifecycle::Finalizing {
         complete_finalizing_import(state, generation, exit_code)
     } else {
@@ -41,7 +33,7 @@ fn running_state(root: &Path) -> AppState {
 
 fn running_state_for_subjects(root: &Path, subjects: &[&str]) -> AppState {
     let state = AppState::default();
-    *state.active_project_root.lock().unwrap() = Some(root.canonicalize().unwrap());
+    crate::project_ownership_tests::own_project(&state, &root.canonicalize().unwrap());
     let subjects = subjects
         .iter()
         .map(|subject| (*subject).to_string())
@@ -61,242 +53,9 @@ fn running_state_for_subjects(root: &Path, subjects: &[&str]) -> AppState {
     run.relocation_plan_id = Some("plan-1".to_string());
     run.relocation_plan = Some(plan);
     run.lifecycle = ImportLifecycle::Running;
-    run.child_pid = Some(42);
     journal::write_record(root, &journal::record_from_state(&run).unwrap()).unwrap();
     *state.import_state.lock().unwrap() = run;
     state
-}
-
-#[test]
-fn cancellation_failure_restores_running_authority_and_durable_error() {
-    let temp = tempfile::tempdir().unwrap();
-    let state = running_state(temp.path());
-    let error = stop_import_run_with(&state, "import-run-1", |_, pid| {
-        assert_eq!(pid, 42);
-        Err("signal denied".to_string())
-    })
-    .unwrap_err();
-    assert_eq!(error, "signal denied");
-    let run = state.import_state.lock().unwrap();
-    assert_eq!(run.lifecycle, ImportLifecycle::Running);
-    assert_eq!(run.error.as_ref().unwrap().code, "cancellation");
-    drop(run);
-    let record = journal::load_record(temp.path()).unwrap().unwrap();
-    assert_eq!(record.snapshot.lifecycle, ImportLifecycle::Running);
-    assert_eq!(record.snapshot.error.unwrap().code, "cancellation");
-}
-
-#[test]
-fn cancelling_is_durable_and_observable_before_process_operations_finish() {
-    let temp = tempfile::tempdir().unwrap();
-    let state = running_state(temp.path());
-
-    let snapshot = stop_import_run_with(&state, "import-run-1", |state, pid| {
-        assert_eq!(pid, 42);
-        assert_eq!(
-            state.import_state.lock().unwrap().lifecycle,
-            ImportLifecycle::Cancelling
-        );
-        assert_eq!(
-            journal::load_record(temp.path())
-                .unwrap()
-                .unwrap()
-                .snapshot
-                .lifecycle,
-            ImportLifecycle::Cancelling
-        );
-        assert_eq!(
-            crate::import::state::get_active_import_run_for_state(state)
-                .unwrap()
-                .unwrap()
-                .lifecycle,
-            ImportLifecycle::Cancelling
-        );
-        Ok(())
-    })
-    .unwrap();
-
-    assert_eq!(snapshot.lifecycle, ImportLifecycle::Cancelled);
-}
-
-#[test]
-fn injectable_process_ops_cover_graceful_timeout_force_and_final_wait_failures() {
-    use std::cell::{Cell, RefCell};
-
-    fn cancelling_state(root: &Path) -> AppState {
-        let state = running_state(root);
-        {
-            let mut run = state.import_state.lock().unwrap();
-            run.lifecycle = ImportLifecycle::Cancelling;
-            journal::write_record(root, &journal::record_from_state(&run).unwrap()).unwrap();
-        }
-        state
-    }
-
-    let graceful_root = tempfile::tempdir().unwrap();
-    let graceful = cancelling_state(graceful_root.path());
-    let order = RefCell::new(Vec::new());
-    let generation = confirm_import_termination_with(
-        &graceful,
-        42,
-        |_| {
-            order.borrow_mut().push("signal");
-            Ok(())
-        },
-        |_| {
-            order.borrow_mut().push("force");
-            Ok(())
-        },
-        |_, _| {
-            order.borrow_mut().push("wait");
-            Ok(true)
-        },
-    )
-    .unwrap();
-    assert_eq!(generation, 4);
-    assert_eq!(&*order.borrow(), &["signal", "wait"]);
-
-    let signal_root = tempfile::tempdir().unwrap();
-    let signal = cancelling_state(signal_root.path());
-    let waited = Cell::new(false);
-    assert_eq!(
-        confirm_import_termination_with(
-            &signal,
-            42,
-            |_| Err("signal denied".to_string()),
-            |_| Ok(()),
-            |_, _| {
-                waited.set(true);
-                Ok(true)
-            },
-        )
-        .unwrap_err(),
-        "signal denied"
-    );
-    assert!(!waited.get());
-    assert_eq!(signal.import_state.lock().unwrap().child_pid, Some(42));
-
-    let force_root = tempfile::tempdir().unwrap();
-    let force = cancelling_state(force_root.path());
-    assert_eq!(
-        confirm_import_termination_with(
-            &force,
-            42,
-            |_| Ok(()),
-            |_| Err("force denied".to_string()),
-            |_, _| Ok(false),
-        )
-        .unwrap_err(),
-        "force denied"
-    );
-    assert_eq!(
-        force.import_state.lock().unwrap().termination_requested_for,
-        None
-    );
-
-    let final_wait_root = tempfile::tempdir().unwrap();
-    let final_wait = cancelling_state(final_wait_root.path());
-    let waits = Cell::new(0);
-    assert_eq!(
-        confirm_import_termination_with(
-            &final_wait,
-            42,
-            |_| Ok(()),
-            |_| Ok(()),
-            |_, _| {
-                waits.set(waits.get() + 1);
-                if waits.get() == 1 {
-                    Ok(false)
-                } else {
-                    Err("final wait unavailable".to_string())
-                }
-            },
-        )
-        .unwrap_err(),
-        "final wait unavailable"
-    );
-    assert_eq!(waits.get(), 2);
-    assert_eq!(
-        final_wait
-            .import_state
-            .lock()
-            .unwrap()
-            .termination_requested_for,
-        None
-    );
-}
-
-#[test]
-fn successful_run_scoped_cancellation_is_terminal_and_pid_private() {
-    let temp = tempfile::tempdir().unwrap();
-    let state = running_state(temp.path());
-    let snapshot = stop_import_run_with(&state, "import-run-1", |_, pid| {
-        assert_eq!(pid, 42);
-        Ok(())
-    })
-    .unwrap();
-    assert_eq!(snapshot.lifecycle, ImportLifecycle::Cancelled);
-    assert_eq!(
-        snapshot.terminal_result,
-        Some(ImportTerminalResult::Cancelled)
-    );
-    assert!(!serde_json::to_string(&snapshot).unwrap().contains("pid"));
-    assert_eq!(
-        journal::load_record(temp.path())
-            .unwrap()
-            .unwrap()
-            .snapshot
-            .lifecycle,
-        ImportLifecycle::Cancelled
-    );
-    assert!(state.import_state.lock().unwrap().child_pid.is_none());
-}
-
-#[test]
-fn preparing_cancellation_is_durable_without_exposing_or_signalling_a_pid() {
-    let temp = tempfile::tempdir().unwrap();
-    let state = running_state(temp.path());
-    {
-        let mut run = state.import_state.lock().unwrap();
-        run.lifecycle = ImportLifecycle::Preparing;
-        run.child_pid = None;
-        journal::write_record(temp.path(), &journal::record_from_state(&run).unwrap()).unwrap();
-    }
-    let signalled = std::cell::Cell::new(false);
-    let snapshot = stop_import_run_with(&state, "import-run-1", |_, _| {
-        signalled.set(true);
-        Ok(())
-    })
-    .unwrap();
-    assert_eq!(snapshot.lifecycle, ImportLifecycle::Cancelled);
-    assert!(!signalled.get());
-    assert_eq!(
-        journal::load_record(temp.path())
-            .unwrap()
-            .unwrap()
-            .snapshot
-            .terminal_result,
-        Some(ImportTerminalResult::Cancelled)
-    );
-}
-
-#[test]
-fn obsolete_cancellation_never_calls_process_control() {
-    let temp = tempfile::tempdir().unwrap();
-    let state = running_state(temp.path());
-    let called = std::cell::Cell::new(false);
-    assert!(
-        stop_import_run_with(&state, "old-run", |_, _| {
-            called.set(true);
-            Ok(())
-        })
-        .is_err()
-    );
-    assert!(!called.get());
-    assert_eq!(
-        state.import_state.lock().unwrap().lifecycle,
-        ImportLifecycle::Running
-    );
 }
 
 #[test]
@@ -306,18 +65,17 @@ fn supervisor_exit_during_cancellation_durably_finishes_cancelled() {
     {
         let mut run = state.import_state.lock().unwrap();
         run.transition(ImportLifecycle::Cancelling).unwrap();
-        run.termination_requested_for = Some(42);
         journal::write_record(temp.path(), &journal::record_from_state(&run).unwrap()).unwrap();
     }
 
-    let snapshot = finalize_import_process(&state, 4, 42, 0).unwrap();
+    let snapshot = finalize_import_process(&state, 4, 0).unwrap();
 
     assert_eq!(snapshot.lifecycle, ImportLifecycle::Cancelled);
     assert_eq!(
         snapshot.terminal_result,
         Some(ImportTerminalResult::Cancelled)
     );
-    assert!(state.import_state.lock().unwrap().child_pid.is_none());
+    assert!(state.import_state.lock().unwrap().cancellation.is_none());
     assert_eq!(
         journal::load_record(temp.path())
             .unwrap()
@@ -333,7 +91,7 @@ fn process_exit_checkpoint_exposes_finalizing_before_verification() {
     let temp = tempfile::tempdir().unwrap();
     let state = running_state(temp.path());
 
-    let snapshot = record_import_process_exit(&state, 4, 42, 0).unwrap();
+    let snapshot = record_import_process_exit(&state, 4, 0).unwrap();
 
     assert_eq!(snapshot.lifecycle, ImportLifecycle::Finalizing);
     assert_eq!(snapshot.exit_evidence.unwrap().exit_code, 0);
@@ -359,8 +117,10 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
     // reservation becomes visible.
     let reserve_root = tempfile::tempdir().unwrap();
     let reserve_state = AppState::default();
-    *reserve_state.active_project_root.lock().unwrap() =
-        Some(reserve_root.path().canonicalize().unwrap());
+    crate::project_ownership_tests::own_project(
+        &reserve_state,
+        &reserve_root.path().canonicalize().unwrap(),
+    );
     let plan = crate::import::state::plan_import_relocation_for_state(
         &reserve_state,
         &["ONE".to_string()],
@@ -391,7 +151,7 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
     {
         let mut run = preparing_state.import_state.lock().unwrap();
         run.lifecycle = ImportLifecycle::Preparing;
-        run.child_pid = Some(RESERVED_IMPORT_PID);
+        run.launch_in_progress = true;
         journal::write_record(
             running_root.path(),
             &journal::record_from_state(&run).unwrap(),
@@ -399,7 +159,7 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
         .unwrap();
     }
     journal::fail_next_record_write();
-    assert!(set_reserved_import_pid(&preparing_state, 4, 42).is_err());
+    assert!(set_reserved_import_running(&preparing_state, 4).is_err());
     assert_eq!(
         preparing_state.import_state.lock().unwrap().lifecycle,
         ImportLifecycle::Preparing
@@ -428,7 +188,7 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
     fs::create_dir_all(&lock).unwrap();
     fs::write(lock.join("999_ready.status"), "ready").unwrap();
     fs::write(staging.join("rawdata/sub-ONE/scan.nii"), "nii").unwrap();
-    record_import_process_exit(&verify_state, 4, 42, 0).unwrap();
+    record_import_process_exit(&verify_state, 4, 0).unwrap();
     journal::fail_next_record_write();
     assert!(complete_finalizing_import(&verify_state, 4, 0).is_err());
     assert!(!verify_root.path().join("rawdata/sub-ONE").exists());
@@ -444,7 +204,7 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
     {
         let mut run = terminal_state.import_state.lock().unwrap();
         run.lifecycle = ImportLifecycle::Finalizing;
-        run.child_pid = None;
+        run.cancellation = None;
         run.exit_evidence = Some(crate::import::types::ImportExitEvidence {
             exit_code: 0,
             successful: true,
@@ -496,7 +256,7 @@ fn obsolete_supervisor_never_returns_a_replacement_snapshot_for_emission() {
     let state = running_state(temp.path());
     state.import_state.lock().unwrap().run_id = "replacement".to_string();
 
-    assert!(finalize_import_process(&state, 3, 42, 0).is_err());
+    assert!(finalize_import_process(&state, 3, 0).is_err());
     assert_eq!(state.import_state.lock().unwrap().run_id, "replacement");
 }
 
@@ -533,47 +293,6 @@ fn parser_completion_and_failure_are_provisional_until_artifact_finalization() {
 
 #[cfg(unix)]
 #[test]
-fn large_interleaved_stdout_and_stderr_are_fully_drained_without_deadlock() {
-    let mut child = std::process::Command::new("sh")
-        .arg("-c")
-        .arg("i=0; while [ $i -lt 4000 ]; do echo stdout-$i; echo stderr-$i >&2; i=$((i+1)); done")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let (sender, receiver) = mpsc::channel();
-    let stdout = read_pipe_lines(
-        child.stdout.take().unwrap(),
-        ImportOutputLineSource::Stdout,
-        sender.clone(),
-    );
-    let stderr = read_pipe_lines(
-        child.stderr.take().unwrap(),
-        ImportOutputLineSource::Stderr,
-        sender.clone(),
-    );
-    drop(sender);
-    let lines = receiver.into_iter().collect::<Vec<_>>();
-    stdout.join().unwrap();
-    stderr.join().unwrap();
-    assert!(child.wait().unwrap().success());
-    assert_eq!(
-        lines
-            .iter()
-            .filter(|line| line.source == ImportOutputLineSource::Stdout)
-            .count(),
-        4000
-    );
-    assert_eq!(
-        lines
-            .iter()
-            .filter(|line| line.source == ImportOutputLineSource::Stderr)
-            .count(),
-        4000
-    );
-}
-
-#[test]
 fn parser_failure_is_diagnostic_when_artifact_is_valid_and_authoritative_when_invalid() {
     for valid_artifact in [true, false] {
         let temp = tempfile::tempdir().unwrap();
@@ -596,7 +315,7 @@ fn parser_failure_is_diagnostic_when_artifact_is_valid_and_authoritative_when_in
             4
         ));
 
-        let terminal = finalize_import_process(&state, 4, 42, 0).unwrap();
+        let terminal = finalize_import_process(&state, 4, 0).unwrap();
         assert_eq!(
             terminal.lifecycle,
             if valid_artifact {
@@ -626,7 +345,7 @@ fn required_failed_lock_cleanup_error_fails_terminal_and_preserves_evidence() {
     let special = lock.join("010_DCM2NII.status");
     fs::create_dir(&special).unwrap();
 
-    let terminal = finalize_import_process(&state, 4, 42, 0).unwrap();
+    let terminal = finalize_import_process(&state, 4, 0).unwrap();
 
     assert_eq!(terminal.lifecycle, ImportLifecycle::Failed);
     assert!(
@@ -664,7 +383,7 @@ fn native_finalizer_preserves_debug_staging_without_weakening_success_checks() {
     fs::create_dir_all(&lock).unwrap();
     fs::write(lock.join("999_ready.status"), "ready").unwrap();
 
-    let terminal = finalize_import_process(&state, 4, 42, 0).unwrap();
+    let terminal = finalize_import_process(&state, 4, 0).unwrap();
 
     assert_eq!(terminal.lifecycle, ImportLifecycle::Completed);
     assert!(staging.join("debug.log").is_file());
@@ -696,7 +415,7 @@ fn mixed_subject_finalization_commits_only_verified_subject_and_replays_without_
     fs::create_dir_all(&lock).unwrap();
     fs::write(lock.join("999_ready.status"), "ready").unwrap();
 
-    let terminal = finalize_import_process(&state, 4, 42, 7).unwrap();
+    let terminal = finalize_import_process(&state, 4, 7).unwrap();
 
     assert_eq!(terminal.lifecycle, ImportLifecycle::Failed);
     assert_eq!(terminal.subject_outcomes.len(), 2);
@@ -736,9 +455,12 @@ fn mixed_subject_finalization_commits_only_verified_subject_and_replays_without_
         .unwrap()
         .modified()
         .unwrap();
+    drop(state); // Native restart releases the prior project lease.
     let recovered_state = AppState::default();
-    *recovered_state.active_project_root.lock().unwrap() =
-        Some(temp.path().canonicalize().unwrap());
+    crate::project_ownership_tests::own_project(
+        &recovered_state,
+        &temp.path().canonicalize().unwrap(),
+    );
     let replay =
         crate::import::state::recover_import_run_for_project(&recovered_state, temp.path())
             .unwrap()
@@ -803,7 +525,11 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
         // Deliberately omit parser global completion text. The process
         // exit, freshly-created marker-bound evidence, and relocation are
         // the only authority for the terminal result.
-        fs::write(&matlab, format!("#!/bin/sh\nsleep 0.1\n{evidence}\nprintf diagnostic-on-stderr >&2\nexit {exit_code}\n")).unwrap();
+        // Two invalid-UTF-8 lines without newlines exceed a pipe buffer at the
+        // same time. This requires the import supervisor to drain stdout and
+        // stderr concurrently, while retaining only bounded line prefixes.
+        let flood = "(head -c 70000 /dev/zero | tr '\\000' '\\377') & (head -c 70000 /dev/zero | tr '\\000' '\\377' >&2) & wait";
+        fs::write(&matlab, format!("#!/bin/sh\nsleep 0.1\n{evidence}\nprintf 'diagnostic-on-stdout\\n'\nprintf 'crlf-line\\r\\n'\nprintf diagnostic-on-stderr >&2\n{flood}\nexit {exit_code}\n")).unwrap();
         let mut permissions = fs::metadata(&matlab).unwrap().permissions();
         permissions.set_mode(0o700);
         fs::set_permissions(&matlab, permissions).unwrap();
@@ -814,9 +540,11 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
             .unwrap();
         let state = app.state::<AppState>();
         let root = fs::canonicalize(&root).unwrap();
-        *state.active_project_root.lock().unwrap() = Some(root.clone());
+        crate::project_ownership_tests::own_project(&state, &root.clone());
         let emitted_snapshots = Arc::new(Mutex::new(Vec::new()));
         let snapshot_log = emitted_snapshots.clone();
+        let raw_lines = Arc::new(Mutex::new(Vec::new()));
+        let raw_log = raw_lines.clone();
         let event_root = root.clone();
         app.listen("import-run-snapshot", move |event| {
             let snapshot: crate::import::types::ImportRunSnapshot =
@@ -827,6 +555,13 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
                 "snapshot emission must follow matching durable record"
             );
             snapshot_log.lock().unwrap().push(snapshot.lifecycle);
+        });
+        app.listen("import-raw-event", move |event| {
+            let raw: serde_json::Value = serde_json::from_str(event.payload()).unwrap();
+            raw_log
+                .lock()
+                .unwrap()
+                .push(raw["line"].as_str().unwrap().to_string());
         });
         let plan = crate::import::relocation::create_plan(
             &root,
@@ -919,7 +654,21 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
             std::thread::sleep(Duration::from_millis(10));
         }
         let terminal = journal::load_record(&root).unwrap().unwrap().snapshot;
+        let raw_lines = raw_lines.lock().unwrap();
+        assert!(
+            raw_lines
+                .iter()
+                .any(|line| line.contains("diagnostic-on-stdout"))
+        );
+        assert!(
+            raw_lines
+                .iter()
+                .any(|line| line.contains("diagnostic-on-stderr"))
+        );
+        assert!(raw_lines.iter().all(|line| line.len() <= 64 * 1024));
+        assert!(raw_lines.iter().any(|line| line == "crlf-line"));
         assert_eq!(terminal.lifecycle, expected_lifecycle, "{name}");
+
         assert!(
             terminal.exit_evidence.is_some(),
             "{name}: exit precedes Finalizing work"
@@ -975,201 +724,301 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
 
 #[cfg(unix)]
 #[test]
-fn launch_rejects_obsolete_ids_fails_repeated_preflight_and_reaps_partial_spawn() {
+fn stop_during_blocking_apptainer_probe_cancels_before_staging_or_scientific_spawn() {
     use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
 
-    struct Fixture {
-        _workspace: tempfile::TempDir,
-        app: tauri::App<tauri::test::MockRuntime>,
-        root: PathBuf,
-        source: PathBuf,
-        matlab: PathBuf,
-        exploreasl: PathBuf,
-        entry: StagingEntry,
-    }
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path().join("project");
+    let source = workspace.path().join("source.dcm");
+    let executable = workspace.path().join("apptainer");
+    let sif = workspace.path().join("image.sif");
+    let ready = workspace.path().join("probe-ready");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(&source, "source").unwrap();
+    fs::write(&sif, "image").unwrap();
+    fs::write(
+        &executable,
+        format!("#!/bin/sh\ntouch '{}'\nsleep 30\n", ready.display()),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&executable).unwrap().permissions();
+    permissions.set_mode(0o700);
+    fs::set_permissions(&executable, permissions).unwrap();
 
-    fn fixture() -> Fixture {
-        let workspace = tempfile::tempdir().unwrap();
-        let root = workspace.path().join("project");
-        let source = workspace.path().join("source.dcm");
-        let matlab = workspace.path().join("fake-matlab");
-        let exploreasl = workspace.path().join("ExploreASL");
-        fs::create_dir_all(&root).unwrap();
-        fs::create_dir_all(&exploreasl).unwrap();
-        fs::write(exploreasl.join("ExploreASL.m"), "% test").unwrap();
-        fs::write(&source, "dicom").unwrap();
-        fs::write(&matlab, "#!/bin/sh\nsleep 30\n").unwrap();
-        let mut permissions = fs::metadata(&matlab).unwrap().permissions();
-        permissions.set_mode(0o700);
-        fs::set_permissions(&matlab, permissions).unwrap();
-        let app = tauri::test::mock_builder()
-            .manage(AppState::default())
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .unwrap();
-        let root = root.canonicalize().unwrap();
-        *app.state::<AppState>().active_project_root.lock().unwrap() = Some(root.clone());
-        let entry = StagingEntry {
-            subject: "ONE".into(),
-            session: "01".into(),
-            run: "01".into(),
-            run_alias: "ASL1".into(),
-            modality: "ASL4D".into(),
-            original_subject: "ONE".into(),
-            original_session: "01".into(),
-            original_run: "01".into(),
-            source_path: source.display().to_string(),
-        };
-        Fixture {
-            _workspace: workspace,
-            app,
-            root,
-            source,
-            matlab,
-            exploreasl,
-            entry,
-        }
-    }
-
-    fn reserve(fixture: &Fixture) -> (crate::import::types::ImportRunSnapshot, String) {
-        let state = fixture.app.state::<AppState>();
-        let plan =
-            crate::import::state::plan_import_relocation_for_state(&state, &["ONE".to_string()])
-                .unwrap();
-        let run = reserve_import_run_for_state(
-            &state,
-            vec!["ONE".to_string()],
-            plan.plan_id.clone(),
-            "profile-1".to_string(),
-            Vec::new(),
-            false,
-        )
+    let app = tauri::test::mock_builder()
+        .manage(AppState::default())
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .unwrap();
-        (run, plan.plan_id)
-    }
-
-    fn launch(
-        fixture: &Fixture,
-        run_id: String,
-        plan_id: String,
-    ) -> Result<u32, ImportCommandError> {
+    let state = app.state::<AppState>();
+    let root = fs::canonicalize(root).unwrap();
+    crate::project_ownership_tests::own_project(&state, &root);
+    let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "probe-plan".into())
+        .unwrap();
+    state
+        .relocation_plans
+        .lock()
+        .unwrap()
+        .insert(plan.plan_id.clone(), plan.clone());
+    let reserved = reserve_import_run_for_state(
+        &state,
+        vec!["ONE".into()],
+        plan.plan_id.clone(),
+        "probe".into(),
+        Vec::new(),
+        false,
+    )
+    .unwrap();
+    let entry = StagingEntry {
+        subject: "ONE".into(),
+        session: "01".into(),
+        run: "01".into(),
+        run_alias: "ASL1".into(),
+        modality: "ASL4D".into(),
+        original_subject: "ONE".into(),
+        original_session: "01".into(),
+        original_run: "01".into(),
+        source_path: source.display().to_string(),
+    };
+    let handle = app.handle().clone();
+    let run_id = reserved.run_id.clone();
+    let plan_id = plan.plan_id.clone();
+    let launch = std::thread::spawn(move || {
+        let launch_state = handle.state::<AppState>();
         run_import_pipeline_impl(
-            fixture.app.handle().clone(),
-            &fixture.app.state::<AppState>(),
-            vec![fixture.entry.clone()],
+            handle.clone(),
+            &launch_state,
+            vec![entry],
             serde_json::json!({}),
             serde_json::json!({}),
-            ExecutionProfile::Matlab {
-                id: "profile-1".into(),
-                label: "Fake".into(),
-                matlab_path: fixture.matlab.display().to_string(),
-                explore_asl_path: fixture.exploreasl.display().to_string(),
+            ExecutionProfile::Apptainer {
+                id: "probe".into(),
+                label: "probe".into(),
+                apptainer_path: executable.display().to_string(),
+                sif_path: sif.display().to_string(),
                 explore_asl_version: None,
             },
-            vec!["ONE".to_string()],
+            vec!["ONE".into()],
             None,
             run_id,
             plan_id,
         )
+    });
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !ready.exists() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
     }
+    let cancelled = crate::import::stop_import_run_for_state(&state, &reserved.run_id).unwrap();
+    assert_eq!(cancelled.lifecycle, ImportLifecycle::Cancelled);
+    assert!(!root.join(".easl_staging").exists());
+    assert!(launch.join().unwrap().is_ok());
+    assert!(
+        state
+            .import_state
+            .lock()
+            .unwrap()
+            .supervisor_handle
+            .is_none()
+    );
+}
 
-    // Launch-time preflight is repeated after reservation. Its failure is
-    // converted into that exact run's authoritative Failed snapshot.
-    let preflight = fixture();
-    let (run, plan) = reserve(&preflight);
-    fs::remove_file(&preflight.source).unwrap();
-    let launch_result = launch(&preflight, run.run_id.clone(), plan);
-    let failed = crate::import::commands::settle_launch_result(
-        &preflight.app.state::<AppState>(),
-        &run.run_id,
-        launch_result,
+#[cfg(unix)]
+#[test]
+fn failed_running_checkpoint_reaps_the_already_spawned_import_scope() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path().join("project");
+    let source = workspace.path().join("source.dcm");
+    let matlab = workspace.path().join("fake-matlab");
+    let exploreasl = workspace.path().join("ExploreASL");
+    let started = workspace.path().join("started");
+    let stopped = workspace.path().join("stopped");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&exploreasl).unwrap();
+    fs::write(exploreasl.join("ExploreASL.m"), "% fixture").unwrap();
+    fs::write(&source, "source").unwrap();
+    fs::write(
+        &matlab,
+        format!(
+            "#!/bin/sh\ntrap \"touch '{}'; sleep 0.2; exit 0\" TERM\ntouch '{}'\nwhile :; do sleep 1; done\n",
+            stopped.display(),
+            started.display()
+        ),
     )
     .unwrap();
-    assert_eq!(failed.lifecycle, ImportLifecycle::Failed);
+    let mut permissions = fs::metadata(&matlab).unwrap().permissions();
+    permissions.set_mode(0o700);
+    fs::set_permissions(&matlab, permissions).unwrap();
+
+    let app = tauri::test::mock_builder()
+        .manage(AppState::default())
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .unwrap();
+    let state = app.state::<AppState>();
+    let root = fs::canonicalize(root).unwrap();
+    crate::project_ownership_tests::own_project(&state, &root);
+    let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "scope-plan".into())
+        .unwrap();
+    state
+        .relocation_plans
+        .lock()
+        .unwrap()
+        .insert(plan.plan_id.clone(), plan.clone());
+    let reserved = reserve_import_run_for_state(
+        &state,
+        vec!["ONE".into()],
+        plan.plan_id.clone(),
+        "scope".into(),
+        Vec::new(),
+        false,
+    )
+    .unwrap();
+    let entry = StagingEntry {
+        subject: "ONE".into(),
+        session: "01".into(),
+        run: "01".into(),
+        run_alias: "ASL1".into(),
+        modality: "ASL4D".into(),
+        original_subject: "ONE".into(),
+        original_session: "01".into(),
+        original_run: "01".into(),
+        source_path: source.display().to_string(),
+    };
+
+    // Admission and generation checkpoints succeed; durable Running fails
+    // after the process scope has been spawned.
+    journal::fail_record_write_after(2);
     assert!(
-        failed
+        run_import_pipeline_impl(
+            app.handle().clone(),
+            &state,
+            vec![entry],
+            serde_json::json!({}),
+            serde_json::json!({}),
+            ExecutionProfile::Matlab {
+                id: "scope".into(),
+                label: "scope".into(),
+                matlab_path: matlab.display().to_string(),
+                explore_asl_path: exploreasl.display().to_string(),
+                explore_asl_version: None,
+            },
+            vec!["ONE".into()],
+            None,
+            reserved.run_id,
+            plan.plan_id,
+        )
+        .is_ok()
+    );
+    {
+        let run = state.import_state.lock().unwrap();
+        assert_eq!(run.lifecycle, ImportLifecycle::Cancelling);
+        assert!(run.supervisor_handle.is_some());
+        assert!(!run.lifecycle.is_terminal());
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !started.exists() {
+        assert!(Instant::now() < deadline, "scope never spawned");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    while !stopped.exists() {
+        assert!(Instant::now() < deadline, "scope escaped failed launch");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    loop {
+        let run = state.import_state.lock().unwrap();
+        if run.lifecycle.is_terminal() && run.supervisor_handle.is_none() {
+            assert_eq!(run.lifecycle, ImportLifecycle::Cancelled);
+            assert!(run.cancellation.is_none());
+            break;
+        }
+        drop(run);
+        assert!(
+            Instant::now() < deadline,
+            "cancelled scope owner did not settle"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn launch_revalidation_failure_settles_only_the_reserved_run_without_staging_mutation() {
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path().join("project");
+    let source = workspace.path().join("source.dcm");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(&source, "source").unwrap();
+    let app = tauri::test::mock_builder()
+        .manage(AppState::default())
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .unwrap();
+    let state = app.state::<AppState>();
+    let root = fs::canonicalize(root).unwrap();
+    crate::project_ownership_tests::own_project(&state, &root);
+    let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "stale-plan".into())
+        .unwrap();
+    state
+        .relocation_plans
+        .lock()
+        .unwrap()
+        .insert(plan.plan_id.clone(), plan.clone());
+    let reserved = reserve_import_run_for_state(
+        &state,
+        vec!["ONE".into()],
+        plan.plan_id.clone(),
+        "profile".into(),
+        Vec::new(),
+        false,
+    )
+    .unwrap();
+    let entry = StagingEntry {
+        subject: "ONE".into(),
+        session: "01".into(),
+        run: "01".into(),
+        run_alias: "ASL1".into(),
+        modality: "ASL4D".into(),
+        original_subject: "ONE".into(),
+        original_session: "01".into(),
+        original_run: "01".into(),
+        source_path: source.display().to_string(),
+    };
+    fs::remove_file(source).unwrap();
+
+    let launch = run_import_pipeline_impl(
+        app.handle().clone(),
+        &state,
+        vec![entry],
+        serde_json::json!({}),
+        serde_json::json!({}),
+        ExecutionProfile::Matlab {
+            id: "profile".into(),
+            label: "profile".into(),
+            matlab_path: workspace.path().join("not-reached").display().to_string(),
+            explore_asl_path: workspace.path().join("not-reached").display().to_string(),
+            explore_asl_version: None,
+        },
+        vec!["ONE".into()],
+        None,
+        reserved.run_id.clone(),
+        plan.plan_id,
+    );
+    let snapshot =
+        crate::import::commands::settle_launch_result(&state, &reserved.run_id, launch).unwrap();
+
+    assert_eq!(snapshot.lifecycle, ImportLifecycle::Failed);
+    assert!(
+        snapshot
             .error
             .as_ref()
             .and_then(|error| error.staging_issues.as_ref())
             .is_some_and(|issues| !issues.is_empty())
     );
-    assert!(!preflight.root.join(".easl_staging").exists());
-
-    // Acknowledged/replaced IDs cannot consume the replacement reservation.
-    let obsolete = fixture();
-    let (old, _) = reserve(&obsolete);
-    {
-        let state = obsolete.app.state::<AppState>();
-        let mut owned = state.import_state.lock().unwrap();
-        owned.lifecycle = ImportLifecycle::Interrupted;
-        owned.terminal_result = Some(ImportTerminalResult::Interrupted);
-        journal::write_record(&obsolete.root, &journal::record_from_state(&owned).unwrap())
-            .unwrap();
-    }
-    crate::import::state::acknowledge_import_run_for_state(
-        &obsolete.app.state::<AppState>(),
-        &old.run_id,
-    )
-    .unwrap();
-    let (replacement, replacement_plan) = reserve(&obsolete);
-    let before = journal::load_record(&obsolete.root).unwrap().unwrap();
-    let stale_result = launch(&obsolete, old.run_id.clone(), replacement_plan);
-    assert!(
-        crate::import::commands::settle_launch_result(
-            &obsolete.app.state::<AppState>(),
-            &old.run_id,
-            stale_result,
-        )
-        .is_err()
-    );
+    assert!(!root.join(".easl_staging").exists());
     assert_eq!(
-        journal::load_record(&obsolete.root)
-            .unwrap()
-            .unwrap()
-            .snapshot,
-        before.snapshot
-    );
-    assert_eq!(
-        obsolete
-            .app
-            .state::<AppState>()
-            .import_state
-            .lock()
-            .unwrap()
-            .run_id,
-        replacement.run_id
-    );
-    assert!(!obsolete.root.join(".easl_staging").exists());
-
-    // Failure after OS spawn but before durable Running kills/reaps child,
-    // emits no readiness, and returns a path-free failed snapshot.
-    let partial = fixture();
-    let (run, plan) = reserve(&partial);
-    journal::fail_record_write_after(2);
-    let launch_result = launch(&partial, run.run_id.clone(), plan);
-    let failed = crate::import::commands::settle_launch_result(
-        &partial.app.state::<AppState>(),
-        &run.run_id,
-        launch_result,
-    )
-    .unwrap();
-    assert_eq!(failed.lifecycle, ImportLifecycle::Failed);
-    assert!(failed.terminal_result.is_some());
-    assert!(!serde_json::to_string(&failed).unwrap().contains("pid"));
-    assert_eq!(
-        journal::load_record(&partial.root)
-            .unwrap()
-            .unwrap()
-            .snapshot,
-        failed
-    );
-    assert!(
-        partial
-            .app
-            .state::<AppState>()
-            .import_state
-            .lock()
-            .unwrap()
-            .child_pid
-            .is_none()
+        journal::load_record(&root).unwrap().unwrap().snapshot,
+        snapshot
     );
 }

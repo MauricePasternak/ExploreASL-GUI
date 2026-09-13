@@ -4,37 +4,39 @@ use super::relocation;
 use super::relocation::RelocationPlan;
 use super::staging;
 use super::types::{
-    ImportCommandError, ImportLifecycle, ImportRunSnapshot, ImportState, ImportStructuredError,
-    ImportTerminalResult, now_ms,
+    ImportLifecycle, ImportRunSnapshot, ImportState, ImportStructuredError, ImportTerminalResult,
+    now_ms,
 };
-use super::validation::rollback_preparation_failure;
 use crate::app_state::AppState;
 use crate::error::MutexExt;
 use anyhow::{Context, Result as AnyResult, bail};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::thread;
 use tauri::{AppHandle, Emitter, Runtime};
-
-pub(crate) const RESERVED_IMPORT_PID: u32 = 0;
 
 pub(crate) fn persist(state: &ImportState) -> AnyResult<()> {
     write_record(&state.project_root, &record_from_state(state)?)
 }
 
 pub(super) fn active_project_root(state: &AppState) -> AnyResult<PathBuf> {
-    let root = state
-        .active_project_root
-        .lock_or_bail("Active project state")?
-        .clone()
-        .context("No active project root")?;
-    fs::canonicalize(root).context("Failed to canonicalize active project root")
+    Ok(crate::project_ownership::active(state)
+        .map_err(anyhow::Error::msg)?
+        .root()
+        .to_path_buf())
 }
 
-/// Recover only durable authority.  No OS process is adopted after a native
-/// restart: Preparing/Running become Interrupted even if stale locks exist.
+/// Import recovery never adopts an OS process or infers ownership from scientific status locks.
+#[cfg(test)]
 pub(crate) fn recover_import_run_for_project(
+    state: &AppState,
+    project_root: &Path,
+) -> AnyResult<Option<ImportRunSnapshot>> {
+    recover_processing_before_import(project_root)?;
+    recover_import_run_after_processing_recovery(state, project_root)
+}
+
+pub(crate) fn recover_import_run_after_processing_recovery(
     state: &AppState,
     project_root: &Path,
 ) -> AnyResult<Option<ImportRunSnapshot>> {
@@ -42,6 +44,18 @@ pub(crate) fn recover_import_run_for_project(
         return Ok(None);
     };
     if record.acknowledged {
+        if record
+            .snapshot
+            .relocation_outcome
+            .as_ref()
+            .is_some_and(|outcome| {
+                outcome.subjects.iter().any(|subject| {
+                    subject.status == super::relocation::RelocationSubjectStatus::RecoveryRequired
+                })
+            })
+        {
+            bail!("Acknowledged import still has unresolved cleanup evidence");
+        }
         remove_record(project_root)?;
         return Ok(None);
     }
@@ -62,6 +76,7 @@ pub(crate) fn recover_import_run_for_project(
     run.relocation_outcome = snapshot.relocation_outcome;
     run.error = snapshot.error;
     run.terminal_result = snapshot.terminal_result;
+    run.confirmation_required = snapshot.confirmation_required;
     run.staging_generation = record.staging_generation;
     run.preserved_subjects = record.preserved_subjects;
     run.preserve_staging = record.preserve_staging;
@@ -79,6 +94,7 @@ pub(crate) fn recover_import_run_for_project(
     ) {
         run.lifecycle = ImportLifecycle::Interrupted;
         run.terminal_result = Some(ImportTerminalResult::Interrupted);
+        run.confirmation_required = true;
         run.error = Some(ImportStructuredError {
             code: "interrupted".to_string(),
             message: "Native import supervisor was not available after restart".to_string(),
@@ -136,6 +152,10 @@ pub(super) fn reserve_import_run_for_state(
     subjects_to_preserve: Vec<String>,
     preserve_staging: bool,
 ) -> AnyResult<ImportRunSnapshot> {
+    let _transition = state
+        .project_transition
+        .lock_or_bail("Project transition")?;
+    crate::project_ownership::ensure_processing_released(state).map_err(anyhow::Error::msg)?;
     validate_subject_components(&subject_list)?;
     if subject_list.is_empty() {
         bail!("At least one subject must be selected");
@@ -210,7 +230,11 @@ pub(super) fn get_active_import_run_for_state(
 }
 
 pub(super) fn acknowledge_import_run_for_state(state: &AppState, run_id: &str) -> AnyResult<()> {
-    let project_root = active_project_root(state)?;
+    let _transition = state
+        .project_transition
+        .lock_or_bail("Project transition")?;
+    let ownership = crate::project_ownership::active(state).map_err(anyhow::Error::msg)?;
+    let project_root = ownership.root().to_path_buf();
     let mut import_state = state.import_state.lock_or_bail("Import state")?;
     if import_state.run_id != run_id || import_state.project_root != project_root {
         bail!("Import run ID is obsolete, unknown, or belongs to another project");
@@ -221,6 +245,9 @@ pub(super) fn acknowledge_import_run_for_state(state: &AppState, run_id: &str) -
     }
     if !import_state.lifecycle.is_terminal() {
         bail!("Only a terminal import run can be acknowledged");
+    }
+    if import_state.confirmation_required {
+        bail!("Import interruption requires confirmation that external worker stopped");
     }
     if import_state
         .relocation_outcome
@@ -237,9 +264,6 @@ pub(super) fn acknowledge_import_run_for_state(state: &AppState, run_id: &str) -
     {
         bail!("Import run still has unresolved relocation recovery evidence");
     }
-    // Keep the terminal record byte-for-byte replayable until retirement
-    // succeeds. Persisting `acknowledged: true` first would turn a failed
-    // removal into a non-replayable record on both this process and restart.
     remove_record(&project_root)?;
     let acknowledged = ImportState {
         run_id: run_id.to_string(),
@@ -249,6 +273,30 @@ pub(super) fn acknowledge_import_run_for_state(state: &AppState, run_id: &str) -
     };
     *import_state = acknowledged;
     Ok(())
+}
+
+pub(super) fn confirm_import_worker_stopped_for_state(
+    state: &AppState,
+    run_id: &str,
+) -> AnyResult<ImportRunSnapshot> {
+    let project_root = active_project_root(state)?;
+    let mut run = state.import_state.lock_or_bail("Import state")?;
+    if run.run_id != run_id
+        || run.project_root != project_root
+        || run.lifecycle != ImportLifecycle::Interrupted
+        || !run.confirmation_required
+    {
+        bail!("Import interruption confirmation is stale or unavailable");
+    }
+    let updated_at_ms = run.updated_at_ms;
+    run.confirmation_required = false;
+    run.updated_at_ms = now_ms();
+    if let Err(error) = persist(&run) {
+        run.confirmation_required = true;
+        run.updated_at_ms = updated_at_ms;
+        return Err(error);
+    }
+    Ok(run.snapshot())
 }
 
 pub(super) fn admit_reserved_import_launch(
@@ -271,7 +319,7 @@ pub(super) fn admit_reserved_import_launch(
         // Admission is one-shot.  The reservation marker is private native
         // state, but prevents a second launch from racing the first before it
         // has transitioned to Running.
-        || run.child_pid.is_some()
+        || run.launch_in_progress
         || run.project_root != active_root
         || run.subject_list != subjects
         || run.relocation_plan_id.as_deref() != Some(relocation_plan_id)
@@ -286,8 +334,8 @@ pub(super) fn admit_reserved_import_launch(
     if let Some(plan) = run.relocation_plan.as_mut() {
         super::relocation::bind_plan(plan, project_root, subjects, generation)?;
     }
-    run.child_pid = Some(RESERVED_IMPORT_PID);
     persist(&run)?;
+    run.launch_in_progress = true;
     Ok(ImportReservation {
         generation: run.ownership_generation,
         preserved_subjects: run.preserved_subjects.clone(),
@@ -303,6 +351,7 @@ pub(super) fn fail_admitted_preparation(
     if run.ownership_generation != generation || run.lifecycle != ImportLifecycle::Preparing {
         bail!("Import reservation is obsolete");
     }
+    let prior = run.snapshot();
     run.transition(ImportLifecycle::Failed)
         .map_err(anyhow::Error::msg)?;
     run.error = Some(ImportStructuredError {
@@ -312,7 +361,13 @@ pub(super) fn fail_admitted_preparation(
         staging_issues: None,
     });
     run.terminal_result = Some(ImportTerminalResult::Failed);
-    persist(&run)?;
+    if let Err(error) = persist(&run) {
+        run.lifecycle = prior.lifecycle;
+        run.updated_at_ms = prior.updated_at_ms;
+        run.error = prior.error;
+        run.terminal_result = prior.terminal_result;
+        return Err(error);
+    }
     Ok(run.snapshot())
 }
 
@@ -333,14 +388,25 @@ pub(super) fn fail_preparing_run_for_id(
         run.ownership_generation
     };
     let mut run = state.import_state.lock_or_bail("Import state")?;
-    if run.ownership_generation != generation || run.lifecycle != ImportLifecycle::Preparing {
+    if run.ownership_generation != generation
+        || run.lifecycle != ImportLifecycle::Preparing
+        || run.launch_in_progress
+        || run.cancellation.is_some()
+    {
         return Ok(None);
     }
+    let prior = run.snapshot();
     run.transition(ImportLifecycle::Failed)
         .map_err(anyhow::Error::msg)?;
     run.error = Some(error);
     run.terminal_result = Some(ImportTerminalResult::Failed);
-    persist(&run)?;
+    if let Err(error) = persist(&run) {
+        run.lifecycle = prior.lifecycle;
+        run.updated_at_ms = prior.updated_at_ms;
+        run.error = prior.error;
+        run.terminal_result = prior.terminal_result;
+        return Err(error);
+    }
     Ok(Some(run.snapshot()))
 }
 
@@ -408,86 +474,7 @@ pub(super) fn bind_relocation_plan_for_run(
     relocation::bind_plan(plan, project_root, subjects, generation)
 }
 
-pub(super) fn rollback_reserved_preparation_failure(
-    state: &AppState,
-    generation: u64,
-    staging_root: &Path,
-    error: String,
-) -> String {
-    let durable_error = fail_admitted_preparation(state, generation, error.clone())
-        .err()
-        .map(|failure| {
-            format!("; additionally failed to persist terminal import result: {failure:#}")
-        })
-        .unwrap_or_default();
-    rollback_preparation_failure(staging_root, format!("{error}{durable_error}"))
-}
-
-pub(super) fn rollback_reserved_operational_failure(
-    state: &AppState,
-    generation: u64,
-    staging_root: &Path,
-    error: anyhow::Error,
-) -> ImportCommandError {
-    ImportCommandError::from(rollback_reserved_preparation_failure(
-        state,
-        generation,
-        staging_root,
-        format!("{error:#}"),
-    ))
-}
-
-pub(super) fn rollback_process_spawn_failure(
-    state: &AppState,
-    generation: u64,
-    staging_root: &Path,
-    process_name: &str,
-    executable_path: &str,
-    error: std::io::Error,
-) -> ImportCommandError {
-    let message = if error.kind() == std::io::ErrorKind::NotFound {
-        format!("{process_name} executable not found: {executable_path}")
-    } else {
-        format!("Failed to spawn {process_name} import process: {error}")
-    };
-    ImportCommandError::from(rollback_reserved_preparation_failure(
-        state,
-        generation,
-        staging_root,
-        message,
-    ))
-}
-
-pub(super) fn cleanup_after_prepare_event_failure(
-    state: &AppState,
-    generation: u64,
-    staging_root: &Path,
-    error: String,
-) -> String {
-    if let Ok(mut run) = state.import_state.lock()
-        && run.ownership_generation == generation
-        && !run.lifecycle.is_terminal()
-    {
-        run.child_pid = None;
-        run.lifecycle = ImportLifecycle::Failed;
-        run.terminal_result = Some(ImportTerminalResult::Failed);
-        run.error = Some(ImportStructuredError {
-            code: "launch".to_string(),
-            message: error.clone(),
-            subject: None,
-            staging_issues: None,
-        });
-        run.updated_at_ms = now_ms();
-        let _ = persist(&run);
-    }
-    rollback_preparation_failure(staging_root, error)
-}
-
-pub(super) fn set_reserved_import_pid(
-    state: &AppState,
-    generation: u64,
-    child_pid: u32,
-) -> Result<(), String> {
+pub(super) fn set_reserved_import_running(state: &AppState, generation: u64) -> Result<(), String> {
     let mut import_state = state
         .import_state
         .lock()
@@ -495,14 +482,13 @@ pub(super) fn set_reserved_import_pid(
 
     if import_state.ownership_generation != generation
         || import_state.lifecycle != ImportLifecycle::Preparing
-        || import_state.child_pid != Some(RESERVED_IMPORT_PID)
+        || !import_state.launch_in_progress
     {
         return Err(
             "Import state changed before process tracking could be established".to_string(),
         );
     }
 
-    import_state.child_pid = Some(child_pid);
     let prior_lifecycle = import_state.lifecycle;
     let prior_updated_at = import_state.updated_at_ms;
     import_state
@@ -511,7 +497,6 @@ pub(super) fn set_reserved_import_pid(
     if let Err(error) = persist(&import_state) {
         import_state.lifecycle = prior_lifecycle;
         import_state.updated_at_ms = prior_updated_at;
-        import_state.child_pid = Some(RESERVED_IMPORT_PID);
         return Err(format!("Failed to persist running import run: {error:#}"));
     }
     Ok(())
@@ -521,7 +506,6 @@ pub(super) fn emit_running_snapshot<R: Runtime>(
     app: &AppHandle<R>,
     state: &AppState,
     generation: u64,
-    child_pid: u32,
 ) -> Result<bool, String> {
     let import_state = state
         .import_state
@@ -529,7 +513,6 @@ pub(super) fn emit_running_snapshot<R: Runtime>(
         .map_err(|_| "Import state lock was poisoned".to_string())?;
     if import_state.ownership_generation != generation
         || import_state.lifecycle != ImportLifecycle::Running
-        || import_state.child_pid != Some(child_pid)
     {
         return Ok(false);
     }
@@ -544,7 +527,6 @@ pub(super) fn emit_running_snapshot<R: Runtime>(
 pub(super) fn set_import_supervisor_handle(
     state: &AppState,
     generation: u64,
-    child_pid: u32,
     supervisor_handle: thread::JoinHandle<()>,
 ) -> Result<(), (String, thread::JoinHandle<()>)> {
     let mut import_state = match state.import_state.lock() {
@@ -558,17 +540,26 @@ pub(super) fn set_import_supervisor_handle(
     };
 
     if import_state.ownership_generation != generation
-        || import_state.lifecycle != ImportLifecycle::Running
-        || import_state.child_pid != Some(child_pid)
+        || !matches!(
+            import_state.lifecycle,
+            ImportLifecycle::Running | ImportLifecycle::Cancelling
+        )
     {
         return Err((
             format!(
-                "Import state changed before supervisor tracking could be established for PID {child_pid}"
+                "Import state changed before supervisor tracking could be established for generation {generation}"
             ),
             supervisor_handle,
         ));
     }
 
     import_state.supervisor_handle = Some(supervisor_handle);
+    Ok(())
+}
+
+/// Processing recovery runs before any BIDS/import recovery mutation.
+pub(crate) fn recover_processing_before_import(root: &Path) -> AnyResult<()> {
+    crate::processing::recovery::validate(root)?;
+    crate::processing::recovery::settle(root, true)?;
     Ok(())
 }

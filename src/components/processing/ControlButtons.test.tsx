@@ -8,10 +8,15 @@ import { findCompletedSubjects } from "./ControlButton.helpers";
 
 const mockKillProcessing = vi.fn();
 const mockStartProcessing = vi.fn();
+const mockConfirmProcessingStopped = vi.fn();
 const mockClearBidsCompatibilityError = vi.fn();
 const mockPreflightBidsSetupRepair = vi.fn();
 const mockCommitBidsProjectMutations = vi.fn();
 let mockBidsCompatibilityError: string | null = null;
+let mockActiveRunId: string | null = "processing-run-1";
+let mockTerminalRunId: string | null = null;
+let mockAvailableAction = "stop";
+let mockActionPending = false;
 
 let mockPhase:
   | "idle"
@@ -41,6 +46,11 @@ vi.mock("../../stores/processingStore", () => ({
         processingPhase: mockPhase,
         startProcessing: mockStartProcessing,
         killProcessing: mockKillProcessing,
+        confirmProcessingStopped: mockConfirmProcessingStopped,
+        availableAction: mockAvailableAction,
+        actionPending: mockActionPending,
+        activeRunId: mockActiveRunId,
+        terminalRunId: mockTerminalRunId,
         config: mockConfig,
         subjectStatuses: mockSubjectStatuses,
         bidsCompatibilityError: mockBidsCompatibilityError,
@@ -51,6 +61,11 @@ vi.mock("../../stores/processingStore", () => ({
         processingPhase: mockPhase,
         startProcessing: mockStartProcessing,
         killProcessing: mockKillProcessing,
+        confirmProcessingStopped: mockConfirmProcessingStopped,
+        availableAction: mockAvailableAction,
+        actionPending: mockActionPending,
+        activeRunId: mockActiveRunId,
+        terminalRunId: mockTerminalRunId,
         config: mockConfig,
         subjectStatuses: mockSubjectStatuses,
         bidsCompatibilityError: mockBidsCompatibilityError,
@@ -81,15 +96,27 @@ function renderButtons(props?: { startDisabled?: boolean }) {
   );
 }
 
+afterEach(() => {
+  mockTerminalRunId = null;
+});
+
 describe("ControlButtons kill confirmation", () => {
   afterEach(() => {
     cleanup();
     mockPhase = "running";
+    mockActiveRunId = "processing-run-1";
+    mockTerminalRunId = null;
+    mockAvailableAction = "stop";
+    mockActionPending = false;
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockPhase = "running";
+    mockActiveRunId = "processing-run-1";
+    mockTerminalRunId = null;
+    mockAvailableAction = "stop";
+    mockActionPending = false;
   });
 
   it("does not call killProcessing immediately when kill button clicked", async () => {
@@ -133,24 +160,78 @@ describe("ControlButtons kill confirmation", () => {
 });
 
 describe("ControlButtons native lifecycle controls", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    mockActiveRunId = "processing-run-1";
+    mockAvailableAction = "stop";
+  });
   beforeEach(() => vi.clearAllMocks());
 
-  it.each(["preparing", "finalizing", "cancelling"] as const)(
-    "locks control while native run is %s",
-    (phase) => {
+  it.each([
+    ["preparing", null],
+    ["finalizing", null],
+    ["cancelling", null],
+    ["cancelling", "processing-run-old"],
+  ] as const)(
+    "locks control while native run is %s without a retry for its active run",
+    (phase, _retryRunId) => {
       mockPhase = phase;
+      mockAvailableAction = "none";
       renderButtons();
-      expect(screen.getByRole("button")).toBeDisabled();
+      const control = screen.getByRole("button");
+      expect(control).toBeDisabled();
+      if (phase === "cancelling") expect(control).toHaveTextContent("Cancelling");
     },
   );
 
-  it.each(["completed", "failed", "cancelled", "interrupted"] as const)(
-    "allows terminal %s restart",
-    (phase) => {
+  it.each(["completed", "failed", "cancelled"] as const)("allows terminal %s restart", (phase) => {
+    mockPhase = phase;
+    renderButtons();
+    expect(screen.getByTestId("start-btn")).toBeEnabled();
+    mockTerminalRunId = "processing-run-1";
+    cleanup();
+    renderButtons();
+    expect(screen.getByTestId("start-btn")).toBeDisabled();
+  });
+
+  it("locks an interrupted run until external stop confirmation", () => {
+    mockPhase = "interrupted";
+    mockAvailableAction = "confirmStopped";
+    renderButtons();
+    expect(screen.getByTestId("stop-btn")).toBeDisabled();
+  });
+
+  it("sends external-stop confirmation once and disables it while pending", async () => {
+    const user = userEvent.setup();
+    mockPhase = "interrupted";
+    mockAvailableAction = "confirmStopped";
+    renderButtons();
+
+    const confirm = screen.getByTestId("confirm-processing-stopped-btn");
+    await user.click(confirm);
+
+    expect(mockConfirmProcessingStopped).toHaveBeenCalledOnce();
+    mockActionPending = true;
+    cleanup();
+    renderButtons();
+    expect(screen.getByTestId("confirm-processing-stopped-btn")).toBeDisabled();
+  });
+
+  it.each(["cancelling", "finalizing"] as const)(
+    "enables exact-run cleanup retry while %s",
+    async (phase) => {
       mockPhase = phase;
+      mockAvailableAction = "retryCleanup";
+      const user = userEvent.setup();
       renderButtons();
-      expect(screen.getByTestId("start-btn")).toBeEnabled();
+
+      const retry = screen.getByTestId("stop-btn");
+      expect(retry).toBeEnabled();
+      expect(retry).toHaveTextContent("Retry cleanup");
+      await user.click(retry);
+      await user.click(await screen.findByTestId("stop-confirm-btn"));
+
+      expect(mockKillProcessing).toHaveBeenCalledTimes(1);
     },
   );
 });

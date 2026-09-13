@@ -1,6 +1,6 @@
-# Use OpenSpec's stock artifact workflow. Agent execution policy lives in
-# AGENTS.md and change tasks rather than tool-specific schema instructions.
-schema: spec-driven
+# Use the local reviewed-groups workflow. It preserves stock proposal/spec/design
+# artifacts while enforcing microtask planning and group-level implementation review.
+schema: spec-driven-reviewed-groups
 
 # 2. Provide global development context for the AI agents running your pipeline
 context: |
@@ -13,16 +13,41 @@ rules:
   proposal:
     - "Ensure all proposals explicitly contrast the new changes against existing capabilities."
     - "Always flag breaking changes clearly in the What Changes section."
+    - "Any proposal replacing existing functionality must explicitly declare superseded components in Superseded Systems & Retirement and forbid dual-path coexistence."
+    - "Any proposal that reduces desktop platform support, adds a helper/daemon process, or strengthens process containment beyond documented product workloads requires explicit user approval before artifact creation."
 
   specs:
     - "Every scenario MUST use exactly 4 hashtags (#### Scenario: ) as per schema layout."
     - "All specifications must use strict normative language (SHALL/MUST)."
+    - "When modifying capabilities, authors must audit canonical specs and declare superseded requirements under ## REMOVED Requirements."
+    - "Process guarantees must describe the supported real workload scope. Synthetic adversarial fixtures must not silently expand requirements or disable a platform."
 
   design:
     - "Include at least two alternative architectures considered for major decisions."
     - "Ensure a clear mitigation is written for every identified risk."
+    - "Design documents must enforce the Single Authority Invariant and include a Retirement Matrix mapping replaced components to exact deletion tasks."
+    - "Prefer standard operating-system primitives. A helper, daemon, process registry, subreaper, pidfd/procfs accounting, or platform lockout requires explicit user approval and a documented product need."
 
   tasks:
-    - "Break down items so no individual task takes more than 2 hours to complete."
+    - "Group related work under numbered headings; each group is one implementer/reviewer ownership unit."
+    - "Every checkbox must be one independently observable action taking at most two minutes of agent work, excluding command runtime."
+    - "Implementers must explicitly state the concrete evidence of how they fulfilled each task (exact command, file/symbol, or observation) before review."
+    - "Before changing tests, classify affected coverage by surviving product invariant as Preserve, Migrate, Delete, or Consolidate; never preserve or delete by test count alone."
+    - "Do not predeclare one test per task or scenario; define required behavioral boundaries, inspect equivalent coverage, and prefer one table-driven test per distinct equivalence class."
+    - "More than three new behavioral cases, more than 150 added test lines, a new fixture/helper abstraction, or deletion of a whole test file requires parent approval before edits."
+    - "Implementers must format-write only owned files, then pass pnpm format:check, pnpm lint, pnpm typecheck, focused/affected tests, and pnpm test on the candidate-final group tree before review."
+    - "Every numbered task group must end with checkboxes requiring scoped formatting plus all required non-writing checks and tests to pass."
+    - "Tasks replacing functionality must include explicit microtasks to delete superseded code, remove obsolete tests, and audit for zero callers."
+    - "Forbid temporary fallback adapters, zombie code, or duplicate lifecycle owners from surviving the change."
+    - "Inventory existing coverage before adding tests; add only distinct missing coverage and prefer table-driven extensions."
+    - "Use RED-GREEN-REFACTOR only for changed behavior; use baseline-GREEN/change/GREEN for refactors and never fabricate RED evidence."
+    - "Never delete unrelated regression tests as dead code and never require one test per specification sentence."
+    - "Reviewers are read-only and report findings only; any reviewer write is a workflow failure."
+    - "Only direct spec/task violations, supported-scope safety defects, stale-identity mutation, missing equivalent required coverage, group-caused mechanical failures, false task evidence, or surviving superseded authority block review."
+    - "Optional polish, realism-only changes, duplicate permutations, and speculative edge cases never enter correction without explicit parent promotion."
+    - "After one parent-triaged correction and second review, require orchestrator arbitration of each remaining finding instead of another broad loop."
+    - "Orchestrator may reject optional findings or authorize one final narrow in-scope correction; a fresh reviewer then performs sealed read-only verification limited to accepted findings and directly caused regressions."
+    - "Spec/design changes, stronger guarantees, support changes, new architecture/dependencies, destructive uncertainty, or unapproved test-budget expansion remain human-only decisions and must be parked while independent groups may continue."
+    - "Treat aborted editing sessions as unknown dirty transactions and audit their diff before any further delegation."
     - "Ensure tasks strictly map to the requirements defined in the specs phase."
-    - "For code changes, include explicit RED, GREEN, and verification steps."
+    - "If implementation discovers a stronger guarantee or unsupported platform behavior than the approved artifacts require, stop and ask the user; never absorb architecture or support changes into a task group."

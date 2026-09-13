@@ -2,9 +2,7 @@ use super::output::cleanup_staging_root;
 use super::staging::{StagingEntry, portable_key};
 use anyhow::{Result as AnyResult, anyhow, bail};
 use std::collections::BTreeMap;
-use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub fn rollback_preparation_failure(staging_root: &Path, error: String) -> String {
     let _ = cleanup_staging_root(staging_root);
@@ -124,103 +122,4 @@ pub(super) fn normalize_staging_subject_spelling(
         .collect()
 }
 
-pub fn validate_matlab_executable(matlab_path: &str) -> AnyResult<String> {
-    let matlab_path = validate_string_input("matlab_path", matlab_path)?;
-
-    if is_path_like(&matlab_path) {
-        let path = Path::new(&matlab_path);
-        validate_executable_file(path)?;
-        return Ok(matlab_path);
-    }
-
-    let path_var = env::var_os("PATH")
-        .and_then(|value| value.into_string().ok())
-        .unwrap_or_default();
-    find_executable_on_path(&matlab_path, &path_var)
-        .map(|path| path.to_string_lossy().to_string())
-        .ok_or_else(|| anyhow!("MATLAB executable not found on PATH: {}", matlab_path))
-}
-
-pub(super) fn is_path_like(value: &str) -> bool {
-    let path = Path::new(value);
-    path.is_absolute() || value.contains('/') || value.contains('\\')
-}
-
-pub(super) fn validate_executable_file(path: &Path) -> AnyResult<()> {
-    if !path.exists() {
-        bail!("MATLAB executable not found: {}", path.display());
-    }
-    if !path.is_file() {
-        bail!("MATLAB path is not a file: {}", path.display());
-    }
-    if !is_executable_file(path) {
-        bail!("MATLAB executable is not executable: {}", path.display());
-    }
-
-    Ok(())
-}
-
-#[cfg(unix)]
-pub(super) fn is_executable_file(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::metadata(path)
-        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
-}
-
-#[cfg(windows)]
-pub(super) fn is_executable_file(path: &Path) -> bool {
-    path.is_file()
-}
-
-#[cfg(not(any(unix, windows)))]
-pub(super) fn is_executable_file(path: &Path) -> bool {
-    path.is_file()
-}
-
-pub fn find_executable_on_path(command: &str, path_var: &str) -> Option<PathBuf> {
-    if command.trim().is_empty() || is_path_like(command) {
-        return None;
-    }
-
-    for dir in env::split_paths(path_var) {
-        for candidate in executable_candidates(&dir, command) {
-            if candidate.is_file() && is_executable_file(&candidate) {
-                return Some(candidate);
-            }
-        }
-    }
-
-    None
-}
-
-#[cfg(windows)]
-pub(super) fn executable_candidates(dir: &Path, command: &str) -> Vec<PathBuf> {
-    let command_path = Path::new(command);
-    if command_path.extension().is_some() {
-        return vec![dir.join(command)];
-    }
-
-    let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
-    pathext
-        .split(';')
-        .filter(|ext| !ext.is_empty())
-        .map(|ext| dir.join(format!("{command}{ext}")))
-        .chain(std::iter::once(dir.join(command)))
-        .collect()
-}
-
-#[cfg(not(windows))]
-pub(super) fn executable_candidates(dir: &Path, command: &str) -> Vec<PathBuf> {
-    vec![dir.join(command)]
-}
-
-pub(super) fn validate_string_input(name: &str, value: &str) -> AnyResult<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        bail!("{} must not be empty", name);
-    }
-
-    Ok(trimmed.to_string())
-}
+pub use crate::execution_managed::{find_executable_on_path, validate_matlab_executable};

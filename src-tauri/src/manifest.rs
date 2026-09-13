@@ -1,119 +1,11 @@
-use anyhow::{Result as AnyResult, bail};
-use serde::Serialize;
-use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::matlab::probe_matlab_version;
-use crate::processing::runs::{
-    completed_population_run_root, lock_processing_state, lock_project_transition,
-    preparing_run_root,
-};
 use crate::processing::{completion_from_lock_or_log, lock_module_roots, normalize_asl_run_id};
 use crate::tracing::CommandTrace;
 
 #[path = "manifest_tests.rs"]
 #[cfg(test)]
 mod manifest_tests;
-
-#[derive(Debug, Clone, Serialize)]
-pub struct EnvironmentVersions {
-    pub explore_asl: String,
-    pub matlab: String,
-}
-
-fn read_exploreasl_version_file(explore_asl_path: &Path) -> AnyResult<String> {
-    let entries = fs::read_dir(explore_asl_path)?;
-    for entry in entries.flatten() {
-        let file_name = entry.file_name().to_string_lossy().to_string();
-        if let Some(version) = file_name.strip_prefix("VERSION_")
-            && !version.is_empty()
-        {
-            return Ok(version.to_string());
-        }
-    }
-    bail!("no VERSION_* file found")
-}
-
-fn capture_environment_versions_impl(
-    explore_asl_path: String,
-    matlab_path: String,
-) -> EnvironmentVersions {
-    let explore_asl = read_exploreasl_version_file(&PathBuf::from(explore_asl_path.trim()))
-        .unwrap_or_else(|_| "unknown".to_string());
-    let matlab = if matlab_path.trim().is_empty() {
-        "unknown".to_string()
-    } else {
-        probe_matlab_version(&PathBuf::from(matlab_path.trim()))
-            .unwrap_or_else(|_| "unknown".to_string())
-    };
-
-    EnvironmentVersions {
-        explore_asl,
-        matlab,
-    }
-}
-
-fn modified_epoch_millis(path: &Path) -> Option<i64> {
-    path.metadata()
-        .ok()?
-        .modified()
-        .ok()?
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()
-        .map(|duration| duration.as_millis() as i64)
-}
-
-/// Capture is correlated to a current Preparing Population reservation. Holding
-/// the native transition gate makes a delayed response fail rather than being
-/// attributed to a replacement project/run by the renderer.
-#[tauri::command]
-pub fn capture_environment_versions_for_run(
-    state: tauri::State<'_, crate::app_state::AppState>,
-    run_id: String,
-    explore_asl_path: String,
-    matlab_path: String,
-) -> Result<EnvironmentVersions, String> {
-    let _transition = lock_project_transition(&state)?;
-    let _root = preparing_run_root(&state, &run_id)?;
-    let selected_population = lock_processing_state(&state)?
-        .current_run
-        .as_ref()
-        .is_some_and(|run| {
-            run.selected_modules
-                .iter()
-                .any(|module| module == "population")
-        });
-    if !selected_population {
-        return Err(format!(
-            "Processing run {run_id} does not select Population"
-        ));
-    }
-    let result = capture_environment_versions_impl(explore_asl_path, matlab_path);
-    let _root = preparing_run_root(&state, &run_id)?;
-    Ok(result)
-}
-
-pub(crate) fn read_population_ready_mtime_impl(project_root: &Path) -> Option<i64> {
-    let p = project_root
-        .join("derivatives")
-        .join("ExploreASL")
-        .join("lock")
-        .join("xASL_module_Population")
-        .join("xASL_module_Population")
-        .join("999_ready.status");
-
-    modified_epoch_millis(&p)
-}
-
-#[tauri::command]
-pub fn read_population_ready_mtime_for_run(
-    state: tauri::State<'_, crate::app_state::AppState>,
-    run_id: String,
-) -> Result<Option<i64>, String> {
-    let _transition = lock_project_transition(&state)?;
-    let root = completed_population_run_root(&state, &run_id)?;
-    Ok(read_population_ready_mtime_impl(&root))
-}
 
 #[tauri::command]
 pub async fn read_prior_modules_mtimes(

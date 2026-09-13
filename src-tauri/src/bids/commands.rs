@@ -75,7 +75,8 @@ pub fn check_bids_dataset(
         .path()
         .app_data_dir()
         .map_err(|error| format!("Could not resolve platform app-data directory: {error}"))?;
-    setup::recover_root(&app_data, root).into_command_result()?;
+    let ownership = crate::project_ownership::for_setup(&state, root)?;
+    setup::recover_root_owned(&app_data, &ownership).into_command_result()?;
     let result = check_bids_dataset_impl(root).into_command_result()?;
     trace.success(&result);
     Ok(result)
@@ -267,7 +268,10 @@ pub fn preflight_bids_project_mutations(
             message: "Project transition lock was poisoned".into(),
         })?;
     let app_data = setup_app_data(&app)?;
-    setup::recover_root(&app_data, Path::new(&root_path)).map_err(setup::command_error)?;
+    let ownership = crate::project_ownership::for_setup(&state, Path::new(&root_path))
+        .map_err(anyhow::Error::msg)
+        .map_err(setup::command_error)?;
+    setup::recover_root_owned(&app_data, &ownership).map_err(setup::command_error)?;
     setup::preflight_for_state(
         &state.setup_plans,
         root_path,
@@ -291,7 +295,10 @@ pub fn preflight_bids_setup_repair(
         })?;
     verify_active_repair_root(&state, Path::new(&root_path)).map_err(setup::command_error)?;
     let app_data = setup_app_data(&app)?;
-    setup::recover_root(&app_data, Path::new(&root_path)).map_err(setup::command_error)?;
+    let ownership = crate::project_ownership::for_setup(&state, Path::new(&root_path))
+        .map_err(anyhow::Error::msg)
+        .map_err(setup::command_error)?;
+    setup::recover_root_owned(&app_data, &ownership).map_err(setup::command_error)?;
     setup::preflight_for_state(&state.setup_plans, root_path, SetupMode::Repair, None)
         .map_err(setup::command_error)
 }
@@ -309,7 +316,7 @@ pub fn commit_bids_project_mutations(
             message: "Project transition lock was poisoned".into(),
         })?;
     let app_data = setup_app_data(&app)?;
-    setup::commit_for_state(&state.setup_plans, &plan_id, &app_data).map_err(setup::command_error)
+    setup::commit_for_app_state(&state, &plan_id, &app_data).map_err(setup::command_error)
 }
 
 /// Native run ownership determines the root. This command has no renderer path

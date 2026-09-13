@@ -1,14 +1,9 @@
 use super::output::{cleanup_staging_root, owned_subject_spelling};
-use super::parser::{
-    ImportOutputLine, ImportOutputLineSource, ImportOutputParser, ImportStructuredEvent,
-    progress_bar_re,
-};
+use super::parser::{ImportOutputLine, ImportOutputParser, ImportStructuredEvent, progress_bar_re};
 use super::staging::{StagingEntry, compile_staging_plan, execute_compiled_staging_plan};
 use super::state::{
-    RESERVED_IMPORT_PID, admit_reserved_import_launch, bind_relocation_plan_for_run,
-    cleanup_after_prepare_event_failure, emit_running_snapshot, rollback_process_spawn_failure,
-    rollback_reserved_operational_failure, set_import_supervisor_handle, set_reserved_import_pid,
-    validate_relocation_plan_for_run,
+    admit_reserved_import_launch, bind_relocation_plan_for_run, emit_running_snapshot,
+    set_import_supervisor_handle, set_reserved_import_running, validate_relocation_plan_for_run,
 };
 use super::status::copy_lock_files_paths;
 use super::types::{
@@ -18,45 +13,19 @@ use super::types::{
 use super::validation::{normalize_staging_subject_spelling, validate_import_request_inputs};
 use super::verification::prepare_generation;
 use crate::app_state::AppState;
-use crate::apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH, ensure_mcr_cache};
+use crate::apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH};
 use crate::error::MutexExt;
 use crate::execution_profile::ExecutionProfile;
-use crate::process_control::{
-    force_kill_process, send_termination_signal, validate_process_id, wait_for_process_exit,
-};
 use anyhow::{Context, Result as AnyResult, bail};
+use easl_execution_runtime::process::{CancellationToken, ProcessScope};
 use serde_json::Value;
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
-use std::path::{Path, PathBuf};
-use std::process::{Child, Stdio};
+use std::path::Path;
+
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
-
-pub(super) fn read_pipe_lines<R>(
-    reader: R,
-    source: ImportOutputLineSource,
-    sender: mpsc::Sender<ImportOutputLine>,
-) -> thread::JoinHandle<()>
-where
-    R: Read + Send + 'static,
-{
-    thread::spawn(move || {
-        for line in BufReader::new(reader).lines() {
-            match line {
-                Ok(line) => {
-                    let output_line = ImportOutputLine { source, line };
-                    if sender.send(output_line).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    })
-}
 
 pub(crate) fn accepts_import_diagnostic(import_state: &ImportState, generation: u64) -> bool {
     import_state.ownership_generation == generation
@@ -123,12 +92,6 @@ pub(super) fn emit_structured_events<R: Runtime>(
     saw_import_complete
 }
 
-pub fn mark_import_termination_requested(state: &mut ImportState, pid: u32) {
-    if state.child_pid == Some(pid) {
-        state.termination_requested_for = Some(pid);
-    }
-}
-
 pub(super) fn stream_import_output<R: Runtime>(
     app: &AppHandle<R>,
     generation: u64,
@@ -170,78 +133,205 @@ pub(super) fn stream_import_output<R: Runtime>(
 pub(super) fn supervise_import_process<R: Runtime>(
     app: AppHandle<R>,
     generation: u64,
-    child_pid: u32,
-    mut child: Child,
+    mut scope: easl_execution_runtime::process::ProcessScope,
     subject_list: Vec<String>,
     start_receiver: mpsc::Receiver<()>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        if !start_supervisor_or_reap(&mut child, start_receiver) {
-            return;
+        if start_receiver.recv().is_err() {
+            scope.cancellation().cancel();
         }
-        let (sender, receiver) = mpsc::channel();
-        let stdout_thread = child
-            .stdout
-            .take()
-            .map(|stdout| read_pipe_lines(stdout, ImportOutputLineSource::Stdout, sender.clone()));
-        let stderr_thread = child
-            .stderr
-            .take()
-            .map(|stderr| read_pipe_lines(stderr, ImportOutputLineSource::Stderr, sender.clone()));
-        drop(sender);
-
-        let mut parser = ImportOutputParser::new(&subject_list);
-        for output_line in receiver {
-            let _ = stream_import_output(&app, generation, output_line, &mut parser);
-        }
-
-        if let Some(handle) = stdout_thread {
-            let _ = handle.join();
-        }
-        if let Some(handle) = stderr_thread {
-            let _ = handle.join();
-        }
-        let finished_events = parser.finish();
-        if let Ok(status) = child.wait() {
-            // Parser output stays diagnostic.  Flush terminal parser diagnostics
-            // before durable exit classification, but never promote it to success.
-            for event in finished_events {
-                if !matches!(event, ImportStructuredEvent::ImportComplete) {
-                    let _ = emit_structured_events(&app, generation, vec![event]);
-                }
-            }
-            let state = app.state::<AppState>();
-            let exit_code = status.code().unwrap_or(-1);
-            if let Ok(snapshot) =
-                record_import_process_exit(&state, generation, child_pid, exit_code)
-            {
-                if snapshot.lifecycle == ImportLifecycle::Finalizing {
-                    // Finalizing is independently durable and visible before
-                    // verification, cleanup, or relocation work begins.
-                    let _ = app.emit("import-run-snapshot", snapshot);
-                    if let Ok(terminal) = complete_finalizing_import(&state, generation, exit_code)
-                    {
-                        release_terminal_supervisor_handle(&state, generation);
-                        let _ = app.emit("import-run-snapshot", terminal);
+        let result = (|| -> AnyResult<()> {
+            let stdout = scope.take_stdout()?;
+            let stderr = scope.take_stderr()?;
+            let (lines, receiver) = mpsc::channel();
+            for (stream, source) in [
+                (
+                    Box::new(stdout) as Box<dyn std::io::Read + Send>,
+                    super::parser::ImportOutputLineSource::Stdout,
+                ),
+                (
+                    Box::new(stderr) as Box<dyn std::io::Read + Send>,
+                    super::parser::ImportOutputLineSource::Stderr,
+                ),
+            ] {
+                let sender = lines.clone();
+                thread::spawn(move || {
+                    let mut reader = std::io::BufReader::new(stream);
+                    let mut retained = Vec::with_capacity(64 * 1024);
+                    let mut buffer = [0_u8; 8192];
+                    loop {
+                        let count = match std::io::Read::read(&mut reader, &mut buffer) {
+                            Ok(0) => break,
+                            Ok(count) => count,
+                            Err(_) => return,
+                        };
+                        for byte in &buffer[..count] {
+                            if *byte == b'\n' {
+                                if retained.last() == Some(&b'\r') {
+                                    retained.pop();
+                                }
+                                let line = bounded_lossy_line(&retained);
+                                let _ = sender.send(ImportOutputLine { line, source });
+                                retained.clear();
+                            } else if retained.len() < 64 * 1024 {
+                                retained.push(*byte);
+                            }
+                        }
                     }
-                } else {
-                    release_terminal_supervisor_handle(&state, generation);
-                    let _ = app.emit("import-run-snapshot", snapshot);
+                    if !retained.is_empty() {
+                        let line = bounded_lossy_line(&retained);
+                        let _ = sender.send(ImportOutputLine { line, source });
+                    }
+                });
+            }
+            drop(lines);
+            let mut parser = ImportOutputParser::new(&subject_list);
+            let exit = loop {
+                while let Ok(line) = receiver.try_recv() {
+                    stream_import_output(&app, generation, line, &mut parser);
+                }
+                match scope.wait_for(Duration::from_millis(20)) {
+                    Ok(Some(outcome)) => break outcome.exit_status,
+                    Ok(None) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+                        break scope.wait()?.exit_status;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            };
+            for line in receiver {
+                stream_import_output(&app, generation, line, &mut parser);
+            }
+            for event in parser.finish() {
+                if !matches!(event, ImportStructuredEvent::ImportComplete) {
+                    emit_structured_events(&app, generation, vec![event]);
                 }
             }
+            settle_import_scope_exit(&app, generation, exit.code().unwrap_or(-1))?;
+            Ok(())
+        })();
+        if let Err(error) = result {
+            retain_import_scope_after_supervision_error(&app, generation, scope, error);
         }
     })
 }
 
+/// A process-scope error is not proof that the worker stopped. Keep the scope
+/// in this supervisor thread until direct-child reaping and scope settlement
+/// succeed, then retry the durable exit/finalization checkpoint as needed.
+fn retain_import_scope_after_supervision_error<R: Runtime>(
+    app: &AppHandle<R>,
+    generation: u64,
+    mut scope: ProcessScope,
+    initial_error: anyhow::Error,
+) {
+    record_import_supervision_error(app, generation, initial_error);
+    loop {
+        let exit = match scope.wait_for(Duration::from_millis(100)) {
+            Ok(Some(outcome)) => outcome.exit_status,
+            Ok(None) => continue,
+            // `wait_for` returns Interrupted only after `cancel` has settled
+            // the supported scope. Re-read its reaped direct-child status.
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => match scope.wait() {
+                Ok(outcome) => outcome.exit_status,
+                Err(error) => {
+                    record_import_supervision_error(app, generation, error);
+                    thread::sleep(Duration::from_millis(100));
+                    continue;
+                }
+            },
+            Err(error) => {
+                // Includes graceful/force/settlement failure. The scope remains
+                // owned by this live thread; a later Stop or shutdown observes
+                // the retained join handle and cannot publish a false terminal.
+                record_import_supervision_error(app, generation, error);
+                thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+        };
+        match settle_import_scope_exit(app, generation, exit.code().unwrap_or(-1)) {
+            Ok(()) => return,
+            Err(error) => {
+                // The worker is known settled, but write-ahead terminal state
+                // is not. Retain this owner until a durable checkpoint succeeds
+                // instead of leaving a finished handle for Stop to reinterpret.
+                record_import_supervision_error(app, generation, error);
+                thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+}
+
+fn record_import_supervision_error<R: Runtime>(
+    app: &AppHandle<R>,
+    generation: u64,
+    error: impl std::fmt::Display,
+) {
+    let state = app.state::<AppState>();
+    if let Ok(mut run) = state.import_state.lock()
+        && run.ownership_generation == generation
+        && !run.lifecycle.is_terminal()
+    {
+        let prior = run.error.clone();
+        run.error = Some(super::types::ImportStructuredError {
+            code: "process".into(),
+            message: format!("Import supervision failed: {error}"),
+            subject: None,
+            staging_issues: None,
+        });
+        if super::state::persist(&run).is_err() {
+            run.error = prior;
+        }
+    }
+}
+
+fn settle_import_scope_exit<R: Runtime>(
+    app: &AppHandle<R>,
+    generation: u64,
+    exit_code: i32,
+) -> AnyResult<()> {
+    let state = app.state::<AppState>();
+    let snapshot = {
+        let run = state.import_state.lock_or_bail("Import state")?;
+        match run.lifecycle {
+            ImportLifecycle::Running | ImportLifecycle::Cancelling => {
+                drop(run);
+                record_import_process_exit(&state, generation, exit_code)?
+            }
+            ImportLifecycle::Finalizing => run.snapshot(),
+            lifecycle if lifecycle.is_terminal() => run.snapshot(),
+            _ => bail!("Import scope settled before native running ownership was established"),
+        }
+    };
+    let terminal = if snapshot.lifecycle == ImportLifecycle::Finalizing {
+        app.emit("import-run-snapshot", snapshot).ok();
+        complete_finalizing_import(&state, generation, exit_code)?
+    } else {
+        snapshot
+    };
+    if !terminal.lifecycle.is_terminal() {
+        bail!("Import scope settled without a terminal native lifecycle");
+    }
+    release_terminal_supervisor_handle(&state, generation);
+    app.emit("import-run-snapshot", terminal).ok();
+    Ok(())
+}
+
+fn bounded_lossy_line(bytes: &[u8]) -> String {
+    let mut line = String::from_utf8_lossy(bytes).into_owned();
+    while line.len() > 64 * 1024 {
+        line.pop();
+    }
+    line
+}
+
 fn release_terminal_supervisor_handle(state: &AppState, generation: u64) {
-    // A naturally completed supervisor has no external joiner. Drop its self
-    // handle only after durable terminal state; project shutdown otherwise
-    // treats the finished handle as live ownership and cannot close.
     if let Ok(mut run) = state.import_state.lock()
         && run.ownership_generation == generation
         && run.lifecycle.is_terminal()
-        && run.child_pid.is_none()
     {
+        run.cancellation = None;
         run.supervisor_handle.take();
     }
 }
@@ -249,72 +339,40 @@ fn release_terminal_supervisor_handle(state: &AppState, generation: u64) {
 pub(crate) fn record_import_process_exit(
     state: &AppState,
     generation: u64,
-    child_pid: u32,
     exit_code: i32,
 ) -> AnyResult<super::types::ImportRunSnapshot> {
-    use super::types::ImportExitEvidence;
-
+    let mut run = state.import_state.lock_or_bail("Import state")?;
+    if run.ownership_generation != generation
+        || !matches!(
+            run.lifecycle,
+            ImportLifecycle::Running | ImportLifecycle::Cancelling
+        )
     {
-        let mut run = state
-            .import_state
-            .lock()
-            .map_err(|_| anyhow::anyhow!("Import state lock was poisoned"))?;
-        if run.ownership_generation != generation || run.child_pid != Some(child_pid) {
-            bail!("Import supervisor is obsolete");
-        }
-        if run.lifecycle == ImportLifecycle::Cancelling
-            && run.termination_requested_for == Some(child_pid)
-        {
-            let prior_updated_at = run.updated_at_ms;
-            run.child_pid = None;
-            run.termination_requested_for = None;
-            run.transition(ImportLifecycle::Cancelled)
-                .map_err(anyhow::Error::msg)?;
-            run.subject_outcomes = cancelled_subject_outcomes(&run.subject_list);
-            run.terminal_result = Some(super::types::ImportTerminalResult::Cancelled);
-            if let Err(error) = super::journal::write_record(
-                &run.project_root,
-                &super::journal::record_from_state(&run)?,
-            ) {
-                run.lifecycle = ImportLifecycle::Cancelling;
-                run.updated_at_ms = prior_updated_at;
-                run.child_pid = Some(child_pid);
-                run.terminal_result = None;
-                return Err(error);
-            }
-            return Ok(run.snapshot());
-        }
-        if run.lifecycle == ImportLifecycle::Cancelling {
-            // Cancellation failed or became unconfirmed before exit. The exit
-            // remains authoritative, but must follow normal finalization rather
-            // than falsely claiming Cancelled.
-            run.transition(ImportLifecycle::Running)
-                .map_err(anyhow::Error::msg)?;
-        }
-        if run.lifecycle != ImportLifecycle::Running {
-            bail!("Import supervisor no longer owns a running process");
-        }
-        run.child_pid = None;
-        let prior_updated_at = run.updated_at_ms;
-        run.exit_evidence = Some(ImportExitEvidence {
-            exit_code,
-            successful: exit_code == 0,
-        });
-        // Durable exit evidence precedes Finalizing and any filesystem mutation.
+        bail!("Import supervisor is obsolete");
+    }
+    let prior = run.snapshot();
+    run.exit_evidence = Some(super::types::ImportExitEvidence {
+        exit_code,
+        successful: exit_code == 0,
+    });
+    if run.lifecycle == ImportLifecycle::Cancelling {
+        run.transition(ImportLifecycle::Cancelled)
+            .map_err(anyhow::Error::msg)?;
+        run.subject_outcomes = cancelled_subject_outcomes(&run.subject_list);
+        run.terminal_result = Some(super::types::ImportTerminalResult::Cancelled);
+    } else {
         run.transition(ImportLifecycle::Finalizing)
             .map_err(anyhow::Error::msg)?;
-        if let Err(error) = super::journal::write_record(
-            &run.project_root,
-            &super::journal::record_from_state(&run)?,
-        ) {
-            run.lifecycle = ImportLifecycle::Running;
-            run.updated_at_ms = prior_updated_at;
-            run.exit_evidence = None;
-            run.child_pid = Some(child_pid);
-            return Err(error);
-        }
     }
-    let run = state.import_state.lock_or_bail("Import state")?;
+    if let Err(error) = super::state::persist(&run) {
+        run.lifecycle = prior.lifecycle;
+        run.updated_at_ms = prior.updated_at_ms;
+        run.exit_evidence = prior.exit_evidence;
+        run.subject_outcomes = prior.subject_outcomes;
+        run.terminal_result = prior.terminal_result;
+        return Err(error);
+    }
+    run.cancellation = None;
     Ok(run.snapshot())
 }
 
@@ -335,10 +393,24 @@ pub(crate) fn resume_finalizing_import(
             .context("Finalizing import record lacks exit evidence")?;
         exit.exit_code
     };
-    complete_finalizing_import(state, generation, exit_code)
+    complete_finalizing_import_after_processing_recovery(state, generation, exit_code)
 }
 
 pub(crate) fn complete_finalizing_import(
+    state: &AppState,
+    generation: u64,
+    exit_code: i32,
+) -> AnyResult<super::types::ImportRunSnapshot> {
+    let root = state
+        .import_state
+        .lock_or_bail("Import state")?
+        .project_root
+        .clone();
+    super::state::recover_processing_before_import(&root)?;
+    complete_finalizing_import_after_processing_recovery(state, generation, exit_code)
+}
+
+fn complete_finalizing_import_after_processing_recovery(
     state: &AppState,
     generation: u64,
     exit_code: i32,
@@ -503,7 +575,8 @@ pub(crate) fn complete_finalizing_import(
             cleanup_errors.push(format!("debug config preservation: {error:#}"));
         }
     }
-    let successful = exit_code == 0
+    let successful = true
+        && exit_code == 0
         && outcomes.len() == subjects.len()
         && outcomes.iter().all(|outcome| outcome.committed)
         && relocation_outcome
@@ -544,7 +617,8 @@ pub(crate) fn complete_finalizing_import(
     } else {
         ImportTerminalResult::Failed
     });
-    if !successful {
+    let prior_error = run.error.clone();
+    if !successful && true {
         run.error = Some(ImportStructuredError {
             code: "finalization".to_string(),
             message: if !cleanup_errors.is_empty() {
@@ -565,62 +639,10 @@ pub(crate) fn complete_finalizing_import(
         run.lifecycle = ImportLifecycle::Finalizing;
         run.updated_at_ms = prior_updated_at;
         run.terminal_result = None;
-        run.error = None;
+        run.error = prior_error;
         return Err(error);
     }
     Ok(run.snapshot())
-}
-
-pub(super) fn start_supervisor_or_reap(
-    child: &mut Child,
-    start_receiver: mpsc::Receiver<()>,
-) -> bool {
-    if start_receiver.recv().is_ok() {
-        return true;
-    }
-
-    let _ = child.kill();
-    let _ = child.wait();
-    false
-}
-
-pub(super) fn spawn_matlab_import_process(
-    matlab_path: &str,
-    batch: &str,
-) -> std::io::Result<Child> {
-    log::info!(
-        "[IMPORT] Spawning MATLAB process: {} with batch: {}",
-        matlab_path,
-        batch
-    );
-    let mut command = crate::apptainer::create_system_command(matlab_path);
-    command
-        .arg("-batch")
-        .arg(batch)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-
-        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        // GenerateConsoleCtrlEvent uses the child PID as the process group id.
-        command.creation_flags(CREATE_NEW_PROCESS_GROUP);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::process::CommandExt;
-        unsafe {
-            command.pre_exec(|| {
-                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
-                Ok(())
-            });
-        }
-    }
-
-    command.spawn()
 }
 
 pub(crate) fn build_apptainer_import_args(staging_root: &Path, sif_path: &Path) -> Vec<String> {
@@ -640,340 +662,107 @@ pub(crate) fn build_apptainer_import_args(staging_root: &Path, sif_path: &Path) 
     ]
 }
 
-pub(super) fn spawn_apptainer_import_process(
-    apptainer_path: &str,
-    args: &[String],
-) -> std::io::Result<Child> {
-    log::info!(
-        "[IMPORT] Spawning Apptainer import process: {} args: {:?}",
-        apptainer_path,
-        args
-    );
-    let mut command = crate::apptainer::create_system_command(apptainer_path);
-    command
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::process::CommandExt;
-        unsafe {
-            command.pre_exec(|| {
-                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
-                Ok(())
-            });
-        }
-    }
-
-    command.spawn()
-}
-
-pub(super) fn take_matching_supervisor_handle(
-    state: &AppState,
-    generation: u64,
-    pid: u32,
-) -> Option<thread::JoinHandle<()>> {
-    state.import_state.lock().ok().and_then(|mut import_state| {
-        if import_state.ownership_generation != generation {
-            return None;
-        }
-        match import_state.lifecycle {
-            ImportLifecycle::Running if import_state.child_pid == Some(pid) => {
-                import_state.child_pid = None;
-                import_state.lifecycle = ImportLifecycle::Finalizing;
-                import_state.supervisor_handle.take()
-            }
-            // The supervisor may have observed exit before a stopper takes its
-            // handle. The generation guard still makes this handle exclusive.
-            ImportLifecycle::Finalizing => import_state.supervisor_handle.take(),
-            ImportLifecycle::Cancelling if import_state.child_pid == Some(pid) => {
-                // Leave PID ownership intact until the supervisor consumes the
-                // real child wait result and durably classifies cancellation.
-                // Clearing it here races the supervisor's exact-run guard.
-                import_state.supervisor_handle.take()
-            }
-            _ => None,
-        }
-    })
-}
-
-pub(super) fn authorize_import_state_pid(
-    import_state: &ImportState,
-    pid: u32,
-) -> Result<(), String> {
-    if import_state.lifecycle == ImportLifecycle::Preparing && pid == RESERVED_IMPORT_PID {
-        return Err("Import is still preparing and cannot be stopped yet".to_string());
-    }
-    validate_process_id(pid)?;
-    if import_state.lifecycle == ImportLifecycle::Preparing {
-        return Err("Import is still preparing and cannot be stopped yet".to_string());
-    }
-
-    if !matches!(
-        import_state.lifecycle,
-        ImportLifecycle::Running | ImportLifecycle::Cancelling
-    ) {
-        return Err("No import process is currently running".to_string());
-    }
-    match import_state.child_pid {
-        None => Err("No import process is currently running".to_string()),
-        Some(active_pid) if active_pid != pid => Err(format!(
-            "Requested PID {pid} does not match active import PID {active_pid}"
-        )),
-        Some(_) => Ok(()),
-    }
-}
-
-pub(super) fn clear_matching_termination_intent(
-    import_state: &mut ImportState,
-    generation: u64,
-    pid: u32,
-) {
-    if import_state.ownership_generation == generation
-        && import_state.child_pid == Some(pid)
-        && import_state.termination_requested_for == Some(pid)
-    {
-        import_state.termination_requested_for = None;
-    }
-}
-
-pub(super) fn confirm_import_termination_with(
-    state: &AppState,
-    pid: u32,
-    send_signal: impl FnOnce(u32) -> Result<(), String>,
-    force_kill: impl FnOnce(u32) -> Result<(), String>,
-    mut wait_for_exit: impl FnMut(u32, Duration) -> Result<bool, String>,
-) -> Result<u64, String> {
-    let generation = {
-        let mut import_state = state
-            .import_state
-            .lock()
-            .map_err(|_| "Import state lock was poisoned".to_string())?;
-        validate_process_id(pid)?;
-        authorize_import_state_pid(&import_state, pid)?;
-        let generation = import_state.ownership_generation;
-
-        // Serialize signal admission against process-exit classification, then
-        // release state while waiting. This keeps durable Cancelling observable
-        // through discovery and avoids holding native ownership for six seconds.
-        send_signal(pid)?;
-        mark_import_termination_requested(&mut import_state, pid);
-        generation
-    };
-
-    let result = match wait_for_exit(pid, Duration::from_secs(5)) {
-        Ok(true) => Ok(()),
-        Ok(false) => match force_kill(pid) {
-            Ok(()) => match wait_for_exit(pid, Duration::from_secs(1)) {
-                Ok(true) => Ok(()),
-                Ok(false) => Err(format!(
-                    "Import process {pid} could not be confirmed stopped"
-                )),
-                Err(error) => Err(error),
-            },
-            Err(error) => Err(error),
-        },
-        Err(error) => Err(error),
-    };
-
-    if result.is_err()
-        && let Ok(mut import_state) = state.import_state.lock()
-    {
-        clear_matching_termination_intent(&mut import_state, generation, pid);
-    }
-    result.map(|()| generation)
-}
-
-pub(super) fn stop_import_pid_with(
-    state: &AppState,
-    pid: u32,
-    send_signal: impl FnOnce(u32) -> Result<(), String>,
-    force_kill: impl FnOnce(u32) -> Result<(), String>,
-    wait_for_exit: impl FnMut(u32, Duration) -> Result<bool, String>,
-) -> Result<(), String> {
-    let generation =
-        confirm_import_termination_with(state, pid, send_signal, force_kill, wait_for_exit)?;
-
-    if let Some(handle) = take_matching_supervisor_handle(state, generation, pid) {
-        handle.join().map_err(|_| {
-            "Import supervisor failed while awaiting final process status".to_string()
-        })?;
-    }
-
-    Ok(())
-}
-
-pub fn stop_import_pid(state: &AppState, pid: u32) -> Result<(), String> {
-    stop_import_pid_with(
-        state,
-        pid,
-        send_termination_signal,
-        force_kill_process,
-        wait_for_process_exit,
-    )
-}
-
-pub fn stop_import_pid_for_exit(state: &AppState, pid: u32) -> Result<(), String> {
-    let generation = confirm_import_termination_with(
-        state,
-        pid,
-        send_termination_signal,
-        force_kill_process,
-        wait_for_process_exit,
-    )?;
-
-    let _ = take_matching_supervisor_handle(state, generation, pid);
-
-    Ok(())
-}
-
-/// Run-scoped cancellation.  The PID remains in native state and callers
-/// cannot cancel another run by guessing an operating-system identifier.
 pub(crate) fn stop_import_run_for_state(
     state: &AppState,
     run_id: &str,
 ) -> Result<super::types::ImportRunSnapshot, String> {
-    stop_import_run_with(state, run_id, stop_import_pid)
-}
-
-pub(crate) fn stop_import_run_with(
-    state: &AppState,
-    run_id: &str,
-    stop: impl FnOnce(&AppState, u32) -> Result<(), String>,
-) -> Result<super::types::ImportRunSnapshot, String> {
-    let (generation, pid) = {
+    let ownership = crate::project_ownership::active(state)?;
+    let (generation, cancellation, launching) = {
         let mut run = state
             .import_state
             .lock()
-            .map_err(|_| "Import state lock was poisoned".to_string())?;
-        if run.run_id != run_id {
-            return Err("Import run ID is obsolete or unknown".to_string());
+            .map_err(|_| "Import state lock was poisoned")?;
+        if run.run_id != run_id || run.project_root != ownership.root() {
+            return Err("Import run ID is obsolete, unknown, or belongs to another project".into());
         }
-        match run.lifecycle {
-            ImportLifecycle::Preparing => {
-                let prior_updated_at = run.updated_at_ms;
-                run.transition(ImportLifecycle::Cancelling)?;
-                if let Err(error) = super::journal::write_record(
-                    &run.project_root,
-                    &super::journal::record_from_state(&run)
-                        .map_err(|error| format!("Failed to encode cancellation: {error:#}"))?,
-                ) {
-                    run.lifecycle = ImportLifecycle::Preparing;
-                    run.updated_at_ms = prior_updated_at;
-                    return Err(format!("Failed to persist cancellation intent: {error:#}"));
-                }
-                let cancelling_updated_at = run.updated_at_ms;
-                let cancelling_outcomes = run.subject_outcomes.clone();
-                run.transition(ImportLifecycle::Cancelled)?;
-                run.subject_outcomes = cancelled_subject_outcomes(&run.subject_list);
-                run.terminal_result = Some(super::types::ImportTerminalResult::Cancelled);
-                if let Err(error) = super::journal::write_record(
-                    &run.project_root,
-                    &super::journal::record_from_state(&run)
-                        .map_err(|error| format!("Failed to encode cancellation: {error:#}"))?,
-                ) {
-                    run.lifecycle = ImportLifecycle::Cancelling;
-                    run.updated_at_ms = cancelling_updated_at;
-                    run.subject_outcomes = cancelling_outcomes;
-                    run.terminal_result = None;
-                    return Err(format!("Failed to persist cancellation: {error:#}"));
-                }
-                return Ok(run.snapshot());
-            }
-            ImportLifecycle::Running => {
-                let prior_updated_at = run.updated_at_ms;
-                run.transition(ImportLifecycle::Cancelling)?;
-                if let Err(error) = super::journal::write_record(
-                    &run.project_root,
-                    &super::journal::record_from_state(&run)
-                        .map_err(|error| format!("Failed to encode cancellation: {error:#}"))?,
-                ) {
-                    run.lifecycle = ImportLifecycle::Running;
-                    run.updated_at_ms = prior_updated_at;
-                    return Err(format!("Failed to persist cancellation: {error:#}"));
-                }
-                (
-                    run.ownership_generation,
-                    run.child_pid
-                        .ok_or_else(|| "Import process has no native PID".to_string())?,
-                )
-            }
-            _ => return Err("Import run is not cancellable".to_string()),
-        }
-    };
-    if let Err(error) = stop(state, pid) {
-        let mut run = state
-            .import_state
-            .lock()
-            .map_err(|_| "Import state lock was poisoned".to_string())?;
-        if run.run_id == run_id
-            && run.ownership_generation == generation
-            && run.lifecycle == ImportLifecycle::Cancelling
-        {
-            let prior_updated_at = run.updated_at_ms;
-            let prior_error = run.error.clone();
-            run.transition(ImportLifecycle::Running)?;
-            run.error = Some(super::types::ImportStructuredError {
-                code: "cancellation".to_string(),
-                message: error.clone(),
-                subject: None,
-                staging_issues: None,
-            });
-            if let Err(persist) = super::journal::write_record(
-                &run.project_root,
-                &super::journal::record_from_state(&run).map_err(|persist| {
-                    format!("Failed to encode cancellation rollback: {persist:#}")
-                })?,
-            ) {
-                run.lifecycle = ImportLifecycle::Cancelling;
-                run.updated_at_ms = prior_updated_at;
-                run.error = prior_error;
-                return Err(format!(
-                    "{error}; failed to persist cancellation rollback: {persist:#}"
-                ));
-            }
-        }
-        if run.run_id == run_id
-            && run.ownership_generation == generation
-            && run.lifecycle.is_terminal()
-        {
+        if run.lifecycle.is_terminal() {
             return Ok(run.snapshot());
         }
-        return Err(error);
-    }
-    let mut run = state
-        .import_state
-        .lock()
-        .map_err(|_| "Import state lock was poisoned".to_string())?;
-    if run.run_id == run_id
-        && run.ownership_generation == generation
-        && !run.lifecycle.is_terminal()
-    {
-        let prior_lifecycle = run.lifecycle;
-        let prior_updated_at = run.updated_at_ms;
-        let prior_outcomes = run.subject_outcomes.clone();
-        let prior_pid = run.child_pid;
-        let prior_termination = run.termination_requested_for;
-        run.lifecycle = ImportLifecycle::Cancelled;
-        run.child_pid = None;
-        run.termination_requested_for = None;
-        run.subject_outcomes = cancelled_subject_outcomes(&run.subject_list);
-        run.terminal_result = Some(super::types::ImportTerminalResult::Cancelled);
-        if let Err(error) = super::journal::write_record(
-            &run.project_root,
-            &super::journal::record_from_state(&run)
-                .map_err(|error| format!("Failed to encode cancellation: {error:#}"))?,
+        if !matches!(
+            run.lifecycle,
+            ImportLifecycle::Preparing | ImportLifecycle::Running | ImportLifecycle::Cancelling
         ) {
-            run.lifecycle = prior_lifecycle;
-            run.updated_at_ms = prior_updated_at;
-            run.child_pid = prior_pid;
-            run.termination_requested_for = prior_termination;
-            run.subject_outcomes = prior_outcomes;
-            run.terminal_result = None;
-            return Err(format!("Failed to persist cancellation: {error:#}"));
+            return Err("Import run is not cancellable".into());
         }
+        if run.lifecycle != ImportLifecycle::Cancelling {
+            run.transition(ImportLifecycle::Cancelling)?;
+        }
+        super::state::persist(&run)
+            .map_err(|e| format!("Failed to persist cancellation intent: {e:#}"))?;
+        (
+            run.ownership_generation,
+            run.cancellation.clone(),
+            run.launch_in_progress,
+        )
+    };
+    let has_scope = cancellation.is_some();
+    if let Some(token) = cancellation {
+        token.cancel();
     }
+    if !has_scope && !launching {
+        return Err("Import has no in-process supervisor ownership; restart recovery requires external-stop confirmation".into());
+    }
+    let deadline = std::time::Instant::now()
+        + easl_execution_runtime::process::GRACE_PERIOD
+        + easl_execution_runtime::process::FORCE_SETTLEMENT_PERIOD
+        + Duration::from_secs(1);
+    loop {
+        let mut run = state
+            .import_state
+            .lock_or_bail("Import state")
+            .map_err(|e| e.to_string())?;
+        if run.run_id != run_id || run.ownership_generation != generation {
+            return Err("Import cancellation became obsolete".into());
+        }
+        if run.lifecycle.is_terminal() {
+            return Ok(run.snapshot());
+        }
+        if run
+            .supervisor_handle
+            .as_ref()
+            .is_some_and(|handle| handle.is_finished())
+            && let Some(handle) = run.supervisor_handle.take()
+        {
+            drop(run);
+            handle.join().map_err(|_| "Import supervisor failed")?;
+            continue;
+        }
+        if run.supervisor_handle.is_none() && !run.launch_in_progress {
+            drop(run);
+            return finish_cancelled_preparation(state, generation).map_err(|e| format!("{e:#}"));
+        }
+        drop(run);
+        if std::time::Instant::now() >= deadline {
+            return Err("Import cancellation did not settle; ownership retained".into());
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn finish_cancelled_preparation(
+    state: &AppState,
+    generation: u64,
+) -> AnyResult<super::types::ImportRunSnapshot> {
+    let mut run = state.import_state.lock_or_bail("Import state")?;
+    if run.ownership_generation != generation
+        || run.launch_in_progress
+        || run.lifecycle != ImportLifecycle::Cancelling
+    {
+        bail!("Import cancellation still has an effect owner");
+    }
+    let prior = run.snapshot();
+    run.transition(ImportLifecycle::Cancelled)
+        .map_err(anyhow::Error::msg)?;
+    run.subject_outcomes = cancelled_subject_outcomes(&run.subject_list);
+    run.terminal_result = Some(super::types::ImportTerminalResult::Cancelled);
+    if let Err(e) = super::state::persist(&run) {
+        run.lifecycle = prior.lifecycle;
+        run.updated_at_ms = prior.updated_at_ms;
+        run.subject_outcomes = prior.subject_outcomes;
+        run.terminal_result = prior.terminal_result;
+        return Err(e);
+    }
+    run.cancellation = None;
     Ok(run.snapshot())
 }
 
@@ -993,23 +782,29 @@ fn cancelled_subject_outcomes(subjects: &[String]) -> Vec<super::types::ImportSu
 
 pub fn stop_running_import_for_exit(app: &AppHandle) -> Result<bool, String> {
     let state = app.state::<AppState>();
-    let (lifecycle, pid) = {
-        let import_state = state
+    let id = {
+        let run = state
             .import_state
             .lock()
-            .map_err(|_| "Import state lock was poisoned".to_string())?;
-        (import_state.lifecycle, import_state.child_pid)
-    };
-
-    match (lifecycle, pid) {
-        (ImportLifecycle::Preparing, Some(RESERVED_IMPORT_PID)) => Ok(false),
-        (_, Some(pid)) => {
-            validate_process_id(pid)?;
-            stop_import_pid_for_exit(&state, pid)?;
-            Ok(true)
+            .map_err(|_| "Import state lock was poisoned")?;
+        if run.lifecycle == ImportLifecycle::Idle || run.lifecycle.is_terminal() {
+            return Ok(false);
         }
-        (_, None) => Ok(false),
+        run.run_id.clone()
+    };
+    stop_import_run_for_state(&state, &id)?;
+    Ok(true)
+}
+
+fn require_preparing(state: &AppState, generation: u64) -> AnyResult<()> {
+    let run = state.import_state.lock_or_bail("Import state")?;
+    if run.ownership_generation != generation
+        || run.lifecycle != ImportLifecycle::Preparing
+        || !run.launch_in_progress
+    {
+        bail!("Import preparation cancelled or obsolete");
     }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1024,312 +819,346 @@ pub(crate) fn run_import_pipeline_impl<R: Runtime>(
     subjects_to_preserve: Option<Vec<String>>,
     run_id: String,
     relocation_plan_id: String,
-) -> Result<u32, ImportCommandError> {
-    // Keep active-root ownership stable through exact-run admission, staging
-    // mutation, and child registration. Project shutdown/activation takes the
-    // same gate and cannot clear or replace this run's root mid-launch.
-    let _transition = state.project_transition.lock().map_err(|_| {
-        ImportCommandError::from("Project transition lock was poisoned".to_string())
-    })?;
-    validate_import_request_inputs(&staging_entries, &subject_list)?;
-    let staging_entries = normalize_staging_subject_spelling(&staging_entries, &subject_list)?;
-    if run_id.trim().is_empty() {
-        return Err("run_id must not be empty".to_string().into());
-    }
-    if relocation_plan_id.trim().is_empty() {
-        return Err("relocation_plan_id must not be empty".to_string().into());
-    }
-
-    if !sourcestructure_json.is_object() {
-        return Err("sourcestructure_json must be a JSON object"
-            .to_string()
-            .into());
-    }
-    if !studypar_json.is_object() {
-        return Err("studypar_json must be a JSON object".to_string().into());
-    }
-
-    let validation = execution_profile.validate();
-    if !validation.valid {
-        return Err(validation.errors.join("; ").into());
-    }
-    let execution_profile_id = execution_profile.id().to_string();
-
-    enum ImportExecution {
-        Matlab {
-            matlab_path: String,
-            exploreasl_path: PathBuf,
-        },
-        Apptainer {
-            apptainer_path: String,
-            sif_path: PathBuf,
-        },
-    }
-
-    let execution = match execution_profile {
-        ExecutionProfile::Matlab { .. } => ImportExecution::Matlab {
-            matlab_path: validation
-                .matlab_path
-                .expect("validated matlab profile should include matlab path"),
-            exploreasl_path: validation
-                .explore_asl_path
-                .expect("validated matlab profile should include exploreasl path"),
-        },
-        ExecutionProfile::Apptainer { .. } => ImportExecution::Apptainer {
-            apptainer_path: validation
-                .apptainer_path
-                .expect("validated Apptainer profile should include executable path"),
-            sif_path: validation
-                .sif_path
-                .expect("validated Apptainer profile should include SIF path"),
-        },
-    };
-
-    let compiled_plan = compile_staging_plan(
-        state
-            .active_project_root
-            .lock()
-            .map_err(|_| "Active project state lock was poisoned".to_string())?
-            .clone(),
-        &staging_entries,
-    )
-    .map_err(|result| ImportCommandError::Preflight {
-        issues: result.issues,
-    })?;
-    // All operations after validation use the immutable, canonical plan root.
-    let staging_root = compiled_plan.staging_root.clone();
-    let project_root = compiled_plan
-        .staging_root
-        .parent()
-        .expect("compiled staging root has a parent")
-        .to_path_buf();
-    let stream_subject_list = subject_list.clone();
-    // Reject foreign, stale-scope, and already-consumed plans before replacing
-    // import ownership or touching staging.
-    validate_relocation_plan_for_run(state, &relocation_plan_id, &project_root, &subject_list)?;
-    if subjects_to_preserve
-        .as_ref()
-        .is_some_and(|subjects| !subjects.is_empty())
-    {
-        return Err(
-            "Retry preservation must be authorized when reserving the import run"
-                .to_string()
-                .into(),
-        );
-    }
-    let reservation = admit_reserved_import_launch(
-        state,
-        &run_id,
-        &staging_root,
-        &project_root,
-        &subject_list,
-        &relocation_plan_id,
-        &execution_profile_id,
-    )?;
-    let generation = reservation.generation;
-    if let Err(error) = bind_relocation_plan_for_run(
-        state,
-        &relocation_plan_id,
-        &project_root,
-        &stream_subject_list,
-        generation,
-    ) {
-        let snapshot = super::state::fail_admitted_preparation(
-            state,
-            generation,
-            format!("Failed to bind confirmed relocation plan: {error:#}"),
-        )
-        .map_err(ImportCommandError::from)?;
-        return Err(ImportCommandError::Operational {
-            message: snapshot
-                .error
-                .map(|error| error.message)
-                .unwrap_or_else(|| "Failed to bind confirmed relocation plan".to_string()),
-        });
-    }
-
-    cleanup_staging_root(&staging_root).map_err(|error| {
-        rollback_reserved_operational_failure(state, generation, &staging_root, error)
-    })?;
-
-    execute_compiled_staging_plan(&compiled_plan).map_err(|error| {
-        rollback_reserved_operational_failure(state, generation, &staging_root, error)
-    })?;
-
-    fs::create_dir_all(&staging_root)
-        .with_context(|| {
-            format!(
-                "Failed to create staging directory {}",
-                staging_root.display()
-            )
-        })
-        .map_err(|error| {
-            rollback_reserved_operational_failure(state, generation, &staging_root, error)
-        })?;
-    write_config_json(
-        &staging_root.join("sourcestructure.json"),
-        &sourcestructure_json,
-    )
-    .map_err(|error| {
-        rollback_reserved_operational_failure(state, generation, &staging_root, error)
-    })?;
-    write_config_json(&staging_root.join("studyPar.json"), &studypar_json)
-        .map_err(|e| rollback_reserved_operational_failure(state, generation, &staging_root, e))?;
-
-    let staging_generation =
-        prepare_generation(&staging_root, &stream_subject_list).map_err(|error| {
-            rollback_reserved_operational_failure(state, generation, &staging_root, error)
-        })?;
-    // Preparation is write-ahead: record the marker and absent-ready baseline
-    // before a child can create any completion evidence.
-    let generation_checkpoint = {
-        let mut import_state = state
-            .import_state
-            .lock()
-            .map_err(|_| "Import state lock was poisoned".to_string())?;
-        if import_state.ownership_generation != generation
-            || import_state.lifecycle != ImportLifecycle::Preparing
-        {
-            return Err("Import reservation became obsolete during preparation"
+) -> Result<(), ImportCommandError> {
+    let (reservation, compiled_plan, ownership) = {
+        let _transition = state
+            .project_transition
+            .lock_or_bail("Project transition")?;
+        crate::project_ownership::ensure_not_shutting_down(state).map_err(anyhow::Error::msg)?;
+        validate_import_request_inputs(&staging_entries, &subject_list)?;
+        let entries = normalize_staging_subject_spelling(&staging_entries, &subject_list)?;
+        if run_id.trim().is_empty() || relocation_plan_id.trim().is_empty() {
+            return Err("run_id and relocation_plan_id must not be empty"
                 .to_string()
                 .into());
         }
-        import_state.staging_generation = staging_generation;
-        super::journal::write_record(
-            &import_state.project_root,
-            &super::journal::record_from_state(&import_state)?,
-        )
-    };
-    if let Err(error) = generation_checkpoint {
-        return Err(rollback_reserved_operational_failure(
+        if !sourcestructure_json.is_object() || !studypar_json.is_object() {
+            return Err("Import configs must be JSON objects".to_string().into());
+        }
+        if subjects_to_preserve
+            .as_ref()
+            .is_some_and(|subjects| !subjects.is_empty())
+        {
+            return Err(
+                "Retry preservation must be authorized when reserving the import run"
+                    .to_string()
+                    .into(),
+            );
+        }
+        let ownership =
+            crate::project_ownership::active(state).map_err(ImportCommandError::from)?;
+        let plan = compile_staging_plan(Some(ownership.root().to_path_buf()), &entries)
+            .map_err(|r| ImportCommandError::Preflight { issues: r.issues })?;
+        validate_relocation_plan_for_run(
             state,
+            &relocation_plan_id,
+            ownership.root(),
+            &subject_list,
+        )?;
+        let reservation = admit_reserved_import_launch(
+            state,
+            &run_id,
+            &plan.staging_root,
+            ownership.root(),
+            &subject_list,
+            &relocation_plan_id,
+            execution_profile.id(),
+        )?;
+        (reservation, plan, ownership)
+    };
+    let generation = reservation.generation;
+    let token = CancellationToken::default();
+    {
+        let mut run = state.import_state.lock_or_bail("Import state")?;
+        if run.ownership_generation != generation || run.lifecycle != ImportLifecycle::Preparing {
+            return Err("Import reservation became obsolete".to_string().into());
+        }
+        run.cancellation = Some(token.clone());
+    }
+    let preparation = (|| -> AnyResult<Option<ProcessScope>> {
+        require_preparing(state, generation)?;
+        let mut command = import_command(&execution_profile, token.clone())?;
+        bind_relocation_plan_for_run(
+            state,
+            &relocation_plan_id,
+            ownership.root(),
+            &subject_list,
             generation,
-            &staging_root,
-            error,
+        )?;
+        cleanup_staging_root(&compiled_plan.staging_root)?;
+        execute_compiled_staging_plan(&compiled_plan)?;
+        fs::create_dir_all(&compiled_plan.staging_root)?;
+        write_config_json(
+            &compiled_plan.staging_root.join("sourcestructure.json"),
+            &sourcestructure_json,
+        )?;
+        write_config_json(
+            &compiled_plan.staging_root.join("studyPar.json"),
+            &studypar_json,
+        )?;
+        let staging_generation = prepare_generation(&compiled_plan.staging_root, &subject_list)?;
+        {
+            let mut run = state.import_state.lock_or_bail("Import state")?;
+            run.staging_generation = staging_generation;
+            super::state::persist(&run)?;
+        }
+        if !reservation.preserved_subjects.is_empty() {
+            copy_lock_files_paths(
+                ownership.root(),
+                &compiled_plan.staging_root,
+                &reservation.preserved_subjects,
+            )?;
+        }
+        if let ExecutionProfile::Apptainer {
+            sif_path,
+            apptainer_path,
+            ..
+        } = &execution_profile
+        {
+            warm_import_mcr_cache(
+                apptainer_path,
+                Path::new(sif_path.trim()),
+                &compiled_plan.staging_root,
+                token.clone(),
+            )?;
+        }
+        match &execution_profile {
+            ExecutionProfile::Matlab {
+                explore_asl_path, ..
+            } => {
+                command.arg("-batch").arg(format!(
+                    "addpath('{}'); ExploreASL('{}', [1,1,0], 0, 0)",
+                    escape_matlab_string(explore_asl_path.trim()),
+                    escape_matlab_string(&compiled_plan.staging_root.to_string_lossy())
+                ));
+            }
+            ExecutionProfile::Apptainer { sif_path, .. } => {
+                command.args(build_apptainer_import_args(
+                    &compiled_plan.staging_root,
+                    Path::new(sif_path.trim()),
+                ));
+            }
+        };
+        command
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        if token.is_cancelled() {
+            bail!("Import preparation cancelled");
+        }
+        let scope = ProcessScope::spawn_with_cancellation(command, token.clone())?;
+        let cancelling = {
+            let run = state.import_state.lock_or_bail("Import state")?;
+            run.lifecycle == ImportLifecycle::Cancelling
+        };
+        if cancelling {
+            token.cancel();
+        } else {
+            if let Err(error) = set_reserved_import_running(state, generation) {
+                // Running is the durable execution-commit boundary. If its
+                // write fails after spawn, retain the scope under a live
+                // Cancelling supervisor. A failed force/settlement attempt
+                // must never turn this into an untracked Failed launch.
+                handoff_running_checkpoint_failure(
+                    app.clone(),
+                    state,
+                    generation,
+                    scope,
+                    subject_list.clone(),
+                    error,
+                )?;
+                return Ok(None);
+            }
+        }
+        Ok(Some(scope))
+    })();
+    let scope = match preparation {
+        Ok(Some(scope)) => scope,
+        Ok(None) => return Ok(()),
+        Err(error) => {
+            let mut run = state.import_state.lock_or_bail("Import state")?;
+            run.launch_in_progress = false;
+            let cancelling = run.lifecycle == ImportLifecycle::Cancelling;
+            run.cancellation = None;
+            drop(run);
+            if cancelling {
+                return finish_cancelled_preparation(state, generation)
+                    .map(|_| ())
+                    .map_err(ImportCommandError::from);
+            }
+            super::state::fail_admitted_preparation(state, generation, format!("{error:#}"))?;
+            return Err(error.into());
+        }
+    };
+    let (start_sender, start_receiver) = mpsc::channel();
+    let supervisor =
+        supervise_import_process(app.clone(), generation, scope, subject_list, start_receiver);
+    if let Err((error, handle)) = set_import_supervisor_handle(state, generation, supervisor) {
+        drop(start_sender);
+        let _ = handle.join();
+        return Err(error.into());
+    }
+    if let Ok(mut run) = state.import_state.lock()
+        && run.ownership_generation == generation
+    {
+        run.launch_in_progress = false;
+    }
+    let _ = emit_running_snapshot(&app, state, generation);
+    start_sender.send(()).map_err(|_| {
+        ImportCommandError::from("Import supervisor stopped before observation".to_string())
+    })?;
+    Ok(())
+}
+
+fn handoff_running_checkpoint_failure<R: Runtime>(
+    app: AppHandle<R>,
+    state: &AppState,
+    generation: u64,
+    scope: ProcessScope,
+    subject_list: Vec<String>,
+    checkpoint_error: String,
+) -> AnyResult<()> {
+    scope.cancellation().cancel();
+    let (start_sender, start_receiver) = mpsc::channel();
+    let supervisor =
+        supervise_import_process(app.clone(), generation, scope, subject_list, start_receiver);
+    let mut run = state.import_state.lock_or_bail("Import state")?;
+    if run.ownership_generation != generation
+        || !matches!(
+            run.lifecycle,
+            ImportLifecycle::Preparing | ImportLifecycle::Cancelling
+        )
+    {
+        drop(run);
+        drop(start_sender);
+        // The supervisor owns the scope and observes its cancelled token even
+        // without a start message. Do not drop a possibly live process scope.
+        return Err(anyhow::anyhow!(
+            "Import ownership changed while retaining failed Running checkpoint: {checkpoint_error}"
         ));
     }
-
-    if !reservation.preserved_subjects.is_empty() {
-        copy_lock_files_paths(
-            &project_root,
-            &staging_root,
-            &reservation.preserved_subjects,
-        )
-        .map_err(|error| {
-            rollback_reserved_operational_failure(state, generation, &staging_root, error)
-        })?;
+    if run.lifecycle == ImportLifecycle::Preparing {
+        run.transition(ImportLifecycle::Cancelling)
+            .map_err(anyhow::Error::msg)?;
     }
+    run.launch_in_progress = false;
+    run.error = Some(super::types::ImportStructuredError {
+        code: "process".into(),
+        message: format!("Failed to durably record Running import: {checkpoint_error}"),
+        subject: None,
+        staging_issues: None,
+    });
+    // The failed Running write has already rolled itself back. Best-effort
+    // persistence of cancellation intent may also fail; in-memory ownership
+    // and the live supervisor still prevent replacement in this process.
+    let _ = super::state::persist(&run);
+    run.supervisor_handle = Some(supervisor);
+    drop(run);
+    start_sender
+        .send(())
+        .map_err(|_| anyhow::anyhow!("Import supervisor stopped before cancelled handoff"))
+}
 
-    let mut child = match execution {
-        ImportExecution::Matlab {
+fn import_command(
+    profile: &ExecutionProfile,
+    cancellation: CancellationToken,
+) -> AnyResult<std::process::Command> {
+    match profile {
+        ExecutionProfile::Matlab {
             matlab_path,
-            exploreasl_path,
+            explore_asl_path,
+            ..
         } => {
-            let batch = format!(
-                "addpath('{}'); ExploreASL('{}', [1,1,0], 0, 0)",
-                escape_matlab_string(&exploreasl_path.to_string_lossy()),
-                escape_matlab_string(&staging_root.to_string_lossy()),
-            );
-            spawn_matlab_import_process(&matlab_path, &batch).map_err(|error| {
-                rollback_process_spawn_failure(
-                    state,
-                    generation,
-                    &staging_root,
-                    "MATLAB",
-                    &matlab_path,
-                    error,
-                )
-            })?
+            let matlab = crate::execution_managed::validate_matlab_executable(matlab_path)?;
+            crate::execution_profile::validate_exploreasl_path(explore_asl_path)?;
+            Ok(crate::apptainer::create_system_command(matlab))
         }
-        ImportExecution::Apptainer {
+        ExecutionProfile::Apptainer {
             apptainer_path,
             sif_path,
+            ..
         } => {
-            ensure_mcr_cache(&apptainer_path, &sif_path, &staging_root).map_err(|error| {
-                rollback_reserved_operational_failure(state, generation, &staging_root, error)
-            })?;
-            let args = build_apptainer_import_args(&staging_root, &sif_path);
-            spawn_apptainer_import_process(&apptainer_path, &args).map_err(|error| {
-                rollback_process_spawn_failure(
-                    state,
-                    generation,
-                    &staging_root,
-                    "Apptainer",
-                    &apptainer_path,
-                    error,
-                )
-            })?
-        }
-    };
-    let child_pid = child.id();
-
-    if let Err(err) = set_reserved_import_pid(state, generation, child_pid) {
-        let _ = child.kill();
-        let _ = child.wait();
-        let error = cleanup_after_prepare_event_failure(state, generation, &staging_root, err);
-        return Err(error.into());
-    }
-
-    // Keep the supervisor gated until readiness is delivered. This gives a
-    // failed readiness emission one owner that can terminate and reap the
-    // child before staging and matching ownership are released.
-    let (start_sender, start_receiver) = mpsc::channel();
-    let supervisor_handle = supervise_import_process(
-        app.clone(),
-        generation,
-        child_pid,
-        child,
-        stream_subject_list,
-        start_receiver,
-    );
-    if let Err((err, supervisor_handle)) =
-        set_import_supervisor_handle(state, generation, child_pid, supervisor_handle)
-    {
-        drop(start_sender);
-        let _ = supervisor_handle.join();
-        let error = cleanup_after_prepare_event_failure(state, generation, &staging_root, err);
-        return Err(error.into());
-    }
-
-    match emit_running_snapshot(&app, state, generation, child_pid) {
-        Ok(true) => {}
-        Ok(false) => {
-            drop(start_sender);
-            if let Some(handle) = take_matching_supervisor_handle(state, generation, child_pid) {
-                let _ = handle.join();
+            let executable = crate::apptainer::resolve_apptainer_executable(apptainer_path)?;
+            if !Path::new(sif_path.trim()).is_file() {
+                bail!("SIF image is not a file: {sif_path}");
             }
-            let error = cleanup_after_prepare_event_failure(
-                state,
-                generation,
-                &staging_root,
-                "Import state changed before the Running snapshot could be emitted".to_string(),
-            );
-            return Err(error.into());
-        }
-        Err(error) => {
-            drop(start_sender);
-            if let Some(handle) = take_matching_supervisor_handle(state, generation, child_pid) {
-                let _ = handle.join();
+            let mut version = crate::apptainer::create_system_command(&executable);
+            version.current_dir(std::env::temp_dir()).arg("--version");
+            let output = easl_execution_runtime::process::run_probe(
+                version,
+                256 * 1024,
+                Duration::from_secs(5),
+                cancellation.clone(),
+            )?;
+            if !output.status.success() {
+                bail!("Apptainer version probe failed");
             }
-            let error =
-                cleanup_after_prepare_event_failure(state, generation, &staging_root, error);
-            return Err(error.into());
+            let mut sif_version = crate::apptainer::create_system_command(&executable);
+            sif_version.current_dir(std::env::temp_dir()).args([
+                "exec",
+                "--cleanenv",
+                sif_path.trim(),
+                "ls",
+                "/opt/xasl/xASL_latest/",
+            ]);
+            let output = easl_execution_runtime::process::run_probe(
+                sif_version,
+                256 * 1024,
+                Duration::from_secs(5),
+                cancellation,
+            )?;
+            if !output.status.success()
+                || !String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+                    line.trim()
+                        .strip_prefix("VERSION_")
+                        .is_some_and(|v| !v.is_empty())
+                })
+            {
+                bail!("Could not find VERSION_* file in container");
+            }
+            Ok(crate::apptainer::create_system_command(executable))
         }
     }
-    if start_sender.send(()).is_err() {
-        if let Some(handle) = take_matching_supervisor_handle(state, generation, child_pid) {
-            let _ = handle.join();
-        }
-        let error = cleanup_after_prepare_event_failure(
-            state,
-            generation,
-            &staging_root,
-            "Import supervisor stopped before it could begin".to_string(),
-        );
-        return Err(error.into());
-    }
+}
 
-    Ok(child_pid)
+fn warm_import_mcr_cache(
+    apptainer_path: &str,
+    sif: &Path,
+    staging: &Path,
+    cancellation: CancellationToken,
+) -> AnyResult<()> {
+    let cache = crate::apptainer::mcr_cache_path();
+    if cache.exists() {
+        return Ok(());
+    }
+    fs::create_dir_all(&cache).context("Failed to create MCR cache")?;
+    let executable = crate::apptainer::resolve_apptainer_executable(apptainer_path)?;
+    let mut command = crate::apptainer::create_system_command(executable);
+    command.args([
+        "exec",
+        "--cleanenv",
+        "--writable-tmpfs",
+        "--bind",
+        &format!("{}:{CONTAINER_DATA_ROOT}", staging.display()),
+        "--bind",
+        &format!("{}:{}", cache.display(), cache.display()),
+        "--env",
+        &format!("MCR_CACHE_ROOT={}", cache.display()),
+        &sif.to_string_lossy(),
+        "/bin/bash",
+        EXPLOREASL_SCRIPT,
+        MCR_PATH,
+    ]);
+    let output = easl_execution_runtime::process::run_probe(
+        command,
+        256 * 1024,
+        Duration::from_secs(300),
+        cancellation,
+    )?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        bail!("Apptainer MCR warmup failed")
+    }
 }
 
 pub(super) fn write_config_json(path: &Path, value: &Value) -> AnyResult<()> {

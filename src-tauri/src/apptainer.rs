@@ -376,62 +376,6 @@ fn run_apptainer_version_command(binary: &Path) -> AnyResult<Output> {
     run_command_with_timeout(command, Duration::from_secs(5))
 }
 
-pub(crate) fn ensure_mcr_cache(
-    apptainer_path: &str,
-    sif_path: &Path,
-    project_root: &Path,
-) -> AnyResult<()> {
-    let cache_dir = mcr_cache_path();
-    if cache_dir.exists() {
-        return Ok(());
-    }
-
-    fs::create_dir_all(&cache_dir).with_context(|| {
-        format!(
-            "Failed to create MCR cache directory {}",
-            cache_dir.display()
-        )
-    })?;
-
-    log::info!(
-        "MCR cache not found at {}. Performing warm-up...",
-        cache_dir.display()
-    );
-
-    let mut command = create_system_command(apptainer_path);
-    command.args([
-        "exec",
-        "--cleanenv",
-        "--writable-tmpfs",
-        "--bind",
-        &format!("{}:{CONTAINER_DATA_ROOT}", project_root.display()),
-        "--bind",
-        &format!("{}:{}", cache_dir.display(), cache_dir.display()),
-        "--env",
-        &format!("MCR_CACHE_ROOT={}", cache_dir.display()),
-        &sif_path.to_string_lossy(),
-        "/bin/bash",
-        EXPLOREASL_SCRIPT,
-        MCR_PATH,
-    ]);
-
-    let status = match command.status() {
-        Ok(status) => status,
-        Err(error) => {
-            let _ = fs::remove_dir_all(&cache_dir);
-            return Err(error).context("Failed to spawn MCR warmup command");
-        }
-    };
-    if !status.success() {
-        let _ = fs::remove_dir_all(&cache_dir);
-        bail!(
-            "MCR warmup run failed with exit status {status}. Check container permissions and MCR path."
-        );
-    }
-
-    Ok(())
-}
-
 pub(crate) fn mcr_cache_path() -> PathBuf {
     env::var_os("MCR_CACHE_ROOT")
         .map(PathBuf::from)

@@ -1,7 +1,9 @@
 //! Read-only BIDS setup planning and the dedicated fixed-path setup transaction.
 //! This module intentionally does not use import-relocation semantics.
+use crate::fs_safety::{atomic_replace, sync_directory};
 use anyhow::{Context, Result, anyhow, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use easl_execution_runtime::project::ActiveProject;
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -2011,51 +2013,9 @@ fn valid_identity(value: &str, prefix: &str) -> bool {
 }
 fn sync_parent(path: &Path) -> Result<bool> {
     fail("flush")?;
-    #[cfg(unix)]
-    {
-        File::open(path)
-            .and_then(|file| file.sync_all())
-            .with_context(|| format!("Could not synchronize directory {}", path.display()))?;
-        Ok(true)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        Ok(false)
-    }
-}
-fn atomic_replace(source: &Path, destination: &Path) -> io::Result<()> {
-    #[cfg(windows)]
-    {
-        use std::os::windows::ffi::OsStrExt;
-        use windows_sys::Win32::Storage::FileSystem::{
-            MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-        };
-        let wide = |path: &Path| {
-            path.as_os_str()
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect::<Vec<_>>()
-        };
-        let source = wide(source);
-        let destination = wide(destination);
-        if unsafe {
-            MoveFileExW(
-                source.as_ptr(),
-                destination.as_ptr(),
-                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-            )
-        } == 0
-        {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        fs::rename(source, destination)
-    }
+    sync_directory(path)
+        .map(|outcome| outcome.is_supported())
+        .with_context(|| format!("Could not synchronize directory {}", path.display()))
 }
 fn persist_bytes(path: &Path, bytes: &[u8], replace: bool) -> Result<bool> {
     let parent = path.parent().ok_or_else(|| anyhow!("Path has no parent"))?;
@@ -2136,7 +2096,15 @@ fn save_registry(app_data: &Path, registry: &PendingRegistry) -> Result<()> {
         Err(error) => Err(error.into()),
     }
 }
+static REGISTRY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn lock_registry() -> Result<std::sync::MutexGuard<'static, ()>> {
+    REGISTRY_LOCK
+        .lock()
+        .map_err(|_| anyhow!("Setup pending registry lock was poisoned"))
+}
 fn register_pending(app_data: &Path, entry: PendingEntry) -> Result<()> {
+    let _registry = lock_registry()?;
     let mut registry = load_registry(app_data)?;
     if registry.entries.iter().any(|old| {
         old.registry_id == entry.registry_id
@@ -2150,6 +2118,7 @@ fn register_pending(app_data: &Path, entry: PendingEntry) -> Result<()> {
     save_registry(app_data, &registry)
 }
 fn remove_pending(app_data: &Path, registry_id: &str) -> Result<()> {
+    let _registry = lock_registry()?;
     let mut registry = load_registry(app_data)?;
     registry
         .entries
@@ -2865,7 +2834,21 @@ fn recover_entry(app_data: &Path, entry: &PendingEntry) -> Result<bool> {
             return Err(error.context("Setup recovery root is unavailable"));
         }
     };
-    let mut journal = read_journal(&root, &entry.journal_id)?;
+    let ownership = ActiveProject::open(&root)?;
+    crate::import::recover_processing_before_import(&root)?;
+    recover_entry_owned(app_data, entry, &ownership)
+}
+fn recover_entry_owned(
+    app_data: &Path,
+    entry: &PendingEntry,
+    ownership: &ActiveProject,
+) -> Result<bool> {
+    validate_registry_entry(entry)?;
+    let root = ownership.root();
+    if canonical_root(Path::new(&entry.root))? != root {
+        bail!("Setup recovery native ownership mismatch");
+    }
+    let mut journal = read_journal(root, &entry.journal_id)?;
     if journal.registry_id != entry.registry_id
         || journal.transaction_id != entry.transaction_id
         || journal.journal_id != entry.journal_id
@@ -2873,24 +2856,24 @@ fn recover_entry(app_data: &Path, entry: &PendingEntry) -> Result<bool> {
         bail!("Setup registry and journal identities diverge");
     }
     if let Some(result) = &journal.terminal {
-        cleanup_terminal(&root, &journal, app_data)?;
+        cleanup_terminal(root, &journal, app_data)?;
         return Ok(result.outcome == "committed");
     }
-    if complete_after_state(&root, &journal)? {
+    if complete_after_state(root, &journal)? {
         journal.phase = TransactionPhase::Committed;
         journal.terminal = Some(SetupCommitResult {
             outcome: "committed".into(),
             project_path: (journal.mode != SetupMode::Repair)
                 .then(|| root.join("project.easl").to_string_lossy().into_owned()),
             canonical_project_bytes: None,
-            directory_sync_supported: sync_parent(&root)?,
+            directory_sync_supported: sync_parent(root)?,
         });
-        write_journal(&root, &journal)?;
-        cleanup_terminal(&root, &journal, app_data)?;
+        write_journal(root, &journal)?;
+        cleanup_terminal(root, &journal, app_data)?;
         return Ok(true);
     }
-    rollback(&root, &mut journal)?;
-    cleanup_terminal(&root, &journal, app_data)?;
+    rollback(root, &mut journal)?;
+    cleanup_terminal(root, &journal, app_data)?;
     Ok(true)
 }
 pub fn recover_all(app_data: &Path) -> Result<SetupRecoverySummary> {
@@ -2924,7 +2907,22 @@ pub fn recover_at_startup(app_data: &Path) -> Result<SetupRecoverySummary> {
     recover_all(app_data)
 }
 pub fn recover_root(app_data: &Path, root: &Path) -> Result<SetupRecoverySummary> {
-    let canonical = canonical_root(root)?;
+    let ownership = ActiveProject::open(root)?;
+    recover_root_owned(app_data, &ownership)
+}
+pub(crate) fn recover_root_owned(
+    app_data: &Path,
+    ownership: &ActiveProject,
+) -> Result<SetupRecoverySummary> {
+    crate::import::recover_processing_before_import(ownership.root())?;
+    recover_root_after_processing_recovery(app_data, ownership)
+}
+
+pub(crate) fn recover_root_after_processing_recovery(
+    app_data: &Path,
+    ownership: &ActiveProject,
+) -> Result<SetupRecoverySummary> {
+    let canonical = ownership.root().to_path_buf();
     let registry = load_registry(app_data)?;
     let entries = registry
         .entries
@@ -2940,7 +2938,7 @@ pub fn recover_root(app_data: &Path, root: &Path) -> Result<SetupRecoverySummary
         blocked: vec![],
     };
     for entry in entries {
-        match recover_entry(app_data, &entry) {
+        match recover_entry_owned(app_data, &entry, ownership) {
             Ok(true) => summary.recovered += 1,
             Ok(false) => summary.deferred_roots.push(entry.root),
             Err(error) => summary.blocked.push(format!("{}: {error:#}", entry.root)),
@@ -2978,6 +2976,25 @@ pub fn commit_for_state(
     plan_id: &str,
     app_data: &Path,
 ) -> Result<SetupCommitResult> {
+    commit_with_ownership(plans, plan_id, app_data, |root| {
+        Ok(std::sync::Arc::new(ActiveProject::open(root)?))
+    })
+}
+pub(crate) fn commit_for_app_state(
+    state: &crate::app_state::AppState,
+    plan_id: &str,
+    app_data: &Path,
+) -> Result<SetupCommitResult> {
+    commit_with_ownership(&state.setup_plans, plan_id, app_data, |root| {
+        crate::project_ownership::for_setup(state, root).map_err(anyhow::Error::msg)
+    })
+}
+fn commit_with_ownership(
+    plans: &SetupPlans,
+    plan_id: &str,
+    app_data: &Path,
+    acquire: impl FnOnce(&Path) -> Result<std::sync::Arc<ActiveProject>>,
+) -> Result<SetupCommitResult> {
     let mut cache = plans
         .0
         .lock()
@@ -2994,6 +3011,7 @@ pub fn commit_for_state(
     if plan.claimed {
         bail!("Setup plan is currently being committed");
     }
+    let _ownership = acquire(&plan.root)?;
     plan.claimed = true;
     let result = commit_plan(plan, app_data);
     match &result {

@@ -16,6 +16,9 @@ pub struct AppState {
     /// registration, so a direct IPC caller cannot mutate an old root after a
     /// project transition has started.
     pub project_transition: Mutex<()>,
+    pub runtime_shutdown_in_progress: std::sync::atomic::AtomicBool,
+    pub active_project:
+        Mutex<Option<std::sync::Arc<easl_execution_runtime::project::ActiveProject>>>,
     pub active_project_root: Mutex<Option<PathBuf>>,
     pub active_data: Mutex<Option<ActiveData>>,
     pub relocation_plans: Mutex<BTreeMap<String, RelocationPlan>>,
@@ -33,6 +36,8 @@ impl Default for AppState {
             import_generation: AtomicU64::new(0),
             processing_state: Mutex::new(ProcessState::default()),
             project_transition: Mutex::new(()),
+            runtime_shutdown_in_progress: std::sync::atomic::AtomicBool::new(false),
+            active_project: Mutex::new(None),
             active_project_root: Mutex::new(None),
             active_data: Mutex::new(None),
             relocation_plans: Mutex::new(BTreeMap::new()),

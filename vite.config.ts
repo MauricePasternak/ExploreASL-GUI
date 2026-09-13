@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "fs";
+import { defineConfig } from "vite";
 
 const packageJson = JSON.parse(readFileSync("./package.json", "utf-8"));
 

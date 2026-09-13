@@ -1,0 +1,412 @@
+name: spec-driven-reviewed-groups
+version: 1
+description: Spec-driven workflow with behavioral test retirement, evidence-gated groups, and read-only review
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Initial proposal document outlining the change
+    template: proposal.md
+    instruction: |
+      Create the proposal document that establishes WHY this change is needed.
+
+      Sections:
+      - **Why**: 1-2 sentences on the problem or opportunity. What problem does this solve? Why now?
+      - **What Changes**: Bullet list of changes. Be specific about new capabilities, modifications, or removals. Mark breaking changes with **BREAKING**.
+      - **Capabilities**: Identify which specs will be created or modified:
+        - **New Capabilities**: List capabilities being introduced. Each becomes a new `specs/<capability-path>/spec.md`. Use kebab-case for path segments you introduce (e.g., `user-auth` or `identity/user-auth`) and follow the project's existing spec organization.
+        - **Modified Capabilities**: List existing capabilities whose REQUIREMENTS are changing. Only include if spec-level behavior changes (not just implementation details). Each needs a delta spec file. Use the exact existing path under `openspec/specs/`. Leave empty if no requirement changes.
+      - **Impact**: Affected code, APIs, dependencies, or systems.
+      - **Superseded Systems & Retirement**: Explicitly declare any existing modules, functions, files, or IPC commands being replaced. State whether dual-path coexistence is permitted (default: strictly forbidden; permanent adapters or fallback pathways are barred and must be scheduled for complete deletion).
+
+      IMPORTANT: The Capabilities section is critical. It creates the contract between
+      proposal and specs phases. Research existing specs before filling this in.
+      Each capability listed here will need a corresponding spec file.
+
+      Every change must either declare at least one capability (new or
+      modified) or explicitly opt out of specs: `openspec validate` rejects a
+      change with zero deltas unless the change's `.openspec.yaml` sets
+      `skip_specs: true`. Use `skip_specs: true` only when no spec-level
+      behavior changes (pure refactor, tooling, docs) - specs describe
+      behavior, so if behavior does not change, no spec should change either.
+      Do not invent a requirement just to satisfy validation.
+
+      Keep it concise (1-2 pages). Focus on the "why" not the "how" -
+      implementation details belong in design.md.
+
+      This is the foundation - specs, design, and tasks all build on this.
+    requires: []
+
+  - id: specs
+    generates: "specs/**/*.md"
+    description: Detailed specifications for the change
+    template: spec.md
+    instruction: |
+      Create specification files that define WHAT the system should do.
+
+      A spec is a behavior contract, not an implementation plan.
+
+      Good spec content:
+      - Observable behavior users or downstream systems rely on
+      - Inputs, outputs, and error conditions
+      - External constraints (security, privacy, reliability, compatibility)
+      - Scenarios that can be tested or explicitly validated
+
+      Avoid in specs:
+      - Internal class/function names
+      - Library or framework choices
+      - Step-by-step implementation details
+      - Detailed execution plans (those belong in design.md or tasks.md)
+
+      Quick test: if the implementation can change without changing externally
+      visible behavior, it likely does not belong in the spec.
+
+      Create one spec file per capability listed in the proposal's Capabilities section.
+      `<capability-path>` is the spec directory relative to `specs/` (for example,
+      `user-auth` or `identity/user-auth`). Preserve the full path:
+      - New capabilities: use the exact path from the proposal at `specs/<capability-path>/spec.md`. Any path segment newly introduced in the proposal must be kebab-case. Follow the project's existing organization; do not add a new domain level when the project uses a flat layout.
+      - Modified capabilities: use the exact existing path from `openspec/specs/<capability-path>/` when creating the delta at `specs/<capability-path>/spec.md`. Do not move or rename the capability.
+
+      There must be at least one spec file unless the change's `.openspec.yaml`
+      sets `skip_specs: true` (no spec-level behavior change) - `openspec validate`
+      rejects a zero-delta change without that marker. If the proposal lists no
+      capabilities and `skip_specs` is not set, revisit the proposal first.
+
+      Delta operations (use ## headers):
+      - **ADDED Requirements**: New capabilities
+      - **MODIFIED Requirements**: Changed behavior - MUST include full updated content
+      - **REMOVED Requirements**: Deprecated features - MUST include **Reason** and **Migration**
+      - **RENAMED Requirements**: Name changes only - use FROM:/TO: format
+
+      Format requirements:
+      - Each requirement: `### Requirement: <name>` followed by description
+      - Use SHALL/MUST for normative requirements (avoid should/may)
+      - Each scenario: `#### Scenario: <name>` with WHEN/THEN format
+      - **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3 hashtags or bullets will fail silently.
+      - Every requirement MUST have at least one scenario.
+
+      New capabilities only: start the delta spec with a `## Purpose` section -
+      one or two sentences (50+ characters, or `openspec validate --strict`
+      reports it as too brief) describing what the capability is for. Archive
+      copies it into the main spec it creates; without it the new main spec is
+      left with a `TBD ... Update Purpose after archive` placeholder to fill in
+      by hand. Do NOT add `## Purpose` to a delta for an existing capability -
+      that spec already has one and the delta's is ignored. To change an
+      existing capability's Purpose - including a leftover `TBD` placeholder -
+      edit `<planningHome.root>/openspec/specs/<capability-path>/spec.md`
+      directly. `planningHome.root` comes from the `openspec instructions ...
+      --json` response. Always use it rather than a repo-relative path: it
+      resolves to the store whenever the change lives in one - whether that
+      came from `--store`, a project `store:` pointer, or a global default
+      store - and to the current repository otherwise. Do not try to work out
+      which case applies; the field already has.
+
+      MODIFIED requirements workflow:
+      1. Locate the existing requirement in `<planningHome.root>/openspec/specs/<capability-path>/spec.md` (the same store-aware root as above)
+      2. Copy the ENTIRE requirement block (from `### Requirement:` through all scenarios)
+      3. Paste under `## MODIFIED Requirements` and edit to reflect new behavior
+      4. Ensure header text matches exactly (whitespace-insensitive)
+
+      Common pitfall: Using MODIFIED with partial content loses detail at archive time.
+      If adding new concerns without changing existing behavior, use ADDED instead.
+
+      Pruning requirement: When modifying existing capabilities, audit the canonical
+      spec and explicitly move all superseded requirements under `## REMOVED Requirements`.
+
+      Example (a new capability, so it opens with `## Purpose`):
+      ```
+      ## Purpose
+
+      Lets users take their data out of the product in a portable format.
+
+      ## ADDED Requirements
+
+      ### Requirement: User can export data
+      The system SHALL allow users to export their data in CSV format.
+
+      #### Scenario: Successful export
+      - **WHEN** user clicks "Export" button
+      - **THEN** system downloads a CSV file with all user data
+
+      ## REMOVED Requirements
+
+      ### Requirement: Legacy export
+      **Reason**: Replaced by new export system
+      **Migration**: Use new export endpoint at /api/v2/export
+      ```
+
+      Specs should be testable - each scenario is a potential test case.
+    requires:
+      - proposal
+
+  - id: design
+    generates: design.md
+    description: Technical design document with implementation details
+    template: design.md
+    instruction: |
+      Create the design document that explains HOW to implement the change.
+
+      When to include design.md (create only if any apply):
+      - Cross-cutting change (multiple services/modules) or new architectural pattern
+      - New external dependency or significant data model changes
+      - Security, performance, or migration complexity
+      - Ambiguity that benefits from technical decisions before coding
+
+      Sections:
+      - **Context**: Only the current state and constraints needed to explain the approach. Reference the proposal for motivation instead of restating it (e.g., "See proposal.md - Why").
+      - **Goals / Non-Goals**: What this design achieves and explicitly excludes. Don't restate the proposal's scope - add only design-level boundaries.
+      - **Decisions**: Key technical choices with rationale (why X over Y?). Include alternatives considered for each decision.
+      - **Risks / Trade-offs**: Known limitations, things that could go wrong. Format: [Risk] → Mitigation
+      - **Single Authority & Retirement Plan**:
+        - **Single Authority Invariant**: Identify the sole owner for each affected capability, lifecycle state, or domain entity. Forbid parallel mechanisms or unmaintained fallbacks.
+        - **Retirement Matrix**: Mandatory table mapping every superseded component/symbol to its replacement, target deletion task group, and zero-caller verification method.
+      - **Behavioral Test Migration**: Required when replacement work deletes, migrates, or substantially rewrites tests. Identify surviving product invariants and classify affected coverage as Preserve, Migrate, Delete, or Consolidate. Reject both blanket deletion and test-count preservation.
+      - **Migration Plan**: Steps to deploy, rollback strategy (if applicable)
+      - **Open Questions**: Unknowns that can safely be answered later without
+        changing the specs, the approach, or the task breakdown. Omit if none.
+
+      Open questions are for genuinely deferrable unknowns, not decisions you
+      skipped. If a question would change the specs, the chosen approach, or
+      the task breakdown, resolve it now - ask the user instead of guessing.
+
+      Focus on architecture and approach, not line-by-line implementation.
+      The proposal covers why and what; design covers how. Reference the
+      proposal for motivation and, once written, the specs for requirements -
+      if a section would only restate them, point to them instead.
+
+      Good design docs explain the "why" behind technical decisions.
+    requires:
+      - proposal
+
+  - id: tasks
+    generates: tasks.md
+    description: Reviewed implementation groups containing atomic trackable microtasks
+    template: tasks.md
+    instruction: |
+      Create the task list as numbered implementation groups containing atomic microtasks.
+
+      Before writing tasks, check design.md for Open Questions. If any of them
+      would change what gets built, resolve them with the user first - do not
+      bake an unstated assumption into the task list.
+
+      **IMPORTANT: Follow the template below exactly.** The apply phase parses
+      checkbox format to track progress. Tasks not using `- [ ]` won't be tracked.
+
+      Group rules:
+      - Each `## N. Group Name` is one implementer/reviewer ownership and review unit.
+      - Keep each group cohesive around one behavior slice or tightly coupled refactor.
+      - Order groups by dependency. Do not duplicate acceptance coverage across groups.
+      - Each group receives an independent read-only reviewer. Implementer continuity across
+        tightly coupled groups is allowed when the previous group completed cleanly.
+      - Define the behavioral test envelope: approved requirements and invariants, existing
+        suites to inspect, retired behavior, known exact tests where already evident, and
+        explicit non-goals. Do not predeclare one exact test per task or scenario.
+
+      Microtask rules:
+      - Each microtask MUST be one checkbox: `- [ ] N.M Task description`.
+      - Each checkbox MUST describe one independently observable action requiring no
+        more than two minutes of agent work. Test/build command runtime is excluded.
+      - Use one verb. Do not combine behavior matrices, multiple files, implementation,
+        and verification in one checkbox.
+      - Name an exact file, symbol, test, command, or delivered observation where useful.
+      - Put test execution and result observation in their own microtasks.
+      - Do not add one test per spec sentence. One table-driven or existing test may cover
+        multiple scenarios.
+
+      Every code group MUST start by inventorying existing coverage against the relevant
+      requirement clauses. If tests may change, require a delivered retirement map:
+      `existing test/coverage -> surviving invariant -> Preserve | Migrate | Delete |
+      Consolidate -> requirement`. Preserve each surviving product invariant once. Add tests
+      only for distinct uncovered behavior. Never delete unrelated regression tests, preserve
+      old test count, hide stale-looking tests, or reconstruct every old scenario separately.
+
+      Test-change budget:
+      - Parent approval is required before edits that add more than three distinct behavioral
+        cases (including table rows), add more than 150 test lines regardless of net deletion,
+        introduce a test fixture/helper/framework abstraction, or delete a complete test file.
+      - Approval requires the requirement, production trigger, existing coverage inspected,
+        why it misses the behavior, smallest stable test seam, and consolidation decision.
+      - This is a forced decision point, not a quality ceiling.
+
+      Anti-Creep & Deletion Rules:
+      - Any group introducing replacement functionality MUST include explicit microtasks
+        to delete superseded code, remove obsolete tests, and audit the codebase for zero
+        remaining callers (e.g., `- [ ] N.M Delete superseded <symbol/file> and audit zero callers`).
+      - Temporary fallback adapters, duplicate lifecycle authorities, and dead code are
+        forbidden from surviving the change.
+
+      For genuinely new or changed behavior, use atomic RED-GREEN-REFACTOR microtasks:
+      1. identify existing coverage and one uncovered behavior;
+      2. add or adjust the smallest focused test;
+      3. run the exact focused command and observe the expected behavior failure;
+      4. make the smallest production change;
+      5. run the same command and observe success;
+      6. refactor only if needed, then rerun the focused command.
+
+      For refactors, deletions, documentation, or already-covered behavior, do not invent
+      a failing RED result. Use baseline-GREEN, change, GREEN, and focused verification.
+      End every group with `### Group N Evidence` and `- Status: pending`. The apply parent
+      replaces that line with starting scope, implementer/reviewer session IDs, method,
+      test-retirement mapping, test-budget disposition, task-by-task fulfillment evidence,
+      exact checks, parent review triage, any orchestrator arbitration and sealed verification,
+      and the clean read-only review result.
+      These are normal bullets, never checkboxes. The parent checks a whole group only
+      after its independent reviewer returns a clean pass.
+      Final checkboxes in every numbered group MUST require format-write on owned files only,
+      then passing `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, focused/affected tests,
+      and `pnpm test` on the candidate-final tree. Add Rust, E2E, or platform checks where
+      applicable. Repository-wide format writes belong only in a final integration group.
+      A group cannot enter review before this gate succeeds. Unrelated failures block or
+      escalate; they never authorize unrelated edits or receive a pre-existing waiver.
+
+      Example:
+      ```
+      ## 1. Setup
+
+      - [ ] 1.1 Inspect existing export tests for CSV quoting coverage
+      - [ ] 1.2 Classify affected export coverage by surviving invariant
+      - [ ] 1.3 Record the distinct uncovered embedded-quote behavior
+      - [ ] 1.4 Add one embedded-quote row to src/export.test.ts
+      - [ ] 1.5 Run the focused test and observe the quoting assertion fail
+      - [ ] 1.6 Escape embedded quotes in src/export.ts
+      - [ ] 1.7 Run the focused test and observe success
+      - [ ] 1.8 Format owned files and pass format-check, lint, typecheck, focused tests, and full tests
+
+      ### Group 1 Evidence
+
+      - Status: pending
+      - Test retirement: pending
+      - Test-budget disposition: pending
+      - Task evidence: pending
+      - Verification: pending
+      - Review triage: pending
+      - Arbitration: not needed
+      - Sealed verification: not needed
+
+      ## 2. Core Implementation
+
+      - [ ] 2.1 Run the existing export suite as a baseline
+      - [ ] 2.2 Rename the internal formatter
+      - [ ] 2.3 Run the existing export suite after the rename
+      - [ ] 2.4 Format-write owned files only
+      - [ ] 2.5 Pass format-check, lint, typecheck, focused tests, and full tests
+
+      ### Group 2 Evidence
+
+      - Status: pending
+      ```
+
+      Reference specs for what needs to be built, design for how to build it.
+    requires:
+      - specs
+      - design
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+  instruction: |
+    Execute tasks one numbered group at a time through a reviewed group gate.
+
+    Parent ownership:
+    - The main agent alone edits tasks.md, including checkboxes and group evidence.
+    - Implementers and reviewers MUST NOT edit tasks.md.
+    - Leave every checkbox in the active group unchecked during implementation and review.
+    - Check all group microtasks together only after the group passes every gate below.
+
+    Preflight each pending group:
+    1. Read all context files and current repository instructions. Enforce Delta Precedence:
+       active delta specs supersede canonical specs; never revive superseded requirements.
+    2. Record `git status --short`, changed paths, and the active group's allowed scope.
+       Preserve unrelated user changes. Do not start another group while current writes are
+       unknown or unaccepted.
+    3. Define a behavioral test envelope: approved requirements and surviving invariants,
+       existing suites to inspect, removed behavior whose tests may retire, known exact tests
+       only where already evident, explicit non-goals, and any pre-approved budget exception.
+       Do not prescribe one exact test per task or scenario.
+
+    Test-migration checkpoint:
+    4. If the group may delete, migrate, or substantially rewrite tests, first ask the
+       implementer for an inventory-only report with no edits:
+       `existing test/coverage -> surviving invariant -> Preserve | Migrate | Delete |
+       Consolidate -> requirement`.
+    5. Parent approves the smallest complete behavioral set before edits. More than three
+       new behavioral cases, more than 150 added test lines, a new fixture/helper abstraction,
+       or whole-test-file deletion requires explicit parent disposition. Missing a dedicated
+       test does not prove missing behavior; equivalent and table-driven coverage count.
+
+    Implementation and handoff:
+    6. Use the same implementer session for inventory, implementation, and accepted
+       corrections. A previous clean implementer may continue into a tightly coupled group;
+       implementer freshness is not mandatory. Never use a reviewer as implementer.
+    7. Give the implementer only the approved group scope, behavioral envelope, context, and
+       retirement disposition. Require RED/GREEN only for changed behavior and baseline-GREEN/
+       change/GREEN for refactors, deletions, and already-covered behavior.
+    8. Reject handoff before review unless every task N.M maps to exact file/symbol, command,
+       test, or observation evidence and the test retirement/delta is fully accounted for.
+       High-level narrative and green test counts are insufficient.
+    9. Require format-write on owned files only, followed by passing `pnpm format:check`,
+       `pnpm lint`, `pnpm typecheck`, focused/affected tests, and `pnpm test` on the final tree.
+       Require additional applicable Rust/E2E/platform checks. No failure may be waived as
+       pre-existing, and unrelated failures never authorize unrelated repair.
+
+    Independent read-only review:
+    10. Create a fresh reviewer session for the group. Reviewer MUST NOT edit source, tests,
+        tasks, specs, configuration, formatting, or generated files. Any reviewer write is a
+        workflow failure and the review cannot pass.
+    11. Give the reviewer the exact requirements/tasks, behavioral envelope, retirement map,
+        implementer evidence, and diff baseline. It audits behavior, evidence, scope, code
+        creep, zombie code, orphaned exports, uncalled helpers, duplicate authority, and tests.
+    12. Only these findings block: direct spec/task violation; data loss/corruption/security
+        risk; supported-scope process/resource leak; stale identity mutating replacement state;
+        required behavior with no equivalent executable coverage; group-caused mechanical
+        failure; false/missing task evidence; surviving superseded authority or caller.
+        Realism-only changes, naming/polish, equivalent permutations, speculative edge cases,
+        and missing dedicated tests with broader equivalent coverage are optional.
+    13. Any requested test must state the exact requirement, realistic production trigger,
+        existing tests inspected, why none catches the defect, smallest failing behavior, and
+        preferred existing test/table to extend.
+
+    Parent triage and bounded correction:
+    14. Parent accepts or rejects every finding. Optional findings never trigger correction
+        unless explicitly promoted. Send only accepted blockers to the same implementer, each
+        as one observed defect with exact requirement/task and smallest acceptance condition;
+        never send a broad restoration matrix.
+    15. Allow one correction and one read-only re-review by the same reviewer. After correction,
+        require affected checks and every mandatory final gate to pass again.
+
+    Bounded autonomous arbitration after the second review:
+    16. If findings remain, the orchestrator MUST write an arbitration record for each one:
+        accept, reject, or human-required, with requirement/task, concrete evidence, scope and
+        test-budget rationale. Mechanical gate failures can never be rejected or waived.
+    17. The orchestrator may autonomously reject optional/equivalent/speculative findings and
+        complete the group when no accepted blocker remains. It may authorize one final narrow
+        correction by the same implementer only when the defect and fix remain inside approved
+        specs, design, task scope, retirement map, and test budget.
+    18. After that final correction, rerun every mandatory gate and create a fresh read-only
+        reviewer for sealed verification. The sealed reviewer checks only the accepted findings
+        and regressions directly caused by their fixes. It MUST NOT introduce new ordinary
+        findings; only a newly observed catastrophic defect (data loss/corruption/security,
+        supported-scope process/resource leak, or mechanical failure) may block.
+    19. A sealed PASS completes the review gate. A sealed failure parks the group as
+        `blocked-awaiting-user`; do not start another correction/review loop. While the user is
+        unavailable, continue only later groups that are demonstrably independent of the parked
+        group.
+    20. These decisions are always human-required: changing specs or design, strengthening a
+        guarantee, changing platform/workload support, adding architecture or dependencies,
+        resolving destructive/data-loss uncertainty, or expanding an unapproved test budget.
+        Park the group with the exact question and options rather than guessing.
+
+    Interrupted sessions:
+    21. Treat an aborted/failed editing session as an unknown dirty transaction. Immediately
+        inspect `git status --short`, `git diff --name-only`, and `git diff --check`, then compare
+        writes with pre-dispatch scope. Do not delegate further work until unexpected writes
+        are resolved. Never infer abort rolled back files.
+
+    Completion:
+    22. Main inspects final diff and structured evidence. Under `### Group N Evidence`, record
+        starting scope, session IDs, method, retirement map, budget disposition, every task's
+        proof, exact checks, accepted/rejected findings, any arbitration and sealed-verification
+        result, and clean read-only verdict.
+    23. Only then check every group microtask together. Never oscillate individual checkboxes.
+
+    Pause on ambiguity, blockers, or scope changes. Never claim completion from prose alone;
+    checked groups require complete inline execution evidence.

@@ -27,16 +27,10 @@ fn processing_events_require_and_serialize_immutable_run_ids() {
         subject_session: None,
         run: None,
     };
-    let worker = WorkerExited {
-        run_id: "run-1".to_string(),
-        pid: 99,
-        exit_code: 0,
-    };
     for event in [
         serde_json::to_value(status).unwrap(),
         serde_json::to_value(lock_created).unwrap(),
         serde_json::to_value(lock_removed).unwrap(),
-        serde_json::to_value(worker).unwrap(),
     ] {
         assert_eq!(event["runId"], "run-1");
         assert!(event.get("run_id").is_none());
@@ -190,4 +184,20 @@ fn parse_lock_path_works_regardless_of_create_kind() {
     assert_eq!(asl_event.subject_session, Some("sub-001_01".to_string()));
     assert_eq!(asl_event.step_code, "020_RealignASL");
     assert_eq!(asl_event.run, Some("1".to_string()));
+}
+
+#[test]
+fn watcher_admission_rejects_existing_nonterminal_run_during_shutdown() {
+    let root = tempfile::tempdir().unwrap();
+    let state = state_with_active_project(root.path());
+    let reserved = reserve_processing_run_impl(&state, vec!["population".into()], vec![]).unwrap();
+    state
+        .runtime_shutdown_in_progress
+        .store(true, std::sync::atomic::Ordering::Release);
+    assert!(
+        validate_watcher_request(&state, &reserved.run_id)
+            .unwrap_err()
+            .contains("shutdown")
+    );
+    assert!(!root.path().join("derivatives/ExploreASL/lock").exists());
 }

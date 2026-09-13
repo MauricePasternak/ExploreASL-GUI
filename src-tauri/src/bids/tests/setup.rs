@@ -18,6 +18,20 @@ fn source_snapshot(root: &Path) -> BTreeMap<PathBuf, SourceEntry> {
         .min_depth(1)
         .into_iter()
         .map(|entry| entry.unwrap())
+        // OS ownership bootstrap directories are GUI authority, outside
+        // reviewed BIDS mutations. Keep every other entry (including unknown
+        // GUI files) in the byte inventory.
+        .filter(|entry| {
+            let relative = entry.path().strip_prefix(root).unwrap();
+            !(entry.file_type().is_dir()
+                && [
+                    "derivatives",
+                    "derivatives/ExploreASL_GUI",
+                    "derivatives/ExploreASL_GUI/execution",
+                ]
+                .iter()
+                .any(|path| relative == Path::new(path)))
+        })
         .map(|entry| {
             let path = entry.path();
             let metadata = fs::symlink_metadata(path).unwrap();
@@ -1971,4 +1985,92 @@ fn commit_contract_returns_only_durable_result_and_structured_failures_without_a
         std::str::from_utf8(&project("bids")).ok()
     );
     assert!(load_registry(app_data.path()).unwrap().entries.is_empty());
+}
+
+#[test]
+fn registry_concurrent_project_updates_preserve_every_pending_entry() {
+    let app_data = TempDir::new().unwrap();
+    // Exercise replacement RMW, beyond the initial create-new registry race.
+    save_registry(
+        app_data.path(),
+        &PendingRegistry {
+            version: REGISTRY_VERSION,
+            entries: vec![],
+        },
+    )
+    .unwrap();
+    let roots = (0..24).map(|_| TempDir::new().unwrap()).collect::<Vec<_>>();
+    let barrier = Barrier::new(roots.len());
+    let results = std::thread::scope(|scope| {
+        let handles = roots
+            .iter()
+            .map(|root| {
+                let barrier = &barrier;
+                let app_data = app_data.path();
+                scope.spawn(move || {
+                    let (transaction, journal, registry) = identities();
+                    let entry = entry_for(root.path(), transaction, journal, registry);
+                    barrier.wait();
+                    register_pending(app_data, entry)
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    assert!(results.iter().all(Result::is_ok), "{results:?}");
+    let entries = load_registry(app_data.path()).unwrap().entries;
+    assert_eq!(
+        entries.len(),
+        roots.len(),
+        "updates from independent projects must not be lost"
+    );
+    std::thread::scope(|scope| {
+        for entry in entries.iter().take(12) {
+            let app_data = app_data.path();
+            scope.spawn(move || remove_pending(app_data, &entry.registry_id).unwrap());
+        }
+    });
+    assert_eq!(load_registry(app_data.path()).unwrap().entries.len(), 12);
+}
+
+#[test]
+fn startup_recovery_preserves_pending_journal_when_processing_evidence_is_malformed() {
+    let root = TempDir::new().unwrap();
+    let app_data = TempDir::new().unwrap();
+    let plan = preflight(root.path(), SetupMode::Bids, Some(project("bids"))).unwrap();
+    let (transaction_id, journal_id, registry_id) = identities();
+    let journal = initial_journal(
+        &plan,
+        transaction_id.clone(),
+        journal_id.clone(),
+        registry_id.clone(),
+    )
+    .unwrap();
+    register_pending(
+        app_data.path(),
+        entry_for(root.path(), transaction_id, journal_id.clone(), registry_id),
+    )
+    .unwrap();
+    write_journal(root.path(), &journal).unwrap();
+    let before = fs::read(journal_path(root.path(), &journal_id)).unwrap();
+    // Malformed processing evidence must block the earliest setup mutation,
+    // even before a project document has been installed or hydrated.
+    let processing = root.path().join(crate::processing::record::CURRENT_RECORD);
+    fs::create_dir_all(processing.parent().unwrap()).unwrap();
+    fs::write(&processing, b"unsupported processing authority").unwrap();
+    assert!(recover_at_startup(app_data.path()).is_err());
+    assert!(recover_root(app_data.path(), root.path()).is_err());
+    assert_eq!(
+        fs::read(journal_path(root.path(), &journal_id)).unwrap(),
+        before
+    );
+    assert_eq!(
+        fs::read(&processing).unwrap(),
+        b"unsupported processing authority"
+    );
+    fs::remove_file(processing).unwrap();
+    assert_eq!(recover_at_startup(app_data.path()).unwrap().recovered, 1);
 }

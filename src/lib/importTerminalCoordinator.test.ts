@@ -7,6 +7,7 @@ import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { closeProjectRuntime } from "./projectCoordinator";
 import {
+  reconcileImportRunAfterShutdown,
   reconcileImportRunForActivation,
   reconcileImportTerminal,
 } from "./importTerminalCoordinator";
@@ -46,6 +47,7 @@ const terminal = (
     stagingCleanupComplete: true,
   },
   terminalResult: lifecycle,
+  confirmationRequired: false,
 });
 
 describe("import terminal coordinator", () => {
@@ -104,6 +106,26 @@ describe("import terminal coordinator", () => {
 
     expect(saveProject).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("blocks interrupted confirmation-required snapshots from save and acknowledgement, including shutdown", async () => {
+    const confirmationRequired = {
+      ...terminal("interrupted-run", "interrupted"),
+      confirmationRequired: true,
+    };
+    const saveProject = vi.fn().mockResolvedValue(undefined);
+    useProjectStore.setState({ saveProject });
+    useImportStore.getState().bindImportRunSnapshot(confirmationRequired);
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "get_active_import_run" ? confirmationRequired : undefined,
+    );
+
+    await reconcileImportTerminal(confirmationRequired.runId);
+    await reconcileImportRunAfterShutdown();
+
+    expect(saveProject).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
+    expect(useImportStore.getState().terminalRunId).toBe(confirmationRequired.runId);
   });
 
   it("project close waits for registered terminal save and acknowledgement", async () => {

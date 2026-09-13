@@ -10,7 +10,6 @@ import { makeMatlabProfile } from "../test/profileFixtures";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { readSessionCheckpoint } from "./sessionCheckpoint";
 import { resolveLogicalSource } from "./projectPaths";
-import { runProcessingPipeline, watchLockDir } from "./processingEvents";
 import { resetProjectLifecycleForTests } from "./projectLifecycle";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore, __resetProjectRevisionForTests } from "../stores/projectStore";
@@ -108,19 +107,6 @@ beforeEach(() => {
       await writeFile(projectPath, canonicalBytes);
       return null;
     }
-    if (command === "run_pipeline" || command === "watch_lock_dir") {
-      return {
-        runId: "processing-run-relocation",
-        lifecycle: "running",
-        projectRoot: "/native-derived-root",
-        selectedModules: ["structural"],
-        selectedSubjectSessions: ["sub-01_01"],
-        startTime: 1,
-        workers: [1234],
-        exitEvidence: [],
-        watcherOwned: command === "watch_lock_dir",
-      };
-    }
     return null;
   });
 });
@@ -131,7 +117,7 @@ afterEach(async () => {
 });
 
 describe.each(["bids", "dicom"] as const)("%s project relocation", (dataSource) => {
-  it("uses only the opened location for owned reads, saves, processing, and watcher roots", async () => {
+  it("uses only the opened location for owned reads and saves; native owns watchers", async () => {
     const { oldRoot, newRoot, easlPath } = await makeMovedProject(dataSource);
 
     await useProjectStore.getState().loadProject(easlPath);
@@ -144,23 +130,8 @@ describe.each(["bids", "dicom"] as const)("%s project relocation", (dataSource) 
 
     useProjectStore.getState().toggleNavbar();
     await useProjectStore.getState().saveProject();
-    const profile = useGlobalStore.getState().settings.executionProfiles[0];
-    await runProcessingPipeline(
-      "processing-run-relocation",
-      {
-        subjects: ["sub-01_01"],
-        modules: ["structural"],
-        selectedProfileId: profile.id,
-        workers: 1,
-      },
-      profile,
-    );
-    await watchLockDir("processing-run-relocation");
-
     expect(JSON.parse(await readFile(easlPath, "utf8")).projectMeta.rootPath).toBeUndefined();
     expect(accessedPaths).toContain(easlPath);
-    // Processing and watcher IPC now carry native run identity, not a renderer
-    // project root. Root authority remains in the active native project record.
     expect(accessedPaths).not.toContain(oldRoot);
     expect(accessedPaths.every((path) => !path.startsWith(oldRoot))).toBe(true);
   });

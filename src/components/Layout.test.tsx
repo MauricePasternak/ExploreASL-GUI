@@ -53,7 +53,6 @@ describe("Layout", () => {
     });
     useProcessingStore.setState({
       processingPhase: "idle",
-      workerPids: [],
     });
     useImportStore.setState({
       importPhase: "idle",

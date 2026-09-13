@@ -696,6 +696,8 @@ export const ImportRunSnapshotSchema = z
     relocationOutcome: ImportRelocationOutcomeSchema.optional(),
     error: ImportStructuredErrorSchema.optional(),
     terminalResult: z.enum(["completed", "failed", "cancelled", "interrupted"]).optional(),
+    /** Released records omit this field; interrupted recovery requires it. */
+    confirmationRequired: z.boolean().default(false),
   })
   .strict()
   .superRefine((snapshot, context) => {

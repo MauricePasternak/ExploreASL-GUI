@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { installE2EBridge, isE2EScenario } from "./e2e/bridge";
 import { MantineProvider, createTheme } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { RouterProvider } from "react-router";
@@ -149,7 +150,6 @@ function renderApp() {
 
 async function bootstrap() {
   if (import.meta.env.VITE_E2E === "1") {
-    const { installE2EBridge, isE2EScenario } = await import("./e2e/bridge");
     const e2eControl = installE2EBridge({ enabled: true, router });
     if (!e2eControl) {
       throw new Error("E2E bridge installation failed");

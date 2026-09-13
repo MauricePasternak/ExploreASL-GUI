@@ -6,132 +6,34 @@ Define backend execution and monitoring of ExploreASL processing.
 
 ## Requirements
 
-### Requirement: run_pipeline Command
-
-The `run_pipeline` Tauri command SHALL accept an existing native `run_id`, `execution_profile: ExecutionProfile`, `data_par_json: String`, `b_process: Vec<bool>`, `workers: u32`, `subject_regexp: String`, and the existing `rerun_bids2legacy` option. It SHALL derive the project root from the matching native `Preparing` reservation and SHALL reject missing, stale, foreign-project, or non-`Preparing` run IDs before mutation. Such admission rejection SHALL NOT change lifecycle, worker/watcher ownership, exit or launch-failure evidence, files, or spawned processes. Invalid profile, mismatched/invalid selected work or worker count, and later mutation/spawn errors SHALL be recorded as launch failure only after exact `Preparing` admission. Public `fail_processing_run` SHALL accept only the exact current `Preparing` reservation and SHALL reject `Running`, `Finalizing`, and terminal runs without mutation; internal post-spawn launch-failure recording MAY retain a partial launch as `Running` with `pendingLaunchFailure`. `run_pipeline` SHALL return the current authoritative run snapshot rather than a PID array. The snapshot SHALL expose optional `pendingLaunchFailure` when a later worker spawn fails after at least one worker was registered. The command SHALL dispatch on the profile `type` and construct the appropriate command. For the `matlab` type, the command SHALL construct worker invocations using the profile's `matlabPath` and `exploreAslPath`.
-
-Before spawning workers, the command SHALL:
-
-1. Confirm the matching native `Preparing` reservation.
-2. Call `execution_profile.validate()`. If validation fails, it SHALL transition the reserved run to `Failed` without performing destructive operations.
-3. Write `data_par_json` to `<project_root>/derivatives/ExploreASL/dataPar.json`.
-4. Create `<project_root>/derivatives/ExploreASL/lock/` if it does not exist.
-5. Clear all stale `locked/` directories under the lock path.
-6. Delete `.status` files for modules matching `b_process` on subjects matching `subject_regexp`.
-7. Delete existing module log files for modules matching `b_process` on subjects matching `subject_regexp` from `<project_root>/derivatives/ExploreASL/log/`.
-8. Confirm the lock watcher is either absent or owned by the same `run_id`.
-9. Attempt N workers in order with the existing stagger between attempts, register each successful worker in native run state, and supervise each worker under the same `run_id`.
-
-The native backend SHALL serialize the complete launch admission/mutation/spawn section with active-project shutdown and root replacement. A direct stale launch SHALL reject before every mutation. Any processing-scoped rawdata setup, stale-lock cleanup, Population version capture, or Population ready-mtime command SHALL accept `run_id`, derive its root from current native ownership, and reject an obsolete/foreign/wrong-state run before mutation or response.
-
-The first registered worker SHALL transition the matching run to `Running`. If the first spawn fails, the run SHALL become `Failed`. If a later spawn fails, the run SHALL retain the first error as `pendingLaunchFailure`, remain `Running` with surviving workers, remain killable, and return a launch error. When its final surviving worker exits, it SHALL become `Failed`, stop its matching watcher before replacement, and retain exit evidence. If workers exit before the command response is delivered, any response or subsequent attachment SHALL reflect current native worker membership and lifecycle rather than reconstructing membership from the originally spawned PID list.
-
-#### Scenario: Status file deletion for selected modules
-
-- **WHEN** `run_pipeline` is called for a valid `Preparing` run with `b_process = [true, true, false]` and `subject_regexp = "^sub-.*$"`
-- **THEN** all `.status` files under `xASL_module_Structural/*/` and `xASL_module_ASL/*/` SHALL be deleted for matching subjects; Population status files SHALL be left untouched
-
-#### Scenario: Stale lock cleanup before launch
-
-- **WHEN** `run_pipeline` is called for a valid reservation and `locked/` directories exist from a previous crashed run
-- **THEN** all `locked/` directories under `derivatives/ExploreASL/lock/` SHALL be removed before spawning workers
-
-#### Scenario: Watcher already running
-
-- **WHEN** `run_pipeline` is called while a lock watcher owned by another run is active
-- **THEN** the command SHALL return an error and SHALL NOT spawn workers
-
-#### Scenario: Missing reservation
-
-- **WHEN** `run_pipeline` is called with an unknown or obsolete `run_id`
-- **THEN** the command SHALL reject before writing configuration, creating directories, deleting status or log files, or spawning workers
-
-#### Scenario: Worker exits before launch response
-
-- **WHEN** a worker exits after native registration but before `run_pipeline` returns to the frontend
-- **THEN** the returned snapshot SHALL contain the backend's current worker membership and lifecycle for that run and SHALL NOT reintroduce the exited PID
-
-#### Scenario: First worker spawn fails
-
-- **WHEN** worker 1 cannot be spawned for a matching `Preparing` run
-- **THEN** the run SHALL transition to `Failed`, own no worker, stop/join its matching watcher before replacement (or retain watcher ownership that blocks replacement on stop failure), and the command SHALL return the launch error
-
-#### Scenario: Later worker spawn fails
-
-- **WHEN** one or more workers are registered and a later worker cannot be spawned
-- **THEN** the run SHALL remain `Running` and killable with surviving authoritative membership and public `pendingLaunchFailure`; after its final worker exits it SHALL transition to `Failed` rather than `Finalizing`
-
 ### Requirement: Module Log File Cleanup
 
-During preparation, `run_pipeline` SHALL delete existing ExploreASL module log files from `<project_root>/derivatives/ExploreASL/log/` for each enabled module matching the subject regexp filter. Log files follow the naming pattern `{module_name}_sub-{Subject}_{Session}[_...].log`. The subject*session SHALL be extracted from the filename using the pattern `sub-[^*]+\_\d+`and tested against`subject_regexp`. The Population module SHALL have its log file deleted regardless of subject regexp match (no per-subject granularity). Non-log files (`.json`, `.csv`) in the log directory SHALL NOT be affected. If the log directory does not exist, the cleanup SHALL succeed silently.
+During preparation, `run_pipeline` SHALL quarantine existing selected ExploreASL module log files under the durable pre-execution journal from `<project_root>/derivatives/ExploreASL/log/` for each enabled module matching the subject regexp filter. Log files follow the naming pattern `{module_name}_sub-{Subject}_{Session}[_...].log`. The subject*session SHALL be extracted from the filename using the pattern `sub-[^*]+\_\d+`and tested against`subject_regexp`. The Population module SHALL have its log file quarantined regardless of subject regexp match (no per-subject granularity). Non-log files (`.json`, `.csv`) in the log directory SHALL NOT be affected. If the log directory does not exist, the cleanup SHALL succeed silently.
 
 #### Scenario: Structural log deleted for matching subject
 
-- **WHEN** `run_pipeline` is called with `b_process = [true, false, false]` and `subject_regexp = "^sub-001_01$"`
-- **THEN** `xASL_module_Structural_sub-001_01.log` SHALL be deleted; `xASL_module_Structural_sub-002_01.log` SHALL be preserved
+- **WHEN** `run_pipeline` launches a reservation selecting only Structural for `sub-001_01`
+- **THEN** `xASL_module_Structural_sub-001_01.log` SHALL be absent from the active log directory after quarantine; `xASL_module_Structural_sub-002_01.log` SHALL be preserved
 
 #### Scenario: All ASL run logs deleted for matching subject
 
-- **WHEN** `run_pipeline` is called with `b_process = [false, true, false]` and `subject_regexp = "^sub-001_01$"`
-- **THEN** ALL log files starting with `xASL_module_ASL_sub-001_01_` SHALL be deleted regardless of run number; logs for `sub-002_01` SHALL be preserved
+- **WHEN** `run_pipeline` launches a reservation selecting only ASL for `sub-001_01`
+- **THEN** ALL log files starting with `xASL_module_ASL_sub-001_01_` SHALL be absent from the active log directory after quarantine regardless of run number; logs for `sub-002_01` SHALL be preserved
 
 #### Scenario: Disabled module logs preserved
 
-- **WHEN** `run_pipeline` is called with `b_process = [true, false, false]` (only Structural enabled)
-- **THEN** ASL and Population log files SHALL NOT be deleted
+- **WHEN** `run_pipeline` launches a reservation selecting only Structural
+- **THEN** ASL and Population log files SHALL remain untouched
 
 #### Scenario: Population log always deleted when module enabled
 
-- **WHEN** `run_pipeline` is called with `b_process = [false, false, true]`
-- **THEN** `xASL_module_Population.log` SHALL be deleted regardless of `subject_regexp` value
+- **WHEN** `run_pipeline` launches a reservation selecting only Population
+- **THEN** `xASL_module_Population.log` SHALL be absent from the active log directory after quarantine regardless of `subject_regexp` value
 
 #### Scenario: Non-log files preserved
 
 - **WHEN** the log directory contains `bids_report_*.json` and `import_summary_*.csv` files
 - **THEN** those files SHALL remain untouched by the log cleanup
-
-### Requirement: kill_pipeline Command
-
-The `kill_pipeline` Tauri command SHALL accept `run_id`. It SHALL reject a missing, obsolete, foreign-project, or non-cancellable run without affecting another run. For a matching `Running` run it SHALL read and validate the complete authoritative PID set before any lifecycle transition or OS call, transition to `Cancelling`, validate the complete set again, and send SIGTERM to each. If a process does not exit within 5 seconds, it SHALL send SIGKILL. A TERM or force-kill error SHALL trigger an immediate exact-PID existence recheck: confirmed disappearance SHALL continue as success; a still-live process or inconclusive existence check SHALL return an error while retaining actionable `Cancelling` ownership. After every worker is confirmed absent, it SHALL join supervisor handles, transition the matching run to `Cancelled`, and return its terminal snapshot. Worker supervisors SHALL NOT independently transition a `Cancelling` run to `Cancelled`.
-
-Immediately after a successful `Running -> Cancelling` transition and before waiting for worker termination, it SHALL emit `ProcessingLifecycleSnapshot` containing the exact run snapshot. Every terminal transition SHALL stop/join or retain actionable matching watcher ownership before permitting terminal replacement.
-
-#### Scenario: Graceful kill with timeout
-
-- **WHEN** `kill_pipeline` is called with the current run ID and 3 running workers
-- **THEN** the run SHALL enter `Cancelling`, SIGTERM SHALL be sent to all 3 PIDs, after 5 seconds any remaining SHALL receive SIGKILL, and the run SHALL enter `Cancelled` only after all workers are reaped
-
-#### Scenario: Obsolete run kill
-
-- **WHEN** `kill_pipeline` is called with an obsolete run ID after a newer run has been reserved
-- **THEN** the command SHALL reject without signalling workers or changing the newer run
-
-### Requirement: watch_lock_dir Command
-
-The `watch_lock_dir` Tauri command SHALL accept `run_id`, derive the project lock directory from the matching native run, and bind the watcher to that run for its entire lifetime. It SHALL reject missing, stale, foreign-project, or terminal run IDs. Every emitted payload SHALL contain the bound `runId`:
-
-- `StatusFileCreated { runId, module, subjectSession, stepCode, run? }`
-- `LockCreated { runId, module, subjectSession?, run? }`
-- `LockRemoved { runId, module, subjectSession?, run? }`
-
-The watcher SHALL NOT obtain a new run ID by consulting whichever run is current when a delayed filesystem event is delivered.
-
-Repeated watch attachment for the same run SHALL be idempotent. Stop/control for another run SHALL reject without releasing current ownership. Before a run becomes replaceable in a terminal state, its matching watcher SHALL be stopped and joined; if watcher shutdown fails, the backend SHALL retain actionable ownership and SHALL reject replacement rather than relabel queued callbacks.
-
-#### Scenario: Status file created for step completion
-
-- **WHEN** ExploreASL creates `060_Segment_T1w.status` under `xASL_module_Structural/sub-X_01/xASL_module_Structural/` for run `R1`
-- **THEN** a `StatusFileCreated` event SHALL be emitted with `{ runId: "R1", module: "structural", subjectSession: "sub-X_01", stepCode: "060_Segment_T1w" }`
-
-#### Scenario: ASL module with run number
-
-- **WHEN** a `.status` file is created under `xASL_module_ASL/sub-X_01/xASL_module_ASL_ASL_1/` for run `R1`
-- **THEN** the event SHALL include `runId: "R1"` and `run: "1"`
-
-#### Scenario: Delayed watcher event after replacement
-
-- **WHEN** a filesystem notification captured by run `R1` is delivered after run `R2` becomes current
-- **THEN** its payload SHALL retain `runId: "R1"` and SHALL NOT be relabelled as run `R2`
 
 ### Requirement: read_lock_status Command
 
@@ -189,35 +91,6 @@ Registered in `lib.rs` and exported via Tauri commands list (existing behavior p
 - **WHEN** `list_subjects` runs on a BIDS-direct project with subjects at root and empty `rawdata/`
 - **THEN** returns subjects from project root, not empty list
 
-### Requirement: AppState for Processing
-
-Native processing state SHALL own worker process identities and the active lock watcher together with the project root that started them. App exit, project close, and project switch SHALL terminate all owned workers and stop the watcher before releasing that project ownership. Shutdown SHALL report a structured success or failure outcome; an already-stopped worker or absent watcher SHALL count as success. The frontend SHALL be able to block a project transition or normal app exit when native shutdown cannot be confirmed.
-
-#### Scenario: App exit during processing
-
-- **WHEN** the user closes the app while workers are running
-- **THEN** all workers SHALL be terminated, the lock watcher SHALL stop, and exit SHALL proceed only after shutdown is confirmed
-
-#### Scenario: Project switch during processing
-
-- **WHEN** the user requests project B while project A owns workers or a lock watcher
-- **THEN** all A-owned workers and the watcher SHALL stop before B can become active
-
-#### Scenario: Processing shutdown fails
-
-- **WHEN** a worker or watcher cannot be confirmed stopped during a close or switch request
-- **THEN** native shutdown SHALL return an actionable failure and SHALL retain enough ownership state for a retry
-
-#### Scenario: No processing resources are active
-
-- **WHEN** shutdown is requested without active workers or a watcher
-- **THEN** shutdown SHALL succeed without warning
-
-#### Scenario: Watcher event arrives during shutdown
-
-- **WHEN** the watcher emits an event after project shutdown begins
-- **THEN** the event SHALL NOT be attributed to a new project lifecycle
-
 ### Requirement: Module Name Mapping
 
 The `b_process` vector SHALL map to ExploreASL lock directory names: index 0 → `xASL_module_Structural`, index 1 → `xASL_module_ASL`, index 2 → `xASL_module_Population`. This mapping SHALL be used by `run_pipeline` for status file deletion, log file cleanup, and by `read_lock_status` for directory traversal.
@@ -226,15 +99,6 @@ The `b_process` vector SHALL map to ExploreASL lock directory names: index 0 →
 
 - **WHEN** `b_process = [true, false, false]` is passed to `run_pipeline`
 - **THEN** only `.status` files under `xASL_module_Structural/*/xASL_module_Structural/` SHALL be deleted
-
-### Requirement: Worker Invocation Pattern
-
-Each worker SHALL be invoked using the execution profile to determine the command. For `matlab` profiles, the invocation pattern SHALL remain: `<profile.matlabPath> -batch "addpath('<profile.exploreAslPath>'); ExploreASL('<project_root>', 0, [<b_process>], 0, <iWorker>, <nWorkers>)"`. The profile's paths SHALL be used instead of separate `matlab_path` and `explore_asl_path` command arguments. Workers SHALL be spawned with PIDs tracked in `AppState.processing_state`.
-
-#### Scenario: Three workers for Structural+ASL
-
-- **WHEN** `workers = 3`, `b_process = [true, true, false]`, and the execution profile is a `MatlabProfile`
-- **THEN** 3 MATLAB processes SHALL be spawned using `profile.matlabPath` with `iWorker` values 1, 2, 3 respectively
 
 ### Requirement: Module Ordering Handled by ExploreASL
 
@@ -254,22 +118,13 @@ BIDS2Legacy runs as part of each ExploreASL invocation before the selected proce
 - **WHEN** ExploreASL runs Structural module on a subject
 - **THEN** BIDS2Legacy executes first as part of the same MATLAB invocation; the dashboard SHALL only show lock file events for the selected module(s)
 
-### Requirement: Worker Stdout Discard
-
-Worker supervisor threads SHALL NOT stream stdout to the frontend. They SHALL only monitor process exit and report `WorkerExited` events. All stdout from MATLAB workers is discarded.
-
-#### Scenario: MATLAB prints warnings during processing
-
-- **WHEN** a MATLAB worker prints warnings or errors to stdout
-- **THEN** the output SHALL be discarded; progress SHALL only be tracked via lock file events
-
 ### Requirement: ExploreASL Version Detection
 
 The `detect_exploreasl_version` Tauri command SHALL remain unchanged. Its usage SHALL shift from being called with the global `exploreAslPath` to being called with the `exploreAslPath` from the selected execution profile. The version SHALL be detected:
 
 1. **On app startup**: during `validate_all_execution_profiles`, each profile's `exploreAslVersion` SHALL be re-detected and persisted if changed. Save-time validation does NOT detect versions — it is path-existence only.
-2. **During preparation phase of `run_pipeline`**: the version SHALL be extracted from the deserialized profile's `exploreAslVersion` field (or re-detected from `exploreAslPath`) and logged.
-3. **At pipeline runtime**: `capture_environment_versions` (unchanged signature) captures actual on-disk versions. This result is stored in `lastRun` alongside the `profileId` for an accurate historical record.
+2. **During preparation phase of `run_pipeline`**: the version SHALL be extracted from the reserved profile's `exploreAslVersion` field (or re-detected from `exploreAslPath`) and logged.
+3. **At pipeline runtime**: native preparation captures actual on-disk versions through managed probes. Accepted native provenance is saved to `lastRun` alongside `profileId`; the renderer does not launch processing-time probes.
 
 The Settings modal SHALL display the detected version on each profile's ExploreASL path input, rather than as a single global indicator.
 
@@ -280,78 +135,8 @@ The Settings modal SHALL display the detected version on each profile's ExploreA
 
 #### Scenario: Version logged during preparation from profile
 
-- **WHEN** `run_pipeline` is called with a `MatlabProfile` that has `exploreAslVersion: "1.11.0"`
+- **WHEN** `run_pipeline` launches an immutable reservation whose `MatlabProfile` has `exploreAslVersion: "1.11.0"`
 - **THEN** the version `"1.11.0"` SHALL be logged via `log::info!` before any destructive operations
-
-### Requirement: startProcessing calls ensure_rawdata_dir for BIDS projects
-
-Before pipeline preparation mutates processing outputs, BIDS-direct `startProcessing` SHALL invoke run-scoped, read-only compatibility verification against the native active-project root. Verification SHALL require the expected `rawdata/` directory and GUI-owned marker and SHALL NOT create, update, rename, or remove source-tree entries. A verification conflict SHALL fail the reserved run before process spawn and direct the user to the explicit setup-repair preflight. DICOM processing SHALL skip this BIDS-direct verification.
-
-#### Scenario: BIDS project flow calls ensure_rawdata_dir
-
-- **WHEN** user clicks Start Processing on a BIDS-direct project with valid committed compatibility artifacts
-- **THEN** native verification SHALL succeed without source-tree mutation and pipeline preparation SHALL be permitted to continue
-
-#### Scenario: BIDS compatibility artifact is missing
-
-- **WHEN** verification finds a missing or invalid compatibility marker
-- **THEN** the reserved run SHALL fail before process spawn, no repair write SHALL occur, and the error SHALL request a reviewed repair preflight
-
-#### Scenario: DICOM project flow skips ensure_rawdata_dir
-
-- **WHEN** user clicks Start Processing on a DICOM project
-- **THEN** BIDS compatibility verification SHALL not run and existing DICOM behavior SHALL be preserved
-
-### Requirement: assembleDataPar injects subjectFolder for BIDS projects
-
-`assembleDataPar` (or Rust `processing.rs::write_data_par_json`) SHALL include `x.opts.subjectFolder = project_root` in the resulting `dataPar.json` when `dataSource === "bids"`. For `dataSource === "dicom"`, `subjectFolder` MUST NOT be injected; `dataPar.json` matches existing behavior.
-
-Resulting `dataPar.json` for BIDS-direct:
-
-```json
-{
-  "x": {
-    "opts": {
-      "subjectFolder": "/path/to/project_root"
-    }
-  },
-  "Q": { ... },
-  "M0": { ... }
-}
-```
-
-#### Scenario: BIDS-direct dataPar.json
-
-- **WHEN** `assembleDataPar` runs for a BIDS-direct project with `rootPath = "/home/user/ds000240"`
-- **THEN** resulting `dataPar.json` contains `"x": { "opts": { "subjectFolder": "/home/user/ds000240" } }` alongside `Q`, `M0` blocks
-
-#### Scenario: DICOM project dataPar.json unchanged
-
-- **WHEN** `assembleDataPar` runs for a DICOM project
-- **THEN** resulting `dataPar.json` matches existing behavior; no `subjectFolder` key present
-
-### Requirement: Processing pre-flight handling for participants.tsv
-
-The `ensureParticipantsFiles` command SHALL operate on `<projectRoot>/derivatives/ExploreASL/participants.tsv`. Root-level user-authored `participants.tsv` SHALL never be modified by GUI code regardless of `dataSource`.
-
-For BIDS-direct projects (`dataSource === "bids"`), if root-level `<projectRoot>/participants.tsv` exists and contains a `site` column, the GUI SHALL read it to extract user-defined `site` values. Lookup SHALL match root-level `participant_id` (e.g. `sub-01`) against the base subject label of session records (e.g. `sub-01_1`, `sub-01_2`). User `site` values SHALL be preserved in derivatives `participants.tsv` and SHALL NOT be overwritten by group labels. When `enableMetadataGroupingCorrection === true`, group labels SHALL fill in only for subjects/sessions lacking a root-level `site`. When `false`, the `site` column SHALL still be kept in derivatives to preserve root-level values.
-
-For DICOM-import projects, existing behavior SHALL be preserved (group labels when correction enabled, stripped when disabled, no root read).
-
-#### Scenario: BIDS-direct project with enableMetadataGroupingCorrection=true
-
-- **WHEN** user clicks Start Processing on a BIDS-direct project with `enableMetadataGroupingCorrection = true` and root-level `participants.tsv` defines `site = "CenterA"` for `participant_id = sub-01`
-- **THEN** derivatives `participants.tsv` has `site = "CenterA"` for `sub-01_1` and `sub-01_2`; subjects without root `site` receive group label fallback
-
-#### Scenario: BIDS-direct project with enableMetadataGroupingCorrection=false
-
-- **WHEN** user clicks Start Processing on a BIDS-direct project with `enableMetadataGroupingCorrection = false` and root-level `participants.tsv` defines `site = "CenterA"` for `sub-01`
-- **THEN** derivatives `participants.tsv` keeps the `site` column with `"CenterA"` for matching sessions (not stripped)
-
-#### Scenario: Root-level participants.tsv preserved through processing
-
-- **WHEN** ds000240 (with root-level `participants.tsv` containing 16 clinical columns) is processed end-to-end as a BIDS-direct project
-- **THEN** root-level `participants.tsv` retains its original 16 columns throughout; ExploreASL-generated columns live in `derivatives/ExploreASL/participants.tsv` only
 
 ### Requirement: Command Execution for Apptainer Profiles
 
@@ -462,96 +247,153 @@ fn spawn_apptainer_worker(
   1. `apptainer exec --cleanenv --writable-tmpfs --bind <project_root>:/data /path/to/image.sif /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/ /data "0" "[1,1,0]" "0" "1" "2"`
   2. `apptainer exec --cleanenv --writable-tmpfs --bind <project_root>:/data /path/to/image.sif /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/ /data "0" "[1,1,0]" "0" "2" "2"`
 
-### Requirement: Authoritative Processing Run Record
+### Requirement: Immutable durable processing request
 
-Native state SHALL own at most one current processing run record containing a backend-generated session-unique `runId`, canonical active project root, selected modules, selected subject-sessions, lifecycle state, start time, worker membership and exit evidence, watcher ownership, optional public `pendingLaunchFailure`, and terminal result when present. Frontend PID arrays and persisted project UI state SHALL NOT be authoritative sources of active worker membership or run identity. A terminal record MAY remain available for inspection until the matching watcher has stopped and the next reservation or project shutdown replaces it.
+Native reservation SHALL validate the active project and an immutable request containing selected work, execution profile, configuration, and participant-generation inputs. It SHALL assign a UUID, persist the request and expected target inventory, and reject empty effective work before destructive mutation. Repeating a request identity with identical canonical content SHALL return the same reservation identity; reuse with different content SHALL reject. Current-root admission metadata SHALL be validated separately and SHALL NOT become persistent request identity. Project-internal path fields SHALL compare portably; external execution/source paths SHALL remain request content. Launch SHALL use only the exact reserved request, not replacement renderer arguments.
 
-The legal lifecycle transitions SHALL be:
+#### Scenario: Lost reservation response
 
-- `Preparing` to `Running` or `Failed`.
-- `Running` to `Finalizing`, `Cancelling`, `Failed`, or `Interrupted`.
-- `Cancelling` to `Cancelled` or `Failed`.
-- `Finalizing` to `Completed` or `Failed`.
+- **WHEN** the caller retries the same request after losing its response
+- **THEN** native admission SHALL return the existing run without creating a second launch
 
-Terminal states SHALL NOT transition. A new reservation MAY replace a terminal record but SHALL NOT replace a nonterminal record.
+#### Scenario: Changed launch request
 
-#### Scenario: Legal launch transition
+- **WHEN** a caller supplies a stale run or reuses a request identity with changed content
+- **THEN** admission SHALL reject before mutation or worker creation
 
-- **WHEN** all workers for a matching `Preparing` run are registered successfully
-- **THEN** native state SHALL transition that run to `Running`
+#### Scenario: Delayed request replay after acknowledgement
 
-#### Scenario: Illegal terminal transition
+- **WHEN** an acknowledged request is repeated after a different request becomes current
+- **THEN** native admission SHALL return a compact historical replay envelope identifying the original reservation without replacing current execution
+- **AND** changed content under the old request identity SHALL still reject
 
-- **WHEN** a caller or supervisor attempts to transition a `Completed` run to `Running`
-- **THEN** native state SHALL reject the transition without changing the run record
+### Requirement: Native processing preparation
 
-#### Scenario: Old supervisor after replacement
+Native processing SHALL verify BIDS compatibility before mutation and own participant merging, configuration installation, environment capture, historical selected-artifact quarantine, and watcher startup. Participant generation SHALL preserve existing root-authored site values, extra columns, ASL run normalization, and correction rules. Root `participants.tsv` and `participants.json` SHALL be read-only inputs, excluded from journal mutation, backup, quarantine and restore targets. Only derivative participant files SHALL be installed. BIDS root TSV site values SHALL take precedence over group fallback, including when correction is disabled; DICOM SHALL preserve its existing no-root-read behavior. BIDS compatibility verification SHALL require existing valid setup and offer separate explicit repair preflight on conflict, never processing-time repair. BIDS configuration SHALL use the current root in `x.opts.subjectFolder`; DICOM SHALL omit that field. Native version capture SHALL preserve `unknown` fallback when a failed probe has settled, overlap independent preparation, and settle before scientific launch. A timed-out or otherwise unsettled probe SHALL fail preparation and settle its in-process process scope before terminal publication; it SHALL NOT permit scientific launch with unresolved probe ownership. Renderer subscriptions SHALL NOT be a prerequisite for safe launch or completion.
 
-- **WHEN** delayed supervisor work for terminal run `R1` executes after run `R2` has replaced it
-- **THEN** the delayed work SHALL NOT mutate `R2` or emit an event attributed to `R2`
+#### Scenario: BIDS verification fails
 
-### Requirement: Pre-Mutation Processing Reservation
+- **WHEN** BIDS compatibility verification fails for an admitted run
+- **THEN** native state SHALL expose structured failure before modifying configuration, participants, selected statuses, or Population metadata
 
-The backend SHALL provide `reserve_processing_run(selected_modules, selected_subject_sessions)` and derive the canonical project root from native active-project state. It SHALL atomically reject when a nonterminal processing run or foreign watcher owns the backend. On success it SHALL create `Preparing` state and return its snapshot before any run-specific configuration write, directory creation, status deletion, log deletion, watcher start, or worker spawn occurs. A concurrent rejected reservation SHALL perform zero filesystem mutation.
+#### Scenario: Root participant mutation target is rejected
 
-#### Scenario: Two concurrent starts
+- **WHEN** a malformed launch manifest proposes root `participants.tsv` or `participants.json` as an owned destination
+- **THEN** native validation SHALL reject before mutation while allowing read-only BIDS root site lookup
 
-- **WHEN** two callers concurrently reserve processing for the same active project
-- **THEN** exactly one SHALL receive a `Preparing` run and the rejected caller SHALL perform no configuration write, directory creation, status deletion, log deletion, watcher start, or worker spawn
+#### Scenario: Participant installation fails
 
-#### Scenario: Active run blocks another project start
+- **WHEN** installing participant artifacts fails before the execution boundary
+- **THEN** native rollback SHALL restore prior GUI-owned files and prior absence after resources settle
 
-- **WHEN** project A owns a nonterminal processing run and a caller attempts to reserve another run
-- **THEN** the reservation SHALL reject without replacing project A ownership or mutating either project
+### Requirement: Durable processing execution boundary
 
-#### Scenario: Terminal run replacement
+Processing SHALL persist validated destination-to-backup mappings before destructive mutation and persist execution commit before a worker can execute. Before execution commit, recovery SHALL restore the exact prior GUI-owned artifact state after current in-process settlement or explicit interrupted-run confirmation. After execution commit, failure or cancellation SHALL stop owned process scopes and preserve current ExploreASL artifacts without restoring historical statuses or configuration. Scientific outputs SHALL never be deleted or restored by launch recovery. Malformed records and unmapped legacy quarantine SHALL block affected launch without inferred destination mapping. Native preparation SHALL retain selected module/subject status and log scope, optional BIDS2Legacy rerun behavior, absence of selected stale locks before launch, unchanged non-log files, and unchanged scientific module ordering. Native launch SHALL validate profile and worker selection and invoke MATLAB/Apptainer with existing profile arguments, worker numbering and staggering; live process identity SHALL remain private to in-process supervision.
 
-- **WHEN** the current run is terminal and the active project reserves a new run
-- **THEN** the backend SHALL atomically replace the terminal record with a new `Preparing` record having a different `runId`
+#### Scenario: Crash during preparation rename
 
-### Requirement: Processing Run Discovery and Attachment
+- **WHEN** interruption occurs between durable rename intent and completion recording
+- **THEN** recovery SHALL inspect owned source/destination evidence and idempotently restore the pre-execution artifact state
 
-The backend SHALL provide `get_active_run()` and `attach_run(run_id)`. `get_active_run` SHALL derive the active project from native state and return the current nonterminal run snapshot only when it belongs to that project. `attach_run` SHALL return the current matching run snapshot, including authoritative worker membership, without starting workers, restarting the watcher, deleting files, or changing lifecycle state. It SHALL reject unknown, obsolete, or foreign-project IDs.
+#### Scenario: Later worker fails to spawn
 
-#### Scenario: Discover current run
+- **WHEN** worker creation fails after execution commit and earlier workers have started
+- **THEN** native supervision SHALL stop and reap the supported process scopes, retain current artifacts, and report Failed only after settlement
 
-- **WHEN** the active project owns a `Running` run
-- **THEN** `get_active_run()` SHALL return that run's ID, lifecycle state, selected work, and current worker membership
+#### Scenario: First worker fails to spawn after commit
 
-#### Scenario: Attach after early worker exit
+- **WHEN** the first worker cannot be created after durable execution commit
+- **THEN** recovery SHALL preserve the committed prepared artifact state and SHALL NOT reactivate historical statuses
 
-- **WHEN** a frontend attaches after one registered worker has already exited
-- **THEN** `attach_run` SHALL return only the workers still owned by native state plus the recorded exit evidence
+#### Scenario: Unknown legacy quarantine
 
-#### Scenario: Attach obsolete run
+- **WHEN** a previous launch left numbered backups without a durable manifest
+- **THEN** native preparation SHALL preserve those files and reject affected execution with actionable recovery information
 
-- **WHEN** `attach_run` receives a run ID that is not the current active-project run
-- **THEN** it SHALL reject without mutating native or filesystem state
+### Requirement: Expected-target native processing completion
 
-### Requirement: Run-Correlated Worker Events
+Native completion SHALL use the immutable target set: Structural per Subject/Session, ASL per Subject/Session/Run, and Population per dataset. It SHALL require safe fresh regular `999_ready.status` files for every expected target and successful exit evidence for every requested worker. Selected historical statuses SHALL be quarantined before execution. Unrelated historical or extra targets SHALL NOT determine current outcome. Watcher notifications SHALL provide progress only; the final filesystem audit SHALL determine target evidence.
 
-Every processing worker event that can affect run state SHALL include the owning `runId`. Worker supervisors SHALL update authoritative membership and exit evidence only when their captured run ID still matches native ownership. `WorkerExited` SHALL include `{ runId, pid, exitCode }`. When the final worker exits, native state SHALL leave `Running` before emitting the final worker event: it SHALL enter `Failed` when `pendingLaunchFailure` exists, otherwise `Finalizing`.
+#### Scenario: Missing selected target
 
-#### Scenario: Final worker exits before frontend registration
+- **WHEN** workers exit successfully but an expected fresh ready file is absent
+- **THEN** the run SHALL fail with the missing target identified
 
-- **WHEN** the final worker exits before the frontend receives the launch response
-- **THEN** native state SHALL record its exit, transition to `Finalizing`, and emit `WorkerExited` with the run ID; a later response or attachment SHALL not re-add that worker
+#### Scenario: Nonzero worker exit with ready files
 
-#### Scenario: Stale worker exit
+- **WHEN** every expected ready file exists but a worker exits unsuccessfully
+- **THEN** the run SHALL fail with worker evidence retained
 
-- **WHEN** a delayed `WorkerExited` event from run `R1` arrives after run `R2` starts
-- **THEN** the payload SHALL retain `R1` and native state for `R2` SHALL remain unchanged
+#### Scenario: Unrelated historical incompletion
 
-### Requirement: Run Finalization Protocol
+- **WHEN** all current targets and workers succeed but an unrelated historical module remains incomplete
+- **THEN** that historical module SHALL NOT prevent current-run completion
 
-Until expected-target completion is made native-authoritative by PL-03, the backend SHALL accept a run-scoped finalization result only for the current `Finalizing` run, validate the run ID, and record either `Completed` or `Failed` as the terminal native result. The frontend MAY derive this provisional result using the existing lock-status behavior, but SHALL NOT directly overwrite native lifecycle state. A future target-verification change SHALL replace that provisional evidence source without changing run identity or transition legality.
+### Requirement: Compact acknowledged request replay
 
-#### Scenario: Current run finalizes
+Admission, discovery and exact acknowledgement SHALL use one fixed full current-run record and direct historical request/run lookup without scanning historical run payloads. Reservation SHALL durably publish that complete fixed record before returning success or journal mutation. No separate current pointer or full historical request payload SHALL be required to discover an interrupted reservation. Unresolved-journal validation SHALL still apply when the current record is absent. Before acknowledgement the full terminal snapshot SHALL remain durable and replayable. After acknowledgement each request SHALL retain an indefinitely preserved binding no larger than 4 KiB plus small direct-lookup entries, containing canonical payload digest, project/request/run identity, exact terminal revision, outcome, fixed-field bounded summary and acknowledgement. It SHALL NOT retain full profiles, configuration, participant inputs, per-target arrays or full worker history. Storage therefore grows by at most 4 KiB logical binding bytes plus lookup/filesystem overhead per acknowledged request; total lifetime storage SHALL NOT be described as constant or fully bounded.
 
-- **WHEN** the frontend submits the existing lock-status result for the current `Finalizing` run
-- **THEN** the backend SHALL record the requested `Completed` or `Failed` terminal state and return the resulting snapshot
+Reservation responses SHALL distinguish current/unacknowledged snapshots from `historicalReplay: true` envelopes. A historical envelope SHALL return the original run identity, exact terminal revision/outcome/summary and acknowledgement without becoming current or launching again. Changed content SHALL still reject. There SHALL be no TTL or AlreadyCompleted replacement for original-identity replay. Exact acknowledgement of that historical run/revision SHALL remain idempotent after another run becomes current; a mismatched revision SHALL reject.
 
-#### Scenario: Obsolete finalization
+Compaction SHALL durably acknowledge the fixed terminal current record, publish the binding and direct run locator, and complete owned journal cleanup before removing that matching full current record. There SHALL be no guardian retirement receipt and no redundant full payload left undiscoverable after removal. Creation, replacement and removal SHALL synchronize affected parents where supported. Failure or uncertain publication/removal durability SHALL prevent durable success and replacement admission until reconciled under active-project ownership. The fixed acknowledged current record SHALL remain the recovery anchor until preceding cleanup and historical publication are durable. Discovery SHALL expose current or unacknowledged state, never acknowledged historical envelopes as active work.
 
-- **WHEN** a delayed finalization request names a run that is no longer current
-- **THEN** the backend SHALL reject it without changing the current run
+#### Scenario: Reservation publication is interrupted
+
+- **WHEN** interruption occurs around initial current-record publication before the reservation response
+- **THEN** recovery SHALL read the fixed key and either recover that exact reservation or establish that none was durably admitted, without a history scan or duplicate execution
+- **AND** no worker admission or destructive preparation SHALL precede durable publication
+
+#### Scenario: Acknowledgement crashes during compaction
+
+- **WHEN** interruption occurs after durable acknowledgement but before compact binding publication completes
+- **THEN** recovery SHALL finish from the retained current record without scanning history, losing exact acknowledgement, or admitting replacement prematurely
+
+#### Scenario: Historical acknowledgement repeats while another run is active
+
+- **WHEN** the caller acknowledges a compacted old run with its exact terminal revision
+- **THEN** acknowledgement SHALL succeed idempotently without modifying the new run or requiring the old full launch payload
+
+### Requirement: Durable processing terminal replay
+
+Native processing SHALL persist lifecycle revision, logical worker exits, target outcomes, structured error, recovery action, and terminal summary. Completed, Failed, and Cancelled snapshots SHALL follow supported process-scope and watcher settlement. Interrupted snapshots discovered after native restart SHALL instead disclose absent in-process ownership and require external-stop confirmation before cleanup, acknowledgement, or replacement execution. Discovery SHALL return active or unacknowledged terminal state. Exact run/revision acknowledgement SHALL be durable and idempotent, and SHALL occur only after corresponding project metadata is saved. Cleanup failures SHALL retain ownership with retryCleanup. Admitted operational failures SHALL return structured snapshots; storage failures SHALL NOT be disguised as persisted terminal success. Only native lifecycle ownership SHALL transition Preparing, Running, Finalizing and Cancelling; terminal lifecycle outcomes SHALL be immutable. Exact stale callbacks SHALL NOT mutate another run. Stop SHALL persist cancellation intent and publish Cancelling before waiting; admitted user cancellation SHALL take precedence over completion. Project shutdown with no owned resources SHALL succeed; failed settlement SHALL retain actionable ownership and block transition. Snapshots SHALL include accepted Population execution-commit/completion and native version/ready-mtime provenance, without requiring renderer filesystem probes.
+
+#### Scenario: Renderer disappears during finalization
+
+- **WHEN** all workers exit while the renderer is unavailable
+- **THEN** native supervision SHALL verify targets and persist the terminal result independently
+
+#### Scenario: Restart with durable finalization evidence
+
+- **WHEN** external-stop confirmation has been accepted and recovery finds complete durable worker exits for an unacknowledged run
+- **THEN** it SHALL resume idempotent target verification or replay the existing terminal result
+
+#### Scenario: Restart without complete exits
+
+- **WHEN** execution committed but complete worker-exit evidence is unavailable after external-stop confirmation
+- **THEN** recovery SHALL preserve current artifacts and persist Interrupted
+
+#### Scenario: Save or acknowledgement fails
+
+- **WHEN** project metadata save or exact terminal acknowledgement fails
+- **THEN** native terminal authority SHALL remain available for replay
+
+### Requirement: Exact interrupted-run confirmation
+
+When activation finds a nonterminal processing record without its matching in-process supervisor, native processing SHALL persist Interrupted with `availableAction: confirmStopped`. It SHALL preserve the launch journal and all current ExploreASL/scientific artifacts, allow project viewing, and block import/processing admission. `confirm_processing_workers_stopped` SHALL accept only the exact current run and revision, SHALL NOT accept or signal a PID/PGID, and SHALL reject stale or foreign confirmation.
+
+After exact confirmation, native recovery SHALL restore proven GUI-owned artifacts only when execution was not committed. When execution was committed, it SHALL preserve current artifacts and clean only proven GUI-owned residue. It SHALL then publish an increasing snapshot with `availableAction: acknowledge`; project metadata save and exact acknowledgement SHALL retain their existing order.
+
+#### Scenario: Interrupted run discovered after native crash
+
+- **WHEN** activation finds a nonterminal current record without a matching in-process supervisor
+- **THEN** it SHALL expose `confirmStopped`, preserve files, and block replacement execution
+
+#### Scenario: Exact confirmation accepted
+
+- **WHEN** the user confirms the current interrupted run and revision after checking operating-system process tools
+- **THEN** native recovery SHALL apply the pre/post-commit artifact policy without signaling remembered process identities and SHALL expose acknowledgement
+
+#### Scenario: Stale confirmation arrives
+
+- **WHEN** confirmation names an obsolete run, project, or revision
+- **THEN** it SHALL reject without changing current lifecycle, files, or execution admission

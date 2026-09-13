@@ -1,7 +1,4 @@
 use crate::app_state::AppState;
-use crate::execution_profile::ExecutionProfile;
-use crate::processing::pipeline::run_pipeline_with;
-use crate::processing::types::ProcessingRunSnapshot;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -9,39 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) fn state_with_active_project(root: &Path) -> Arc<AppState> {
     let state = Arc::new(AppState::default());
-    *state.active_project_root.lock().unwrap() = Some(root.canonicalize().unwrap());
+    crate::project_ownership_tests::own_project(&state, &root.canonicalize().unwrap());
     state
-}
-
-pub(crate) fn invoke_launch_expected_before_profile_validation(
-    state: &AppState,
-    run_id: &str,
-    b_process: &[bool],
-    workers: u32,
-) -> Result<ProcessingRunSnapshot, String> {
-    let profile = ExecutionProfile::Matlab {
-        id: "unused".to_string(),
-        label: "Unused".to_string(),
-        matlab_path: "/unused/matlab".to_string(),
-        explore_asl_path: "/unused/ExploreASL".to_string(),
-        explore_asl_version: None,
-    };
-    run_pipeline_with(
-        state,
-        run_id,
-        &profile,
-        "must-not-be-written",
-        b_process,
-        workers,
-        "",
-        false,
-        |_| panic!("request must resolve before profile validation"),
-        |_, _, _| panic!("request cannot warm MCR"),
-        |_| -> Result<(u32, ()), String> { panic!("request cannot spawn") },
-        |_, _, ()| panic!("request cannot supervise"),
-        || panic!("request cannot stagger"),
-        |()| panic!("request cannot terminate a child"),
-    )
 }
 
 pub(crate) fn unique_temp_path(name: &str) -> PathBuf {

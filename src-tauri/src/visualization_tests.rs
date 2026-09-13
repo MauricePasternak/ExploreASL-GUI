@@ -137,7 +137,7 @@ mod tests {
         .unwrap();
         let state = AppState::default();
         let active_root = active.path().canonicalize().unwrap();
-        *state.active_project_root.lock().unwrap() = Some(active_root.clone());
+        crate::project_ownership_tests::own_project(&state, &active_root);
 
         let error = set_active_project_impl(candidate.path().display().to_string(), &state)
             .expect_err("malformed journal must block activation");
@@ -146,6 +146,10 @@ mod tests {
         assert_eq!(
             state.active_project_root.lock().unwrap().as_deref(),
             Some(active_root.as_path())
+        );
+        assert_eq!(
+            crate::project_ownership::active(&state).unwrap().root(),
+            active_root
         );
     }
 
@@ -160,7 +164,7 @@ mod tests {
         fs::write(&record, "not an import run record").unwrap();
         let state = AppState::default();
         let active_root = active.path().canonicalize().unwrap();
-        *state.active_project_root.lock().unwrap() = Some(active_root.clone());
+        crate::project_ownership_tests::own_project(&state, &active_root);
 
         let error = set_active_project_impl(candidate.path().display().to_string(), &state)
             .expect_err("malformed import authority must block activation");
@@ -169,6 +173,10 @@ mod tests {
         assert_eq!(
             state.active_project_root.lock().unwrap().as_deref(),
             Some(active_root.as_path())
+        );
+        assert_eq!(
+            crate::project_ownership::active(&state).unwrap().root(),
+            active_root
         );
         assert_eq!(
             state.import_state.lock().unwrap().lifecycle,
@@ -188,7 +196,7 @@ mod tests {
         .unwrap();
         let state = AppState::default();
         let active_root = active.path().canonicalize().unwrap();
-        *state.active_project_root.lock().unwrap() = Some(active_root.clone());
+        crate::project_ownership_tests::own_project(&state, &active_root);
         *state.setup_app_data.lock().unwrap() = Some(app_data.path().to_path_buf());
 
         let error = set_active_project_impl(candidate.path().display().to_string(), &state)
@@ -199,6 +207,10 @@ mod tests {
             state.active_project_root.lock().unwrap().as_deref(),
             Some(active_root.as_path())
         );
+        assert_eq!(
+            crate::project_ownership::active(&state).unwrap().root(),
+            active_root
+        );
     }
 
     #[test]
@@ -207,7 +219,7 @@ mod tests {
         let second = tempfile::tempdir().unwrap();
         let state = AppState::default();
         let first_root = first.path().canonicalize().unwrap();
-        *state.active_project_root.lock().unwrap() = Some(first_root.clone());
+        crate::project_ownership_tests::own_project(&state, &first_root);
         let mut run = ProcessingRun::new(
             "run-1".to_string(),
             first_root.clone(),

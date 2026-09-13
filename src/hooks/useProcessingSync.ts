@@ -24,8 +24,6 @@ export function useProcessingSync() {
       await Promise.resolve();
       const project = useProjectStore.getState().project;
       if (!project || cancelled) return;
-      useProcessingStore.getState().hydrateProcessing(project.uiState.processing);
-      await useProcessingStore.getState().synchronizeProcessingRun();
       if (cancelled) return;
       await useProcessingStore.getState().scanAvailableSubjects();
       if (cancelled || useProcessingStore.getState().activeRunId) return;
@@ -39,7 +37,7 @@ export function useProcessingSync() {
 
   // Subscribe to processing store changes → sync to project store.
   // Use a selector so the callback only fires when `config` or `processingPhase`
-  // changes — NOT on every subjectStatuses/workerPids update during a run
+  // changes — NOT on every subjectStatuses update during a run
   // (those fire dozens of times per second and would hammer projectStore with
   // redundant syncProcessingState calls + JSON.stringify equality checks).
   useEffect(() => {

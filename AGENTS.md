@@ -1,47 +1,42 @@
 # AGENTS.md — ExploreASL GUI
 
-Tauri v2 desktop GUI wrapping ExploreASL (MATLAB ASL MRI pipeline).
+Tauri v2 + React 19 + TS 7 + Mantine 9 + Zustand 5 + Zod 4 + React Router 7.
+GUI wrapping ExploreASL (MATLAB ASL MRI pipeline). Specs in `openspec/specs/` are authoritative.
 
-**Stack:** Tauri v2 + React 19 + TS 7 + Mantine 9 + Zustand 5 + Zod 4 + React Router 7
-**Dev (Frontend):** `pnpm dev` → `http://localhost:1420`
-**Specs:** `openspec/specs/` (authoritative), `openspec/changes/` (in-progress)
+## Commands & Quality Checks
 
-**Architecture:**
+- Dev: `pnpm dev` (`http://localhost:1420`)
+- Test: `pnpm test <file>` (Vitest; run targeted tests, not full suite unless finishing). Rust: `cargo test --manifest-path src-tauri/Cargo.toml`
+- Lint/Type/Format: `pnpm lint` | `pnpm typecheck` | `pnpm format`
+- Git: Conventional commits; require explicit user confirmation before committing.
 
-- Rust thin. Prefer Tauri plugins (dialog, fs) over custom commands. Custom: subprocess, file watcher, debug logs.
-- Project state: `.easl` JSON in `<root>/project.easl`. Global settings: `@tauri-apps/plugin-store` (`settings.json` in app data dir).
-- Import: MATLAB stdout parsing. Processing: lock file watcher (`.status` files).
-- Staging tree: 4-level `Subject/Session/Run/Modality`. Session/Run default to `01`.
-- ExploreASL invoked: `ExploreASL(root, importModules, processModules, ...)`.
+## Architecture & Domain
 
-**Terminology (GUI ↔ ExploreASL):**
+- State: `.easl` in `<root>/project.easl`. App settings: `@tauri-apps/plugin-store`.
+- Staging: 4-level `Subject/Session/Run/Modality` (Session/Run default to `01`).
+- Prefer Tauri plugins (dialog, fs) over custom Rust commands.
+- Never hardcode filepaths like `"/tmp/"`; use Tauri filesystem APIs.
 
-| GUI/BIDS | ExploreASL | `tokenOrdering` |
-| -------- | ---------- | --------------- |
-| Subject  | Subject    | 1               |
-| Session  | Visit      | 2               |
-| Run      | Session    | 3               |
-| Modality | Scan       | 4               |
+| GUI/BIDS | ExploreASL | tokenOrdering |
+| -------- | ---------- | ------------- |
+| Subject  | Subject    | 1             |
+| Session  | Visit      | 2             |
+| Run      | Session    | 3             |
+| Modality | Scan       | 4             |
 
-GUI uses BIDS terms. ExploreASL docs use `[Subject, Visit, Session, Scan]`. Agents MUST translate.
-
-**Test data:** `test/test_project_root/sourcedata/`. GENFI ASL dataset at `test/test_GENFI/` — see its `README.md` for subject details, ASL parameters, and M0 handling quirks.
-**Testing:** `pnpm test` (Vitest + jsdom). Mock Tauri APIs in `src/test/setup.tsx`. UNIT TEST schemas, stores, utilities. Component tests for critical paths. Note: Frontend tests currently take around 20 seconds to complete, so do not assume the test runner has hung.
-**Test isolation:** No global autounmount. Mount tests need local `afterEach(cleanup)` to prevent stale Zustand subscriptions/render loops.
-
----
+_Agents MUST translate between BIDS and ExploreASL terms._
 
 ## Rules
 
-- `pnpm test` for testing
-  - focus on running specific test files and test cases, not the entire test suite UNLESS it is to finish up a task set or the bug likely affects multiple test files.
-- `pnpm lint` for linting
-- `pnpm typecheck` for type-checking
-- `pnpm format` for formatting
-- All components should have a `data-testid` attribute for testing and easier referencing for agents.
-- Git commits cannot be made without explicit user confirmation and must follow conventional commit message format.
-- No sync `setState` in `useEffect`. Sync state in render or use component `key`.
-- No ref update/access in render. Use `useEffect` to update refs.
-- Complete hook dependencies. Use Ref Sync pattern for non-reactive reads.
-- Never hardcode `"/tmp/"` or other filepaths. Make use of the correct tauri/rust filesystem functions.
-- Rust backend test structure: For small modules, put tests in `<module_name>_test.rs` (or `<module_name>_tests.rs`). For large sub-packages, they should be located in `<sub-package>/tests/<module_name>.rs`. Never embed large test suites directly into production implementation files.
+### Frontend & Testing
+
+- Add `data-testid` on all components. Dynamic imports forbidden.
+- No sync `setState` in `useEffect` (sync in render or use component `key`).
+- No ref access/mutation in render; complete hook dependencies (Ref Sync pattern for non-reactive reads).
+- Test isolation: Mount tests require local `afterEach(cleanup)` (no global autounmount; prevents Zustand loops).
+- Test data: `test/test_project_root/sourcedata/` and GENFI at `test/test_GENFI/`.
+
+### Backend
+
+- See `openspec/specs/` before altering runtime execution, capability operations, or process handling.
+- Rust tests: `<module>_test.rs` for small modules, `<crate>/tests/<module>.rs` for packages. No large test suites in production files.

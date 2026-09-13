@@ -21,7 +21,6 @@ describe("project store replacement", () => {
       config: null,
       availableSubjects: [],
       subjectStatuses: [],
-      workerPids: [],
       bidsCompatibilityError: null,
       profileError: null,
       preparingMessage: null,
@@ -66,7 +65,6 @@ describe("project store replacement", () => {
           aslRuns: [],
         },
       ],
-      workerPids: [42],
       subjectStatuses: [
         {
           subjectSession: "sub-a_01",
@@ -115,7 +113,6 @@ describe("project store replacement", () => {
       config: null,
       availableSubjects: [],
       subjectStatuses: [],
-      workerPids: [],
     });
     expect(useManifestStore.getState()).toMatchObject({
       filter: "all",

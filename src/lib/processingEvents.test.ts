@@ -1,359 +1,227 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-
 import {
+  activateProjectLease,
+  captureProjectLease,
+  resetProjectLifecycleForTests,
+} from "./projectLifecycle";
+import {
+  acknowledgeProcessingRun,
   attachRun,
-  clearStaleLocksForRun,
-  failProcessingRun,
-  finalizeProcessingRun,
+  confirmProcessingWorkersStopped,
   getActiveRun,
+  loadLockStatus,
+  projectProcessingSnapshot,
   reserveProcessingRun,
-  reconcileAndFinalizeIfNeeded,
   runProcessingPipeline,
   setupProcessingListeners,
   stopProcessingPipeline,
-  stopWatcher,
-  watchLockDir,
 } from "./processingEvents";
 import {
-  activateProjectLease,
-  invalidateProjectLease,
-  resetProjectLifecycleForTests,
-} from "./projectLifecycle";
-import { useProcessingStore } from "../stores/processingStore";
-import { useProjectStore } from "../stores/projectStore";
+  processingProfile,
+  processingReplay,
+  processingSnapshot,
+} from "../test/processingFixtures";
 import { DEFAULT_PROJECT_FILE } from "../schemas/project";
-import type { ExecutionProfile } from "../schemas/executionProfile";
-import type { ProcessConfig, ProcessingRunSnapshot } from "../schemas/processingSchemas";
+import { useProjectStore } from "../stores/projectStore";
+import { useProcessingStore } from "../stores/processingStore";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
-
-const SNAPSHOT: ProcessingRunSnapshot = {
-  runId: "processing-run-1",
-  lifecycle: "running",
-  projectRoot: "/test/project",
-  selectedModules: ["structural"],
+const listeners = new Map<string, (event: { payload: unknown }) => void>();
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (name: string, cb: (event: { payload: unknown }) => void) => {
+    listeners.set(name, cb);
+    return () => listeners.delete(name);
+  }),
+}));
+const request = {
+  requestId: "12345678-1234-4234-8234-123456789010",
+  projectId: "project-1",
+  selectedModules: ["structural"] as "structural"[],
   selectedSubjectSessions: ["sub-001_01"],
-  startTime: 1,
-  workers: [100],
-  exitEvidence: [],
-  watcherOwned: false,
-};
-const CONFIG: ProcessConfig = {
-  subjects: ["sub-001_01"],
-  modules: ["structural"],
-  selectedProfileId: "profile-1",
-  workers: 2,
-};
-const PROFILE: ExecutionProfile = {
-  id: "profile-1",
-  type: "matlab",
-  label: "MATLAB",
-  matlabPath: "/usr/bin/matlab",
-  exploreAslPath: "/opt/ExploreASL",
+  executionProfile: processingProfile,
+  dataPar: {},
+  participants: { correction: false, subjectRows: [], metadataGroups: [] },
+  workers: 1,
+  rerunBids2legacy: false,
 };
 
-describe("processing run IPC clients", () => {
-  beforeEach(() => vi.mocked(invoke).mockResolvedValue(SNAPSHOT));
-
-  it("uses exact camelCase reservation and run-scoped control payloads", async () => {
-    await reserveProcessingRun(["structural"], ["sub-001_01"]);
-    await failProcessingRun("processing-run-1");
-    await finalizeProcessingRun("processing-run-1", "completed");
-    await stopProcessingPipeline("processing-run-1");
-    await watchLockDir("processing-run-1");
-    await stopWatcher("processing-run-1");
-    await attachRun("processing-run-1");
-    await clearStaleLocksForRun("processing-run-1");
-
-    expect(invoke).toHaveBeenNthCalledWith(1, "reserve_processing_run", {
-      selectedModules: ["structural"],
-      selectedSubjectSessions: ["sub-001_01"],
-    });
-    expect(invoke).toHaveBeenNthCalledWith(2, "fail_processing_run", { runId: "processing-run-1" });
-    expect(invoke).toHaveBeenNthCalledWith(3, "finalize_processing_run", {
-      runId: "processing-run-1",
-      outcome: "completed",
-    });
-    expect(invoke).toHaveBeenNthCalledWith(4, "kill_pipeline", { runId: "processing-run-1" });
-    expect(invoke).toHaveBeenNthCalledWith(5, "watch_lock_dir", { runId: "processing-run-1" });
-    expect(invoke).toHaveBeenNthCalledWith(6, "stop_watch_lock_dir", { runId: "processing-run-1" });
-    expect(invoke).toHaveBeenNthCalledWith(7, "attach_run", { runId: "processing-run-1" });
-    expect(invoke).toHaveBeenNthCalledWith(8, "clear_stale_locks_for_run", {
-      runId: "processing-run-1",
-    });
-  });
-
-  it("launches from run authority, never caller project root or PID array", async () => {
-    await runProcessingPipeline("processing-run-1", CONFIG, PROFILE);
-    expect(invoke).toHaveBeenCalledWith("run_pipeline", {
-      runId: "processing-run-1",
-      executionProfile: PROFILE,
-      dataParJson: JSON.stringify({ x: {} }),
-      bProcess: [true, false, false],
-      workers: 1,
-      subjectRegexp: "^(sub-001_01)$",
-      rerunBids2legacy: false,
-    });
-  });
-
-  it("parses nullable discovery and rejects malformed native snapshots", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(null);
-    await expect(getActiveRun()).resolves.toBeNull();
-    vi.mocked(invoke).mockResolvedValueOnce({ ...SNAPSHOT, runId: "" });
-    await expect(attachRun("processing-run-1")).rejects.toThrow();
-  });
-});
-
-describe("run and lease scoped processing listeners", () => {
-  const listeners: Record<string, (event: { payload: unknown }) => Promise<void> | void> = {};
-  beforeEach(() => {
+describe("processing native IPC", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    listeners.clear();
     resetProjectLifecycleForTests();
-    activateProjectLease("project-1", "/test/project");
-    useProcessingStore.setState({
-      activeRunId: "processing-run-1",
-      processingPhase: "running",
-      workerPids: [100],
-      subjectStatuses: [],
-    });
-    vi.mocked(listen).mockImplementation(async (name, callback) => {
-      listeners[name] = callback as (typeof listeners)[string];
-      return () => {};
-    });
-    vi.mocked(invoke).mockResolvedValue(SNAPSHOT);
+    await useProcessingStore.getState().resetProcessing();
+    useProjectStore.setState({ project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project") });
+    activateProjectLease("project-1", "/project");
   });
-  afterEach(() => {
-    resetProjectLifecycleForTests();
-    useProjectStore.setState({ project: null, loaded: false, isDirty: false });
-    useProcessingStore.setState({
-      activeRunId: null,
-      processingPhase: "idle",
-      workerPids: [],
-      subjectStatuses: [],
+  it("sends immutable request and admission", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({ kind: "current", snapshot: processingSnapshot() });
+    await reserveProcessingRun(request, "/project");
+    expect(invoke).toHaveBeenCalledWith("reserve_processing_run", {
+      request,
+      admission: { projectRoot: "/project" },
     });
   });
+  it("uses exact native run commands and nullable discovery", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(processingSnapshot())
+      .mockResolvedValueOnce(processingSnapshot())
+      .mockResolvedValueOnce(processingSnapshot());
+    expect(await getActiveRun()).toBeNull();
+    await attachRun("run");
+    await runProcessingPipeline("run");
+    await stopProcessingPipeline("run");
+    expect(invoke).toHaveBeenNthCalledWith(2, "attach_run", { runId: "run" });
+    expect(invoke).toHaveBeenNthCalledWith(3, "run_pipeline", { runId: "run" });
+    expect(invoke).toHaveBeenNthCalledWith(4, "kill_pipeline", { runId: "run" });
+  });
+  it("requires advancing exact confirmation and acknowledgement", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(processingSnapshot({ revision: 2 }))
+      .mockResolvedValueOnce(processingReplay());
+    await expect(
+      confirmProcessingWorkersStopped(processingSnapshot().runId, 1),
+    ).resolves.toMatchObject({ revision: 2 });
+    await acknowledgeProcessingRun(processingSnapshot().runId, 5);
+    expect(invoke).toHaveBeenLastCalledWith("acknowledge_processing_run", {
+      runId: processingSnapshot().runId,
+      terminalRevision: 5,
+    });
+  });
+  it("drops confirmation snapshots from a stale project lease", async () => {
+    const interrupted = processingSnapshot({
+      lifecycle: "interrupted",
+      revision: 2,
+      availableAction: "confirmStopped",
+    });
+    useProcessingStore.getState().bindRunSnapshot(interrupted);
+    const staleLease = activateProjectLease("project-1", "/project");
+    activateProjectLease("project-2", "/other");
 
-  it("admits matching events and preserves GUI Run normalization", async () => {
-    await setupProcessingListeners("processing-run-1");
-    listeners.StatusFileCreated({
+    await projectProcessingSnapshot(
+      processingSnapshot({
+        lifecycle: "cancelled",
+        revision: 3,
+        availableAction: "acknowledge",
+        terminalRevision: 3,
+        terminalResult: "cancelled",
+      }),
+      staleLease,
+    );
+
+    expect(useProcessingStore.getState().snapshot).toMatchObject({
+      runId: interrupted.runId,
+      revision: 2,
+      availableAction: "confirmStopped",
+    });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+  it("admits only exact-run status, lock, and increasing lifecycle events", async () => {
+    const run = processingSnapshot({ lifecycle: "preparing", revision: 1 });
+    useProcessingStore.getState().bindRunSnapshot(run);
+    expect(useProcessingStore.getState().attachmentGeneration).toBe(
+      captureProjectLease()?.generation,
+    );
+    const cleanup = await setupProcessingListeners(run.runId);
+    for (const row of [
+      {
+        event: "StatusFileCreated",
+        payload: {
+          runId: run.runId,
+          module: "xASL_module_ASL",
+          subjectSession: "sub-001_01",
+          run: "01",
+          stepCode: "010",
+        },
+        assertion: () =>
+          expect(useProcessingStore.getState().subjectStatuses[0]).toMatchObject({
+            module: "asl",
+            run: "1",
+            status: "incomplete",
+          }),
+      },
+      {
+        event: "LockCreated",
+        payload: {
+          runId: run.runId,
+          module: "xASL_module_ASL",
+          subjectSession: "sub-001_01",
+          run: "01",
+        },
+        assertion: () =>
+          expect(useProcessingStore.getState().subjectStatuses[0]).toMatchObject({ locked: true }),
+      },
+      {
+        event: "LockRemoved",
+        payload: {
+          runId: run.runId,
+          module: "xASL_module_ASL",
+          subjectSession: "sub-001_01",
+          run: "01",
+        },
+        assertion: () =>
+          expect(useProcessingStore.getState().subjectStatuses[0]).toMatchObject({ locked: false }),
+      },
+      {
+        event: "LockCreated",
+        payload: {
+          runId: "other",
+          module: "xASL_module_ASL",
+          subjectSession: "sub-ignored_01",
+          run: "01",
+        },
+        assertion: () => expect(useProcessingStore.getState().subjectStatuses).toHaveLength(1),
+      },
+      {
+        event: "LockRemoved",
+        payload: { module: "xASL_module_ASL", subjectSession: "sub-ignored_01", run: "01" },
+        assertion: () => expect(useProcessingStore.getState().subjectStatuses).toHaveLength(1),
+      },
+    ]) {
+      listeners.get(row.event)?.({ payload: row.payload });
+      row.assertion();
+    }
+    listeners.get("ProcessingLifecycleSnapshot")?.({
+      payload: processingSnapshot({ runId: run.runId, revision: 2, lifecycle: "running" }),
+    });
+    await vi.waitFor(() => expect(useProcessingStore.getState().processingPhase).toBe("running"));
+    listeners.get("ProcessingLifecycleSnapshot")?.({
+      payload: processingSnapshot({ runId: run.runId, revision: 1, lifecycle: "preparing" }),
+    });
+    expect(useProcessingStore.getState().snapshot?.revision).toBe(2);
+
+    activateProjectLease("project-2", "/other");
+    listeners.get("LockCreated")?.({
       payload: {
-        runId: "processing-run-1",
-        module: "xASL_module_ASL",
-        subjectSession: "sub-001_01",
-        stepCode: "060_Test",
-        run: "ASL_01",
+        runId: run.runId,
+        module: "xASL_module_Structural",
+        subjectSession: "sub-ignored_01",
       },
     });
-    expect(useProcessingStore.getState().subjectStatuses).toMatchObject([
-      { module: "asl", run: "1" },
-    ]);
-  });
-
-  it("fails closed for missing IDs, same-project old IDs, unknown workers, and queued old leases", async () => {
-    await setupProcessingListeners("processing-run-1");
-    listeners.StatusFileCreated({ payload: { module: "xASL_module_ASL", stepCode: "060_Test" } });
-    listeners.StatusFileCreated({
-      payload: { runId: "processing-run-old", module: "xASL_module_ASL", stepCode: "060_Test" },
+    listeners.get("ProcessingLifecycleSnapshot")?.({
+      payload: processingSnapshot({ runId: run.runId, revision: 3, lifecycle: "finalizing" }),
     });
-    await listeners.WorkerExited({ payload: { runId: "processing-run-1", pid: 999, exitCode: 0 } });
-    expect(useProcessingStore.getState()).toMatchObject({ subjectStatuses: [], workerPids: [100] });
-
-    invalidateProjectLease();
-    activateProjectLease("project-1", "/test/project");
-    listeners.StatusFileCreated({
-      payload: { runId: "processing-run-1", module: "xASL_module_ASL", stepCode: "060_Test" },
-    });
-    expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
-  });
-
-  it("renders native Cancelling immediately and rejects a stale lifecycle snapshot", async () => {
-    await setupProcessingListeners("processing-run-1");
-    listeners.ProcessingLifecycleSnapshot({
-      payload: { ...SNAPSHOT, lifecycle: "cancelling" },
-    });
+    await Promise.resolve();
     expect(useProcessingStore.getState()).toMatchObject({
-      activeRunId: "processing-run-1",
-      processingPhase: "cancelling",
-    });
-
-    listeners.ProcessingLifecycleSnapshot({
-      payload: { ...SNAPSHOT, runId: "processing-run-old", lifecycle: "cancelled", workers: [] },
-    });
-    expect(useProcessingStore.getState().processingPhase).toBe("cancelling");
-  });
-
-  it("coalesces worker-event and launch-snapshot finalization into one provisional request", async () => {
-    const finalizing = { ...SNAPSHOT, lifecycle: "finalizing" as const, workers: [] };
-    const completed = {
-      ...finalizing,
-      lifecycle: "completed" as const,
-      terminalResult: "completed" as const,
-    };
-    useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/test/project"),
-      loaded: true,
-    });
-    let releaseAttach!: () => void;
-    const attachGate = new Promise<void>((resolve) => {
-      releaseAttach = resolve;
-    });
-    vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "attach_run") {
-        await attachGate;
-        return finalizing;
-      }
-      if (command === "read_lock_status") {
-        return [
-          {
-            subjectSession: "sub-001_01",
-            module: "xASL_module_Structural",
-            status: "complete",
-            completedSteps: [],
-            locked: false,
-          },
-        ];
-      }
-      if (command === "finalize_processing_run") return completed;
-      return null;
-    });
-    await setupProcessingListeners(SNAPSHOT.runId);
-    const attachCallsBefore = vi
-      .mocked(invoke)
-      .mock.calls.filter(([command]) => command === "attach_run").length;
-    const finalizeCallsBefore = vi
-      .mocked(invoke)
-      .mock.calls.filter(([command]) => command === "finalize_processing_run").length;
-
-    const fromEvent = listeners.WorkerExited({
-      payload: { runId: SNAPSHOT.runId, pid: 100, exitCode: 0 },
-    });
-    const fromLaunch = reconcileAndFinalizeIfNeeded(finalizing);
-    await vi.waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("attach_run", { runId: SNAPSHOT.runId }),
-    );
-    releaseAttach();
-    await Promise.all([fromEvent, fromLaunch]);
-
-    expect(
-      vi.mocked(invoke).mock.calls.filter(([command]) => command === "attach_run"),
-    ).toHaveLength(attachCallsBefore + 1);
-    expect(
-      vi.mocked(invoke).mock.calls.filter(([command]) => command === "finalize_processing_run"),
-    ).toHaveLength(finalizeCallsBefore + 1);
-    expect(useProcessingStore.getState()).toMatchObject({
-      activeRunId: null,
-      terminalRunId: SNAPSHOT.runId,
-      processingPhase: "completed",
-      workerPids: [],
-    });
-  });
-
-  it.each([
-    ["missing", []],
-    [
-      "incomplete",
-      [
-        {
-          subjectSession: "sub-001_01",
-          module: "xASL_module_Structural",
-          status: "incomplete",
-          completedSteps: ["060_Segment_T1w"],
-          locked: false,
-        },
-      ],
-    ],
-  ])("finalizes %s lock status as authoritative native Failed", async (_case, statuses) => {
-    const finalizing = { ...SNAPSHOT, lifecycle: "finalizing" as const, workers: [] };
-    const failed = {
-      ...finalizing,
-      lifecycle: "failed" as const,
-      terminalResult: "failed" as const,
-    };
-    useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/test/project"),
-      loaded: true,
-    });
-    vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "attach_run") return finalizing;
-      if (command === "read_lock_status") return statuses;
-      if (command === "finalize_processing_run") return failed;
-      return null;
-    });
-    useProcessingStore.getState().bindRunSnapshot(finalizing);
-
-    await reconcileAndFinalizeIfNeeded(finalizing);
-
-    expect(invoke).toHaveBeenCalledWith("finalize_processing_run", {
-      runId: SNAPSHOT.runId,
-      outcome: "failed",
-    });
-    expect(useProcessingStore.getState()).toMatchObject({
-      activeRunId: null,
-      terminalRunId: SNAPSHOT.runId,
-      processingPhase: "failed",
-      workerPids: [],
-    });
-  });
-
-  it("drops an obsolete finalization response and its terminal side effects", async () => {
-    const populationFinalizing = {
-      ...SNAPSHOT,
-      lifecycle: "finalizing" as const,
-      workers: [],
-      selectedModules: ["population"],
-    };
-    const replacement = {
-      ...SNAPSHOT,
-      runId: "processing-run-2",
-      workers: [200],
-    };
-    useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/test/project"),
-      loaded: true,
-    });
-    let resolveFinalization!: (snapshot: ProcessingRunSnapshot) => void;
-    vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "attach_run") return populationFinalizing;
-      if (command === "read_lock_status") {
-        return [
-          {
-            subjectSession: "",
-            module: "xASL_module_Population",
-            status: "complete",
-            completedSteps: [],
-            locked: false,
-          },
-        ];
-      }
-      if (command === "finalize_processing_run") {
-        return new Promise((resolve) => {
-          resolveFinalization = resolve;
-        });
-      }
-      return null;
-    });
-    useProcessingStore.getState().bindRunSnapshot(populationFinalizing);
-    const pending = reconcileAndFinalizeIfNeeded(populationFinalizing);
-    await vi.waitFor(() => expect(resolveFinalization).toBeTypeOf("function"));
-
-    useProcessingStore.getState().bindRunSnapshot(replacement);
-    resolveFinalization({
-      ...populationFinalizing,
-      lifecycle: "completed",
-      terminalResult: "completed",
-    });
-    await pending;
-
-    expect(useProcessingStore.getState()).toMatchObject({
-      activeRunId: replacement.runId,
       processingPhase: "running",
-      workerPids: [200],
+      snapshot: { revision: 2 },
+      subjectStatuses: [expect.objectContaining({ subjectSession: "sub-001_01" })],
     });
-    expect(invoke).not.toHaveBeenCalledWith(
-      "read_population_ready_mtime_for_run",
-      expect.anything(),
-    );
+    cleanup();
+  });
+  it("normalizes lock scans", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce([
+      {
+        subjectSession: "sub-001_01",
+        module: "xASL_module_ASL",
+        run: "01",
+        status: "pending",
+        completedSteps: [],
+        locked: true,
+      },
+    ]);
+    await expect(loadLockStatus("/project")).resolves.toMatchObject([{ module: "asl", run: "1" }]);
   });
 });

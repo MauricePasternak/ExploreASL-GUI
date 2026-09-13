@@ -28,7 +28,7 @@ fn reads_matlab_version_from_version_info_xml() {
     let matlab = bin.join("matlab");
     fs::write(&matlab, "#!/bin/sh\necho should-not-run\n").unwrap();
 
-    let version = probe_matlab_version(&matlab).unwrap();
+    let version = probe_matlab_version_fast(&matlab).unwrap();
     assert_eq!(version, "R2022b");
 }
 
