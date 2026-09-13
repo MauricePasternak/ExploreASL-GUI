@@ -1,6 +1,9 @@
 mod app_state;
 mod apptainer;
-pub(crate) use easl_execution_runtime::fs_safety;
+pub(crate) mod runtime {
+    pub use easl_execution_runtime::{fs_safety, process};
+}
+pub(crate) use runtime::{fs_safety, process};
 pub mod bids;
 mod commands;
 mod error;
@@ -11,7 +14,7 @@ pub mod manifest;
 pub mod matlab;
 mod niivue_protocol;
 pub mod processing;
-mod project_ownership;
+pub(crate) mod project_ownership;
 mod project_runtime;
 mod project_writer;
 pub mod qc;

@@ -382,3 +382,25 @@ fn journal_capabilities_retain_file_witness_and_confine_directory_operations() {
         );
     }
 }
+
+#[test]
+fn matches_root_identifies_matching_and_swapped_directories() {
+    let workspace = tempdir().unwrap();
+    let root = workspace.path().join("project");
+    fs::create_dir(&root).unwrap();
+    let directory = ProjectDirectory::open(&root).unwrap();
+    assert!(directory.matches_root(&root).unwrap());
+
+    // Non-existent path returns an error.
+    assert!(directory.matches_root(&workspace.path().join("missing")).is_err());
+
+    #[cfg(unix)]
+    {
+        // Directory replaced with a different directory on the same path returns false.
+        let moved = workspace.path().join("moved");
+        fs::rename(&root, &moved).unwrap();
+        fs::create_dir(&root).unwrap();
+        assert!(!directory.matches_root(&root).unwrap());
+    }
+}
+

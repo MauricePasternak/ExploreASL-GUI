@@ -17,8 +17,8 @@ pub struct AppState {
     /// project transition has started.
     pub project_transition: Mutex<()>,
     pub runtime_shutdown_in_progress: std::sync::atomic::AtomicBool,
-    pub active_project:
-        Mutex<Option<std::sync::Arc<easl_execution_runtime::project::ActiveProject>>>,
+    pub(crate) active_project:
+        Mutex<Option<std::sync::Arc<crate::project_ownership::ActiveProject>>>,
     pub active_project_root: Mutex<Option<PathBuf>>,
     pub active_data: Mutex<Option<ActiveData>>,
     pub relocation_plans: Mutex<BTreeMap<String, RelocationPlan>>,

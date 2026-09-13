@@ -16,8 +16,8 @@ use crate::app_state::AppState;
 use crate::apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH};
 use crate::error::MutexExt;
 use crate::execution_profile::ExecutionProfile;
+use crate::process::{CancellationToken, ProcessScope};
 use anyhow::{Context, Result as AnyResult, bail};
-use easl_execution_runtime::process::{CancellationToken, ProcessScope};
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -133,7 +133,7 @@ pub(super) fn stream_import_output<R: Runtime>(
 pub(super) fn supervise_import_process<R: Runtime>(
     app: AppHandle<R>,
     generation: u64,
-    mut scope: easl_execution_runtime::process::ProcessScope,
+    mut scope: ProcessScope,
     subject_list: Vec<String>,
     start_receiver: mpsc::Receiver<()>,
 ) -> thread::JoinHandle<()> {
@@ -703,8 +703,8 @@ pub(crate) fn stop_import_run_for_state(
         return Err("Import has no in-process supervisor ownership; restart recovery requires external-stop confirmation".into());
     }
     let deadline = std::time::Instant::now()
-        + easl_execution_runtime::process::GRACE_PERIOD
-        + easl_execution_runtime::process::FORCE_SETTLEMENT_PERIOD
+        + crate::process::GRACE_PERIOD
+        + crate::process::FORCE_SETTLEMENT_PERIOD
         + Duration::from_secs(1);
     loop {
         let mut run = state
@@ -1083,7 +1083,7 @@ fn import_command(
             }
             let mut version = crate::apptainer::create_system_command(&executable);
             version.current_dir(std::env::temp_dir()).arg("--version");
-            let output = easl_execution_runtime::process::run_probe(
+            let output = crate::process::run_probe(
                 version,
                 256 * 1024,
                 Duration::from_secs(5),
@@ -1100,7 +1100,7 @@ fn import_command(
                 "ls",
                 "/opt/xasl/xASL_latest/",
             ]);
-            let output = easl_execution_runtime::process::run_probe(
+            let output = crate::process::run_probe(
                 sif_version,
                 256 * 1024,
                 Duration::from_secs(5),
@@ -1148,12 +1148,8 @@ fn warm_import_mcr_cache(
         EXPLOREASL_SCRIPT,
         MCR_PATH,
     ]);
-    let output = easl_execution_runtime::process::run_probe(
-        command,
-        256 * 1024,
-        Duration::from_secs(300),
-        cancellation,
-    )?;
+    let output =
+        crate::process::run_probe(command, 256 * 1024, Duration::from_secs(300), cancellation)?;
     if output.status.success() {
         Ok(())
     } else {

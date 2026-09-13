@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cap-std = "4.0.3"
-cap-fs-ext = "4.0.3"
-libc = "0.2"
-process-wrap = { version = "10.0.0", default-features = false, features = ["std", "process-group", "job-object", "creation-flags"] }
+cap-std = { workspace = true }
+cap-fs-ext = { workspace = true }
+libc = { workspace = true }
+process-wrap = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Console"] }
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Console"] }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }

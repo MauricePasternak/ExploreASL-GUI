@@ -10,6 +10,14 @@ members = ["crates/execution-runtime"]
 default-members = [".", "crates/execution-runtime"]
 resolver = "2"
 
+[workspace.dependencies]
+cap-std = "4.0.3"
+cap-fs-ext = "4.0.3"
+libc = "0.2"
+process-wrap = { version = "10.0.0", default-features = false, features = ["std", "process-group", "job-object", "creation-flags"] }
+tempfile = "3"
+windows-sys = "0.61.2"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
@@ -41,10 +49,10 @@ tauri-plugin-clipboard-manager = "2.3.2"
 notify = "8.2.0"
 num_cpus = "1"
 sha2 = "0.10"
-tempfile = "3"
+tempfile = { workspace = true }
 csv = "1.4.0"
 calamine = "0.35.0"
-libc = "0.2"
+libc = { workspace = true }
 strsim = "0.11.1"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
@@ -58,7 +66,7 @@ time = { version = "0.3", features = ["parsing"] }
 easl-execution-runtime = { path = "crates/execution-runtime" }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation"] }
+windows-sys = { workspace = true, features = ["Win32_System_SystemInformation"] }
 
 [dev-dependencies]
 tauri = { version = "2.11.3", features = ["test"] }

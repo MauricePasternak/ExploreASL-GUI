@@ -572,7 +572,7 @@ fn ensure_processing_runtime_released(state: &crate::app_state::AppState) -> Any
 
 fn replace_active_project_state(
     state: &crate::app_state::AppState,
-    ownership: Option<std::sync::Arc<easl_execution_runtime::project::ActiveProject>>,
+    ownership: Option<std::sync::Arc<crate::project_ownership::ActiveProject>>,
 ) -> AnyResult<()> {
     // Obtain every fallible state guard before publishing any replacement.
     let mut root = lock_state(&state.active_project_root, None)?;

@@ -1,9 +1,9 @@
 //! Read-only BIDS setup planning and the dedicated fixed-path setup transaction.
 //! This module intentionally does not use import-relocation semantics.
 use crate::fs_safety::{atomic_replace, sync_directory};
+use crate::project_ownership::ActiveProject;
 use anyhow::{Context, Result, anyhow, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use easl_execution_runtime::project::ActiveProject;
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

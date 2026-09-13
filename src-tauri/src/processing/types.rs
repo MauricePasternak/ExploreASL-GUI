@@ -225,7 +225,7 @@ impl ProcessingRun {
 #[derive(Default)]
 pub struct ProcessState {
     pub(crate) settlement: std::sync::Arc<std::sync::Mutex<()>>,
-    pub(crate) cancellation: Option<easl_execution_runtime::process::CancellationToken>,
+    pub(crate) cancellation: Option<crate::process::CancellationToken>,
     pub(crate) supervisor_handle: Option<thread::JoinHandle<()>>,
     pub(crate) launch_in_progress: bool,
     pub current_run: Option<ProcessingRun>,

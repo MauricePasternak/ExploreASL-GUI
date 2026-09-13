@@ -129,7 +129,7 @@ pub struct ImportState {
     pub run_id: String,
     pub launch_in_progress: bool,
     /// Transient only. No process identity or containment proof enters records.
-    pub cancellation: Option<easl_execution_runtime::process::CancellationToken>,
+    pub cancellation: Option<crate::process::CancellationToken>,
     pub supervisor_handle: Option<thread::JoinHandle<()>>,
     pub staging_root: PathBuf,
     pub project_root: PathBuf,

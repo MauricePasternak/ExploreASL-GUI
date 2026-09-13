@@ -3,9 +3,9 @@ use super::{
     journal::relative, record::ProcessingRecord, transaction::LaunchTransaction,
     types::ProcessingVersions,
 };
+use crate::process::CancellationToken;
 use crate::{execution_profile::ExecutionProfile, fs_safety::ProjectDirectory};
 use anyhow::{Result, bail};
-use easl_execution_runtime::process::CancellationToken;
 use std::{process::Command, time::Duration};
 
 pub(crate) fn versions(

@@ -1,7 +1,7 @@
 //! Shared managed process mechanisms. Domain launch/result policy stays with its owner.
+use crate::process::{CancellationToken, run_probe};
 use crate::{apptainer::create_system_command, execution_profile::ExecutionProfile};
 use anyhow::{Context, Result, Result as AnyResult, anyhow, bail};
-use easl_execution_runtime::process::{CancellationToken, run_probe};
 use std::{
     env, fs,
     path::{Path, PathBuf},

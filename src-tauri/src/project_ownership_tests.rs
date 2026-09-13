@@ -116,3 +116,35 @@ fn renamed_active_root_cannot_authorize_replacement_directory() {
     assert!(result.is_err());
     assert!(!root.join("project.easl").exists());
 }
+
+#[test]
+fn active_project_retains_canonical_directory_identity() {
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path().join("project");
+    std::fs::create_dir(&root).unwrap();
+    let canonical_root = root.canonicalize().unwrap();
+    let project = crate::project_ownership::ActiveProject::open(&root).unwrap();
+    assert_eq!(project.root(), canonical_root);
+    project.verify_root_identity().unwrap();
+
+    #[cfg(unix)]
+    {
+        let symlink = workspace.path().join("symlink_project");
+        std::os::unix::fs::symlink(&root, &symlink).unwrap();
+        let sym_project = crate::project_ownership::ActiveProject::open(&symlink).unwrap();
+        assert_eq!(sym_project.root(), canonical_root);
+        sym_project.verify_root_identity().unwrap();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn active_project_rejects_path_replacement() {
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path().join("project");
+    std::fs::create_dir(&root).unwrap();
+    let project = crate::project_ownership::ActiveProject::open(&root).unwrap();
+    std::fs::rename(&root, workspace.path().join("moved")).unwrap();
+    std::fs::create_dir(&root).unwrap();
+    assert!(project.verify_root_identity().is_err());
+}

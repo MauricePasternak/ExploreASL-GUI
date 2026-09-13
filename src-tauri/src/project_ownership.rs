@@ -1,8 +1,61 @@
 //! Native project admission inside the single application process.
 
-use crate::{app_state::AppState, import::ImportLifecycle};
-use easl_execution_runtime::project::ActiveProject;
-use std::{path::Path, sync::Arc};
+use crate::{
+    app_state::AppState,
+    fs_safety::{DirectorySync, ProjectDirectory, ProjectRelativePath},
+    import::ImportLifecycle,
+};
+use std::{
+    fmt, io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+const AUTHORITY_DIRECTORY: &str = "derivatives/ExploreASL_GUI/execution";
+
+pub(crate) struct ActiveProject {
+    root: PathBuf,
+    directory: ProjectDirectory,
+    #[allow(dead_code)]
+    pub directory_sync: DirectorySync,
+}
+
+impl fmt::Debug for ActiveProject {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ActiveProject")
+            .field("root", &self.root)
+            .finish_non_exhaustive()
+    }
+}
+
+impl ActiveProject {
+    pub(crate) fn open(root: impl AsRef<Path>) -> io::Result<Self> {
+        let root = root.as_ref().canonicalize()?;
+        let directory = ProjectDirectory::open(&root)?;
+        let directory_sync =
+            directory.create_dir_all_durable(&ProjectRelativePath::new(AUTHORITY_DIRECTORY)?)?;
+        Ok(Self {
+            root,
+            directory,
+            directory_sync,
+        })
+    }
+
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub(crate) fn verify_root_identity(&self) -> io::Result<()> {
+        if !self.directory.matches_root(&self.root)? {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Project directory identity changed while active",
+            ));
+        }
+        Ok(())
+    }
+}
 
 pub(crate) fn active(state: &AppState) -> Result<Arc<ActiveProject>, String> {
     let root = state

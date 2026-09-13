@@ -78,7 +78,7 @@ impl ProjectDirectory {
 
     /// Check the current pathname against the retained directory identity.
     /// This detects rename/replacement before native pathname-based admission.
-    pub(crate) fn matches_root(&self, root: &Path) -> io::Result<bool> {
+    pub fn matches_root(&self, root: &Path) -> io::Result<bool> {
         use cap_fs_ext::MetadataExt;
         let current = Self::open(root)?;
         let held = self.directory.dir_metadata()?;

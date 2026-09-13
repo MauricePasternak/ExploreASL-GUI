@@ -5,13 +5,13 @@ use super::{
     types::{ProcessingLifecycle, ProcessingRunSnapshot},
     utils::escape_matlab_string,
 };
+use crate::process::{CancellationToken, ProcessScope, cancel_all};
 use crate::{
     app_state::AppState,
     apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH},
     execution_profile::{ExecutionProfile, get_exploreasl_version},
 };
 use anyhow::{Context, Result};
-use easl_execution_runtime::process::{CancellationToken, ProcessScope, cancel_all};
 use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
