@@ -24,7 +24,7 @@ import LogViewerModal from "./LogViewerModal";
 import { fetchSubjectReports } from "../../lib/reportViewer";
 import ReportViewerModal from "./ReportViewerModal";
 import type { ModuleDisplayStatus } from "./SubjectSelection.helpers";
-import { resolveLogBadge, resolveModuleDisplayFromIndex } from "./SubjectSelection.helpers";
+import { resolveLogBadge, resolveModuleDisplay } from "./SubjectSelection.helpers";
 import { indexSubjectStatuses } from "./subjectStatusIndex";
 
 type FilterValue = "all" | "pending" | "incomplete" | "complete";
@@ -489,8 +489,8 @@ export default function SubjectSelection() {
 
   const rows: SubjectRow[] = useMemo(() => {
     return sortedSubjects.map((info) => {
-      const structural = resolveModuleDisplayFromIndex(info, "structural", statusIndex);
-      const asl = resolveModuleDisplayFromIndex(info, "asl", statusIndex);
+      const structural = resolveModuleDisplay(info, "structural", statusIndex);
+      const asl = resolveModuleDisplay(info, "asl", statusIndex);
       return {
         ...info,
         _selected: selectedSet.has(info.subjectSession),

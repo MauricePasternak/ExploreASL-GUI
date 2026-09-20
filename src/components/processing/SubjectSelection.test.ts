@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveLogBadge, resolveModuleDisplay } from "./SubjectSelection.helpers";
 import type { LogFileInfo } from "../../lib/logViewer";
 import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
+import { indexSubjectStatuses } from "./subjectStatusIndex";
 
 function makeLog(overrides: Partial<LogFileInfo> = {}): LogFileInfo {
   return {
@@ -78,30 +79,44 @@ describe("resolveLogBadge", () => {
 describe("resolveModuleDisplay", () => {
   it("marks completed structural status outdated when BIDS2Legacy subject-session lock is missing", () => {
     expect(
-      resolveModuleDisplay(SUBJECT_INFO, "structural", [makeStatus({ bids2legacyExists: false })]),
+      resolveModuleDisplay(
+        SUBJECT_INFO,
+        "structural",
+        indexSubjectStatuses([makeStatus({ bids2legacyExists: false })]),
+      ),
     ).toBe("outdated");
   });
 
   it("marks completed ASL status outdated when BIDS2Legacy subject-session lock is missing", () => {
     expect(
-      resolveModuleDisplay(SUBJECT_INFO, "asl", [
-        makeStatus({ module: "asl", run: "1", bids2legacyExists: false }),
-      ]),
+      resolveModuleDisplay(
+        SUBJECT_INFO,
+        "asl",
+        indexSubjectStatuses([makeStatus({ module: "asl", run: "1", bids2legacyExists: false })]),
+      ),
     ).toBe("outdated");
   });
 
   it("keeps completed status when BIDS2Legacy subject-session lock exists", () => {
     expect(
-      resolveModuleDisplay(SUBJECT_INFO, "structural", [makeStatus({ bids2legacyExists: true })]),
+      resolveModuleDisplay(
+        SUBJECT_INFO,
+        "structural",
+        indexSubjectStatuses([makeStatus({ bids2legacyExists: true })]),
+      ),
     ).toBe("complete");
   });
 
   it("does not convert pending or skipped modules to outdated", () => {
-    expect(resolveModuleDisplay(SUBJECT_INFO, "structural", [])).toBe("pending");
+    expect(resolveModuleDisplay(SUBJECT_INFO, "structural", indexSubjectStatuses([]))).toBe(
+      "pending",
+    );
     expect(
-      resolveModuleDisplay({ ...SUBJECT_INFO, hasStructural: false }, "structural", [
-        makeStatus({ bids2legacyExists: false }),
-      ]),
+      resolveModuleDisplay(
+        { ...SUBJECT_INFO, hasStructural: false },
+        "structural",
+        indexSubjectStatuses([makeStatus({ bids2legacyExists: false })]),
+      ),
     ).toBe("skipped");
   });
 });

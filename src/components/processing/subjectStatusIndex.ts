@@ -37,8 +37,7 @@ export function getEntriesFor(
 
 /**
  * Returns the entry matching the requested run, or (when `run` is undefined)
- * the first entry for the subject/module (mirrors the legacy linear-scan
- * semantics where `runMatches(s.run, undefined)` is always true).
+ * the first entry for the subject/module, preserving insertion-order semantics.
  *
  * Run matching uses `aslRunsEqual` so "01" matches "1" etc.
  */

@@ -35,6 +35,7 @@ import ReportViewerModal from "../processing/ReportViewerModal";
 import type { ModuleDisplayStatus } from "../processing/SubjectSelection.helpers";
 import { resolveLogBadge, resolveModuleDisplay } from "../processing/SubjectSelection.helpers";
 import { StatusIcon } from "../processing/SubjectSelection";
+import { indexSubjectStatuses } from "../processing/subjectStatusIndex";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -282,6 +283,8 @@ export default function QcSelectionTable({
     return map;
   }, [mappingState]);
 
+  const statusIndex = useMemo(() => indexSubjectStatuses(subjectStatuses), [subjectStatuses]);
+
   const handleVerdictChange = useCallback(
     (subjectSession: string, value: string) => {
       if (value === "pass") {
@@ -338,8 +341,8 @@ export default function QcSelectionTable({
       a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
     );
     return sorted.map((info) => {
-      const structuralStatus = resolveModuleDisplay(info, "structural", subjectStatuses);
-      const aslStatus = resolveModuleDisplay(info, "asl", subjectStatuses);
+      const structuralStatus = resolveModuleDisplay(info, "structural", statusIndex);
+      const aslStatus = resolveModuleDisplay(info, "asl", statusIndex);
       const cleanSs = info.subjectSession.replace(/^sub-/, "");
       const groupId = rowGroupMap.get(cleanSs);
       const groupLabel = groupId ? (groupMap.get(groupId)?.label ?? "Ungrouped") : "Ungrouped";
@@ -368,7 +371,7 @@ export default function QcSelectionTable({
         aslRuns: info.aslRuns || [],
       };
     });
-  }, [availableSubjects, subjectStatuses, rowGroupMap, groupMap, verdicts, noInfoSubjects]);
+  }, [availableSubjects, statusIndex, rowGroupMap, groupMap, verdicts, noInfoSubjects]);
 
   const handleViewLog = useCallback(
     async (subjectSession: string, module: "structural" | "asl") => {

@@ -7,6 +7,7 @@ import {
   getSubjectOverallStatus,
   calcModuleProgress,
 } from "./ExecutionDashboard.helpers";
+import { indexSubjectStatuses } from "./subjectStatusIndex";
 
 describe("getStepsForSubject", () => {
   const baseEntry: SubjectModuleStatus = {
@@ -19,7 +20,7 @@ describe("getStepsForSubject", () => {
 
   it("maps completed steps to complete status", () => {
     const statuses: SubjectModuleStatus[] = [{ ...baseEntry, locked: false }];
-    const steps = getStepsForSubject("sub-001_01", "structural", statuses);
+    const steps = getStepsForSubject(indexSubjectStatuses(statuses), "sub-001_01", "structural");
     expect(steps).toEqual([
       { name: "060_Segment_T1w", status: "complete" },
       { name: "070_SkullStrip_T1w", status: "complete" },
@@ -28,7 +29,7 @@ describe("getStepsForSubject", () => {
 
   it("appends running step when locked", () => {
     const statuses: SubjectModuleStatus[] = [baseEntry];
-    const steps = getStepsForSubject("sub-001_01", "structural", statuses);
+    const steps = getStepsForSubject(indexSubjectStatuses(statuses), "sub-001_01", "structural");
     expect(steps).toEqual([
       { name: "060_Segment_T1w", status: "complete" },
       { name: "070_SkullStrip_T1w", status: "complete" },
@@ -38,19 +39,19 @@ describe("getStepsForSubject", () => {
 
   it("does not append running step when not locked", () => {
     const statuses: SubjectModuleStatus[] = [{ ...baseEntry, locked: false }];
-    const steps = getStepsForSubject("sub-001_01", "structural", statuses);
+    const steps = getStepsForSubject(indexSubjectStatuses(statuses), "sub-001_01", "structural");
     expect(steps).toHaveLength(2);
     expect(steps.every((s) => s.status === "complete")).toBe(true);
   });
 
   it("returns empty array when no entry found", () => {
-    const steps = getStepsForSubject("sub-999_01", "structural", []);
+    const steps = getStepsForSubject(indexSubjectStatuses([]), "sub-999_01", "structural");
     expect(steps).toEqual([]);
   });
 
   it("returns only running step when locked with no completed steps", () => {
     const statuses: SubjectModuleStatus[] = [{ ...baseEntry, completedSteps: [], locked: true }];
-    const steps = getStepsForSubject("sub-001_01", "structural", statuses);
+    const steps = getStepsForSubject(indexSubjectStatuses(statuses), "sub-001_01", "structural");
     expect(steps).toEqual([{ name: "Processing...", status: "running" }]);
   });
 
@@ -59,20 +60,30 @@ describe("getStepsForSubject", () => {
       { ...baseEntry, run: "1", locked: false },
       { ...baseEntry, run: "2", locked: true },
     ];
-    const steps = getStepsForSubject("sub-001_01", "structural", statuses, "2");
+    const steps = getStepsForSubject(
+      indexSubjectStatuses(statuses),
+      "sub-001_01",
+      "structural",
+      "2",
+    );
     expect(steps).toHaveLength(3);
     expect(steps[2]).toEqual({ name: "Processing...", status: "running" });
   });
 
   it("matches padded and unpadded run ids", () => {
     const statuses: SubjectModuleStatus[] = [{ ...baseEntry, run: "1", locked: false }];
-    const steps = getStepsForSubject("sub-001_01", "structural", statuses, "01");
+    const steps = getStepsForSubject(
+      indexSubjectStatuses(statuses),
+      "sub-001_01",
+      "structural",
+      "01",
+    );
     expect(steps).toHaveLength(2);
   });
 
   it("does not append running step when locked but status is complete", () => {
     const statuses: SubjectModuleStatus[] = [{ ...baseEntry, status: "complete", locked: true }];
-    const steps = getStepsForSubject("sub-001_01", "structural", statuses);
+    const steps = getStepsForSubject(indexSubjectStatuses(statuses), "sub-001_01", "structural");
     expect(steps).toEqual([
       { name: "060_Segment_T1w", status: "complete" },
       { name: "070_SkullStrip_T1w", status: "complete" },
@@ -101,7 +112,7 @@ describe("getRunsForSubjectInfo", () => {
         locked: false,
       },
     ];
-    const runs = getRunsForSubjectInfo(baseSubject, statuses);
+    const runs = getRunsForSubjectInfo(baseSubject, indexSubjectStatuses(statuses));
     expect(runs).toEqual(["1", "2", "3"]);
   });
 
@@ -117,7 +128,7 @@ describe("getRunsForSubjectInfo", () => {
         locked: true,
       },
     ];
-    expect(getRunsForSubjectInfo(subject, statuses)).toEqual(["1"]);
+    expect(getRunsForSubjectInfo(subject, indexSubjectStatuses(statuses))).toEqual(["1"]);
   });
 
   it("defaults to ['1'] when no runs are defined", () => {
@@ -125,7 +136,7 @@ describe("getRunsForSubjectInfo", () => {
       ...baseSubject,
       aslRuns: [],
     };
-    const runs = getRunsForSubjectInfo(subjectWithoutRuns, []);
+    const runs = getRunsForSubjectInfo(subjectWithoutRuns, indexSubjectStatuses([]));
     expect(runs).toEqual(["1"]);
   });
 });
@@ -150,7 +161,7 @@ describe("getSubjectOverallStatus", () => {
         locked: true,
       },
     ];
-    const overall = getSubjectOverallStatus("sub-001_01", "asl", statuses);
+    const overall = getSubjectOverallStatus(indexSubjectStatuses(statuses), "sub-001_01", "asl");
     expect(overall).toEqual({
       status: "incomplete",
       locked: true,
@@ -177,7 +188,7 @@ describe("getSubjectOverallStatus", () => {
         locked: false,
       },
     ];
-    const overall = getSubjectOverallStatus("sub-001_01", "asl", statuses);
+    const overall = getSubjectOverallStatus(indexSubjectStatuses(statuses), "sub-001_01", "asl");
     expect(overall.status).toBe("complete");
     expect(overall.locked).toBe(false);
   });
@@ -213,7 +224,7 @@ describe("calcModuleProgress", () => {
         locked: false,
       },
     ];
-    const progress = calcModuleProgress(subjects, "structural", statuses);
+    const progress = calcModuleProgress(subjects, "structural", indexSubjectStatuses(statuses));
     expect(progress).toEqual({ complete: 1, total: 2 });
   });
 
@@ -244,7 +255,7 @@ describe("calcModuleProgress", () => {
         locked: false,
       },
     ];
-    const progress = calcModuleProgress(subjects, "asl", statuses);
+    const progress = calcModuleProgress(subjects, "asl", indexSubjectStatuses(statuses));
     // sub-002_01 has all its runs (only run 1) complete -> complete
     // sub-001_01 has run 2 incomplete -> not complete
     expect(progress).toEqual({ complete: 1, total: 2 });

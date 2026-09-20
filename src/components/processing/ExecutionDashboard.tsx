@@ -26,11 +26,11 @@ import type {
 import { useProcessingStore } from "../../stores/processingStore";
 import type { ModuleName, StepStatus } from "./ExecutionDashboard.helpers";
 import {
-  calcModuleProgressFromIndex,
-  getRunsForSubjectInfoFromIndex,
-  getStatusForSubjectFromIndex,
-  getStepsForSubjectFromIndex,
-  getSubjectOverallStatusFromIndex,
+  calcModuleProgress,
+  getRunsForSubjectInfo,
+  getStatusForSubject,
+  getStepsForSubject,
+  getSubjectOverallStatus,
 } from "./ExecutionDashboard.helpers";
 import { indexSubjectStatuses } from "./subjectStatusIndex";
 
@@ -325,7 +325,7 @@ const ModuleHeader = memo(function ModuleHeader({
   statusIndex: ReturnType<typeof indexSubjectStatuses>;
 }) {
   const { complete, total } = useMemo(
-    () => calcModuleProgressFromIndex(subjects, module, statusIndex),
+    () => calcModuleProgress(subjects, module, statusIndex),
     [subjects, module, statusIndex],
   );
   const pct = total === 0 ? 0 : Math.round((complete / total) * 100);
@@ -390,22 +390,17 @@ function SubjectModuleSection({
   return (
     <Stack gap={0} data-testid={`${module}-section`}>
       {eligible.map((subject) => {
-        const runs = module === "asl" ? getRunsForSubjectInfoFromIndex(subject, statusIndex) : [];
+        const runs = module === "asl" ? getRunsForSubjectInfo(subject, statusIndex) : [];
         const hasMultipleRuns = module === "asl" && runs.length > 1;
 
         const {
           status: overallStatus,
           locked: overallLocked,
           completedRunsCount,
-        } = getSubjectOverallStatusFromIndex(statusIndex, subject.subjectSession, module);
+        } = getSubjectOverallStatus(statusIndex, subject.subjectSession, module);
 
         const singleRun = module === "asl" && runs.length === 1 ? runs[0] : undefined;
-        const steps = getStepsForSubjectFromIndex(
-          statusIndex,
-          subject.subjectSession,
-          module,
-          singleRun,
-        );
+        const steps = getStepsForSubject(statusIndex, subject.subjectSession, module, singleRun);
 
         const isExpanded = !!expandedSubjects[subject.subjectSession];
 
@@ -429,13 +424,13 @@ function SubjectModuleSection({
               <Collapse expanded={isExpanded}>
                 <Stack gap={0} pb="xs">
                   {runs.map((run) => {
-                    const runEntry = getStatusForSubjectFromIndex(
+                    const runEntry = getStatusForSubject(
                       statusIndex,
                       subject.subjectSession,
                       "asl",
                       run,
                     );
-                    const runSteps = getStepsForSubjectFromIndex(
+                    const runSteps = getStepsForSubject(
                       statusIndex,
                       subject.subjectSession,
                       "asl",
