@@ -273,7 +273,7 @@ Collision resolution: when multiple groups produce the same label, suffix `_(2)`
 
 ### Requirement: Labeling type derivation supports three main strategies
 
-`derive_labeling_type(asl_type: Option<&str>)` and TS `deriveInjectedFields` SHALL derive the labeling type as:
+`derive_labeling_type(asl_type: Option<&str>)` SHALL derive the labeling type as:
 
 - `"PCASL"` → `"PCASL"`
 - `"CASL"` → `"CASL"`

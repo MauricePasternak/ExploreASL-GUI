@@ -118,7 +118,7 @@ Manufacturer: z
   .optional(),
 ```
 
-Transforms live in `src/lib/bids/normalize.ts` and are consumed by `src/lib/bids/schema.ts` (which re-exports the schemas).
+Transforms live in `src/lib/bids/normalize.ts` and are consumed by `src/schemas/importSchemas.ts`.
 
 Both are symmetric with ExploreASL's MATLAB `regexpi` pattern: case-insensitive substring match, canonical emission, drop field on no match.
 
