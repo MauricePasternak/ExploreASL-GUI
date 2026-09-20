@@ -877,7 +877,8 @@ pub(crate) fn run_import_pipeline_impl<R: Runtime>(
     }
     let preparation = (|| -> AnyResult<Option<ProcessScope>> {
         require_preparing(state, generation)?;
-        let mut command = import_command(&execution_profile, token.clone())?;
+        let mut command =
+            crate::execution_managed::validate_profile(&execution_profile, token.clone())?;
         bind_relocation_plan_for_run(
             state,
             &relocation_plan_id,
@@ -909,14 +910,9 @@ pub(crate) fn run_import_pipeline_impl<R: Runtime>(
                 &reservation.preserved_subjects,
             )?;
         }
-        if let ExecutionProfile::Apptainer {
-            sif_path,
-            apptainer_path,
-            ..
-        } = &execution_profile
-        {
-            warm_import_mcr_cache(
-                apptainer_path,
+        if let ExecutionProfile::Apptainer { sif_path, .. } = &execution_profile {
+            crate::execution_managed::warm_cache(
+                command.get_program(),
                 Path::new(sif_path.trim()),
                 &compiled_plan.staging_root,
                 token.clone(),
@@ -1056,105 +1052,6 @@ fn handoff_running_checkpoint_failure<R: Runtime>(
     start_sender
         .send(())
         .map_err(|_| anyhow::anyhow!("Import supervisor stopped before cancelled handoff"))
-}
-
-fn import_command(
-    profile: &ExecutionProfile,
-    cancellation: CancellationToken,
-) -> AnyResult<std::process::Command> {
-    match profile {
-        ExecutionProfile::Matlab {
-            matlab_path,
-            explore_asl_path,
-            ..
-        } => {
-            let matlab = crate::execution_managed::validate_matlab_executable(matlab_path)?;
-            crate::execution_profile::validate_exploreasl_path(explore_asl_path)?;
-            Ok(crate::apptainer::create_system_command(matlab))
-        }
-        ExecutionProfile::Apptainer {
-            apptainer_path,
-            sif_path,
-            ..
-        } => {
-            let executable = crate::apptainer::resolve_apptainer_executable(apptainer_path)?;
-            if !Path::new(sif_path.trim()).is_file() {
-                bail!("SIF image is not a file: {sif_path}");
-            }
-            let mut version = crate::apptainer::create_system_command(&executable);
-            version.current_dir(std::env::temp_dir()).arg("--version");
-            let output = crate::process::run_probe(
-                version,
-                256 * 1024,
-                Duration::from_secs(5),
-                cancellation.clone(),
-            )?;
-            if !output.status.success() {
-                bail!("Apptainer version probe failed");
-            }
-            let mut sif_version = crate::apptainer::create_system_command(&executable);
-            sif_version.current_dir(std::env::temp_dir()).args([
-                "exec",
-                "--cleanenv",
-                sif_path.trim(),
-                "ls",
-                "/opt/xasl/xASL_latest/",
-            ]);
-            let output = crate::process::run_probe(
-                sif_version,
-                256 * 1024,
-                Duration::from_secs(5),
-                cancellation,
-            )?;
-            if !output.status.success()
-                || !String::from_utf8_lossy(&output.stdout).lines().any(|line| {
-                    line.trim()
-                        .strip_prefix("VERSION_")
-                        .is_some_and(|v| !v.is_empty())
-                })
-            {
-                bail!("Could not find VERSION_* file in container");
-            }
-            Ok(crate::apptainer::create_system_command(executable))
-        }
-    }
-}
-
-fn warm_import_mcr_cache(
-    apptainer_path: &str,
-    sif: &Path,
-    staging: &Path,
-    cancellation: CancellationToken,
-) -> AnyResult<()> {
-    let cache = crate::apptainer::mcr_cache_path();
-    if cache.exists() {
-        return Ok(());
-    }
-    fs::create_dir_all(&cache).context("Failed to create MCR cache")?;
-    let executable = crate::apptainer::resolve_apptainer_executable(apptainer_path)?;
-    let mut command = crate::apptainer::create_system_command(executable);
-    command.args([
-        "exec",
-        "--cleanenv",
-        "--writable-tmpfs",
-        "--bind",
-        &format!("{}:{CONTAINER_DATA_ROOT}", staging.display()),
-        "--bind",
-        &format!("{}:{}", cache.display(), cache.display()),
-        "--env",
-        &format!("MCR_CACHE_ROOT={}", cache.display()),
-        &sif.to_string_lossy(),
-        "/bin/bash",
-        EXPLOREASL_SCRIPT,
-        MCR_PATH,
-    ]);
-    let output =
-        crate::process::run_probe(command, 256 * 1024, Duration::from_secs(300), cancellation)?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        bail!("Apptainer MCR warmup failed")
-    }
 }
 
 pub(super) fn write_config_json(path: &Path, value: &Value) -> AnyResult<()> {
