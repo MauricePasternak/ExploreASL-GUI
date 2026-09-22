@@ -23,7 +23,8 @@ pub use fault_injection::{
 #[cfg(test)]
 pub use filesystem::transaction_test_fingerprint;
 pub use inventory::{
-    bind_plan, create_plan, inventory_subject, plan_relocation, validate_plan_scope,
+    bind_plan, create_plan, inventory_subject, plan_relocation, validate_bound_plan,
+    validate_plan_scope,
 };
 pub use journal::JOURNAL_FILE;
 pub use paths::{canonical_project_root, validate_relative_path};

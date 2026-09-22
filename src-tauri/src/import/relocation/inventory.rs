@@ -227,7 +227,7 @@ pub fn create_plan(
     })
 }
 
-pub fn validate_plan_scope(
+fn validate_plan_project_and_scope(
     plan: &RelocationPlan,
     project_root: &Path,
     subjects: &[String],
@@ -235,9 +235,6 @@ pub fn validate_plan_scope(
     let root = canonical_project_root(project_root)?;
     if plan.project_root != root || plan.project_identity != project_identity(&root) {
         bail!("Relocation plan belongs to another project");
-    }
-    if plan.bound_generation.is_some() {
-        bail!("Relocation plan has already been used");
     }
     let planned = plan
         .subjects
@@ -250,6 +247,31 @@ pub fn validate_plan_scope(
         .collect::<Vec<_>>();
     if planned != requested {
         bail!("Relocation plan does not match the selected subject scope");
+    }
+    Ok(())
+}
+
+pub fn validate_plan_scope(
+    plan: &RelocationPlan,
+    project_root: &Path,
+    subjects: &[String],
+) -> AnyResult<()> {
+    validate_plan_project_and_scope(plan, project_root, subjects)?;
+    if plan.bound_generation.is_some() {
+        bail!("Relocation plan has already been used");
+    }
+    Ok(())
+}
+
+pub fn validate_bound_plan(
+    plan: &RelocationPlan,
+    project_root: &Path,
+    subjects: &[String],
+    generation: u64,
+) -> AnyResult<()> {
+    validate_plan_project_and_scope(plan, project_root, subjects)?;
+    if plan.bound_generation != Some(generation) {
+        bail!("Relocation plan belongs to another import generation");
     }
     Ok(())
 }

@@ -888,9 +888,9 @@ fn failed_running_checkpoint_reaps_the_already_spawned_import_scope() {
         source_path: source.display().to_string(),
     };
 
-    // Admission and generation checkpoints succeed; durable Running fails
-    // after the process scope has been spawned.
-    journal::fail_record_write_after(2);
+    // Staging-generation checkpoint succeeds; durable Running fails after the
+    // process scope has been spawned.
+    journal::fail_record_write_after(1);
     assert!(
         run_import_pipeline_impl(
             app.handle().clone(),

@@ -2,8 +2,8 @@ use super::output::{cleanup_staging_root, owned_subject_spelling};
 use super::parser::{ImportOutputLine, ImportOutputParser, ImportStructuredEvent, progress_bar_re};
 use super::staging::{StagingEntry, compile_staging_plan, execute_compiled_staging_plan};
 use super::state::{
-    admit_reserved_import_launch, bind_relocation_plan_for_run, emit_running_snapshot,
-    set_import_supervisor_handle, set_reserved_import_running, validate_relocation_plan_for_run,
+    admit_reserved_import_launch, emit_running_snapshot, set_import_supervisor_handle,
+    set_reserved_import_running,
 };
 use super::status::copy_lock_files_paths;
 use super::types::{
@@ -861,12 +861,6 @@ pub(crate) fn run_import_pipeline_impl<R: Runtime>(
             crate::project_ownership::active(state).map_err(ImportCommandError::from)?;
         let plan = compile_staging_plan(Some(ownership.root().to_path_buf()), &entries)
             .map_err(|r| ImportCommandError::Preflight { issues: r.issues })?;
-        validate_relocation_plan_for_run(
-            state,
-            &relocation_plan_id,
-            ownership.root(),
-            &subject_list,
-        )?;
         let reservation = admit_reserved_import_launch(
             state,
             &run_id,
@@ -891,13 +885,6 @@ pub(crate) fn run_import_pipeline_impl<R: Runtime>(
         require_preparing(state, generation)?;
         let mut command =
             crate::execution_managed::validate_profile(&execution_profile, token.clone())?;
-        bind_relocation_plan_for_run(
-            state,
-            &relocation_plan_id,
-            ownership.root(),
-            &subject_list,
-            generation,
-        )?;
         cleanup_staging_root(&compiled_plan.staging_root)?;
         execute_compiled_staging_plan(&compiled_plan)?;
         fs::create_dir_all(&compiled_plan.staging_root)?;

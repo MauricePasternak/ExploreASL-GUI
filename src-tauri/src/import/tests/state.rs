@@ -37,14 +37,52 @@ fn reservation_is_mutation_free_and_blocks_duplicate_or_changed_scope() {
     )
     .unwrap();
     assert_eq!(snapshot.lifecycle, ImportLifecycle::Preparing);
+    let live = state.import_state.lock().unwrap();
+    let bound_plan = live.relocation_plan.as_ref().unwrap();
+    assert_eq!(bound_plan.plan_id, plan.plan_id);
+    assert_eq!(bound_plan.project_root, temp.path());
+    assert_eq!(bound_plan.project_identity, plan.project_identity);
+    assert_eq!(
+        bound_plan
+            .subjects
+            .iter()
+            .map(|inventory| inventory.subject.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ONE"]
+    );
+    assert_eq!(
+        bound_plan.bound_generation,
+        Some(snapshot.ownership_generation)
+    );
+    drop(live);
+    assert!(
+        !state
+            .relocation_plans
+            .lock()
+            .unwrap()
+            .contains_key(&plan.plan_id)
+    );
     assert!(!temp.path().join(STAGING_DIRECTORY).exists());
     assert!(record_path(temp.path()).is_file());
+    let record = load_record(temp.path()).unwrap().unwrap();
+    let durable_plan = record.relocation_plan.unwrap();
+    assert_eq!(
+        record.relocation_plan_id.as_deref(),
+        Some(plan.plan_id.as_str())
+    );
+    assert_eq!(durable_plan.plan_id, plan.plan_id);
+    assert_eq!(durable_plan.fingerprint, plan.fingerprint);
+    assert_eq!(durable_plan.subjects, plan.subjects);
+    assert_eq!(
+        record.snapshot.ownership_generation,
+        snapshot.ownership_generation
+    );
 
     assert!(
         reserve_import_run_for_state(
             &state,
             vec!["ONE".to_string()],
-            plan.plan_id,
+            plan.plan_id.clone(),
             "profile-1".to_string(),
             Vec::new(),
             false,
@@ -92,17 +130,31 @@ fn reservation_rename_failure_leaves_idle_authority_and_allows_retry() {
     assert!(get_active_import_run_for_state(&state).unwrap().is_none());
     assert!(!record_path(temp.path()).exists());
     assert!(!temp.path().join(STAGING_DIRECTORY).exists());
+    assert!(
+        state
+            .relocation_plans
+            .lock()
+            .unwrap()
+            .contains_key(&plan.plan_id)
+    );
 
     assert!(
         reserve_import_run_for_state(
             &state,
             vec!["ONE".to_string()],
-            plan.plan_id,
+            plan.plan_id.clone(),
             "profile-1".to_string(),
             Vec::new(),
             false,
         )
         .is_ok()
+    );
+    assert!(
+        !state
+            .relocation_plans
+            .lock()
+            .unwrap()
+            .contains_key(&plan.plan_id)
     );
 }
 
@@ -150,6 +202,13 @@ fn reservation_parent_sync_failure_retains_uncertain_ownership_and_recovers_inte
     assert_eq!(
         live.error.as_ref().map(|error| error.code.as_str()),
         Some("reservation_durability_uncertain")
+    );
+    assert!(
+        !state
+            .relocation_plans
+            .lock()
+            .unwrap()
+            .contains_key(&plan.plan_id)
     );
     assert!(!crate::import::pipeline::should_stop_import_for_exit(&live));
     let run_id = live.run_id.clone();
@@ -209,6 +268,64 @@ fn reservation_parent_sync_failure_retains_uncertain_ownership_and_recovers_inte
     assert_eq!(recovered.run_id, run_id);
     assert_eq!(recovered.lifecycle, ImportLifecycle::Interrupted);
     assert!(recovered.confirmation_required);
+    let recovered_state = recovered_state.import_state.lock().unwrap();
+    let recovered_plan = recovered_state.relocation_plan.as_ref().unwrap();
+    assert_eq!(recovered_plan.project_root, temp.path());
+    assert_eq!(
+        recovered_plan.project_identity,
+        relocation::project_identity(temp.path())
+    );
+    assert_eq!(
+        recovered_plan.bound_generation,
+        Some(recovered.ownership_generation)
+    );
+}
+
+#[test]
+fn conflicting_visible_reservation_consumes_pending_plan_and_retains_attempted_authority() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = active_state(temp.path());
+    let plan = plan_import_relocation_for_state(&state, &["ONE".to_string()]).unwrap();
+    let mut conflicting = ImportState::new(
+        temp.path().join(STAGING_DIRECTORY),
+        temp.path().to_path_buf(),
+        vec!["ONE".to_string()],
+    );
+    conflicting.run_id = "conflicting-run".to_string();
+    conflicting.profile_id = "profile-1".to_string();
+    conflicting.ownership_generation = 99;
+    conflicting.relocation_plan_id = Some(plan.plan_id.clone());
+    let mut conflicting_plan = plan.clone();
+    relocation::bind_plan(&mut conflicting_plan, temp.path(), &["ONE".to_string()], 99).unwrap();
+    conflicting.relocation_plan = Some(conflicting_plan);
+    write_record(temp.path(), &record_from_state(&conflicting).unwrap()).unwrap();
+    inject_fault(RecordFaultPoint::Rename);
+
+    let error = reserve_import_run_for_state(
+        &state,
+        vec!["ONE".to_string()],
+        plan.plan_id.clone(),
+        "profile-1".to_string(),
+        Vec::new(),
+        false,
+    )
+    .unwrap_err();
+
+    assert!(error.to_string().contains("durability uncertain"));
+    assert!(
+        !state
+            .relocation_plans
+            .lock()
+            .unwrap()
+            .contains_key(&plan.plan_id)
+    );
+    let live = state.import_state.lock().unwrap();
+    assert_eq!(live.lifecycle, ImportLifecycle::Preparing);
+    assert_ne!(live.run_id, "conflicting-run");
+    assert_eq!(
+        live.error.as_ref().map(|error| error.code.as_str()),
+        Some("reservation_durability_uncertain")
+    );
 }
 
 #[test]
@@ -442,7 +559,15 @@ fn launch_admission_is_one_shot_and_rejects_changed_or_foreign_scope_without_mut
         false,
     )
     .unwrap();
+    assert!(
+        !state
+            .relocation_plans
+            .lock()
+            .unwrap()
+            .contains_key(&plan.plan_id)
+    );
     let staging = temp.path().join(STAGING_DIRECTORY);
+    let reserved_updated_at = snapshot.updated_at_ms;
     assert!(
         admit_reserved_import_launch(
             &state,
@@ -462,10 +587,85 @@ fn launch_admission_is_one_shot_and_rejects_changed_or_foreign_scope_without_mut
             &staging,
             temp.path(),
             &["ONE".to_string()],
+            "wrong-plan",
+            "profile-1",
+        )
+        .is_err()
+    );
+    {
+        let mut run = state.import_state.lock().unwrap();
+        run.relocation_plan.as_mut().unwrap().project_root = foreign.path().to_path_buf();
+    }
+    assert!(
+        admit_reserved_import_launch(
+            &state,
+            &snapshot.run_id,
+            &staging,
+            temp.path(),
+            &["ONE".to_string()],
+            &plan.plan_id,
+            "profile-1",
+        )
+        .is_err()
+    );
+    {
+        let mut run = state.import_state.lock().unwrap();
+        run.relocation_plan.as_mut().unwrap().project_root = temp.path().to_path_buf();
+        run.relocation_plan.as_mut().unwrap().subjects[0].subject = "TWO".to_string();
+    }
+    assert!(
+        admit_reserved_import_launch(
+            &state,
+            &snapshot.run_id,
+            &staging,
+            temp.path(),
+            &["ONE".to_string()],
+            &plan.plan_id,
+            "profile-1",
+        )
+        .is_err()
+    );
+    {
+        let mut run = state.import_state.lock().unwrap();
+        run.relocation_plan.as_mut().unwrap().subjects[0].subject = "ONE".to_string();
+        run.relocation_plan.as_mut().unwrap().bound_generation =
+            Some(snapshot.ownership_generation + 1);
+    }
+    assert!(
+        admit_reserved_import_launch(
+            &state,
+            &snapshot.run_id,
+            &staging,
+            temp.path(),
+            &["ONE".to_string()],
+            &plan.plan_id,
+            "profile-1",
+        )
+        .is_err()
+    );
+    state
+        .import_state
+        .lock()
+        .unwrap()
+        .relocation_plan
+        .as_mut()
+        .unwrap()
+        .bound_generation = Some(snapshot.ownership_generation);
+    assert!(
+        admit_reserved_import_launch(
+            &state,
+            &snapshot.run_id,
+            &staging,
+            temp.path(),
+            &["ONE".to_string()],
             &plan.plan_id,
             "profile-1",
         )
         .is_ok()
+    );
+    assert_eq!(
+        state.import_state.lock().unwrap().updated_at_ms,
+        reserved_updated_at
     );
     let record_before = fs::read(record_path(temp.path())).unwrap();
     for (root, subjects) in [
@@ -511,7 +711,7 @@ fn acknowledgement_is_terminal_exact_idempotent_and_required_for_replacement() {
     let snapshot = reserve_import_run_for_state(
         &state,
         vec!["ONE".to_string()],
-        plan.plan_id,
+        plan.plan_id.clone(),
         "profile-1".to_string(),
         Vec::new(),
         false,
@@ -529,6 +729,18 @@ fn acknowledgement_is_terminal_exact_idempotent_and_required_for_replacement() {
     acknowledge_import_run_for_state(&state, &snapshot.run_id).unwrap();
     assert!(get_active_import_run_for_state(&state).unwrap().is_none());
     assert!(!record_path(temp.path()).exists());
+
+    assert!(
+        reserve_import_run_for_state(
+            &state,
+            vec!["ONE".to_string()],
+            plan.plan_id,
+            "profile-1".to_string(),
+            Vec::new(),
+            false,
+        )
+        .is_err()
+    );
 
     let next = plan_import_relocation_for_state(&state, &["ONE".to_string()]).unwrap();
     assert!(

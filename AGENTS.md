@@ -28,6 +28,12 @@ _Agents MUST translate between BIDS and ExploreASL terms._
 
 ## Rules
 
+### Core
+
+- Evidence-based decision-making; **back up your claims with code references**.
+- Never add implied complexity (i.e. atomic operations, provenance tracking) without explicit user confirmation.
+- This codebase currently suffers from over-engineering, excessive complexity, and unnecessary indirection. Seek to simplify and streamline wherever possible.
+
 ### Frontend & Testing
 
 - Add `data-testid` on all components. Dynamic imports forbidden.

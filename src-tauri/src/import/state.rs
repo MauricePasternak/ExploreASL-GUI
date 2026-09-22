@@ -183,13 +183,6 @@ pub(super) fn reserve_import_run_for_state(
         bail!("Execution profile identity is required");
     }
     let project_root = active_project_root(state)?;
-    validate_relocation_plan_for_run(state, &relocation_plan_id, &project_root, &subject_list)?;
-    let relocation_plan = state
-        .relocation_plans
-        .lock_or_bail("Relocation plan state")?
-        .get(&relocation_plan_id)
-        .cloned()
-        .context("Confirmed relocation plan is unavailable")?;
     validate_subject_components(&subjects_to_preserve)?;
     validate_preserved_subjects_are_disjoint(&subject_list, &subjects_to_preserve)?;
     for subject in &subjects_to_preserve {
@@ -201,41 +194,63 @@ pub(super) fn reserve_import_run_for_state(
     if !matches!(import_state.lifecycle, ImportLifecycle::Idle) {
         bail!("A non-acknowledged import run already owns this project");
     }
+    let mut relocation_plans = state
+        .relocation_plans
+        .lock_or_bail("Relocation plan state")?;
+    let (plan_key, pending_plan) = relocation_plans
+        .get_key_value(&relocation_plan_id)
+        .context("Confirmed relocation plan is unavailable")?;
+    if plan_key != &pending_plan.plan_id {
+        bail!("Confirmed relocation plan identity is inconsistent");
+    }
+    relocation::validate_plan_scope(pending_plan, &project_root, &subject_list)?;
+    let generation = state.import_generation.fetch_add(1, Ordering::Relaxed) + 1;
+    let mut relocation_plan = pending_plan.clone();
+    relocation::bind_plan(
+        &mut relocation_plan,
+        &project_root,
+        &subject_list,
+        generation,
+    )?;
     let staging_root = project_root.join(staging::STAGING_DIRECTORY);
     let mut run = ImportState::new(staging_root, project_root, subject_list);
     run.run_id = format!("import-run-{}", uuid::Uuid::new_v4());
     run.profile_id = profile_id;
-    run.relocation_plan_id = Some(relocation_plan_id);
+    run.relocation_plan_id = Some(relocation_plan_id.clone());
     run.relocation_plan = Some(relocation_plan);
     run.preserved_subjects = subjects_to_preserve;
     run.preserve_staging = preserve_staging;
-    run.ownership_generation = state.import_generation.fetch_add(1, Ordering::Relaxed) + 1;
+    run.ownership_generation = generation;
     run.lifecycle = ImportLifecycle::Preparing;
     run.updated_at_ms = now_ms();
+    let previous = std::mem::replace(&mut *import_state, run);
     // Write-ahead: no staging mutation has occurred at this point.
-    let expected_record = record_from_state(&run)?;
-    if let Err(write_error) = write_record(&run.project_root, &expected_record) {
-        let details = match exact_record_is_visible(&run.project_root, &expected_record) {
-            Ok(false) => return Err(write_error),
+    let expected_record = record_from_state(&import_state)?;
+    if let Err(write_error) = write_record(&import_state.project_root, &expected_record) {
+        let details = match exact_record_is_visible(&import_state.project_root, &expected_record) {
+            Ok(false) => {
+                *import_state = previous;
+                return Err(write_error);
+            }
             Ok(true) => format!("Record write failed: {write_error:#}"),
             Err(visibility_error) => format!(
                 "Record write failed: {write_error:#}; visible authority could not be reconciled: {visibility_error:#}"
             ),
         };
+        relocation_plans.remove(&relocation_plan_id);
         let message = format!(
             "Import reservation durability uncertain; ownership retained in native memory; no staging or process launch is allowed. Close and reopen the project to recover the interrupted reservation before retrying. {details}"
         );
-        run.error = Some(ImportStructuredError {
+        import_state.error = Some(ImportStructuredError {
             code: RESERVATION_DURABILITY_UNCERTAIN.to_string(),
             message: message.clone(),
             subject: None,
             staging_issues: None,
         });
-        *import_state = run;
         bail!(message);
     }
-    let snapshot = run.snapshot();
-    *import_state = run;
+    relocation_plans.remove(&relocation_plan_id);
+    let snapshot = import_state.snapshot();
     Ok(snapshot)
 }
 
@@ -353,7 +368,6 @@ pub(super) fn admit_reserved_import_launch(
     if project_root != active_root || staging_root != active_root.join(staging::STAGING_DIRECTORY) {
         bail!("Compiled staging plan does not match the active project root");
     }
-    validate_relocation_plan_for_run(state, relocation_plan_id, project_root, subjects)?;
     let mut run = state.import_state.lock_or_bail("Import state")?;
     if reservation_durability_is_uncertain(&run) {
         bail!(
@@ -373,14 +387,14 @@ pub(super) fn admit_reserved_import_launch(
     {
         bail!("Import run is obsolete or is not eligible for launch");
     }
-    // The durable Preparing checkpoint already exists.  Binding the relocation
-    // plan does not mutate staging and retains this exact ownership generation.
-    run.updated_at_ms = now_ms();
-    let generation = run.ownership_generation;
-    if let Some(plan) = run.relocation_plan.as_mut() {
-        super::relocation::bind_plan(plan, project_root, subjects, generation)?;
+    let plan = run
+        .relocation_plan
+        .as_ref()
+        .context("Reserved import run lacks a relocation plan")?;
+    if plan.plan_id != relocation_plan_id {
+        bail!("Reserved import relocation plan identity is inconsistent");
     }
-    persist(&run)?;
+    super::relocation::validate_bound_plan(plan, project_root, subjects, run.ownership_generation)?;
     run.launch_in_progress = true;
     Ok(ImportReservation {
         generation: run.ownership_generation,
@@ -494,37 +508,6 @@ pub(super) fn plan_import_relocation_for_state(
 pub(super) struct ImportReservation {
     pub(super) generation: u64,
     pub(super) preserved_subjects: Vec<String>,
-}
-
-pub(super) fn validate_relocation_plan_for_run(
-    state: &AppState,
-    plan_id: &str,
-    project_root: &Path,
-    subjects: &[String],
-) -> AnyResult<()> {
-    let plans = state
-        .relocation_plans
-        .lock_or_bail("Relocation plan state")?;
-    let plan = plans
-        .get(plan_id)
-        .context("Confirmed relocation plan is unavailable")?;
-    relocation::validate_plan_scope(plan, project_root, subjects)
-}
-
-pub(super) fn bind_relocation_plan_for_run(
-    state: &AppState,
-    plan_id: &str,
-    project_root: &Path,
-    subjects: &[String],
-    generation: u64,
-) -> AnyResult<()> {
-    let mut plans = state
-        .relocation_plans
-        .lock_or_bail("Relocation plan state")?;
-    let plan = plans
-        .get_mut(plan_id)
-        .context("Confirmed relocation plan is unavailable")?;
-    relocation::bind_plan(plan, project_root, subjects, generation)
 }
 
 pub(super) fn set_reserved_import_running(state: &AppState, generation: u64) -> Result<(), String> {
