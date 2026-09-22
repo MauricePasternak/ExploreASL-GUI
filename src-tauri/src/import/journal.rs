@@ -515,7 +515,7 @@ pub fn write_record(project_root: &Path, record: &ImportRunRecord) -> Result<()>
     })?;
     let record_parent = record_parent_relative_path()?;
     authority
-        .create_dir_all(&record_parent)
+        .create_dir_all_durable(&record_parent)
         .context("Failed to create import run record parent")?;
     let record_relative = record_relative_path()?;
     let temp_relative = ProjectRelativePath::new(format!(
@@ -585,12 +585,44 @@ pub fn load_record(project_root: &Path) -> Result<Option<ImportRunRecord>> {
         )
     })?;
     let relative = record_relative_path()?;
-    let bytes = match authority.read_regular(&relative) {
+    let record = read_record_without_parent_sync(&authority, &relative, project_root)?;
+    repair_record_parent(&authority, &relative)?;
+    Ok(record)
+}
+
+pub(crate) fn exact_record_is_visible(
+    project_root: &Path,
+    expected: &ImportRunRecord,
+) -> Result<bool> {
+    let authority = ProjectDirectory::open(project_root).with_context(|| {
+        format!(
+            "Failed to open project record authority {}",
+            project_root.display()
+        )
+    })?;
+    let relative = record_relative_path()?;
+    let Some(visible) = read_record_without_parent_sync(&authority, &relative, project_root)?
+    else {
+        return Ok(false);
+    };
+    let visible =
+        serde_json::to_value(visible).context("Failed to compare visible import run record")?;
+    let expected =
+        serde_json::to_value(expected).context("Failed to compare expected import run record")?;
+    if visible != expected {
+        bail!("Visible import run record conflicts with the attempted reservation");
+    }
+    Ok(true)
+}
+
+fn read_record_without_parent_sync(
+    authority: &ProjectDirectory,
+    relative: &ProjectRelativePath,
+    project_root: &Path,
+) -> Result<Option<ImportRunRecord>> {
+    let bytes = match authority.read_regular(relative) {
         Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            repair_record_parent(&authority, &relative)?;
-            return Ok(None);
-        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error).context("Failed to inspect import run record"),
     };
     let value: serde_json::Value =
@@ -603,7 +635,6 @@ pub fn load_record(project_root: &Path) -> Result<Option<ImportRunRecord>> {
     let record: ImportRunRecord =
         serde_json::from_slice(&bytes).context("Malformed import run record")?;
     validate_record(&record, project_root)?;
-    repair_record_parent(&authority, &relative)?;
     Ok(Some(record))
 }
 

@@ -1,23 +1,15 @@
 //! Native project admission inside the single application process.
 
-use crate::{
-    app_state::AppState,
-    fs_safety::{DirectorySync, ProjectDirectory, ProjectRelativePath},
-    import::ImportLifecycle,
-};
+use crate::{app_state::AppState, fs_safety::ProjectDirectory, import::ImportLifecycle};
 use std::{
     fmt, io,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-const AUTHORITY_DIRECTORY: &str = "derivatives/ExploreASL_GUI/execution";
-
 pub(crate) struct ActiveProject {
     root: PathBuf,
     directory: ProjectDirectory,
-    #[allow(dead_code)]
-    pub directory_sync: DirectorySync,
 }
 
 impl fmt::Debug for ActiveProject {
@@ -33,13 +25,7 @@ impl ActiveProject {
     pub(crate) fn open(root: impl AsRef<Path>) -> io::Result<Self> {
         let root = root.as_ref().canonicalize()?;
         let directory = ProjectDirectory::open(&root)?;
-        let directory_sync =
-            directory.create_dir_all_durable(&ProjectRelativePath::new(AUTHORITY_DIRECTORY)?)?;
-        Ok(Self {
-            root,
-            directory,
-            directory_sync,
-        })
+        Ok(Self { root, directory })
     }
 
     pub(crate) fn root(&self) -> &Path {

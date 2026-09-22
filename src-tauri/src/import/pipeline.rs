@@ -675,6 +675,12 @@ pub(crate) fn stop_import_run_for_state(
         if run.run_id != run_id || run.project_root != ownership.root() {
             return Err("Import run ID is obsolete, unknown, or belongs to another project".into());
         }
+        if super::state::reservation_durability_is_uncertain(&run) {
+            return Err(
+                "Import reservation durability uncertain; ownership retained; cancellation cannot rewrite it"
+                    .into(),
+            );
+        }
         if run.lifecycle.is_terminal() {
             return Ok(run.snapshot());
         }
@@ -787,13 +793,19 @@ pub fn stop_running_import_for_exit(app: &AppHandle) -> Result<bool, String> {
             .import_state
             .lock()
             .map_err(|_| "Import state lock was poisoned")?;
-        if run.lifecycle == ImportLifecycle::Idle || run.lifecycle.is_terminal() {
+        if !should_stop_import_for_exit(&run) {
             return Ok(false);
         }
         run.run_id.clone()
     };
     stop_import_run_for_state(&state, &id)?;
     Ok(true)
+}
+
+pub(super) fn should_stop_import_for_exit(run: &ImportState) -> bool {
+    run.lifecycle != ImportLifecycle::Idle
+        && !run.lifecycle.is_terminal()
+        && !super::state::reservation_durability_is_uncertain(run)
 }
 
 fn require_preparing(state: &AppState, generation: u64) -> AnyResult<()> {

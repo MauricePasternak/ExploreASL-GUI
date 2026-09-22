@@ -1,4 +1,6 @@
-use super::journal::{load_record, record_from_state, remove_record, write_record};
+use super::journal::{
+    exact_record_is_visible, load_record, record_from_state, remove_record, write_record,
+};
 use super::output::{validate_preserved_subjects_are_disjoint, validate_subject_components};
 use super::relocation;
 use super::relocation::RelocationPlan;
@@ -15,7 +17,21 @@ use std::sync::atomic::Ordering;
 use std::thread;
 use tauri::{AppHandle, Emitter, Runtime};
 
+const RESERVATION_DURABILITY_UNCERTAIN: &str = "reservation_durability_uncertain";
+
+pub(super) fn reservation_durability_is_uncertain(state: &ImportState) -> bool {
+    state
+        .error
+        .as_ref()
+        .is_some_and(|error| error.code == RESERVATION_DURABILITY_UNCERTAIN)
+}
+
 pub(crate) fn persist(state: &ImportState) -> AnyResult<()> {
+    if reservation_durability_is_uncertain(state) {
+        bail!(
+            "Import reservation durability uncertain; retained ownership cannot be durably rewritten"
+        );
+    }
     write_record(&state.project_root, &record_from_state(state)?)
 }
 
@@ -197,7 +213,27 @@ pub(super) fn reserve_import_run_for_state(
     run.lifecycle = ImportLifecycle::Preparing;
     run.updated_at_ms = now_ms();
     // Write-ahead: no staging mutation has occurred at this point.
-    persist(&run)?;
+    let expected_record = record_from_state(&run)?;
+    if let Err(write_error) = write_record(&run.project_root, &expected_record) {
+        let details = match exact_record_is_visible(&run.project_root, &expected_record) {
+            Ok(false) => return Err(write_error),
+            Ok(true) => format!("Record write failed: {write_error:#}"),
+            Err(visibility_error) => format!(
+                "Record write failed: {write_error:#}; visible authority could not be reconciled: {visibility_error:#}"
+            ),
+        };
+        let message = format!(
+            "Import reservation durability uncertain; ownership retained in native memory; no staging or process launch is allowed. Close and reopen the project to recover the interrupted reservation before retrying. {details}"
+        );
+        run.error = Some(ImportStructuredError {
+            code: RESERVATION_DURABILITY_UNCERTAIN.to_string(),
+            message: message.clone(),
+            subject: None,
+            staging_issues: None,
+        });
+        *import_state = run;
+        bail!(message);
+    }
     let snapshot = run.snapshot();
     *import_state = run;
     Ok(snapshot)
@@ -238,6 +274,11 @@ pub(super) fn acknowledge_import_run_for_state(state: &AppState, run_id: &str) -
     let mut import_state = state.import_state.lock_or_bail("Import state")?;
     if import_state.run_id != run_id || import_state.project_root != project_root {
         bail!("Import run ID is obsolete, unknown, or belongs to another project");
+    }
+    if reservation_durability_is_uncertain(&import_state) {
+        bail!(
+            "Import reservation durability uncertain; retained ownership cannot be acknowledged or rewritten"
+        );
     }
     if import_state.acknowledged {
         remove_record(&project_root)?;
@@ -314,6 +355,11 @@ pub(super) fn admit_reserved_import_launch(
     }
     validate_relocation_plan_for_run(state, relocation_plan_id, project_root, subjects)?;
     let mut run = state.import_state.lock_or_bail("Import state")?;
+    if reservation_durability_is_uncertain(&run) {
+        bail!(
+            "Import reservation durability uncertain; ownership retained; no staging or process launch is allowed"
+        );
+    }
     if run.run_id != run_id
         || run.lifecycle != ImportLifecycle::Preparing
         // Admission is one-shot.  The reservation marker is private native
@@ -348,6 +394,11 @@ pub(super) fn fail_admitted_preparation(
     message: String,
 ) -> AnyResult<ImportRunSnapshot> {
     let mut run = state.import_state.lock_or_bail("Import state")?;
+    if reservation_durability_is_uncertain(&run) {
+        bail!(
+            "Import reservation durability uncertain; retained ownership cannot be failed or rewritten"
+        );
+    }
     if run.ownership_generation != generation || run.lifecycle != ImportLifecycle::Preparing {
         bail!("Import reservation is obsolete");
     }
@@ -382,6 +433,7 @@ pub(super) fn fail_preparing_run_for_id(
         if run.run_id != run_id
             || run.project_root != project_root
             || run.lifecycle != ImportLifecycle::Preparing
+            || reservation_durability_is_uncertain(&run)
         {
             return Ok(None);
         }
@@ -392,6 +444,7 @@ pub(super) fn fail_preparing_run_for_id(
         || run.lifecycle != ImportLifecycle::Preparing
         || run.launch_in_progress
         || run.cancellation.is_some()
+        || reservation_durability_is_uncertain(&run)
     {
         return Ok(None);
     }
@@ -483,6 +536,7 @@ pub(super) fn set_reserved_import_running(state: &AppState, generation: u64) -> 
     if import_state.ownership_generation != generation
         || import_state.lifecycle != ImportLifecycle::Preparing
         || !import_state.launch_in_progress
+        || reservation_durability_is_uncertain(&import_state)
     {
         return Err(
             "Import state changed before process tracking could be established".to_string(),

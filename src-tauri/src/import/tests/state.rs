@@ -1,5 +1,8 @@
 use crate::app_state::AppState;
-use crate::import::journal::record_path;
+use crate::import::journal::{
+    RecordFaultPoint, exact_record_is_visible, inject_fault, load_record, record_from_state,
+    record_path, write_record,
+};
 use crate::import::relocation;
 use crate::import::staging::STAGING_DIRECTORY;
 use crate::import::state::{
@@ -62,6 +65,174 @@ fn reservation_is_mutation_free_and_blocks_duplicate_or_changed_scope() {
         vec!["ONE"]
     );
     assert!(attach_import_run_for_state(&state, "obsolete").is_err());
+}
+
+#[test]
+fn reservation_rename_failure_leaves_idle_authority_and_allows_retry() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = active_state(temp.path());
+    let plan = plan_import_relocation_for_state(&state, &["ONE".to_string()]).unwrap();
+    inject_fault(RecordFaultPoint::Rename);
+
+    assert!(
+        reserve_import_run_for_state(
+            &state,
+            vec!["ONE".to_string()],
+            plan.plan_id.clone(),
+            "profile-1".to_string(),
+            Vec::new(),
+            false,
+        )
+        .is_err()
+    );
+    assert_eq!(
+        state.import_state.lock().unwrap().lifecycle,
+        ImportLifecycle::Idle
+    );
+    assert!(get_active_import_run_for_state(&state).unwrap().is_none());
+    assert!(!record_path(temp.path()).exists());
+    assert!(!temp.path().join(STAGING_DIRECTORY).exists());
+
+    assert!(
+        reserve_import_run_for_state(
+            &state,
+            vec!["ONE".to_string()],
+            plan.plan_id,
+            "profile-1".to_string(),
+            Vec::new(),
+            false,
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn reservation_parent_sync_failure_retains_uncertain_ownership_and_recovers_interrupted() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = active_state(temp.path());
+    let plan = plan_import_relocation_for_state(&state, &["ONE".to_string()]).unwrap();
+    inject_fault(RecordFaultPoint::ParentSync);
+
+    let error = reserve_import_run_for_state(
+        &state,
+        vec!["ONE".to_string()],
+        plan.plan_id.clone(),
+        "profile-1".to_string(),
+        Vec::new(),
+        false,
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("durability uncertain"));
+    assert!(error.to_string().contains("ownership retained"));
+
+    let visible = load_record(temp.path()).unwrap().unwrap();
+    let live = state.import_state.lock().unwrap();
+    let mut expected = record_from_state(&live).unwrap();
+    expected.snapshot.error = None;
+    assert_eq!(
+        serde_json::to_value(&visible).unwrap(),
+        serde_json::to_value(expected).unwrap()
+    );
+    assert_eq!(visible.snapshot.lifecycle, ImportLifecycle::Preparing);
+    assert_eq!(visible.snapshot.error, None);
+    assert_eq!(live.run_id, visible.snapshot.run_id);
+    assert_eq!(
+        live.ownership_generation,
+        visible.snapshot.ownership_generation
+    );
+    assert_eq!(live.project_root, temp.path());
+    assert_eq!(live.subject_list, visible.snapshot.selected_subjects);
+    assert_eq!(live.profile_id, visible.snapshot.profile_id);
+    assert_eq!(
+        serde_json::to_value(&live.relocation_plan).unwrap(),
+        serde_json::to_value(&visible.relocation_plan).unwrap()
+    );
+    assert_eq!(
+        live.error.as_ref().map(|error| error.code.as_str()),
+        Some("reservation_durability_uncertain")
+    );
+    assert!(!crate::import::pipeline::should_stop_import_for_exit(&live));
+    let run_id = live.run_id.clone();
+    drop(live);
+
+    let record_before = fs::read(record_path(temp.path())).unwrap();
+    assert!(
+        reserve_import_run_for_state(
+            &state,
+            vec!["ONE".to_string()],
+            plan.plan_id.clone(),
+            "profile-1".to_string(),
+            Vec::new(),
+            false,
+        )
+        .is_err()
+    );
+    assert_eq!(fs::read(record_path(temp.path())).unwrap(), record_before);
+
+    let launch_error = crate::import::commands::settle_launch_result(
+        &state,
+        &run_id,
+        Err(crate::import::types::ImportCommandError::Operational {
+            message: "launch stayed blocked".to_string(),
+        }),
+    )
+    .unwrap_err();
+    assert_eq!(launch_error.to_string(), "launch stayed blocked");
+    assert_eq!(
+        state.import_state.lock().unwrap().lifecycle,
+        ImportLifecycle::Preparing
+    );
+    assert_eq!(fs::read(record_path(temp.path())).unwrap(), record_before);
+
+    let admission_error = admit_reserved_import_launch(
+        &state,
+        &run_id,
+        &temp.path().join(STAGING_DIRECTORY),
+        temp.path(),
+        &["ONE".to_string()],
+        &plan.plan_id,
+        "profile-1",
+    )
+    .unwrap_err();
+    assert!(admission_error.to_string().contains("durability uncertain"));
+    assert!(crate::import::stop_import_run_for_state(&state, &run_id).is_err());
+    assert_eq!(fs::read(record_path(temp.path())).unwrap(), record_before);
+    assert!(acknowledge_import_run_for_state(&state, &run_id).is_err());
+    assert_eq!(fs::read(record_path(temp.path())).unwrap(), record_before);
+    assert!(!temp.path().join(STAGING_DIRECTORY).exists());
+
+    let recovered_state = active_state(temp.path());
+    let recovered =
+        crate::import::state::recover_import_run_for_project(&recovered_state, temp.path())
+            .unwrap()
+            .unwrap();
+    assert_eq!(recovered.run_id, run_id);
+    assert_eq!(recovered.lifecycle, ImportLifecycle::Interrupted);
+    assert!(recovered.confirmation_required);
+}
+
+#[test]
+fn exact_visibility_rejects_conflicting_valid_record_without_mutation() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = active_state(temp.path());
+    let plan = plan_import_relocation_for_state(&state, &["ONE".to_string()]).unwrap();
+    reserve_import_run_for_state(
+        &state,
+        vec!["ONE".to_string()],
+        plan.plan_id,
+        "profile-1".to_string(),
+        Vec::new(),
+        false,
+    )
+    .unwrap();
+    let expected = load_record(temp.path()).unwrap().unwrap();
+    let mut conflicting = expected.clone();
+    conflicting.snapshot.profile_id = "profile-2".to_string();
+    write_record(temp.path(), &conflicting).unwrap();
+    let visible_bytes = fs::read(record_path(temp.path())).unwrap();
+
+    assert!(exact_record_is_visible(temp.path(), &expected).is_err());
+    assert_eq!(fs::read(record_path(temp.path())).unwrap(), visible_bytes);
 }
 
 #[test]

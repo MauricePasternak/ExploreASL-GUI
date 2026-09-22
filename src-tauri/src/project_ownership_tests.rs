@@ -22,6 +22,16 @@ pub(crate) fn own_project(state: &AppState, root: &std::path::Path) {
 }
 
 #[test]
+fn candidate_capability_acquisition_is_read_only() {
+    let root = tempfile::tempdir().unwrap();
+    crate::project_ownership::ActiveProject::open(root.path()).unwrap();
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+
+    crate::project_ownership::for_setup(&AppState::default(), root.path()).unwrap();
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+}
+
+#[test]
 fn same_root_reuses_capability_and_switch_replaces_it() {
     let first = tempfile::tempdir().unwrap();
     let second = tempfile::tempdir().unwrap();
