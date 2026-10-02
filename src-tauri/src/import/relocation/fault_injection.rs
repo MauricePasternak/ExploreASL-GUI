@@ -35,17 +35,7 @@ pub enum FaultPoint {
     JournalCleanup,
     Rollback,
     InterruptAfterDatasetInstall,
-    InterruptAfterDatasetReserved,
-    InterruptAfterCandidateReserved,
-    InterruptAfterCandidateReservationIntent,
-    InterruptAfterCandidateReservationOperation,
-    InterruptAfterCandidatePopulationIntent,
     InterruptAfterCandidatePopulationOperation,
-    InterruptAfterDatasetReservationIntent,
-    InterruptAfterDatasetReservationOperation,
-    InterruptAfterDatasetPopulationIntent,
-    InterruptAfterDatasetPopulationOperation,
-    InterruptAfterDatasetCandidateReady,
     InterruptAfterDatasetInstallIntent,
     InterruptAfterDatasetInstallOperation,
     InterruptAfterCandidateReady,
@@ -56,14 +46,6 @@ pub enum FaultPoint {
     InterruptAfterInstallOperation,
     InterruptAfterInstall,
     InterruptAfterCommit,
-    #[cfg(test)]
-    SubstituteAfterCandidateReady,
-    #[cfg(test)]
-    SubstituteAfterInstall,
-    #[cfg(test)]
-    SubstituteDatasetAfterCandidateReady,
-    #[cfg(test)]
-    SubstituteDatasetAfterInstall,
     InterruptRollbackAfterIntent,
     InterruptRollbackAfterDestinationRemoval,
     InterruptRollbackAfterBackupRestore,
@@ -71,10 +53,6 @@ pub enum FaultPoint {
     InterruptDatasetRollbackAfterIntent,
     InterruptDatasetRollbackAfterDestinationRemoval,
     InterruptDatasetRollbackAfterCandidateCleanup,
-    PayloadParentSync,
-    PayloadRenameSourceSync,
-    PayloadRenameDestinationSync,
-    WrapperDeleteParentSync,
 }
 
 impl FaultPoint {
@@ -103,33 +81,9 @@ impl FaultPoint {
             Self::JournalCleanup => "journal-cleanup",
             Self::Rollback => "rollback",
             Self::InterruptAfterDatasetInstall => "interrupt-after-dataset-install",
-            Self::InterruptAfterDatasetReserved => "interrupt-after-dataset-reserved",
-            Self::InterruptAfterCandidateReserved => "interrupt-after-candidate-reserved",
-            Self::InterruptAfterCandidateReservationIntent => {
-                "interrupt-after-candidate-reservation-intent"
-            }
-            Self::InterruptAfterCandidateReservationOperation => {
-                "interrupt-after-candidate-reservation-operation"
-            }
-            Self::InterruptAfterCandidatePopulationIntent => {
-                "interrupt-after-candidate-population-intent"
-            }
             Self::InterruptAfterCandidatePopulationOperation => {
                 "interrupt-after-candidate-population-operation"
             }
-            Self::InterruptAfterDatasetReservationIntent => {
-                "interrupt-after-dataset-reservation-intent"
-            }
-            Self::InterruptAfterDatasetReservationOperation => {
-                "interrupt-after-dataset-reservation-operation"
-            }
-            Self::InterruptAfterDatasetPopulationIntent => {
-                "interrupt-after-dataset-population-intent"
-            }
-            Self::InterruptAfterDatasetPopulationOperation => {
-                "interrupt-after-dataset-population-operation"
-            }
-            Self::InterruptAfterDatasetCandidateReady => "interrupt-after-dataset-candidate-ready",
             Self::InterruptAfterDatasetInstallIntent => "interrupt-after-dataset-install-intent",
             Self::InterruptAfterDatasetInstallOperation => {
                 "interrupt-after-dataset-install-operation"
@@ -142,16 +96,6 @@ impl FaultPoint {
             Self::InterruptAfterInstallOperation => "interrupt-after-install-operation",
             Self::InterruptAfterInstall => "interrupt-after-install",
             Self::InterruptAfterCommit => "interrupt-after-commit",
-            #[cfg(test)]
-            Self::SubstituteAfterCandidateReady => "substitute-after-candidate-ready",
-            #[cfg(test)]
-            Self::SubstituteAfterInstall => "substitute-after-install",
-            #[cfg(test)]
-            Self::SubstituteDatasetAfterCandidateReady => {
-                "substitute-dataset-after-candidate-ready"
-            }
-            #[cfg(test)]
-            Self::SubstituteDatasetAfterInstall => "substitute-dataset-after-install",
             Self::InterruptRollbackAfterIntent => "interrupt-rollback-after-intent",
             Self::InterruptRollbackAfterDestinationRemoval => {
                 "interrupt-rollback-after-destination-removal"
@@ -167,10 +111,6 @@ impl FaultPoint {
             Self::InterruptDatasetRollbackAfterCandidateCleanup => {
                 "interrupt-dataset-rollback-after-candidate-cleanup"
             }
-            Self::PayloadParentSync => "payload-parent-sync",
-            Self::PayloadRenameSourceSync => "payload-rename-source-sync",
-            Self::PayloadRenameDestinationSync => "payload-rename-destination-sync",
-            Self::WrapperDeleteParentSync => "wrapper-delete-parent-sync",
         }
     }
 
@@ -241,27 +181,6 @@ pub(super) fn interrupt(point: FaultPoint) -> RelocationTransactionResult<()> {
     } else {
         Ok(())
     }
-}
-
-#[cfg(test)]
-pub(super) fn substitute(point: FaultPoint, path: &Path) -> AnyResult<()> {
-    if !take(point) {
-        return Ok(());
-    }
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("Failed to inspect fault-injection path {}", path.display()))?;
-    if metadata.is_dir() {
-        fs::remove_dir_all(path)
-            .with_context(|| format!("Failed to remove fault-injection path {}", path.display()))?;
-        fs::create_dir(path)
-            .with_context(|| format!("Failed to create fault-injection path {}", path.display()))?;
-        fs::write(path.join("foreign"), b"foreign")
-            .with_context(|| format!("Failed to write fault-injection path {}", path.display()))?;
-    } else {
-        fs::write(path, b"foreign")
-            .with_context(|| format!("Failed to write fault-injection path {}", path.display()))?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

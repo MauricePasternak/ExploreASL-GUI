@@ -348,6 +348,198 @@ fn terminal_cleanup_recovery_accepts_only_the_same_cross_journal_outcome() {
 }
 
 #[test]
+fn relocation_recovery_preserves_checkpointed_pending_derived_outcome() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("rawdata/sub-ONE")).unwrap();
+    fs::write(root.join("rawdata/sub-ONE/old.nii"), "old").unwrap();
+    let staging = root.join(".easl_staging");
+    fs::create_dir_all(staging.join("rawdata/sub-ONE")).unwrap();
+    fs::write(staging.join("rawdata/sub-ONE/new.nii"), "new").unwrap();
+    let staged_lock = crate::import::status::import_lock_dir(&staging, "ONE");
+    fs::create_dir_all(&staged_lock).unwrap();
+    fs::write(staged_lock.join("new.status"), "new lock").unwrap();
+
+    let mut plan =
+        crate::import::relocation::create_plan(root, &["ONE".to_string()], "plan-1".to_string())
+            .unwrap();
+    crate::import::relocation::bind_plan(&mut plan, root, &["ONE".to_string()], 7).unwrap();
+    let mut record = finalizing_record(root);
+    record.relocation_plan = Some(plan.clone());
+    write_record(root, &record).unwrap();
+
+    let pending = {
+        let _failure = crate::import::relocation::inject_relocation_failure(
+            crate::import::relocation::RelocationFailurePoint::AncillaryInstall,
+        );
+        crate::import::relocation::relocate(&plan, 7, &staging, &["ONE".to_string()], false, false)
+            .unwrap()
+    };
+    assert_eq!(pending.subjects[0].phase, "derivedReconciliation");
+    assert!(pending.subjects[0].message.is_some());
+
+    record = load_record(root).unwrap().unwrap();
+    record.snapshot.relocation_outcome = Some(pending.clone());
+    record.snapshot.lifecycle = ImportLifecycle::Failed;
+    record.snapshot.terminal_result = Some(crate::import::types::ImportTerminalResult::Failed);
+    write_record(root, &record).unwrap();
+
+    let summary = crate::import::relocation::recover(root).unwrap();
+
+    assert!(summary.cleanup_errors.is_empty());
+    assert!(!root.join(crate::import::relocation::JOURNAL_FILE).exists());
+    assert_eq!(
+        load_record(root)
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .relocation_outcome,
+        Some(pending)
+    );
+    assert_eq!(
+        fs::read_to_string(crate::import::status::import_lock_dir(root, "ONE").join("new.status"))
+            .unwrap(),
+        "new lock"
+    );
+}
+
+#[test]
+fn activation_checkpoints_committed_rawdata_despite_persistent_derived_cleanup_failure() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("rawdata/sub-ONE")).unwrap();
+    fs::write(root.join("rawdata/sub-ONE/old.nii"), "old").unwrap();
+    let staging = root.join(".easl_staging");
+    fs::create_dir_all(staging.join("rawdata/sub-ONE")).unwrap();
+    fs::write(staging.join("rawdata/sub-ONE/new.nii"), "new").unwrap();
+    fs::write(
+        staging.join(crate::import::verification::STAGING_GENERATION_MARKER),
+        "generation-1",
+    )
+    .unwrap();
+    let staged_lock = crate::import::status::import_lock_dir(&staging, "ONE");
+    fs::create_dir_all(&staged_lock).unwrap();
+    fs::write(staged_lock.join("999_ready.status"), "ready").unwrap();
+    let derived_parent = root.join("derivatives/ExploreASL/log");
+    fs::create_dir_all(derived_parent.parent().unwrap()).unwrap();
+    fs::write(&derived_parent, "unrelated obstruction").unwrap();
+    let mut plan =
+        crate::import::relocation::create_plan(root, &["ONE".into()], "plan-1".into()).unwrap();
+    crate::import::relocation::bind_plan(&mut plan, root, &["ONE".into()], 7).unwrap();
+    let mut record = finalizing_record(root);
+    record.relocation_plan = Some(plan.clone());
+    write_record(root, &record).unwrap();
+    {
+        let _failure = crate::import::relocation::inject_relocation_failure(
+            crate::import::relocation::RelocationFailurePoint::InterruptAfterCommit,
+        );
+        crate::import::relocation::relocate(&plan, 7, &staging, &["ONE".into()], true, false)
+            .unwrap_err();
+    }
+    assert!(
+        load_record(root)
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .relocation_outcome
+            .is_none()
+    );
+    let installed_mtime = fs::metadata(root.join("rawdata/sub-ONE/new.nii"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let state = crate::app_state::AppState::default();
+
+    let summary =
+        crate::project_runtime::set_active_project_impl(root.display().to_string(), &state)
+            .expect("committed custody permits activation despite cleanup warning");
+
+    assert_eq!(summary.preserved_subjects, ["ONE"]);
+    assert!(
+        summary
+            .cleanup_errors
+            .iter()
+            .any(|error| error.contains("Derived artifact reconciliation remains pending"))
+    );
+    assert_eq!(
+        crate::project_ownership::active(&state).unwrap().root(),
+        root
+    );
+    let terminal = load_record(root).unwrap().unwrap().snapshot;
+    assert_eq!(terminal.lifecycle, ImportLifecycle::Failed);
+    assert!(terminal.subject_outcomes[0].committed);
+    assert!(
+        terminal
+            .error
+            .as_ref()
+            .unwrap()
+            .message
+            .contains("reconciliation remains pending")
+    );
+    assert_eq!(
+        terminal.relocation_outcome.as_ref().unwrap().subjects[0].phase,
+        "derivedReconciliation"
+    );
+    assert!(staging.exists());
+    assert!(root.join(crate::import::relocation::JOURNAL_FILE).exists());
+    assert_eq!(
+        fs::read_to_string(&derived_parent).unwrap(),
+        "unrelated obstruction"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("rawdata/sub-ONE/new.nii")).unwrap(),
+        "new"
+    );
+    assert!(!root.join("rawdata/sub-ONE/old.nii").exists());
+
+    // Retry cleanup without rewriting the durable historical failure.
+    drop(state);
+    let state = crate::app_state::AppState::default();
+    let summary =
+        crate::project_runtime::set_active_project_impl(root.display().to_string(), &state)
+            .unwrap();
+    assert!(!summary.cleanup_errors.is_empty());
+    assert_eq!(load_record(root).unwrap().unwrap().snapshot, terminal);
+    fs::remove_file(&derived_parent).unwrap();
+    drop(state);
+    let state = crate::app_state::AppState::default();
+    {
+        let _failure = crate::import::relocation::inject_relocation_failure(
+            crate::import::relocation::RelocationFailurePoint::JournalPersist,
+        );
+        let summary =
+            crate::project_runtime::set_active_project_impl(root.display().to_string(), &state)
+                .unwrap();
+        assert!(summary.cleanup_errors.iter().any(|error| error.contains("Failed to checkpoint derived artifact reconciliation")));
+    }
+    assert_eq!(load_record(root).unwrap().unwrap().snapshot, terminal);
+    let pending: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join(crate::import::relocation::JOURNAL_FILE)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        pending["terminalOutcome"],
+        serde_json::to_value(&terminal.relocation_outcome).unwrap()
+    );
+    drop(state);
+    let state = crate::app_state::AppState::default();
+    let summary =
+        crate::project_runtime::set_active_project_impl(root.display().to_string(), &state)
+            .unwrap();
+    assert!(summary.cleanup_errors.is_empty());
+    assert!(!root.join(crate::import::relocation::JOURNAL_FILE).exists());
+    assert!(staging.exists());
+    assert_eq!(load_record(root).unwrap().unwrap().snapshot, terminal);
+    assert_eq!(
+        fs::metadata(root.join("rawdata/sub-ONE/new.nii"))
+            .unwrap()
+            .modified()
+            .unwrap(),
+        installed_mtime
+    );
+}
+
+#[test]
 fn finalization_after_relocation_cleanup_uses_checkpoint_without_staging() {
     let temp = tempfile::tempdir().unwrap();
     let mut record = finalizing_record(temp.path());

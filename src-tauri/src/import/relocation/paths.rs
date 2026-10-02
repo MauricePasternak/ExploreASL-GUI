@@ -80,26 +80,6 @@ pub(super) fn safe_join(root: &Path, relative: &str) -> AnyResult<PathBuf> {
     Ok(path)
 }
 
-pub(super) fn candidate_record_path(root: &Path, relative: &str) -> AnyResult<PathBuf> {
-    let relative = Path::new(relative);
-    validate_relative_path(relative)?;
-    let path = root.join(relative);
-    let parent = path.parent().context("Candidate path has no parent")?;
-    reject_symlink_components(root, parent)?;
-    if parent.exists() {
-        let canonical_parent = fs::canonicalize(parent).with_context(|| {
-            format!(
-                "Failed to canonicalize candidate parent {}",
-                parent.display()
-            )
-        })?;
-        if !canonical_parent.starts_with(root) {
-            bail!("Candidate path escapes project root");
-        }
-    }
-    Ok(path)
-}
-
 pub(super) fn reject_symlink_components(root: &Path, path: &Path) -> AnyResult<()> {
     let relative = path
         .strip_prefix(root)

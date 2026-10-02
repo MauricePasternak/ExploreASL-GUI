@@ -41,7 +41,7 @@ fn planner_reports_empty_and_populated_project_relative_subject_inventories() {
 }
 
 #[test]
-fn planner_fingerprint_is_deterministic_and_detects_logs_and_locks() {
+fn planner_fingerprint_is_deterministic_and_scoped_to_rawdata() {
     let workspace = tempdir().expect("workspace");
     let project = workspace.path().join("project");
     fs::create_dir_all(project.join("rawdata/sub-A")).expect("rawdata");
@@ -58,19 +58,23 @@ fn planner_fingerprint_is_deterministic_and_detects_logs_and_locks() {
     .expect("legacy lock");
 
     let first = inventory_subject(&project, "A").expect("first");
+    fs::write(
+        project.join("derivatives/ExploreASL/log/import_sub-A.log"),
+        "changed derived log",
+    )
+    .unwrap();
+    fs::remove_dir_all(
+        project.join("derivatives/ExploreASL/lock/xASL_module_BIDS2Legacy/sub-A_ses-01"),
+    )
+    .unwrap();
     let second = inventory_subject(&project, "A").expect("second");
     assert_eq!(first.fingerprint, second.fingerprint);
+    assert_eq!(first.file_count, 1);
     assert!(
         first
             .entries
             .iter()
-            .any(|entry| entry.path.contains("import_sub-A.log"))
-    );
-    assert!(
-        first
-            .entries
-            .iter()
-            .any(|entry| entry.path.contains("BIDS2Legacy/sub-A_ses-01"))
+            .all(|entry| entry.path.starts_with("rawdata/sub-A"))
     );
 }
 
@@ -139,4 +143,49 @@ fn plan_rejects_foreign_scope_and_stale_destination_before_relocation() {
         "old"
     );
     assert!(staging.join("rawdata/sub-A/new.nii").exists());
+}
+
+#[test]
+fn dataset_candidate_collision_preserves_unrelated_files_and_directories_in_every_plan_phase() {
+    for (source_present, destination_present) in
+        [(true, true), (false, false), (false, true), (true, false)]
+    {
+        for directory in [false, true] {
+            let workspace = tempdir().unwrap();
+            let project = workspace.path().join("project");
+            let staging = super::common::write_old_and_staged(&project, "A");
+            if source_present {
+                fs::write(staging.join("rawdata/dataset_description.json"), "staged").unwrap();
+            }
+            if destination_present {
+                fs::write(project.join("rawdata/dataset_description.json"), "existing").unwrap();
+            }
+            let plan = super::common::bound_plan(&project, &["A"], "dataset-collision");
+            let candidate = project.join(
+                "rawdata/.dataset_description.json.easl-relocation-datasetcollision-run-candidate",
+            );
+            let sentinel = if directory {
+                fs::create_dir(&candidate).unwrap();
+                candidate.join("unrelated.txt")
+            } else {
+                candidate.clone()
+            };
+            fs::write(&sentinel, "unrelated").unwrap();
+
+            let error = relocate(&plan, 1, &staging, &["A".into()], false, false)
+                .expect_err("reserved candidate collision must precede mutation");
+
+            assert!(error.to_string().contains("collision"));
+            assert_eq!(fs::read_to_string(&sentinel).unwrap(), "unrelated");
+            assert_eq!(
+                fs::read_to_string(project.join("rawdata/sub-A/old.nii")).unwrap(),
+                "old"
+            );
+            assert!(
+                !project
+                    .join(crate::import_relocation::JOURNAL_FILE)
+                    .exists()
+            );
+        }
+    }
 }

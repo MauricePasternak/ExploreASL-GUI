@@ -540,6 +540,16 @@ fn complete_finalizing_import_after_processing_recovery(
             };
             (outcomes, relocation, cleanup_errors)
         };
+    if relocation_outcome.is_some()
+        && project_root
+            .join(super::relocation::JOURNAL_FILE)
+            .try_exists()
+            .context("Failed to inspect pending relocation cleanup")?
+    {
+        cleanup_errors.push(
+            "Relocation cleanup remains pending; staging and recovery journal retained".to_string(),
+        );
+    }
     if let Some(relocation) = &relocation_outcome {
         for outcome in &mut outcomes {
             if let Some(subject) = relocation
@@ -550,6 +560,9 @@ fn complete_finalizing_import_after_processing_recovery(
                 if subject.status == RelocationSubjectStatus::Committed {
                     outcome.outcome = ImportSubjectOutcomeKind::Committed;
                     outcome.committed = true;
+                    if let Some(message) = &subject.message {
+                        cleanup_errors.push(format!("{}: {message}", outcome.subject));
+                    }
                 } else {
                     outcome.outcome = ImportSubjectOutcomeKind::Failed;
                     outcome.error = Some(ImportStructuredError {

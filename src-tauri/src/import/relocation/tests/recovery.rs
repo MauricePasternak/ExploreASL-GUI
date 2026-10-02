@@ -137,6 +137,51 @@ fn dataset_creation_rolls_back_when_no_subject_commits() {
 }
 
 #[test]
+fn dataset_install_intent_distinguishes_completed_rename_from_corruption() {
+    for corrupt in [false, true] {
+        let workspace = tempdir().unwrap();
+        let project = workspace.path().join("project");
+        let staging = write_old_and_staged(&project, "A");
+        fs::write(staging.join("rawdata/dataset_description.json"), "staged").unwrap();
+        let plan = bound_plan(
+            &project,
+            &["A"],
+            if corrupt {
+                "dataset-install-corrupt"
+            } else {
+                "dataset-install-complete"
+            },
+        );
+        {
+            let _failure = inject_relocation_failure(RelocationFailurePoint::Cleanup);
+            relocate(&plan, 1, &staging, &["A".to_string()], false, false).unwrap();
+        }
+        let journal_path = project.join(crate::import_relocation::JOURNAL_FILE);
+        let mut journal: serde_json::Value =
+            serde_json::from_slice(&fs::read(&journal_path).unwrap()).unwrap();
+        journal["dataset"]["phase"] = "installIntent".into();
+        fs::write(&journal_path, serde_json::to_vec_pretty(&journal).unwrap()).unwrap();
+        let destination = project.join("rawdata/dataset_description.json");
+
+        if corrupt {
+            fs::write(&destination, "corrupt").unwrap();
+            let error = recover(&project).expect_err("corrupt installed bytes must block");
+            assert!(error.to_string().contains("fingerprint"));
+        } else {
+            let summary = {
+                let _failure = inject_relocation_failure(RelocationFailurePoint::Cleanup);
+                recover(&project).expect("completed dataset rename recovery")
+            };
+            assert_eq!(summary.cleanup_errors.len(), 1);
+            let recovered: serde_json::Value =
+                serde_json::from_slice(&fs::read(&journal_path).unwrap()).unwrap();
+            assert_eq!(recovered["dataset"]["phase"], "installed");
+            assert_eq!(fs::read_to_string(&destination).unwrap(), "staged");
+        }
+    }
+}
+
+#[test]
 fn terminal_journal_recovers_after_backups_were_already_cleaned() {
     let workspace = tempdir().expect("workspace");
     let project = workspace.path().join("project");
@@ -302,11 +347,11 @@ fn malformed_and_foreign_journals_block_before_any_recovery_mutation() {
         let journal_path = project.join(crate::import_relocation::JOURNAL_FILE);
         let mut journal: serde_json::Value =
             serde_json::from_slice(&fs::read(&journal_path).unwrap()).unwrap();
-        assert_eq!(journal["version"], 2);
+        assert_eq!(journal["version"], 3);
         if foreign_identity {
             journal["projectIdentity"] = "foreign".into();
         } else {
-            journal["subjects"][0]["artifacts"][0]["destination"] = "../escape".into();
+            journal["subjects"][0]["rawdata"]["destination"] = "../escape".into();
         }
         fs::write(&journal_path, serde_json::to_vec_pretty(&journal).unwrap()).unwrap();
         let destination_before = fs::read(project.join("rawdata/sub-A/new.nii")).unwrap();
@@ -316,5 +361,112 @@ fn malformed_and_foreign_journals_block_before_any_recovery_mutation() {
             fs::read(project.join("rawdata/sub-A/new.nii")).unwrap(),
             destination_before
         );
+    }
+}
+
+#[test]
+fn dataset_rollback_intent_rejects_changed_owned_evidence_and_invalid_ownership() {
+    for corruption in [
+        "destination",
+        "candidate",
+        "sourcePresent",
+        "destinationExisted",
+    ] {
+        let workspace = tempdir().unwrap();
+        let project = workspace.path().join("project");
+        let staging = write_old_and_staged(&project, "A");
+        fs::write(staging.join("rawdata/dataset_description.json"), "dataset").unwrap();
+        let plan = bound_plan(&project, &["A"], "dataset-intent-corrupt");
+        {
+            let _failure = inject_relocation_failure(if corruption == "candidate" {
+                RelocationFailurePoint::InterruptAfterDatasetInstallIntent
+            } else {
+                RelocationFailurePoint::InterruptAfterDatasetInstallOperation
+            });
+            relocate(&plan, 1, &staging, &["A".into()], false, false).unwrap_err();
+        }
+        {
+            let _failure = inject_relocation_failure(
+                RelocationFailurePoint::InterruptDatasetRollbackAfterIntent,
+            );
+            recover(&project).unwrap_err();
+        }
+        let journal_path = project.join(crate::import_relocation::JOURNAL_FILE);
+        let mut journal: serde_json::Value =
+            serde_json::from_slice(&fs::read(&journal_path).unwrap()).unwrap();
+        let evidence = if corruption == "candidate" {
+            project.join(journal["dataset"]["candidate"].as_str().unwrap())
+        } else {
+            project.join("rawdata/dataset_description.json")
+        };
+        match corruption {
+            "destination" | "candidate" => fs::write(&evidence, "changed").unwrap(),
+            "sourcePresent" => journal["dataset"][corruption] = false.into(),
+            "destinationExisted" => journal["dataset"][corruption] = true.into(),
+            _ => unreachable!(),
+        }
+        let bytes = serde_json::to_vec_pretty(&journal).unwrap();
+        fs::write(&journal_path, &bytes).unwrap();
+        let evidence_before = fs::read(&evidence).unwrap();
+
+        recover(&project).expect_err("rollback intent must not weaken corruption checks");
+
+        assert_eq!(fs::read(&journal_path).unwrap(), bytes);
+        assert_eq!(fs::read(&evidence).unwrap(), evidence_before);
+        assert_eq!(
+            fs::read_to_string(project.join("rawdata/sub-A/old.nii")).unwrap(),
+            "old"
+        );
+    }
+}
+
+#[test]
+fn dataset_rollback_preserves_an_unrelated_create_only_winner_even_with_identical_bytes() {
+    let workspace = tempdir().unwrap();
+    let project = workspace.path().join("project");
+    let staging = write_old_and_staged(&project, "A");
+    fs::write(staging.join("rawdata/dataset_description.json"), "dataset").unwrap();
+    let plan = bound_plan(&project, &["A"], "dataset-winner");
+    {
+        let _failure =
+            inject_relocation_failure(RelocationFailurePoint::InterruptAfterDatasetInstallIntent);
+        relocate(&plan, 1, &staging, &["A".into()], false, false).unwrap_err();
+    }
+    let destination = project.join("rawdata/dataset_description.json");
+    fs::write(&destination, "dataset").unwrap();
+
+    recover(&project).expect("create-only winner is not transaction-installed");
+
+    assert_eq!(fs::read_to_string(&destination).unwrap(), "dataset");
+    assert_eq!(
+        fs::read_to_string(project.join("rawdata/sub-A/old.nii")).unwrap(),
+        "old"
+    );
+}
+
+#[test]
+fn dataset_cleanup_does_not_claim_a_candidate_it_never_created() {
+    use crate::import::relocation::types::DatasetPhase;
+
+    for phase in [DatasetPhase::NotRequired, DatasetPhase::ExistingWon] {
+        let workspace = tempdir().unwrap();
+        let project = workspace.path().join("project");
+        let staging = write_old_and_staged(&project, "A");
+        let plan = bound_plan(&project, &["A"], "dataset-unowned");
+        {
+            let _failure =
+                inject_relocation_failure(RelocationFailurePoint::InterruptAfterCandidateReady);
+            relocate(&plan, 1, &staging, &["A".into()], false, false).unwrap_err();
+        }
+        let mut journal = crate::import::relocation::journal::read_journal(&project)
+            .unwrap()
+            .unwrap();
+        journal.dataset.phase = phase;
+        let candidate = project.join(&journal.dataset.candidate);
+        fs::write(&candidate, "unrelated").unwrap();
+
+        crate::import::relocation::rollback::cleanup_dataset_candidate(&project, &journal).unwrap();
+
+        assert_eq!(fs::read_to_string(&candidate).unwrap(), "unrelated");
     }
 }

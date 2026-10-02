@@ -1,7 +1,7 @@
 use super::filesystem::path_exists;
 use super::paths::{
-    canonical_project_root, log_matches_subject, project_identity, reject_symlink_components,
-    relative_path, safe_join, subject_dir,
+    canonical_project_root, project_identity, reject_symlink_components, relative_path, safe_join,
+    subject_dir,
 };
 use super::types::{RelocationEntry, RelocationEntryKind, RelocationPlan, SubjectInventory};
 use anyhow::{Context, Result as AnyResult, bail};
@@ -143,49 +143,7 @@ pub fn inventory_subject(project_root: &Path, subject: &str) -> AnyResult<Subjec
     crate::import::validate_subject_components(&[subject.to_string()])?;
     let root = canonical_project_root(project_root)?;
     let sub = subject_dir(subject);
-    let mut paths = vec![
-        root.join("rawdata").join(&sub),
-        crate::import::import_lock_dir_for_relocation(&root, subject),
-    ];
-    let log_root = root.join("derivatives/ExploreASL/log");
-    if path_exists(&log_root)? {
-        reject_symlink_components(&root, &log_root)?;
-        for entry in fs::read_dir(&log_root)
-            .with_context(|| format!("Failed to read log directory {}", log_root.display()))?
-        {
-            let entry = entry.with_context(|| {
-                format!(
-                    "Failed to read entry in log directory {}",
-                    log_root.display()
-                )
-            })?;
-            if log_matches_subject(&entry.file_name().to_string_lossy(), &sub) {
-                paths.push(entry.path());
-            }
-        }
-    }
-    let legacy_root = root.join("derivatives/ExploreASL/lock/xASL_module_BIDS2Legacy");
-    if path_exists(&legacy_root)? {
-        reject_symlink_components(&root, &legacy_root)?;
-        let prefix = format!("{sub}_");
-        for entry in fs::read_dir(&legacy_root).with_context(|| {
-            format!(
-                "Failed to read legacy lock directory {}",
-                legacy_root.display()
-            )
-        })? {
-            let entry = entry.with_context(|| {
-                format!(
-                    "Failed to read entry in legacy lock directory {}",
-                    legacy_root.display()
-                )
-            })?;
-            if entry.file_name().to_string_lossy().starts_with(&prefix) {
-                paths.push(entry.path());
-            }
-        }
-    }
-    inventory_paths(&root, paths, subject)
+    inventory_paths(&root, [root.join("rawdata").join(sub)], subject)
 }
 
 pub fn plan_relocation(project_root: &Path, subjects: &[String]) -> AnyResult<RelocationPlan> {

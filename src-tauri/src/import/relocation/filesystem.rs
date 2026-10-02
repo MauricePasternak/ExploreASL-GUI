@@ -289,8 +289,3 @@ pub(super) fn remove_proven(path: &Path, expected: Option<&str>, ownership: &str
         bail!("Refusing to remove unsupported {ownership}")
     }
 }
-
-#[cfg(test)]
-pub fn transaction_test_fingerprint(path: &Path) -> Result<String, String> {
-    tree_fingerprint(path).map_err(|error| format!("{error:#}"))
-}

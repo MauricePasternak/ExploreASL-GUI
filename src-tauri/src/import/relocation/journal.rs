@@ -1,10 +1,7 @@
 use super::fault_injection::{FaultPoint, fail};
 use super::filesystem::{atomic_replace, path_exists, rename_no_replace, sync_parent_durable};
-use super::paths::{
-    candidate_record_path, log_matches_subject, owned_sibling, project_identity, safe_join,
-    subject_dir,
-};
-use super::types::{ArtifactPhase, ArtifactRole, DatasetPhase, OwnedPathRole, RelocationJournal};
+use super::paths::{owned_sibling, project_identity, safe_join, subject_dir};
+use super::types::{OwnedPathRole, RelocationJournal};
 use anyhow::{Context, Result as AnyResult, bail};
 use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
@@ -14,7 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const JOURNAL_FILE: &str = ".easl_import_relocation.json";
-pub(super) const JOURNAL_VERSION: u32 = 2;
+pub(super) const JOURNAL_VERSION: u32 = 3;
 static JOURNAL_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn journal_path(root: &Path) -> PathBuf {
@@ -152,7 +149,7 @@ pub(super) fn validate_journal(root: &Path, journal: &RelocationJournal) -> AnyR
     if dataset_destination != root.join("rawdata/dataset_description.json") {
         bail!("Journal dataset destination is invalid");
     }
-    let dataset_candidate = candidate_record_path(root, &journal.dataset.candidate)?;
+    let dataset_candidate = safe_join(root, &journal.dataset.candidate)?;
     if dataset_candidate
         != owned_sibling(
             &dataset_destination,
@@ -169,67 +166,33 @@ pub(super) fn validate_journal(root: &Path, journal: &RelocationJournal) -> AnyR
         if !subjects.insert(crate::import::staging::portable_key(&subject.subject)) {
             bail!("Relocation journal repeats a subject");
         }
-        let mut destinations = BTreeSet::new();
-        for artifact in &subject.artifacts {
-            let destination = safe_join(root, &artifact.destination)?;
-            if !destinations.insert(artifact.destination.clone())
-                || !is_subject_artifact_destination(root, &destination, &subject.subject)
-            {
-                bail!("Journal references an unrelated or duplicate artifact destination");
-            }
-            let backup = artifact
-                .backup
-                .as_deref()
-                .context("Subject artifact has no backup path")?;
-            if safe_join(root, backup)?
-                != owned_sibling(
-                    &destination,
-                    &journal.plan_id,
-                    &subject.subject,
-                    OwnedPathRole::Backup,
-                )?
-            {
-                bail!("Journal backup does not match its owned destination");
-            }
-            match artifact.role {
-                ArtifactRole::Replacement => {
-                    let candidate = artifact
-                        .candidate
-                        .as_deref()
-                        .context("Replacement artifact has no candidate")?;
-                    if candidate_record_path(root, candidate)?
-                        != owned_sibling(
-                            &destination,
-                            &journal.plan_id,
-                            &subject.subject,
-                            OwnedPathRole::Candidate,
-                        )?
-                    {
-                        bail!("Journal candidate does not match its owned destination");
-                    }
-                }
-                ArtifactRole::Removal if artifact.candidate.is_some() => {
-                    bail!("Removal artifact must not have a candidate");
-                }
-                ArtifactRole::Removal => {}
-            }
-            if artifact.candidate_abandoned
-                && !matches!(
-                    artifact.phase,
-                    ArtifactPhase::RollbackIntent | ArtifactPhase::RolledBack
-                )
-            {
-                bail!("Abandoned candidate has an invalid journal phase");
-            }
+        if subject.derived_reconciled && subject.phase != super::types::SubjectPhase::Committed {
+            bail!("Uncommitted subject cannot have reconciled derived artifacts");
         }
-    }
-    if journal.dataset.candidate_abandoned
-        && !matches!(
-            journal.dataset.phase,
-            DatasetPhase::RollbackIntent | DatasetPhase::RolledBack
-        )
-    {
-        bail!("Abandoned dataset candidate has an invalid journal phase");
+        let destination = safe_join(root, &subject.rawdata.destination)?;
+        if destination != root.join("rawdata").join(subject_dir(&subject.subject)) {
+            bail!("Journal rawdata destination is unrelated to its subject");
+        }
+        if safe_join(root, &subject.rawdata.backup)?
+            != owned_sibling(
+                &destination,
+                &journal.plan_id,
+                &subject.subject,
+                OwnedPathRole::Backup,
+            )?
+        {
+            bail!("Journal backup does not match its owned destination");
+        }
+        if safe_join(root, &subject.rawdata.candidate)?
+            != owned_sibling(
+                &destination,
+                &journal.plan_id,
+                &subject.subject,
+                OwnedPathRole::Candidate,
+            )?
+        {
+            bail!("Journal candidate does not match its owned destination");
+        }
     }
     if let Some(outcome) = &journal.terminal_outcome {
         if outcome.plan_id != journal.plan_id || outcome.generation != journal.generation {
@@ -250,26 +213,4 @@ pub(super) fn validate_journal(root: &Path, journal: &RelocationJournal) -> AnyR
         }
     }
     Ok(())
-}
-
-fn is_subject_artifact_destination(root: &Path, destination: &Path, subject: &str) -> bool {
-    let sub = subject_dir(subject);
-    if destination == root.join("rawdata").join(&sub)
-        || destination == crate::import::import_lock_dir_for_relocation(root, subject)
-    {
-        return true;
-    }
-    let log_root = root.join("derivatives/ExploreASL/log");
-    if destination.parent() == Some(log_root.as_path()) {
-        return destination
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| log_matches_subject(name, &sub));
-    }
-    let legacy_root = root.join("derivatives/ExploreASL/lock/xASL_module_BIDS2Legacy");
-    destination.parent() == Some(legacy_root.as_path())
-        && destination
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with(&format!("{sub}_")))
 }

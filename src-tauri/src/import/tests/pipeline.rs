@@ -398,6 +398,51 @@ fn native_finalizer_preserves_debug_staging_without_weakening_success_checks() {
 }
 
 #[test]
+fn debug_staging_preservation_does_not_hide_pending_relocation_cleanup() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = running_state(temp.path());
+    state.import_state.lock().unwrap().preserve_staging = true;
+    let staging = temp.path().join(".easl_staging");
+    fs::create_dir_all(staging.join("rawdata/sub-ONE")).unwrap();
+    fs::write(staging.join("rawdata/sub-ONE/scan.nii"), "nii").unwrap();
+    fs::write(
+        staging.join(crate::import::verification::STAGING_GENERATION_MARKER),
+        "generation-1",
+    )
+    .unwrap();
+    fs::write(staging.join("studyPar.json"), "{}").unwrap();
+    fs::write(staging.join("sourcestructure.json"), "{}").unwrap();
+    let lock = crate::import::status::import_lock_dir(&staging, "ONE");
+    fs::create_dir_all(&lock).unwrap();
+    fs::write(lock.join("999_ready.status"), "ready").unwrap();
+    let _failure = crate::import::relocation::inject_relocation_failure(
+        crate::import::relocation::RelocationFailurePoint::Cleanup,
+    );
+
+    let terminal = finalize_import_process(&state, 4, 0).unwrap();
+
+    assert_eq!(terminal.lifecycle, ImportLifecycle::Failed);
+    assert!(terminal.subject_outcomes[0].committed);
+    assert!(
+        terminal
+            .error
+            .unwrap()
+            .message
+            .contains("cleanup remains pending")
+    );
+    assert!(staging.exists());
+    assert!(
+        temp.path()
+            .join(crate::import::relocation::JOURNAL_FILE)
+            .exists()
+    );
+    assert_eq!(
+        fs::read_to_string(temp.path().join("rawdata/sub-ONE/scan.nii")).unwrap(),
+        "nii"
+    );
+}
+
+#[test]
 fn mixed_subject_finalization_commits_only_verified_subject_and_replays_without_relocation() {
     let temp = tempfile::tempdir().unwrap();
     let state = running_state_for_subjects(temp.path(), &["GOOD", "BAD"]);

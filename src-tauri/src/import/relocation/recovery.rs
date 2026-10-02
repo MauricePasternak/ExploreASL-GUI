@@ -1,244 +1,282 @@
-use super::candidate::{
-    candidate_payload, remove_candidate_wrapper, require_owned_fingerprint, sync_payload_rename,
-};
+use super::candidate::require_owned_fingerprint;
 use super::cleanup::cleanup_after_terminal;
 use super::error::{RelocationTransactionResult, format_transaction_error};
-use super::filesystem::{path_exists, rename_no_replace};
+use super::filesystem::{
+    path_exists, remove_proven, rename_no_replace, sync_parent, sync_parent_durable,
+};
 use super::journal::{read_journal, remove_journal_owned, validate_journal, write_journal};
-use super::paths::{candidate_record_path, canonical_project_root, safe_join};
-use super::rollback::{
-    dataset_should_remain, rollback_dataset, rollback_subject, validate_candidate_for_phase,
-    validate_dataset_candidate_for_phase,
-};
+use super::paths::{canonical_project_root, safe_join};
+use super::reconcile::reconcile_subject;
+use super::rollback::{dataset_should_remain, rollback_dataset, rollback_subject};
 use super::types::{
-    ArtifactPhase, ArtifactRole, DatasetPhase, JournalArtifact, RelocationJournal,
-    RelocationOutcome, RelocationRecoverySummary, RelocationSubjectStatus, SubjectPhase,
-    SubjectRelocationOutcome,
+    DatasetPhase, JournalRawdata, RawdataPhase, RelocationJournal, RelocationOutcome,
+    RelocationRecoverySummary, RelocationSubjectStatus, SubjectPhase, SubjectRelocationOutcome,
 };
-use anyhow::{Context, Result as AnyResult, bail};
+use anyhow::{Result as AnyResult, bail};
 use std::path::Path;
 
 fn validate_prior_destination(
     destination: &Path,
     destination_exists: bool,
-    artifact: &JournalArtifact,
+    rawdata: &JournalRawdata,
 ) -> AnyResult<()> {
-    if artifact.had_destination {
+    if rawdata.had_destination {
         if !destination_exists {
-            bail!("Prior destination is missing for {}", artifact.destination);
+            bail!("Prior rawdata destination is missing");
         }
         require_owned_fingerprint(
             destination,
-            artifact.backup_fingerprint.as_deref(),
-            "Prior destination",
+            rawdata.backup_fingerprint.as_deref(),
+            "Prior rawdata destination",
         )
     } else if destination_exists {
-        Err(anyhow::anyhow!(
-            "Destination appeared despite recorded prior absence for {}",
-            artifact.destination
-        ))
+        bail!("Rawdata destination appeared despite recorded prior absence")
     } else {
         Ok(())
     }
 }
 
-fn validate_owned_backup(
-    backup: &Path,
-    backup_exists: bool,
-    artifact: &JournalArtifact,
-) -> AnyResult<()> {
-    if artifact.had_destination {
-        if !backup_exists {
-            bail!("Required backup is missing for {}", artifact.destination);
+fn validate_backup(backup: &Path, exists: bool, rawdata: &JournalRawdata) -> AnyResult<()> {
+    if rawdata.had_destination {
+        if !exists {
+            bail!("Required rawdata backup is missing");
         }
         require_owned_fingerprint(
             backup,
-            artifact.backup_fingerprint.as_deref(),
-            "Transaction backup",
+            rawdata.backup_fingerprint.as_deref(),
+            "Rawdata backup",
         )
-    } else if backup_exists {
-        Err(anyhow::anyhow!(
-            "Unexpected backup exists for originally absent {}",
-            artifact.destination
-        ))
+    } else if exists {
+        bail!("Unexpected rawdata backup for prior absence")
     } else {
         Ok(())
     }
 }
 
-fn validate_recovery_artifact(
+fn validate_candidate(candidate: &Path, rawdata: &JournalRawdata, required: bool) -> AnyResult<()> {
+    let exists = path_exists(candidate)?;
+    if required && !exists {
+        bail!("Required rawdata candidate is missing");
+    }
+    if exists && rawdata.candidate_fingerprint.is_some() {
+        require_owned_fingerprint(
+            candidate,
+            rawdata.candidate_fingerprint.as_deref(),
+            "Rawdata candidate",
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_recovery_subject(
     root: &Path,
-    artifact: &JournalArtifact,
-    committed: bool,
+    subject: &super::types::JournalSubject,
     terminal_exists: bool,
 ) -> AnyResult<()> {
-    let destination = safe_join(root, &artifact.destination)?;
-    let backup = safe_join(root, artifact.backup.as_deref().expect("validated backup"))?;
+    let rawdata = &subject.rawdata;
+    let destination = safe_join(root, &rawdata.destination)?;
+    let candidate = safe_join(root, &rawdata.candidate)?;
+    let backup = safe_join(root, &rawdata.backup)?;
     let destination_exists = path_exists(&destination)?;
+    let candidate_exists = path_exists(&candidate)?;
     let backup_exists = path_exists(&backup)?;
-    validate_candidate_for_phase(root, artifact)?;
 
-    if committed {
-        match artifact.role {
-            ArtifactRole::Replacement => {
-                if artifact.phase != ArtifactPhase::Installed || !destination_exists {
-                    bail!(
-                        "Committed replacement evidence is incomplete for {}",
-                        artifact.destination
-                    );
-                }
-                require_owned_fingerprint(
-                    &destination,
-                    artifact.candidate_fingerprint.as_deref(),
-                    "Committed destination",
-                )?;
-            }
-            ArtifactRole::Removal => {
-                if artifact.phase != ArtifactPhase::BackedUp || destination_exists {
-                    bail!(
-                        "Committed removal evidence is incomplete for {}",
-                        artifact.destination
-                    );
-                }
-            }
+    if subject.phase == SubjectPhase::Committed {
+        if rawdata.phase != RawdataPhase::Installed || !destination_exists {
+            bail!("Committed rawdata evidence is incomplete");
+        }
+        require_owned_fingerprint(
+            &destination,
+            rawdata.candidate_fingerprint.as_deref(),
+            "Committed rawdata destination",
+        )?;
+        if candidate_exists {
+            bail!("Committed rawdata retains a candidate");
         }
         if backup_exists {
-            validate_owned_backup(&backup, true, artifact)?;
-        } else if artifact.had_destination && !terminal_exists {
-            bail!(
-                "Committed backup disappeared before terminal outcome for {}",
-                artifact.destination
-            );
-        }
-        if !artifact.had_destination && backup_exists {
-            bail!("Unexpected committed backup for {}", artifact.destination);
+            validate_backup(&backup, true, rawdata)?;
+        } else if rawdata.had_destination && !terminal_exists {
+            bail!("Committed rawdata backup disappeared before terminal outcome");
         }
         return Ok(());
     }
 
-    match artifact.phase {
-        ArtifactPhase::Planned
-        | ArtifactPhase::ReservationIntent
-        | ArtifactPhase::CandidateReserved
-        | ArtifactPhase::PopulationIntent
-        | ArtifactPhase::CandidateReady => {
+    match rawdata.phase {
+        RawdataPhase::Planned => {
             if backup_exists {
-                bail!(
-                    "Prepared artifact has an unexpected backup for {}",
-                    artifact.destination
-                );
+                bail!("Planned rawdata has an unexpected backup");
             }
-            validate_prior_destination(&destination, destination_exists, artifact)
+            validate_prior_destination(&destination, destination_exists, rawdata)
         }
-        ArtifactPhase::BackupIntent => {
-            if artifact.had_destination {
+        RawdataPhase::CandidateReady => {
+            validate_candidate(&candidate, rawdata, true)?;
+            if backup_exists {
+                bail!("Prepared rawdata has an unexpected backup");
+            }
+            validate_prior_destination(&destination, destination_exists, rawdata)
+        }
+        RawdataPhase::BackupIntent => {
+            validate_candidate(&candidate, rawdata, true)?;
+            if rawdata.had_destination {
                 if destination_exists == backup_exists {
-                    bail!(
-                        "Backup intent has ambiguous old-state evidence for {}",
-                        artifact.destination
-                    );
+                    bail!("Backup intent has ambiguous old rawdata evidence");
                 }
                 if destination_exists {
-                    validate_prior_destination(&destination, true, artifact)
+                    validate_prior_destination(&destination, true, rawdata)
                 } else {
-                    validate_owned_backup(&backup, true, artifact)
+                    validate_backup(&backup, true, rawdata)
                 }
             } else if destination_exists || backup_exists {
-                Err(anyhow::anyhow!(
-                    "Backup intent conflicts with prior absence for {}",
-                    artifact.destination
-                ))
+                bail!("Backup intent conflicts with prior rawdata absence")
             } else {
                 Ok(())
             }
         }
-        ArtifactPhase::BackedUp => {
+        RawdataPhase::BackedUp => {
+            validate_candidate(&candidate, rawdata, true)?;
             if destination_exists {
-                bail!(
-                    "Backed-up destination unexpectedly exists for {}",
-                    artifact.destination
-                );
+                bail!("Backed-up rawdata destination unexpectedly exists");
             }
-            validate_owned_backup(&backup, backup_exists, artifact)
+            validate_backup(&backup, backup_exists, rawdata)
         }
-        ArtifactPhase::InstallIntent => {
-            validate_owned_backup(&backup, backup_exists, artifact)?;
-            if artifact.role != ArtifactRole::Replacement {
-                bail!("Removal artifact cannot have install intent");
-            }
-            let candidate = safe_join(
-                root,
-                artifact.candidate.as_deref().expect("validated candidate"),
-            )?;
-            let payload_exists = path_exists(&candidate_payload(&candidate))?;
-            match (payload_exists, destination_exists) {
-                (true, false) => Ok(()),
+        RawdataPhase::InstallIntent => {
+            validate_backup(&backup, backup_exists, rawdata)?;
+            match (candidate_exists, destination_exists) {
+                (true, false) => validate_candidate(&candidate, rawdata, true),
                 (false, true) => require_owned_fingerprint(
                     &destination,
-                    artifact.candidate_fingerprint.as_deref(),
-                    "Install-intent destination",
+                    rawdata.candidate_fingerprint.as_deref(),
+                    "Install-intent rawdata destination",
                 ),
-                _ => Err(anyhow::anyhow!(
-                    "Install intent has ambiguous candidate/destination evidence for {}",
-                    artifact.destination
-                )),
+                _ => bail!("Install intent has ambiguous rawdata evidence"),
             }
         }
-        ArtifactPhase::Installed => {
-            validate_owned_backup(&backup, backup_exists, artifact)?;
-            match artifact.role {
-                ArtifactRole::Replacement if destination_exists => require_owned_fingerprint(
-                    &destination,
-                    artifact.candidate_fingerprint.as_deref(),
-                    "Installed destination",
-                ),
-                ArtifactRole::Replacement => Err(anyhow::anyhow!(
-                    "Installed replacement evidence is incomplete for {}",
-                    artifact.destination
-                )),
-                ArtifactRole::Removal if !destination_exists => Ok(()),
-                ArtifactRole::Removal => Err(anyhow::anyhow!(
-                    "Installed removal evidence is incomplete for {}",
-                    artifact.destination
-                )),
+        RawdataPhase::Installed => {
+            validate_backup(&backup, backup_exists, rawdata)?;
+            if candidate_exists || !destination_exists {
+                bail!("Installed rawdata evidence is incomplete");
             }
+            require_owned_fingerprint(
+                &destination,
+                rawdata.candidate_fingerprint.as_deref(),
+                "Installed rawdata destination",
+            )
         }
-        ArtifactPhase::RollbackIntent => {
+        RawdataPhase::RollbackIntent => {
             if backup_exists {
-                validate_owned_backup(&backup, true, artifact)?;
+                validate_backup(&backup, true, rawdata)?;
                 if destination_exists {
-                    if artifact.role != ArtifactRole::Replacement {
-                        bail!("Removal rollback has conflicting destination and backup");
-                    }
                     require_owned_fingerprint(
                         &destination,
-                        artifact.candidate_fingerprint.as_deref(),
-                        "Rollback installed destination",
+                        rawdata.candidate_fingerprint.as_deref(),
+                        "Rollback rawdata destination",
                     )?;
                 }
-                Ok(())
-            } else if artifact.had_destination {
-                validate_prior_destination(&destination, destination_exists, artifact)
+            } else if rawdata.had_destination {
+                validate_prior_destination(&destination, destination_exists, rawdata)?;
             } else if destination_exists {
                 require_owned_fingerprint(
                     &destination,
-                    artifact.candidate_fingerprint.as_deref(),
-                    "Rollback destination pending removal",
-                )
-            } else {
-                Ok(())
+                    rawdata.candidate_fingerprint.as_deref(),
+                    "Rollback rawdata destination",
+                )?;
             }
+            validate_candidate(&candidate, rawdata, false)
         }
-        ArtifactPhase::RolledBack => {
-            if backup_exists {
-                bail!(
-                    "Rolled-back artifact retains a backup for {}",
-                    artifact.destination
-                );
+        RawdataPhase::RolledBack => {
+            if candidate_exists || backup_exists {
+                bail!("Rolled-back rawdata retains transaction artifacts");
             }
-            validate_prior_destination(&destination, destination_exists, artifact)
+            validate_prior_destination(&destination, destination_exists, rawdata)
         }
     }
+}
+
+fn validate_dataset(root: &Path, journal: &RelocationJournal) -> AnyResult<()> {
+    let dataset = &journal.dataset;
+    let destination = safe_join(root, &dataset.destination)?;
+    let candidate = safe_join(root, &dataset.candidate)?;
+    let destination_exists = path_exists(&destination)?;
+    let candidate_exists = path_exists(&candidate)?;
+    match dataset.phase {
+        DatasetPhase::NotRequired => {
+            if dataset.source_present || candidate_exists {
+                bail!("Not-required dataset description has unexpected evidence");
+            }
+        }
+        DatasetPhase::Planned => {
+            if !dataset.source_present || dataset.destination_existed || destination_exists {
+                bail!("Planned dataset description has inconsistent evidence");
+            }
+        }
+        DatasetPhase::InstallIntent => match (candidate_exists, destination_exists) {
+            (true, false) | (true, true) => require_owned_fingerprint(
+                &candidate,
+                dataset.fingerprint.as_deref(),
+                "Dataset description candidate",
+            )?,
+            (false, true) => require_owned_fingerprint(
+                &destination,
+                dataset.fingerprint.as_deref(),
+                "Installed dataset description",
+            )?,
+            (false, false) => bail!("Dataset description install evidence is missing"),
+        },
+        DatasetPhase::Installed => {
+            if candidate_exists || !destination_exists {
+                bail!("Installed dataset description evidence is incomplete");
+            }
+            require_owned_fingerprint(
+                &destination,
+                dataset.fingerprint.as_deref(),
+                "Installed dataset description",
+            )?;
+        }
+        DatasetPhase::ExistingWon => {
+            if !destination_exists {
+                bail!("Existing dataset description evidence is incomplete");
+            }
+            if candidate_exists {
+                require_owned_fingerprint(
+                    &candidate,
+                    dataset.fingerprint.as_deref(),
+                    "Dataset description candidate",
+                )?;
+            }
+        }
+        DatasetPhase::RolledBack => {
+            if candidate_exists || (!dataset.destination_existed && destination_exists) {
+                bail!("Rolled-back dataset description evidence is inconsistent");
+            }
+        }
+        DatasetPhase::RollbackIntent => {
+            if !dataset.source_present
+                || dataset.destination_existed
+                || destination_exists && candidate_exists
+                || journal
+                    .subjects
+                    .iter()
+                    .any(|subject| subject.phase != SubjectPhase::RolledBack)
+            {
+                bail!("Dataset description rollback intent has inconsistent ownership");
+            }
+            if destination_exists {
+                require_owned_fingerprint(
+                    &destination,
+                    dataset.fingerprint.as_deref(),
+                    "Rollback dataset description",
+                )?;
+            }
+            if candidate_exists && dataset.fingerprint.is_some() {
+                require_owned_fingerprint(
+                    &candidate,
+                    dataset.fingerprint.as_deref(),
+                    "Dataset description candidate",
+                )?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_recovery_preflight(root: &Path, journal: &RelocationJournal) -> AnyResult<()> {
@@ -254,162 +292,11 @@ fn validate_recovery_preflight(root: &Path, journal: &RelocationJournal) -> AnyR
             })
             .is_some_and(|entry| entry.status == RelocationSubjectStatus::Committed);
         if terminal.is_some() && terminal_committed != (subject.phase == SubjectPhase::Committed) {
-            bail!(
-                "Terminal outcome conflicts with subject journal state for {}",
-                subject.subject
-            );
+            bail!("Terminal outcome conflicts with subject journal state");
         }
-        for artifact in &subject.artifacts {
-            validate_recovery_artifact(
-                root,
-                artifact,
-                subject.phase == SubjectPhase::Committed,
-                terminal.is_some(),
-            )?;
-        }
+        validate_recovery_subject(root, subject, terminal.is_some())?;
     }
-
-    let destination = safe_join(root, &journal.dataset.destination)?;
-    let candidate = candidate_record_path(root, &journal.dataset.candidate)?;
-    let destination_exists = path_exists(&destination)?;
-    let candidate_exists = path_exists(&candidate)?;
-    validate_dataset_candidate_for_phase(root, &journal.dataset)?;
-    match journal.dataset.phase {
-        DatasetPhase::NotRequired => {
-            if journal.dataset.source_present || candidate_exists {
-                bail!("Not-required dataset artifact has unexpected evidence");
-            }
-        }
-        DatasetPhase::Planned => {
-            if !journal.dataset.source_present
-                || journal.dataset.destination_existed
-                || destination_exists
-                || candidate_exists
-            {
-                bail!("Planned dataset artifact has inconsistent evidence");
-            }
-        }
-        DatasetPhase::ReservationIntent => {
-            if destination_exists {
-                bail!("Dataset destination appeared before installation");
-            }
-        }
-        DatasetPhase::CandidateReserved | DatasetPhase::PopulationIntent => {
-            if destination_exists || !candidate_exists {
-                bail!("Prepared dataset reservation has incomplete evidence");
-            }
-        }
-        DatasetPhase::CandidateReady => {
-            if destination_exists || !candidate_exists {
-                bail!("Prepared dataset artifact has incomplete evidence");
-            }
-        }
-        DatasetPhase::InstallIntent => {
-            if !candidate_exists {
-                bail!("Dataset install intent lost its candidate wrapper");
-            }
-            let payload_exists = path_exists(&candidate_payload(&candidate))?;
-            match (payload_exists, destination_exists) {
-                (true, false) => {}
-                (false, true) => require_owned_fingerprint(
-                    &destination,
-                    journal.dataset.fingerprint.as_deref(),
-                    "Installed dataset description",
-                )?,
-                // A concurrent create may win no-replace while our payload remains.
-                (true, true) => {}
-                (false, false) => {
-                    bail!("Dataset install evidence is missing");
-                }
-            }
-        }
-        DatasetPhase::Installed => {
-            if !destination_exists {
-                bail!("Installed dataset evidence is incomplete");
-            }
-            require_owned_fingerprint(
-                &destination,
-                journal.dataset.fingerprint.as_deref(),
-                "Installed dataset description",
-            )?;
-        }
-        DatasetPhase::ExistingWon => {
-            if !destination_exists {
-                bail!("Concurrent dataset winner evidence is incomplete");
-            }
-        }
-        DatasetPhase::RollbackIntent => {
-            if destination_exists {
-                require_owned_fingerprint(
-                    &destination,
-                    journal.dataset.fingerprint.as_deref(),
-                    "Dataset destination pending rollback",
-                )?;
-            }
-        }
-        DatasetPhase::RolledBack => {
-            if (!journal.dataset.candidate_abandoned && candidate_exists) || destination_exists {
-                bail!("Rolled-back dataset evidence is inconsistent");
-            }
-        }
-    }
-    Ok(())
-}
-
-fn preserve_ambiguous_reservation_wrappers(
-    root: &Path,
-    journal: &mut RelocationJournal,
-    summary: &mut RelocationRecoverySummary,
-) -> AnyResult<()> {
-    let mut changed = false;
-    for subject in &mut journal.subjects {
-        for artifact in &mut subject.artifacts {
-            if artifact.candidate_abandoned {
-                summary.cleanup_errors.push(format!(
-                    "Preserved ambiguous reservation wrapper {}; manual cleanup may be required",
-                    artifact.candidate.as_deref().unwrap_or("unknown")
-                ));
-                continue;
-            }
-            if artifact.phase != ArtifactPhase::ReservationIntent {
-                continue;
-            }
-            let Some(candidate_relative) = artifact.candidate.as_deref() else {
-                continue;
-            };
-            let candidate = candidate_record_path(root, candidate_relative)?;
-            if path_exists(&candidate)? {
-                artifact.candidate_abandoned = true;
-                artifact.phase = ArtifactPhase::RollbackIntent;
-                summary.cleanup_errors.push(format!(
-                    "Preserved ambiguous reservation wrapper {candidate_relative}; manual cleanup may be required"
-                ));
-                changed = true;
-            }
-        }
-    }
-    if journal.dataset.candidate_abandoned {
-        summary.cleanup_errors.push(format!(
-            "Preserved ambiguous reservation wrapper {}; manual cleanup may be required",
-            journal.dataset.candidate
-        ));
-    }
-    if journal.dataset.phase == DatasetPhase::ReservationIntent {
-        let candidate = candidate_record_path(root, &journal.dataset.candidate)?;
-        if path_exists(&candidate)? {
-            journal.dataset.candidate_abandoned = true;
-            journal.dataset.phase = DatasetPhase::RollbackIntent;
-            summary.cleanup_errors.push(format!(
-                "Preserved ambiguous reservation wrapper {}; manual cleanup may be required",
-                journal.dataset.candidate
-            ));
-            changed = true;
-        }
-    }
-    if changed {
-        write_journal(root, journal)?;
-    }
-    Ok(())
+    validate_dataset(root, journal)
 }
 
 pub fn recover(project_root: &Path) -> anyhow::Result<RelocationRecoverySummary> {
@@ -421,7 +308,6 @@ fn recover_result(project_root: &Path) -> RelocationTransactionResult<Relocation
     let Some(mut journal) = read_journal(&root)? else {
         return Ok(RelocationRecoverySummary::default());
     };
-    // Preflight every record and all actual evidence before first mutation.
     validate_recovery_preflight(&root, &journal)?;
     crate::import::journal::validate_relocation_recovery_authority(
         &root,
@@ -429,102 +315,168 @@ fn recover_result(project_root: &Path) -> RelocationTransactionResult<Relocation
         &journal.plan_id,
         journal.terminal_outcome.as_ref(),
     )?;
+    let checkpointed_outcome = crate::import::journal::load_record(&root)?
+        .and_then(|record| record.snapshot.relocation_outcome);
+    if let Some(checkpointed) = &checkpointed_outcome
+        && journal.terminal_outcome.as_ref() != Some(checkpointed)
+    {
+        return Err("Relocation journal disagrees with durable import-run checkpoint".into());
+    }
+    let normalize_terminal_outcome = checkpointed_outcome.is_none();
     let mut summary = RelocationRecoverySummary::default();
-    preserve_ambiguous_reservation_wrappers(&root, &mut journal, &mut summary)?;
     for index in 0..journal.subjects.len() {
         let subject = journal.subjects[index].subject.clone();
         if journal.subjects[index].phase == SubjectPhase::Committed {
-            summary.preserved_subjects.push(subject.clone());
+            summary.preserved_subjects.push(subject);
         } else {
             rollback_subject(&root, &mut journal, index)?;
-            summary.restored_subjects.push(subject.clone());
+            summary.restored_subjects.push(subject);
         }
     }
+
     if dataset_should_remain(&journal) {
         if journal.dataset.phase == DatasetPhase::InstallIntent {
             let destination = safe_join(&root, &journal.dataset.destination)?;
-            let candidate = candidate_record_path(&root, &journal.dataset.candidate)?;
-            let payload = candidate_payload(&candidate);
-            if path_exists(&payload)? && !path_exists(&destination)? {
-                rename_no_replace(&payload, &destination).with_context(|| {
-                    format!(
-                        "Failed to resume dataset installation from {} to {}",
-                        payload.display(),
-                        destination.display()
-                    )
-                })?;
-                sync_payload_rename(&candidate, &destination)?;
-                require_owned_fingerprint(
-                    &destination,
-                    journal.dataset.fingerprint.as_deref(),
-                    "Recovered dataset destination",
-                )?;
-                journal.dataset.phase = DatasetPhase::Installed;
-                write_journal(&root, &journal)?;
-            } else if !path_exists(&payload)? && path_exists(&destination)? {
-                journal.dataset.phase = DatasetPhase::Installed;
-                write_journal(&root, &journal)?;
-            } else if path_exists(&payload)? && path_exists(&destination)? {
-                journal.dataset.phase = DatasetPhase::ExistingWon;
-                write_journal(&root, &journal)?;
-                remove_candidate_wrapper(
-                    &candidate,
-                    journal.dataset.reservation_token.as_deref(),
-                    journal.dataset.fingerprint.as_deref(),
-                    false,
-                )?;
+            let candidate = safe_join(&root, &journal.dataset.candidate)?;
+            match (path_exists(&candidate)?, path_exists(&destination)?) {
+                (true, false) => {
+                    rename_no_replace(&candidate, &destination).map_err(anyhow::Error::from)?;
+                    sync_parent(candidate.parent().expect("dataset candidate parent"))?;
+                    sync_parent(destination.parent().expect("dataset destination parent"))?;
+                    require_owned_fingerprint(
+                        &destination,
+                        journal.dataset.fingerprint.as_deref(),
+                        "Recovered dataset description",
+                    )?;
+                    journal.dataset.phase = DatasetPhase::Installed;
+                    write_journal(&root, &journal)?;
+                }
+                (false, true) => {
+                    require_owned_fingerprint(
+                        &destination,
+                        journal.dataset.fingerprint.as_deref(),
+                        "Recovered dataset description",
+                    )?;
+                    journal.dataset.phase = DatasetPhase::Installed;
+                    write_journal(&root, &journal)?;
+                }
+                (true, true) => {
+                    journal.dataset.phase = DatasetPhase::ExistingWon;
+                    write_journal(&root, &journal)?;
+                    remove_proven(
+                        &candidate,
+                        journal.dataset.fingerprint.as_deref(),
+                        "dataset description candidate",
+                    )?;
+                }
+                (false, false) => {
+                    return Err("Dataset description install evidence is missing".into());
+                }
             }
         }
     } else {
         rollback_dataset(&root, &mut journal)?;
     }
+
     if journal.terminal_outcome.is_none() {
-        let subjects = journal
-            .subjects
-            .iter()
-            .map(|subject| SubjectRelocationOutcome {
-                subject: subject.subject.clone(),
-                status: if subject.phase == SubjectPhase::Committed {
-                    RelocationSubjectStatus::Committed
-                } else {
-                    RelocationSubjectStatus::RolledBack
-                },
-                phase: "activationRecovery".to_string(),
-                message: None,
-            })
-            .collect();
         journal.terminal_outcome = Some(RelocationOutcome {
             plan_id: journal.plan_id.clone(),
             generation: journal.generation,
-            subjects,
+            subjects: journal
+                .subjects
+                .iter()
+                .map(|subject| SubjectRelocationOutcome {
+                    subject: subject.subject.clone(),
+                    status: if subject.phase == SubjectPhase::Committed {
+                        RelocationSubjectStatus::Committed
+                    } else {
+                        RelocationSubjectStatus::RolledBack
+                    },
+                    phase: "activationRecovery".to_string(),
+                    message: None,
+                })
+                .collect(),
             staging_cleanup_complete: false,
         });
         write_journal(&root, &journal)?;
     }
-    match cleanup_after_terminal(&root, &mut journal) {
-        Ok(()) => {
-            for subject in &journal.subjects {
-                if subject
-                    .artifacts
-                    .iter()
-                    .all(|artifact| !artifact.candidate_abandoned)
-                {
-                    summary.cleaned_subjects.push(subject.subject.clone());
-                }
-            }
-            if let Some(outcome) = &journal.terminal_outcome {
-                crate::import::journal::checkpoint_relocation_outcome(&root, outcome)?;
-            }
-            if let Err(error) = remove_journal_owned(&root, &journal) {
-                summary
-                    .cleanup_errors
-                    .push(format!("Failed to remove relocation journal: {error:#}"));
-            }
+
+    let cleanup_ok = match cleanup_after_terminal(&root, &mut journal) {
+        Ok(()) => true,
+        Err(error) => {
+            summary.cleanup_errors.push(format!(
+                "Relocation cleanup remains pending: {}",
+                format_transaction_error(&error)
+            ));
+            false
         }
-        Err(error) => summary.cleanup_errors.push(format!(
-            "Relocation cleanup remains pending: {}",
-            format_transaction_error(&error)
-        )),
+    };
+    let staging = root.join(".easl_staging");
+    for index in 0..journal.subjects.len() {
+        if journal.subjects[index].phase != SubjectPhase::Committed
+            || journal.subjects[index].derived_reconciled
+        {
+            continue;
+        }
+        let subject = journal.subjects[index].subject.clone();
+        let result = reconcile_subject(&root, &staging, &subject);
+        let warning = result.as_ref().err().map(|error| {
+            format!("Derived artifact reconciliation remains pending for {subject}: {error:#}")
+        });
+        if let Some(warning) = &warning {
+            summary.cleanup_errors.push(warning.clone());
+        }
+        journal.subjects[index].derived_reconciled = result.is_ok();
+        if normalize_terminal_outcome {
+            let terminal_subject = journal
+                .terminal_outcome
+                .as_mut()
+                .and_then(|outcome| {
+                    outcome
+                        .subjects
+                        .iter_mut()
+                        .find(|entry| entry.subject == subject)
+                })
+                .ok_or_else(|| "Terminal outcome lacks its committed subject".to_string())?;
+            terminal_subject.phase = if result.is_ok() {
+                "committed"
+            } else {
+                "derivedReconciliation"
+            }
+            .to_string();
+            terminal_subject.message = warning;
+        }
+        if (result.is_ok() || normalize_terminal_outcome)
+            && let Err(error) = write_journal(&root, &journal)
+        {
+            summary.cleanup_errors.push(format!(
+                "Failed to checkpoint derived artifact reconciliation for {subject}: {error:#}"
+            ));
+            // Replacement may be visible despite a failed parent sync. Bridge
+            // the actual durable journal, not the attempted in-memory outcome.
+            journal = read_journal(&root)?.ok_or_else(|| {
+                "Relocation journal disappeared during reconciliation checkpoint".to_string()
+            })?;
+            sync_parent_durable(&root)?;
+        }
+    }
+    // Custody is authoritative even when cleanup cannot finish. Finalization
+    // must reuse this durable outcome rather than relocate committed rawdata.
+    if let Some(outcome) = &journal.terminal_outcome {
+        crate::import::journal::checkpoint_relocation_outcome(&root, outcome)?;
+    }
+    if cleanup_ok && summary.cleanup_errors.is_empty() {
+        summary.cleaned_subjects.extend(
+            journal
+                .subjects
+                .iter()
+                .map(|subject| subject.subject.clone()),
+        );
+        if let Err(error) = remove_journal_owned(&root, &journal) {
+            summary
+                .cleanup_errors
+                .push(format!("Failed to remove relocation journal: {error:#}"));
+        }
     }
     Ok(summary)
 }

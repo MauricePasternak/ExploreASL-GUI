@@ -27,48 +27,8 @@ fn labels_match_fault_contract() {
             "interrupt-after-dataset-install",
         ),
         (
-            FaultPoint::InterruptAfterDatasetReserved,
-            "interrupt-after-dataset-reserved",
-        ),
-        (
-            FaultPoint::InterruptAfterCandidateReserved,
-            "interrupt-after-candidate-reserved",
-        ),
-        (
-            FaultPoint::InterruptAfterCandidateReservationIntent,
-            "interrupt-after-candidate-reservation-intent",
-        ),
-        (
-            FaultPoint::InterruptAfterCandidateReservationOperation,
-            "interrupt-after-candidate-reservation-operation",
-        ),
-        (
-            FaultPoint::InterruptAfterCandidatePopulationIntent,
-            "interrupt-after-candidate-population-intent",
-        ),
-        (
             FaultPoint::InterruptAfterCandidatePopulationOperation,
             "interrupt-after-candidate-population-operation",
-        ),
-        (
-            FaultPoint::InterruptAfterDatasetReservationIntent,
-            "interrupt-after-dataset-reservation-intent",
-        ),
-        (
-            FaultPoint::InterruptAfterDatasetReservationOperation,
-            "interrupt-after-dataset-reservation-operation",
-        ),
-        (
-            FaultPoint::InterruptAfterDatasetPopulationIntent,
-            "interrupt-after-dataset-population-intent",
-        ),
-        (
-            FaultPoint::InterruptAfterDatasetPopulationOperation,
-            "interrupt-after-dataset-population-operation",
-        ),
-        (
-            FaultPoint::InterruptAfterDatasetCandidateReady,
-            "interrupt-after-dataset-candidate-ready",
         ),
         (
             FaultPoint::InterruptAfterDatasetInstallIntent,
@@ -102,22 +62,6 @@ fn labels_match_fault_contract() {
         (FaultPoint::InterruptAfterInstall, "interrupt-after-install"),
         (FaultPoint::InterruptAfterCommit, "interrupt-after-commit"),
         (
-            FaultPoint::SubstituteAfterCandidateReady,
-            "substitute-after-candidate-ready",
-        ),
-        (
-            FaultPoint::SubstituteAfterInstall,
-            "substitute-after-install",
-        ),
-        (
-            FaultPoint::SubstituteDatasetAfterCandidateReady,
-            "substitute-dataset-after-candidate-ready",
-        ),
-        (
-            FaultPoint::SubstituteDatasetAfterInstall,
-            "substitute-dataset-after-install",
-        ),
-        (
             FaultPoint::InterruptRollbackAfterIntent,
             "interrupt-rollback-after-intent",
         ),
@@ -144,19 +88,6 @@ fn labels_match_fault_contract() {
         (
             FaultPoint::InterruptDatasetRollbackAfterCandidateCleanup,
             "interrupt-dataset-rollback-after-candidate-cleanup",
-        ),
-        (FaultPoint::PayloadParentSync, "payload-parent-sync"),
-        (
-            FaultPoint::PayloadRenameSourceSync,
-            "payload-rename-source-sync",
-        ),
-        (
-            FaultPoint::PayloadRenameDestinationSync,
-            "payload-rename-destination-sync",
-        ),
-        (
-            FaultPoint::WrapperDeleteParentSync,
-            "wrapper-delete-parent-sync",
         ),
     ];
 

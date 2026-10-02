@@ -11,6 +11,7 @@ mod journal;
 mod paths;
 mod planning;
 mod prepare;
+mod reconcile;
 mod recovery;
 mod rollback;
 mod transaction;
@@ -20,8 +21,6 @@ mod types;
 pub use fault_injection::{
     FaultPoint as RelocationFailurePoint, RelocationFailureGuard, inject_relocation_failure,
 };
-#[cfg(test)]
-pub use filesystem::transaction_test_fingerprint;
 pub use inventory::{
     bind_plan, create_plan, inventory_subject, plan_relocation, validate_bound_plan,
     validate_plan_scope,

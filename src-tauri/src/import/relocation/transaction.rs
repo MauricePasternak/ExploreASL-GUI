@@ -10,6 +10,7 @@ use super::journal::{JOURNAL_VERSION, journal_path, remove_journal_owned, write_
 use super::paths::{canonical_project_root, project_identity, reject_symlink_components};
 use super::planning::{planned_dataset, planned_subject};
 use super::prepare::{prepare_dataset, prepare_subject};
+use super::reconcile::reconcile_subject;
 use super::rollback::rollback_subject;
 use super::types::{
     RelocationJournal, RelocationOutcome, RelocationPlan, RelocationSubjectStatus,
@@ -105,7 +106,7 @@ fn relocate_result(
     let dataset = planned_dataset(&root, staging, plan)?;
     let mut subjects = Vec::with_capacity(selected.len());
     for inventory in selected {
-        subjects.push(planned_subject(&root, staging, plan, inventory)?);
+        subjects.push(planned_subject(&root, plan, inventory)?);
     }
     let mut journal = RelocationJournal {
         version: JOURNAL_VERSION,
@@ -140,12 +141,26 @@ fn relocate_result(
         let result = prepare_subject(&root, staging, &mut journal, index)
             .and_then(|()| commit_subject(&root, &mut journal, index, &mut failure_phase));
         match result {
-            Ok(()) => outcomes.push(SubjectRelocationOutcome {
-                subject,
-                status: RelocationSubjectStatus::Committed,
-                phase: "committed".to_string(),
-                message: None,
-            }),
+            Ok(()) => match reconcile_subject(&root, staging, &subject) {
+                Ok(()) => {
+                    journal.subjects[index].derived_reconciled = true;
+                    write_journal(&root, &journal)?;
+                    outcomes.push(SubjectRelocationOutcome {
+                        subject,
+                        status: RelocationSubjectStatus::Committed,
+                        phase: "committed".to_string(),
+                        message: None,
+                    });
+                }
+                Err(error) => outcomes.push(SubjectRelocationOutcome {
+                    subject,
+                    status: RelocationSubjectStatus::Committed,
+                    phase: "derivedReconciliation".to_string(),
+                    message: Some(format!(
+                        "Rawdata committed; derived artifact reconciliation remains pending: {error:#}"
+                    )),
+                }),
+            },
             Err(error @ RelocationTransactionError::Interrupted { .. }) => {
                 return Err(error);
             }
@@ -214,6 +229,13 @@ fn relocate_result(
             "Relocation terminal cleanup deferred: {}",
             format_transaction_error(&error)
         );
+        return Ok(outcome);
+    }
+    if outcome
+        .subjects
+        .iter()
+        .any(|subject| subject.message.is_some())
+    {
         return Ok(outcome);
     }
     if all_committed && cleanup_staging && !debug_mode {

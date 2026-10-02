@@ -10,19 +10,21 @@ Define safe project transitions so each opened project owns a complete, isolated
 
 Project activation SHALL inspect the candidate root for an unfinished native import-relocation recovery record after candidate validation but before normal project hydration, output access, or subprocess launch. Recovery SHALL derive every candidate, destination, and backup path from the canonical candidate project root and validated project-relative record data; it SHALL NOT trust absolute or escaping recorded paths.
 
-For each subject durably recorded as committed, recovery SHALL preserve the installed replacement and remove only transaction-owned stale candidates or backups. For each subject not durably committed, recovery SHALL restore the complete previous destination when one existed or restore destination absence when it did not. Recovery SHALL finish all safe subject decisions before the project becomes active and SHALL expose a summary of preserved, restored, and cleaned subjects.
+For each subject durably recorded as committed, recovery SHALL preserve the installed rawdata replacement and remove only transaction-owned stale rawdata candidates or backups. For each subject not durably committed, recovery SHALL restore the complete previous rawdata destination when one existed or restore destination absence when it did not. After rawdata custody is settled, recovery SHALL retry pending import-lock, import-log, and BIDS2Legacy-lock reconciliation idempotently. Derived cleanup failure SHALL retain staging and the relocation journal and report a warning without rolling back committed rawdata or blocking activation when custody and its durable checkpoint are authoritative. Recovery SHALL finish all safe custody decisions before the project becomes active and SHALL expose a summary of preserved, restored, and cleaned subjects.
 
-If the recovery record is malformed, references an unsafe path that could affect project output, conflicts with authoritative destination state, or cannot establish one complete old or new subject state, project activation MUST fail without guessing, deleting unowned content, or hydrating the candidate project. When a durable reservation intent identifies an isolated candidate path but interruption occurred before candidate ownership evidence became verifiable, recovery SHALL preserve that unknown candidate without reading, renaming, or deleting it, SHALL retain the provably complete project destination or destination absence as authoritative, and SHALL permit activation with an actionable cleanup warning. Other cleanup failures for an otherwise unambiguous complete state SHALL likewise be reported without changing which subject copy is authoritative.
+Before native import finalization resumes or the relocation journal is retired, recovery SHALL checkpoint the authoritative relocation outcome into the matching import-run record even when derived cleanup remains pending. An existing durable checkpoint SHALL remain unchanged; disagreement between records SHALL reject before mutation. Resumed finalization SHALL reuse that checkpoint instead of relocating committed rawdata again. Relocation recovery SHALL NOT remove staging or rewrite a historical terminal import result after a successful cleanup retry. Dataset-description rollback SHALL record durable removal intent and resume interrupted removal without deleting a preexisting description.
+
+If the recovery record is malformed, references an unsafe path that could affect project output, conflicts with authoritative rawdata state, or cannot establish one complete old or new subject state, project activation MUST fail without guessing, deleting unrelated content, or hydrating the candidate project. Under authoritative single-instance ownership, a journaled project-relative candidate path is transaction-owned after exclusive creation; recovery MAY delete an interrupted partial candidate while restoring the recorded prior rawdata state. Cleanup failures for an otherwise unambiguous complete state SHALL be reported without changing which rawdata copy is authoritative.
 
 #### Scenario: Crash before subject commit
 
 - **WHEN** project activation finds an interrupted subject transaction without a durable commit record
-- **THEN** recovery SHALL restore the previous complete subject or previous absence before the project becomes active
+- **THEN** recovery SHALL restore the previous complete subject rawdata tree or previous absence before the project becomes active
 
 #### Scenario: Crash after subject commit
 
-- **WHEN** project activation finds a durable subject commit with an installed replacement and retained transaction backup
-- **THEN** recovery SHALL preserve the installed replacement and SHALL remove only the transaction-owned backup and candidate artifacts
+- **WHEN** project activation finds a durable subject commit with an installed rawdata replacement and retained transaction backup
+- **THEN** recovery SHALL preserve the installed rawdata replacement and SHALL remove only the transaction-owned rawdata backup and candidate
 
 #### Scenario: Earlier subject committed before later interruption
 
@@ -34,10 +36,10 @@ If the recovery record is malformed, references an unsafe path that could affect
 - **WHEN** a recovery record contains an absolute path, traversal, symlink escape, foreign project identity, or unowned evidence that prevents proving a complete authoritative project destination
 - **THEN** project activation SHALL fail without deleting, renaming, or copying the referenced filesystem content
 
-#### Scenario: Interrupted candidate reservation is unverifiable
+#### Scenario: Candidate copy is interrupted
 
-- **WHEN** a durable reservation intent identifies an isolated transaction candidate, its ownership marker is incomplete or unverifiable, and the project destination or prior destination absence remains provably complete
-- **THEN** recovery SHALL preserve the unknown candidate unchanged, SHALL remove it from authoritative transaction consideration, and SHALL activate the project with an actionable cleanup warning
+- **WHEN** recovery finds an incomplete candidate at a journaled project-relative candidate path before the candidate-ready checkpoint
+- **THEN** recovery SHALL remove that transaction candidate, preserve or restore the prior rawdata destination, and retain staging for retry
 
 #### Scenario: Recovery cannot establish complete state
 
@@ -48,6 +50,21 @@ If the recovery record is malformed, references an unsafe path that could affect
 
 - **WHEN** a valid candidate project has no import-relocation recovery record
 - **THEN** project activation SHALL continue with existing transition and hydration behavior
+
+#### Scenario: Derived cleanup still fails after rawdata commit
+
+- **WHEN** committed rawdata is proven complete but retrying derived import artifacts fails
+- **THEN** recovery SHALL checkpoint custody before finalizer resumption, retain staging and the relocation journal, allow activation with a cleanup warning, and SHALL NOT relocate the committed rawdata again
+
+#### Scenario: Cleanup succeeds after a failed terminal run
+
+- **WHEN** derived reconciliation completes for a run whose terminal result and relocation checkpoint are already durable
+- **THEN** recovery SHALL remove safely cleaned relocation residue without changing the historical checkpoint or terminal result and SHALL retain staging
+
+#### Scenario: Unsupported relocation journal remains unfinished
+
+- **WHEN** activation encounters an unfinished version 2 relocation journal rather than the current version 3 format
+- **THEN** activation SHALL fail closed without mutating its recorded artifacts, deleting the journal, or automatically migrating it; import-run-record compatibility SHALL remain a separate contract
 
 ### Requirement: Transactional project transition
 

@@ -5,7 +5,6 @@ use std::path::PathBuf;
 pub(super) enum SubjectFailurePhase {
     CandidatePreparation,
     Journal,
-    CandidateVerification,
     Backup,
     Install,
     CommitVerification,
@@ -17,7 +16,6 @@ impl SubjectFailurePhase {
         match self {
             Self::CandidatePreparation => "candidatePreparation",
             Self::Journal => "journal",
-            Self::CandidateVerification => "candidateVerification",
             Self::Backup => "backup",
             Self::Install => "install",
             Self::CommitVerification => "commitVerification",
@@ -140,7 +138,8 @@ pub struct RelocationJournal {
 pub(super) struct JournalSubject {
     pub(super) subject: String,
     pub(super) phase: SubjectPhase,
-    pub(super) artifacts: Vec<JournalArtifact>,
+    pub(super) rawdata: JournalRawdata,
+    pub(super) derived_reconciled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,18 +155,8 @@ pub(super) enum SubjectPhase {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) enum ArtifactRole {
-    Replacement,
-    Removal,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) enum ArtifactPhase {
+pub(super) enum RawdataPhase {
     Planned,
-    ReservationIntent,
-    CandidateReserved,
-    PopulationIntent,
     CandidateReady,
     BackupIntent,
     BackedUp,
@@ -179,18 +168,14 @@ pub(super) enum ArtifactPhase {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct JournalArtifact {
-    pub(super) role: ArtifactRole,
+pub(super) struct JournalRawdata {
     pub(super) destination: String,
-    pub(super) candidate: Option<String>,
-    pub(super) backup: Option<String>,
+    pub(super) candidate: String,
+    pub(super) backup: String,
     pub(super) had_destination: bool,
-    pub(super) phase: ArtifactPhase,
+    pub(super) phase: RawdataPhase,
     pub(super) candidate_fingerprint: Option<String>,
     pub(super) backup_fingerprint: Option<String>,
-    pub(super) reservation_token: Option<String>,
-    #[serde(default)]
-    pub(super) candidate_abandoned: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,10 +183,6 @@ pub(super) struct JournalArtifact {
 pub(super) enum DatasetPhase {
     NotRequired,
     Planned,
-    ReservationIntent,
-    CandidateReserved,
-    PopulationIntent,
-    CandidateReady,
     InstallIntent,
     Installed,
     ExistingWon,
@@ -218,7 +199,4 @@ pub(super) struct JournalDataset {
     pub(super) candidate: String,
     pub(super) phase: DatasetPhase,
     pub(super) fingerprint: Option<String>,
-    pub(super) reservation_token: Option<String>,
-    #[serde(default)]
-    pub(super) candidate_abandoned: bool,
 }

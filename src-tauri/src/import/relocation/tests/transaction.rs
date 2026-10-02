@@ -98,7 +98,7 @@ fn injected_candidate_and_swap_failures_restore_the_complete_old_subject() {
 }
 
 #[test]
-fn ancillary_install_failure_rolls_back_rawdata_and_lock_together() {
+fn derived_reconciliation_retry_clears_pending_terminal_outcome() {
     let workspace = tempdir().expect("workspace");
     let project = workspace.path().join("project");
     fs::create_dir_all(project.join("rawdata/sub-A")).expect("old rawdata");
@@ -116,88 +116,43 @@ fn ancillary_install_failure_rolls_back_rawdata_and_lock_together() {
     fs::create_dir_all(&new_lock).expect("new lock");
     fs::write(new_lock.join("new.status"), "new lock").expect("new lock file");
 
-    let _failure = inject_relocation_failure(RelocationFailurePoint::AncillaryInstall);
-    let outcome = relocate(&plan, 1, &staging, &["A".to_string()], false, false).expect("outcome");
+    let outcome = {
+        let _failure = inject_relocation_failure(RelocationFailurePoint::AncillaryInstall);
+        relocate(&plan, 1, &staging, &["A".to_string()], false, false).expect("outcome")
+    };
 
     assert_eq!(
-        outcome.subjects[0].status,
-        RelocationSubjectStatus::RolledBack
-    );
-    assert_eq!(
-        fs::read_to_string(project.join("rawdata/sub-A/old.nii")).expect("old"),
-        "old"
-    );
-    assert_eq!(
-        fs::read_to_string(old_lock.join("old.status")).expect("old lock"),
-        "old lock"
-    );
-    assert!(!old_lock.join("new.status").exists());
-}
-
-#[test]
-fn candidate_ready_substitution_never_commits_or_deletes_foreign_content() {
-    let workspace = tempdir().expect("workspace");
-    let project = workspace.path().join("project");
-    let staging = write_old_and_staged(&project, "A");
-    let plan = bound_plan(&project, &["A"], "candidate-ready-substitution");
-    let _failure = inject_relocation_failure(RelocationFailurePoint::SubstituteAfterCandidateReady);
-
-    let outcome = relocate(&plan, 1, &staging, &["A".to_string()], false, false).unwrap();
-
-    assert_ne!(
         outcome.subjects[0].status,
         RelocationSubjectStatus::Committed
     );
+    assert_eq!(outcome.subjects[0].phase, "derivedReconciliation");
     assert_eq!(
-        fs::read_to_string(project.join("rawdata/sub-A/old.nii")).unwrap(),
-        "old"
+        fs::read_to_string(project.join("rawdata/sub-A/new.nii")).expect("new"),
+        "new"
     );
-    let candidate =
-        project.join("rawdata/.sub-A.easl-relocation-candidatereadysubstitution-A-candidate");
-    assert!(candidate.join("foreign").exists());
-}
-
-#[test]
-fn installed_substitution_before_commit_preserves_backup_and_requires_recovery() {
-    let workspace = tempdir().expect("workspace");
-    let project = workspace.path().join("project");
-    let staging = write_old_and_staged(&project, "A");
-    let plan = bound_plan(&project, &["A"], "installed-substitution");
-    let backup = project.join("rawdata/.sub-A.easl-relocation-installedsubstitution-A-backup");
-    let _failure = inject_relocation_failure(RelocationFailurePoint::SubstituteAfterInstall);
-
-    let outcome = relocate(&plan, 1, &staging, &["A".to_string()], false, false).unwrap();
-
+    assert!(!old_lock.exists());
+    assert!(!old_lock.join("new.status").exists());
+    let summary = {
+        let _failure = inject_relocation_failure(RelocationFailurePoint::Cleanup);
+        recover(&project).expect("derived reconciliation retry")
+    };
+    assert_eq!(summary.cleanup_errors.len(), 1);
+    let journal: serde_json::Value = serde_json::from_slice(
+        &fs::read(project.join(crate::import_relocation::JOURNAL_FILE)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(journal["subjects"][0]["derivedReconciled"], true);
     assert_eq!(
-        outcome.subjects[0].status,
-        RelocationSubjectStatus::RecoveryRequired
+        journal["terminalOutcome"]["subjects"][0]["phase"],
+        "committed"
     );
-    assert!(backup.join("old.nii").exists());
-    assert!(project.join("rawdata/sub-A/foreign").exists());
-}
-
-#[test]
-fn dataset_candidate_and_installed_substitutions_are_never_accepted() {
-    for point in [
-        RelocationFailurePoint::SubstituteDatasetAfterCandidateReady,
-        RelocationFailurePoint::SubstituteDatasetAfterInstall,
-    ] {
-        let workspace = tempdir().expect("workspace");
-        let project = workspace.path().join("project");
-        let staging = write_old_and_staged(&project, "A");
-        fs::write(staging.join("rawdata/dataset_description.json"), "dataset").unwrap();
-        let plan = bound_plan(&project, &["A"], &format!("dataset-substitute-{point:?}"));
-        let _failure = inject_relocation_failure(point);
-
-        relocate(&plan, 1, &staging, &["A".to_string()], false, false)
-            .expect_err("dataset substitution must stop relocation");
-
-        assert_eq!(
-            fs::read_to_string(project.join("rawdata/sub-A/old.nii")).unwrap(),
-            "old"
-        );
-        assert!(recover(&project).is_err());
-    }
+    assert!(journal["terminalOutcome"]["subjects"][0]["message"].is_null());
+    assert_eq!(
+        fs::read_to_string(old_lock.join("new.status")).expect("new lock"),
+        "new lock"
+    );
+    assert!(!old_lock.join("old.status").exists());
+    recover(&project).expect("terminal cleanup retry");
 }
 
 #[test]
@@ -239,7 +194,7 @@ fn stale_journal_temp_never_blocks_a_new_unique_write() {
 }
 
 #[test]
-fn late_raw_install_failure_rolls_back_logs_locks_and_legacy_custody() {
+fn raw_install_failure_does_not_touch_derived_artifacts() {
     let workspace = tempdir().expect("workspace");
     let project = workspace.path().join("project");
     let staging = write_old_and_staged(&project, "A");

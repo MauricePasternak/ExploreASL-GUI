@@ -73,7 +73,7 @@ Every public operation that mutates import staging, verifies completion, cleans 
 
 Native import ownership SHALL expose `Idle`, `Preparing`, `Running`, `Finalizing`, `Completed`, `Failed`, `Cancelling`, `Cancelled`, and `Interrupted` lifecycle states. Reservation SHALL enter `Preparing`; successful spawn SHALL enter `Running`; confirmed process exit SHALL leave `Running` before finalization begins. The native supervisor SHALL own output draining, process wait, completion verification, failed-lock cleanup, transactional relocation, and terminal classification. Every state mutation, event, cancellation, finalization step, and cleanup SHALL require the matching native run identity and ownership generation. Public post-processing commands that let the frontend initiate or classify finalization SHALL be removed.
 
-Finalization SHALL process only subjects from the immutable selected scope. A failed run MAY commit subjects with verified fresh completion evidence, but the run SHALL become `Completed` only when process exit is successful, every selected subject has verified fresh completion evidence, every selected subject relocation commits, and required staging cleanup completes. Otherwise it SHALL expose a structured `Failed`, `Cancelled`, or `Interrupted` result while retaining staging and recovery evidence required for retry or diagnosis. Debug preservation SHALL retain staging after success without weakening completion verification.
+Finalization SHALL process only subjects from the immutable selected scope. A failed run MAY commit subjects with verified fresh completion evidence, but the run SHALL become `Completed` only when process exit is successful, every selected subject has verified fresh completion evidence, every selected subject rawdata relocation commits, and required derived-artifact, transaction, and non-debug staging cleanup completes. Otherwise it SHALL expose a structured `Failed`, `Cancelled`, or `Interrupted` result while retaining staging and recovery evidence required for retry or diagnosis. Debug preservation SHALL waive staging deletion only, not completion verification or required derived-artifact and transaction cleanup.
 
 #### Scenario: Frontend submits post-processing authority
 
@@ -290,27 +290,27 @@ The system SHALL store the active import process scope in native app state; reme
 
 ### Requirement: Lock file cleanup for failed subjects
 
-The system SHALL provide a Rust command `clean_import_status(staging_root, subjects: Vec<String>)` that deletes the three lock files (`010_DCM2NII.status`, `020_NII2BIDS.status`, `999_ready.status`) for each specified subject from `<staging_root>/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/xASL_module_Import/`. This command SHALL be called automatically after the MATLAB subprocess exits, using the list of subjects that emitted `import_failed` events. It SHALL NOT delete lock files for subjects that succeeded.
+After process exit, native finalization SHALL clean the three staging status files (`010_DCM2NII.status`, `020_NII2BIDS.status`, `999_ready.status`) only for selected subjects that failed authoritative completion verification, under `<owned-staging-root>/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/xASL_module_Import/`. Cleanup SHALL derive its root and subject scope from the matching native run, reject unsafe entries, and preserve evidence when staging-generation authority is missing. Parser `import_failed` events SHALL NOT independently authorize deletion. No renderer-callable failed-status cleanup command SHALL be exposed. Status files for verified subjects SHALL remain unchanged by failed-subject cleanup.
 
 #### Scenario: One subject fails, one succeeds
 
-- **WHEN** GOOD succeeds and BADDIE fails during import
+- **WHEN** GOOD passes native completion verification and BADDIE fails it
 - **THEN** after MATLAB exits, lock files for BADDIE are deleted, lock files for GOOD are preserved
 
 #### Scenario: All subjects succeed
 
-- **WHEN** all subjects complete without `import_failed` events
+- **WHEN** all selected subjects pass native completion verification
 - **THEN** no lock files are deleted
 
 ### Requirement: Confirmed relocation plan integrity
 
-Before import starts, the system SHALL obtain a native, read-only relocation plan for the immutable selected-subject snapshot. The plan SHALL derive all project and staging roots from native active-project ownership, SHALL identify every existing project-relative rawdata, import-lock, import-log, and BIDS2Legacy-lock path that a successful relocation would replace or remove, and SHALL include per-subject file counts, byte totals, sessions, and an opaque content fingerprint. Absolute project paths SHALL NOT be exposed in the user-facing inventory.
+Before import starts, the system SHALL obtain a native, read-only relocation plan for the immutable selected-subject snapshot. The plan SHALL derive all project and staging roots from native active-project ownership, SHALL identify every existing project-relative rawdata path that a successful relocation would replace, and SHALL include per-subject file counts, byte totals, sessions, and an opaque content fingerprint. Derived import locks, import logs, and BIDS2Legacy locks SHALL NOT participate in the confirmed custody fingerprint. Absolute project paths SHALL NOT be exposed in the user-facing inventory.
 
 Native import ownership SHALL bind the confirmed plan identity and fingerprint to the same subject snapshot and import generation used for staging and execution. Before relocation mutates project output, the system MUST recompute the destination inventory and SHALL reject a missing, foreign, subject-mismatched, or stale plan without changing project output. Staging output SHALL remain available after this rejection.
 
 #### Scenario: Destination has no replaceable artifacts
 
-- **WHEN** native planning finds no existing project artifacts that relocation would replace or remove for the selected subjects
+- **WHEN** native planning finds no existing subject rawdata that relocation would replace for the selected subjects
 - **THEN** the plan SHALL report an empty replacement inventory and SHALL remain eligible to bind to that exact selected-subject snapshot
 
 #### Scenario: Destination inventory changes after confirmation
@@ -325,9 +325,9 @@ Native import ownership SHALL bind the confirmed plan identity and fingerprint t
 
 ### Requirement: Structured relocation outcome
 
-Relocation SHALL return a structured outcome that identifies each owned succeeded subject as committed, rolled back, or failed and includes an actionable phase and message for every failure. A subject SHALL NOT be reported as committed until its complete replacement is durable. The frontend SHALL surface relocation failures and partial outcomes in import status and logs; it SHALL NOT convert a relocation failure into successful import completion or silently discard the error.
+Relocation SHALL return a structured outcome that identifies each owned succeeded subject as `committed`, `rolledBack`, or `recoveryRequired` and includes an actionable phase and message for every failure. A subject SHALL NOT be reported as committed until its complete rawdata replacement is durable. A committed subject with pending derived reconciliation SHALL retain committed status and carry a cleanup message. The frontend SHALL surface relocation failures and partial outcomes in import status and logs; it SHALL NOT convert a relocation failure or pending required cleanup into successful import completion or silently discard the error.
 
-Staging cleanup SHALL occur only when every subject expected to relocate is committed and existing cleanup conditions permit it. Any failed or unresolved relocation SHALL retain staging and terminal native ownership for retry, inspection, or recovery. Existing debug-mode staging preservation SHALL remain unchanged.
+Staging cleanup SHALL occur only when every subject expected to relocate is committed and existing cleanup conditions permit it. Any failed or unresolved relocation SHALL retain staging and native ownership for retry, inspection, or recovery. Existing debug-mode staging preservation SHALL remain unchanged.
 
 #### Scenario: Every subject commits
 
@@ -337,7 +337,7 @@ Staging cleanup SHALL occur only when every subject expected to relocate is comm
 #### Scenario: One subject commits and another fails
 
 - **WHEN** subject A commits and subject B encounters a relocation failure that is rolled back
-- **THEN** the outcome SHALL report A as committed and B as rolled back or failed, the frontend SHALL show a failed partial outcome, and staging SHALL remain available
+- **THEN** the outcome SHALL report A as committed and B as rolled back, the frontend SHALL show a failed partial outcome, and staging SHALL remain available
 
 #### Scenario: Relocation error reaches frontend
 
@@ -346,23 +346,37 @@ Staging cleanup SHALL occur only when every subject expected to relocate is comm
 
 ### Requirement: Output relocation after import
 
-The native output-relocation operation SHALL replace import output per owned succeeded subject without deleting unrelated project data. For each subject, the staged `rawdata/sub-<Subject>/` SHALL be the complete authoritative replacement for the project `rawdata/sub-<Subject>/`; older sessions and files absent from the staged replacement SHALL NOT be merged forward. The operation SHALL also update that subject's import-lock directory and matching import logs, and SHALL remove matching BIDS2Legacy subject-session lock directories only as part of the same committed subject transaction. Existing Structural, ASL, Population, Stats, `dataPar.json`, `participants.tsv`, non-import lock files, unrelated logs, and unrelated subjects SHALL remain unchanged.
+The native output-relocation operation SHALL replace import output per owned succeeded subject without deleting unrelated project data. For each subject, the staged `rawdata/sub-<Subject>/` SHALL be the complete authoritative replacement for the project `rawdata/sub-<Subject>/`; older sessions and files absent from the staged replacement SHALL NOT be merged forward. After rawdata custody commits, the operation SHALL idempotently reconcile that subject's import-lock directory and matching import logs and remove matching BIDS2Legacy subject-session lock directories. Derived reconciliation SHALL NOT roll back or endanger committed rawdata. Existing Structural, ASL, Population, Stats, `dataPar.json`, `participants.tsv`, non-import lock files, unrelated logs, and unrelated subjects SHALL remain unchanged.
 
-Before replacing a subject, the system SHALL require nonempty staged subject rawdata, reject symlinks and unsupported filesystem entries in owned source, candidate, destination, backup, and journal paths, copy into uniquely owned sibling candidates, and verify the complete relative-path, entry-type, size, and content inventory against the staged source. It SHALL durably record recovery state before moving an existing destination to a sibling backup. A subject SHALL commit only after all of its replacement artifacts are installed and durable. Existing subject data SHALL remain recoverable until a durable run-level outcome records that subject as committed or rolled back.
+Before replacing a subject, the system SHALL require nonempty staged subject rawdata, reject symlinks and unsupported filesystem entries in owned source, candidate, destination, backup, and journal paths, copy into an exclusively created sibling candidate, and verify the complete relative-path, entry-type, size, and content inventory against the staged source. It SHALL durably record recovery state before moving an existing rawdata destination to a sibling backup. A subject SHALL commit only after its complete rawdata replacement is installed and durable. Existing subject rawdata SHALL remain recoverable until a durable subject commit records which copy owns custody.
 
-Relocation SHALL process subjects independently. Failure before a subject commits SHALL restore that subject's complete previous state or preserve its absence when no prior state existed. A subject committed before another subject fails SHALL remain committed. Dataset description creation, when required and absent, SHALL be atomic and SHALL NOT overwrite an existing project dataset description.
+Relocation SHALL process subjects independently. Failure before a subject commits SHALL restore that subject's complete previous rawdata state or preserve its absence when no prior state existed. A subject committed before another subject fails SHALL remain committed. Derived-artifact reconciliation failure SHALL retain staging, report an actionable cleanup error, and remain retryable without changing rawdata custody. Dataset description creation, when required and absent, SHALL be atomic and SHALL NOT overwrite an existing project dataset description.
 
-When all subjects succeed and staging cleanup is requested, the system SHALL delete staging only after every subject commit and the durable outcome. Debug mode SHALL preserve staging and copy import configuration as before. During partial process success, relocation failure, stale confirmation, or unresolved recovery, staging SHALL remain available. When no subjects succeeded, relocation SHALL NOT modify project output.
+The rawdata transaction SHALL handle ordinary application/OS crashes and filesystem errors under authoritative single-instance ownership. Deliberate substitution of transaction artifacts and unsupported concurrent project writers SHALL remain outside the contract; path confinement, corruption validation, exclusive creation, and preservation of unrelated content SHALL remain required. Rawdata crash atomicity SHALL mean recoverability to a complete old or new subject tree, not continuous destination availability between backup and installation renames.
+
+When staged `dataset_description.json` is present and the project description is absent, relocation SHALL install it before subject transactions. A preexisting description SHALL remain unchanged. A transaction-created description SHALL remain after any subject commits; when none commits, rollback SHALL remove only transaction-owned description artifacts. Dataset rollback SHALL durably record `rollbackIntent` before removal and SHALL resume interrupted destination/candidate removal idempotently. Unowned candidate collisions SHALL reject before mutation, including when dataset creation is skipped.
+
+When all subjects succeed, required derived-artifact and transaction cleanup completes, and staging cleanup is requested, the system SHALL delete staging only after every subject commit and the durable outcome. Debug mode SHALL preserve staging and copy import configuration as before. During partial process success, relocation failure, stale confirmation, pending required cleanup, or unresolved recovery, staging SHALL remain available. When no subjects succeeded, relocation SHALL NOT modify project output.
 
 #### Scenario: Full success with debug mode off
 
-- **WHEN** all subjects succeed, every subject transaction commits, and debug mode is disabled
-- **THEN** complete subject rawdata, import locks, and matching logs SHALL replace their planned destinations, matching BIDS2Legacy locks SHALL be removed, unrelated project data SHALL remain unchanged, staging SHALL be deleted, and normal phase advancement SHALL proceed
+- **WHEN** all subjects succeed, every subject rawdata transaction commits, required derived-artifact and transaction cleanup succeeds, and debug mode is disabled
+- **THEN** complete subject rawdata SHALL replace its planned destination, derived import locks and matching logs SHALL be reconciled, matching BIDS2Legacy locks SHALL be removed, unrelated project data SHALL remain unchanged, staging SHALL be deleted, and normal phase advancement SHALL proceed
 
 #### Scenario: Full success with debug mode on
 
-- **WHEN** all subjects succeed, every subject transaction commits, and debug mode is enabled
+- **WHEN** all subjects succeed, every subject rawdata transaction commits, required derived-artifact and transaction cleanup succeeds, and debug mode is enabled
 - **THEN** subject output SHALL commit, unrelated project data SHALL remain unchanged, staging SHALL be preserved, and import configurations SHALL be copied to the GUI derivatives directory
+
+#### Scenario: Rawdata commits but derived reconciliation fails
+
+- **WHEN** a subject's rawdata commit is durable but its import locks, matching logs, or BIDS2Legacy cleanup cannot be reconciled
+- **THEN** its rawdata SHALL remain committed, staging and the relocation journal SHALL remain for retry, and finalization SHALL expose `Failed` with an actionable cleanup error even when debug preservation is enabled
+
+#### Scenario: Dataset-description rollback is interrupted
+
+- **WHEN** no subject committed and interruption occurs after recording dataset rollback intent but before completing removal
+- **THEN** recovery SHALL resume removal of transaction-owned description artifacts, accept already-completed removal, preserve existing user descriptions, and restore the complete previous subject state
 
 #### Scenario: Existing subject has extra sessions and files
 
@@ -372,7 +386,7 @@ When all subjects succeed and staging cleanup is requested, the system SHALL del
 #### Scenario: Re-import after full processing pipeline
 
 - **WHEN** a user re-runs import for selected subjects on a project that already has completed Structural, ASL, or Population output
-- **THEN** only each committed subject's rawdata, import locks, matching import logs, and BIDS2Legacy locks SHALL change, while all processing outputs and unrelated subjects SHALL remain unchanged
+- **THEN** only each committed subject's rawdata and subject-matching derived import artifacts SHALL change, while all processing outputs and unrelated subjects SHALL remain unchanged
 
 #### Scenario: Candidate copy or verification fails
 
@@ -449,7 +463,7 @@ The native supervisor SHALL record the matching process exit status before compl
 
 #### Scenario: MATLAB exits zero with complete targets
 
-- **WHEN** the process exits successfully and all selected subjects verify and relocate successfully
+- **WHEN** the process exits successfully, all selected subjects verify and commit rawdata, and required cleanup succeeds under the configured debug-preservation policy
 - **THEN** the run SHALL become `Completed`
 
 #### Scenario: MATLAB exits normally with zero code
@@ -482,12 +496,12 @@ A global setting "Preserve staging directory" SHALL be added to `globalStore.set
 
 #### Scenario: Debug mode enabled on successful import
 
-- **WHEN** all subjects succeed and "Preserve staging directory" is enabled
+- **WHEN** native finalization succeeds, including required derived-artifact and transaction cleanup, and "Preserve staging directory" is enabled
 - **THEN** `.easl_staging/` is preserved, configs are copied to `derivatives/ExploreASL_GUI/`
 
 #### Scenario: Debug mode disabled on successful import
 
-- **WHEN** all subjects succeed and "Preserve staging directory" is disabled
+- **WHEN** native finalization succeeds, including required derived-artifact and transaction cleanup, and "Preserve staging directory" is disabled
 - **THEN** `.easl_staging/` is deleted entirely
 
 ### Requirement: MATLAB executable selection for import
@@ -640,6 +654,18 @@ Before import preparation mutates staging, native code SHALL atomically persist 
 
 On project activation, a Preparing, Running, or Cancelling record without a matching in-process supervisor SHALL become Interrupted, preserve staging, and require external-stop confirmation before new execution. It SHALL NOT resume mutation or infer completion from process absence. After confirmation, a valid Finalizing record with durable exit and completion evidence SHALL resume safe cleanup/relocation using the existing relocation journal. A terminal record SHALL be replayed until the frontend has reconciled and successfully persisted matching project state, then explicitly acknowledges that exact run. Acknowledgement SHALL be idempotent and SHALL never remove unresolved recovery evidence.
 
+After settling rawdata custody, relocation recovery SHALL checkpoint the relocation outcome into the matching import-run record before finalizer resumption or relocation-journal retirement, even when derived cleanup remains pending. Existing durable relocation checkpoints SHALL remain unchanged and conflicting outcomes SHALL reject. Without an existing checkpoint, recovery MAY normalize a pending-derived message after a successful retry before recording the outcome. Finalization SHALL reuse the checkpoint rather than relocate committed rawdata again. Relocation recovery SHALL NOT delete staging, claim staging cleanup complete, or rewrite a historical terminal result when cleanup later succeeds.
+
+#### Scenario: Crash before import-run relocation checkpoint
+
+- **WHEN** activation finds durably committed rawdata but no import-run relocation checkpoint and derived cleanup still fails
+- **THEN** recovery SHALL persist the authoritative custody outcome, retain staging and the relocation journal, and allow finalization to report pending cleanup without repeating rawdata relocation
+
+#### Scenario: Cleanup retry follows terminal failure
+
+- **WHEN** a terminal `Failed` run already contains a relocation checkpoint and a later derived-cleanup retry succeeds
+- **THEN** recovery SHALL retire safely cleaned relocation residue without changing the checkpoint or historical terminal result, and staging SHALL remain available
+
 #### Scenario: Application stops during running import
 
 - **WHEN** activation finds a durable Running record but no current in-process supervisor
@@ -667,7 +693,7 @@ On project activation, a Preparing, Running, or Cancelling record without a matc
 
 ### Requirement: In-process import supervision
 
-Import SHALL use the same native in-process process-scope mechanism as processing while retaining import-specific verification, relocation, cancellation, released journal compatibility, and terminal replay. Linux and macOS SHALL use POSIX process groups; Windows SHALL use Job Objects. Renderer death SHALL NOT stop native import completion. Native process death SHALL follow Honest abnormal-interruption recovery and SHALL NOT trigger persisted-PID adoption.
+Import SHALL use the same native in-process process-scope mechanism as processing while retaining import-specific verification, relocation, cancellation, supported import-run-record compatibility, and terminal replay. Linux and macOS SHALL use POSIX process groups; Windows SHALL use Job Objects. Renderer death SHALL NOT stop native import completion. Native process death SHALL follow Honest abnormal-interruption recovery and SHALL NOT trigger persisted-PID adoption.
 
 Import stdout and stderr SHALL be drained concurrently into the existing parser and run-correlated event path. Captured output SHALL remain transient; no guardian spool, diagnostic-capacity authority, retention receipt, or durable quiescence record SHALL be created.
 
@@ -685,7 +711,7 @@ Import stdout and stderr SHALL be drained concurrently into the existing parser 
 
 An import record found in Preparing, Running, or Cancelling without matching in-process ownership SHALL become Interrupted and preserve staging, captured domain evidence, verified commits, and relocation state. Project viewing MAY continue, but import and processing admission SHALL remain blocked until the user confirms the external worker has stopped. Confirmation SHALL NOT signal a persisted PID and SHALL NOT infer successful import.
 
-Unshipped import records containing guardian containment fields SHALL reject without mutation and direct the user to settle them with the checkpoint build or restore a verified clean project copy. Released pre-guardian records without those fields SHALL retain existing readability.
+Unshipped import records containing guardian containment fields SHALL reject without mutation and direct the user to settle them with the checkpoint build or restore a verified clean project copy. Released pre-guardian import-run records without those fields SHALL retain existing readability. Relocation-journal compatibility SHALL be separate: current relocation journals use version 3, and unfinished version 2 relocation journals SHALL fail closed without mutation, deletion, or automatic migration.
 
 #### Scenario: App restarts after import interruption
 

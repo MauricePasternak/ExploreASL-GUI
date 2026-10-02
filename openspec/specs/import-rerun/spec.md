@@ -184,7 +184,7 @@ The system SHALL provide "Start Import" and "Stop" controls on step 5. When the 
 
 1. If no subjects are selected, the button SHALL be disabled.
 2. The system SHALL resolve one immutable selected-subject snapshot and request a native read-only replacement inventory for that exact snapshot before staging mutation or process spawn.
-3. If the inventory contains any existing project artifact that relocation would replace or remove, or selected subjects include any fresh completed subject, a confirmation dialog SHALL appear with title "Replace existing imported data?", an expandable subject-grouped inventory of affected project-relative paths, sessions, file counts, and byte totals, explanatory text that the complete selected subject will replace older sessions and files, and actions "Cancel" (default) and "Replace and import".
+3. If the inventory contains any existing selected-subject rawdata that relocation would replace, or selected subjects include any fresh completed subject, a confirmation dialog SHALL appear with title "Replace existing imported data?", an expandable subject-grouped inventory of affected project-relative rawdata paths, sessions, file counts, and byte totals, explanatory text that the complete selected subject will replace older sessions and files, and actions "Cancel" (default) and "Replace and import". Derived import locks, import logs, and BIDS2Legacy locks SHALL NOT trigger replacement confirmation or affect the confirmed rawdata fingerprint.
 4. If the inventory is empty and all selected subjects are stale, pending, or failed, import SHALL start without a replacement confirmation.
 5. Cancellation SHALL preserve selection and SHALL NOT bind a relocation plan, mutate staging, or spawn ExploreASL.
 6. Confirmation SHALL bind the native relocation-plan identity and fingerprint to the same selected-subject snapshot used for staging, progress tracking, parser ownership, retry preservation, and execution.
@@ -193,18 +193,23 @@ The system SHALL provide "Start Import" and "Stop" controls on step 5. When the 
 
 #### Scenario: Initial import has no existing destination
 
-- **WHEN** selected pending subjects have no project artifacts that relocation would replace or remove
+- **WHEN** selected pending subjects have no subject rawdata that relocation would replace
 - **THEN** import SHALL start without replacement confirmation using the immutable selected-subject snapshot and empty relocation inventory
 
 #### Scenario: Existing pending or stale subject has output
 
-- **WHEN** a selected pending, stale, or failed subject has existing project artifacts that relocation would replace or remove
+- **WHEN** a selected pending, stale, or failed subject has existing subject rawdata that relocation would replace
 - **THEN** the replacement confirmation SHALL appear regardless of displayed completion status
 
 #### Scenario: Re-import with only stale subjects
 
-- **WHEN** the user selects only stale subjects and native inventory finds no existing project artifact that relocation would replace or remove
+- **WHEN** the user selects only stale subjects and native inventory finds no existing subject rawdata that relocation would replace
 - **THEN** import SHALL start without replacement confirmation, stage only those stale subjects, delete their import locks, and preserve authorized locks for unselected fresh subjects
+
+#### Scenario: Only derived artifacts exist for selected pending subject
+
+- **WHEN** a selected pending subject has old import locks or logs but no subject rawdata
+- **THEN** the native replacement inventory SHALL remain empty and those derived artifacts alone SHALL NOT require replacement confirmation
 
 #### Scenario: Freshly completed subject is selected
 
