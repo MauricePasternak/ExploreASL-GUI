@@ -269,6 +269,12 @@ pub struct LogFileInfo {
     pub has_error: bool,
 }
 
+pub(super) struct ParsedLockComponents {
+    pub module: String,
+    pub subject_session: Option<String>,
+    pub run: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusFileCreated {

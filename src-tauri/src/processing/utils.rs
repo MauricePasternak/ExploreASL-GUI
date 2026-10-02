@@ -1,4 +1,4 @@
-use super::types::{LockCreated, LogFileInfo, StatusFileCreated};
+use super::types::{LockCreated, LogFileInfo, ParsedLockComponents, StatusFileCreated};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -331,71 +331,56 @@ pub(crate) fn parse_module_log_file(
     })
 }
 
-pub(crate) fn parse_lock_path(
-    lock_root: &Path,
-    path: &Path,
-    run_id: &str,
-) -> Option<StatusFileCreated> {
+fn parse_lock_components(lock_root: &Path, path: &Path) -> Option<ParsedLockComponents> {
     let relative = path.strip_prefix(lock_root).ok()?;
     let parts: Vec<&str> = relative.iter().map(|p| p.to_str().unwrap_or("")).collect();
+    let module = parts.first()?.to_string();
 
-    if parts.len() < 2 {
-        return None;
-    }
-
-    let module = parts[0].to_string();
-    let file_name = parts.last()?.to_string();
-
-    if !file_name.ends_with(".status") {
-        return None;
-    }
-
-    let step_code = file_name.trim_end_matches(".status").to_string();
-
-    match module.as_str() {
+    let (subject_session, run) = match module.as_str() {
         "xASL_module_Structural" => {
             if parts.len() < 4 {
                 return None;
             }
-            let subject_session = Some(parts[1].to_string());
-            Some(StatusFileCreated {
-                run_id: run_id.to_string(),
-                module,
-                subject_session,
-                step_code,
-                run: None,
-            })
+            (Some(parts[1].to_string()), None)
         }
         "xASL_module_ASL" => {
             if parts.len() < 4 {
                 return None;
             }
-            let subject_session = Some(parts[1].to_string());
-            let run_dir = parts[2].to_string();
-            let run = if run_dir.starts_with("xASL_module_ASL_ASL_") {
-                run_dir
-                    .strip_prefix("xASL_module_ASL_ASL_")
-                    .map(normalize_asl_run_id)
-            } else {
-                None
-            };
-            Some(StatusFileCreated {
-                run_id: run_id.to_string(),
-                module,
-                subject_session,
-                step_code,
-                run,
-            })
+            let run = parts[2]
+                .strip_prefix("xASL_module_ASL_ASL_")
+                .map(normalize_asl_run_id);
+            (Some(parts[1].to_string()), run)
         }
-        "xASL_module_Population" => Some(StatusFileCreated {
-            run_id: run_id.to_string(),
-            module,
-            subject_session: None,
-            step_code,
-            run: None,
-        }),
-        _ => None,
+        "xASL_module_Population" => (None, None),
+        _ => return None,
+    };
+
+    Some(ParsedLockComponents {
+        module,
+        subject_session,
+        run,
+    })
+}
+
+pub(crate) fn parse_lock_path(
+    lock_root: &Path,
+    path: &Path,
+    run_id: &str,
+) -> Option<StatusFileCreated> {
+    let components = parse_lock_components(lock_root, path)?;
+    let file_name = path.file_name()?.to_str().unwrap_or("");
+    if !file_name.ends_with(".status") {
+        return None;
     }
+
+    Some(StatusFileCreated {
+        run_id: run_id.to_string(),
+        module: components.module,
+        subject_session: components.subject_session,
+        step_code: file_name.trim_end_matches(".status").to_string(),
+        run: components.run,
+    })
 }
 
 pub(crate) fn parse_lock_dir_path(
@@ -403,54 +388,11 @@ pub(crate) fn parse_lock_dir_path(
     path: &Path,
     run_id: &str,
 ) -> Option<LockCreated> {
-    let relative = path.strip_prefix(lock_root).ok()?;
-    let parts: Vec<&str> = relative.iter().map(|p| p.to_str().unwrap_or("")).collect();
-
-    if parts.is_empty() {
-        return None;
-    }
-
-    let module = parts[0].to_string();
-
-    match module.as_str() {
-        "xASL_module_Structural" => {
-            if parts.len() < 4 {
-                return None;
-            }
-            let subject_session = Some(parts[1].to_string());
-            Some(LockCreated {
-                run_id: run_id.to_string(),
-                module,
-                subject_session,
-                run: None,
-            })
-        }
-        "xASL_module_ASL" => {
-            if parts.len() < 4 {
-                return None;
-            }
-            let subject_session = Some(parts[1].to_string());
-            let run_dir = parts[2].to_string();
-            let run = if run_dir.starts_with("xASL_module_ASL_ASL_") {
-                run_dir
-                    .strip_prefix("xASL_module_ASL_ASL_")
-                    .map(normalize_asl_run_id)
-            } else {
-                None
-            };
-            Some(LockCreated {
-                run_id: run_id.to_string(),
-                module,
-                subject_session,
-                run,
-            })
-        }
-        "xASL_module_Population" => Some(LockCreated {
-            run_id: run_id.to_string(),
-            module,
-            subject_session: None,
-            run: None,
-        }),
-        _ => None,
-    }
+    let components = parse_lock_components(lock_root, path)?;
+    Some(LockCreated {
+        run_id: run_id.to_string(),
+        module: components.module,
+        subject_session: components.subject_session,
+        run: components.run,
+    })
 }

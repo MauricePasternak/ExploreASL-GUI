@@ -1,7 +1,7 @@
 use super::common::*;
 use crate::processing::runs::{reserve_processing_run_impl, validate_watcher_request};
 use crate::processing::types::*;
-use crate::processing::utils::parse_lock_path;
+use crate::processing::utils::{parse_lock_dir_path, parse_lock_path};
 use crate::processing::watcher::stop_watch_lock_dir_impl;
 use std::fs;
 use std::sync::mpsc;
@@ -157,7 +157,7 @@ fn watcher_stop_reaps_an_already_exited_thread_after_stop_channel_disconnects() 
 // -------------------------------------------------------------------------
 
 #[test]
-fn parse_lock_path_works_regardless_of_create_kind() {
+fn parse_lock_paths_work_regardless_of_create_kind() {
     let temp = std::env::temp_dir();
     let lock_root = temp.join("test").join("lock");
     let path = lock_root
@@ -184,6 +184,16 @@ fn parse_lock_path_works_regardless_of_create_kind() {
     assert_eq!(asl_event.subject_session, Some("sub-001_01".to_string()));
     assert_eq!(asl_event.step_code, "020_RealignASL");
     assert_eq!(asl_event.run, Some("1".to_string()));
+
+    let lock_event = parse_lock_dir_path(
+        &lock_root,
+        &asl_path.parent().unwrap().join("locked"),
+        "run-1",
+    )
+    .unwrap();
+    assert_eq!(lock_event.module, asl_event.module);
+    assert_eq!(lock_event.subject_session, asl_event.subject_session);
+    assert_eq!(lock_event.run, asl_event.run);
 }
 
 #[test]
