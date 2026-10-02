@@ -1,6 +1,6 @@
 use crate::{
     app_state::AppState,
-    visualization::{clear_active_project_impl, set_active_project_impl},
+    project_runtime::{clear_active_project_impl, set_active_project_impl},
 };
 
 #[test]

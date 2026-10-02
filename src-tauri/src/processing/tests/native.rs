@@ -660,7 +660,7 @@ fn shutdown_and_release_retain_real_durable_cleanup_until_exact_retry() {
     assert_eq!(pending.available_action, AvailableAction::RetryCleanup);
     assert!(!pending.lifecycle.is_terminal());
     assert!(!crate::project_runtime::shutdown_project_runtime_impl(&state).success);
-    assert!(crate::visualization::clear_active_project_impl(&state).is_err());
+    assert!(crate::project_runtime::clear_active_project_impl(&state).is_err());
     assert_eq!(fs::read(&foreign).unwrap(), b"preserve");
     let durable = records(root.path()).unwrap().pop().unwrap();
     assert_eq!(durable.run_id.to_string(), run_id);

@@ -53,15 +53,15 @@ use processing::{
     list_subject_reports, list_subjects, read_lock_status, read_module_logs, read_report_image,
     reserve_processing_run, run_pipeline, stop_running_processing_for_exit,
 };
-use project_runtime::shutdown_project_runtime;
+use project_runtime::{clear_active_project, set_active_project, shutdown_project_runtime};
 use project_writer::{atomic_write_project, cleanup_project_temps};
 use qc::{get_all_subjects_qc, get_subject_session_qc};
 use tauri::Manager;
 #[cfg(debug_assertions)]
 use tauri::{LogicalSize, Size};
 use visualization::{
-    check_join_sanity, clear_active_project, execute_join, inspect_external_data, list_stats_files,
-    load_qcbf_data, read_data_columns, set_active_project, stat_file,
+    check_join_sanity, execute_join, inspect_external_data, list_stats_files, load_qcbf_data,
+    read_data_columns, stat_file,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

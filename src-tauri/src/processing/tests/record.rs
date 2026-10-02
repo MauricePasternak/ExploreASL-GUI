@@ -94,7 +94,7 @@ fn activation_marks_absent_processing_owner_interrupted_and_blocks_admission() {
 
     // Project activation remains viewable, but no absent native owner may be
     // treated as settled or replaced before exact external-stop confirmation.
-    crate::visualization::set_active_project_impl(temp.path().display().to_string(), &state)
+    crate::project_runtime::set_active_project_impl(temp.path().display().to_string(), &state)
         .unwrap();
     let snapshot = crate::processing::runs::get_active_run_impl(&state)
         .unwrap()
@@ -143,7 +143,7 @@ fn activation_of_copied_unresolved_record_requires_confirmation_without_mutation
         .unwrap();
     let state = app.state::<crate::app_state::AppState>();
 
-    crate::visualization::set_active_project_impl(copied.path().display().to_string(), &state)
+    crate::project_runtime::set_active_project_impl(copied.path().display().to_string(), &state)
         .unwrap();
     let snapshot = crate::processing::runs::get_active_run_impl(&state)
         .unwrap()

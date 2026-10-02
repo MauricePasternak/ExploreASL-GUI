@@ -87,8 +87,11 @@ mod tests {
         std::os::unix::fs::symlink(&project, &project_alias).expect("project alias");
 
         let state = AppState::default();
-        crate::visualization::set_active_project_impl(project_alias.display().to_string(), &state)
-            .expect("set active project through parent symlink");
+        crate::project_runtime::set_active_project_impl(
+            project_alias.display().to_string(),
+            &state,
+        )
+        .expect("set active project through parent symlink");
         let active = state
             .active_project_root
             .lock()
