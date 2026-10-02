@@ -3,7 +3,6 @@ use crate::bids::scan::{asl_json_path_for, parse_bids_structure};
 use crate::bids::setup::{self, SetupCommandError, SetupCommitResult, SetupMode, SetupPlan};
 use crate::bids::sidecar::find_asl_sidecars;
 use crate::error::IntoCommandResult;
-use crate::processing::runs::preparing_run_root;
 use crate::tracing::CommandTrace;
 use anyhow::Result as AnyResult;
 use serde::{Deserialize, Serialize};
@@ -317,30 +316,6 @@ pub fn commit_bids_project_mutations(
         })?;
     let app_data = setup_app_data(&app)?;
     setup::commit_for_app_state(&state, &plan_id, &app_data).map_err(setup::command_error)
-}
-
-/// Native run ownership determines the root. This command has no renderer path
-/// and intentionally performs no setup mutation.
-#[tauri::command]
-pub fn verify_bids_compatibility_for_run(
-    state: tauri::State<'_, crate::app_state::AppState>,
-    run_id: String,
-) -> Result<(), String> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| "Project transition lock was poisoned".to_string())?;
-    verify_bids_compatibility_for_run_impl(&state, &run_id).into_command_result()
-}
-
-/// Kept separate from IPC so run ownership and read-only verification have a
-/// direct native test target. Renderer input supplies only the reservation ID.
-pub(crate) fn verify_bids_compatibility_for_run_impl(
-    state: &crate::app_state::AppState,
-    run_id: &str,
-) -> AnyResult<()> {
-    let root = preparing_run_root(state, run_id).map_err(anyhow::Error::msg)?;
-    setup::verify(&root)
 }
 
 #[cfg(test)]

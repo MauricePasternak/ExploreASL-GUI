@@ -1,7 +1,5 @@
 use super::common::*;
-use crate::processing::runs::{
-    attach_run_impl, get_active_run_impl, preparing_run_root, reserve_processing_run_impl,
-};
+use crate::processing::runs::{attach_run_impl, get_active_run_impl, reserve_processing_run_impl};
 use crate::processing::types::*;
 use std::fs;
 use std::path::PathBuf;
@@ -148,7 +146,7 @@ fn processing_reservation_is_atomic_and_never_mutates_rejected_fixture() {
 }
 
 #[test]
-fn run_scoped_preparation_and_finalization_roots_reject_stale_identity_before_mutation() {
+fn matching_run_for_active_project_rejects_stale_identity_before_mutation() {
     let workspace = tempfile::tempdir().unwrap();
     let root = workspace.path().join("project");
     let other_root = workspace.path().join("other-project");
@@ -163,21 +161,6 @@ fn run_scoped_preparation_and_finalization_roots_reject_stale_identity_before_mu
         vec!["sub-001_01".to_string()],
     )
     .unwrap();
-
-    assert_eq!(
-        preparing_run_root(&state, &reserved.run_id).unwrap(),
-        root.canonicalize().unwrap()
-    );
-    state
-        .processing_state
-        .lock()
-        .unwrap()
-        .current_run
-        .as_mut()
-        .unwrap()
-        .lifecycle = ProcessingLifecycle::Running;
-    assert!(preparing_run_root(&state, &reserved.run_id).is_err());
-    assert_eq!(fs::read_to_string(&sentinel).unwrap(), "unchanged");
 
     state
         .processing_state

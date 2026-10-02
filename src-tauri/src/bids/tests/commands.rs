@@ -1,6 +1,5 @@
 use super::*;
 use crate::app_state::AppState;
-use crate::processing::runs::reserve_processing_run_impl;
 use std::fs;
 use tempfile::TempDir;
 
@@ -236,26 +235,6 @@ fn check_bids_uncompressed_nii_accepted() {
     let result = check_bids_dataset_impl(root).unwrap();
     assert!(result.is_bids);
     assert_eq!(result.asl_subject_count, 1);
-}
-
-#[test]
-fn run_scoped_compatibility_verification_requires_the_exact_preparing_reservation() {
-    let root = TempDir::new().unwrap();
-    fs::create_dir(root.path().join("rawdata")).unwrap();
-    fs::write(
-        root.path().join(crate::bids::setup::RAWDATA_MARKER_PATH),
-        crate::bids::setup::RAWDATA_MARKER_BYTES,
-    )
-    .unwrap();
-    let state = AppState::default();
-    crate::project_ownership_tests::own_project(&state, &root.path().canonicalize().unwrap());
-    let reserved = reserve_processing_run_impl(&state, vec!["structural".into()], vec![]).unwrap();
-    verify_bids_compatibility_for_run_impl(&state, &reserved.run_id).unwrap();
-    assert!(verify_bids_compatibility_for_run_impl(&state, "obsolete-run").is_err());
-    // A replacement active root turns the original reservation foreign.
-    let other = TempDir::new().unwrap();
-    crate::project_ownership_tests::own_project(&state, &other.path().canonicalize().unwrap());
-    assert!(verify_bids_compatibility_for_run_impl(&state, &reserved.run_id).is_err());
 }
 
 #[test]

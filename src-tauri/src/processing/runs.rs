@@ -461,21 +461,3 @@ pub(crate) fn matching_run_for_active_project<'a>(
     }
     Ok((processing_state, project_root))
 }
-
-/// Return a root only while the exact native reservation remains in Preparing.
-/// Callers that mutate project files must take `AppState::project_transition`
-/// first, then use this instead of accepting a renderer-supplied root.
-pub(crate) fn preparing_run_root(state: &AppState, run_id: &str) -> Result<PathBuf, String> {
-    let (processing_state, project_root) = matching_run_for_active_project(state, run_id)?;
-    let run = processing_state
-        .current_run
-        .as_ref()
-        .expect("matching run exists");
-    if run.lifecycle != ProcessingLifecycle::Preparing {
-        return Err(format!(
-            "Processing run {run_id} must be Preparing, found {:?}",
-            run.lifecycle
-        ));
-    }
-    Ok(project_root)
-}

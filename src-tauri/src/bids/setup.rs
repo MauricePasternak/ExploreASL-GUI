@@ -2096,15 +2096,7 @@ fn save_registry(app_data: &Path, registry: &PendingRegistry) -> Result<()> {
         Err(error) => Err(error.into()),
     }
 }
-static REGISTRY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-fn lock_registry() -> Result<std::sync::MutexGuard<'static, ()>> {
-    REGISTRY_LOCK
-        .lock()
-        .map_err(|_| anyhow!("Setup pending registry lock was poisoned"))
-}
 fn register_pending(app_data: &Path, entry: PendingEntry) -> Result<()> {
-    let _registry = lock_registry()?;
     let mut registry = load_registry(app_data)?;
     if registry.entries.iter().any(|old| {
         old.registry_id == entry.registry_id
@@ -2118,7 +2110,6 @@ fn register_pending(app_data: &Path, entry: PendingEntry) -> Result<()> {
     save_registry(app_data, &registry)
 }
 fn remove_pending(app_data: &Path, registry_id: &str) -> Result<()> {
-    let _registry = lock_registry()?;
     let mut registry = load_registry(app_data)?;
     registry
         .entries

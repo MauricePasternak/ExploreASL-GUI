@@ -267,7 +267,6 @@ vi.mock("@tauri-apps/api/core", () => ({
           temporaryArtifacts: [],
         });
       case "commit_bids_project_mutations":
-      case "verify_bids_compatibility_for_run":
         return Promise.resolve({ directorySyncSupported: true });
       case "preflight_bids_setup_repair":
         return Promise.resolve({

@@ -34,7 +34,7 @@ use app_state::AppState;
 use apptainer::which_apptainer;
 use bids::commands::{
     check_bids_dataset, commit_bids_project_mutations, preflight_bids_project_mutations,
-    preflight_bids_setup_repair, scan_bids_sidecars, verify_bids_compatibility_for_run,
+    preflight_bids_setup_repair, scan_bids_sidecars,
 };
 use commands::{
     get_available_memory_mb, get_cpu_cores, inspect_source_path, is_writable, walk_directory,
@@ -151,7 +151,6 @@ pub fn run() {
             preflight_bids_project_mutations,
             preflight_bids_setup_repair,
             commit_bids_project_mutations,
-            verify_bids_compatibility_for_run,
             atomic_write_project,
             cleanup_project_temps,
             shutdown_project_runtime,

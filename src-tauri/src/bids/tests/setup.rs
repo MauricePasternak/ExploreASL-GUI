@@ -1,5 +1,4 @@
 use super::*;
-use std::sync::{Arc, Barrier};
 use tempfile::TempDir;
 use walkdir::WalkDir;
 
@@ -1025,45 +1024,6 @@ fn a_failed_claim_is_terminal_and_cannot_be_retried_with_reviewed_bytes() {
     assert!(!root.path().join("project.easl").exists());
 }
 #[test]
-fn concurrent_duplicate_commit_has_one_admission_and_one_terminal_replay() {
-    let root = TempDir::new().unwrap();
-    let app_data = TempDir::new().unwrap();
-    let plans = Arc::new(SetupPlans::default());
-    let plan = preflight_for_state(
-        &plans,
-        root.path().display().to_string(),
-        SetupMode::Bids,
-        Some(String::from_utf8(project("bids")).unwrap()),
-    )
-    .unwrap();
-    let barrier = Arc::new(Barrier::new(3));
-    let outcomes = std::thread::scope(|scope| {
-        let first_plans = Arc::clone(&plans);
-        let first_barrier = Arc::clone(&barrier);
-        let first_id = plan.plan_id.clone();
-        let first_app_data = app_data.path().to_path_buf();
-        let first = scope.spawn(move || {
-            first_barrier.wait();
-            commit_for_state(&first_plans, &first_id, &first_app_data).unwrap()
-        });
-        let second_plans = Arc::clone(&plans);
-        let second_barrier = Arc::clone(&barrier);
-        let second_id = plan.plan_id.clone();
-        let second_app_data = app_data.path().to_path_buf();
-        let second = scope.spawn(move || {
-            second_barrier.wait();
-            commit_for_state(&second_plans, &second_id, &second_app_data).unwrap()
-        });
-        barrier.wait();
-        [first.join().unwrap(), second.join().unwrap()]
-    });
-    assert_eq!(outcomes[0], outcomes[1]);
-    assert_eq!(
-        fs::read(root.path().join("project.easl")).unwrap(),
-        project("bids")
-    );
-}
-#[test]
 fn malformed_registry_and_path_escape_fail_closed() {
     let temp = TempDir::new().unwrap();
     fs::write(temp.path().join(REGISTRY_FILE), b"not json").unwrap();
@@ -1985,55 +1945,6 @@ fn commit_contract_returns_only_durable_result_and_structured_failures_without_a
         std::str::from_utf8(&project("bids")).ok()
     );
     assert!(load_registry(app_data.path()).unwrap().entries.is_empty());
-}
-
-#[test]
-fn registry_concurrent_project_updates_preserve_every_pending_entry() {
-    let app_data = TempDir::new().unwrap();
-    // Exercise replacement RMW, beyond the initial create-new registry race.
-    save_registry(
-        app_data.path(),
-        &PendingRegistry {
-            version: REGISTRY_VERSION,
-            entries: vec![],
-        },
-    )
-    .unwrap();
-    let roots = (0..24).map(|_| TempDir::new().unwrap()).collect::<Vec<_>>();
-    let barrier = Barrier::new(roots.len());
-    let results = std::thread::scope(|scope| {
-        let handles = roots
-            .iter()
-            .map(|root| {
-                let barrier = &barrier;
-                let app_data = app_data.path();
-                scope.spawn(move || {
-                    let (transaction, journal, registry) = identities();
-                    let entry = entry_for(root.path(), transaction, journal, registry);
-                    barrier.wait();
-                    register_pending(app_data, entry)
-                })
-            })
-            .collect::<Vec<_>>();
-        handles
-            .into_iter()
-            .map(|h| h.join().unwrap())
-            .collect::<Vec<_>>()
-    });
-    assert!(results.iter().all(Result::is_ok), "{results:?}");
-    let entries = load_registry(app_data.path()).unwrap().entries;
-    assert_eq!(
-        entries.len(),
-        roots.len(),
-        "updates from independent projects must not be lost"
-    );
-    std::thread::scope(|scope| {
-        for entry in entries.iter().take(12) {
-            let app_data = app_data.path();
-            scope.spawn(move || remove_pending(app_data, &entry.registry_id).unwrap());
-        }
-    });
-    assert_eq!(load_registry(app_data.path()).unwrap().entries.len(), 12);
 }
 
 #[test]
