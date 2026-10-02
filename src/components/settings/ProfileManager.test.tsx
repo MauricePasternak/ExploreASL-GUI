@@ -19,6 +19,12 @@ function renderManager() {
   );
 }
 
+function validationInvokeCount() {
+  return vi
+    .mocked(invoke)
+    .mock.calls.filter(([command]) => command === "validate_execution_profile").length;
+}
+
 beforeEach(() => {
   useGlobalStore.setState({
     loaded: true,
@@ -133,7 +139,13 @@ describe("ProfileManager", () => {
       expect(useGlobalStore.getState().settings.executionProfiles[0].exploreAslVersion).toBe(
         "1.15.0",
       );
+      const profileId = useGlobalStore.getState().settings.executionProfiles[0].id;
+      expect(useGlobalStore.getState().profileValidationState[profileId]).toEqual({
+        valid: true,
+        errors: [],
+      });
     });
+    expect(validationInvokeCount()).toBe(1);
   });
 
   it("creates an Apptainer profile with SIF and executable paths", async () => {
@@ -425,7 +437,7 @@ describe("ProfileManager", () => {
     const profile = makeMatlabProfile({ label: "Original" });
     useGlobalStore.setState({
       settings: { ...DEFAULT_SETTINGS, executionProfiles: [profile] },
-      profileValidationState: { [profile.id]: { valid: true, errors: [] } },
+      profileValidationState: { [profile.id]: { valid: false, errors: ["stale"] } },
     });
 
     vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
@@ -435,7 +447,7 @@ describe("ProfileManager", () => {
           id: executionProfile.id,
           valid: true,
           errors: [],
-          exploreAslVersion: "1.15.0",
+          exploreAslVersion: "2.0.0",
         };
       }
       return null;
@@ -455,6 +467,14 @@ describe("ProfileManager", () => {
 
     await waitFor(() => {
       expect(useGlobalStore.getState().settings.executionProfiles[0].label).toBe("Updated Label");
+      expect(useGlobalStore.getState().settings.executionProfiles[0].exploreAslVersion).toBe(
+        "2.0.0",
+      );
+      expect(useGlobalStore.getState().profileValidationState[profile.id]).toEqual({
+        valid: true,
+        errors: [],
+      });
     });
+    expect(validationInvokeCount()).toBe(1);
   });
 });

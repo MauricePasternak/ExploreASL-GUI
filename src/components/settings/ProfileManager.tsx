@@ -27,7 +27,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
 
 import type { ExecutionProfile } from "../../schemas/executionProfile";
-import { useGlobalStore } from "../../stores/globalStore";
+import { useGlobalStore, type ProfileValidationResult } from "../../stores/globalStore";
 
 interface MatlabDetectionResult {
   id: string;
@@ -312,12 +312,7 @@ export default function ProfileManager() {
     try {
       const result = (await invoke("validate_execution_profile", {
         executionProfile: profile,
-      })) as {
-        id: string;
-        valid: boolean;
-        errors: string[];
-        exploreAslVersion?: string;
-      };
+      })) as ProfileValidationResult;
 
       if (!result.valid) {
         setSaveErrors(result.errors);
@@ -330,10 +325,10 @@ export default function ProfileManager() {
       };
 
       if (editingId === "new") {
-        await addProfile(persistedProfile);
+        await addProfile(persistedProfile, result);
       } else {
         updateProfile(editingId, persistedProfile);
-        await validateProfile(persistedProfile);
+        await validateProfile(persistedProfile, result);
       }
 
       resetForm();

@@ -11,7 +11,7 @@ import {
   RecentProjectsSchema,
 } from "../schemas/globalSettings";
 
-interface ProfileValidationResult {
+export interface ProfileValidationResult {
   id: string;
   valid: boolean;
   errors: string[];
@@ -24,11 +24,17 @@ interface GlobalState {
   profileValidationState: Record<string, { valid: boolean; errors: string[] }>;
   loadSettings: () => Promise<void>;
   saveSettings: () => Promise<void>;
-  addProfile: (profile: ExecutionProfile) => Promise<void>;
+  addProfile: (
+    profile: ExecutionProfile,
+    validationResult?: ProfileValidationResult,
+  ) => Promise<void>;
   updateProfile: (id: string, updates: Partial<ExecutionProfile>) => void;
   deleteProfile: (id: string) => void;
   getProfileById: (id: string) => ExecutionProfile | undefined;
-  validateProfile: (profile: ExecutionProfile) => Promise<void>;
+  validateProfile: (
+    profile: ExecutionProfile,
+    validationResult?: ProfileValidationResult,
+  ) => Promise<void>;
   validateAllProfiles: () => Promise<void>;
   hasValidProfile: () => boolean;
   setTheme: (theme: "light" | "dark") => void;
@@ -145,7 +151,7 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     await store.save();
   },
 
-  addProfile: async (profile) => {
+  addProfile: async (profile, validationResult) => {
     set((state) => ({
       settings: {
         ...state.settings,
@@ -156,7 +162,7 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
         [profile.id]: { valid: false, errors: [] },
       },
     }));
-    await get().validateProfile(profile);
+    await get().validateProfile(profile, validationResult);
     await get().saveSettings();
   },
 
@@ -204,10 +210,12 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     return get().settings.executionProfiles.find((p) => p.id === id);
   },
 
-  validateProfile: async (profile) => {
-    const result = (await invoke("validate_execution_profile", {
-      executionProfile: profile,
-    })) as ProfileValidationResult | null;
+  validateProfile: async (profile, validationResult) => {
+    const result =
+      validationResult ??
+      ((await invoke("validate_execution_profile", {
+        executionProfile: profile,
+      })) as ProfileValidationResult | null);
 
     if (!result) return;
 

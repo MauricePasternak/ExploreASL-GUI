@@ -157,10 +157,17 @@ Profile validation SHALL occur at four points in the application lifecycle. The 
 3. **On profile switch** (non-blocking): When the user selects a different profile in a ProfileSelector dropdown, the frontend SHALL call `invoke("validate_execution_profile", { executionProfile })`. If invalid, a warning is shown and the Start button is disabled.
 4. **During preparation phase** (blocking): `run_import_pipeline` and `run_pipeline` SHALL call `profile.validate()` internally before any destructive operations. If validation fails, the command SHALL return an error and no destructive operations SHALL occur.
 
+Each profile save SHALL perform one native validation. Profile persistence, detected version, and `profileValidationState` refresh SHALL reuse that save's result without a second validation invocation. Startup, profile-switch, and native preparation validation SHALL remain independent triggers.
+
 #### Scenario: Valid profile on save
 
 - **WHEN** the user saves a profile with valid MATLAB and ExploreASL paths
 - **THEN** validation passes, profile is persisted, `profileValidationState[id].valid` is `true`, and `exploreAslVersion` is populated from the VERSION file (fast file read, no MATLAB spawn)
+
+#### Scenario: Saving an edited profile refreshes stale validation
+
+- **WHEN** a profile with stale cached validation is edited and save-time native validation succeeds with a new detected version
+- **THEN** the edited profile, version, and validation entry SHALL reflect that single result without invoking native validation again during persistence
 
 #### Scenario: Invalid MATLAB path blocks save
 

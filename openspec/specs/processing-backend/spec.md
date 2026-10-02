@@ -122,7 +122,7 @@ BIDS2Legacy runs as part of each ExploreASL invocation before the selected proce
 
 The `detect_exploreasl_version` Tauri command SHALL remain unchanged. Its usage SHALL shift from being called with the global `exploreAslPath` to being called with the `exploreAslPath` from the selected execution profile. The version SHALL be detected:
 
-1. **On app startup**: during `validate_all_execution_profiles`, each profile's `exploreAslVersion` SHALL be re-detected and persisted if changed. Save-time validation does NOT detect versions — it is path-existence only.
+1. **On app startup and profile save**: profile validation SHALL re-detect `exploreAslVersion` and persist it if changed. Profile save SHALL reuse its single validation result as defined in `execution-profiles`.
 2. **During preparation phase of `run_pipeline`**: the version SHALL be extracted from the reserved profile's `exploreAslVersion` field (or re-detected from `exploreAslPath`) and logged.
 3. **At pipeline runtime**: native preparation captures actual on-disk versions through managed probes. Accepted native provenance is saved to `lastRun` alongside `profileId`; the renderer does not launch processing-time probes.
 
