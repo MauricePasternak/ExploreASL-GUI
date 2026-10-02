@@ -217,6 +217,20 @@ Each SubjectSession row in the execution dashboard SHALL be architected to accom
 - **WHEN** a SubjectSession row is rendered
 - **THEN** the row component SHALL expose an actions slot or callback area that can later accommodate error viewing, QC viewing, and inline error text
 
+### Requirement: QC metric labels are resolved in the renderer
+
+The report viewer SHALL derive human-readable QC labels from the metric key using the frontend QC-label dictionary. Unknown keys SHALL use the frontend's title-case fallback formatter. It SHALL consume native key/value measures without requiring a backend display-label field.
+
+#### Scenario: Known QC metric is displayed
+
+- **WHEN** the report viewer receives a metric key found in the QC-label dictionary
+- **THEN** it SHALL display that dictionary label with the native value
+
+#### Scenario: Unknown QC metric is displayed
+
+- **WHEN** the report viewer receives `unknown_metric_key` without a label field
+- **THEN** it SHALL display `Unknown Metric Key` with the native value
+
 ### Requirement: ASL Run Display
 
 For ASL module rows, run sub-rows SHALL only be displayed when a SubjectSession has more than one ASL run (multiple `xASL_module_ASL_ASL_<n>` directories in the lock structure). When there is exactly one run, the ASL row SHALL display progress inline without sub-rows.

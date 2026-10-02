@@ -267,10 +267,9 @@ describe("ReportViewerModal", () => {
     const qcSpy = vi.spyOn(reportViewer, "fetchSubjectQC").mockResolvedValue([
       {
         key: "T1w_GM_ICV_Ratio",
-        label: "Ratio of Gray Matter vs Intra-cortical Volume",
         value: "0.437",
       },
-      { key: "T1w_GM_vol_mL", label: "Gray Matter Volume (mL)", value: "640" },
+      { key: "T1w_GM_vol_mL", value: "640" },
     ]);
 
     renderModal({

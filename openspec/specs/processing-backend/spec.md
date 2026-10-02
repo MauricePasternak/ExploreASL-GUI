@@ -397,3 +397,12 @@ After exact confirmation, native recovery SHALL restore proven GUI-owned artifac
 
 - **WHEN** confirmation names an obsolete run, project, or revision
 - **THEN** it SHALL reject without changing current lifecycle, files, or execution admission
+
+### Requirement: QC measures contain data rather than display labels
+
+The `get_subject_session_qc` command SHALL return per-measure objects containing `key` and string `value` without display labels. Native extraction SHALL retain Structural and ASL-run selection, value formatting, error handling, and deterministic key ordering. Display-label resolution SHALL belong to the renderer.
+
+#### Scenario: QC measures are returned for report viewing
+
+- **WHEN** a valid subject-session QC collection is requested for a supported module and run
+- **THEN** the native response SHALL contain sorted key/value measures and SHALL NOT compute or transmit human-readable metric labels

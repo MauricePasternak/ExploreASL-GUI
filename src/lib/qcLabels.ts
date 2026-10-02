@@ -88,7 +88,7 @@ export const QC_METRIC_LABELS: Record<string, string> = {
 /**
  * Fallback formatter that converts snake_case or identifier strings to title case.
  */
-export function formatFallbackQcKey(key: string): string {
+function formatFallbackQcKey(key: string): string {
   let label = "";
   let capitalize = true;
   for (const c of key) {
@@ -106,14 +106,11 @@ export function formatFallbackQcKey(key: string): string {
 }
 
 /**
- * Resolves a human-readable QC metric label given its key and an optional fallback label.
+ * Resolves a human-readable QC metric label given its key.
  */
-export function getQcMeasureLabel(key: string, fallbackLabel?: string): string {
+export function getQcMeasureLabel(key: string): string {
   if (key in QC_METRIC_LABELS) {
     return QC_METRIC_LABELS[key];
-  }
-  if (fallbackLabel && fallbackLabel.trim() !== "" && fallbackLabel !== key) {
-    return fallbackLabel;
   }
   return formatFallbackQcKey(key);
 }

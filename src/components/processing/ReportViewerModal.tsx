@@ -506,7 +506,7 @@ export default function ReportViewerModal({
                     <Table.Tr key={measure.key} data-testid={`qc-row-${measure.key}`}>
                       <Table.Td>
                         <Text size="sm" fw={500} data-testid={`qc-label-${measure.key}`}>
-                          {getQcMeasureLabel(measure.key, measure.label)}
+                          {getQcMeasureLabel(measure.key)}
                         </Text>
                       </Table.Td>
                       <Table.Td style={{ maxWidth: 300 }}>

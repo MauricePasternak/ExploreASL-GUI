@@ -11,25 +11,7 @@ use crate::tracing::CommandTrace;
 #[serde(rename_all = "camelCase")]
 pub struct QcMeasure {
     pub key: String,
-    pub label: String,
     pub value: String,
-}
-
-fn format_qc_label(key: &str) -> String {
-    let mut label = String::new();
-    let mut capitalize = true;
-    for c in key.chars() {
-        if c == '_' {
-            label.push(' ');
-            capitalize = true;
-        } else if capitalize {
-            label.push(c.to_ascii_uppercase());
-            capitalize = false;
-        } else {
-            label.push(c);
-        }
-    }
-    label
 }
 
 fn format_json_value(val: &Value) -> String {
@@ -70,79 +52,67 @@ pub fn extract_qc_measures(
     let json: Value = serde_json::from_str(&content)
         .with_context(|| format!("Failed to parse JSON in {}", file_path.display()))?;
 
-    let mut measures = Vec::new();
-
-    if module.eq_ignore_ascii_case("structural") {
-        if let Some(structural_val) = json.get("Structural") {
-            if let Some(obj) = structural_val.as_object() {
-                for (k, v) in obj {
-                    measures.push(QcMeasure {
-                        key: k.clone(),
-                        label: format_qc_label(k),
-                        value: format_json_value(v),
-                    });
-                }
-            } else {
-                bail!("Field 'Structural' in JSON is not an object");
-            }
-        } else {
+    let obj = if module.eq_ignore_ascii_case("structural") {
+        let Some(structural_val) = json.get("Structural") else {
             bail!("Field 'Structural' not found in JSON");
-        }
+        };
+        let Some(obj) = structural_val.as_object() else {
+            bail!("Field 'Structural' in JSON is not an object");
+        };
+        obj
     } else if module.eq_ignore_ascii_case("asl") {
-        if let Some(asl_val) = json.get("ASL") {
-            if let Some(asl_obj) = asl_val.as_object() {
-                let run_key = if let Some(r) = run {
-                    let r_trimmed = r.trim_start_matches('0');
-                    let key_option_1 = format!("ASL_{}", r);
-                    let key_option_2 = format!("ASL_{}", r_trimmed);
+        let Some(asl_val) = json.get("ASL") else {
+            bail!("Field 'ASL' not found in JSON");
+        };
+        let Some(asl_obj) = asl_val.as_object() else {
+            bail!("Field 'ASL' in JSON is not an object");
+        };
 
-                    if asl_obj.contains_key(&key_option_1) {
-                        Some(key_option_1)
-                    } else if asl_obj.contains_key(&key_option_2) {
-                        Some(key_option_2)
-                    } else {
-                        asl_obj
-                            .keys()
-                            .find(|k| {
-                                k.eq_ignore_ascii_case(&key_option_1)
-                                    || k.eq_ignore_ascii_case(&key_option_2)
-                                    || k.ends_with(&format!("_{}", r))
-                                    || k.ends_with(&format!("_{}", r_trimmed))
-                            })
-                            .cloned()
-                    }
-                } else {
-                    asl_obj.keys().find(|k| k.starts_with("ASL_")).cloned()
-                };
+        let run_key = if let Some(r) = run {
+            let r_trimmed = r.trim_start_matches('0');
+            let key_option_1 = format!("ASL_{}", r);
+            let key_option_2 = format!("ASL_{}", r_trimmed);
 
-                if let Some(key) = run_key {
-                    if let Some(run_data) = asl_obj.get(&key) {
-                        if let Some(obj) = run_data.as_object() {
-                            for (k, v) in obj {
-                                measures.push(QcMeasure {
-                                    key: k.clone(),
-                                    label: format_qc_label(k),
-                                    value: format_json_value(v),
-                                });
-                            }
-                        } else {
-                            bail!("Field 'ASL.{}' in JSON is not an object", key);
-                        }
-                    } else {
-                        bail!("Field 'ASL.{}' not found in JSON", key);
-                    }
-                } else {
-                    bail!("No matching ASL run found in JSON for run: {:?}", run);
-                }
+            if asl_obj.contains_key(&key_option_1) {
+                Some(key_option_1)
+            } else if asl_obj.contains_key(&key_option_2) {
+                Some(key_option_2)
             } else {
-                bail!("Field 'ASL' in JSON is not an object");
+                asl_obj
+                    .keys()
+                    .find(|k| {
+                        k.eq_ignore_ascii_case(&key_option_1)
+                            || k.eq_ignore_ascii_case(&key_option_2)
+                            || k.ends_with(&format!("_{}", r))
+                            || k.ends_with(&format!("_{}", r_trimmed))
+                    })
+                    .cloned()
             }
         } else {
-            bail!("Field 'ASL' not found in JSON");
-        }
+            asl_obj.keys().find(|k| k.starts_with("ASL_")).cloned()
+        };
+
+        let Some(key) = run_key else {
+            bail!("No matching ASL run found in JSON for run: {:?}", run);
+        };
+        let Some(run_data) = asl_obj.get(&key) else {
+            bail!("Field 'ASL.{}' not found in JSON", key);
+        };
+        let Some(obj) = run_data.as_object() else {
+            bail!("Field 'ASL.{}' in JSON is not an object", key);
+        };
+        obj
     } else {
         bail!("Unsupported module: {}", module);
-    }
+    };
+
+    let mut measures: Vec<QcMeasure> = obj
+        .iter()
+        .map(|(k, v)| QcMeasure {
+            key: k.clone(),
+            value: format_json_value(v),
+        })
+        .collect();
 
     measures.sort_by(|a, b| a.key.cmp(&b.key));
 

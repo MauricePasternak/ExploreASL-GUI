@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getQcMeasureLabel, formatFallbackQcKey, QC_METRIC_LABELS } from "./qcLabels";
+import { getQcMeasureLabel, QC_METRIC_LABELS } from "./qcLabels";
 
 describe("qcLabels", () => {
   it("contains pre-defined metric entries in dictionary", () => {
@@ -28,14 +28,8 @@ describe("qcLabels", () => {
     expect(getQcMeasureLabel("ID")).toBe("Subject Session ID");
   });
 
-  it("uses provided fallbackLabel if key is unknown", () => {
-    expect(getQcMeasureLabel("Custom_Metric_Name", "Custom Metric Name")).toBe(
-      "Custom Metric Name",
-    );
-  });
-
-  it("formats key as title case if key is unknown and no valid fallbackLabel", () => {
+  it("formats unknown keys as title case", () => {
     expect(getQcMeasureLabel("unknown_metric_key")).toBe("Unknown Metric Key");
-    expect(formatFallbackQcKey("another_unknown_key")).toBe("Another Unknown Key");
+    expect(getQcMeasureLabel("another_unknown_key")).toBe("Another Unknown Key");
   });
 });

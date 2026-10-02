@@ -40,7 +40,6 @@ export async function fetchReportImage(
 
 export const QcMeasureSchema = z.object({
   key: z.string(),
-  label: z.string(),
   value: z.string(),
 });
 

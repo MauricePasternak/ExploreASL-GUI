@@ -3,16 +3,6 @@ use std::io::Write;
 use tempfile::NamedTempFile;
 
 #[test]
-fn test_format_qc_label() {
-    assert_eq!(format_qc_label("T1w_GM_ICV_Ratio"), "T1w GM ICV Ratio");
-    assert_eq!(format_qc_label("ASL_tSNR_GM_Ratio"), "ASL TSNR GM Ratio");
-    assert_eq!(
-        format_qc_label("Unrecognized_Key_Name"),
-        "Unrecognized Key Name"
-    );
-}
-
-#[test]
 fn test_format_json_value() {
     assert_eq!(format_json_value(&Value::Null), "");
     assert_eq!(format_json_value(&Value::Bool(true)), "true");
@@ -53,7 +43,6 @@ fn test_extract_qc_measures_structural() {
     let measures = extract_qc_measures(tmp_file.path(), "structural", None).unwrap();
     assert_eq!(measures.len(), 2);
     assert_eq!(measures[0].key, "T1w_GM_ICV_Ratio");
-    assert_eq!(measures[0].label, "T1w GM ICV Ratio");
     assert_eq!(measures[0].value, "0.437");
 }
 
@@ -76,7 +65,6 @@ fn test_extract_qc_measures_asl() {
     assert_eq!(measures.len(), 3);
 
     let echo_time = measures.iter().find(|m| m.key == "EchoTime_ms").unwrap();
-    assert_eq!(echo_time.label, "EchoTime Ms");
     assert_eq!(echo_time.value, "9.991");
 
     let readout_time = measures
