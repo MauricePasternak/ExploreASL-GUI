@@ -1,8 +1,10 @@
-import { render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { TestMantineProvider as MantineProvider } from "../test/render";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ErrorBoundary from "./ErrorBoundary";
+
+afterEach(cleanup);
 
 function ThrowingComponent(): never {
   throw new Error("boom");
@@ -13,7 +15,7 @@ describe("ErrorBoundary", () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ErrorBoundary>
           <ThrowingComponent />
         </ErrorBoundary>

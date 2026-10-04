@@ -1,14 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
-import { describe, expect, it } from "vitest";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
+import { afterEach, describe, expect, it } from "vitest";
 
 import HelpTooltip from "./HelpTooltip";
+
+afterEach(cleanup);
 
 describe("HelpTooltip", () => {
   it("reveals explanatory text on hover", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <HelpTooltip
           label="What does this mean?"
           tooltip="This is the longer explanation shown on demand."
@@ -23,7 +25,7 @@ describe("HelpTooltip", () => {
 
   it("renders a wider tooltip panel for longer guidance", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <HelpTooltip
           label="Tooltip width"
           tooltip="This tooltip should have enough width to wrap useful help text comfortably."

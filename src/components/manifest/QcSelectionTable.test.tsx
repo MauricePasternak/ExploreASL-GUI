@@ -1,36 +1,9 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { exists } from "@tauri-apps/plugin-fs";
-
-vi.mock("mantine-datatable", () => ({
-  DataTable: ({ records, columns, idAccessor = "id" }: any) => (
-    <table data-testid="qc-verdict-table">
-      <thead>
-        <tr>
-          {columns.map((col: any, idx: number) => (
-            <th key={col.accessor || idx}>{col.title}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {records.map((record: any) => {
-          const id = record[idAccessor];
-          return (
-            <tr key={id} data-testid={`row-${id}`}>
-              {columns.map((col: any, idx: number) => {
-                const content = col.render ? col.render(record) : record[col.accessor];
-                return <td key={col.accessor || idx}>{content}</td>;
-              })}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  ),
-}));
 
 import QcSelectionTable from "./QcSelectionTable";
 import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
@@ -201,7 +174,7 @@ function renderTable(
     filter: "all",
   });
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <QcSelectionTable
         noInfoSubjects={props.noInfoSubjects ?? new Set()}
         onNextReady={props.onNextReady}
@@ -226,7 +199,7 @@ afterEach(() => {
   mockBids2LegacyExists = true;
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
   useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
-  useManifestStore.setState({ staleVerdicts: new Set(), step: 0, filter: "all" });
+  useManifestStore.getState().resetManifest();
 });
 
 // ---------------------------------------------------------------------------
@@ -326,7 +299,7 @@ describe("QcSelectionTable", () => {
     expect(screen.getByTestId("verdict-notes-sub-01_01")).toHaveValue("Reviewer 1 note");
 
     view.rerender(
-      <MantineProvider>
+      <MantineProvider env="test">
         <QcSelectionTable reviewerId={reviewer2.id} />
       </MantineProvider>,
     );
@@ -344,7 +317,7 @@ describe("QcSelectionTable", () => {
     expect(screen.getByTestId("verdict-reason-sub-01_01")).toBeInTheDocument();
 
     view.rerender(
-      <MantineProvider>
+      <MantineProvider env="test">
         <QcSelectionTable reviewerId={reviewer2.id} />
       </MantineProvider>,
     );
@@ -423,6 +396,9 @@ describe("QcSelectionTable", () => {
     expect(screen.getByRole("table")).toBeTruthy();
     expect(screen.getByTestId("qc-filter")).toBeTruthy();
     expect(screen.getByTestId("bulk-mark-pass")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(3);
+    expect(screen.getByRole("row", { name: /sub-01/ })).toHaveTextContent("Global Defaults");
+    expect(screen.getByRole("row", { name: /sub-02/ })).toHaveTextContent("Encoding Group");
   });
 
   // 12.8 — next gate: disabled when neutral rows exist

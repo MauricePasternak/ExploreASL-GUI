@@ -1,5 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
@@ -33,11 +33,9 @@ vi.mock("@niivue/niivue", () => {
 });
 
 const originalGetContext = HTMLCanvasElement.prototype.getContext;
-afterEach(cleanup);
-
 function renderComponent() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <NiftiViewer />
     </MantineProvider>,
   );
@@ -55,6 +53,7 @@ describe("NiftiViewer", () => {
   });
 
   afterEach(() => {
+    cleanup();
     resetProjectLifecycleForTests();
     HTMLCanvasElement.prototype.getContext = originalGetContext;
   });

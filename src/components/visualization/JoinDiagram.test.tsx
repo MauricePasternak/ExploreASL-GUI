@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it } from "vitest";
 
 import JoinDiagram from "./JoinDiagram";
@@ -32,7 +32,7 @@ interface JoinDiagramProps {
 
 function renderComponent(props: JoinDiagramProps) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <JoinDiagram {...props} />
     </MantineProvider>,
   );

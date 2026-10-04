@@ -1,14 +1,10 @@
-import { MantineProvider } from "@mantine/core";
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import DataParEditor from "./DataParEditor";
+import { renderWithMantine } from "../../test/render";
 
 import { useDataParStore } from "../../stores/dataParStore";
 import { useProjectStore } from "../../stores/projectStore";
-
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
 
 afterEach(() => cleanup());
 

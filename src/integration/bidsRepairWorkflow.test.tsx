@@ -7,7 +7,7 @@
  * journal; this layer proves renderer/store/native-contract sequencing.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
@@ -246,7 +246,7 @@ describe("existing BIDS project repair and retry integration", () => {
     expect(await snapshot(root)).toEqual(openedBefore);
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ControlButtons />
       </MantineProvider>,
     );

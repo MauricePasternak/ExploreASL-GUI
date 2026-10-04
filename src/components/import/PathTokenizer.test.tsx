@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { cleanup, render, screen } from "@testing-library/react";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it } from "vitest";
 
 import PathTokenizer from "./PathTokenizer";
@@ -23,13 +23,14 @@ const SAMPLE_PATTERNS: PathPattern[] = [
 
 function renderWithProviders() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <PathTokenizer />
     </MantineProvider>,
   );
 }
 
 afterEach(() => {
+  cleanup();
   useImportStore.getState().resetImport();
 });
 

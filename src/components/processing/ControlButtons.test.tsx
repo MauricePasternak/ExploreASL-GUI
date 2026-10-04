@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -90,7 +90,7 @@ const { default: ControlButtons } = await import("./ControlButtons");
 
 function renderButtons(props?: { startDisabled?: boolean }) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ControlButtons startDisabled={props?.startDisabled} />
     </MantineProvider>,
   );

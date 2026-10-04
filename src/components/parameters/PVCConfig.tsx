@@ -22,7 +22,7 @@ export function PVCConfig({
   onKernelChange,
   showAdvanced,
 }: PVCConfigProps) {
-  const pvcEnabled = fromFlag(bPVCNativeSpace);
+  const pvcEnabled = fromFlag(bPVCNativeSpace, true);
   const gaussianEnabled = fromFlag(bPVCGaussianMM);
   const kernel = PVCNativeSpaceKernel ?? (gaussianEnabled ? [10, 10, 4] : [5, 5, 1]);
 

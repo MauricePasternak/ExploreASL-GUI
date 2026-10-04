@@ -1,5 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PreflightResult } from "./ProcessingStatusAlert";
 import { makeMatlabProfile } from "../../test/profileFixtures";
@@ -49,7 +49,7 @@ const ProcessingStatusAlert = ProcessingStatusAlertModule.default;
 
 function renderAlert(onResult?: (r: PreflightResult) => void) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ProcessingStatusAlert onResult={onResult} />
     </MantineProvider>,
   );

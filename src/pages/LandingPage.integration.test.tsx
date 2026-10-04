@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
@@ -120,7 +120,7 @@ describe("Landing BIDS pre-confirmation source-tree integration", () => {
 
   function mount() {
     return render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>

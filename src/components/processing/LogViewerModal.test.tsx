@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LogContent } from "../../lib/logViewer";
@@ -28,7 +28,7 @@ function renderModal(props: {
   runErrorMap?: Record<string, boolean>;
 }) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <LogViewerModal
         opened={props.opened}
         onClose={props.onClose ?? vi.fn()}
@@ -119,7 +119,7 @@ describe("LogViewerModal", () => {
   it("calls onClose via onClose prop", () => {
     const onClose = vi.fn();
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <LogViewerModal
           opened={true}
           onClose={onClose}

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
@@ -36,11 +36,9 @@ vi.mock("../../stores/projectStore", () => ({
     }),
 }));
 
-afterEach(cleanup);
-
 function renderComponent() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ChartPanel />
     </MantineProvider>,
   );
@@ -62,7 +60,10 @@ describe("ChartPanel", () => {
     });
   });
 
-  afterEach(() => resetProjectLifecycleForTests());
+  afterEach(() => {
+    cleanup();
+    resetProjectLifecycleForTests();
+  });
 
   it("discards chart rows loaded for a replaced lifecycle", async () => {
     let resolveRows!: (rows: Record<string, string>[]) => void;

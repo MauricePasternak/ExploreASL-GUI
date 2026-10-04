@@ -1,14 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
-import { describe, expect, it } from "vitest";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { DataParFieldLabel } from "./DataParFieldLabel";
+
+afterEach(cleanup);
 
 describe("DataParFieldLabel", () => {
   it("renders the label text from FIELD_METADATA", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <DataParFieldLabel fieldKey="M0" />
       </MantineProvider>,
     );
@@ -18,7 +20,7 @@ describe("DataParFieldLabel", () => {
 
   it("shows tooltip with description on hover", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <DataParFieldLabel fieldKey="M0" />
       </MantineProvider>,
     );
@@ -31,7 +33,7 @@ describe("DataParFieldLabel", () => {
 
   it("renders label for a different field key", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <DataParFieldLabel fieldKey="Lambda" />
       </MantineProvider>,
     );

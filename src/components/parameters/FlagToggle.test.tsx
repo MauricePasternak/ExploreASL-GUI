@@ -1,14 +1,10 @@
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { cleanup, screen, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderWithMantine } from "../../test/render";
 
 import { FlagToggle } from "./FlagToggle";
 
 afterEach(cleanup);
-
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
 
 describe("FlagToggle", () => {
   it("renders a switch with label", () => {

@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
-
-afterEach(cleanup);
-
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
+import { cleanup, screen } from "@testing-library/react";
+import { renderWithMantine } from "../test/render";
 
 // Mock Tauri APIs
 vi.mock("@tauri-apps/api/core", () => ({
@@ -203,7 +197,10 @@ describe("Visualization setup flow integration", () => {
     });
   });
 
-  afterEach(() => resetProjectLifecycleForTests());
+  afterEach(() => {
+    cleanup();
+    resetProjectLifecycleForTests();
+  });
 
   it("discards a late stats scan after same-ID project replacement", async () => {
     let resolveFiles!: (files: typeof mockFiles) => void;

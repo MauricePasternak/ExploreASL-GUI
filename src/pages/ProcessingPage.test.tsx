@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -90,7 +90,7 @@ const DEFAULT_SUBJECTS = [
 
 function renderPage() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ProcessingPage />
     </MantineProvider>,
   );

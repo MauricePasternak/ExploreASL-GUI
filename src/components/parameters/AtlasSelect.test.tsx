@@ -1,6 +1,6 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderWithMantine } from "../../test/render";
 
 import { AtlasSelect } from "./AtlasSelect";
 
@@ -21,10 +21,6 @@ vi.mock("@mantine/core", async (importOriginal) => {
     )),
   };
 });
-
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
 
 afterEach(() => {
   cleanup();

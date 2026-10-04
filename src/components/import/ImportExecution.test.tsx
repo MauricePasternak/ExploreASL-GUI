@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 function renderExecution() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MemoryRouter>
         <ImportExecution />
       </MemoryRouter>

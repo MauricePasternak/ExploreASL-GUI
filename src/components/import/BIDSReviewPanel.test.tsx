@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exists } from "@tauri-apps/plugin-fs";
@@ -83,7 +83,7 @@ function makeProject(overrides: Record<string, unknown> = {}) {
 
 function renderPanel() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MemoryRouter>
         <BIDSReviewPanel />
       </MemoryRouter>

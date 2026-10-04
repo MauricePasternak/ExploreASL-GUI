@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import MetadataModal from "./MetadataModal";
@@ -47,7 +47,7 @@ function renderModal(
 ) {
   const onSubmit = (props.onSubmit ?? vi.fn()) as any;
   render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MetadataModal
         opened
         title="Configure Metadata"

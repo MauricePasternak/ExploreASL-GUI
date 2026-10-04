@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ManifestPage from "./ManifestPage";
@@ -133,7 +133,7 @@ vi.mock("../stores/projectStore", () => {
 
 function renderPage() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ManifestPage />
     </MantineProvider>,
   );
@@ -286,7 +286,7 @@ describe("ManifestPage", () => {
       [reviewerTwo]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
     };
     view.rerender(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ManifestPage />
       </MantineProvider>,
     );

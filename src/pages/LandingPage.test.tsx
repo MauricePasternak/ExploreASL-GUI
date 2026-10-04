@@ -4,7 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { notifications } from "@mantine/notifications";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { MemoryRouter } from "react-router";
 
 import { PROJECT_FILE_NAME } from "../schemas/project";
@@ -55,7 +55,7 @@ describe("LandingPage", () => {
 
   it("renders the primary landing actions", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -78,7 +78,7 @@ describe("LandingPage", () => {
     vi.mocked(invoke).mockResolvedValue(false);
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -108,7 +108,7 @@ describe("LandingPage", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -157,7 +157,7 @@ describe("LandingPage", () => {
     );
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -215,7 +215,7 @@ describe("LandingPage", () => {
     );
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -254,7 +254,7 @@ describe("LandingPage", () => {
     vi.mocked(open).mockResolvedValue("/tmp/recovery/project.easl");
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -287,7 +287,7 @@ describe("LandingPage", () => {
     vi.mocked(open).mockResolvedValue("/tmp/recovery/project.easl");
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -305,7 +305,7 @@ describe("LandingPage", () => {
     seedZeroProfilesGate();
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage onOpenSettings={vi.fn()} />
         </MemoryRouter>
@@ -322,7 +322,7 @@ describe("LandingPage", () => {
     const onOpenSettings = vi.fn();
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage onOpenSettings={onOpenSettings} />
         </MemoryRouter>
@@ -337,7 +337,7 @@ describe("LandingPage", () => {
     seedInvalidProfileGate();
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -361,7 +361,7 @@ describe("LandingPage", () => {
     vi.mocked(exists).mockResolvedValue(true);
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -382,7 +382,7 @@ describe("LandingPage", () => {
     vi.mocked(open).mockResolvedValue("/tmp/custom-name.easl");
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -420,7 +420,7 @@ describe("LandingPage", () => {
     );
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -474,7 +474,7 @@ describe("LandingPage", () => {
     vi.mocked(readTextFile).mockResolvedValue(identityProjectBytes("same-id"));
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -529,7 +529,7 @@ describe("LandingPage", () => {
     vi.mocked(readTextFile).mockResolvedValue(identityProjectBytes("same-id"));
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -579,7 +579,7 @@ describe("LandingPage BIDS detection dialogs", () => {
 
   function renderLanding() {
     return render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -1103,7 +1103,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>
@@ -1147,7 +1147,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <LandingPage />
         </MemoryRouter>

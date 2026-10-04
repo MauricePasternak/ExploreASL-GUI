@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ManifestPreview from "./ManifestPreview";
@@ -157,7 +157,7 @@ function renderPreview() {
     loaded: true,
   });
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ManifestPreview />
     </MantineProvider>,
   );
@@ -488,7 +488,7 @@ describe("ManifestPreview", () => {
     });
 
     rerender(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ManifestPreview />
       </MantineProvider>,
     );
@@ -502,7 +502,7 @@ describe("ManifestPreview", () => {
     useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ManifestPreview />
       </MantineProvider>,
     );
@@ -585,7 +585,7 @@ describe("ManifestPreview", () => {
     useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ManifestPreview />
       </MantineProvider>,
     );

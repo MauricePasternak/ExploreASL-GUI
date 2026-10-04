@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as reportViewer from "../../lib/reportViewer";
@@ -32,7 +32,7 @@ describe("ReportViewerModal", () => {
 
   const renderModal = (props: any) => {
     return render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ReportViewerModal {...props} />
       </MantineProvider>,
     );

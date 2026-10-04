@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { exists } from "@tauri-apps/plugin-fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 
 import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
 import { useGlobalStore } from "../../stores/globalStore";
@@ -27,7 +27,7 @@ describe("RecentProjectsList", () => {
 
   it("renders availability state for recent projects", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <RecentProjectsList onOpen={() => undefined} />
       </MantineProvider>,
     );
@@ -46,7 +46,7 @@ describe("RecentProjectsList", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <RecentProjectsList onOpen={() => undefined} />
       </MantineProvider>,
     );
@@ -61,7 +61,7 @@ describe("RecentProjectsList", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <RecentProjectsList onOpen={onOpen} />
       </MantineProvider>,
     );

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { MemoryRouter } from "react-router";
 import OverviewPage from "./OverviewPage";
 
@@ -20,7 +20,7 @@ describe("OverviewPage", () => {
   });
   it("renders the overview page and all 4 major workflow headings", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <OverviewPage />
         </MemoryRouter>
@@ -53,6 +53,7 @@ describe("OverviewPage", () => {
 
     // Verify accordions/sub-steps are present in the DOM
     expect(screen.getByTestId("project-management-accordion")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /What is a "Project"/i }));
     expect(screen.getByTestId("project-structure-title")).toBeInTheDocument();
     expect(screen.getByTestId("import-accordion")).toBeInTheDocument();
     expect(screen.getByTestId("parameters-accordion")).toBeInTheDocument();
@@ -62,7 +63,7 @@ describe("OverviewPage", () => {
 
   it("handles navigation back to home", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <OverviewPage />
         </MemoryRouter>
@@ -77,7 +78,7 @@ describe("OverviewPage", () => {
 
   it("handles navigation back to previous project page when state.from is present", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter
           initialEntries={[{ pathname: "/overview", state: { from: "/project/proj1/import" } }]}
         >
@@ -95,7 +96,7 @@ describe("OverviewPage", () => {
 
   it("shows 'Back to Home' when navigating from home page with state.from='/'", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={[{ pathname: "/overview", state: { from: "/" } }]}>
           <OverviewPage />
         </MemoryRouter>

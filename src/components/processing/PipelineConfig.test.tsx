@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -49,7 +49,7 @@ const { default: PipelineConfig } = await import("./PipelineConfig");
 
 function renderConfig() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <PipelineConfig />
     </MantineProvider>,
   );

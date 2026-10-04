@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { notifications } from "@mantine/notifications";
 import { MemoryRouter, Route, Routes } from "react-router";
 
@@ -19,7 +19,7 @@ const realCloseProject = useProjectStore.getState().closeProject;
 
 function renderLayout(initialPath = "/") {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route element={<Layout onOpenSettings={() => undefined} />}>

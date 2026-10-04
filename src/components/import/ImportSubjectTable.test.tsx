@@ -1,6 +1,7 @@
-import { MantineProvider } from "@mantine/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
@@ -16,7 +17,7 @@ function renderWithProviders(
   onSelectedSubjectsChange = vi.fn(),
 ) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MemoryRouter>
         <ImportSubjectTable
           rows={rows}
@@ -45,6 +46,10 @@ function makeProgress(
   };
 }
 
+function subjectCheckbox(subject: string) {
+  return within(screen.getByRole("cell", { name: subject }).closest("tr")!).getByRole("checkbox");
+}
+
 afterEach(() => {
   cleanup();
   useImportStore.getState().resetImport();
@@ -65,11 +70,13 @@ describe("ImportSubjectTable", () => {
     expect(screen.getByTestId("import-table")).toBeInTheDocument();
     expect(screen.getByTestId("import-filter")).toBeInTheDocument();
     expect(screen.getByRole("table")).toBeInTheDocument();
-    // Header select-all plus one checkbox per subject row
-    expect(screen.getAllByRole("checkbox").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(subjectCheckbox("SUB01")).not.toBeChecked();
+    expect(subjectCheckbox("SUB02")).not.toBeChecked();
   });
 
   it("filter counts match subject distribution", async () => {
+    const user = userEvent.setup();
     const rows = [
       makeProgress("SUB01", "pending"),
       makeProgress("SUB02", "completed"),
@@ -79,19 +86,25 @@ describe("ImportSubjectTable", () => {
     ];
     renderWithProviders(rows);
 
-    expect(screen.getByTestId("import-filter")).toBeInTheDocument();
-    expect(screen.getByText("All")).toBeInTheDocument();
-    expect(screen.getByText("Pending")).toBeInTheDocument();
-    expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.getByText("Failed")).toBeInTheDocument();
-    expect(screen.getByText("Stale")).toBeInTheDocument();
-
-    // Filter badge counts (All=5, Pending=1, Completed=2, Failed=1, Stale=1)
-    const badges = screen.getAllByText("5");
-    expect(badges.length).toBeGreaterThan(0);
+    const filter = within(screen.getByTestId("import-filter"));
+    for (const [label, count, subjects] of [
+      ["All", 5, ["SUB01", "SUB02", "SUB03", "SUB04", "SUB05"]],
+      ["Pending", 1, ["SUB01"]],
+      ["Completed", 2, ["SUB02", "SUB05"]],
+      ["Failed", 1, ["SUB03"]],
+      ["Stale", 1, ["SUB04"]],
+    ] as const) {
+      const radio = filter.getByRole("radio", { name: `${label} ${count}` });
+      await user.click(radio);
+      expect(radio).toBeChecked();
+      const tableRows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+      expect(tableRows.map((row) => within(row).getAllByRole("cell")[1].textContent)).toEqual(
+        subjects,
+      );
+    }
   });
 
-  it("checkbox pre-selection follows staleness logic", () => {
+  it("renders supplied stale and failed pre-selection", () => {
     const rows = [
       makeProgress("SUB01", "completed", false),
       makeProgress("SUB02", "completed", true),
@@ -103,10 +116,10 @@ describe("ImportSubjectTable", () => {
     // Pre-select stale+failed
     renderWithProviders(rows, ["SUB02", "SUB03"], onSelectedSubjectsChange);
 
-    expect(screen.getByText("SUB01")).toBeInTheDocument();
-    expect(screen.getByText("SUB02")).toBeInTheDocument();
-    expect(screen.getByText("SUB03")).toBeInTheDocument();
-    expect(screen.getByText("SUB04")).toBeInTheDocument();
+    expect(subjectCheckbox("SUB01")).not.toBeChecked();
+    expect(subjectCheckbox("SUB02")).toBeChecked();
+    expect(subjectCheckbox("SUB03")).toBeChecked();
+    expect(subjectCheckbox("SUB04")).not.toBeChecked();
   });
 
   it("keeps only committed partial success eligible for preservation; failed and interrupted rows remain selected", () => {
@@ -117,9 +130,10 @@ describe("ImportSubjectTable", () => {
       makeProgress("INTERRUPTED", "interrupted"),
     ];
     renderWithProviders(rows, ["STALE", "INVALID", "INTERRUPTED"]);
-    expect(screen.getByText("COMMITTED")).toBeInTheDocument();
-    expect(screen.getByText("INVALID")).toBeInTheDocument();
-    expect(screen.getByText("INTERRUPTED")).toBeInTheDocument();
+    expect(subjectCheckbox("COMMITTED")).not.toBeChecked();
+    expect(subjectCheckbox("STALE")).toBeChecked();
+    expect(subjectCheckbox("INVALID")).toBeChecked();
+    expect(subjectCheckbox("INTERRUPTED")).toBeChecked();
     expect(screen.getByTestId("status-failed")).toBeInTheDocument();
     expect(screen.getByTestId("status-interrupted")).toBeInTheDocument();
   });
@@ -144,6 +158,68 @@ describe("ImportSubjectTable", () => {
     expect(screen.getByTestId("status-failed")).toBeInTheDocument();
     expect(screen.getByTestId("status-interrupted")).toBeInTheDocument();
     expect(screen.getByTestId("status-cancelled")).toBeInTheDocument();
+    expect(subjectCheckbox("COMMITTED")).not.toBeChecked();
+    for (const subject of [
+      "STALE-COMMITTED",
+      "INVALID-AUDIT",
+      "INTERRUPTED-STAGING",
+      "CANCELLED",
+    ]) {
+      expect(subjectCheckbox(subject)).toBeChecked();
+    }
+  });
+
+  it("retains selection across real pagination and disables selection when locked", async () => {
+    const user = userEvent.setup();
+    const rows = Array.from({ length: 12 }, (_, index) =>
+      makeProgress(`SUB${index + 1}`, "pending"),
+    );
+    function ControlledTable({ selectionLocked = false }: { selectionLocked?: boolean }) {
+      const [selectedSubjects, setSelectedSubjects] = useState(["SUB1"]);
+      return (
+        <ImportSubjectTable
+          rows={rows}
+          selectedSubjects={selectedSubjects}
+          onSelectedSubjectsChange={setSelectedSubjects}
+          selectionLocked={selectionLocked}
+        />
+      );
+    }
+    const view = render(
+      <MantineProvider env="test">
+        <ControlledTable />
+      </MantineProvider>,
+    );
+
+    expect(screen.getAllByRole("row")).toHaveLength(11);
+    expect(screen.queryByText("SUB11")).not.toBeInTheDocument();
+    expect(subjectCheckbox("SUB1")).toBeChecked();
+    await user.click(subjectCheckbox("SUB2"));
+    expect(subjectCheckbox("SUB2")).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "2" }));
+    expect(screen.getAllByRole("row")).toHaveLength(3);
+    expect(screen.queryByText("SUB1")).not.toBeInTheDocument();
+    expect(subjectCheckbox("SUB11")).not.toBeChecked();
+    await user.click(subjectCheckbox("SUB11"));
+    expect(subjectCheckbox("SUB11")).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "1" }));
+    expect(subjectCheckbox("SUB1")).toBeChecked();
+    expect(subjectCheckbox("SUB2")).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "2" }));
+    expect(subjectCheckbox("SUB11")).toBeChecked();
+
+    view.rerender(
+      <MantineProvider env="test">
+        <ControlledTable selectionLocked />
+      </MantineProvider>,
+    );
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      expect(checkbox).toBeDisabled();
+    }
+    await user.click(subjectCheckbox("SUB12"));
+    expect(subjectCheckbox("SUB12")).not.toBeChecked();
+    expect(subjectCheckbox("SUB11")).toBeChecked();
   });
 
   it("renders stale overlay on completed-but-stale subjects", () => {

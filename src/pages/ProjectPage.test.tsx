@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { invoke } from "@tauri-apps/api/core";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -76,7 +76,7 @@ describe("ProjectPage", () => {
 
   it("syncs the current phase from the route and persists it", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/project-1/parameters"]}>
           <Routes>
             <Route path="/project/:id/:phase" element={<ProjectPage />} />
@@ -111,7 +111,7 @@ describe("ProjectPage", () => {
     }));
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/project-1/visualization"]}>
           <Routes>
             <Route path="/project/:id/:phase" element={<ProjectPage />} />
@@ -147,7 +147,7 @@ describe("ProjectPage", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/project-1/visualization"]}>
           <Routes>
             <Route path="/project/:id/:phase" element={<ProjectPage />} />
@@ -183,7 +183,7 @@ describe("ProjectPage", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/project-1/manifest"]}>
           <Routes>
             <Route path="/project/:id/:phase" element={<ProjectPage />} />
@@ -207,7 +207,7 @@ describe("ProjectPage", () => {
     vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(PROJECT_JSON));
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/project-1/import"]}>
           <Routes>
             <Route path="/" element={<div>Landing</div>} />
@@ -243,7 +243,7 @@ describe("ProjectPage", () => {
     );
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/project-1/import"]}>
           <Routes>
             <Route path="/project/:id/:phase" element={<ProjectPage />} />
@@ -271,7 +271,7 @@ describe("ProjectPage", () => {
     vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(PROJECT_JSON));
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/project-1/import"]}>
           <Routes>
             <Route path="/" element={<div>Landing</div>} />
@@ -303,7 +303,7 @@ describe("ProjectPage", () => {
     vi.mocked(readTextFile).mockRejectedValue(new Error("missing file"));
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/missing-project/import"]}>
           <Routes>
             <Route path="/" element={<div>Landing</div>} />

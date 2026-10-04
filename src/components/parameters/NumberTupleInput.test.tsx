@@ -1,14 +1,10 @@
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { cleanup, screen, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderWithMantine } from "../../test/render";
 
 import { NumberTupleInput } from "./NumberTupleInput";
 
 afterEach(cleanup);
-
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
 
 /** Get the visible (not aria-hidden) input by testid. */
 function getVisibleInput(testId: string): HTMLInputElement {

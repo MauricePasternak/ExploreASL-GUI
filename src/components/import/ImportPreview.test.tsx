@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -56,7 +56,7 @@ describe("ImportPreview staging validation", () => {
       modalityAliases: [{ captured: "ASL", mapped: "ASL4D" }],
     });
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ImportPreview />
       </MantineProvider>,
     );

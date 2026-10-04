@@ -1,13 +1,15 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdvancedDivider } from "./AdvancedDivider";
+
+afterEach(cleanup);
 
 describe("AdvancedDivider", () => {
   it("renders with 'Show advanced' label", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <AdvancedDivider showAdvanced={false} onToggle={() => {}} />
       </MantineProvider>,
     );
@@ -18,7 +20,7 @@ describe("AdvancedDivider", () => {
   it("calls onToggle when switch input is clicked", () => {
     const onToggle = vi.fn();
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <AdvancedDivider showAdvanced={false} onToggle={onToggle} />
       </MantineProvider>,
     );
@@ -32,7 +34,7 @@ describe("AdvancedDivider", () => {
 
   it("renders switch as checked when showAdvanced is true", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <AdvancedDivider showAdvanced={true} onToggle={() => {}} />
       </MantineProvider>,
     );

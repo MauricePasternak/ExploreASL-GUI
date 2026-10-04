@@ -1,13 +1,15 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { invoke } from "@tauri-apps/api/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
 import { useGlobalStore } from "../../stores/globalStore";
 import { makeMatlabProfile } from "../../test/profileFixtures";
 import SettingsModal from "./SettingsModal";
+
+afterEach(cleanup);
 
 describe("SettingsModal", () => {
   beforeEach(() => {
@@ -47,7 +49,7 @@ describe("SettingsModal", () => {
     const onClose = vi.fn();
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <SettingsModal opened onClose={onClose} />
       </MantineProvider>,
     );
@@ -64,7 +66,7 @@ describe("SettingsModal", () => {
 
   it("adds a profile through ProfileManager detect flow", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <SettingsModal opened onClose={() => undefined} />
       </MantineProvider>,
     );
@@ -98,7 +100,7 @@ describe("SettingsModal", () => {
 
   it("adds a custom tokenizer delimiter", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <SettingsModal opened onClose={() => undefined} />
       </MantineProvider>,
     );
@@ -118,7 +120,7 @@ describe("SettingsModal", () => {
 
   it("toggles preserve staging directory for import debug mode", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <SettingsModal opened onClose={() => undefined} />
       </MantineProvider>,
     );
@@ -137,7 +139,7 @@ describe("SettingsModal", () => {
 
   it("ignores duplicate tokenizer delimiters", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <SettingsModal opened onClose={() => undefined} />
       </MantineProvider>,
     );
@@ -163,7 +165,7 @@ describe("SettingsModal", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <SettingsModal opened onClose={() => undefined} />
       </MantineProvider>,
     );

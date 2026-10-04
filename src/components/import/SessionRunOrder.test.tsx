@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,7 +10,7 @@ afterEach(cleanup);
 describe("OrderAliasTable", () => {
   it("shows portable collision errors for both Run aliases", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <OrderAliasTable
           aliases={[
             { captured: "one", alias: "ASL", index: 1 },
@@ -35,7 +35,7 @@ describe("OrderAliasTable", () => {
       aliases = next;
     };
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <OrderAliasTable
           aliases={aliases}
           onAliasesChange={onAliasesChange}

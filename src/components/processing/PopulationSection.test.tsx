@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProcessingStore } from "../../stores/processingStore";
@@ -30,7 +30,7 @@ vi.mock("../../lib/logViewer", () => ({
 
 function renderSection() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <PopulationSection />
     </MantineProvider>,
   );

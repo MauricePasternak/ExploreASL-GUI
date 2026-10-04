@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it } from "vitest";
 
 import AliasResolution from "./AliasResolution";
@@ -8,7 +8,7 @@ import { useImportStore } from "../../stores/importStore";
 
 function renderWithProviders() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <AliasResolution />
     </MantineProvider>,
   );

@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockPhase = "running";
@@ -35,7 +35,7 @@ const { default: ProcessingStatusBar } = await import("./ProcessingStatusBar");
 
 function renderBar() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ProcessingStatusBar />
     </MantineProvider>,
   );

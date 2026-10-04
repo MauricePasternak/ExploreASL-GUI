@@ -1,13 +1,9 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderWithMantine } from "../../test/render";
 
 import { StructuralSection } from "./StructuralSection";
 import type { DataParState } from "../../schemas/dataParSchema";
-
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
 
 function clickSwitch(text: RegExp) {
   const textEl = screen.getAllByText(text)[0];

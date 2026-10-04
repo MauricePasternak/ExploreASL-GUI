@@ -1,5 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 
@@ -37,7 +37,7 @@ afterEach(() => {
 
 function renderComponent() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <JoinConfig />
     </MantineProvider>,
   );

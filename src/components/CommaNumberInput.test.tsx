@@ -1,11 +1,11 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CommaNumberInput, CommaArrayInput } from "./CommaNumberInput";
 
 function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
+  return render(<MantineProvider env="test">{ui}</MantineProvider>);
 }
 
 afterEach(() => cleanup());
@@ -77,7 +77,7 @@ describe("CommaArrayInput", () => {
 
     // Rerender with initial prop value while focused (simulating form validation state fallback)
     rerender(
-      <MantineProvider>
+      <MantineProvider env="test">
         <CommaArrayInput label="Test Label" value={[2, 4]} onChange={handleChange} />
       </MantineProvider>,
     );

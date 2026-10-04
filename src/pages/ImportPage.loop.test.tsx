@@ -1,6 +1,6 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -49,7 +49,7 @@ describe("Import autosave loop", () => {
     const loadSpy = vi.spyOn(useImportStore.getState(), "loadPersistedState");
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/project/project-1/import"]}>
           <Routes>
             <Route path="/project/:id/:phase" element={<ProjectPage />} />

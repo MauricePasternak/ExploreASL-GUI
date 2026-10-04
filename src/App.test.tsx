@@ -1,5 +1,5 @@
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "./test/render";
 import { MemoryRouter } from "react-router";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +28,7 @@ describe("App", () => {
 
   it("renders the landing page at the root route", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/"]}>
           <App />
         </MemoryRouter>
@@ -44,7 +44,7 @@ describe("App", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/"]}>
           <App />
         </MemoryRouter>
@@ -63,7 +63,7 @@ describe("App", () => {
     useGlobalStore.setState({ loadSettings });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/"]}>
           <App />
         </MemoryRouter>
@@ -79,7 +79,7 @@ describe("App", () => {
     useGlobalStore.setState({ loadSettings });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/"]}>
           <App e2e={{ enabled: true, onReady }} />
         </MemoryRouter>

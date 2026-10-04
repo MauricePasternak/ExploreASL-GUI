@@ -1,12 +1,10 @@
-import { render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
-import { describe, expect, it } from "vitest";
+import { cleanup, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { renderWithMantine } from "../../test/render";
 
 import { PVCConfig } from "./PVCConfig";
 
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
+afterEach(cleanup);
 
 describe("PVCConfig", () => {
   it("renders PVC toggle", () => {
@@ -54,6 +52,7 @@ describe("PVCConfig", () => {
       />,
     );
 
+    expect(screen.getByRole("switch")).not.toBeChecked();
     const labels = container.querySelectorAll("span");
     const kernelEl = Array.from(labels).find((el) => el.textContent?.match(/kernel size/i));
     expect(kernelEl).toBeUndefined();
@@ -122,6 +121,8 @@ describe("PVCConfig", () => {
       />,
     );
 
+    expect(screen.getByRole("switch")).toBeChecked();
+    expect(screen.getByTestId("field-bPVCGaussianMM")).toHaveValue("Flat");
     expect(screen.getAllByText(/kernel size/i).length).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -87,7 +87,7 @@ describe("legacy import staging safety", () => {
       subjectRows: [{ id: "FOO+BAR/01", subject: "FOO+BAR", session: "01", groupId: "global" }],
     });
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ImportPreview />
       </MantineProvider>,
     );

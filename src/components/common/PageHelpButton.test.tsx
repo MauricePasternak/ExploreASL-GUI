@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +28,7 @@ describe("PageHelpButton", () => {
 
   const renderComponent = (initialPath: string) => {
     return render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={[initialPath]}>
           <Routes>
             <Route path="/project/:id/:phase" element={<PageHelpButton />} />
@@ -41,7 +41,7 @@ describe("PageHelpButton", () => {
 
   it("does not render when not on a project route", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter initialEntries={["/"]}>
           <Routes>
             <Route path="/" element={<PageHelpButton />} />

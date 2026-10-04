@@ -1,12 +1,10 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, screen, fireEvent } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderWithMantine } from "../../test/render";
 
 import { M0Select } from "./M0Select";
 
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
+afterEach(cleanup);
 
 describe("M0Select", () => {
   it("renders with M0 options", () => {

@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ import ImportPage from "./ImportPage";
 
 function renderWithProviders() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MemoryRouter>
         <ImportPage />
       </MemoryRouter>
@@ -792,7 +792,7 @@ describe("ImportPage import runner step", () => {
 
     useImportStore.setState({ importPhase: "failed" });
     rerender(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <ImportPage />
         </MemoryRouter>
@@ -867,7 +867,7 @@ describe("ImportPage dataSource conditional rendering", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <ImportPage />
         </MemoryRouter>
@@ -899,7 +899,7 @@ describe("ImportPage dataSource conditional rendering", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <ImportPage />
         </MemoryRouter>

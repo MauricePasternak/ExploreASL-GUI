@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { StrictMode } from "react";
 import { notifications } from "@mantine/notifications";
 import { invoke } from "@tauri-apps/api/core";
@@ -29,7 +29,7 @@ function update(version = "0.2.0") {
 
 function renderManager() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <UpdateManager enabled />
     </MantineProvider>,
   );
@@ -45,7 +45,7 @@ function availableNotification() {
 
 async function openAvailableUpdate() {
   const call = availableNotification();
-  render(<MantineProvider>{call.message}</MantineProvider>);
+  render(<MantineProvider env="test">{call.message}</MantineProvider>);
   await userEvent.setup().click(screen.getByTestId("update-available-action"));
 }
 
@@ -68,7 +68,7 @@ describe("UpdateManager", () => {
   it("checks exactly once under StrictMode", async () => {
     render(
       <StrictMode>
-        <MantineProvider>
+        <MantineProvider env="test">
           <UpdateManager enabled />
         </MantineProvider>
       </StrictMode>,
@@ -80,7 +80,7 @@ describe("UpdateManager", () => {
 
   it("uses the explicit production-test override and honors an explicit disable", async () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <UpdateManager enabled={false} />
       </MantineProvider>,
     );
@@ -119,7 +119,7 @@ describe("UpdateManager", () => {
       autoClose: 10_000,
       position: "bottom-right",
     });
-    render(<MantineProvider>{call.message}</MantineProvider>);
+    render(<MantineProvider env="test">{call.message}</MantineProvider>);
     expect(screen.getByText("Version 1.2.3 is available.")).toBeInTheDocument();
     expect(screen.getByTestId("update-available-action")).toHaveTextContent("Update");
   });
@@ -269,7 +269,7 @@ describe("UpdateManager", () => {
     useProjectStore.setState({ isDirty: true });
     render(
       <StrictMode>
-        <MantineProvider>
+        <MantineProvider env="test">
           <UpdateManager enabled />
         </MantineProvider>
       </StrictMode>,
@@ -328,7 +328,7 @@ describe("UpdateManager", () => {
 
     await waitFor(() => availableNotification());
     const call = availableNotification();
-    render(<MantineProvider>{call.message}</MantineProvider>);
+    render(<MantineProvider env="test">{call.message}</MantineProvider>);
     const user = userEvent.setup();
     await user.dblClick(screen.getByTestId("update-available-action"));
 

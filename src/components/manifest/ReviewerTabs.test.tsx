@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ReviewerTabs from "./ReviewerTabs";
@@ -43,7 +43,7 @@ function setManifest(manifest: Record<string, unknown>) {
 
 function renderTabs(eligibleSubjectSessions = ["sub-01_01", "sub-02_01"]) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ReviewerTabs eligibleSubjectSessions={eligibleSubjectSessions}>
         {(reviewerId, addControl) => (
           <div data-testid="reviewer-content">
@@ -185,7 +185,7 @@ describe("ReviewerTabs", () => {
     );
 
     view.rerender(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ReviewerTabs eligibleSubjectSessions={["sub-01_01"]}>
           {(reviewerId) => <div data-testid="reviewer-content">{reviewerId ?? "single"}</div>}
         </ReviewerTabs>
@@ -206,7 +206,7 @@ describe("ReviewerTabs", () => {
     });
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ReviewerTabs
           eligibleSubjectSessions={["sub-01_01"]}
           onMultiReviewerReady={onMultiReviewerReady}

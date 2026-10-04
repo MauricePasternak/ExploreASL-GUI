@@ -1,16 +1,12 @@
-import { MantineProvider } from "@mantine/core";
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { renderWithMantine } from "../test/render";
 
 import DataParEditor from "../components/parameters/DataParEditor";
 import { assembleDataPar } from "../lib/assembleDataPar";
 import type { DataParState } from "../schemas/dataParSchema";
 import { useDataParStore } from "../stores/dataParStore";
 import { useProjectStore } from "../stores/projectStore";
-
-function renderWithMantine(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
-}
 
 function clickSwitchByLabel(container: HTMLElement, pattern: RegExp) {
   const w = within(container);
@@ -228,6 +224,7 @@ describe("dataPar flow: M0 conditional logic", () => {
   it("BackgroundSuppressionPulseTime hidden when M0 is not UseControlAsM0", () => {
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
+    fireEvent.click(w.getByRole("button", { name: "M0 Configuration" }));
     // Default M0 is not set — pulse time should be hidden
     expect(w.queryAllByText(/background suppression pulse time/i).length).toBe(0);
   });
@@ -237,6 +234,7 @@ describe("dataPar flow: M0 conditional logic", () => {
     useDataParStore.getState().setDataParField("BackgroundSuppressionNumberPulses", 4);
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
+    fireEvent.click(w.getByRole("button", { name: "M0 Configuration" }));
     expect(w.getAllByText(/background suppression pulse time/i).length).toBeGreaterThanOrEqual(1);
   });
 
@@ -245,6 +243,7 @@ describe("dataPar flow: M0 conditional logic", () => {
     useDataParStore.getState().setDataParField("BackgroundSuppressionNumberPulses", 0);
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
+    fireEvent.click(w.getByRole("button", { name: "M0 Configuration" }));
     expect(w.queryAllByText(/background suppression pulse time/i).length).toBe(0);
   });
 });
@@ -253,6 +252,7 @@ describe("dataPar flow: PVC conditional logic", () => {
   it("PVC toggle renders in ASL Processing section", () => {
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
+    fireEvent.click(w.getByRole("button", { name: "ASL Processing" }));
     expect(w.getAllByText(/native-space partial volume correction/i).length).toBeGreaterThanOrEqual(
       1,
     );
@@ -260,6 +260,7 @@ describe("dataPar flow: PVC conditional logic", () => {
 
   it("bPVCNativeSpace field is set in store via toggle", () => {
     const { container } = renderWithMantine(<DataParEditor />);
+    fireEvent.click(within(container).getByRole("button", { name: "ASL Processing" }));
     clickSwitchByLabel(container, /native-space partial volume correction/i);
     expect(useDataParStore.getState().dataPar.bPVCNativeSpace).toBeDefined();
   });

@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 function renderComponent() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <SettingsDrawer />
     </MantineProvider>,
   );

@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
@@ -18,7 +18,7 @@ describe("SubjectRenameTable", () => {
       { original: "two", target: "foo" },
     ]);
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <SubjectRenameTable />
       </MantineProvider>,
     );
@@ -30,7 +30,7 @@ describe("SubjectRenameTable", () => {
   it("applies a suggestion only after explicit acceptance", async () => {
     useImportStore.getState().setSubjectRenames([{ original: "one", target: "FOO+BAR" }]);
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <SubjectRenameTable />
       </MantineProvider>,
     );

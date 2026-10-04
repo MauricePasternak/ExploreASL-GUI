@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { notifications } from "@mantine/notifications";
 import { invoke } from "@tauri-apps/api/core";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -18,7 +18,7 @@ function renderSelector(props: {
   disabled?: boolean;
 }) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ProfileSelector {...props} />
     </MantineProvider>,
   );
@@ -155,7 +155,7 @@ describe("ProfileSelector", () => {
     }
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <ControlledSelector />
       </MantineProvider>,
     );

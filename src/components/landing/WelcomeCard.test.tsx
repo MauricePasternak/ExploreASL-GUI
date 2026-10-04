@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import WelcomeCard from "./WelcomeCard";
@@ -9,7 +9,7 @@ describe("WelcomeCard", () => {
 
   it("renders onboarding heading and numbered setup steps", () => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <WelcomeCard onOpenSettings={() => {}} />
       </MantineProvider>,
     );
@@ -31,7 +31,7 @@ describe("WelcomeCard", () => {
     const onOpenSettings = vi.fn();
 
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <WelcomeCard onOpenSettings={onOpenSettings} />
       </MantineProvider>,
     );

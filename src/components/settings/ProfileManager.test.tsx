@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +13,7 @@ import ProfileManager from "./ProfileManager";
 
 function renderManager() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ProfileManager />
     </MantineProvider>,
   );

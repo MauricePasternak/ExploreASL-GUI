@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../test/render";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
@@ -48,7 +48,7 @@ afterEach(() => {
 
 function renderWithProviders(ui: React.ReactNode) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MemoryRouter initialEntries={["/project/test-project/import"]}>{ui}</MemoryRouter>
     </MantineProvider>,
   );

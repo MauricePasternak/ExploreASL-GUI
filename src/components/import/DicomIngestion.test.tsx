@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -12,7 +12,7 @@ import { discoverPathPatterns } from "../../lib/pathUtils";
 
 function renderWithProviders() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <DicomIngestion />
     </MantineProvider>,
   );

@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -57,7 +57,7 @@ const { default: ExecutionDashboard } = await import("./ExecutionDashboard");
 
 function renderDashboard() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <ExecutionDashboard />
     </MantineProvider>,
   );

@@ -1,37 +1,10 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MantineProvider } from "@mantine/core";
+import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { mockFetchLogContent } = vi.hoisted(() => ({
   mockFetchLogContent: vi.fn(),
-}));
-
-vi.mock("mantine-datatable", () => ({
-  DataTable: ({ records, columns, idAccessor = "id", "data-testid": testId }: any) => (
-    <table data-testid={testId}>
-      <thead>
-        <tr>
-          {columns.map((column: any, index: number) => (
-            <th key={column.accessor || index} data-column-width={column.width}>
-              {column.title}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {records.map((record: any) => (
-          <tr key={record[idAccessor]} data-testid={`resolution-row-${record[idAccessor]}`}>
-            {columns.map((column: any, index: number) => (
-              <td key={column.accessor || index}>
-                {column.render ? column.render(record) : record[column.accessor]}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  ),
 }));
 
 vi.mock("../../lib/logViewer", () => ({
@@ -141,7 +114,7 @@ function setState(
 
 function renderResolution() {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <VerdictResolution />
     </MantineProvider>,
   );
@@ -188,38 +161,27 @@ describe("VerdictResolution", () => {
     );
   });
 
-  it("prioritizes table width for verdict controls and readable wrapping actions", () => {
+  it("renders table headers and row-scoped verdict controls and actions", () => {
     setState();
 
     renderResolution();
 
-    expect(screen.getByRole("columnheader", { name: "Subject" })).toHaveAttribute(
-      "data-column-width",
-      "140",
-    );
-    expect(screen.getByRole("columnheader", { name: "Session" })).toHaveAttribute(
-      "data-column-width",
-      "90",
-    );
-    expect(screen.getByRole("columnheader", { name: "Reviewer 1" })).toHaveAttribute(
-      "data-column-width",
-      "150",
-    );
-    expect(screen.getByRole("columnheader", { name: "Reviewer 2" })).toHaveAttribute(
-      "data-column-width",
-      "150",
-    );
-    expect(screen.getByRole("columnheader", { name: "Final Verdict" })).toHaveAttribute(
-      "data-column-width",
-      "320",
-    );
-    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveAttribute(
-      "data-column-width",
-      "30%",
-    );
-    expect(
-      screen.getByTestId("resolution-actions-sub-01_01").style.getPropertyValue("--group-wrap"),
-    ).toBe("wrap");
+    const table = within(screen.getByRole("table"));
+    expect(table.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Subject",
+      "Session",
+      "Reviewer 1",
+      "Reviewer 2",
+      "Final Verdict",
+      "Actions",
+    ]);
+    expect(table.getAllByRole("row")).toHaveLength(3);
+    const row = within(table.getByRole("row", { name: /sub-01/ }));
+    expect(row.getByRole("radio", { name: "Pass" })).toBeInTheDocument();
+    expect(row.getByRole("radio", { name: "Fail" })).toBeInTheDocument();
+    expect(row.getByRole("button", { name: "View images for sub-01_01" })).toBeEnabled();
+    expect(row.getByRole("button", { name: "View QC metrics for sub-01_01" })).toBeEnabled();
+    expect(row.getByRole("button", { name: "View logs for sub-01_01" })).toBeEnabled();
   });
 
   it("keeps fail pending until a controlled reason is selected and writes pass resolutions", async () => {
