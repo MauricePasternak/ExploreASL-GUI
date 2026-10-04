@@ -3,16 +3,10 @@ use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::sync::mpsc;
-use std::thread;
 use std::time::Duration;
 
+use crate::process::{CancellationToken, run_probe};
 use crate::tracing::CommandTrace;
-
-#[path = "matlab_tests.rs"]
-#[cfg(test)]
-mod matlab_tests;
 
 #[tauri::command]
 pub async fn which_matlab(custom_paths: Option<Vec<String>>) -> Vec<serde_json::Value> {
@@ -187,31 +181,20 @@ fn matlab_search_roots() -> Vec<PathBuf> {
     roots
 }
 
-fn detect_matlab_version_impl(binary: &Path) -> Option<String> {
-    let (tx, rx) = mpsc::channel();
-    let binary = binary.to_path_buf();
-    let timeout = Duration::from_secs(15);
-
-    thread::spawn(move || {
-        let result = run_matlab_release(&binary);
-        let _ = tx.send(result);
-    });
-
-    rx.recv_timeout(timeout).ok().flatten()
-}
-
-fn run_matlab_release(binary: &Path) -> Option<String> {
+pub(crate) fn detect_matlab_version_impl(binary: &Path) -> Option<String> {
     log::info!("[COMMAND] which_matlab — executing {:?}", binary);
-    let output = match crate::execution::command::create_system_command(binary)
-        .args(["-batch", "disp(version('-release'))"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-    {
+    let mut command = crate::execution::command::create_system_command(binary);
+    command.args(["-batch", "disp(version('-release'))"]);
+    let output = match run_probe(
+        command,
+        256 * 1024,
+        Duration::from_secs(15),
+        CancellationToken::default(),
+    ) {
         Ok(o) => o,
         Err(e) => {
             log::warn!(
-                "[COMMAND] which_matlab — failed to spawn {:?}: {}",
+                "[COMMAND] which_matlab — probe failed for {:?}: {}",
                 binary,
                 e
             );
@@ -306,7 +289,7 @@ fn extract_xml_tag(contents: &str, tag: &str) -> Option<String> {
     Some(contents[start..end].trim().to_string())
 }
 
-fn release_from_path(path: &Path) -> Option<String> {
+pub(crate) fn release_from_path(path: &Path) -> Option<String> {
     for component in path.components() {
         let name = component.as_os_str().to_string_lossy();
         // Standard Win/Linux: .../R2022b/...

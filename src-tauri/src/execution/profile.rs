@@ -238,7 +238,3 @@ pub fn validate_all_execution_profiles(
         })
         .collect())
 }
-
-#[cfg(test)]
-#[path = "execution_profile_tests.rs"]
-mod execution_profile_tests;

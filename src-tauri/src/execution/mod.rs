@@ -8,3 +8,6 @@ pub(crate) mod executables;
 pub(crate) mod launch;
 pub mod matlab;
 pub mod profile;
+
+#[cfg(test)]
+mod tests;

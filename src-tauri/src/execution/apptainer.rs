@@ -1,13 +1,12 @@
 //! Apptainer/Singularity discovery, container versions, and container path constants.
 use super::command::create_system_command;
+use crate::process::{CancellationToken, ProbeOutput, run_probe};
 use anyhow::{Context, Result as AnyResult, bail};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub(crate) const CONTAINER_DATA_ROOT: &str = "/data";
 pub(crate) const EXPLOREASL_SCRIPT: &str = "/opt/xasl/xASL_latest/run_xASL_latest.sh";
@@ -213,11 +212,16 @@ pub(crate) fn detect_apptainer_version(apptainer_path: &str, sif_path: &Path) ->
         "/opt/xasl/xASL_latest/",
     ]);
 
-    let output = run_command_with_timeout(command, Duration::from_secs(5))
-        .inspect_err(|error| {
-            log::error!("[APPTAINER] Version detection timed out or failed: {error:#}")
-        })
-        .context("Version detection timed out or failed")?;
+    let output = run_probe(
+        command,
+        256 * 1024,
+        Duration::from_secs(5),
+        CancellationToken::default(),
+    )
+    .inspect_err(|error| {
+        log::error!("[APPTAINER] Version detection timed out or failed: {error:#}")
+    })
+    .context("Version detection timed out or failed")?;
 
     if !output.status.success() {
         let stdout_str = String::from_utf8_lossy(&output.stdout);
@@ -292,11 +296,16 @@ pub(crate) fn validate_apptainer_executable(apptainer_path: &str) -> AnyResult<(
     }
 }
 
-fn run_apptainer_version_command(binary: &Path) -> AnyResult<Output> {
+pub(crate) fn run_apptainer_version_command(binary: &Path) -> AnyResult<ProbeOutput> {
     let mut command = create_system_command(binary);
     command.current_dir(env::temp_dir());
     command.arg("--version");
-    run_command_with_timeout(command, Duration::from_secs(5))
+    Ok(run_probe(
+        command,
+        256 * 1024,
+        Duration::from_secs(5),
+        CancellationToken::default(),
+    )?)
 }
 
 pub(crate) fn mcr_cache_path() -> PathBuf {
@@ -304,38 +313,6 @@ pub(crate) fn mcr_cache_path() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".mcrCache9.7")))
         .unwrap_or_else(|| PathBuf::from(".mcrCache9.7"))
-}
-
-pub(crate) fn run_command_with_timeout(
-    mut command: Command,
-    timeout: Duration,
-) -> AnyResult<Output> {
-    let mut child = command
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?;
-    let deadline = Instant::now() + timeout;
-
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => {
-                return child
-                    .wait_with_output()
-                    .context("Failed to collect command output");
-            }
-            Ok(None) if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                bail!("command timed out after {} seconds", timeout.as_secs());
-            }
-            Ok(None) => thread::sleep(Duration::from_millis(10)),
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(error).context("failed while waiting for command");
-            }
-        }
-    }
 }
 
 fn find_executable_on_path(command: &str, path_var: &str) -> Option<PathBuf> {
@@ -375,7 +352,3 @@ fn is_executable(path: &Path) -> bool {
 fn is_executable(path: &Path) -> bool {
     path.is_file()
 }
-
-#[cfg(test)]
-#[path = "apptainer_tests.rs"]
-mod apptainer_tests;

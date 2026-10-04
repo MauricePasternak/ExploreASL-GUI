@@ -1,17 +1,10 @@
-use super::*;
+use super::common::*;
+use crate::execution::matlab::*;
 use std::fs;
-#[cfg(unix)]
-use std::io::Write;
 use std::path::PathBuf;
 #[cfg(unix)]
 use std::process::Command;
-
-fn get_test_temp_dir() -> tempfile::TempDir {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let target_dir = manifest_dir.join("target");
-    let _ = fs::create_dir_all(&target_dir);
-    tempfile::tempdir_in(&target_dir).unwrap()
-}
+use std::time::Duration;
 
 // From manifest.rs tests:
 #[test]
@@ -52,24 +45,13 @@ fn detect_matlab_version_from_fake_binary() {
     let dir = temp.path();
 
     let fake_matlab = dir.join("matlab");
-    {
-        let mut f = fs::File::create(&fake_matlab).unwrap();
-        writeln!(f, "#!/bin/sh").unwrap();
-        writeln!(f, "echo '2022b'").unwrap();
-        f.sync_all().unwrap();
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&fake_matlab, PermissionsExt::from_mode(0o755)).unwrap();
-    }
+    write_executable(&fake_matlab, "#!/bin/sh\necho '2022b'\n");
 
     let debug_output = Command::new(&fake_matlab)
         .args(["-batch", "disp(version('-release'))"])
         .output();
 
-    let version = run_matlab_release(&fake_matlab);
+    let version = detect_matlab_version_impl(&fake_matlab);
     assert_eq!(
         version,
         Some("R2022b".to_string()),
@@ -80,24 +62,53 @@ fn detect_matlab_version_from_fake_binary() {
 
 #[cfg(unix)]
 #[test]
-fn run_matlab_release_rejects_failure() {
+fn detect_matlab_version_rejects_failure() {
     let temp = get_test_temp_dir();
     let dir = temp.path();
 
     let fake_matlab = dir.join("matlab");
-    {
-        let mut f = fs::File::create(&fake_matlab).unwrap();
-        writeln!(f, "#!/bin/sh").unwrap();
-        writeln!(f, "echo nope >&2").unwrap();
-        writeln!(f, "exit 1").unwrap();
-    }
+    write_executable(&fake_matlab, "#!/bin/sh\necho nope >&2\nexit 1\n");
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&fake_matlab, PermissionsExt::from_mode(0o755)).unwrap();
-    }
-
-    let version = run_matlab_release(&fake_matlab);
+    let version = detect_matlab_version_impl(&fake_matlab);
     assert_eq!(version, None);
+}
+
+#[cfg(unix)]
+#[test]
+fn matlab_discovery_timeout_settles_supported_scope() {
+    use std::time::Instant;
+
+    let temp = get_test_temp_dir();
+    let binary = temp.path().join("matlab");
+    // Finite fixture also self-cleans if the old detached implementation returns early.
+    write_executable(
+        &binary,
+        "#!/bin/sh\ncd \"$(dirname \"$0\")\"\ntrap 'wait \"$child\"; exit 0' TERM\nsleep 30 &\nchild=$!\nprintf '%s %s' \"$$\" \"$child\" > scope-pids\nwait \"$child\"\n",
+    );
+
+    let started = Instant::now();
+    let results = tauri::async_runtime::block_on(which_matlab(Some(vec![
+        binary.to_string_lossy().into_owned(),
+    ])));
+
+    assert_eq!(results.len(), 1);
+    assert!(results[0]["version"].is_null());
+    assert!(started.elapsed() >= Duration::from_secs(15));
+    assert!(started.elapsed() < Duration::from_secs(25));
+    let pids = fs::read_to_string(temp.path().join("scope-pids")).unwrap();
+    let pids: Vec<i32> = pids
+        .split_whitespace()
+        .map(|pid| pid.parse().unwrap())
+        .collect();
+    for pid in [pids[0], pids[1], -pids[0]] {
+        assert_eq!(
+            unsafe { libc::kill(pid, 0) },
+            -1,
+            "scope member {pid} survived discovery"
+        );
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ESRCH)
+        );
+    }
 }
