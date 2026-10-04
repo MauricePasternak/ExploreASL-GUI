@@ -1,6 +1,7 @@
-use super::*;
+use crate::app::state::AppState;
 use crate::import::ImportLifecycle;
 use crate::processing::{ProcessState, ProcessingLifecycle, ProcessingRun};
+use crate::project::lifecycle::*;
 use crate::visualization::ActiveData;
 use std::fs;
 use std::path::PathBuf;
@@ -105,7 +106,7 @@ fn shutdown_without_owned_resources_succeeds() {
 fn unmanaged_import_fails_shutdown_and_retains_ownership() {
     let state = AppState::default();
     let workspace = tempfile::tempdir().unwrap();
-    crate::project::ownership_tests::own_project(&state, workspace.path());
+    crate::project::ownership::own_project(&state, workspace.path());
     {
         let mut import_state = state.import_state.lock().unwrap();
         import_state.run_id = "import-run-1".to_string();
@@ -234,7 +235,7 @@ fn shutdown_reservation_blocks_idle_project_replacement_without_holding_transiti
     let state = std::sync::Arc::new(AppState::default());
     let root = tempfile::tempdir().unwrap();
     let replacement = tempfile::tempdir().unwrap();
-    crate::project::ownership_tests::own_project(&state, root.path());
+    crate::project::ownership::own_project(&state, root.path());
     let (stop, stopped) = mpsc::channel();
     let (entered, observed) = mpsc::channel();
     let (release, wait_release) = mpsc::channel();
@@ -329,7 +330,7 @@ fn relocation_recovery_blocks_candidate_activation_without_replacing_active_root
     .unwrap();
     let state = AppState::default();
     let active_root = active.path().canonicalize().unwrap();
-    crate::project::ownership_tests::own_project(&state, &active_root);
+    crate::project::ownership::own_project(&state, &active_root);
 
     let error = set_active_project_impl(candidate.path().display().to_string(), &state)
         .expect_err("malformed journal must block activation");
@@ -356,7 +357,7 @@ fn import_run_recovery_blocks_candidate_activation_without_replacing_active_root
     fs::write(&record, "not an import run record").unwrap();
     let state = AppState::default();
     let active_root = active.path().canonicalize().unwrap();
-    crate::project::ownership_tests::own_project(&state, &active_root);
+    crate::project::ownership::own_project(&state, &active_root);
 
     let error = set_active_project_impl(candidate.path().display().to_string(), &state)
         .expect_err("malformed import authority must block activation");
@@ -388,7 +389,7 @@ fn setup_recovery_blocks_candidate_activation_without_replacing_active_root() {
     .unwrap();
     let state = AppState::default();
     let active_root = active.path().canonicalize().unwrap();
-    crate::project::ownership_tests::own_project(&state, &active_root);
+    crate::project::ownership::own_project(&state, &active_root);
     *state.setup_app_data.lock().unwrap() = Some(app_data.path().to_path_buf());
 
     let error = set_active_project_impl(candidate.path().display().to_string(), &state)
@@ -411,7 +412,7 @@ fn active_project_changes_reject_live_processing_ownership() {
     let second = tempfile::tempdir().unwrap();
     let state = AppState::default();
     let first_root = first.path().canonicalize().unwrap();
-    crate::project::ownership_tests::own_project(&state, &first_root);
+    crate::project::ownership::own_project(&state, &first_root);
     let mut run = ProcessingRun::new(
         "run-1".to_string(),
         first_root.clone(),

@@ -894,7 +894,7 @@ fn acknowledgement_record_removal_failure_retains_replayable_memory_and_record()
     run.terminal_result = Some(crate::import::types::ImportTerminalResult::Interrupted);
     write_record(temp.path(), &record_from_state(&run).unwrap()).unwrap();
     let state = crate::app::state::AppState::default();
-    crate::project::ownership_tests::own_project(&state, temp.path());
+    crate::project::ownership::own_project(&state, temp.path());
     *state.import_state.lock().unwrap() = run;
     fail_next_record_removal();
 

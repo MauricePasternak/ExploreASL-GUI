@@ -959,7 +959,7 @@ fn durable_processing_terminal_survives_shutdown_and_blocks_setup_import_until_e
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .unwrap();
     let state = app.state::<crate::app::state::AppState>();
-    crate::project::ownership_tests::own_project(&state, temp.path());
+    crate::project::ownership::own_project(&state, temp.path());
     let terminal = terminal(temp.path(), request(temp.path()));
     state.processing_state.lock().unwrap().current_run =
         Some(ProcessingRun::from_record(terminal.clone()));

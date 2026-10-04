@@ -136,7 +136,3 @@ pub fn inspect_source_path(
     }
     result.into_command_result()
 }
-
-#[cfg(test)]
-#[path = "source_paths_tests.rs"]
-mod tests;

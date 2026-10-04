@@ -32,7 +32,7 @@ fn running_state(root: &Path) -> AppState {
 
 fn running_state_for_subjects(root: &Path, subjects: &[&str]) -> AppState {
     let state = AppState::default();
-    crate::project::ownership_tests::own_project(&state, &root.canonicalize().unwrap());
+    crate::project::ownership::own_project(&state, &root.canonicalize().unwrap());
     let subjects = subjects
         .iter()
         .map(|subject| (*subject).to_string())
@@ -116,7 +116,7 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
     // reservation becomes visible.
     let reserve_root = tempfile::tempdir().unwrap();
     let reserve_state = AppState::default();
-    crate::project::ownership_tests::own_project(
+    crate::project::ownership::own_project(
         &reserve_state,
         &reserve_root.path().canonicalize().unwrap(),
     );
@@ -499,10 +499,7 @@ fn mixed_subject_finalization_commits_only_verified_subject_and_replays_without_
         .unwrap();
     drop(state); // Native restart releases the prior project lease.
     let recovered_state = AppState::default();
-    crate::project::ownership_tests::own_project(
-        &recovered_state,
-        &temp.path().canonicalize().unwrap(),
-    );
+    crate::project::ownership::own_project(&recovered_state, &temp.path().canonicalize().unwrap());
     let replay = crate::import::runs::recover_import_run_for_project(&recovered_state, temp.path())
         .unwrap()
         .unwrap();
@@ -580,7 +577,7 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
             .unwrap();
         let state = app.state::<AppState>();
         let root = fs::canonicalize(&root).unwrap();
-        crate::project::ownership_tests::own_project(&state, &root.clone());
+        crate::project::ownership::own_project(&state, &root.clone());
         let emitted_snapshots = Arc::new(Mutex::new(Vec::new()));
         let snapshot_log = emitted_snapshots.clone();
         let raw_lines = Arc::new(Mutex::new(Vec::new()));
@@ -792,7 +789,7 @@ fn stop_during_blocking_apptainer_probe_cancels_before_staging_or_scientific_spa
         .unwrap();
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
-    crate::project::ownership_tests::own_project(&state, &root);
+    crate::project::ownership::own_project(&state, &root);
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "probe-plan".into())
         .unwrap();
     state
@@ -899,7 +896,7 @@ fn failed_running_checkpoint_reaps_the_already_spawned_import_scope() {
         .unwrap();
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
-    crate::project::ownership_tests::own_project(&state, &root);
+    crate::project::ownership::own_project(&state, &root);
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "scope-plan".into())
         .unwrap();
     state
@@ -997,7 +994,7 @@ fn launch_revalidation_failure_settles_only_the_reserved_run_without_staging_mut
         .unwrap();
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
-    crate::project::ownership_tests::own_project(&state, &root);
+    crate::project::ownership::own_project(&state, &root);
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "stale-plan".into())
         .unwrap();
     state

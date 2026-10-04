@@ -11,7 +11,7 @@ fn second_launch_only_targets_existing_main_window() {
         .unwrap();
     let project_root = tempfile::tempdir().unwrap();
     let state = app.state::<crate::app::state::AppState>();
-    crate::project::ownership_tests::own_project(&state, project_root.path());
+    crate::project::ownership::own_project(&state, project_root.path());
     let active_before = crate::project::ownership::active(&state).unwrap();
 
     assert!(handle_second_instance(

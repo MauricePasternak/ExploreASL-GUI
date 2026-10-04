@@ -1,4 +1,4 @@
-use super::{PathOwnership, inspect_source_path_impl};
+use crate::project::source_paths::{PathOwnership, inspect_source_path_impl};
 use std::fs;
 use tempfile::tempdir;
 

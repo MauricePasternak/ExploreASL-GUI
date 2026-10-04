@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 
 fn active_state(root: &Path) -> AppState {
     let state = AppState::default();
-    crate::project::ownership_tests::own_project(&state, root);
+    crate::project::ownership::own_project(&state, root);
     state
 }
 
@@ -492,7 +492,7 @@ fn discovery_and_attachment_distinguish_absent_and_true_foreign_project_ownershi
         false,
     )
     .unwrap();
-    crate::project::ownership_tests::own_project(&state, &project_b.path().canonicalize().unwrap());
+    crate::project::ownership::own_project(&state, &project_b.path().canonicalize().unwrap());
 
     assert_eq!(get_active_import_run_for_state(&state).unwrap(), None);
     assert!(attach_import_run_for_state(&state, &snapshot.run_id).is_err());

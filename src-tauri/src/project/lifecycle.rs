@@ -15,14 +15,14 @@ pub struct ResourceShutdown {
 }
 
 impl ResourceShutdown {
-    fn success() -> Self {
+    pub(crate) fn success() -> Self {
         Self {
             success: true,
             error: None,
         }
     }
 
-    fn failure(error: impl Into<String>) -> Self {
+    pub(crate) fn failure(error: impl Into<String>) -> Self {
         Self {
             success: false,
             error: Some(error.into()),
@@ -193,7 +193,7 @@ pub fn clear_active_project(state: State<'_, crate::app::state::AppState>) -> Re
     Ok(())
 }
 
-fn shutdown_import(state: &AppState) -> ResourceShutdown {
+pub(crate) fn shutdown_import(state: &AppState) -> ResourceShutdown {
     let (lifecycle, run_id) = match state.import_state.lock() {
         Ok(run) => (run.lifecycle, run.run_id.clone()),
         Err(_) => return ResourceShutdown::failure("Import state lock was poisoned"),
@@ -332,7 +332,7 @@ pub fn shutdown_project_runtime_impl(state: &AppState) -> ProjectRuntimeShutdown
     shutdown_project_runtime_with(state, shutdown_import, shutdown_workers, shutdown_watcher)
 }
 
-fn shutdown_project_runtime_with<Import, Workers, Watcher>(
+pub(crate) fn shutdown_project_runtime_with<Import, Workers, Watcher>(
     state: &AppState,
     import: Import,
     workers: Workers,
@@ -361,7 +361,3 @@ where
 pub fn shutdown_project_runtime(state: State<'_, AppState>) -> ProjectRuntimeShutdown {
     shutdown_project_runtime_impl(&state)
 }
-
-#[cfg(test)]
-#[path = "lifecycle_tests.rs"]
-mod tests;

@@ -55,7 +55,7 @@ fn fixture_with_profile(
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .unwrap();
     let state = app.state::<AppState>();
-    crate::project::ownership_tests::own_project(&state, root);
+    crate::project::ownership::own_project(&state, root);
     let mut request = ProcessingRequest {
         request_id: uuid::Uuid::new_v4(),
         project_id: "native-processing".into(),

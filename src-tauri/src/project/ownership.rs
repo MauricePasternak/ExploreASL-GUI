@@ -151,3 +151,11 @@ pub(crate) fn ensure_not_shutting_down(state: &AppState) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Fixtures install a real confined project capability without domain recovery.
+#[cfg(test)]
+pub(crate) fn own_project(state: &AppState, root: &Path) {
+    let project = for_root(state, root).unwrap();
+    *state.active_project_root.lock().unwrap() = Some(project.root().to_path_buf());
+    *state.active_project.lock().unwrap() = Some(project);
+}

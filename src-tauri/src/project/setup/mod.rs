@@ -138,5 +138,4 @@ pub fn command_error(error: anyhow::Error) -> SetupCommandError {
 }
 
 #[cfg(test)]
-#[path = "tests/setup.rs"]
 mod tests;

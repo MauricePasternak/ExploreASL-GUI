@@ -14,13 +14,6 @@ fn processing_admission_requires_native_capability() {
     );
 }
 
-/// Fixtures install a real confined project capability without domain recovery.
-pub(crate) fn own_project(state: &AppState, root: &std::path::Path) {
-    let project = crate::project::ownership::for_root(state, root).unwrap();
-    *state.active_project_root.lock().unwrap() = Some(project.root().to_path_buf());
-    *state.active_project.lock().unwrap() = Some(project);
-}
-
 #[test]
 fn candidate_capability_acquisition_is_read_only() {
     let root = tempfile::tempdir().unwrap();

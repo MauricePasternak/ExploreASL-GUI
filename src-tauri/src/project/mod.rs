@@ -8,6 +8,4 @@ pub(crate) mod source_paths;
 pub(crate) mod validation;
 
 #[cfg(test)]
-pub(crate) mod ownership_tests;
-#[cfg(test)]
-mod persistence_tests;
+mod tests;

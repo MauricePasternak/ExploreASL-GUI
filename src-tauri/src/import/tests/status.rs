@@ -73,7 +73,7 @@ fn state_owned_audit_rejects_missing_active_project() {
 fn active_root_audit_classifies_ready_dangling_partial_absent_and_special_entries() {
     let temp = tempfile::tempdir().unwrap();
     let state = AppState::default();
-    crate::project::ownership_tests::own_project(&state, temp.path());
+    crate::project::ownership::own_project(&state, temp.path());
     let complete = status_root(temp.path(), "COMPLETE");
     fs::write(complete.join("999_ready.status"), "ready").unwrap();
     fs::create_dir_all(temp.path().join("rawdata/sub-COMPLETE")).unwrap();
