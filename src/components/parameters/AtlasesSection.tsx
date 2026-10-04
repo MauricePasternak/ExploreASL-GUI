@@ -42,15 +42,13 @@ function bMaskingToTuple(
 
 function tupleToBMasking(
   tuple: [boolean, boolean, boolean, boolean],
-): number | [number, number, number, number] {
+): [number, number, number, number] {
   const nums: [number, number, number, number] = [
     tuple[0] ? 1 : 0,
     tuple[1] ? 1 : 0,
     tuple[2] ? 1 : 0,
     tuple[3] ? 1 : 0,
   ];
-  if (nums[0] === 1 && nums[1] === 1 && nums[2] === 1 && nums[3] === 1) return 1;
-  if (nums[0] === 0 && nums[1] === 0 && nums[2] === 0 && nums[3] === 0) return 0;
   return nums;
 }
 
@@ -67,7 +65,7 @@ export function AtlasesSection({
 
   const allMasked = bMaskingTuple.every(Boolean);
   const toggleAllMasks = () => {
-    onFieldChange("bMasking", allMasked ? 0 : 1);
+    onFieldChange("bMasking", allMasked ? [0, 0, 0, 0] : [1, 1, 1, 1]);
   };
 
   return (

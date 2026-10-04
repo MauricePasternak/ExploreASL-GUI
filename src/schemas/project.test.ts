@@ -86,6 +86,24 @@ describe("legacy migration and canonical serialization", () => {
     expect(output).not.toHaveProperty("version");
     expect(output.projectMeta).not.toHaveProperty("rootPath");
     expect(serializeProject(parseProject(JSON.stringify(legacy)))).toBe(first);
+    for (const [value, expected] of [
+      [true, 1],
+      [false, 0],
+      [0, 0],
+      [1, 1],
+      [undefined, undefined],
+    ] as const) {
+      const parsed = parseProject(
+        JSON.stringify({
+          ...legacy,
+          dataPar: { ...legacy.dataPar, bPVCGaussianMM: value },
+        }),
+      );
+      const dataPar =
+        expected === undefined ? legacy.dataPar : { ...legacy.dataPar, bPVCGaussianMM: expected };
+      expect(parsed.dataPar).toEqual(dataPar);
+      expect(parseProject(serializeProject(parsed)).dataPar).toEqual(dataPar);
+    }
   });
 
   it("rejects invalid valuable legacy mapping values", () => {

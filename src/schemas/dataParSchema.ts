@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toFlag } from "../lib/dataParFlags";
 
 export const M0Schema = z.union([
   z.enum(["separate_scan", "UseControlAsM0", "Absent"]),
@@ -31,9 +32,7 @@ export const QuantificationSectionSchema = z.object({
   T2tissueMultiTE: z.number().optional(),
   bUseExternalQuantification: z.boolean().optional(),
   ExternalQuantificationType: z.string().optional(),
-  ExternalQuantificationSmoothGaussianMM: z
-    .tuple([z.number().int(), z.number().int(), z.number().int()])
-    .optional(),
+  ExternalQuantificationSmoothGaussianMM: z.tuple([z.number(), z.number(), z.number()]).optional(),
   bMaskingExternal: z.boolean().optional(),
   bSpatialBASIL: z.boolean().optional(),
   bInferT1BASIL: z.boolean().optional(),
@@ -57,7 +56,10 @@ export const ASLProcessingSectionSchema = z.object({
   motionCorrection: z.union([z.literal(0), z.literal(1)]).optional(),
   bTopUp: z.boolean().optional(),
   bPVCNativeSpace: z.union([z.literal(0), z.literal(1)]).optional(),
-  bPVCGaussianMM: z.union([z.literal(0), z.literal(1)]).optional(),
+  bPVCGaussianMM: z
+    .union([z.literal(0), z.literal(1), z.boolean()])
+    .transform(toFlag)
+    .optional(),
   PVCNativeSpaceKernel: PVCNativeSpaceKernelSchema.optional(),
   SaveCBF4D: z.boolean().optional(),
   SpikeRemovalThreshold: z.number().optional(),

@@ -641,9 +641,14 @@ fn native_destinations_are_canonical_before_storage_and_replay() {
     project(temp.path());
     let mut input = request(temp.path());
     input.data_par["x"]["opts"] = serde_json::json!({"subjectFolder": temp.path()});
+    input.data_par["x"]["WMHsegmAlg"] = serde_json::json!("LGA");
     input.data_par["x"]["dataset"] =
         serde_json::json!({"subjectRegexp":"renderer", "ForceInclusionList":["ignored"]});
     let first = admit(temp.path(), input.clone()).unwrap();
+    assert_eq!(
+        first.assembled_configuration().unwrap()["x"]["WMHsegmAlg"],
+        "LGA"
+    );
     assert!(
         !fs::read_to_string(temp.path().join(CURRENT_RECORD))
             .unwrap()

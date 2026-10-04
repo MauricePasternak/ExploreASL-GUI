@@ -137,6 +137,9 @@ describe("processing store", () => {
       },
     });
     useDataParStore.getState().setDataParField("enableMetadataGroupingCorrection", true);
+    useDataParStore.getState().setDataParField("WMHsegmAlg", "LGA");
+    useDataParStore.getState().setDataParField("bRunLongReg", 1);
+    useDataParStore.getState().setDataParField("nCompartments", 2);
     useProcessingStore.getState().setAvailableSubjects([
       {
         subjectSession: "sub-001_01",
@@ -178,6 +181,12 @@ describe("processing store", () => {
       "/project",
     );
     const request = vi.mocked(reserveProcessingRun).mock.calls[0]![0];
+    expect(request.dataPar.x).toMatchObject({
+      WMHsegmAlg: "LGA",
+      modules: { bRunLongReg: 1 },
+      Q: { nCompartments: 2 },
+    });
+    expect(request.dataPar.x).not.toHaveProperty("modules.asl.SpikeRemovalAbsoluteThreshold");
     expect(request.dataPar).not.toHaveProperty("opts");
     expect(request.dataPar).not.toHaveProperty("dataset");
     expect(runProcessingPipeline).toHaveBeenCalledWith(processingSnapshot().runId);

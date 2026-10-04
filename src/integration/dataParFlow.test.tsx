@@ -134,6 +134,11 @@ describe("dataPar flow: store ↔ project sync", () => {
       Lambda: 0.9,
       Quality: 1,
       Atlases: ["MNI_Structural"],
+      WMHsegmAlg: "LGA",
+      bRunLongReg: 1,
+      nCompartments: 2,
+      bRegisterM02ASL: 0,
+      ExternalQuantificationSmoothGaussianMM: [5.5, 5, 1.5],
     };
 
     const store = useDataParStore.getState();
@@ -144,6 +149,16 @@ describe("dataPar flow: store ↔ project sync", () => {
 
     const saved = useProjectStore.getState().project!.dataPar;
     expect(saved).toMatchObject(fields);
+    store.loadDataPar(JSON.parse(JSON.stringify(saved)));
+    expect(useDataParStore.getState().dataPar).toEqual(saved);
+    expect(assembleDataPar(useDataParStore.getState().dataPar).x).toMatchObject({
+      WMHsegmAlg: "LGA",
+      modules: {
+        bRunLongReg: 1,
+        asl: { bRegisterM02ASL: 0, ExternalQuantificationSmoothGaussianMM: [5.5, 5, 1.5] },
+      },
+      Q: { nCompartments: 2 },
+    });
   });
 
   it("showAdvancedSections syncs to project uiState.dataParametersAdvancedVisibility", () => {
@@ -273,7 +288,7 @@ describe("dataPar flow: assembly from filled state", () => {
     useDataParStore.getState().setDataParField("bTopUp", true);
     useDataParStore.getState().setDataParField("Quality", 1);
     useDataParStore.getState().setDataParField("Atlases", ["MNI_Structural"]);
-    useDataParStore.getState().setDataParField("bRunLongReg", true);
+    useDataParStore.getState().setDataParField("bRunLongReg", 1);
     useDataParStore.getState().setDataParField("bAutomaticallyDetectFSL", true);
 
     const result = assembleDataPar(useDataParStore.getState().dataPar);
@@ -283,8 +298,8 @@ describe("dataPar flow: assembly from filled state", () => {
     expect(result.x.modules?.asl?.bTopUp).toBe(true);
     expect(result.x.settings?.Quality).toBe(1);
     expect(result.x.S?.Atlases).toEqual(["MNI_Structural"]);
-    expect(result.x.modules?.structural?.bRunLongReg).toBe(true);
-    expect(result.x.bAutomaticallyDetectFSL).toBe(true);
+    expect(result.x.modules?.bRunLongReg).toBe(1);
+    expect(result.x.external?.bAutomaticallyDetectFSL).toBe(true);
   });
 
   it("assembles empty sections when only some fields set", () => {
@@ -308,6 +323,10 @@ describe("dataPar flow: loadDataPar → assemble round-trip", () => {
       Lambda: 0.9,
       Atlases: ["TotalGM"],
       bAutomaticallyDetectFSL: false,
+      WMHsegmAlg: "LGA",
+      nCompartments: 2,
+      bRegisterM02ASL: 0,
+      SpikeRemovalAbsoluteThreshold: 0,
     };
 
     useDataParStore.getState().loadDataPar(state);
@@ -318,6 +337,11 @@ describe("dataPar flow: loadDataPar → assemble round-trip", () => {
     expect(assembled.x.settings?.Quality).toBe(1);
     expect(assembled.x.Q?.Lambda).toBe(0.9);
     expect(assembled.x.S?.Atlases).toEqual(["TotalGM"]);
-    expect(assembled.x.bAutomaticallyDetectFSL).toBe(false);
+    expect(assembled.x.external?.bAutomaticallyDetectFSL).toBe(false);
+    expect(assembled.x.WMHsegmAlg).toBe("LGA");
+    expect(assembled.x.Q?.nCompartments).toBe(2);
+    expect(assembled.x.modules?.asl?.bRegisterM02ASL).toBe(0);
+    expect(assembled.x.modules?.asl?.SpikeRemovalAbsoluteThreshold).toBe(0);
+    expect(assembled.x.modules?.asl?.SpikeRemovalThreshold).toBeUndefined();
   });
 });

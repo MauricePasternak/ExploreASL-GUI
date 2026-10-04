@@ -98,6 +98,11 @@ export function flattenRunDataPar(
   mergeSections(flat, x.settings as Record<string, unknown> | undefined);
   mergeSections(flat, x.S as Record<string, unknown> | undefined);
   mergeSections(flat, x.external as Record<string, unknown> | undefined);
+  for (const key of ["bRunLongReg", "bRunDARTEL"]) {
+    const value = (x.modules as Record<string, unknown> | undefined)?.[key];
+    if (value !== undefined) flat[key] = value;
+  }
+  if (x.WMHsegmAlg !== undefined) flat.WMHsegmAlg = x.WMHsegmAlg;
 
   if (x.bAutomaticallyDetectFSL !== undefined) {
     flat.bAutomaticallyDetectFSL = x.bAutomaticallyDetectFSL;

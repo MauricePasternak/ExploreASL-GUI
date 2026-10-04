@@ -68,7 +68,7 @@ describe("AtlasesSection", () => {
     renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/minimal roi volume/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/wmh lesion detection/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/include existing wmh voxels/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/data types/i).length).toBeGreaterThan(0);
   });
 
@@ -95,7 +95,7 @@ describe("AtlasesSection", () => {
     const onFieldChange = vi.fn();
     renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />);
     clickSwitch(/show advanced/i);
-    clickSwitch(/wmh lesion detection/i);
+    clickSwitch(/include existing wmh voxels/i);
     expect(onFieldChange).toHaveBeenCalledWith("bWMH", expect.any(Boolean));
   });
 
@@ -111,5 +111,22 @@ describe("AtlasesSection", () => {
     );
     clickSwitch(/show advanced/i);
     expect(onToggle).toHaveBeenCalled();
+  });
+
+  it("keeps all-on and all-off ROI masks as persistable tuples", () => {
+    const onFieldChange = vi.fn();
+    renderWithMantine(<AtlasesSectionWrapper initialShow onFieldChange={onFieldChange} />);
+    fireEvent.click(screen.getByTestId("field-bMasking-select-all"));
+    expect(onFieldChange).toHaveBeenLastCalledWith("bMasking", [0, 0, 0, 0]);
+    cleanup();
+    renderWithMantine(
+      <AtlasesSectionWrapper
+        initialShow
+        dataPar={{ bMasking: [0, 0, 0, 0] }}
+        onFieldChange={onFieldChange}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("field-bMasking-select-all"));
+    expect(onFieldChange).toHaveBeenLastCalledWith("bMasking", [1, 1, 1, 1]);
   });
 });

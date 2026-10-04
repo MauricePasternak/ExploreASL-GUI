@@ -100,6 +100,15 @@ describe("ASLProcessingSection", () => {
     expect(screen.getAllByText(/dct registration/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/use mni as dummy/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/apply quantification/i).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("field-SpikeRemovalAbsoluteThreshold")).toHaveAttribute(
+      "placeholder",
+      "Unset: use relative threshold",
+    );
+    fireEvent.click(screen.getByTestId("field-bRegistrationContrast"));
+    expect(
+      screen.getByText("Combined control and CBF registration (automatic)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Combined registration with forced CBF attempt")).toBeInTheDocument();
   });
 
   it("calls onFieldChange when motionCorrection toggled", () => {

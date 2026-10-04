@@ -26,6 +26,8 @@ describe("flattenRunDataPar", () => {
       nCompartments: 2,
       bTopUp: true,
       bRunLongReg: 1,
+      bRunDARTEL: 0,
+      WMHsegmAlg: "LGA",
       Quality: 1,
       Atlases: ["Total"],
       bUseExternalQuantification: true,
@@ -37,6 +39,8 @@ describe("flattenRunDataPar", () => {
     expect(flat.nCompartments).toBe(2);
     expect(flat.bTopUp).toBe(true);
     expect(flat.bRunLongReg).toBe(1);
+    expect(flat.bRunDARTEL).toBe(0);
+    expect(flat.WMHsegmAlg).toBe("LGA");
     expect(flat.Quality).toBe(1);
     expect(flat.Atlases).toEqual(["Total"]);
     expect(flat.bUseExternalQuantification).toBe(true);

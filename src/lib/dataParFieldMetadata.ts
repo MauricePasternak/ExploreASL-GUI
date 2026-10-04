@@ -34,7 +34,8 @@ export interface FieldMeta {
 const isUseControlAsM0WithPulses = (s: Record<string, unknown>): boolean =>
   s.M0 === "UseControlAsM0" && ((s.BackgroundSuppressionNumberPulses as number) ?? 0) > 0;
 
-const isPVCEnabled = (s: Record<string, unknown>): boolean => s.bPVCNativeSpace === true;
+const isPVCEnabled = (s: Record<string, unknown>): boolean =>
+  s.bPVCNativeSpace === 1 || s.bPVCNativeSpace === true;
 
 const isExternalQuant = (s: Record<string, unknown>): boolean =>
   s.bUseExternalQuantification === true;
@@ -48,7 +49,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   M0: {
     label: "M0 source",
     description:
-      "Select the M0 (equilibrium magnetization) calibration strategy. Choose 'Separate M0 scan' if you acquired a dedicated calibration scan, 'Use control as M0' to estimate it from control images, or 'Absent' to skip M0 processing entirely.",
+      "Select M0 equilibrium magnetization calibration: a separate scan, control images, or a numeric scalar calibration value. 'Absent' skips M0 processing. The GUI initially displays 'Absent'; when unset, ExploreASL chooses from available data.",
     default: "Absent",
     defaultHint: "Absent",
     section: "m0",
@@ -66,9 +67,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "number",
   },
   BackgroundSuppressionPulseTime: {
-    label: "Background suppression pulse times",
+    label: "Background suppression pulse times (ms)",
     description:
-      "The exact timing (in seconds or comma-separated list of seconds) of each background suppression pulse relative to the start of labeling.",
+      "Pulse times in milliseconds after the start of labeling, as a scalar or comma-separated list. These are ExploreASL processing units, not BIDS seconds.",
     defaultHint: "",
     section: "m0",
     tier: "basic",
@@ -88,9 +89,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bRegisterM02ASL: {
     label: "Register M0 to ASL",
     description:
-      "Align/register the M0 calibration scan to the ASL space before performing blood flow quantification to correct for head movement between scans.",
+      "Allow M0 registration to mean control, or T1w if mean control is unavailable. Explicit 0 skips registration; when unset, ExploreASL decides from M0 source and sequence. Registration is skipped for control-as-M0 and spiral sequences.",
     default: 0,
-    defaultHint: "false",
+    defaultHint: "Data-dependent when unset",
     section: "m0",
     tier: "basic",
     widget: "toggle",
@@ -98,7 +99,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   M0_conventionalProcessing: {
     label: "Legacy / Conventional M0 calibration",
     description:
-      "Enable legacy (conventional) processing of the M0 calibration scan instead of the newer standard pipeline.",
+      "Use conventional native-space M0 masking and minor smoothing instead of erosion, smoothing and extrapolation. ExploreASL disables this option for 3D acquisitions.",
     default: 0,
     defaultHint: "false",
     section: "m0",
@@ -106,9 +107,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   RepetitionTimePreparationM0: {
-    label: "M0 repetition time (TR)",
+    label: "Legacy M0 repetition time (s)",
     description:
-      "The repetition time (TR) of the M0 preparation scan (in seconds), which is used to correct for T1 relaxation effects.",
+      "Legacy value retained for saved projects. The audited ExploreASL 2.0.0_BETA processing code does not read x.Q.RepetitionTimePreparationM0; M0 recovery correction reads RepetitionTimePreparation or RepetitionTime from scan metadata. This key is used during import, not as a processing override.",
     default: [],
     defaultHint: "",
     section: "m0",
@@ -141,7 +142,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "T2 of arterial blood",
     description: "The transverse relaxation time (T2) of arterial blood in milliseconds.",
     default: 165,
-    defaultHint: "165",
+    defaultHint: "165 at 3 T; field-dependent",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -151,7 +152,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     description:
       "The longitudinal relaxation time (T1) of arterial blood in milliseconds. Typically 1650 ms at 3 Tesla.",
     default: 1650,
-    defaultHint: "1650",
+    defaultHint: "1650 at 3 T; field-dependent",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -161,7 +162,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     description:
       "The longitudinal relaxation time (T1) of grey matter tissue in milliseconds (typically 1240 ms).",
     default: 1240,
-    defaultHint: "1240",
+    defaultHint: "1240 at 3 T; field-dependent",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -171,7 +172,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     description:
       "The longitudinal relaxation time (T1) of white matter tissue in milliseconds (typically 800 ms).",
     default: 800,
-    defaultHint: "800",
+    defaultHint: "800 at 3 T; field-dependent",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -181,7 +182,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     description:
       "The transverse relaxation time (T2) of grey matter tissue in milliseconds (typically 85 ms).",
     default: 85,
-    defaultHint: "85",
+    defaultHint: "85 at 3 T; field-dependent",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -189,9 +190,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   T2WM: {
     label: "T2 of white matter",
     description:
-      "The transverse relaxation time (T2) of white matter tissue in milliseconds (typically 76 ms).",
+      "White-matter T2 in milliseconds. ExploreASL defaults to 75 ms at 3 T and 86 ms at 1.5 T when unset.",
     default: 76,
-    defaultHint: "76",
+    defaultHint: "75 at 3 T; field-dependent",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -201,7 +202,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     description:
       "The transverse relaxation time (T2) of brain tissue in milliseconds, used specifically for multi-echo-time (multi-TE) ASL sequences.",
     default: 85,
-    defaultHint: "85",
+    defaultHint: "85 at 3 T; field-dependent",
     section: "quantification",
     tier: "advanced",
     widget: "number",
@@ -209,9 +210,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bUseExternalQuantification: {
     label: "Use external quantification",
     description:
-      "Enable external toolboxes (like FSL BASIL) for blood flow quantification instead of the built-in ExploreASL quantification model.",
+      "Request external quantification with BASIL, FABBER or VABY. When unset, ExploreASL can select external quantification from the data, including multi-PLD or multi-TE acquisitions.",
     default: false,
-    defaultHint: "false",
+    defaultHint: "Data-dependent when unset",
     section: "quantification",
     tier: "advanced",
     widget: "toggle",
@@ -221,7 +222,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     description:
       "The specific external quantification engine to run (e.g. BASIL, FABBER, or VABY).",
     default: "BASIL",
-    defaultHint: "BASIL",
+    defaultHint: "Data-dependent when unset",
     section: "quantification",
     tier: "advanced",
     widget: "select",
@@ -230,9 +231,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   ExternalQuantificationSmoothGaussianMM: {
     label: "External quantification smoothing (mm)",
     description:
-      "Apply Gaussian smoothing (Full Width at Half Maximum in millimeters) during the external quantification process.",
+      "Optional extra Gaussian smoothing of PWI input, with FWHM in millimeters. When unset, no extra smoothing is requested. ExploreASL rounds the width to voxel units.",
     default: [5, 5, 1],
-    defaultHint: "5, 5, 1",
+    defaultHint: "No extra smoothing when unset",
     section: "quantification",
     tier: "advanced",
     widget: "numberTuple",
@@ -263,7 +264,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bInferT1BASIL: {
     label: "Infer T1 in BASIL",
     description:
-      "Allow the BASIL quantification model to dynamically estimate/infer the local T1 relaxation values rather than using a fixed assumption.",
+      "Infer variable T1 values in BASIL for multi-PLD data. This option is ignored for single-PLD data and disabled in low-quality mode.",
     default: false,
     defaultHint: "false",
     section: "quantification",
@@ -272,11 +273,11 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     condition: isExternalQuant,
   },
   bInferATTBASIL: {
-    label: "Infer ATT in BASIL",
+    label: "Infer ATT in BASIL (legacy, unsupported in audited checkout)",
     description:
-      "Allow the BASIL model to dynamically estimate/infer the arterial transit time (ATT / blood arrival time).",
+      "Retained for saved-project compatibility. ExploreASL 2.0.0_BETA lists this legacy key but has no operative reader. It does not control ATT inference in that checkout and is not the distinct bInferArtBASIL arterial-component option.",
     default: true,
-    defaultHint: "true",
+    defaultHint: "No operative default in audited checkout",
     section: "quantification",
     tier: "advanced",
     widget: "toggle",
@@ -305,9 +306,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     condition: isExternalQuant,
   },
   ATTSDBASIL: {
-    label: "BASIL ATT standard deviation",
+    label: "BASIL ATT prior standard deviation (s)",
     description:
-      "The expected variation/standard deviation of the arterial transit time (ATT) prior assumption within BASIL.",
+      "Standard deviation of the arterial transit time prior in seconds, passed to BASIL as --batsd for multi-PLD data.",
     default: 1.0,
     defaultHint: "1.0",
     section: "quantification",
@@ -318,9 +319,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bCleanUpExternal: {
     label: "Clean up external quantification",
     description:
-      "Delete temporary and intermediate calculation files generated by the external quantification engine once finished.",
+      "Delete external quantification intermediates after processing. ExploreASL defaults to true when unset; the GUI switch initially displays false without writing it.",
     default: false,
-    defaultHint: "false",
+    defaultHint: "true when unset; GUI initially off",
     section: "quantification",
     tier: "advanced",
     widget: "toggle",
@@ -350,7 +351,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   },
   SkipIfNoFlair: {
     label: "Skip if no FLAIR",
-    description: "Skip processing for any subjects/sessions that do not have a FLAIR image.",
+    description:
+      "Skip the structural module for a subject/session without a FLAIR image. This does not skip the ASL module.",
     default: 0,
     defaultHint: "0",
     section: "generalSettings",
@@ -359,7 +361,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   },
   SkipIfNoASL: {
     label: "Skip if no ASL",
-    description: "Skip processing for any subjects/sessions that do not have an ASL image.",
+    description: "Skip the structural module for a subject/session without an ASL image.",
     default: 0,
     defaultHint: "0",
     section: "generalSettings",
@@ -369,7 +371,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   SkipIfNoM0: {
     label: "Skip if no M0",
     description:
-      "Skip processing for any subjects/sessions that do not have an M0 calibration image.",
+      "Skip the structural module for a subject/session without an M0 calibration image.",
     default: 0,
     defaultHint: "0",
     section: "generalSettings",
@@ -379,9 +381,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bLesionFilling: {
     label: "Lesion filling",
     description:
-      "Fill white-matter lesions with surrounding normal tissue signal before structural segmentation, reducing tissue segmentation errors.",
+      "Fill white-matter lesions with surrounding normal tissue signal before structural segmentation. ExploreASL defaults to true when unset. The GUI switch initially displays false without writing it.",
     default: false,
-    defaultHint: "false",
+    defaultHint: "true when unset; GUI initially off",
     section: "generalSettings",
     tier: "advanced",
     widget: "toggle",
@@ -420,9 +422,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bTopUp: {
     label: "FSL Topup distortion correction",
     description:
-      "Enable FSL TopUp distortion correction if a calibration scan with reversed phase encoding direction is available.",
+      "Request FSL TopUp distortion correction. When unset, ExploreASL enables it if reversed phase-encoding scans exist, except when merging ASL sessions. The GUI switch initially displays false without writing it.",
     default: false,
-    defaultHint: "false",
+    defaultHint: "Automatic when unset",
     section: "aslProcessing",
     tier: "basic",
     widget: "toggle",
@@ -430,7 +432,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bPVCNativeSpace: {
     label: "Native-space partial volume correction (PVC)",
     description:
-      "Correct for partial volume effects (mixing of grey matter, white matter, and CSF within a voxel) in native space before standardizing the images.",
+      "Correct partial volume effects in native space. The GUI initially displays this switch on; unset values remain omitted, and ExploreASL defaults to off. Toggle explicitly to request a value.",
     default: 0,
     defaultHint: "0",
     section: "aslProcessing",
@@ -450,7 +452,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   PVCNativeSpaceKernel: {
     label: "PVC native-space kernel",
     description:
-      "Define the dimensions (Left-Right [LR], Anterior-Posterior [AP], Inferior-Superior [IS]) of the local kernel used for native-space partial volume correction.",
+      "Flat kernel dimensions are in voxels, default [5, 5, 1]. Gaussian kernel FWHM is in millimeters, default [10, 10, 4]. Unset kernel values let ExploreASL choose according to kernel shape.",
     default: [5, 5, 1],
     defaultHint: "5, 5, 1",
     section: "aslProcessing",
@@ -469,9 +471,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "toggle",
   },
   SpikeRemovalThreshold: {
-    label: "Spike removal threshold",
+    label: "Relative spike removal threshold",
     description:
-      "The statistical threshold (Z-score) used to detect and filter out sudden signal spikes (e.g. due to motion or scanner instability) in the ASL timeseries.",
+      "Fractional t-statistic improvement threshold for ENABLE, not a Z-score. Default 0.01 means 1%. Used when no absolute motion threshold is provided; outlier exclusion is disabled for multi-PLD and multi-TE in the audited checkout.",
     default: 0.01,
     defaultHint: "0.01",
     section: "aslProcessing",
@@ -479,11 +481,11 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "number",
   },
   SpikeRemovalAbsoluteThreshold: {
-    label: "Absolute spike removal threshold",
+    label: "Absolute motion threshold (mm)",
     description:
-      "The absolute signal value threshold above which any timeseries volume is classified as a spike and removed.",
+      "Motion threshold in millimeters, between 0 and 1. Providing this field selects fixed-threshold removal instead of ENABLE, even for explicit 0. Leave unset for the relative-threshold approach. This is not a signal-intensity threshold.",
     default: 0,
-    defaultHint: "0",
+    defaultHint: "Unset: use relative threshold",
     section: "aslProcessing",
     tier: "advanced",
     widget: "number",
@@ -491,9 +493,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bRegistrationContrast: {
     label: "ASL-to-Structural registration contrast",
     description:
-      "Select the image contrast type for aligning the ASL scans to structural anatomical scans.",
+      "0: control to T1w. 1: CBF/PWI to pseudo-CBF. 2: combined control and CBF registration, with data-dependent CBF attempts. 3: combined registration with forced CBF attempts. Subtracted data and DCT options can alter the strategy.",
     default: 2,
-    defaultHint: "Automatic based on spatial CoV of PWI",
+    defaultHint: "Data-dependent when unset",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -513,7 +515,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     description:
       "Whether to use Discrete Cosine Transform (DCT) on top of affine registration to improve registration accuracy.",
     default: 0,
-    defaultHint: "Disabled (affine only)",
+    defaultHint: "Disabled (no DCT)",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -531,9 +533,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bHct2BloodT1: {
     label: "Blood T1 relaxation estimation method",
     description:
-      'Configure hematocrit estimation and its influence on blood T1:\n• Default: Disable hematocrit estimation and any subsequent influence on blood T1.\n• Provided Hct: To use provided hematocrit data per subject present as the column "hematocrit" (case-sensitive) in participants.tsv and subsequently calculate the influence on blood T1.\n• Age & Sex: To derive hematocrit data using age and sex information from "age" and "sex" (values "male" or "female" within) columns (case-sensitive) in participants.tsv, and subsequently calculate the influence on blood T1.',
+      'Blood T1 estimation: 0 disables hematocrit conversion; 1 uses "hematocrit" from participants.tsv; 2 estimates from "age" and "sex". When unset, ExploreASL can infer this choice from available participant data. It is not universally disabled by default.',
     default: 0,
-    defaultHint: "Disabled (use fixed blood T1)",
+    defaultHint: "Data-dependent when unset",
     section: "aslProcessing",
     tier: "advanced",
     widget: "select",
@@ -573,7 +575,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   TissueThreshold: {
     label: "Tissue probability threshold",
     description:
-      "Minimum tissue probability threshold (0.0 to 1.0) for atlas ROI masking. Voxels are included if the summed probabilities of the specified tissue type(s) meet or exceed this value (e.g., selecting GM+WM with 0.7 means all voxels where the summed probabilities of grey or white matter add up to 70% or more are considered).",
+      "Unitless tissue probability threshold from 0 to 1 for atlas ROI masking. The summed probabilities of selected tissues must exceed this value. For GM+WM at 0.7, this means above 70%, not a volume in mL.",
     default: [0.7, 0.7],
     defaultHint: "0.7, 0.7",
     section: "atlases",
@@ -601,9 +603,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     widget: "number",
   },
   bWMH: {
-    label: "WMH lesion detection & regional analysis",
+    label: "Include existing WMH voxels in ROI masks",
     description:
-      "Enable automated detection, segmentation, and regional analysis of white-matter hyperintensities (lesions).",
+      "Include voxels from existing white-matter hyperintensity maps in ROI masks. When false, these voxels are excluded. This does not enable WMH detection or segmentation.",
     default: false,
     defaultHint: "false",
     section: "atlases",
@@ -613,7 +615,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   DataTypes: {
     label: "Data types",
     description:
-      "The statistical maps and output metric types to generate from quantification (e.g. quantitative CBF, arterial transit time, etc.).",
+      "Existing statistical maps to include in population ROI analysis, such as qCBF. This selection does not generate quantification outputs.",
     default: ["qCBF"],
     defaultHint: "qCBF",
     section: "atlases",
@@ -674,7 +676,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bFixResolution: {
     label: "Fix resolution",
     description:
-      "Automatically resample high-resolution structural scans to a standard 1mm isotropic resolution if they deviate.",
+      "Adjust T1w voxel dimensions coarser than about 1.5 mm for CAT12 segmentation. Finer voxel dimensions are retained; this is not resampling to 1 mm isotropic resolution.",
     default: false,
     defaultHint: "false",
     section: "structural",
@@ -686,19 +688,19 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bAutomaticallyDetectFSL: {
     label: "Auto-detect FSL",
     description:
-      "Allow the processing pipeline to automatically locate the FSL (FMRIB Software Library) installation path on your system.",
+      "Allow automatic FSL installation detection. When unset and no FSL directory is already available, ExploreASL defaults to automatic search. The GUI switch initially displays true without writing it.",
     default: false,
-    defaultHint: "false",
+    defaultHint: "Automatic search when needed",
     section: "environment",
     tier: "advanced",
     widget: "toggle",
   },
   bAutomaticallyDetectVABY: {
-    label: "Auto-detect Vaby",
+    label: "Auto-detect VABY (unsupported in audited checkout)",
     description:
-      "Allow the processing pipeline to automatically locate the Vaby/FABBER installation path on your system.",
+      "Retained for saved-project compatibility. ExploreASL 2.0.0_BETA reads this flag but does not implement automatic VABY discovery or use it to locate FABBER. Requested VABY quantification requires a configured x.external.VABYdir. The GUI switch initially displays true without writing it; this does not enable discovery in that checkout.",
     default: false,
-    defaultHint: "false",
+    defaultHint: "Automatic discovery not implemented in audited checkout",
     section: "environment",
     tier: "advanced",
     widget: "toggle",

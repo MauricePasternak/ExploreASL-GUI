@@ -199,6 +199,7 @@ impl ProcessingRequest {
                         | "settings"
                         | "S"
                         | "external"
+                        | "WMHsegmAlg"
                         | "dataset"
                         | "bAutomaticallyDetectFSL"
                         | "bAutomaticallyDetectVABY"

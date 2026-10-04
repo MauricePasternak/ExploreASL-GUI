@@ -139,8 +139,7 @@ export function QuantificationSection({
                         onChange={(v) => onFieldChange("ExternalQuantificationSmoothGaussianMM", v)}
                         labels={["LR", "AP", "IS"]}
                         testId="field-ExternalQuantificationSmoothGaussianMM"
-                        integerOnly
-                        placeholder={[5, 5, 1]}
+                        suffix=" mm"
                       />
                     </Stack>
 

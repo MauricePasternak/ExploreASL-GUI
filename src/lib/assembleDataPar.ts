@@ -7,6 +7,8 @@ export interface DataParJson {
     };
     Q?: Record<string, unknown>;
     modules?: {
+      bRunLongReg?: DataParState["bRunLongReg"];
+      bRunDARTEL?: DataParState["bRunDARTEL"];
       asl?: Record<string, unknown>;
       structural?: Record<string, unknown>;
     };
@@ -17,8 +19,7 @@ export interface DataParJson {
       subjectRegexp?: string;
       ForceInclusionList?: string[];
     };
-    bAutomaticallyDetectFSL?: boolean;
-    bAutomaticallyDetectVABY?: boolean;
+    WMHsegmAlg?: string;
   };
 }
 
@@ -53,9 +54,9 @@ export function assembleDataPar(state: DataParState): DataParJson {
     "T2GM",
     "T2WM",
     "T2tissueMultiTE",
-    "M0_GMScaleFactor",
-    "bRegisterM02ASL",
-    "M0_conventionalProcessing",
+    "nCompartments",
+    "BackgroundSuppressionNumberPulses",
+    "BackgroundSuppressionPulseTime",
     "RepetitionTimePreparationM0",
   ];
 
@@ -74,19 +75,23 @@ export function assembleDataPar(state: DataParState): DataParJson {
     "bUseMNIasDummyStructural",
     "bHct2BloodT1",
     "ApplyQuantification",
-    "BackgroundSuppressionNumberPulses",
-    "BackgroundSuppressionPulseTime",
-    "nCompartments",
+    "M0_GMScaleFactor",
+    "bRegisterM02ASL",
+    "M0_conventionalProcessing",
+    "bUseExternalQuantification",
+    "ExternalQuantificationType",
+    "ExternalQuantificationSmoothGaussianMM",
+    "bMaskingExternal",
+    "bSpatialBASIL",
+    "bInferT1BASIL",
+    "bInferATTBASIL",
+    "ExchBASIL",
+    "DispBASIL",
+    "ATTSDBASIL",
+    "bCleanUpExternal",
   ];
 
-  const structuralKeys = [
-    "bRunLongReg",
-    "bRunDARTEL",
-    "WMHsegmAlg",
-    "bSegmentSPM12",
-    "bHammersCAT12",
-    "bFixResolution",
-  ];
+  const structuralKeys = ["bSegmentSPM12", "bHammersCAT12", "bFixResolution"];
 
   const settingsKeys = [
     "Quality",
@@ -108,19 +113,7 @@ export function assembleDataPar(state: DataParState): DataParJson {
     "DataTypes",
   ];
 
-  const externalKeys = [
-    "bUseExternalQuantification",
-    "ExternalQuantificationType",
-    "ExternalQuantificationSmoothGaussianMM",
-    "bMaskingExternal",
-    "bSpatialBASIL",
-    "bInferT1BASIL",
-    "bInferATTBASIL",
-    "ExchBASIL",
-    "DispBASIL",
-    "ATTSDBASIL",
-    "bCleanUpExternal",
-  ];
+  const externalKeys = ["bAutomaticallyDetectFSL", "bAutomaticallyDetectVABY"];
 
   const q = buildSection(state, qKeys);
   const asl = buildSection(state, aslKeys);
@@ -128,10 +121,12 @@ export function assembleDataPar(state: DataParState): DataParJson {
   const settings = buildSection(state, settingsKeys);
   const s = buildSection(state, sKeys);
   const external = buildSection(state, externalKeys);
+  const moduleOptions = buildSection(state, ["bRunLongReg", "bRunDARTEL"]);
 
   const modules =
-    !isEmpty(asl) || !isEmpty(structural)
+    !isEmpty(asl) || !isEmpty(structural) || !isEmpty(moduleOptions)
       ? {
+          ...moduleOptions,
           ...(!isEmpty(asl) && { asl }),
           ...(!isEmpty(structural) && { structural }),
         }
@@ -145,11 +140,8 @@ export function assembleDataPar(state: DataParState): DataParJson {
     ...(!isEmpty(external) && { external }),
   };
 
-  if (state.bAutomaticallyDetectFSL !== undefined) {
-    x.bAutomaticallyDetectFSL = state.bAutomaticallyDetectFSL;
-  }
-  if (state.bAutomaticallyDetectVABY !== undefined) {
-    x.bAutomaticallyDetectVABY = state.bAutomaticallyDetectVABY;
+  if (state.WMHsegmAlg !== undefined) {
+    x.WMHsegmAlg = state.WMHsegmAlg;
   }
 
   return { x };

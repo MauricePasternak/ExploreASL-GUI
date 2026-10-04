@@ -493,7 +493,6 @@ fn validate_datapar(data_par: &serde_json::Value) -> Result<()> {
         "bCleanUpExternal",
         "enableMetadataGroupingCorrection",
         "bTopUp",
-        "bPVCGaussianMM",
         "SaveCBF4D",
         "bFixResolution",
         "bLesionFilling",
@@ -522,6 +521,7 @@ fn validate_datapar(data_par: &serde_json::Value) -> Result<()> {
         "SkipIfNoM0",
         "motionCorrection",
         "bPVCNativeSpace",
+        "bPVCGaussianMM",
         "bUseMNIasDummyStructural",
         "bRunLongReg",
         "bRunDARTEL",
@@ -529,7 +529,9 @@ fn validate_datapar(data_par: &serde_json::Value) -> Result<()> {
         "bHammersCAT12",
     ] {
         if let Some(value) = object.get(field) {
-            if !matches!(value.as_i64(), Some(0 | 1)) {
+            if !matches!(value.as_i64(), Some(0 | 1))
+                && !(field == "bPVCGaussianMM" && value.is_boolean())
+            {
                 bail!("Project payload has invalid {field}");
             }
         }
@@ -577,13 +579,7 @@ fn validate_datapar(data_par: &serde_json::Value) -> Result<()> {
             let values = value
                 .as_array()
                 .ok_or_else(|| anyhow!("Project payload has invalid {field}"))?;
-            if values.len() != 3
-                || values.iter().any(|entry| {
-                    !entry.is_number()
-                        || (field == "ExternalQuantificationSmoothGaussianMM"
-                            && entry.as_i64().is_none())
-                })
-            {
+            if values.len() != 3 || values.iter().any(|entry| !entry.is_number()) {
                 bail!("Project payload has invalid {field}");
             }
         }

@@ -20,12 +20,14 @@ The system SHALL define a Zod schema `DataParSchema` representing all dataPar.js
 
 ### Requirement: Field metadata constant
 
-The system SHALL define a `FIELD_METADATA` constant mapping each dataPar field key to: `label` (human-readable display name), `description` (tooltip text from ExploreASL docs), `defaultHint` (ExploreASL default shown as placeholder), `section` (accordion section ID), `tier` ("basic" | "advanced"), `condition` (optional function receiving full state that returns boolean for conditional reveal), and `widget` (control type: "toggle" | "number" | "select" | "checkboxGroup" | "tags" | "numberTuple" | "selectWithCustom").
+The system SHALL define `FIELD_METADATA` for field labels, help, hints, sections, tiers, conditions and widgets. Descriptions SHALL match operative meanings and units in the audited ExploreASL checkout `6dafdba4cd2333eede4525d05f110b1cfa3f63c6`, identified by `VERSION_2.0.0_BETA`; this SHALL NOT imply support across all releases. Hints SHALL distinguish GUI display choices from fixed or data-dependent MATLAB defaults. Metadata defaults SHALL NOT populate unset processing fields.
+
+FSL help SHALL describe the GUI's initially on display and MATLAB's default automatic search when no FSL directory is already available. Lesion-filling help SHALL distinguish the GUI's initially off display from MATLAB's true default when unset. VABY discovery help SHALL state that the audited checkout does not implement automatic discovery and requires configured `x.external.VABYdir` for requested VABY quantification; existing discovery flag values SHALL remain preserved.
 
 #### Scenario: Toggle field metadata
 
 - **WHEN** `bTopUp` metadata is accessed
-- **THEN** `label` is "FSL TopUp correction", `tier` is "basic", `widget` is "toggle", `defaultHint` is "true"
+- **THEN** help SHALL describe automatic data-dependent TopUp selection when unset and the GUI's initially off display
 
 #### Scenario: Conditional field not shown
 
@@ -35,7 +37,7 @@ The system SHALL define a `FIELD_METADATA` constant mapping each dataPar field k
 #### Scenario: Conditional field shown
 
 - **WHEN** `BackgroundSuppressionPulseTime` metadata `condition` is evaluated with state where `M0` is "UseControlAsM0" AND `BackgroundSuppressionNumberPulses` > 0
-- **THEN** condition returns `true`
+- **THEN** the pulse-time control SHALL appear with milliseconds as its processing unit
 
 ### Requirement: M0 field widget
 
@@ -72,7 +74,7 @@ The `x.modules.asl.ApplyQuantification` field SHALL be rendered as 6 labeled che
 
 ### Requirement: Atlas multi-select with paired masking
 
-The `x.S.Atlases` field SHALL be rendered as a Mantine `MultiSelect` with optgroups for "Free" and "Non-commercial only" atlases. Default selection SHALL be `["Total", "DeepWM"]`. For each selected atlas, a paired row SHALL appear showing `TissueMasking` (select: GM, WM, CSF, GM+WM, GM+WM+CSF) and `TissueThreshold` (NumberInput with "mL" suffix, default 0.7).
+The `x.S.Atlases` field SHALL use a multi-select grouped into free and non-commercial-only atlases. The GUI initial selection SHALL remain `["Total", "DeepWM"]`. Each atlas SHALL have paired `TissueMasking` and `TissueThreshold` controls with aligned indices. Tissue choices SHALL include GM, WM, CSF, GM+WM and GM+WM+CSF. `TissueThreshold` SHALL be a unitless probability from 0 to 1, with GUI initial value 0.7, not a volume. Only `MinimalROIVolume` SHALL use mL. ROI mask controls SHALL emit the existing four-element 0/1 tuple representation, including all-on and all-off selections.
 
 #### Scenario: User selects Thalamus atlas with GM masking
 
@@ -84,9 +86,16 @@ The `x.S.Atlases` field SHALL be rendered as a Mantine `MultiSelect` with optgro
 - **WHEN** user removes "DeepWM" from the atlas list
 - **THEN** corresponding TissueMasking and TissueThreshold entries are removed, remaining entries stay aligned
 
+#### Scenario: User deselects all masks
+
+- **WHEN** user deselects all ROI masks
+- **THEN** state SHALL contain `bMasking = [0, 0, 0, 0]`, accepted by project persistence
+
 ### Requirement: PVC conditional reveal
 
-When `bPVCNativeSpace` is toggled on, the UI SHALL reveal `bPVCGaussianMM` (toggle, default off) and `PVCNativeSpaceKernel` (3 NumberInput fields labeled X, Y, Z). When `bPVCGaussianMM` is off, kernel labels SHALL show "Kernel size (voxels)" with default [5, 5, 1]. When `bPVCGaussianMM` is on, labels SHALL change to "Kernel FWHM (mm)" with default [10, 10, 4]. The GUI default for `bPVCNativeSpace` SHALL be `true` (overriding ExploreASL's default of 0).
+The GUI SHALL retain its initially on PVC switch display without forcing an unset field into state. Unset `bPVCNativeSpace` SHALL remain omitted, allowing ExploreASL's default of 0. When the displayed switch is on, advanced controls SHALL reveal `bPVCGaussianMM` and the three-dimensional kernel. Flat kernel dimensions SHALL use voxels and `[5, 5, 1]`; Gaussian kernel FWHM SHALL use mm and `[10, 10, 4]` when no explicit kernel exists. Explicit kernel values SHALL survive shape changes. Numeric 0/1 PVC flags SHALL pass normal project save/load validation.
+
+Project parsing SHALL also accept legacy boolean `bPVCGaussianMM` values and normalize true/false to numeric 1/0 in memory, preserving Gaussian/flat meaning for existing consumers. An absent flag SHALL remain absent. This normalization SHALL NOT rewrite projects on open.
 
 #### Scenario: User enables PVC without Gaussian
 
@@ -96,7 +105,7 @@ When `bPVCNativeSpace` is toggled on, the UI SHALL reveal `bPVCGaussianMM` (togg
 #### Scenario: User enables Gaussian PVC
 
 - **WHEN** user toggles `bPVCGaussianMM` on
-- **THEN** PVCNativeSpaceKernel defaults change to [10, 10, 4] and label changes to "Kernel FWHM (mm)"
+- **THEN** kernel display SHALL use `[10, 10, 4]` and FWHM mm when no explicit kernel exists, without injecting that kernel into unset state
 
 ### Requirement: Basic/advanced toggle
 
@@ -114,21 +123,34 @@ Each accordion section SHALL contain a "Show advanced" sub-divider. Basic-tier f
 
 ### Requirement: Ghost placeholder defaults
 
-All dataPar fields SHALL use Zod `.optional()`. When a field is empty (undefined), the input SHALL display the ExploreASL documented default as gray placeholder text. Only explicitly set values SHALL be written to dataPar.json. Placeholder text SHALL be sourced from `FIELD_METADATA.defaultHint`.
+All processing fields SHALL remain optional. Empty inputs SHALL display a hint from `FIELD_METADATA.defaultHint` without writing its value. Hints SHALL qualify magnetic-field-dependent relaxation constants and other data-dependent choices instead of asserting universal runtime defaults. Clearing an optional field SHALL omit it from outbound JSON.
 
 #### Scenario: User sees default for T1blood
 
 - **WHEN** T1blood field is empty
-- **THEN** input shows gray placeholder "1650" with a "(?)" tooltip explaining "T1 relaxation time of arterial blood (ms). Defaults (Alsop MRM 2014). @3T: 1650"
+- **THEN** its placeholder SHALL identify 1650 ms as a 3 T reference and SHALL NOT write that value to state
 
 #### Scenario: User clears a field
 
 - **WHEN** user clears the T1blood input
-- **THEN** state field `T1blood` becomes `undefined`, the placeholder "1650" reappears, and the field will be omitted from the written dataPar.json
+- **THEN** state SHALL become undefined, the hint SHALL reappear and outbound JSON SHALL omit T1blood
 
 ### Requirement: DataPar assembly function
 
-The system SHALL provide an `assembleDataPar(state: DataParState): DataParJson` function that converts the flat Zod-validated state into the nested `x.*` JSON structure matching ExploreASL's expected format. The function SHALL omit undefined fields, producing a minimal JSON. Nested structure: `x.Q.*`, `x.modules.asl.*`, `x.modules.structural.*`, `x.settings.*`, `x.S.*`, `x.external.*`.
+The system SHALL convert flat optional project settings into nested ExploreASL JSON, preserving explicit numbers, arrays, zero and false while omitting undefined fields and empty sections. The assembly SHALL use these destinations:
+
+| Destination            | Flat GUI keys                                                                                                                                                                                               |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `x`                    | `WMHsegmAlg`                                                                                                                                                                                                |
+| `x.modules`            | `bRunLongReg`, `bRunDARTEL`                                                                                                                                                                                 |
+| `x.Q`                  | `M0`, `nCompartments`, `Lambda`, `T2art`, `T1blood`, `T1GM`, `T1WM`, `T2GM`, `T2WM`, `T2tissueMultiTE`, `BackgroundSuppressionNumberPulses`, `BackgroundSuppressionPulseTime`                               |
+| `x.modules.asl`        | `M0_GMScaleFactor`, `bRegisterM02ASL`, `M0_conventionalProcessing`, all external quantification settings, motion, distortion, PVC, registration, hematocrit, spike-removal and quantification-step settings |
+| `x.modules.structural` | `bSegmentSPM12`, `bHammersCAT12`, `bFixResolution`                                                                                                                                                          |
+| `x.settings`           | `Quality`, `DELETETEMP`, `SkipIfNoFlair`, `SkipIfNoASL`, `SkipIfNoM0`, `bLesionFilling`, `bAutoACPC`                                                                                                        |
+| `x.S`                  | `Atlases`, `TissueMasking`, `TissueThreshold`, `bMasking`, `MinimalROIVolume`, `bWMH`, `DataTypes`                                                                                                          |
+| `x.external`           | `bAutomaticallyDetectFSL`, `bAutomaticallyDetectVABY`                                                                                                                                                       |
+
+The legacy `RepetitionTimePreparationM0` key SHALL remain preserved under `x.Q` for saved-project compatibility, with help stating that the audited processing code has no operative reader. `bInferATTBASIL` SHALL remain preserved under its deprecated-map destination `x.modules.asl`, with help stating that the audited checkout has no operative reader. It SHALL NOT be converted to `bInferArtBASIL`. Existing Methods flattening SHALL continue to read relocated explicit root/module options without a Methods redesign. Native request validation SHALL admit `x.WMHsegmAlg`.
 
 #### Scenario: Multiple sections produce correct nesting
 
@@ -137,22 +159,22 @@ The system SHALL provide an `assembleDataPar(state: DataParState): DataParJson` 
 
 #### Scenario: Empty section is omitted
 
-- **WHEN** no ASL processing fields are set
-- **THEN** output has no `"modules": { "asl": {} }` key — the `"asl"` key is omitted entirely
+- **WHEN** no ASL settings are set but `bRunLongReg = 1`
+- **THEN** output SHALL contain `x.modules.bRunLongReg = 1` without empty ASL or structural sections
 
 ### Requirement: Write timing — dataPar.json at processing time
 
-The dataPar.json file SHALL NOT be written to disk on every field change. Edits SHALL be persisted to `.easl` under `dataPar` immediately. The Rust backend SHALL merge `.easl` dataPar state with per-run dataset params and write the combined result to `<root>/derivatives/ExploreASL/dataPar.json` only when "Start Processing" is invoked.
+Edits SHALL persist as flat optional settings under `.easl` `dataPar`; parameter edits SHALL NOT write processing JSON. Processing submission SHALL assemble those settings in the frontend request. Native preparation SHALL add per-run dataset/path parameters and write `<root>/derivatives/ExploreASL/dataPar.json` from the admitted request without relocating or dropping scientific settings. Corrected assembly SHALL NOT rewrite existing projects or require a migration.
 
 #### Scenario: User edits parameters without running processing
 
-- **WHEN** user toggles bTopUp and navigates away
-- **THEN** `.easl` file contains `{ "dataPar": { "modules": { "asl": { "bTopUp": true } } } }` but `dataPar.json` on disk is unchanged
+- **WHEN** user edits `bTopUp` and the normal project save completes
+- **THEN** `.easl` SHALL contain flat `dataPar.bTopUp` and processing JSON SHALL remain unchanged
 
 #### Scenario: User starts processing
 
 - **WHEN** user clicks "Start Processing"
-- **THEN** Rust reads `.easl` dataPar, merges with dataset params, writes combined result to `dataPar.json`, then spawns MATLAB
+- **THEN** explicit supported values SHALL reach the assembled request and processing JSON at their operative destinations
 
 ### Requirement: Parameter route
 
@@ -170,23 +192,28 @@ The `/project/:id/parameters` route SHALL render a page containing the dataPar e
 
 ### Requirement: (?) Tooltip pattern for field labels
 
-Each dataPar field label SHALL display a blue "(?)" icon next to it. Clicking or hovering the icon SHALL show a Mantine `Tooltip` with the field's description from `FIELD_METADATA.description`. The pattern SHALL follow the existing `BidsFieldLabel` component used in the import metadata modal, using `IconInfoCircle` with a 320px-wide multiline tooltip.
+Each processing field SHALL display an information icon with metadata help in a multiline tooltip. Help SHALL distinguish WMH ROI inclusion from segmentation, numeric M0 scalar calibration from an image, relative t-statistic improvement from a Z-score, and absolute motion threshold in mm from signal intensity. Providing absolute threshold 0 SHALL NOT be described as disabling fixed-threshold removal. Registration contrast choices SHALL describe 0 as control-to-T1w, 1 as CBF/PWI-to-pseudoCBF, 2 as automatic combined registration and 3 as combined registration with forced CBF attempts.
 
 #### Scenario: User hovers over bTopUp label
 
-- **WHEN** user hovers over "FSL TopUp correction (?)"
-- **THEN** tooltip displays: "True to explicitly turn ON or OFF the FSL TopUp option if the M0 scan with reversed phase encoding direction is present. Default: true, but turned off when merging several ASL sessions."
+- **WHEN** user hovers over the TopUp information icon
+- **THEN** help SHALL describe automatic selection when unset, including reversed phase-encoding scans and session-merging exceptions
+
+#### Scenario: User inspects WMH ROI help
+
+- **WHEN** user inspects `bWMH` help
+- **THEN** it SHALL explain inclusion of existing WMH voxels in ROI masks, not WMH detection
 
 ### Requirement: External quantification conditional subtree
 
-When `bUseExternalQuantification` is toggled on, the UI SHALL reveal: `ExternalQuantificationType` (select: BASIL | FABBER | VABY), `ExternalQuantificationSmoothGaussianMM` (3 NumberInput fields for FWHM mm), `bMaskingExternal` (toggle), `bSpatialBASIL` (toggle), `bInferT1BASIL` (toggle), `bInferATTBASIL` (toggle), `ExchBASIL` (select: mix | simple | 2cpt | spa), `DispBASIL` (select: none | gamma | gauss | sgauss), `ATTSDBASIL` (NumberInput), `bCleanUpExternal` (toggle). All external quantification fields are advanced-tier.
+When `bUseExternalQuantification` is explicitly on, advanced controls SHALL reveal engine selection BASIL/FABBER/VABY, optional decimal FWHM smoothing widths in mm, masking, BASIL options and cleanup. Unset smoothing SHALL NOT display a fixed `[5, 5, 1]` runtime default or request additional smoothing. Engine hints SHALL describe data-dependent selection when unset. BASIL exchange choices SHALL remain mix/simple/2cpt/spa and dispersion choices none/gamma/gauss/sgauss. ATT prior standard deviation SHALL use seconds. Legacy ATT inference SHALL carry checkout-specific unsupported help while preserving saved values.
 
 #### Scenario: User enables external quantification
 
 - **WHEN** user toggles `bUseExternalQuantification` on
-- **THEN** ExternalQuantificationType select appears with default "BASIL", and all BASIL-specific options appear below it
+- **THEN** the engine and advanced controls SHALL appear without injecting their placeholders into state
 
 #### Scenario: User selects VABY
 
 - **WHEN** user selects "VABY" as ExternalQuantificationType
-- **THEN** all BASIL-specific fields (bSpatialBASIL, bInferT1BASIL, bInferATTBASIL, ExchBASIL, DispBASIL, ATTSDBASIL) remain visible (they may still apply depending on backend)
+- **THEN** BASIL controls SHALL remain visible for compatibility without claiming they operate for that engine

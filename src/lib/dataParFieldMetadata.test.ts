@@ -142,6 +142,23 @@ describe("FIELD_METADATA", () => {
       expect(meta.description.trim(), `${key}.description empty`).not.toBe("");
     }
   });
+
+  it("describes processing units and distinguishes unset behavior from GUI display", () => {
+    expect(FIELD_METADATA.BackgroundSuppressionPulseTime.label).toContain("ms");
+    expect(FIELD_METADATA.SpikeRemovalThreshold.description).toContain("Fractional t-statistic");
+    expect(FIELD_METADATA.SpikeRemovalAbsoluteThreshold.label).toContain("mm");
+    expect(FIELD_METADATA.SpikeRemovalAbsoluteThreshold.description).toContain(
+      "even for explicit 0",
+    );
+    expect(FIELD_METADATA.bWMH.label).toBe("Include existing WMH voxels in ROI masks");
+    expect(FIELD_METADATA.PVCNativeSpaceKernel.description).toContain("[10, 10, 4]");
+    expect(FIELD_METADATA.T2WM.defaultHint).toContain("75 at 3 T");
+    expect(FIELD_METADATA.bRegistrationContrast.defaultHint).toBe("Data-dependent when unset");
+    expect(FIELD_METADATA.bInferATTBASIL.description).toContain("no operative reader");
+    expect(FIELD_METADATA.RepetitionTimePreparationM0.description).toContain(
+      "not as a processing override",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -175,6 +192,7 @@ describe("bPVCGaussianMM condition", () => {
 
   it("returns true when bPVCNativeSpace is true", () => {
     expect(cond({ bPVCNativeSpace: true })).toBe(true);
+    expect(cond({ bPVCNativeSpace: 1 })).toBe(true);
   });
 
   it("returns false when bPVCNativeSpace is false", () => {

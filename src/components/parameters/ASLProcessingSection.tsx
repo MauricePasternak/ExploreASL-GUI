@@ -92,9 +92,9 @@ export function ASLProcessingSection({
                   label={<DataParFieldLabel fieldKey="bRegistrationContrast" />}
                   data={[
                     { value: "0", label: "Control images to T1-weighted" },
-                    { value: "1", label: "PWI to pseudo-CBF template as an intermediate" },
-                    { value: "2", label: "Automatic based on spatial CoV of PWI" },
-                    { value: "3", label: "Force PWI to pseudo-CBF intermediate" },
+                    { value: "1", label: "CBF/PWI to pseudo-CBF" },
+                    { value: "2", label: "Combined control and CBF registration (automatic)" },
+                    { value: "3", label: "Combined registration with forced CBF attempt" },
                   ]}
                   value={
                     dataPar.bRegistrationContrast != null
@@ -126,7 +126,7 @@ export function ASLProcessingSection({
                 <Select
                   label={<DataParFieldLabel fieldKey="bDCTRegistration" />}
                   data={[
-                    { value: "0", label: "Disabled (affine only)" },
+                    { value: "0", label: "Disabled (no DCT)" },
                     { value: "1", label: "Enabled" },
                     { value: "2", label: "Enabled with Partial Volume Correction" },
                   ]}
