@@ -29,7 +29,10 @@
   transform: translateY(-0.5px);
 }
 
-:root[data-mantine-color-scheme="light"] input,
+:root[data-mantine-color-scheme="light"]
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(
+    [type="file"]
+  ):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
 :root[data-mantine-color-scheme="light"] textarea,
 :root[data-mantine-color-scheme="light"] [contenteditable] {
   color-scheme: light !important;
@@ -40,11 +43,30 @@
     text !important;
 }
 
-:root[data-mantine-color-scheme="dark"] input,
+:root[data-mantine-color-scheme="dark"]
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(
+    [type="file"]
+  ):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
 :root[data-mantine-color-scheme="dark"] textarea,
 :root[data-mantine-color-scheme="dark"] [contenteditable] {
   color-scheme: dark !important;
   caret-color: #ffffff !important;
+}
+
+/* Checkboxes and radios should show pointer cursor on hover */
+.mantine-Checkbox-input,
+.mantine-Checkbox-label,
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+.mantine-Checkbox-input:disabled,
+.mantine-Checkbox-root[data-disabled] .mantine-Checkbox-label,
+.mantine-Checkbox-root[data-disabled] .mantine-Checkbox-input,
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  cursor: not-allowed;
 }
 
 @keyframes spin {

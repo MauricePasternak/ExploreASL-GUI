@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { installE2EBridge, isE2EScenario } from "./e2e/bridge";
-import { MantineProvider, createTheme } from "@mantine/core";
+import { MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { RouterProvider } from "react-router";
 
@@ -12,6 +12,7 @@ import "./App.css";
 
 import { createAppRouter } from "./app/router";
 import { renderBootstrapError } from "./app/bootstrapError";
+import { theme } from "./app/theme";
 import type { E2EBridgeControl } from "./e2e/bridge";
 import {
   captureSnapshot,
@@ -25,55 +26,6 @@ import { useGlobalStore } from "./stores/globalStore";
 import { useImportStore } from "./stores/importStore";
 import { useDataParStore } from "./stores/dataParStore";
 import { useProjectStore } from "./stores/projectStore";
-
-const theme = createTheme({
-  primaryColor: "teal",
-  breakpoints: {
-    xs: "30em",
-    sm: "48em",
-    md: "62em",
-    lg: "75em",
-    xl: "88em",
-  },
-  colors: {
-    teal: [
-      "#e3fafc",
-      "#c5f6fa",
-      "#99e9f2",
-      "#66d9e8",
-      "#3bc9db",
-      "#15aabf",
-      "#0c8599",
-      "#0b7285",
-      "#09677a",
-      "#084e5b",
-    ],
-    red: [
-      "#fff5f5",
-      "#ffe3e3",
-      "#ffc9c9",
-      "#ffa8a8",
-      "#ff8787",
-      "#ff6b6b",
-      "#fa5252",
-      "#f03e3e",
-      "#e03131",
-      "#c92a2a",
-    ],
-    blue: [
-      "#eef3ff",
-      "#dbe4ff",
-      "#bac8ff",
-      "#91a7ff",
-      "#748ffc",
-      "#5c7cfa",
-      "#4c6ef5",
-      "#4263eb",
-      "#3b5bdb",
-      "#364fc7",
-    ],
-  },
-});
 
 // Initialize debug tooling before React mounts
 initConsoleBridge();
