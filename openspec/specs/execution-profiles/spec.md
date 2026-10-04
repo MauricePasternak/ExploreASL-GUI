@@ -326,6 +326,11 @@ The Settings modal's "Execution Profiles" section SHALL support the creation and
 - **WHEN** the user clicks "Detect MATLAB" and no MATLAB is found on the system
 - **THEN** a message is shown: "No MATLAB installations found. Enter the path manually or use Browse."
 
+#### Scenario: MATLAB release discovery times out
+
+- **WHEN** a discovered MATLAB executable does not finish its release probe within the 15-second execution deadline
+- **THEN** native discovery SHALL settle its supported process scope before returning the candidate with an absent version; successful release output SHALL retain the `R<release>` format
+
 ### Requirement: Profile selector on Import page
 
 The Import step 5 execution view SHALL replace the MATLAB version select dropdown with a Profile selector dropdown. The dropdown SHALL list all execution profiles from `globalStore.settings.executionProfiles`, displaying each profile's label, type badge, ExploreASL version (if available), and validity state. The selection SHALL be stored as `selectedProfileId` and persisted in the `.easl` project file under `uiState.import.selectedProfileId`. Invalid profiles SHALL be shown in the dropdown (so the user knows they exist) but SHALL be visually marked and SHALL disable the Start button when selected.
@@ -550,7 +555,7 @@ Apptainer profile validation SHALL occur at the same lifecycle points as Matlab 
 1. Verify that `sifPath` exists on disk and is a file.
 2. Verify that `apptainerPath` is executable on the host system. If the user-supplied `apptainerPath` is the default `"apptainer"` and is not found on the system PATH, the validation routine SHALL automatically attempt to fall back to `"singularity"` as the default executable.
 3. Detect the ExploreASL version by checking if the SIF image contains a file matching `VERSION_*` inside `/opt/xasl/xASL_latest/` (by running `<apptainerPath> exec <sifPath> ls /opt/xasl/xASL_latest/` and extracting the version suffix).
-   - This command SHALL run with a strict 5-second timeout.
+   - This command and the executable `--version` check SHALL use the shared native runtime probe mechanism with a 5-second execution deadline and bounded concurrent stdout/stderr capture. Timeout handling SHALL settle the supported scope before returning failure; termination and settlement MAY extend the call beyond five seconds.
    - If the version detection command fails or times out, validation SHALL fail with an error.
 4. **MCR Warmup**: The validation routine itself SHALL NOT perform the MCR warmup cache extraction, keeping validation fast and responsive. Instead, the MCR warmup check and execution is deferred to native preparation in `launch_import_run` / `run_pipeline`.
 
@@ -572,6 +577,7 @@ The system SHALL support auto-detecting and auto-labeling Apptainer and Singular
    - The backend command `which_apptainer` SHALL scan all directories listed on the system `PATH` for executable binaries named `apptainer` or `singularity`.
    - Discovered paths SHALL be deduplicated by canonicalizing them (resolving symlinks).
    - For each unique binary path, it SHALL detect its version by running `<binary> --version`.
+   - Version discovery SHALL use the same native runtime probe mechanism and 5-second execution deadline as executable validation. Spawn, supervision, or timeout failures SHALL return an absent version after any started supported scope settles, preserving the path-based fallback label. A nonzero exit status SHALL NOT discard a parseable version from stdout or stderr.
 
 2. **Auto-Inference of Profile Label**:
    - The system SHALL format a user-friendly label for each candidate:

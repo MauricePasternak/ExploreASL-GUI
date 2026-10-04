@@ -44,6 +44,18 @@ On user Stop, project close, project switch, or normal app exit, native supervis
 
 The supported Unix scope SHALL contain descendants that remain in the launched process group. Explicit `setsid`, new-process-group escape, daemonization, externally delegated work, remote execution, unsupported namespace/privilege changes, and hostile unbounded forking SHALL be outside the contract. These out-of-scope possibilities SHALL NOT disable Linux or macOS scientific execution or authorize stronger process-tree machinery.
 
+MATLAB release discovery, Apptainer/Singularity executable discovery and validation, container version validation, and launch-related probes SHALL use the same native runtime probe mechanism and supported platform scopes. It SHALL drain stdout and stderr concurrently while retaining at most 256 KiB per stream. Discovery and UI-facing validation SHALL retain call-local scope ownership; launch-related probes SHALL additionally accept run cancellation. On timeout or supervision error, the probe call SHALL retain ownership through supported-scope termination, direct-child reaping, and settlement before returning a result or error. A probe deadline SHALL bound normal execution, not guarantee instantaneous return; graceful termination, force termination, and settlement retries MAY add time.
+
+#### Scenario: Discovery probe reaches its deadline
+
+- **WHEN** MATLAB release discovery or Apptainer/Singularity discovery or validation reaches its probe deadline
+- **THEN** the shared runtime SHALL settle the supported scope before discovery returns an absent version or validation reports failure
+
+#### Scenario: Probe fills both output pipes
+
+- **WHEN** a discovery or validation probe writes more than the retained capture limit to stdout and stderr
+- **THEN** the shared runtime SHALL continue draining both streams concurrently without retaining excess bytes or waiting for child exit before reading
+
 #### Scenario: Stop ordinary Unix scientific tree
 
 - **WHEN** MATLAB launches synchronous shell, FSL, BASIL, or Apptainer descendants that remain in its process group and the user requests Stop
