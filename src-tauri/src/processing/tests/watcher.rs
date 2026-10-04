@@ -1,7 +1,7 @@
 use super::common::*;
+use crate::processing::locks::{parse_lock_dir_path, parse_lock_path};
 use crate::processing::runs::{reserve_processing_run_impl, validate_watcher_request};
 use crate::processing::types::*;
-use crate::processing::utils::{parse_lock_dir_path, parse_lock_path};
 use crate::processing::watcher::stop_watch_lock_dir_impl;
 use std::fs;
 use std::sync::mpsc;

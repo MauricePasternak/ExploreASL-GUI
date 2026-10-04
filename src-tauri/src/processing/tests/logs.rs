@@ -1,6 +1,7 @@
 use super::common::unique_temp_path;
+use crate::processing::locks::determine_status;
+use crate::processing::logs::{check_log_for_error, is_mutex_related_line};
 use crate::processing::logs::{list_module_logs, read_module_logs};
-use crate::processing::utils::{check_log_for_error, determine_status, is_mutex_related_line};
 use std::fs;
 
 #[test]

@@ -1,6 +1,5 @@
 use super::common::*;
 use crate::processing::locks::*;
-use crate::processing::utils::determine_status;
 use std::fs;
 
 // -------------------------------------------------------------------------

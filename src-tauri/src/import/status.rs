@@ -1,7 +1,7 @@
 use super::output::{validate_project_root_for_staging, validate_subject_components};
 use super::types::{ImportSubjectStatus, ImportSubjectStatusKind};
 use super::validation::validate_staging_root;
-use crate::app_state::AppState;
+use crate::app::state::AppState;
 use anyhow::{Context, Result as AnyResult};
 use std::fs;
 use std::path::{Path, PathBuf};

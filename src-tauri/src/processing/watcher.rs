@@ -1,7 +1,7 @@
+use super::locks::{parse_lock_dir_path, parse_lock_path};
 use super::runs::{matching_run_for_active_project, validate_watcher_request};
 use super::types::{LockRemoved, ProcessingRunSnapshot};
-use super::utils::{parse_lock_dir_path, parse_lock_path};
-use crate::app_state::AppState;
+use crate::app::state::AppState;
 use notify::{EventKind, RecursiveMode, Watcher};
 use std::sync::mpsc;
 use std::thread;

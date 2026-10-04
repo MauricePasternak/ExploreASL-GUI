@@ -3,7 +3,7 @@ use super::{
     journal::{AUTHORITY, publish, relative},
     types::*,
 };
-use crate::{execution_profile::ExecutionProfile, fs_safety::ProjectDirectory};
+use crate::{execution::profile::ExecutionProfile, fs_safety::ProjectDirectory};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -862,7 +862,7 @@ pub(crate) fn expected_targets(
                     targets.push(ExpectedTarget {
                         module: module.clone(),
                         subject_session: Some(subject.subject_session.clone()),
-                        run: Some(super::utils::normalize_asl_run_id(run)),
+                        run: Some(super::identifiers::normalize_asl_run_id(run)),
                         complete: false,
                     });
                 }

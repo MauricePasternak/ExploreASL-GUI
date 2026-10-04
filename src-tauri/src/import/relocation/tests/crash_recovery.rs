@@ -85,8 +85,8 @@ fn activation_cleans_an_owned_candidate_left_before_ready_checkpoint() {
         relocate(&plan, 1, &staging, &["A".into()], false, false).unwrap_err();
     }
 
-    let state = crate::app_state::AppState::default();
-    let summary = crate::project_runtime::set_active_project_impl(
+    let state = crate::app::state::AppState::default();
+    let summary = crate::project::lifecycle::set_active_project_impl(
         project.to_string_lossy().to_string(),
         &state,
     )
@@ -113,9 +113,12 @@ fn activation_rolls_back_uncommitted_dataset_description() {
         relocate(&plan, 1, &staging, &["A".into()], false, false).unwrap_err();
     }
 
-    let state = crate::app_state::AppState::default();
-    crate::project_runtime::set_active_project_impl(project.to_string_lossy().to_string(), &state)
-        .expect("dataset recovery");
+    let state = crate::app::state::AppState::default();
+    crate::project::lifecycle::set_active_project_impl(
+        project.to_string_lossy().to_string(),
+        &state,
+    )
+    .expect("dataset recovery");
 
     assert!(!project.join("rawdata/dataset_description.json").exists());
     assert_eq!(
@@ -138,9 +141,12 @@ fn activation_restores_authoritative_subject_absence() {
         relocate(&plan, 1, &staging, &["A".into()], false, false).unwrap_err();
     }
 
-    let state = crate::app_state::AppState::default();
-    crate::project_runtime::set_active_project_impl(project.to_string_lossy().to_string(), &state)
-        .expect("absence recovery");
+    let state = crate::app::state::AppState::default();
+    crate::project::lifecycle::set_active_project_impl(
+        project.to_string_lossy().to_string(),
+        &state,
+    )
+    .expect("absence recovery");
 
     assert!(!project.join("rawdata/sub-A").exists());
 }

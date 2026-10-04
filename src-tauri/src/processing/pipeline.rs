@@ -1,15 +1,16 @@
-//! Sole native owner of processing preparation, managed workers and terminal settlement.
+//! Processing workflow owner for preparation, workers and terminal settlement.
+//!
+//! Shared engine validation, probes and command helpers live in `crate::execution`.
 use super::{
     record::{AvailableAction, ProcessingError, ProcessingRecord},
     runs::{attach_run_impl, lock_project_transition, matching_run_for_active_project},
     types::{ProcessingLifecycle, ProcessingRunSnapshot},
-    utils::escape_matlab_string,
 };
 use crate::process::{CancellationToken, ProcessScope, cancel_all};
 use crate::{
-    app_state::AppState,
-    apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH},
-    execution_profile::{ExecutionProfile, get_exploreasl_version},
+    app::state::AppState,
+    execution::apptainer::{CONTAINER_DATA_ROOT, EXPLOREASL_SCRIPT, MCR_PATH},
+    execution::profile::{ExecutionProfile, get_exploreasl_version},
 };
 use anyhow::{Context, Result};
 use std::{
@@ -17,6 +18,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+
+fn escape_matlab_string(value: &str) -> String {
+    value.replace('\'', "''")
+}
 
 pub(crate) fn build_matlab_processing_batch(
     exploreasl_path: &Path,
@@ -172,7 +177,7 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
         return Ok(());
     }
     if reserved.data_source == "bids"
-        && let Err(error) = crate::bids::setup::verify(&reserved.project_root)
+        && let Err(error) = crate::project::setup::verify(&reserved.project_root)
     {
         fail(&state, run_id, "bidsCompatibility", format!("{error:#}"))?;
         return Ok(());
@@ -215,9 +220,9 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
         }
     }
     let command =
-        crate::execution_managed::validate_profile(&execution_profile, cancellation.clone())?;
+        crate::execution::launch::validate_profile(&execution_profile, cancellation.clone())?;
     if let ExecutionProfile::Apptainer { sif_path, .. } = &execution_profile {
-        crate::execution_managed::warm_cache(
+        crate::execution::launch::warm_cache(
             command.get_program(),
             Path::new(sif_path),
             &reserved.project_root,
@@ -296,7 +301,8 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
             if cancelled(&state, run_id)? {
                 return Ok(());
             }
-            let mut worker_command = crate::apptainer::create_system_command(command.get_program());
+            let mut worker_command =
+                crate::execution::command::create_system_command(command.get_program());
             match &execution_profile {
                 ExecutionProfile::Matlab {
                     explore_asl_path, ..
@@ -491,7 +497,7 @@ pub fn run_pipeline<R: Runtime>(
     run_id: String,
 ) -> Result<ProcessingRunSnapshot, String> {
     let _transition = lock_project_transition(&state)?;
-    crate::project_ownership::ensure_not_shutting_down(&state)?;
+    crate::project::ownership::ensure_not_shutting_down(&state)?;
     reconcile_idle(&state, &run_id).map_err(|e| e.to_string())?;
     let previous = record(&state, &run_id).map_err(|e| e.to_string())?;
     if previous.launch_started || previous.lifecycle != ProcessingLifecycle::Preparing {
@@ -616,7 +622,7 @@ pub(crate) fn reap_finished_supervisor(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 pub(crate) fn reap_supervisor(state: &AppState) -> Result<(), String> {
-    let deadline = Instant::now() + crate::execution_managed::SETTLE_TIMEOUT;
+    let deadline = Instant::now() + crate::execution::launch::SETTLE_TIMEOUT;
     loop {
         let (handle, running) = {
             let mut processing = state

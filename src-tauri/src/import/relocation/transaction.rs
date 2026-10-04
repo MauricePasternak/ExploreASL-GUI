@@ -247,7 +247,7 @@ fn relocate_result(
         journal.terminal_outcome = Some(outcome.clone());
         write_journal(&root, &journal)?;
     }
-    crate::import::journal::checkpoint_relocation_outcome(&root, &outcome)?;
+    crate::import::record::checkpoint_relocation_outcome(&root, &outcome)?;
     remove_journal_owned(&root, &journal)?;
     Ok(outcome)
 }

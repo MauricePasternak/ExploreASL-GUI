@@ -2,13 +2,13 @@ use super::types::{
     ProcessState, ProcessingLifecycle, ProcessingRun, ProcessingRunSnapshot,
     ProcessingTerminalResult,
 };
-use crate::app_state::AppState;
+use crate::app::state::AppState;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 use tauri::State;
 
 fn active_project_root(state: &AppState) -> Result<PathBuf, String> {
-    Ok(crate::project_ownership::active(state)?
+    Ok(crate::project::ownership::active(state)?
         .root()
         .to_path_buf())
 }
@@ -59,7 +59,7 @@ pub(crate) fn reserve_processing_run_impl(
     selected_subject_sessions: Vec<String>,
 ) -> Result<ProcessingRunSnapshot, String> {
     let _transition = lock_project_transition(state)?;
-    crate::project_ownership::ensure_import_released(state)?;
+    crate::project::ownership::ensure_import_released(state)?;
     let project_root = active_project_root(state)?;
     let mut processing_state = lock_processing_state(state)?;
 
@@ -95,7 +95,7 @@ pub(crate) fn reserve_request_impl(
     admission: super::record::ProcessingAdmission,
 ) -> Result<super::record::ProcessingReservation, String> {
     let _transition = lock_project_transition(state)?;
-    crate::project_ownership::ensure_import_released(state)?;
+    crate::project::ownership::ensure_import_released(state)?;
     let project_root = active_project_root(state)?;
     let mut processing = lock_processing_state(state)?;
     let admitted_root = admission
@@ -415,7 +415,7 @@ pub(crate) fn validate_watcher_request(
     state: &AppState,
     run_id: &str,
 ) -> Result<WatcherAdmission, String> {
-    crate::project_ownership::ensure_not_shutting_down(state)?;
+    crate::project::ownership::ensure_not_shutting_down(state)?;
     let (processing_state, project_root) = matching_run_for_active_project(state, run_id)?;
     let run = processing_state
         .current_run

@@ -1,6 +1,6 @@
 use crate::{
-    app_state::AppState,
-    execution_profile::ExecutionProfile,
+    app::state::AppState,
+    execution::profile::ExecutionProfile,
     processing::{record::*, types::*},
 };
 use std::{
@@ -55,7 +55,7 @@ fn fixture_with_profile(
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .unwrap();
     let state = app.state::<AppState>();
-    crate::project_ownership_tests::own_project(&state, root);
+    crate::project::ownership_tests::own_project(&state, root);
     let mut request = ProcessingRequest {
         request_id: uuid::Uuid::new_v4(),
         project_id: "native-processing".into(),
@@ -345,8 +345,8 @@ fn native_participant_reads_preserve_bids_roots_and_skip_dicom_root_inputs() {
         if source == "bids" {
             fs::create_dir(root.path().join("rawdata")).unwrap();
             fs::write(
-                root.path().join(crate::bids::setup::RAWDATA_MARKER_PATH),
-                crate::bids::setup::RAWDATA_MARKER_BYTES,
+                root.path().join(crate::project::setup::RAWDATA_MARKER_PATH),
+                crate::project::setup::RAWDATA_MARKER_BYTES,
             )
             .unwrap();
             fs::create_dir_all(root.path().join("sub-01/perf")).unwrap();
@@ -526,7 +526,7 @@ fn padded_apptainer_profile_consumes_validated_image_for_warmup_and_cached_launc
         );
         return;
     }
-    let cache = crate::apptainer::mcr_cache_path();
+    let cache = crate::execution::apptainer::mcr_cache_path();
     for cached in [false, true] {
         if cached {
             fs::create_dir_all(&cache).unwrap();
@@ -659,8 +659,8 @@ fn shutdown_and_release_retain_real_durable_cleanup_until_exact_retry() {
             .unwrap();
     assert_eq!(pending.available_action, AvailableAction::RetryCleanup);
     assert!(!pending.lifecycle.is_terminal());
-    assert!(!crate::project_runtime::shutdown_project_runtime_impl(&state).success);
-    assert!(crate::project_runtime::clear_active_project_impl(&state).is_err());
+    assert!(!crate::project::lifecycle::shutdown_project_runtime_impl(&state).success);
+    assert!(crate::project::lifecycle::clear_active_project_impl(&state).is_err());
     assert_eq!(fs::read(&foreign).unwrap(), b"preserve");
     let durable = records(root.path()).unwrap().pop().unwrap();
     assert_eq!(durable.run_id.to_string(), run_id);

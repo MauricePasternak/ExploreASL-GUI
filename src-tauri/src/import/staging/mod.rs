@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
 
-use crate::app_state::AppState;
+use crate::app::state::AppState;
 
 pub const STAGING_DIRECTORY: &str = ".easl_staging";
 pub const MODALITIES: [&str; 6] = ["T1w", "T2w", "ASL4D", "M0", "FLAIR", "WMH_SEGM"];

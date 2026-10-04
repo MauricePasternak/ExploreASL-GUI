@@ -1,7 +1,7 @@
 use super::common::*;
+use crate::processing::identifiers::{normalize_asl_run_id, normalize_asl_run_id_opt};
 use crate::processing::subjects::*;
 use crate::processing::types::*;
-use crate::processing::utils::{normalize_asl_run_id, normalize_asl_run_id_opt};
 use std::fs;
 
 // -------------------------------------------------------------------------

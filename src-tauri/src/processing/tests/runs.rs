@@ -125,7 +125,7 @@ fn processing_reservation_is_atomic_and_never_mutates_rejected_fixture() {
     assert!(rejected.is_err());
     assert_eq!(fs::read(&sentinel).unwrap(), before);
 
-    let no_active = crate::app_state::AppState::default();
+    let no_active = crate::app::state::AppState::default();
     assert!(reserve_processing_run_impl(&no_active, vec!["asl".to_string()], vec![]).is_err());
 
     {
@@ -176,7 +176,7 @@ fn matching_run_for_active_project_rejects_stale_identity_before_mutation() {
             .1,
         root.canonicalize().unwrap()
     );
-    crate::project_ownership_tests::own_project(&state, &other_root.canonicalize().unwrap());
+    crate::project::ownership_tests::own_project(&state, &other_root.canonicalize().unwrap());
     assert!(
         crate::processing::runs::matching_run_for_active_project(&state, &reserved.run_id).is_err()
     );
@@ -238,7 +238,7 @@ fn run_discovery_and_attachment_are_observational_and_ownership_checked() {
     );
     assert!(attach_run_impl(&state, "obsolete").is_err());
 
-    crate::project_ownership_tests::own_project(&state, &other_root.canonicalize().unwrap());
+    crate::project::ownership_tests::own_project(&state, &other_root.canonicalize().unwrap());
     assert!(get_active_run_impl(&state).unwrap().is_none());
     assert!(attach_run_impl(&state, &reserved.run_id).is_err());
 }

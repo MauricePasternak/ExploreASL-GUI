@@ -1,12 +1,15 @@
-use super::types::SubjectModuleStatus;
-use super::utils::{
-    determine_status, find_asl_runs_from_logs, get_asl_completion_time,
-    get_population_completion_time, get_structural_completion_time, normalize_asl_run_id,
+//! ExploreASL processing lock status and watcher path parsing.
+use super::completion::{
+    get_asl_completion_time, get_population_completion_time, get_structural_completion_time,
 };
+use super::identifiers::normalize_asl_run_id;
+use super::logs::find_asl_runs_from_logs;
+use super::types::{LockCreated, ParsedLockComponents, StatusFileCreated, SubjectModuleStatus};
 use crate::error::IntoCommandResult;
 use crate::tracing::CommandTrace;
 use anyhow::{Context, Result as AnyResult};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 #[tauri::command]
 pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>, String> {
@@ -217,4 +220,128 @@ fn read_lock_status_impl(project_root: String) -> AnyResult<Vec<SubjectModuleSta
 
     trace.success(&statuses);
     Ok(statuses)
+}
+
+pub(crate) fn determine_status(dir: &Path) -> (String, Vec<String>, bool) {
+    let mut has_status = false;
+    let mut has_ready = false;
+    let mut locked = false;
+    let mut completed_steps = Vec::new();
+
+    if dir.join("locked").exists() {
+        locked = true;
+    }
+
+    for entry in WalkDir::new(dir).min_depth(1).into_iter().flatten() {
+        let path = entry.path();
+        if path.is_file()
+            && let Some(file_name) = path.file_name().and_then(|f| f.to_str())
+            && file_name.ends_with(".status")
+        {
+            has_status = true;
+            let step_name = file_name.trim_end_matches(".status").to_string();
+            if step_name == "999_ready" {
+                has_ready = true;
+            } else {
+                completed_steps.push(step_name);
+            }
+        }
+    }
+
+    if has_ready {
+        locked = false;
+    }
+
+    completed_steps.sort();
+
+    let status = if has_ready {
+        "complete".to_string()
+    } else if has_status {
+        "incomplete".to_string()
+    } else {
+        "pending".to_string()
+    };
+    (status, completed_steps, locked)
+}
+
+pub(crate) fn lock_module_roots(project_root: &Path, module: &str) -> [PathBuf; 2] {
+    [
+        project_root
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("lock")
+            .join(module),
+        project_root
+            .join(".easl_staging")
+            .join("derivatives")
+            .join("ExploreASL")
+            .join("lock")
+            .join(module),
+    ]
+}
+
+fn parse_lock_components(lock_root: &Path, path: &Path) -> Option<ParsedLockComponents> {
+    let relative = path.strip_prefix(lock_root).ok()?;
+    let parts: Vec<&str> = relative.iter().map(|p| p.to_str().unwrap_or("")).collect();
+    let module = parts.first()?.to_string();
+
+    let (subject_session, run) = match module.as_str() {
+        "xASL_module_Structural" => {
+            if parts.len() < 4 {
+                return None;
+            }
+            (Some(parts[1].to_string()), None)
+        }
+        "xASL_module_ASL" => {
+            if parts.len() < 4 {
+                return None;
+            }
+            let run = parts[2]
+                .strip_prefix("xASL_module_ASL_ASL_")
+                .map(normalize_asl_run_id);
+            (Some(parts[1].to_string()), run)
+        }
+        "xASL_module_Population" => (None, None),
+        _ => return None,
+    };
+
+    Some(ParsedLockComponents {
+        module,
+        subject_session,
+        run,
+    })
+}
+
+pub(crate) fn parse_lock_path(
+    lock_root: &Path,
+    path: &Path,
+    run_id: &str,
+) -> Option<StatusFileCreated> {
+    let components = parse_lock_components(lock_root, path)?;
+    let file_name = path.file_name()?.to_str().unwrap_or("");
+    if !file_name.ends_with(".status") {
+        return None;
+    }
+
+    Some(StatusFileCreated {
+        run_id: run_id.to_string(),
+        module: components.module,
+        subject_session: components.subject_session,
+        step_code: file_name.trim_end_matches(".status").to_string(),
+        run: components.run,
+    })
+}
+
+pub(crate) fn parse_lock_dir_path(
+    lock_root: &Path,
+    path: &Path,
+    run_id: &str,
+) -> Option<LockCreated> {
+    let components = parse_lock_components(lock_root, path)?;
+    Some(LockCreated {
+        run_id: run_id.to_string(),
+        module: components.module,
+        subject_session: components.subject_session,
+        run: components.run,
+    })
 }

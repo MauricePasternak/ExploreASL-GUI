@@ -10,7 +10,7 @@ fn request(root: &Path) -> ProcessingRequest {
         project_root: root.into(),
         selected_modules: vec!["population".into()],
         selected_subject_sessions: Vec::new(),
-        execution_profile: crate::execution_profile::ExecutionProfile::Matlab {
+        execution_profile: crate::execution::profile::ExecutionProfile::Matlab {
             id: "profile".into(),
             label: "MATLAB".into(),
             matlab_path: "unused".into(),
@@ -87,14 +87,14 @@ fn activation_marks_absent_processing_owner_interrupted_and_blocks_admission() {
     project(temp.path());
     let admitted = admit(temp.path(), request(temp.path())).unwrap();
     let app = tauri::test::mock_builder()
-        .manage(crate::app_state::AppState::default())
+        .manage(crate::app::state::AppState::default())
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .unwrap();
-    let state = app.state::<crate::app_state::AppState>();
+    let state = app.state::<crate::app::state::AppState>();
 
     // Project activation remains viewable, but no absent native owner may be
     // treated as settled or replaced before exact external-stop confirmation.
-    crate::project_runtime::set_active_project_impl(temp.path().display().to_string(), &state)
+    crate::project::lifecycle::set_active_project_impl(temp.path().display().to_string(), &state)
         .unwrap();
     let snapshot = crate::processing::runs::get_active_run_impl(&state)
         .unwrap()
@@ -138,12 +138,12 @@ fn activation_of_copied_unresolved_record_requires_confirmation_without_mutation
     fs::copy(original.path().join(CURRENT_RECORD), &path).unwrap();
     let original_bytes = fs::read(&path).unwrap();
     let app = tauri::test::mock_builder()
-        .manage(crate::app_state::AppState::default())
+        .manage(crate::app::state::AppState::default())
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .unwrap();
-    let state = app.state::<crate::app_state::AppState>();
+    let state = app.state::<crate::app::state::AppState>();
 
-    crate::project_runtime::set_active_project_impl(copied.path().display().to_string(), &state)
+    crate::project::lifecycle::set_active_project_impl(copied.path().display().to_string(), &state)
         .unwrap();
     let snapshot = crate::processing::runs::get_active_run_impl(&state)
         .unwrap()
@@ -772,7 +772,7 @@ fn terminal_summary_bounds_actual_json_bytes_before_acknowledgement() {
         write_project(&project_id);
         let mut input = request(temp.path());
         input.project_id = project_id.clone();
-        if let crate::execution_profile::ExecutionProfile::Matlab { id, .. } =
+        if let crate::execution::profile::ExecutionProfile::Matlab { id, .. } =
             &mut input.execution_profile
         {
             *id = text.clone();
@@ -955,21 +955,21 @@ fn durable_processing_terminal_survives_shutdown_and_blocks_setup_import_until_e
     let temp = tempfile::tempdir().unwrap();
     project(temp.path());
     let app = tauri::test::mock_builder()
-        .manage(crate::app_state::AppState::default())
+        .manage(crate::app::state::AppState::default())
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .unwrap();
-    let state = app.state::<crate::app_state::AppState>();
-    crate::project_ownership_tests::own_project(&state, temp.path());
+    let state = app.state::<crate::app::state::AppState>();
+    crate::project::ownership_tests::own_project(&state, temp.path());
     let terminal = terminal(temp.path(), request(temp.path()));
     state.processing_state.lock().unwrap().current_run =
         Some(ProcessingRun::from_record(terminal.clone()));
-    assert!(crate::project_runtime::shutdown_project_runtime_impl(&state).success);
+    assert!(crate::project::lifecycle::shutdown_project_runtime_impl(&state).success);
     assert!(
         crate::processing::runs::get_active_run_impl(&state)
             .unwrap()
             .is_some()
     );
-    assert!(crate::project_ownership::for_setup(&state, temp.path()).is_err());
+    assert!(crate::project::ownership::for_setup(&state, temp.path()).is_err());
     let error = crate::import::reserve_import_run(
         app.state(),
         vec!["subject".into()],
@@ -988,10 +988,10 @@ fn durable_processing_terminal_survives_shutdown_and_blocks_setup_import_until_e
         )
         .is_err()
     );
-    assert!(crate::project_ownership::for_setup(&state, temp.path()).is_err());
+    assert!(crate::project::ownership::for_setup(&state, temp.path()).is_err());
     crate::processing::acknowledge_processing_run(app.state(), terminal.run_id, terminal.revision)
         .unwrap();
-    assert!(crate::project_ownership::for_setup(&state, temp.path()).is_ok());
+    assert!(crate::project::ownership::for_setup(&state, temp.path()).is_ok());
     // Once processing releases authority, import reaches its own plan validation.
     let error = crate::import::reserve_import_run(
         app.state(),

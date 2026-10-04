@@ -1,6 +1,6 @@
 #[test]
 fn public_import_command_surface_has_only_run_scoped_authority() {
-    let source = include_str!("../../lib.rs");
+    let source = include_str!("../../app/bootstrap.rs");
     let handler = source
         .split(".invoke_handler")
         .nth(1)

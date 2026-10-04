@@ -139,7 +139,7 @@ pub(crate) fn merge(
                 ("participant_id".into(), id.clone()),
                 (
                     "session".into(),
-                    format!("ASL_{}", super::utils::normalize_asl_run_id(&run)),
+                    format!("ASL_{}", super::identifiers::normalize_asl_run_id(&run)),
                 ),
                 ("site".into(), site.clone()),
             ]));

@@ -1,5 +1,5 @@
 use super::common::*;
-use crate::execution_profile::get_exploreasl_version;
+use crate::execution::profile::get_exploreasl_version;
 use crate::processing::pipeline::*;
 use std::{fs, path::PathBuf};
 #[test]

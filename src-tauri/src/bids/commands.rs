@@ -1,8 +1,8 @@
 use crate::bids::group::{BidsSidecarScan, group_by_fingerprint};
 use crate::bids::scan::{asl_json_path_for, parse_bids_structure};
-use crate::bids::setup::{self, SetupCommandError, SetupCommitResult, SetupMode, SetupPlan};
 use crate::bids::sidecar::find_asl_sidecars;
 use crate::error::IntoCommandResult;
+use crate::project::setup::{self, SetupCommandError, SetupCommitResult, SetupMode, SetupPlan};
 use crate::tracing::CommandTrace;
 use anyhow::Result as AnyResult;
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ fn setup_app_data(app: &tauri::AppHandle) -> Result<std::path::PathBuf, SetupCom
 /// preflight, accepting a renderer-selected root here would let arbitrary IPC
 /// select a different existing source tree for a mutating repair commit.
 fn verify_active_repair_root(
-    state: &crate::app_state::AppState,
+    state: &crate::app::state::AppState,
     requested_root: &Path,
 ) -> AnyResult<()> {
     let active_root = state
@@ -58,7 +58,7 @@ pub struct BidsCheckResult {
 
 #[tauri::command]
 pub fn check_bids_dataset(
-    state: tauri::State<'_, crate::app_state::AppState>,
+    state: tauri::State<'_, crate::app::state::AppState>,
     app: tauri::AppHandle,
     root_path: String,
 ) -> Result<BidsCheckResult, String> {
@@ -74,7 +74,7 @@ pub fn check_bids_dataset(
         .path()
         .app_data_dir()
         .map_err(|error| format!("Could not resolve platform app-data directory: {error}"))?;
-    let ownership = crate::project_ownership::for_setup(&state, root)?;
+    let ownership = crate::project::ownership::for_setup(&state, root)?;
     setup::recover_root_owned(&app_data, &ownership).into_command_result()?;
     let result = check_bids_dataset_impl(root).into_command_result()?;
     trace.success(&result);
@@ -254,7 +254,7 @@ fn scan_bids_sidecars_impl(root: &Path) -> AnyResult<BidsSidecarScan> {
 
 #[tauri::command]
 pub fn preflight_bids_project_mutations(
-    state: tauri::State<'_, crate::app_state::AppState>,
+    state: tauri::State<'_, crate::app::state::AppState>,
     app: tauri::AppHandle,
     root_path: String,
     mode: SetupMode,
@@ -267,7 +267,7 @@ pub fn preflight_bids_project_mutations(
             message: "Project transition lock was poisoned".into(),
         })?;
     let app_data = setup_app_data(&app)?;
-    let ownership = crate::project_ownership::for_setup(&state, Path::new(&root_path))
+    let ownership = crate::project::ownership::for_setup(&state, Path::new(&root_path))
         .map_err(anyhow::Error::msg)
         .map_err(setup::command_error)?;
     setup::recover_root_owned(&app_data, &ownership).map_err(setup::command_error)?;
@@ -282,7 +282,7 @@ pub fn preflight_bids_project_mutations(
 
 #[tauri::command]
 pub fn preflight_bids_setup_repair(
-    state: tauri::State<'_, crate::app_state::AppState>,
+    state: tauri::State<'_, crate::app::state::AppState>,
     app: tauri::AppHandle,
     root_path: String,
 ) -> Result<SetupPlan, SetupCommandError> {
@@ -294,7 +294,7 @@ pub fn preflight_bids_setup_repair(
         })?;
     verify_active_repair_root(&state, Path::new(&root_path)).map_err(setup::command_error)?;
     let app_data = setup_app_data(&app)?;
-    let ownership = crate::project_ownership::for_setup(&state, Path::new(&root_path))
+    let ownership = crate::project::ownership::for_setup(&state, Path::new(&root_path))
         .map_err(anyhow::Error::msg)
         .map_err(setup::command_error)?;
     setup::recover_root_owned(&app_data, &ownership).map_err(setup::command_error)?;
@@ -304,7 +304,7 @@ pub fn preflight_bids_setup_repair(
 
 #[tauri::command]
 pub fn commit_bids_project_mutations(
-    state: tauri::State<'_, crate::app_state::AppState>,
+    state: tauri::State<'_, crate::app::state::AppState>,
     app: tauri::AppHandle,
     plan_id: String,
 ) -> Result<SetupCommitResult, SetupCommandError> {

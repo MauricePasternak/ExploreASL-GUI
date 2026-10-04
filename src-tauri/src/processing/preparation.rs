@@ -1,10 +1,11 @@
 //! Native preparation reads intent once and installs only journal-owned artifacts.
+//! Engine version capture uses shared probes and command helpers in `crate::execution`.
 use super::{
     journal::relative, record::ProcessingRecord, transaction::LaunchTransaction,
     types::ProcessingVersions,
 };
 use crate::process::CancellationToken;
-use crate::{execution_profile::ExecutionProfile, fs_safety::ProjectDirectory};
+use crate::{execution::profile::ExecutionProfile, fs_safety::ProjectDirectory};
 use anyhow::{Result, bail};
 use std::{process::Command, time::Duration};
 
@@ -17,20 +18,20 @@ pub(crate) fn versions(
         ExecutionProfile::Matlab {
             explore_asl_path, ..
         } => {
-            let explore = crate::execution_profile::get_exploreasl_version(std::path::Path::new(
+            let explore = crate::execution::profile::get_exploreasl_version(std::path::Path::new(
                 explore_asl_path,
             ))
             .unwrap_or_else(|| "unknown".into());
-            let mut probe = crate::apptainer::create_system_command(command.get_program());
+            let mut probe = crate::execution::command::create_system_command(command.get_program());
             probe
                 .current_dir(std::env::temp_dir())
                 .args(["-batch", "disp(version)"]);
-            let matlab = if let Some(version) = crate::matlab::probe_matlab_version_fast(
+            let matlab = if let Some(version) = crate::execution::matlab::probe_matlab_version_fast(
                 std::path::Path::new(command.get_program()),
             ) {
                 version
             } else {
-                match crate::execution_managed::probe(
+                match crate::execution::launch::probe(
                     probe,
                     Duration::from_secs(15),
                     cancellation.clone(),
@@ -66,8 +67,9 @@ pub(crate) fn versions(
             sif_path,
             ..
         } => {
-            let executable = crate::apptainer::resolve_apptainer_executable(apptainer_path)?;
-            let mut probe = crate::apptainer::create_system_command(executable);
+            let executable =
+                crate::execution::apptainer::resolve_apptainer_executable(apptainer_path)?;
+            let mut probe = crate::execution::command::create_system_command(executable);
             probe.args([
                 "exec",
                 "--cleanenv",
@@ -76,7 +78,7 @@ pub(crate) fn versions(
                 "/opt/xasl/xASL_latest/",
             ]);
             let output =
-                crate::execution_managed::probe(probe, Duration::from_secs(15), cancellation)?;
+                crate::execution::launch::probe(probe, Duration::from_secs(15), cancellation)?;
             (
                 if output.success {
                     String::from_utf8_lossy(&output.stdout)

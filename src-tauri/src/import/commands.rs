@@ -1,18 +1,19 @@
-use super::pipeline::{self, stop_import_run_for_state};
+use super::pipeline::run_import_pipeline_impl;
 use super::relocation::RelocationPlan;
-use super::staging::{StagingEntry, StagingPreflightResult, preflight_staging_plan_for_state};
-use super::state::{
+use super::runs::{
     acknowledge_import_run_for_state, attach_import_run_for_state,
     confirm_import_worker_stopped_for_state, fail_preparing_run_for_id,
     get_active_import_run_for_state, plan_import_relocation_for_state,
     reserve_import_run_for_state,
 };
+use super::staging::{StagingEntry, StagingPreflightResult, preflight_staging_plan_for_state};
+use super::supervisor::stop_import_run_for_state;
 use super::types::{
     ImportCommandError, ImportRunSnapshot, ImportStructuredError, ImportSubjectStatus,
 };
-use crate::app_state::AppState;
+use crate::app::state::AppState;
 use crate::error::IntoCommandResult;
-use crate::execution_profile::ExecutionProfile;
+use crate::execution::profile::ExecutionProfile;
 use serde_json::Value;
 use tauri::{AppHandle, Runtime, State};
 
@@ -82,7 +83,7 @@ pub fn launch_import_run<R: Runtime>(
     subject_list: Vec<String>,
     relocation_plan_id: String,
 ) -> Result<ImportRunSnapshot, ImportCommandError> {
-    let launch_result = pipeline::run_import_pipeline_impl(
+    let launch_result = run_import_pipeline_impl(
         app,
         &state,
         staging_entries,

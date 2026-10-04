@@ -1,4 +1,4 @@
-use crate::app_state::AppState;
+use crate::app::state::AppState;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) fn state_with_active_project(root: &Path) -> Arc<AppState> {
     let state = Arc::new(AppState::default());
-    crate::project_ownership_tests::own_project(&state, &root.canonicalize().unwrap());
+    crate::project::ownership_tests::own_project(&state, &root.canonicalize().unwrap());
     state
 }
 

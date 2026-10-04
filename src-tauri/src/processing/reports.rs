@@ -1,5 +1,5 @@
+use super::identifiers::normalize_asl_run_id_opt;
 use super::types::ReportFileInfo;
-use super::utils::normalize_asl_run_id_opt;
 use crate::error::IntoCommandResult;
 use crate::tracing::CommandTrace;
 use anyhow::{Context, Result as AnyResult, bail};

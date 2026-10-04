@@ -1,14 +1,13 @@
-use crate::app_state::AppState;
+use crate::app::state::AppState;
 #[cfg(unix)]
-use crate::execution_profile::ExecutionProfile;
+use crate::execution::profile::ExecutionProfile;
+use crate::import::finalization::{complete_finalizing_import, record_import_process_exit};
 use crate::import::parser::ImportStructuredEvent;
-use crate::import::pipeline::{
-    accepts_import_diagnostic, canonicalize_import_event_subject, complete_finalizing_import,
-    record_import_process_exit, run_import_pipeline_impl,
-};
-use crate::import::state::{reserve_import_run_for_state, set_reserved_import_running};
+use crate::import::pipeline::run_import_pipeline_impl;
+use crate::import::runs::{reserve_import_run_for_state, set_reserved_import_running};
+use crate::import::supervisor::{accepts_import_diagnostic, canonicalize_import_event_subject};
 use crate::import::types::{ImportLifecycle, ImportRunSnapshot, ImportState, ImportTerminalResult};
-use crate::import::{StagingEntry, journal};
+use crate::import::{StagingEntry, record};
 use anyhow::Result as AnyResult;
 use std::fs;
 use std::path::Path;
@@ -33,7 +32,7 @@ fn running_state(root: &Path) -> AppState {
 
 fn running_state_for_subjects(root: &Path, subjects: &[&str]) -> AppState {
     let state = AppState::default();
-    crate::project_ownership_tests::own_project(&state, &root.canonicalize().unwrap());
+    crate::project::ownership_tests::own_project(&state, &root.canonicalize().unwrap());
     let subjects = subjects
         .iter()
         .map(|subject| (*subject).to_string())
@@ -53,7 +52,7 @@ fn running_state_for_subjects(root: &Path, subjects: &[&str]) -> AppState {
     run.relocation_plan_id = Some("plan-1".to_string());
     run.relocation_plan = Some(plan);
     run.lifecycle = ImportLifecycle::Running;
-    journal::write_record(root, &journal::record_from_state(&run).unwrap()).unwrap();
+    record::write_record(root, &record::record_from_state(&run).unwrap()).unwrap();
     *state.import_state.lock().unwrap() = run;
     state
 }
@@ -65,7 +64,7 @@ fn supervisor_exit_during_cancellation_durably_finishes_cancelled() {
     {
         let mut run = state.import_state.lock().unwrap();
         run.transition(ImportLifecycle::Cancelling).unwrap();
-        journal::write_record(temp.path(), &journal::record_from_state(&run).unwrap()).unwrap();
+        record::write_record(temp.path(), &record::record_from_state(&run).unwrap()).unwrap();
     }
 
     let snapshot = finalize_import_process(&state, 4, 0).unwrap();
@@ -77,7 +76,7 @@ fn supervisor_exit_during_cancellation_durably_finishes_cancelled() {
     );
     assert!(state.import_state.lock().unwrap().cancellation.is_none());
     assert_eq!(
-        journal::load_record(temp.path())
+        record::load_record(temp.path())
             .unwrap()
             .unwrap()
             .snapshot
@@ -97,7 +96,7 @@ fn process_exit_checkpoint_exposes_finalizing_before_verification() {
     assert_eq!(snapshot.exit_evidence.unwrap().exit_code, 0);
     assert!(snapshot.terminal_result.is_none());
     assert_eq!(
-        journal::load_record(temp.path())
+        record::load_record(temp.path())
             .unwrap()
             .unwrap()
             .snapshot
@@ -117,16 +116,14 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
     // reservation becomes visible.
     let reserve_root = tempfile::tempdir().unwrap();
     let reserve_state = AppState::default();
-    crate::project_ownership_tests::own_project(
+    crate::project::ownership_tests::own_project(
         &reserve_state,
         &reserve_root.path().canonicalize().unwrap(),
     );
-    let plan = crate::import::state::plan_import_relocation_for_state(
-        &reserve_state,
-        &["ONE".to_string()],
-    )
-    .unwrap();
-    journal::fail_next_record_write();
+    let plan =
+        crate::import::runs::plan_import_relocation_for_state(&reserve_state, &["ONE".to_string()])
+            .unwrap();
+    record::fail_next_record_write();
     assert!(
         reserve_import_run_for_state(
             &reserve_state,
@@ -152,20 +149,20 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
         let mut run = preparing_state.import_state.lock().unwrap();
         run.lifecycle = ImportLifecycle::Preparing;
         run.launch_in_progress = true;
-        journal::write_record(
+        record::write_record(
             running_root.path(),
-            &journal::record_from_state(&run).unwrap(),
+            &record::record_from_state(&run).unwrap(),
         )
         .unwrap();
     }
-    journal::fail_next_record_write();
+    record::fail_next_record_write();
     assert!(set_reserved_import_running(&preparing_state, 4).is_err());
     assert_eq!(
         preparing_state.import_state.lock().unwrap().lifecycle,
         ImportLifecycle::Preparing
     );
     assert_eq!(
-        journal::load_record(running_root.path())
+        record::load_record(running_root.path())
             .unwrap()
             .unwrap()
             .snapshot
@@ -189,10 +186,10 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
     fs::write(lock.join("999_ready.status"), "ready").unwrap();
     fs::write(staging.join("rawdata/sub-ONE/scan.nii"), "nii").unwrap();
     record_import_process_exit(&verify_state, 4, 0).unwrap();
-    journal::fail_next_record_write();
+    record::fail_next_record_write();
     assert!(complete_finalizing_import(&verify_state, 4, 0).is_err());
     assert!(!verify_root.path().join("rawdata/sub-ONE").exists());
-    let durable = journal::load_record(verify_root.path()).unwrap().unwrap();
+    let durable = record::load_record(verify_root.path()).unwrap().unwrap();
     assert_eq!(durable.snapshot.lifecycle, ImportLifecycle::Finalizing);
     assert!(durable.snapshot.subject_outcomes.is_empty());
     assert!(durable.snapshot.relocation_outcome.is_none());
@@ -228,16 +225,16 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
             }],
             staging_cleanup_complete: true,
         });
-        journal::write_record(
+        record::write_record(
             terminal_root.path(),
-            &journal::record_from_state(&run).unwrap(),
+            &record::record_from_state(&run).unwrap(),
         )
         .unwrap();
     }
-    journal::fail_record_write_after(1);
+    record::fail_record_write_after(1);
     assert!(complete_finalizing_import(&terminal_state, 4, 0).is_err());
     let memory = terminal_state.import_state.lock().unwrap().snapshot();
-    let durable = journal::load_record(terminal_root.path())
+    let durable = record::load_record(terminal_root.path())
         .unwrap()
         .unwrap()
         .snapshot;
@@ -366,7 +363,7 @@ fn native_finalizer_preserves_debug_staging_without_weakening_success_checks() {
     {
         let mut run = state.import_state.lock().unwrap();
         run.preserve_staging = true;
-        journal::write_record(temp.path(), &journal::record_from_state(&run).unwrap()).unwrap();
+        record::write_record(temp.path(), &record::record_from_state(&run).unwrap()).unwrap();
     }
     let staging = temp.path().join(".easl_staging");
     fs::create_dir_all(staging.join("rawdata/sub-ONE")).unwrap();
@@ -490,7 +487,7 @@ fn mixed_subject_finalization_commits_only_verified_subject_and_replays_without_
         fs::read_to_string(staging.join("rawdata/sub-BAD/scan.nii")).unwrap(),
         "bad-staging"
     );
-    let durable = journal::load_record(temp.path()).unwrap().unwrap().snapshot;
+    let durable = record::load_record(temp.path()).unwrap().unwrap().snapshot;
     assert_eq!(durable, terminal);
     assert!(durable.relocation_outcome.is_some());
 
@@ -502,18 +499,16 @@ fn mixed_subject_finalization_commits_only_verified_subject_and_replays_without_
         .unwrap();
     drop(state); // Native restart releases the prior project lease.
     let recovered_state = AppState::default();
-    crate::project_ownership_tests::own_project(
+    crate::project::ownership_tests::own_project(
         &recovered_state,
         &temp.path().canonicalize().unwrap(),
     );
-    let replay =
-        crate::import::state::recover_import_run_for_project(&recovered_state, temp.path())
-            .unwrap()
-            .unwrap();
+    let replay = crate::import::runs::recover_import_run_for_project(&recovered_state, temp.path())
+        .unwrap()
+        .unwrap();
     assert_eq!(replay, terminal);
     assert_eq!(
-        crate::import::state::attach_import_run_for_state(&recovered_state, &replay.run_id)
-            .unwrap(),
+        crate::import::runs::attach_import_run_for_state(&recovered_state, &replay.run_id).unwrap(),
         terminal
     );
     assert_eq!(
@@ -585,7 +580,7 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
             .unwrap();
         let state = app.state::<AppState>();
         let root = fs::canonicalize(&root).unwrap();
-        crate::project_ownership_tests::own_project(&state, &root.clone());
+        crate::project::ownership_tests::own_project(&state, &root.clone());
         let emitted_snapshots = Arc::new(Mutex::new(Vec::new()));
         let snapshot_log = emitted_snapshots.clone();
         let raw_lines = Arc::new(Mutex::new(Vec::new()));
@@ -594,7 +589,7 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
         app.listen("import-run-snapshot", move |event| {
             let snapshot: crate::import::types::ImportRunSnapshot =
                 serde_json::from_str(event.payload()).unwrap();
-            let durable = journal::load_record(&event_root).unwrap().unwrap().snapshot;
+            let durable = record::load_record(&event_root).unwrap().unwrap().snapshot;
             assert_eq!(
                 durable, snapshot,
                 "snapshot emission must follow matching durable record"
@@ -629,7 +624,7 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
         )
         .unwrap();
         assert_eq!(
-            journal::load_record(&root)
+            record::load_record(&root)
                 .unwrap()
                 .unwrap()
                 .snapshot
@@ -667,7 +662,7 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
             plan.plan_id,
         )
         .unwrap();
-        let running = journal::load_record(&root).unwrap().unwrap();
+        let running = record::load_record(&root).unwrap().unwrap();
         assert_eq!(
             running.snapshot.lifecycle,
             ImportLifecycle::Running,
@@ -698,7 +693,7 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
             );
             std::thread::sleep(Duration::from_millis(10));
         }
-        let terminal = journal::load_record(&root).unwrap().unwrap().snapshot;
+        let terminal = record::load_record(&root).unwrap().unwrap().snapshot;
         let raw_lines = raw_lines.lock().unwrap();
         assert!(
             raw_lines
@@ -743,7 +738,7 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
             "{name}: terminal supervisor ownership is released"
         );
         assert!(
-            crate::project_runtime::shutdown_project_runtime_impl(&state).success,
+            crate::project::lifecycle::shutdown_project_runtime_impl(&state).success,
             "{name}: terminal import must not block project close"
         );
         let event_deadline = Instant::now() + Duration::from_secs(1);
@@ -797,7 +792,7 @@ fn stop_during_blocking_apptainer_probe_cancels_before_staging_or_scientific_spa
         .unwrap();
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
-    crate::project_ownership_tests::own_project(&state, &root);
+    crate::project::ownership_tests::own_project(&state, &root);
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "probe-plan".into())
         .unwrap();
     state
@@ -904,7 +899,7 @@ fn failed_running_checkpoint_reaps_the_already_spawned_import_scope() {
         .unwrap();
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
-    crate::project_ownership_tests::own_project(&state, &root);
+    crate::project::ownership_tests::own_project(&state, &root);
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "scope-plan".into())
         .unwrap();
     state
@@ -935,7 +930,7 @@ fn failed_running_checkpoint_reaps_the_already_spawned_import_scope() {
 
     // Staging-generation checkpoint succeeds; durable Running fails after the
     // process scope has been spawned.
-    journal::fail_record_write_after(1);
+    record::fail_record_write_after(1);
     assert!(
         run_import_pipeline_impl(
             app.handle().clone(),
@@ -1002,7 +997,7 @@ fn launch_revalidation_failure_settles_only_the_reserved_run_without_staging_mut
         .unwrap();
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
-    crate::project_ownership_tests::own_project(&state, &root);
+    crate::project::ownership_tests::own_project(&state, &root);
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "stale-plan".into())
         .unwrap();
     state
@@ -1063,7 +1058,7 @@ fn launch_revalidation_failure_settles_only_the_reserved_run_without_staging_mut
     );
     assert!(!root.join(".easl_staging").exists());
     assert_eq!(
-        journal::load_record(&root).unwrap().unwrap().snapshot,
+        record::load_record(&root).unwrap().unwrap().snapshot,
         snapshot
     );
 }

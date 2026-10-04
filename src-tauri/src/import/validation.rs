@@ -122,4 +122,4 @@ pub(super) fn normalize_staging_subject_spelling(
         .collect()
 }
 
-pub use crate::execution_managed::{find_executable_on_path, validate_matlab_executable};
+pub use crate::execution::executables::{find_executable_on_path, validate_matlab_executable};

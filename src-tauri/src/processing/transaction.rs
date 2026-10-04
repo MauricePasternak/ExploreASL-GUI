@@ -1,5 +1,5 @@
+use super::identifiers::module_index_to_name;
 use super::journal::{LaunchJournal, Phase};
-use super::utils::module_index_to_name;
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};

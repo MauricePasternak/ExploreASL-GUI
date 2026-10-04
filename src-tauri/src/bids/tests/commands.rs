@@ -1,5 +1,5 @@
 use super::*;
-use crate::app_state::AppState;
+use crate::app::state::AppState;
 use std::fs;
 use tempfile::TempDir;
 
@@ -243,7 +243,7 @@ fn repair_root_must_match_native_active_project_ownership() {
     let other = TempDir::new().unwrap();
     let state = AppState::default();
     assert!(verify_active_repair_root(&state, active.path()).is_err());
-    crate::project_ownership_tests::own_project(&state, &active.path().canonicalize().unwrap());
+    crate::project::ownership_tests::own_project(&state, &active.path().canonicalize().unwrap());
     assert!(verify_active_repair_root(&state, active.path()).is_ok());
     assert!(verify_active_repair_root(&state, other.path()).is_err());
 }

@@ -309,13 +309,13 @@ fn recover_result(project_root: &Path) -> RelocationTransactionResult<Relocation
         return Ok(RelocationRecoverySummary::default());
     };
     validate_recovery_preflight(&root, &journal)?;
-    crate::import::journal::validate_relocation_recovery_authority(
+    crate::import::record::validate_relocation_recovery_authority(
         &root,
         journal.generation,
         &journal.plan_id,
         journal.terminal_outcome.as_ref(),
     )?;
-    let checkpointed_outcome = crate::import::journal::load_record(&root)?
+    let checkpointed_outcome = crate::import::record::load_record(&root)?
         .and_then(|record| record.snapshot.relocation_outcome);
     if let Some(checkpointed) = &checkpointed_outcome
         && journal.terminal_outcome.as_ref() != Some(checkpointed)
@@ -463,7 +463,7 @@ fn recover_result(project_root: &Path) -> RelocationTransactionResult<Relocation
     // Custody is authoritative even when cleanup cannot finish. Finalization
     // must reuse this durable outcome rather than relocate committed rawdata.
     if let Some(outcome) = &journal.terminal_outcome {
-        crate::import::journal::checkpoint_relocation_outcome(&root, outcome)?;
+        crate::import::record::checkpoint_relocation_outcome(&root, outcome)?;
     }
     if cleanup_ok && summary.cleanup_errors.is_empty() {
         summary.cleaned_subjects.extend(
