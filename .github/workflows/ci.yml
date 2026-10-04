@@ -33,7 +33,7 @@ jobs:
       - name: Check OpenSpec relationships
         run: pnpm spec:doctor
 
-  # ── TypeScript pipeline ────────────────────────────────────────────────
+  # ── Frontend pipeline ──────────────────────────────────────────────────
 
   format-ts:
     runs-on: ubuntu-latest
@@ -51,7 +51,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Prettier
-        run: pnpm format:check
+        run: pnpm format:check:frontend
 
   lint-ts:
     needs: format-ts
@@ -70,7 +70,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Oxlint
-        run: pnpm lint:oxlint
+        run: pnpm lint:frontend
 
       - name: Type-check
         run: pnpm typecheck
@@ -92,27 +92,31 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run frontend tests
-        run: pnpm test
+        run: pnpm test:frontend
 
-  # ── Rust pipeline ──────────────────────────────────────────────────────
+  # ── Backend pipeline ───────────────────────────────────────────────────
 
   format-rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
       - name: Rustfmt
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+        run: pnpm format:check:backend
 
   lint-rust:
     needs: format-rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
 
       - name: Install Tauri system dependencies
         run: |
@@ -128,13 +132,15 @@ jobs:
           workspaces: "./src-tauri -> target"
 
       - name: Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+        run: pnpm lint:backend
 
   test-rust:
     needs: format-rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
 
       - name: Install Tauri system dependencies
         run: |
@@ -148,7 +154,7 @@ jobs:
           workspaces: "./src-tauri -> target"
 
       - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: pnpm test:backend
 
   # Standalone process/filesystem runtime needs no Tauri GUI dependencies.
   # Retained platform-specific process and capability tests compile on each desktop OS.

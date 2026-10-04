@@ -6,8 +6,8 @@ GUI wrapping ExploreASL (MATLAB ASL MRI pipeline). Specs in `openspec/specs/` ar
 ## Commands & Quality Checks
 
 - Dev: `pnpm dev` (`http://localhost:1420`)
-- Test: `pnpm test <file>` (Vitest; run targeted tests, not full suite unless finishing). Rust: `cargo test --manifest-path src-tauri/Cargo.toml`
-- Lint/Type/Format: `pnpm lint` | `pnpm typecheck` | `pnpm format`
+- Test: `pnpm test:frontend <file>` (Vitest; run targeted tests, not full suite unless finishing). Backend: `pnpm test:backend` (or `cargo test --manifest-path src-tauri/Cargo.toml`). Full suite: `pnpm test`.
+- Lint/Type/Format: `pnpm lint` (`lint:frontend` | `lint:backend`) | `pnpm typecheck` | `pnpm format` (`format:frontend` | `format:backend`)
 - Git: Conventional commits; require explicit user confirmation before committing.
 
 ## Architecture & Domain

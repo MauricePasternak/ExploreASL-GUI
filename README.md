@@ -346,10 +346,16 @@ ExploreASL_GUI/
 ## 🧪 Testing
 
 ```bash
-# Run unit tests (Vitest)
+# Run all unit tests (frontend Vitest + backend Cargo)
 pnpm test
 
-# Run unit tests in watch mode
+# Run frontend unit tests only
+pnpm test:frontend
+
+# Run backend Rust tests only
+pnpm test:backend
+
+# Run frontend unit tests in watch mode
 pnpm test:watch
 
 # Run end-to-end tests (requires a debug build at src-tauri/target/debug/exploreasl_gui)

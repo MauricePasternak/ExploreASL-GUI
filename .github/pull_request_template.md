@@ -18,10 +18,10 @@ Please delete options that are not relevant.
 
 Before submitting this PR, please check that you have completed the following:
 
-- [ ] **Formatting**: Code is formatted. Run `pnpm format` (and `pnpm format:rust` if Rust/Tauri changes were made).
-- [ ] **Linting**: No linting issues. Run `pnpm lint`.
+- [ ] **Formatting**: Code is formatted. Run `pnpm format` (or `pnpm format:frontend` / `pnpm format:backend`).
+- [ ] **Linting**: No linting issues. Run `pnpm lint` (or `pnpm lint:frontend` / `pnpm lint:backend`).
 - [ ] **Type-checking**: No TypeScript compiler errors. Run `pnpm typecheck`.
-- [ ] **Tests**: All tests pass. Run `pnpm test` (and `pnpm test:rust` if Rust/Tauri changes were made).
+- [ ] **Tests**: All tests pass. Run `pnpm test` (or `pnpm test:frontend` / `pnpm test:backend`).
 - [ ] **Component IDs**: Added `data-testid` attributes to any new/modified interactive UI elements.
 - [ ] **OS Compatibility**: Avoided hardcoded paths (e.g. `/tmp/`). Used Tauri/Rust filesystem APIs.
 - [ ] **Commit Messages**: Commits follow the [Conventional Commits](https://www.conventionalcommits.org/) specification (e.g. `feat: ...`, `fix: ...`).

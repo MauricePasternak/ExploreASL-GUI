@@ -5,6 +5,44 @@ import { defineConfig } from "vite";
 
 const packageJson = JSON.parse(readFileSync("./package.json", "utf-8"));
 
+// These tests exercise schemas and helpers without browser APIs or shared IPC mocks.
+const nodeTests = [
+  "src/schemas/**/*.test.ts",
+  "src/lib/bids/{errorFormatter,normalize,setup,sidecar,subjectRows}.test.ts",
+  "src/lib/aslRun.test.ts",
+  "src/lib/assembleDataPar.test.ts",
+  "src/lib/commaNumbers.test.ts",
+  "src/lib/dataParDefaults.test.ts",
+  "src/lib/dataParFieldMetadata.test.ts",
+  "src/lib/dataParFlags.test.ts",
+  "src/lib/dicomRelink.test.ts",
+  "src/lib/importPlan.test.ts",
+  "src/lib/importPreviewUtils.test.ts",
+  "src/lib/importStaleness.test.ts",
+  "src/lib/importStepAccess.test.ts",
+  "src/lib/interRaterAgreement.test.ts",
+  "src/lib/logViewer.test.ts",
+  "src/lib/manifestCsvExport.test.ts",
+  "src/lib/manifestExport.test.ts",
+  "src/lib/manifestMethods.test.ts",
+  "src/lib/nivoTheme.test.ts",
+  "src/lib/pathUtils.test.ts",
+  "src/lib/projectIdentity.test.ts",
+  "src/lib/projectPaths.test.ts",
+  "src/lib/qcLabels.test.ts",
+  "src/lib/snapshotCompression.test.ts",
+  "src/lib/stagingValidation.test.ts",
+  "src/lib/subjectMatching.test.ts",
+  "src/lib/tokenizerUtils.test.ts",
+  "src/lib/tsvUtils.test.ts",
+  "src/components/import/metadata{FieldHints,FormUtils}.test.ts",
+  "src/components/processing/{ExecutionDashboard,SubjectSelection,subjectStatusIndex}.test.ts",
+  "scripts/check-e2e-bundle.test.ts",
+  "src-tauri/{dev-mode,capabilities/default}.test.ts",
+  "src/test/nodeEnvironment.test.ts",
+];
+const testExclude = ["**/node_modules/**", "**/.worktrees/**", "e2e-tests/**"];
+
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
@@ -47,10 +85,27 @@ export default defineConfig(async () => ({
 
   // Vitest configuration
   test: {
-    environment: "jsdom",
-    setupFiles: ["./src/test/setup.tsx"],
-    exclude: ["**/node_modules/**", "**/.worktrees/**", "e2e-tests/**"],
+    exclude: testExclude,
     pool: "forks",
     testTimeout: 30000,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: nodeTests,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          setupFiles: ["./src/test/setup.tsx"],
+          exclude: [...testExclude, ...nodeTests],
+        },
+      },
+    ],
   },
 }));

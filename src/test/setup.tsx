@@ -1,137 +1,15 @@
-import { afterEach, vi } from "vitest";
-
-// Wrap global/window timers to track and clean them up after each test.
-// This prevents React 19 scheduler and Mantine transitions from triggering
-// asynchronous callbacks after the JSDOM window object has been torn down.
-const activeTimeouts = new Set<any>();
-const activeIntervals = new Set<any>();
-const activeRays = new Set<any>();
-
-const originalSetTimeout = globalThis.setTimeout;
-const originalClearTimeout = globalThis.clearTimeout;
-const originalSetInterval = globalThis.setInterval;
-const originalClearInterval = globalThis.clearInterval;
-
-globalThis.setTimeout = function (cb: (...args: any[]) => void, delay?: number, ...args: any[]) {
-  let timerId: any = null;
-  const wrappedCb = (...callbackArgs: any[]) => {
-    activeTimeouts.delete(timerId);
-    cb(...callbackArgs);
-  };
-  timerId = originalSetTimeout(wrappedCb, delay, ...args);
-  activeTimeouts.add(timerId);
-  return timerId;
-} as any;
-
-globalThis.clearTimeout = function (timerId: any) {
-  activeTimeouts.delete(timerId);
-  return originalClearTimeout(timerId);
-} as any;
-
-globalThis.setInterval = function (cb: (...args: any[]) => void, delay?: number, ...args: any[]) {
-  const timerId = originalSetInterval(cb, delay, ...args);
-  activeIntervals.add(timerId);
-  return timerId;
-} as any;
-
-globalThis.clearInterval = function (timerId: any) {
-  activeIntervals.delete(timerId);
-  return originalClearInterval(timerId);
-} as any;
-
-const originalRaf = typeof window !== "undefined" ? window.requestAnimationFrame : undefined;
-const originalCaf = typeof window !== "undefined" ? window.cancelAnimationFrame : undefined;
-
-if (originalRaf && originalCaf) {
-  const wrapRaf = (raf: typeof originalRaf) => {
-    return function (cb: FrameRequestCallback) {
-      let rayId: any = null;
-      const wrappedCb = (time: number) => {
-        activeRays.delete(rayId);
-        cb(time);
-      };
-      rayId = raf(wrappedCb);
-      activeRays.add(rayId);
-      return rayId;
-    };
-  };
-
-  const wrapCaf = (caf: typeof originalCaf) => {
-    return function (rayId: any) {
-      activeRays.delete(rayId);
-      return caf(rayId);
-    };
-  };
-
-  if (typeof globalThis.requestAnimationFrame === "function") {
-    globalThis.requestAnimationFrame = wrapRaf(globalThis.requestAnimationFrame);
-  }
-  if (typeof globalThis.cancelAnimationFrame === "function") {
-    globalThis.cancelAnimationFrame = wrapCaf(globalThis.cancelAnimationFrame);
-  }
-  if (typeof window !== "undefined") {
-    window.requestAnimationFrame = wrapRaf(originalRaf);
-    window.cancelAnimationFrame = wrapCaf(originalCaf);
-  }
-}
-
-if (typeof window !== "undefined") {
-  window.setTimeout = globalThis.setTimeout;
-  window.clearTimeout = globalThis.clearTimeout;
-  window.setInterval = globalThis.setInterval;
-  window.clearInterval = globalThis.clearInterval;
-}
-
-afterEach(() => {
-  activeTimeouts.forEach((timerId) => originalClearTimeout(timerId));
-  activeTimeouts.clear();
-  activeIntervals.forEach((timerId) => originalClearInterval(timerId));
-  activeIntervals.clear();
-  if (originalCaf) {
-    activeRays.forEach((rayId) => originalCaf(rayId));
-    activeRays.clear();
-  }
-});
-
+import { vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import "mantine-datatable/styles.css";
 
-// ResizeObserver polyfill for mantine-datatable — must invoke the callback so rows render in jsdom
+// jsdom has no layout or ResizeObserver. TestMantineProvider also respects reduced motion.
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+if (!Element.prototype.scrollTo) {
+  Element.prototype.scrollTo = () => {};
+}
 class ResizeObserverMock {
-  private callback: ResizeObserverCallback;
-
-  constructor(callback: ResizeObserverCallback) {
-    this.callback = callback;
-  }
-
-  observe(target: Element) {
-    this.callback(
-      [
-        {
-          target,
-          contentRect: {
-            width: 800,
-            height: 600,
-            top: 0,
-            left: 0,
-            bottom: 600,
-            right: 800,
-            x: 0,
-            y: 0,
-            toJSON: () => ({}),
-          },
-          borderBoxSize: [{ inlineSize: 800, blockSize: 600 }],
-          contentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
-          devicePixelContentBoxSize: [],
-        } as ResizeObserverEntry,
-      ],
-      this,
-    );
-  }
-
+  observe() {}
   unobserve() {}
   disconnect() {}
 }
@@ -139,8 +17,9 @@ class ResizeObserverMock {
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
-    matches: false,
+  value: vi.fn((query: string) => ({
+    // ponytail: only unrestricted columns and reduced motion match; browser tests cover layout.
+    matches: query.trim() === "" || query === "(prefers-reduced-motion: reduce)",
     media: query,
     onchange: null,
     addListener: vi.fn(),
