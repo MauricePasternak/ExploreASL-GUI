@@ -59,7 +59,7 @@ When the attached native import run is `preparing`, `running`, `finalizing`, or 
 #### Scenario: Import is interrupted
 
 - **WHEN** project recovery classifies a prior run as `Interrupted`
-- **THEN** Step 5 SHALL show the interruption, preserve available diagnostics, and permit a safe new attempt
+- **THEN** Step 5 SHALL show the interruption, preserve available diagnostics, and keep new execution blocked until exact external-stop confirmation and terminal reconciliation release native admission
 
 #### Scenario: Import failed, user edits metadata
 

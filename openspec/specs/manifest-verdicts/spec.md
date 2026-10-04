@@ -14,10 +14,10 @@ Define manifest verdict persistence and state management.
 - `activeReviewerId: z.string().uuid().optional()` — selected reviewer tab in multi-reviewer mode; undefined in single-reviewer mode.
 - `verdicts: z.union([z.record(z.string(), ManifestVerdictSchema), z.record(z.string(), z.record(z.string(), ManifestVerdictSchema))]).optional()` — flat SubjectSession map in single-reviewer mode or reviewer-indexed map in multi-reviewer mode. A refinement SHALL reject nonempty nested maps in single-reviewer mode and nonempty flat maps in multi-reviewer mode. An empty record is valid in either mode.
 - `resolvedVerdicts: z.record(z.string(), ManifestVerdictSchema).optional()` — final resolutions keyed by SubjectSession.
-- `lastRunVersions: { exploreASL?: string; matlab?: string; gui?: string }` — optional, defaults to `{}`.
-- `lastPopulationRunMtime: number | null` — optional, defaults to `null`.
+- `lastRunVersions: { exploreASL?: string; matlab?: string; gui?: string }` — optional legacy field, with no default injection.
+- `lastPopulationRunMtime: number | null` — optional legacy field, with no default injection.
 
-The individual `ManifestVerdictSchema` shape (`status`, `reason`, `notes`, `setAt`) SHALL remain unchanged. Every manifest field SHALL be optional so pre-existing `.easl` files parse without manual migration. The flat shape remains required in single-reviewer mode; adding a second reviewer wraps it and reverting to one reviewer unwraps it.
+The individual `ManifestVerdictSchema` shape (`status`, `reason`, `notes`, `setAt`) SHALL remain unchanged. Every manifest field SHALL be optional so pre-existing `.easl` files parse without manual migration. Current Population provenance SHALL live under `uiState.processing.population.lastRun` as defined in `manifest-version-capture`, not the legacy manifest fields. The flat shape remains required in single-reviewer mode; adding a second reviewer wraps it and reverting to one reviewer unwraps it.
 
 #### Scenario: Legacy project file without manifest slot parses
 
@@ -142,11 +142,11 @@ A verdict's `setAt` SHALL equal the integer maximum completion mtime of prior mo
 
 ### Requirement: Population Re-run Locks Manifest Phase
 
-Because `processingStore.startProcessing` already calls `setPopulationCompleted(false)` when re-running Population, no new lockout logic SHALL be added. The shared `canAccessPhase` dependency SHALL cascade to Manifest. No reviewer verdict SHALL be deleted; all verdict slices persist and become stale only according to prior-module mtimes.
+An accepted native Population execution-commit snapshot SHALL clear Population completion under the existing `processing-store` contract. The shared `canAccessPhase` dependency SHALL cascade to Manifest; no separate manifest lockout state SHALL be added. A rejected start or pre-commit preparation failure SHALL preserve prior access. No reviewer verdict SHALL be deleted; all verdict slices persist and become stale only according to prior-module mtimes.
 
 #### Scenario: Re-running Population hides Manifest nav
 
-- **WHEN** a user with stored multi-reviewer verdicts re-runs Population and the run enters `preparing`
+- **WHEN** a user with stored multi-reviewer verdicts re-runs Population and an accepted native snapshot reports execution commit
 - **THEN** `processing.population.completed` SHALL become `false`, `canAccessPhase(project, "manifest")` SHALL return `false`, and the Manifest nav button SHALL be disabled
 
 #### Scenario: Verdicts remain on disk during re-run

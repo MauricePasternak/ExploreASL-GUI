@@ -94,9 +94,9 @@ The preview SHALL render a "Software Manifest" section containing two sub-sectio
 
 A 3-row table with columns `Software` / `Version`, listing:
 
-- ExploreASL Version (from `uiState.manifest.lastRunVersions.exploreASL`, or `"unknown"` if absent)
-- ExploreASL GUI Version (from `uiState.manifest.lastRunVersions.gui`, or `"unknown"` if absent)
-- MATLAB Version (from `uiState.manifest.lastRunVersions.matlab`, or `"unknown"` if absent)
+- ExploreASL Version (from `uiState.processing.population.lastRun.exploreASLVersion`, or `"unknown"` if absent)
+- ExploreASL GUI Version (from `uiState.processing.population.lastRun.guiVersion`, or `"unknown"` if absent)
+- MATLAB Version (from `uiState.processing.population.lastRun.matlabVersion`, or `"unknown"` if absent)
 
 #### Sub-section: ExploreASL Data Parameter Configuration
 
@@ -118,7 +118,7 @@ A spec-level reservation SHALL note that human-readable label translation of `da
 
 #### Scenario: Unknown version placeholder
 
-- **WHEN** `uiState.manifest.lastRunVersions.exploreASL` is `undefined` at preview time
+- **WHEN** `uiState.processing.population.lastRun.exploreASLVersion` is `undefined` at preview time
 - **THEN** Section 2 SHALL render the ExploreASL Version row with value `"unknown"`
 
 ### Requirement: Manifest Section 3 Qc Summary
@@ -193,9 +193,9 @@ Below the tables, the section SHALL display: `Initial agreement is unadjusted. K
 
 The preview SHALL render a "Pipeline Summary" section containing a single paragraph. The paragraph text SHALL be a static template (stored as a TS template literal in code) drawn from `notes/Manifest_Pipeline_Summary.md` with the following substitutions applied at render time:
 
-- ExploreASL version → `uiState.manifest.lastRunVersions.exploreASL ?? "unknown"`
-- MATLAB version → `uiState.manifest.lastRunVersions.matlab ?? "unknown"`
-- GUI version → `uiState.manifest.lastRunVersions.gui ?? "unknown"`
+- ExploreASL version → `uiState.processing.population.lastRun.exploreASLVersion ?? "unknown"`
+- MATLAB version → `uiState.processing.population.lastRun.matlabVersion ?? "unknown"`
+- GUI version → `uiState.processing.population.lastRun.guiVersion ?? "unknown"`
 - Subject count → total SubjectSessions included in the manifest (excluding No Info)
 - Study-level counts as needed by the paragraph
 
@@ -203,7 +203,7 @@ Clauses SHALL NOT be toggled based on `dataPar.json` flags in v0 — the paragra
 
 #### Scenario: Unknown versions substituted in paragraph
 
-- **WHEN** `lastRunVersions` is `undefined` and the user previews the manifest
+- **WHEN** Population `lastRun` version fields are undefined and the user previews the manifest
 - **THEN** Section 4 SHALL contain the substring `"unknown"` in the positions where ExploreASL, MATLAB, and GUI versions would otherwise appear
 
 #### Scenario: Paragraph is static for v0

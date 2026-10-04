@@ -73,7 +73,7 @@ When the user confirms BIDS review in `BIDSReviewPanel`, the store MUST set `pro
 When Bilder review is confirmed, the store MUST write to `mappingState`:
 
 - `metadataGroups`: derived from `BidsReviewState.detectedGroups` projected down to `MetadataGroup` (pick `id`, `label`, `bidsParams` of each)
-- `subjectRows`: flattened from `detectedGroups[].subjects[]` into `SubjectRow` entries with `id` = `"sub-{subjectLabel}_{sessionLabel}"`, `subject` = `"sub-{subjectLabel}"`, `session` = `{sessionLabel}`, `groupId` = group's `id`
+- `subjectRows`: flattened from `detectedGroups[].subjects[]` into `SubjectRow` entries after stripping any `sub-` prefix from the subject label, with `id` = `"sub-{strippedSubject}_{sessionLabel}"`, `subject` = `{strippedSubject}`, `session` = `{sessionLabel}`, and `groupId` = group's `id`
 - `ingestionComplete = true`
 - `sourceDataPath = rootPath`
 

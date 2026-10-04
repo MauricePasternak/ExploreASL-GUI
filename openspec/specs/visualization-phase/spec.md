@@ -8,7 +8,7 @@ Orchestrate the user interface and store sync for the population analysis visual
 
 ### Requirement: Visualization Project Phase
 
-The project phase system SHALL include `visualization` as the fourth phase after `processing`. The route `/project/:id/visualization` SHALL render the Visualization page. The `PROJECT_PHASES` array SHALL be `["import", "parameters", "processing", "visualization"]`. The project's `currentPhase` SHALL update to `"visualization"` when the user navigates to the route, following the same pattern as other phases.
+The project phase system SHALL include `visualization` as the fourth phase after `processing`, followed by `manifest`. The route `/project/:id/visualization` SHALL render the Visualization page. The `PROJECT_PHASES` array SHALL be `["import", "parameters", "processing", "visualization", "manifest"]`. The project's `currentPhase` SHALL update to `"visualization"` when the user navigates to the route, following the same pattern as other phases.
 
 #### Scenario: Route renders visualization page
 
@@ -46,11 +46,11 @@ Access to the visualization phase SHALL be gated by `uiState.processing.populati
 
 ### Requirement: Population Completion Flag
 
-The `processingStore` SHALL set `uiState.processing.population.completed = true` via a `setPopulationCompleted(true)` action on the project store when `processingPhase` transitions to `"completed"` AND the processing config's `modules` includes `"population"`. The flag SHALL be persisted to the `.easl` project file. The `processingStore` SHALL clear the flag (`setPopulationCompleted(false)`) when `startProcessing` is called with Population module selected (re-run scenario).
+Population completion SHALL derive only from accepted native run evidence under Exact processing terminal persistence in `processing-store`. An accepted Population execution-commit snapshot SHALL clear `uiState.processing.population.completed`; an accepted Completed terminal result for that committed Population run SHALL set it to `true` and persist it before exact acknowledgement. Rejected reservation or preparation failure before execution commit SHALL preserve prior completion. Renderer worker counts and historical lock reads SHALL NOT establish current-run completion.
 
 #### Scenario: Flag set on Population completion
 
-- **WHEN** all workers exit, `read_lock_status` confirms all subjects complete, and `config.modules` includes `"population"`
+- **WHEN** native worker and expected-target audit publishes Completed for the attached committed Population run
 - **THEN** `uiState.processing.population.completed` SHALL be set to `true` and persisted to the `.easl` file
 
 #### Scenario: Flag not set when Population not selected
@@ -60,8 +60,13 @@ The `processingStore` SHALL set `uiState.processing.population.completed = true`
 
 #### Scenario: Flag cleared on Population re-run
 
-- **WHEN** the user starts processing with `config.modules` including `"population"` and `uiState.processing.population.completed` is currently `true`
-- **THEN** `uiState.processing.population.completed` SHALL be cleared to `false` before workers are spawned
+- **WHEN** an accepted native snapshot reports execution commit for a Population rerun and `uiState.processing.population.completed` is currently `true`
+- **THEN** `uiState.processing.population.completed` SHALL be cleared to `false` from that commit evidence
+
+#### Scenario: Population preparation fails before execution commit
+
+- **WHEN** a Population start is rejected or preparation fails before native execution commit
+- **THEN** prior Population completion and provenance SHALL remain unchanged
 
 #### Scenario: Flag not cleared on non-Population re-run
 

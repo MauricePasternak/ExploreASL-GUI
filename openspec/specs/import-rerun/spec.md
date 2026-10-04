@@ -6,19 +6,24 @@ Define import configuration snapshots and safe selective import re-runs.
 
 ### Requirement: Import snapshot persistence
 
-The system SHALL capture an `ImportSnapshot` at `startImport()` time and persist it in the project file at `uiState.import.mostRecentConfig`. The snapshot SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, and `subjectRows` (including `groupId` assignments). The snapshot SHALL be `null` before the first import run. Its source location SHALL use the same project-relative-internal or absolute-external representation as current import state so moving a project does not change the logical source.
+The system SHALL capture an `ImportSnapshot` for the reserved import attempt and retain it as pending runtime state. Only reconciliation of that run's authoritative Completed result SHALL replace the successful freshness baseline persisted at `uiState.import.mostRecentConfig`; rejected starts and failed, cancelled, or interrupted attempts SHALL preserve the prior baseline. The snapshot SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, and `subjectRows` (including `groupId` assignments). The baseline SHALL be `null` before the first successful import run. Its source location SHALL use the same project-relative-internal or absolute-external representation as current import state so moving a project does not change the logical source.
 
 When persisted to `.easl`, the snapshot SHALL be serialized as a gzip-compressed, base64-encoded string (algorithm: gzip, level 9). The in-memory store and staleness computation SHALL operate on a fully validated `ImportSnapshot` object. Schema v1 parsing SHALL decompress and validate a persisted string before exposing the snapshot. Migration of a legacy `.easl` file SHALL preserve either a valid compressed snapshot or a valid full-object snapshot, and canonical schema v1 serialization SHALL emit the compressed form. An invalid object, base64 value, gzip payload, JSON payload, snapshot shape, or escaping project-relative path SHALL produce an actionable project validation or migration error instead of silently replacing the snapshot with `null`.
 
 #### Scenario: First import creates snapshot
 
-- **WHEN** the user clicks "Start Import" for the first time
-- **THEN** the current location-independent import configuration SHALL be captured as an `ImportSnapshot` and stored at `uiState.import.mostRecentConfig`
+- **WHEN** the first reserved import attempt reaches authoritative Completed and terminal reconciliation succeeds
+- **THEN** its captured location-independent configuration SHALL become `uiState.import.mostRecentConfig` and persist before acknowledgement
 
 #### Scenario: Re-run overwrites snapshot
 
-- **WHEN** the user starts a re-run with selected subjects
-- **THEN** the current import configuration SHALL replace the previous snapshot at `uiState.import.mostRecentConfig`
+- **WHEN** a reserved re-run with selected subjects reaches authoritative Completed
+- **THEN** its captured configuration SHALL replace the previous baseline at `uiState.import.mostRecentConfig` through terminal reconciliation
+
+#### Scenario: Failed attempt preserves successful baseline
+
+- **WHEN** a re-run fails, is cancelled, or becomes interrupted
+- **THEN** `uiState.import.mostRecentConfig` SHALL retain the prior successful configuration so failed work cannot make changed subjects appear fresh
 
 #### Scenario: Snapshot persists across sessions
 

@@ -56,7 +56,7 @@ The `read_lock_status` Tauri command SHALL accept `project_root: String` and ret
 
 ### Requirement: list_subjects Command
 
-`processing.rs::list_subjects(project_root: String, data_source: Option<String>)` SHALL delegate to `bids::scan::parse_bids_structure` on:
+The `list_subjects(project_root: String, data_source: Option<String>)` command SHALL delegate to `bids::scan::parse_bids_structure` on:
 
 - `project_root.join("rawdata")` when `data_source` is `"dicom"` or omitted (existing DICOM-import contract)
 - `project_root` when `data_source` is `"bids"` (BIDS-direct subjects live at project root)
@@ -74,7 +74,7 @@ The function maps `Vec<BidsSubject>` to `Vec<SubjectInfo>` preserving the existi
 
 Cross-sectional handling: missing `ses-*` directories default to session `"1"` per D2.
 
-Registered in `lib.rs` and exported via Tauri commands list (existing behavior preserved).
+The command SHALL remain registered for Tauri IPC.
 
 #### Scenario: DICOM project list_subjects unchanged output shape
 
@@ -97,7 +97,7 @@ The `b_process` vector SHALL map to ExploreASL lock directory names: index 0 →
 
 #### Scenario: Delete status files for structural module only
 
-- **WHEN** `b_process = [true, false, false]` is passed to `run_pipeline`
+- **WHEN** `run_pipeline` launches a reservation selecting only Structural, corresponding to `b_process = [true, false, false]`
 - **THEN** only `.status` files under `xASL_module_Structural/*/xASL_module_Structural/` SHALL be deleted
 
 ### Requirement: Module Ordering Handled by ExploreASL
@@ -107,7 +107,7 @@ The GUI SHALL NOT orchestrate module execution order. It passes the `bProcess` v
 #### Scenario: User selects Structural and ASL
 
 - **WHEN** the user checks Structural and ASL checkboxes
-- **THEN** the GUI SHALL pass `b_process = [true, true, false]` to `run_pipeline` without any ordering logic
+- **THEN** the immutable request SHALL select both modules and native launch SHALL pass `b_process = [true, true, false]` to ExploreASL without any GUI ordering logic
 
 ### Requirement: BIDS2Legacy Transparency
 
@@ -140,9 +140,9 @@ The Settings modal SHALL display the detected version on each profile's ExploreA
 
 ### Requirement: Command Execution for Apptainer Profiles
 
-The Tauri commands `run_import_pipeline` and `run_pipeline` SHALL support execution using the `apptainer` profile type.
+The Tauri commands `launch_import_run` and `run_pipeline` SHALL support execution using the `apptainer` profile type. Import launch SHALL use its exact reservation and typed profile; processing launch SHALL use only the run ID of an immutable request containing that profile.
 
-1. **Import execution (`run_import_pipeline`)**:
+1. **Import execution (`launch_import_run`)**:
    Instead of running MATLAB directly on the host, the backend SHALL construct and spawn the following command line:
 
    ```
@@ -153,14 +153,14 @@ The Tauri commands `run_import_pipeline` and `run_pipeline` SHALL support execut
    - The `--cleanenv` flag SHALL be included to isolate the container environment and prevent host MATLAB environment variables from causing conflicts.
    - The compiled script is executed with `/data` as the dataset root, running the import module (arguments `"[1,1,0]" "0"`).
 
-2. **Processing execution (`run_pipeline`) & Import execution (`run_import_pipeline`)**:
+2. **Processing execution (`run_pipeline`) & Import execution (`launch_import_run`)**:
    Before spawning any worker or running import, the backend SHALL check for a pre-flight MCR cache.
    - The MCR cache directory is determined by checking the environment variable `$MCR_CACHE_ROOT` on the host system. If not set, it defaults to `$HOME/.mcrCache9.7/` (where `$HOME` is derived from the environment variable `$HOME`).
    - If that directory does not exist, the backend SHALL perform a warmup run synchronously by executing:
      ```
-     <profile.apptainerPath> exec --cleanenv --writable-tmpfs <profile.sifPath> /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/
+     <profile.apptainerPath> exec --cleanenv --writable-tmpfs --bind <dataset_root>:/data --bind <cache_dir>:<cache_dir> --env MCR_CACHE_ROOT=<cache_dir> <profile.sifPath> /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/
      ```
-     This command extracts the runtime libraries to the host cache directory. Once this warmup run completes successfully, the actual pipeline runs are executed as warm starts.
+     `<dataset_root>` SHALL be the owned staging root for import or current project root for processing. The backend SHALL create the cache directory before warmup, bind it into the container, and set its container `MCR_CACHE_ROOT` explicitly. Warmup SHALL use a cancellable bounded native probe and preserve shared cache bytes on failure. Once warmup completes successfully, the actual pipeline runs are executed as warm starts.
 
    Once warmed up, for each worker `i` from `1` to `N` (workers) in `run_pipeline`, the backend SHALL construct and spawn:
 
@@ -175,74 +175,14 @@ The Tauri commands `run_import_pipeline` and `run_pipeline` SHALL support execut
    - `N` is the total number of workers.
    - **Staggered Launch**: The backend SHALL stagger the spawning of parallel workers by at least 2 seconds (instead of the 1 second used for MATLAB) to allow container namespace initialization to settle and prevent SQLite/file access races.
 
-#### Pseudocode: Rust Command Construction
-
-```rust
-// Warmup Check & Run
-fn check_and_warmup_mcr(apptainer_path: &str, sif_path: &str) -> Result<(), String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    let cache_dir = std::env::var("MCR_CACHE_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(home).join(".mcrCache9.7"));
-
-    if !cache_dir.exists() {
-        let mut cmd = Command::new(apptainer_path);
-        cmd.args(&[
-            "exec",
-            "--cleanenv",
-            "--writable-tmpfs",
-            sif_path,
-            "/bin/bash",
-            "/opt/xasl/xASL_latest/run_xASL_latest.sh",
-            "/opt/mcr/v97/",
-        ]);
-        let status = cmd.status().map_err(|e| e.to_string())?;
-        if !status.success() {
-            return Err("MCR Warmup failed".to_string());
-        }
-    }
-    Ok(())
-}
-
-// Spawning Worker
-fn spawn_apptainer_worker(
-    apptainer_path: &str,
-    sif_path: &str,
-    project_root: &str,
-    b_process_str: &str,
-    i: usize,
-    n: usize,
-) -> Result<Child, std::io::Error> {
-    let mut cmd = Command::new(apptainer_path);
-    cmd.args(&[
-        "exec",
-        "--cleanenv",
-        "--writable-tmpfs",
-        "--bind",
-        &format!("{}:/data", project_root),
-        sif_path,
-        "/bin/bash",
-        "/opt/xasl/xASL_latest/run_xASL_latest.sh",
-        "/opt/mcr/v97/",
-        "/data",
-        "0",
-        b_process_str,
-        "0",
-        &i.to_string(),
-        &n.to_string(),
-    ]);
-    cmd.spawn()
-}
-```
-
 #### Scenario: Running import with Apptainer execution profile
 
-- **WHEN** `run_import_pipeline` is called with an Apptainer profile having `sifPath: "/path/to/image.sif"` and `apptainerPath: "apptainer"`
+- **WHEN** `launch_import_run` launches an exact reservation with an Apptainer profile having `sifPath: "/path/to/image.sif"` and `apptainerPath: "apptainer"`
 - **THEN** the backend SHALL spawn the command `apptainer exec --cleanenv --writable-tmpfs --bind <staging_root>:/data /path/to/image.sif /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/ /data "[1,1,0]" "0"`
 
 #### Scenario: Running processing with Apptainer execution profile and 2 workers
 
-- **WHEN** `run_pipeline` is called with `workers = 2`, `b_process = [true, true, false]`, and an Apptainer profile having `sifPath: "/path/to/image.sif"`
+- **WHEN** `run_pipeline` launches a reservation with `workers = 2`, Structural and ASL selected, and an Apptainer profile having `sifPath: "/path/to/image.sif"`
 - **THEN** the backend SHALL perform a warmup run if MCR is not cached, and then spawn 2 parallel worker processes:
   1. `apptainer exec --cleanenv --writable-tmpfs --bind <project_root>:/data /path/to/image.sif /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/ /data "0" "[1,1,0]" "0" "1" "2"`
   2. `apptainer exec --cleanenv --writable-tmpfs --bind <project_root>:/data /path/to/image.sif /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/ /data "0" "[1,1,0]" "0" "2" "2"`

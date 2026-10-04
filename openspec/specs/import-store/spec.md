@@ -41,22 +41,22 @@ The runtime-only native preflight state SHALL carry a plan fingerprint, monotoni
 
 ### Requirement: ImportProgress state shape
 
-The `ImportProgress` type in the import store SHALL be extended to include: `errorStep?: "DCM2NII" | "NII2BIDS"` (which step failed), `warnings?: string[]` (collected warning messages from stdout), `duration?: number` (processing duration in seconds), and `stale?: boolean` (whether the config has changed since this subject was imported). The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`.
+The `ImportProgress` type in the import store SHALL be extended to include: `errorStep?: "DCM2NII" | "NII2BIDS"` (which step failed), `warnings?: string[]` (collected warning messages from stdout), `duration?: number` (processing duration in seconds), and `stale?: boolean` (whether the config has changed since this subject was imported). The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`, `"interrupted"`.
 
 #### Scenario: Subject fails at NII2BIDS step
 
-- **WHEN** an `import_failed` event is parsed for subject BADDIE with step NII2BIDS
-- **THEN** `importProgress["BADDIE"].status` is set to `"failed"`, `errorStep` is `"NII2BIDS"`, and `error` contains the failure message
+- **WHEN** a matching native snapshot reports subject BADDIE failed verification after an NII2BIDS diagnostic failure
+- **THEN** `importProgress["BADDIE"].status` SHALL become `"failed"` with the available failure detail; the diagnostic event alone SHALL NOT classify the terminal outcome
 
 #### Scenario: Subject succeeds with warnings
 
-- **WHEN** subject GOOD completes processing with stdout warnings but no failures
+- **WHEN** native finalization reports subject GOOD committed with available stdout warnings and duration diagnostics
 - **THEN** `importProgress["GOOD"].status` is `"completed"`, `warnings` array contains parsed warning messages, `duration` contains the seconds value
 
 #### Scenario: Subject cancelled by user
 
-- **WHEN** user clicks "Stop" while subject INPROGRESS is in `"running"` state
-- **THEN** `importProgress["INPROGRESS"].status` is set to `"cancelled"`
+- **WHEN** native cancellation settles and a matching snapshot reports subject INPROGRESS cancelled
+- **THEN** `importProgress["INPROGRESS"].status` SHALL become `"cancelled"`; clicking Stop alone SHALL NOT claim cancellation
 
 #### Scenario: Stale subject on re-visit
 
@@ -96,7 +96,7 @@ The store SHALL retain import logs, staleness state, BIDS review state, current 
 
 ### Requirement: Subject error detail matching
 
-When an `import_failed` event is received, the system SHALL match the failure description against the known subject list from `importProgress` keys. For each known subject, if the subject name appears as a substring in the failure description, that subject is marked as failed. The full message line following the failure pattern (e.g., `Message: ...`) SHALL be captured as the error detail.
+When import failure output is parsed, native diagnostics SHALL match the description against the run's immutable selected subject list. For each matching subject, the full message line following the failure pattern (e.g., `Message: ...`) SHALL be captured as error detail in a run-correlated diagnostic. The store MAY display that detail provisionally, but only authoritative native snapshots SHALL classify subject failure or completion.
 
 #### Scenario: Subject name with underscores in failure description
 
@@ -106,7 +106,7 @@ When an `import_failed` event is received, the system SHALL match the failure de
 #### Scenario: Multiple subjects in single failure line
 
 - **WHEN** a failure line references multiple subjects
-- **THEN** each matching known subject is marked as failed with the same error detail
+- **THEN** each matching selected subject SHALL receive the same diagnostic error detail without the parser independently choosing its terminal outcome
 
 ### Requirement: ImportProgress table population
 

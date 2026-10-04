@@ -8,7 +8,7 @@ Preserve raw BIDS and DICOM source data compatibility while ExploreASL processin
 
 ### Requirement: Root-level participants.tsv never modified
 
-For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/participants.tsv` (if present) SHALL never be read, written, or modified by GUI code. `ensureParticipantsFiles` operates exclusively on `<projectRoot>/derivatives/ExploreASL/participants.tsv`. ExploreASL Population module appends processing-derived columns (`gm_vol`, `motion`, etc.) to the derivatives file, not root.
+For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/participants.tsv` (if present) SHALL never be written or modified by GUI code. Native participant preparation MAY read it for BIDS-direct site-column lookup as defined below; DICOM preparation SHALL NOT read it. Participant installation operates exclusively on derivative files under `<projectRoot>/derivatives/ExploreASL/`. ExploreASL Population module appends processing-derived columns (`gm_vol`, `motion`, etc.) to the derivatives file, not root.
 
 #### Scenario: User-authored participants.tsv preserved
 
@@ -17,7 +17,7 @@ For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/partic
 
 ### Requirement: subjectFolder override injected into dataPar.json
 
-When `assembleDataPar` (or `rust processing.rs::write_data_par_json`) runs for a project with `dataSource === "bids"`, the resulting `dataPar.json` MUST include the absolute path to the project root directory in `x.opts.subjectFolder`:
+When native processing preparation assembles configuration for a project with `dataSource === "bids"`, the resulting `dataPar.json` MUST include the absolute path to the current project root directory in `x.opts.subjectFolder`:
 
 ```json
 {
@@ -38,16 +38,16 @@ ExploreASL reads `x.opts.subjectFolder` in `xASL_init_SubjectList.m` and overrid
 #### Scenario: BIDS-direct project processing
 
 - **WHEN** `startProcessing` runs on a BIDS-direct project (`dataSource = "bids"`)
-- **THEN** `ensure_rawdata_dir` is called first; `dataPar.json` is written with `x.opts.subjectFolder = <rootPath>`; `run_pipeline` starts ExploreASL which scans root-level `sub-*/`
+- **THEN** native preparation SHALL verify the existing compatibility directory and marker without modifying them, write `dataPar.json` with `x.opts.subjectFolder = <rootPath>`, and launch ExploreASL to scan root-level `sub-*/`
 
 #### Scenario: DICOM project processing unchanged
 
 - **WHEN** `startProcessing` runs on a DICOM project (`dataSource = "dicom"`)
-- **THEN** `ensure_rawdata_dir` is NOT called; `dataPar.json` is written without `subjectFolder` (existing behavior preserved)
+- **THEN** BIDS compatibility verification SHALL NOT run and `dataPar.json` SHALL be written without `subjectFolder` (existing behavior preserved)
 
 ### Requirement: list_subjects refactored to parse_bids_structure
 
-`processing.rs::list_subjects(project_root: String)` SHALL delegate to `bids::scan::parse_bids_structure(Path::new(&project_root).join("rawdata"))`. The existing `SubjectInfo` frontend contract is preserved — `BidsSubject`/`BidsSession` mappings produce equivalent `SubjectInfo` entries (the `subject_session`, `subject`, `session`, `has_structural`, `has_asl`, `asl_runs` fields map 1:1).
+The `list_subjects(project_root: String, data_source: Option<String>)` command SHALL delegate to `bids::scan::parse_bids_structure` using the project root for `"bids"` and `project_root.join("rawdata")` for `"dicom"` or omitted data source. The existing `SubjectInfo` frontend contract is preserved: `BidsSubject`/`BidsSession` mappings produce equivalent `SubjectInfo` entries with `subject_session`, `subject`, `session`, `has_structural`, `has_asl`, and `asl_runs` fields.
 
 Cross-sectional handling: `parse_bids_structure` defaults missing `ses-*` to session `"1"` (per cross-sectional convention). DICOM-import projects (which always have `ses-*` directories after import via NII2BIDS) remain unaffected.
 

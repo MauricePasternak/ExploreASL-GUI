@@ -57,7 +57,7 @@ The processing store SHALL project native `preparing`, `running`, `finalizing`, 
 
 #### Scenario: Version probe failure does not block run
 
-- **WHEN** a native version probe fails
+- **WHEN** a native version probe fails with settled process ownership and permits the unknown fallback
 - **THEN** native provenance SHALL use unknown for that probe while retaining other captured versions and continuing launch
 
 #### Scenario: Version capture runs in parallel with participants generation
@@ -166,12 +166,17 @@ Before reservation, `startProcessing` SHALL:
 
 ### Requirement: Subject List Discovery
 
-The store SHALL provide `availableSubjects` populated by calling `list_subjects` which scans `rawdata/sub-X/ses-Y/` directories. Each entry SHALL include the SubjectSession string (`sub-X_Y`), the subject label, session label, and module availability flags (`hasStructural`, `hasASL`) derived from the presence of `anat/` and `perf/` subdirectories.
+The store SHALL provide `availableSubjects` populated by calling `list_subjects` with the project's data source. Discovery SHALL scan `rawdata/sub-X/` for DICOM projects and root-level `sub-X/` for BIDS-direct projects, using the BIDS session conventions defined in `processing-backend`. Each entry SHALL include the SubjectSession string (`sub-X_Y`), the subject label, session label, and module availability flags (`hasStructural`, `hasASL`).
 
 #### Scenario: No rawdata directory
 
-- **WHEN** `rawdata/` does not exist or is empty
+- **WHEN** a DICOM project's `rawdata/` does not exist or is empty
 - **THEN** `availableSubjects` SHALL be empty and the UI SHALL show an error state
+
+#### Scenario: BIDS-direct subjects do not depend on rawdata content
+
+- **WHEN** a BIDS-direct project has usable root-level subjects and an empty compatibility `rawdata/` directory
+- **THEN** `availableSubjects` SHALL contain the root-level subjects rather than an empty list
 
 #### Scenario: Session detection from BIDS
 

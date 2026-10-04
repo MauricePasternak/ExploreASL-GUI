@@ -506,7 +506,7 @@ A global setting "Preserve staging directory" SHALL be added to `globalStore.set
 
 ### Requirement: MATLAB executable selection for import
 
-This requirement is **replaced** by the Profile selector defined in the `execution-profiles` capability spec. The import step 5 execution view SHALL provide an Execution Profile select dropdown (replacing the MATLAB version select dropdown). The dropdown SHALL list all configured execution profiles from `globalStore.settings.executionProfiles`, displaying each profile's label and type. The selection SHALL be stored as `selectedProfileId`. The selected profile SHALL be serialized and passed to `runImportPipeline`.
+This requirement is **replaced** by the Profile selector defined in the `execution-profiles` capability spec. The import step 5 execution view SHALL provide an Execution Profile select dropdown (replacing the MATLAB version select dropdown). The dropdown SHALL list all configured execution profiles from `globalStore.settings.executionProfiles`, displaying each profile's label and type. The selection SHALL be stored as `selectedProfileId`. Reservation SHALL bind the selected profile ID; `launch_import_run` SHALL receive the matching typed profile with the exact reserved run identity.
 
 If no execution profiles are configured, the "Start Import" button SHALL be disabled and an alert message SHALL be shown.
 
@@ -528,13 +528,13 @@ If no execution profiles are configured, the "Start Import" button SHALL be disa
 #### Scenario: Selected profile used for import
 
 - **WHEN** the user selects a profile from the dropdown and clicks "Start Import"
-- **THEN** `runImportPipeline` is called with the full typed `ExecutionProfile` object, not separate `matlabPath` / `exploreAslPath` strings
+- **THEN** `launch_import_run` SHALL receive the full typed `ExecutionProfile` object matching the reservation, not separate `matlabPath` / `exploreAslPath` strings
 
 ### Requirement: ImportProgress table population
 
-The progress table SHALL be populated from two sources: (1) `read_import_status` lock file scan results when entering step 5, and (2) real-time events during import execution. On entering step 5, the system SHALL call `read_import_status` to reconstruct per-subject progress, then SHALL compute staleness by diffing current config against `mostRecentConfig`.
+When discovery finds no active or replayable native run, the progress table SHALL use `read_import_status` to audit committed project artifacts, then compute staleness by diffing current config against `mostRecentConfig`. While a native run is attached, its matching snapshots SHALL determine authoritative status and terminal outcomes.
 
-During import execution, the table SHALL update in real-time as structured events arrive. All subjects start with `status: "pending"` when `startImport()` is called.
+Run-correlated structured events MAY update provisional running diagnostics, but parser completion SHALL NOT establish completed status. Every selected subject SHALL start pending when its reservation enters Preparing; only verified committed native outcomes or safe committed-artifact audit SHALL establish completion.
 
 #### Scenario: Table shows reconstructed status on re-visit
 
@@ -561,7 +561,7 @@ During import execution, the table SHALL update in real-time as structured event
 - If `targetPhase === "processing"` → dispatch on `dataSource`:
   - `dataSource === "bids"` → return `project.uiState?.import?.bidsReviewConfirmed === true`
   - `dataSource === "dicom"` → return `project.uiState?.import?.completed === true`
-- If `targetPhase === "visualization" || targetPhase === "manifest"` → return `project.uiState?.population?.completed === true`.
+- If `targetPhase === "visualization" || targetPhase === "manifest"` → return `project.uiState?.processing?.population?.completed === true`.
 - Else → return `false`.
 
 `dataSource` is required (no fallback default per `ProjectMetaSchema`). Existing test fixtures that omitted `dataSource` MUST be updated to set it explicitly.

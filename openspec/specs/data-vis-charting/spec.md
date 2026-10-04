@@ -79,12 +79,12 @@ On entering the "Visualize" step with a valid contract, the axis assignment drop
 
 ### Requirement: Immediate Chart Re-render on Axis Change
 
-Changing any axis dropdown (X, Y, or color-by) SHALL trigger `read_tsv_columns` for the newly needed columns and re-render the chart immediately. No "Render" button SHALL be required. The chart SHALL update as soon as the new data arrives.
+Changing any axis dropdown (X, Y, or color-by) SHALL trigger `read_data_columns` for the newly needed columns and re-render the chart immediately. No "Render" button SHALL be required. The chart SHALL update as soon as the new data arrives.
 
 #### Scenario: X-axis change triggers re-render
 
 - **WHEN** the user changes the X-axis dropdown from "Total_GM_B" to "MeanMotion"
-- **THEN** `read_tsv_columns` SHALL be called with the new column set and the chart SHALL re-render upon data arrival
+- **THEN** `read_data_columns` SHALL be called with the new column set and the chart SHALL re-render upon data arrival
 
 #### Scenario: Color-by change triggers re-render
 

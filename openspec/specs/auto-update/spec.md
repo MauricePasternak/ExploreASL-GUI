@@ -31,9 +31,9 @@ The application SHALL show an available update as a lower-right Mantine notifica
 
 ### Requirement: Guarded update installation
 
-The application SHALL install immediately when no project changes are dirty and no processing or import is preparing/running. Otherwise it SHALL request confirmation. Active work includes processing `preparing`/`running`, import `preparing`/`running`, and `importRunning`.
+The application SHALL install immediately when no project changes are dirty and no processing or import is active. Otherwise it SHALL request confirmation. Active work includes processing and import `preparing`, `running`, `finalizing`, and `cancelling`, plus `importRunning`.
 
-On confirmation the application SHALL stop processing through `killProcessing`, stop import through `stop_active_import`, save dirty project state, and only then download/install. Abort or save failure SHALL prevent installation and show a ten-second actionable error. Cancelling the modal SHALL not alter work or install. The application SHALL recheck for dirty or active work before installation so work started during download is not interrupted.
+On confirmation the application SHALL stop processing through `killProcessing`, cancel cancellable import through `cancel_import_run` using its exact attached run ID, reconcile its terminal result, save dirty project state, and only then download/install. Import finalization or cancellation still in progress SHALL block update preparation rather than authorize another cancellation. Abort, reconciliation, or save failure SHALL prevent installation and show a ten-second actionable error. Cancelling the modal SHALL not alter work or install. The application SHALL recheck for dirty or active work before installation so work started during download is not interrupted.
 
 #### Scenario: Dirty processing project
 
@@ -44,6 +44,11 @@ On confirmation the application SHALL stop processing through `killProcessing`, 
 
 - **WHEN** saving dirty project state fails while preparing an update
 - **THEN** no updater download starts and an actionable error is displayed
+
+#### Scenario: Import is finalizing
+
+- **WHEN** the user confirms an update while import is finalizing
+- **THEN** no cancellation or updater download SHALL start and an actionable error SHALL require import finalization to finish
 
 ### Requirement: Download, install, and relaunch feedback
 

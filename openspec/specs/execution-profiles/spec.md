@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Unified execution profile abstraction replacing scattered MATLAB path configuration. Supports `matlab` profile type in Phase 1 with future variants (`compiled`, `docker`, `apptainer`). Profiles are globally-stored, validated at four lifecycle points, and referenced by projects via ID.
+Define globally stored MATLAB and Apptainer execution profiles, validation at four lifecycle points, and project references by profile ID.
 
 ## Requirements
 
 ### Requirement: Execution Profile schema
 
-The system SHALL define an `ExecutionProfileSchema` as a Zod discriminated union on the `type` field. All profile variants SHALL share a base shape containing: `id: z.string().uuid()`, `label: z.string().min(1)`, and `exploreAslVersion: z.string().optional()`. Phase 1 SHALL include only the `matlab` variant:
+The system SHALL define an `ExecutionProfileSchema` as a Zod discriminated union on the `type` field. All profile variants SHALL share a base shape containing: `id: z.string().uuid()`, `label: z.string().min(1)`, and `exploreAslVersion: z.string().optional()`. The supported variants SHALL be `matlab` and `apptainer`. The MATLAB variant SHALL be:
 
 ```
 MatlabProfileSchema = ExecutionProfileBaseSchema.extend({
@@ -21,10 +21,10 @@ MatlabProfileSchema = ExecutionProfileBaseSchema.extend({
 The discriminated union SHALL be defined as:
 
 ```
-ExecutionProfileSchema = z.discriminatedUnion("type", [MatlabProfileSchema])
+ExecutionProfileSchema = z.discriminatedUnion("type", [MatlabProfileSchema, ApptainerProfileSchema])
 ```
 
-Future variants (`compiled`, `docker`, `apptainer`) SHALL be added by extending this union without changing the base or existing variants.
+The Apptainer variant SHALL follow the Apptainer Execution Profile schema requirement below. Unsupported profile types SHALL be rejected.
 
 #### Scenario: Valid MATLAB profile parses successfully
 
@@ -39,7 +39,7 @@ Future variants (`compiled`, `docker`, `apptainer`) SHALL be added by extending 
 #### Scenario: Unknown type fails validation
 
 - **WHEN** `ExecutionProfileSchema.parse()` is called with `{ id: "...", label: "Test", type: "docker", ... }`
-- **THEN** the parse SHALL throw a Zod validation error because `docker` is not a recognized discriminator value in Phase 1
+- **THEN** the parse SHALL throw a Zod validation error because `docker` is not a supported discriminator value
 
 #### Scenario: Missing label fails validation
 
@@ -155,7 +155,7 @@ Profile validation SHALL occur at four points in the application lifecycle. The 
 1. **On profile save** (blocking, <500ms): The frontend SHALL call `invoke("validate_execution_profile", { executionProfile })` before persisting. This is a fast operation — checks `matlabPath` is an executable file, `exploreAslPath` contains `ExploreASL.m`, and reads `exploreAslVersion` from VERSION file. No MATLAB process spawn. If `valid: false`, the save is blocked and errors are shown inline. If `valid: true`, the profile is persisted and `profileValidationState[id].valid` is set to `true`.
 2. **On app startup** (blocking): After `loadSettings()`, the frontend SHALL call `invoke("validate_all_execution_profiles", { executionProfiles })` for all profiles. Results populate `profileValidationState`. Any profile whose returned `explore_asl_version` differs from the stored value SHALL be updated and persisted. A notification SHALL be shown listing invalid profiles.
 3. **On profile switch** (non-blocking): When the user selects a different profile in a ProfileSelector dropdown, the frontend SHALL call `invoke("validate_execution_profile", { executionProfile })`. If invalid, a warning is shown and the Start button is disabled.
-4. **During preparation phase** (blocking): `run_import_pipeline` and `run_pipeline` SHALL call `profile.validate()` internally before any destructive operations. If validation fails, the command SHALL return an error and no destructive operations SHALL occur.
+4. **During preparation phase** (blocking): `launch_import_run` and `run_pipeline` SHALL validate the admitted profile natively before any destructive operations. If validation fails, the admitted run SHALL return an authoritative failure and no destructive operations SHALL occur. Launch-time probes SHALL use cancellable native process scopes; UI-facing validation and launch validation SHALL enforce the same profile validity rules.
 
 Each profile save SHALL perform one native validation. Profile persistence, detected version, and `profileValidationState` refresh SHALL reuse that save's result without a second validation invocation. Startup, profile-switch, and native preparation validation SHALL remain independent triggers.
 
@@ -206,12 +206,12 @@ Each profile save SHALL perform one native validation. Profile persistence, dete
 
 #### Scenario: Preparation-phase validation failure
 
-- **WHEN** `run_import_pipeline` or `run_pipeline` is called and profile path validation fails on the Rust side
-- **THEN** the command returns an error, no destructive operations (lock cleanup, status file deletion) are performed
+- **WHEN** `launch_import_run` or `run_pipeline` launches an admitted run and profile path validation fails on the Rust side
+- **THEN** the run SHALL report authoritative failure and no destructive operations (lock cleanup, status file deletion) SHALL be performed
 
 #### Scenario: Preparation-phase validation success
 
-- **WHEN** `run_import_pipeline` is called and profile paths are valid
+- **WHEN** `launch_import_run` is called for a reserved run and profile paths are valid
 - **THEN** preparation proceeds normally (symlink creation, config writing, MATLAB spawning)
 
 ---
@@ -351,7 +351,7 @@ If no profiles are configured, the "Start Import" button SHALL be disabled and a
 
 - **WHEN** the user selects a valid profile and clicks "Start Import"
 - **THEN** the handler SHALL pre-validate: resolve the profile from `executionProfiles` (checking it still exists) and check `profileValidationState[id].valid`. If the profile was deleted or is invalid, an inline error SHALL be shown ("Selected profile was deleted or is invalid") and the Start button SHALL be disabled. No pipeline state transition occurs.
-- **THEN** if pre-validation passes, `runImportPipeline` is called with the full typed `ExecutionProfile` object
+- **THEN** if pre-validation passes, reservation SHALL bind the selected profile ID and `launch_import_run` SHALL receive the matching full typed `ExecutionProfile` and exact reserved run identity
 
 #### Scenario: Start clicked with deleted profile
 
@@ -372,7 +372,7 @@ If no profiles are configured, the "Start Import" button SHALL be disabled and a
 
 ### Requirement: Profile selector on Processing page
 
-The Processing page SHALL replace the MATLAB selection dropdown with a Profile selector dropdown. The dropdown SHALL list all execution profiles from `globalStore.settings.executionProfiles` with validity indicators. The selection SHALL be stored as `selectedProfileId` in the processing config (replacing `matlabPath` and `exploreAslPath`). The selected profile SHALL be resolved to a full profile object and passed to `run_pipeline`. The Start button SHALL be disabled when the selected profile is invalid.
+The Processing page SHALL replace the MATLAB selection dropdown with a Profile selector dropdown. The dropdown SHALL list all execution profiles from `globalStore.settings.executionProfiles` with validity indicators. The selection SHALL be stored as `selectedProfileId` in the processing config (replacing `matlabPath` and `exploreAslPath`). The selected profile SHALL be resolved to a full profile object in the immutable `reserve_processing_run` request. `run_pipeline` SHALL launch only the returned run ID, without replacement profile arguments. The Start button SHALL be disabled when the selected profile is invalid.
 
 When the processing page first renders and no `selectedProfileId` has been set (e.g., new project or first visit to processing), the selector SHALL auto-select the first valid profile from `executionProfiles`.
 
@@ -390,7 +390,7 @@ When the processing page first renders and no `selectedProfileId` has been set (
 
 - **WHEN** the user selects a valid profile and clicks Start
 - **THEN** the handler SHALL pre-validate the profile (resolved from `executionProfiles`, checked in `profileValidationState`). If deleted or invalid, an inline error blocks execution without transitioning to `failed` pipeline state.
-- **THEN** if pre-validation passes, `run_pipeline` is called with the full typed `ExecutionProfile` object
+- **THEN** if pre-validation passes, `reserve_processing_run` SHALL receive the full typed `ExecutionProfile` in its immutable request and `run_pipeline` SHALL receive only the reserved run ID
 
 #### Scenario: Invalid profile prevents start
 
@@ -422,9 +422,9 @@ When a new project is created, the Import phase SHALL have `selectedProfileId` i
 
 ### Requirement: Rust ExecutionProfile deserialization and validation
 
-The Rust backend SHALL define an `ExecutionProfile` enum with `serde(tag = "type")` for internally-tagged deserialization. Phase 1 SHALL include a `Matlab` variant with fields: `id: String`, `label: String`, `matlab_path: String`, `explore_asl_path: String`, `explore_asl_version: Option<String>`. The Rust `serde` field names SHALL use `snake_case` with `#[serde(rename_all = "camelCase")]` to match the frontend's `camelCase` JSON.
+The Rust backend SHALL define an `ExecutionProfile` enum with `serde(tag = "type")` for internally-tagged deserialization. It SHALL include `Matlab` and `Apptainer` variants. `Matlab` SHALL contain fields: `id: String`, `label: String`, `matlab_path: String`, `explore_asl_path: String`, `explore_asl_version: Option<String>`. The Rust fields SHALL serialize as `camelCase` to match the frontend JSON.
 
-All Tauri commands (`run_import_pipeline`, `run_pipeline`, `validate_execution_profile`, `validate_all_execution_profiles`) SHALL accept `ExecutionProfile` as a typed parameter — Tauri handles serde deserialization natively. No manual JSON string wrapping.
+`launch_import_run`, `validate_execution_profile`, and `validate_all_execution_profiles` SHALL accept typed `ExecutionProfile` values. `reserve_processing_run` SHALL accept the typed profile within its immutable request; `run_pipeline` SHALL accept only the reserved run ID. Tauri SHALL handle serde deserialization natively without manual JSON string wrapping.
 
 #### Scenario: Valid MATLAB profile JSON deserializes
 
@@ -434,7 +434,7 @@ All Tauri commands (`run_import_pipeline`, `run_pipeline`, `validate_execution_p
 #### Scenario: Unknown type fails deserialization
 
 - **WHEN** Rust receives a JSON object with `"type": "docker"`
-- **THEN** deserialization SHALL fail with a serde error (no `Docker` variant in Phase 1)
+- **THEN** deserialization SHALL fail with a serde error (no supported `Docker` variant)
 
 ### Requirement: Rust profile validation commands
 
@@ -552,7 +552,7 @@ Apptainer profile validation SHALL occur at the same lifecycle points as Matlab 
 3. Detect the ExploreASL version by checking if the SIF image contains a file matching `VERSION_*` inside `/opt/xasl/xASL_latest/` (by running `<apptainerPath> exec <sifPath> ls /opt/xasl/xASL_latest/` and extracting the version suffix).
    - This command SHALL run with a strict 5-second timeout.
    - If the version detection command fails or times out, validation SHALL fail with an error.
-4. **MCR Warmup**: The validation routine itself SHALL NOT perform the MCR warmup cache extraction, keeping validation fast and responsive. Instead, the MCR warmup check and execution is deferred to a pre-flight step inside the pipeline running commands (`run_import_pipeline` / `run_pipeline`).
+4. **MCR Warmup**: The validation routine itself SHALL NOT perform the MCR warmup cache extraction, keeping validation fast and responsive. Instead, the MCR warmup check and execution is deferred to native preparation in `launch_import_run` / `run_pipeline`.
 
 #### Scenario: Valid Apptainer profile passes validation
 

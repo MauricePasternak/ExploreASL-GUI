@@ -8,7 +8,7 @@ Define the processing route, dashboard, and access behavior.
 
 ### Requirement: Processing Route and Gating
 
-The processing route SHALL be `/project/:id/processing`. It SHALL be inaccessible when `project.uiState.importCompleted !== true`, enforced by the existing `canAccessPhase` function. If the user navigates to this route without completing import, they SHALL be redirected to the import route.
+The processing route SHALL be `/project/:id/processing`. Access SHALL use the data-source-specific `canAccessPhase` gate: `project.uiState.import.completed === true` for DICOM projects or `project.uiState.import.bidsReviewConfirmed === true` for BIDS-direct projects. If the user navigates to this route before satisfying the applicable import gate, they SHALL be redirected to the import route.
 
 #### Scenario: Access before import completion
 

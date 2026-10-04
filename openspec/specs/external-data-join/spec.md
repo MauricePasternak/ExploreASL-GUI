@@ -285,7 +285,7 @@ When the user removes the external file selection (deselects or clears it), `joi
 
 ### Requirement: External File mtime Re-Validation
 
-On Tauri window focus, if `joinConfig` is active, the system SHALL stat the external file's mtime. If the mtime has changed since the last validation, `execute_join` SHALL re-run and the returned `externalHash` SHALL be compared with `joinConfig.externalSource.fileHash`. If the hash mismatches, `joinConfig` SHALL be invalidated (reset to `null`), `load_qcbf_data` SHALL re-run for qCBF-only data, and a banner SHALL display: "External data file has changed. Join configuration has been reset." If the external file no longer exists, the banner SHALL read: "External file '{filename}' no longer exists."
+On Tauri window focus, if `joinConfig` is active, the system SHALL stat the external file's mtime. If the mtime has changed since the last validation, `execute_join` SHALL re-run and the returned `externalHash` SHALL be compared with `joinConfig.externalSource.fileHash`. If the hash mismatches or the external file is missing or unreadable, the saved `joinConfig` and dependent contract settings SHALL remain unchanged. The system SHALL show a persistent Relink warning, disable joined-data actions, and keep readable qCBF-only data available through `load_qcbf_data`. Relinking matching content SHALL preserve setup; adopting changed content SHALL require confirmation before resetting dependent setup, as defined in `data-vis-contract`.
 
 #### Scenario: External file unchanged on focus
 
@@ -295,12 +295,12 @@ On Tauri window focus, if `joinConfig` is active, the system SHALL stat the exte
 #### Scenario: External file changed on focus
 
 - **WHEN** the window regains focus, the external file's mtime has changed, and the hash mismatches
-- **THEN** `joinConfig` SHALL be invalidated, `load_qcbf_data` SHALL re-run, and the banner "External data file has changed. Join configuration has been reset." SHALL display
+- **THEN** `joinConfig` and saved setup SHALL remain unchanged, qCBF-only data SHALL remain available, and a Relink warning SHALL require confirmation before resetting setup for changed content
 
 #### Scenario: External file deleted on focus
 
 - **WHEN** the window regains focus and the external file no longer exists
-- **THEN** `joinConfig` SHALL be invalidated and the banner "External file '{filename}' no longer exists." SHALL display
+- **THEN** `joinConfig` SHALL remain unchanged, joined-data actions SHALL be disabled, and a persistent Relink warning SHALL identify the missing saved source
 
 ### Requirement: Join Execution on Step Advance
 
