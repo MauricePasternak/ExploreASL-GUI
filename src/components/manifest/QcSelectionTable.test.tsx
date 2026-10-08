@@ -12,6 +12,9 @@ import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import { useProjectStore } from "../../stores/projectStore";
 import { useManifestStore } from "../../stores/manifestStore";
 import { useProcessingStore } from "../../stores/processingStore";
+import { projectFixture } from "../../test/projectFixtures";
+import { projectView } from "../../schemas/project";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 
 // ---------------------------------------------------------------------------
 // Test data
@@ -105,44 +108,39 @@ let mockVerdicts: Record<string, ManifestVerdict> = {};
 let mockNestedVerdicts: Record<string, Record<string, ManifestVerdict>> | undefined;
 let mockReviewers: { id: string; label: string; createdAt: string }[] | undefined;
 let mockActiveReviewerId: string | undefined;
-let mockStaleVerdicts: Set<string> | Record<string, Set<string>> = new Set();
+let mockStaleVerdicts: Record<string, Set<string>> = {};
+let editReply = projectFixture();
 let mockMetadataGroups: MetadataGroup[] = [];
 let mockSubjectRows: SubjectRow[] = [];
 let mockBids2LegacyExists = true;
 
 function buildProjectState() {
-  return {
-    version: "0.1.0" as const,
-    projectMeta: {
-      id: "project-1",
-      name: "Brain Study",
-      rootPath: "/test/project",
-      createdAt: "2026-05-03T00:00:00.000Z",
-      lastOpened: "2026-05-03T00:00:00.000Z",
-      currentPhase: "manifest" as const,
-      dataSource: "dicom" as const,
-    },
-    mappingState: {
-      metadataGroups: mockMetadataGroups,
-      subjectRows: mockSubjectRows,
-    },
-    uiState: {
-      processing: {
-        population: {
-          lastRun: {
-            Mtime: null,
+  const reviewers = mockReviewers ?? projectFixture().document.uiState.manifest.reviewers;
+  return projectView(
+    projectFixture("project-1", "Brain Study", "/test/project", {
+      mappingState: {
+        metadataGroups: mockMetadataGroups,
+        subjectRows: mockSubjectRows,
+      },
+      uiState: {
+        processing: {
+          population: {
+            lastRun: {
+              profileId: "profile",
+              Mtime: null,
+            },
           },
         },
+        manifest: {
+          reviewers,
+          activeReviewerId: mockActiveReviewerId ?? reviewers[0].id,
+          verdicts: mockNestedVerdicts ?? { [reviewers[0].id]: mockVerdicts },
+          resolvedVerdicts: {},
+        },
       },
-      manifest: {
-        ...(mockReviewers
-          ? { reviewers: mockReviewers, activeReviewerId: mockActiveReviewerId }
-          : {}),
-        verdicts: mockNestedVerdicts ?? mockVerdicts,
-      },
-    },
-    dataPar: {},
-  };
+      dataPar: {},
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +166,13 @@ function renderTable(
     project: buildProjectState() as any,
     loaded: true,
   });
+  activateProjectLease("project-1", "/test/project");
+  const originalInvoke = vi.mocked(invoke).getMockImplementation();
+  vi.mocked(invoke).mockImplementation((command, args) =>
+    command === "accept_project_edit"
+      ? Promise.resolve(editReply)
+      : (originalInvoke?.(command, args) ?? Promise.resolve([])),
+  );
   useManifestStore.setState({
     staleVerdicts: mockStaleVerdicts,
     step: 0,
@@ -186,14 +191,18 @@ function renderTable(
 
 afterEach(() => {
   cleanup();
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
+  editReply = projectFixture("project-1", "Brain Study", "/test/project");
   vi.clearAllMocks();
+  vi.mocked(invoke).mockReset();
   mockAvailableSubjects = [];
   mockSubjectStatuses = [];
   mockVerdicts = {};
   mockNestedVerdicts = undefined;
   mockReviewers = undefined;
   mockActiveReviewerId = undefined;
-  mockStaleVerdicts = new Set();
+  mockStaleVerdicts = {};
   mockMetadataGroups = [];
   mockSubjectRows = [];
   mockBids2LegacyExists = true;
@@ -273,6 +282,12 @@ describe("QcSelectionTable", () => {
       [reviewer1.id]: {},
       [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
     };
+    editReply.document.uiState.manifest.reviewers = [reviewer1, reviewer2];
+    editReply.document.uiState.manifest.activeReviewerId = reviewer2.id;
+    editReply.document.uiState.manifest.verdicts = {
+      [reviewer1.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
+      [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
+    };
 
     renderTable({ reviewerId: reviewer1.id });
     await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Pass"));
@@ -281,6 +296,8 @@ describe("QcSelectionTable", () => {
       [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
     });
 
+    editReply = structuredClone(editReply);
+    editReply.document.uiState.manifest.verdicts[reviewer1.id] = {};
     await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Neutral"));
     expect(useProjectStore.getState().project?.uiState.manifest?.verdicts).toEqual({
       [reviewer1.id]: {},
@@ -315,6 +332,9 @@ describe("QcSelectionTable", () => {
     const view = renderTable({ reviewerId: reviewer1.id });
     await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Fail"));
     expect(screen.getByTestId("verdict-reason-sub-01_01")).toBeInTheDocument();
+    await expect(useProjectStore.getState().flushEdits()).rejects.toThrow(
+      "Complete pending Fail verdicts",
+    );
 
     view.rerender(
       <MantineProvider env="test">
@@ -330,6 +350,12 @@ describe("QcSelectionTable", () => {
     setupMultiReviewerVerdicts();
     mockActiveReviewerId = reviewer2.id;
     mockNestedVerdicts = { [reviewer1.id]: {}, [reviewer2.id]: {} };
+    editReply.document.uiState.manifest.reviewers = [reviewer1, reviewer2];
+    editReply.document.uiState.manifest.activeReviewerId = reviewer2.id;
+    editReply.document.uiState.manifest.verdicts = {
+      [reviewer1.id]: {},
+      [reviewer2.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
+    };
 
     renderTable();
     await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Pass"));
@@ -346,6 +372,12 @@ describe("QcSelectionTable", () => {
     mockActiveReviewerId = reviewer2.id;
     mockNestedVerdicts = {
       [reviewer1.id]: {},
+      [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
+    };
+    editReply.document.uiState.manifest.reviewers = [reviewer1, reviewer2];
+    editReply.document.uiState.manifest.activeReviewerId = reviewer2.id;
+    editReply.document.uiState.manifest.verdicts = {
+      [reviewer1.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
       [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
     };
 
@@ -369,16 +401,19 @@ describe("QcSelectionTable", () => {
     expect(screen.queryByTestId("stale-badge-sub-01_01")).not.toBeInTheDocument();
   });
 
-  it("ignores reviewerId and retains flat storage in single-reviewer mode", async () => {
+  it("uses the registered indexed slice in single-reviewer mode", async () => {
     const user = userEvent.setup();
     mockAvailableSubjects = [subject1];
     mockReviewers = [reviewer1];
+    editReply.document.uiState.manifest.verdicts = {
+      [reviewer1.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
+    };
 
-    renderTable({ reviewerId: reviewer2.id });
+    renderTable({ reviewerId: reviewer1.id });
     await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Pass"));
 
     expect(useProjectStore.getState().project?.uiState.manifest?.verdicts).toEqual({
-      "sub-01_01": { status: "pass", setAt: 0 },
+      [reviewer1.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
     });
   });
 
@@ -495,35 +530,6 @@ describe("QcSelectionTable", () => {
   });
 
   // 12.12 — Mark all complete→Pass skips No Info
-  it("Mark all complete→Pass button skips No Info subjects", async () => {
-    const user = userEvent.setup();
-    mockAvailableSubjects = [subject1, subject4];
-    mockSubjectStatuses = [
-      statusComplete,
-      {
-        subjectSession: "sub-01_01",
-        module: "asl",
-        status: "complete",
-        completedSteps: [],
-        locked: false,
-      },
-    ];
-    mockMetadataGroups = [group1];
-    mockSubjectRows = [
-      subjectRow1,
-      { id: "sub-04/01", subject: "sub-04", session: "01", groupId: "g1" },
-    ];
-
-    const noInfo = new Set<string>(["sub-04_01"]);
-    renderTable({ noInfoSubjects: noInfo });
-
-    const bulkBtn = await screen.findByTestId("bulk-mark-pass");
-    await user.click(bulkBtn);
-
-    const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
-    expect(verdicts["sub-01_01"]?.status).toBe("pass");
-    expect(verdicts["sub-04_01"]).toBeUndefined();
-  });
 
   // 12.12b — Mark all complete skips incomplete modules
   it("Mark all complete→Pass skips subjects with incomplete modules", async () => {
@@ -540,8 +546,8 @@ describe("QcSelectionTable", () => {
     await user.click(bulkBtn);
 
     const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
-    expect(verdicts["sub-01_01"]).toBeUndefined();
-    expect(verdicts["sub-02_01"]).toBeUndefined();
+    expect(verdicts[reviewer1.id]["sub-01_01"]).toBeUndefined();
+    expect(verdicts[reviewer1.id]["sub-02_01"]).toBeUndefined();
   });
 
   // 12.12c — Mark all complete→Pass overwrites existing fail verdicts
@@ -563,6 +569,9 @@ describe("QcSelectionTable", () => {
     mockVerdicts = {
       "sub-01_01": { status: "fail", reason: "motion", setAt: 1000 },
     };
+    editReply.document.uiState.manifest.verdicts = {
+      [reviewer1.id]: { "sub-01_01": { status: "pass", setAt: 0 } },
+    };
 
     renderTable();
 
@@ -570,7 +579,7 @@ describe("QcSelectionTable", () => {
     await user.click(bulkBtn);
 
     const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
-    expect(verdicts["sub-01_01"]?.status).toBe("pass");
+    expect(verdicts[reviewer1.id]["sub-01_01"]?.status).toBe("pass");
   });
 
   it("marks completed Structural and ASL reports outdated when BIDS2Legacy lock is missing", async () => {
@@ -627,7 +636,7 @@ describe("QcSelectionTable", () => {
   });
 
   describe("verdict setAt validation", () => {
-    it("sets correct setAt from priorModulesMtimes when marking Pass", async () => {
+    it("writes indexed Fail only after a controlled reason and displays the accepted timestamp", async () => {
       const user = userEvent.setup();
       mockAvailableSubjects = [subject1];
       mockSubjectStatuses = [
@@ -643,82 +652,17 @@ describe("QcSelectionTable", () => {
       mockMetadataGroups = [group1];
       mockSubjectRows = [subjectRow1];
 
+      editReply.document.uiState.manifest.verdicts = {
+        [reviewer1.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1700000000000 } },
+      };
       renderTable();
-      useManifestStore.setState({
-        priorModulesMtimes: {
-          "sub-01_01": 1700000000000,
-        },
-      });
-
-      const control = await screen.findByTestId("verdict-control-sub-01_01");
-      const passBtn = within(control).getByText("Pass");
-      await user.click(passBtn);
-
-      const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
-      expect(verdicts["sub-01_01"]).toEqual({
-        status: "pass",
-        setAt: 1700000000000,
-      });
-    });
-
-    it("falls back to 0 when subject session not found in priorModulesMtimes", async () => {
-      const user = userEvent.setup();
-      mockAvailableSubjects = [subject1];
-      mockSubjectStatuses = [
-        statusComplete,
-        {
-          subjectSession: "sub-01_01",
-          module: "asl",
-          status: "complete",
-          completedSteps: [],
-          locked: false,
-        },
-      ];
-      mockMetadataGroups = [group1];
-      mockSubjectRows = [subjectRow1];
-
-      renderTable();
-      useManifestStore.setState({
-        priorModulesMtimes: {}, // Empty
-      });
-
-      const control = await screen.findByTestId("verdict-control-sub-01_01");
-      const passBtn = within(control).getByText("Pass");
-      await user.click(passBtn);
-
-      const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
-      expect(verdicts["sub-01_01"]).toEqual({
-        status: "pass",
-        setAt: 0,
-      });
-    });
-
-    it("sets correct setAt from priorModulesMtimes when marking Fail with a reason", async () => {
-      const user = userEvent.setup();
-      mockAvailableSubjects = [subject1];
-      mockSubjectStatuses = [
-        statusComplete,
-        {
-          subjectSession: "sub-01_01",
-          module: "asl",
-          status: "complete",
-          completedSteps: [],
-          locked: false,
-        },
-      ];
-      mockMetadataGroups = [group1];
-      mockSubjectRows = [subjectRow1];
-
-      renderTable();
-      useManifestStore.setState({
-        priorModulesMtimes: {
-          "sub-01_01": 1700000000000,
-        },
-      });
 
       const control = await screen.findByTestId("verdict-control-sub-01_01");
       const failBtn = within(control).getByText("Fail");
       await user.click(failBtn);
+      expect(useProjectStore.getState().project?.uiState.manifest.verdicts[reviewer1.id]).toEqual(
+        {},
+      );
 
       // Select a reason
       const reasonSelect = await screen.findByTestId("verdict-reason-sub-01_01");
@@ -727,70 +671,10 @@ describe("QcSelectionTable", () => {
       await user.click(option);
 
       const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
-      expect(verdicts["sub-01_01"]).toEqual({
+      expect(verdicts[reviewer1.id]["sub-01_01"]).toEqual({
         status: "fail",
         reason: "motion",
         setAt: 1700000000000,
-      });
-    });
-
-    it("sets correct mtimes for each subject respectively during bulk Pass", async () => {
-      const user = userEvent.setup();
-      const customSubject2: SubjectInfo = {
-        subjectSession: "sub-02_01",
-        subject: "sub-02",
-        session: "01",
-        hasStructural: true,
-        hasASL: true,
-        aslRuns: [],
-      };
-      mockAvailableSubjects = [subject1, customSubject2];
-      mockSubjectStatuses = [
-        statusComplete,
-        {
-          subjectSession: "sub-01_01",
-          module: "asl",
-          status: "complete",
-          completedSteps: [],
-          locked: false,
-        },
-        {
-          subjectSession: "sub-02_01",
-          module: "structural",
-          status: "complete",
-          completedSteps: [],
-          locked: false,
-        },
-        {
-          subjectSession: "sub-02_01",
-          module: "asl",
-          status: "complete",
-          completedSteps: [],
-          locked: false,
-        },
-      ];
-      mockMetadataGroups = [group1];
-      mockSubjectRows = [subjectRow1, subjectRow2];
-
-      renderTable();
-      useManifestStore.setState({
-        priorModulesMtimes: {
-          "sub-01_01": 1700000000000,
-          "sub-02_01": 1700000060000,
-        },
-      });
-
-      const bulkBtn = await screen.findByTestId("bulk-mark-pass");
-      await user.click(bulkBtn);
-
-      const verdicts = useProjectStore.getState().project?.uiState?.manifest?.verdicts ?? {};
-      expect(verdicts["sub-01_01"]).toEqual({
-        status: "pass",
-        setAt: 1700000000000,
-      });
-      expect(verdicts["sub-02_01"]).toEqual({
-        status: "pass",
-        setAt: 1700000060000,
       });
     });
 

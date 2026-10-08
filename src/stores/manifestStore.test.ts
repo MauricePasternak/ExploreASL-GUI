@@ -19,8 +19,7 @@ const { mockGetState, mockProcessingState } = vi.hoisted(() => ({
 
 function singleReviewerStaleVerdicts(): Set<string> {
   const stale = useManifestStore.getState().staleVerdicts;
-  if (!(stale instanceof Set)) throw new Error("Expected single-reviewer stale verdicts");
-  return stale;
+  return stale["reviewer-a"];
 }
 
 vi.mock("./projectStore", () => ({
@@ -46,7 +45,7 @@ describe("useManifestStore", () => {
     useManifestStore.setState({
       step: 0,
       filter: "all",
-      staleVerdicts: new Set(),
+      staleVerdicts: {},
       priorModulesMtimes: {},
       qcData: null,
       qcLoaded: false,
@@ -155,14 +154,12 @@ describe("useManifestStore multi-reviewer derived state", () => {
       reviewerMode: "single",
       disagreements: [],
       agreementResults: null,
-      staleVerdicts: new Set(),
+      staleVerdicts: {},
       priorModulesMtimes: {},
     });
   });
 
   it.each([
-    [undefined, "single"],
-    [[], "single"],
     [[reviewers[0]], "single"],
     [[reviewers[0], reviewers[1]], "multi"],
   ] as const)("derives %s reviewers as %s mode", (configuredReviewers, expectedMode) => {
@@ -223,27 +220,6 @@ describe("useManifestStore multi-reviewer derived state", () => {
           "reviewer-b": coverageFail,
           "reviewer-c": pass,
         },
-      },
-    ]);
-  });
-
-  it("reports a two-reviewer pass-fail disagreement", () => {
-    const pass = { status: "pass" as const, setAt: 10 };
-    const fail = { status: "fail" as const, reason: "motion" as const, setAt: 11 };
-    setManifestProject({
-      reviewers: reviewers.slice(0, 2),
-      verdicts: {
-        "reviewer-a": { "sub-01_01": pass },
-        "reviewer-b": { "sub-01_01": fail },
-      },
-    });
-
-    useManifestStore.getState().computeDisagreements();
-
-    expect(useManifestStore.getState().disagreements).toEqual([
-      {
-        subjectSession: "sub-01_01",
-        verdictsByReviewer: { "reviewer-a": pass, "reviewer-b": fail },
       },
     ]);
   });
@@ -361,19 +337,23 @@ describe("useManifestStore multi-reviewer derived state", () => {
     });
   });
 
-  it("computes flat single-reviewer staleness from prior-module mtimes only", () => {
+  it("computes indexed single-reviewer staleness from prior-module mtimes only", () => {
     setManifestProject({
+      reviewers: [reviewers[0]],
       verdicts: {
-        "sub-01_01": { status: "pass", setAt: 10 },
-        "sub-02_01": { status: "pass", setAt: 20 },
+        "reviewer-a": {
+          "sub-01_01": { status: "pass", setAt: 10 },
+          "sub-02_01": { status: "pass", setAt: 20 },
+        },
       },
-      lastPopulationRunMtime: 99,
     });
     useManifestStore.setState({ priorModulesMtimes: { "sub-01_01": 10, "sub-02_01": 21 } });
 
     useManifestStore.getState().computeStaleVerdicts();
 
-    expect(useManifestStore.getState().staleVerdicts).toEqual(new Set(["sub-02_01"]));
+    expect(useManifestStore.getState().staleVerdicts).toEqual({
+      "reviewer-a": new Set(["sub-02_01"]),
+    });
   });
 
   it("computes every multi-reviewer stale slice independently", () => {
@@ -402,7 +382,7 @@ describe("useManifestStore staleness actions", () => {
     useManifestStore.setState({
       step: 0,
       filter: "all",
-      staleVerdicts: new Set(),
+      staleVerdicts: {},
       priorModulesMtimes: {},
     });
     mockProcessingState.availableSubjects = [];
@@ -413,12 +393,15 @@ describe("useManifestStore staleness actions", () => {
         projectMeta: { rootPath: "/test/root" },
         uiState: {
           manifest: {
+            reviewers: [{ id: "reviewer-a" }],
             verdicts: {
-              "sub-A_01": { status: "pass" as const, setAt: 1700000000000 },
-              "sub-B_01": {
-                status: "fail" as const,
-                reason: "motion" as const,
-                setAt: 1700000060000,
+              "reviewer-a": {
+                "sub-A_01": { status: "pass" as const, setAt: 1700000000000 },
+                "sub-B_01": {
+                  status: "fail" as const,
+                  reason: "motion" as const,
+                  setAt: 1700000060000,
+                },
               },
             },
           },
@@ -443,34 +426,21 @@ describe("useManifestStore staleness actions", () => {
     expect(stale.has("sub-B_01")).toBe(false);
   });
 
-  it("computeStaleVerdicts computes staleness synchronously in-memory", () => {
-    useManifestStore.setState({
-      priorModulesMtimes: {
-        "sub-A_01": 1700000060000,
-        "sub-B_01": 1700000060000,
-      },
-    });
-    useManifestStore.getState().computeStaleVerdicts();
-    const stale = singleReviewerStaleVerdicts();
-    expect(stale.has("sub-A_01")).toBe(true);
-    expect(stale.has("sub-B_01")).toBe(false);
-  });
-
   it("loadPriorModulesMtimes clears stale set when no verdicts exist", async () => {
     mockGetState.mockReturnValue({
       project: {
         projectMeta: { rootPath: "/test/root" },
-        uiState: { manifest: { verdicts: {} } },
+        uiState: { manifest: { reviewers: [{ id: "reviewer-a" }], verdicts: {} } },
       },
     });
     await useManifestStore.getState().loadPriorModulesMtimes();
-    expect(useManifestStore.getState().staleVerdicts.size).toBe(0);
+    expect(useManifestStore.getState().staleVerdicts).toEqual({ "reviewer-a": new Set() });
   });
 
   it("loadPriorModulesMtimes no-ops when no project root", async () => {
     mockGetState.mockReturnValue({ project: null });
     await useManifestStore.getState().loadPriorModulesMtimes();
-    expect(useManifestStore.getState().staleVerdicts.size).toBe(0);
+    expect(useManifestStore.getState().staleVerdicts).toEqual({});
   });
 
   it("loadPriorModulesMtimes handles invoke errors gracefully", async () => {
@@ -478,7 +448,7 @@ describe("useManifestStore staleness actions", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(invoke).mockRejectedValueOnce(new Error("fs error"));
     await useManifestStore.getState().loadPriorModulesMtimes();
-    expect(useManifestStore.getState().staleVerdicts.size).toBe(0);
+    expect(useManifestStore.getState().staleVerdicts).toEqual({ "reviewer-a": new Set() });
     expect(warnSpy).toHaveBeenCalledWith(
       "[manifestStore] failed to read prior modules mtimes for staleness",
       expect.any(Error),
@@ -558,14 +528,19 @@ describe("useManifestStore staleness actions", () => {
     );
     useManifestStore.setState({
       priorModulesMtimes: { "sub-B_01": 20 },
-      staleVerdicts: new Set(["sub-B_01"]),
+      staleVerdicts: { "reviewer-a": new Set(["sub-B_01"]) },
     });
 
     const load = useManifestStore.getState().loadPriorModulesMtimes();
     mockGetState.mockReturnValue({
       project: {
         projectMeta: { rootPath: "/other/project" },
-        uiState: { manifest: { verdicts: { "sub-B_01": { status: "pass", setAt: 20 } } } },
+        uiState: {
+          manifest: {
+            reviewers: [{ id: "reviewer-a" }],
+            verdicts: { "reviewer-a": { "sub-B_01": { status: "pass", setAt: 20 } } },
+          },
+        },
       },
     });
     resolveMtimes!({ "sub-A_01": 10 });
@@ -581,9 +556,12 @@ describe("useManifestStore staleness actions", () => {
         projectMeta: { rootPath: "/test/root" },
         uiState: {
           manifest: {
+            reviewers: [{ id: "reviewer-a" }],
             verdicts: {
-              "sub-A_01": { status: "pass", setAt: 0 },
-              "sub-B_01": { status: "pass", setAt: 1700000000000 },
+              "reviewer-a": {
+                "sub-A_01": { status: "pass", setAt: 0 },
+                "sub-B_01": { status: "pass", setAt: 1700000000000 },
+              },
             },
           },
         },

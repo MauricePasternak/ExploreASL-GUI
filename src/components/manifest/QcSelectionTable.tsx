@@ -21,7 +21,6 @@ import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import { FAIL_REASON_LABELS, MAX_REVIEWERS } from "../../schemas/manifestSchemas";
 import {
   MANIFEST_FAIL_REASONS,
-  ManifestVerdictSchema,
   type ManifestVerdict,
   type ManifestFailReason,
 } from "../../schemas/project";
@@ -74,41 +73,22 @@ const EMPTY_VERDICTS: FlatManifestVerdicts = {};
 const EMPTY_STALE_VERDICTS = new Set<string>();
 const EMPTY_PENDING_FAILS: PendingFails = new Map();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isFlatManifestVerdicts(value: unknown): value is FlatManifestVerdicts {
-  return (
-    isRecord(value) &&
-    Object.values(value).every((verdict) => ManifestVerdictSchema.safeParse(verdict).success)
-  );
-}
-
 function isManifestFailReason(value: string): value is ManifestFailReason {
   return MANIFEST_FAIL_REASONS.some((reason) => reason === value);
 }
 
 function verdictSlice(
-  value: unknown,
-  multiReviewerMode: boolean,
+  value: Record<string, FlatManifestVerdicts> | undefined,
   reviewerId: string | undefined,
 ): FlatManifestVerdicts {
-  if (!multiReviewerMode) return isFlatManifestVerdicts(value) ? value : EMPTY_VERDICTS;
-  if (!reviewerId || !isRecord(value)) return EMPTY_VERDICTS;
-  const reviewerVerdicts = value[reviewerId];
-  return isFlatManifestVerdicts(reviewerVerdicts) ? reviewerVerdicts : EMPTY_VERDICTS;
+  return reviewerId ? (value?.[reviewerId] ?? EMPTY_VERDICTS) : EMPTY_VERDICTS;
 }
 
 function staleVerdictSlice(
-  value: unknown,
-  multiReviewerMode: boolean,
+  value: Record<string, Set<string>>,
   reviewerId: string | undefined,
 ): Set<string> {
-  if (!multiReviewerMode) return value instanceof Set ? value : EMPTY_STALE_VERDICTS;
-  if (!reviewerId || !isRecord(value)) return EMPTY_STALE_VERDICTS;
-  const reviewerStaleVerdicts = value[reviewerId];
-  return reviewerStaleVerdicts instanceof Set ? reviewerStaleVerdicts : EMPTY_STALE_VERDICTS;
+  return reviewerId ? (value[reviewerId] ?? EMPTY_STALE_VERDICTS) : EMPTY_STALE_VERDICTS;
 }
 
 const FILTER_OPTIONS: { label: string; value: FilterValue }[] = [
@@ -137,22 +117,19 @@ export default function QcSelectionTable({
   const reviewers = useProjectStore((s) => s.project?.uiState?.manifest?.reviewers);
   const reviewerCount = reviewers?.length ?? 0;
   const activeReviewerId = useProjectStore((s) => s.project?.uiState?.manifest?.activeReviewerId);
-  const multiReviewerMode = reviewerCount > 1;
   const selectedReviewerId = reviewerId ?? activeReviewerId;
-  const scopedReviewerId =
-    multiReviewerMode && reviewers?.some((reviewer) => reviewer.id === selectedReviewerId)
-      ? selectedReviewerId
-      : undefined;
-  const verdictScopeKey = multiReviewerMode ? (scopedReviewerId ?? "unselected") : "single";
+  const scopedReviewerId = reviewers?.some((reviewer) => reviewer.id === selectedReviewerId)
+    ? selectedReviewerId
+    : undefined;
+  const verdictScopeKey = scopedReviewerId ?? "unselected";
   const verdicts = useProjectStore((s) =>
-    verdictSlice(s.project?.uiState?.manifest?.verdicts, multiReviewerMode, scopedReviewerId),
+    verdictSlice(s.project?.uiState?.manifest?.verdicts, scopedReviewerId),
   );
   const staleVerdicts = useManifestStore((s) =>
-    staleVerdictSlice(s.staleVerdicts, multiReviewerMode, scopedReviewerId),
+    staleVerdictSlice(s.staleVerdicts, scopedReviewerId),
   );
   const qcData = useManifestStore((s) => s.qcData);
   const qcLoaded = useManifestStore((s) => s.qcLoaded);
-  const priorModulesMtimes = useManifestStore((s) => s.priorModulesMtimes);
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
 
   const [logFiles, setLogFiles] = useState<Map<string, LogFileInfo[]>>(new Map());
@@ -242,6 +219,14 @@ export default function QcSelectionTable({
   const [page, setPage] = useState(1);
   const [pendingFailsByScope, setPendingFailsByScope] = useState<PendingFailsByScope>(new Map());
   const pendingFails = pendingFailsByScope.get(verdictScopeKey) ?? EMPTY_PENDING_FAILS;
+  const setDraftError = useProjectStore((s) => s.setDraftError);
+  useEffect(() => {
+    setDraftError(
+      "manifest:qc",
+      pendingFailsByScope.size ? "Complete pending Fail verdicts" : null,
+    );
+    return () => setDraftError("manifest:qc", null);
+  }, [pendingFailsByScope, setDraftError]);
 
   const updatePendingFails = useCallback(
     (update: (pendingFails: PendingFails) => void) => {
@@ -289,20 +274,23 @@ export default function QcSelectionTable({
     (subjectSession: string, value: string) => {
       if (value === "pass") {
         updatePendingFails((pendingFailsForScope) => pendingFailsForScope.delete(subjectSession));
-        const mtime = priorModulesMtimes[subjectSession] ?? 0;
         useProjectStore
           .getState()
-          .setManifestVerdict(subjectSession, "pass", { setAt: mtime }, scopedReviewerId);
+          .setManifestVerdict(subjectSession, "pass", {}, scopedReviewerId)
+          .catch(() => undefined);
       } else if (value === "fail") {
         updatePendingFails((pendingFailsForScope) =>
           pendingFailsForScope.set(subjectSession, undefined),
         );
       } else if (value === "neutral") {
         updatePendingFails((pendingFailsForScope) => pendingFailsForScope.delete(subjectSession));
-        useProjectStore.getState().removeManifestVerdict(subjectSession, scopedReviewerId);
+        useProjectStore
+          .getState()
+          .removeManifestVerdict(subjectSession, scopedReviewerId)
+          .catch(() => undefined);
       }
     },
-    [priorModulesMtimes, scopedReviewerId, updatePendingFails],
+    [scopedReviewerId, updatePendingFails],
   );
 
   const handleReasonChange = useCallback(
@@ -312,12 +300,13 @@ export default function QcSelectionTable({
       updatePendingFails((pendingFailsForScope) =>
         pendingFailsForScope.set(subjectSession, reason),
       );
-      const mtime = priorModulesMtimes[subjectSession] ?? 0;
       useProjectStore
         .getState()
-        .setManifestVerdict(subjectSession, "fail", { reason, setAt: mtime }, scopedReviewerId);
+        .setManifestVerdict(subjectSession, "fail", { reason }, scopedReviewerId)
+        .then(() => updatePendingFails((pending) => pending.delete(subjectSession)))
+        .catch(() => undefined);
     },
-    [priorModulesMtimes, scopedReviewerId, updatePendingFails],
+    [scopedReviewerId, updatePendingFails],
   );
 
   const handleNotesBlur = useCallback(
@@ -329,9 +318,10 @@ export default function QcSelectionTable({
         .setManifestVerdict(
           subjectSession,
           current.status,
-          { reason: current.reason, notes: notes || undefined, setAt: current.setAt },
+          { reason: current.reason, notes: notes || undefined },
           scopedReviewerId,
-        );
+        )
+        .catch(() => undefined);
     },
     [verdicts, scopedReviewerId],
   );
@@ -767,29 +757,27 @@ export default function QcSelectionTable({
   const handleBulkMarkPass = useCallback(() => {
     for (const row of rows) {
       if (row.structuralStatus === "complete" && row.aslStatus === "complete" && !row.noInfo) {
-        const mtime = priorModulesMtimes[row.subjectSession] ?? 0;
         useProjectStore
           .getState()
-          .setManifestVerdict(row.subjectSession, "pass", { setAt: mtime }, scopedReviewerId);
+          .setManifestVerdict(row.subjectSession, "pass", {}, scopedReviewerId)
+          .catch(() => undefined);
       }
     }
-  }, [rows, priorModulesMtimes, scopedReviewerId]);
+  }, [rows, scopedReviewerId]);
 
   const hasNeutral = useMemo(() => {
-    const visible = filter === "all" ? rows : filteredRows;
-    return visible.some((row) => {
+    return rows.some((row) => {
       if (row.noInfo) return false;
       if (pendingFails.has(row.subjectSession)) return false;
       return row.displayedVerdict === "neutral";
     });
-  }, [rows, filteredRows, filter, pendingFails]);
+  }, [rows, pendingFails]);
 
   const hasPendingFails = useMemo(() => {
-    const visible = filter === "all" ? rows : filteredRows;
-    return visible.some(
+    return rows.some(
       (row) => pendingFails.has(row.subjectSession) && !pendingFails.get(row.subjectSession),
     );
-  }, [rows, filteredRows, filter, pendingFails]);
+  }, [rows, pendingFails]);
 
   const nextReady = !hasNeutral && !hasPendingFails;
 

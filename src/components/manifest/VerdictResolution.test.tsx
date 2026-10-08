@@ -15,6 +15,10 @@ import VerdictResolution from "./VerdictResolution";
 import { areDisagreementsResolved } from "./VerdictResolution.helpers";
 import { useManifestStore, type ManifestDisagreement } from "../../stores/manifestStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { projectFixture } from "../../test/projectFixtures";
+import { projectView } from "../../schemas/project";
+import { invoke } from "@tauri-apps/api/core";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 
 mockFetchLogContent.mockRejectedValue(new Error("Failed to load logs"));
 
@@ -50,7 +54,7 @@ const disagreements: ManifestDisagreement[] = [
 
 describe("areDisagreementsResolved", () => {
   it("accepts an empty current disagreement set without resolutions", () => {
-    expect(areDisagreementsResolved([], undefined)).toBe(true);
+    expect(areDisagreementsResolved([], {})).toBe(true);
   });
 
   it("ignores stale resolutions and requires every current disagreement", () => {
@@ -73,28 +77,21 @@ function setState(
   resolvedVerdicts: Record<string, unknown> | undefined = undefined,
 ) {
   useProjectStore.setState({
-    project: {
-      version: "0.1.0",
-      projectMeta: {
-        id: "project-1",
-        name: "Verdict resolution",
-        rootPath: "/project",
-        createdAt: "2026-08-08T00:00:00.000Z",
-        lastOpened: "2026-08-08T00:00:00.000Z",
-        currentPhase: "manifest",
-        dataSource: "dicom",
-      },
-      uiState: {
-        processing: { population: { lastRun: { Mtime: 99 } } },
-        manifest: {
-          reviewers,
-          verdicts: {},
-          ...(resolvedVerdicts ? { resolvedVerdicts } : {}),
+    project: projectView(
+      projectFixture("project-1", "Verdict resolution", "/project", {
+        uiState: {
+          processing: { population: { lastRun: { profileId: "profile", Mtime: 99 } } },
+          manifest: {
+            reviewers,
+            activeReviewerId: reviewers[0].id,
+            verdicts: {},
+            resolvedVerdicts: (resolvedVerdicts as any) ?? {},
+          },
         },
-      },
-      mappingState: {},
-      dataPar: {},
-    } as any,
+        mappingState: {},
+        dataPar: {},
+      }),
+    ),
     isDirty: false,
     loaded: true,
   });
@@ -110,6 +107,13 @@ function setState(
       },
     },
   });
+  activateProjectLease("project-1", "/project");
+  return {
+    ...projectFixture("project-1", "Verdict resolution", "/project", {
+      uiState: { manifest: structuredClone(useProjectStore.getState().project!.uiState.manifest) },
+    }),
+    acceptedRevision: 1,
+  };
 }
 
 function renderResolution() {
@@ -122,6 +126,9 @@ function renderResolution() {
 
 afterEach(() => {
   cleanup();
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
+  vi.mocked(invoke).mockReset();
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
   useManifestStore.setState({ disagreements: [], priorModulesMtimes: {}, qcData: null });
   vi.restoreAllMocks();
@@ -186,7 +193,7 @@ describe("VerdictResolution", () => {
 
   it("keeps fail pending until a controlled reason is selected and writes pass resolutions", async () => {
     const user = userEvent.setup();
-    setState();
+    const reply = setState();
     const setResolvedVerdict = vi.spyOn(useProjectStore.getState(), "setResolvedVerdict");
 
     renderResolution();
@@ -196,15 +203,23 @@ describe("VerdictResolution", () => {
     );
     expect(screen.getByTestId("final-reason-sub-01_01")).toBeInTheDocument();
     expect(setResolvedVerdict).not.toHaveBeenCalled();
+    reply.document.uiState.manifest.resolvedVerdicts["sub-01_01"] = {
+      status: "fail",
+      reason: "motion",
+      setAt: 10,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(structuredClone(reply));
 
     await user.click(screen.getByTestId("final-reason-sub-01_01"));
     await user.click(screen.getByRole("option", { name: "Motion", hidden: true }));
     expect(setResolvedVerdict).toHaveBeenCalledWith("sub-01_01", "fail", {
       reason: "motion",
       notes: undefined,
-      setAt: 10,
     });
 
+    reply.acceptedRevision = 2;
+    reply.document.uiState.manifest.resolvedVerdicts["sub-02_02"] = { status: "pass", setAt: 20 };
+    vi.mocked(invoke).mockResolvedValueOnce(reply);
     await user.click(
       screen.getByTestId("final-verdict-sub-02_02").querySelector("input[value='pass']")!,
     );
@@ -215,7 +230,16 @@ describe("VerdictResolution", () => {
 
   it("displays existing resolutions and permits overwriting them", async () => {
     const user = userEvent.setup();
-    setState(disagreements, { "sub-01_01": { status: "pass", notes: "prior", setAt: 1 } });
+    const reply = setState(disagreements, {
+      "sub-01_01": { status: "pass", notes: "prior", setAt: 1 },
+    });
+    reply.document.uiState.manifest.resolvedVerdicts["sub-01_01"] = {
+      status: "fail",
+      reason: "artifact",
+      notes: "prior",
+      setAt: 10,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(reply);
 
     renderResolution();
 
@@ -231,7 +255,7 @@ describe("VerdictResolution", () => {
     ).toMatchObject({ status: "fail", reason: "artifact", setAt: 10 });
   });
 
-  it("removes an existing pass while a replacement fail lacks its required reason", async () => {
+  it("preserves accepted pass and blocks flush while a replacement fail lacks its required reason", async () => {
     const user = userEvent.setup();
     setState(disagreements, { "sub-01_01": { status: "pass", notes: "prior", setAt: 1 } });
 
@@ -242,7 +266,10 @@ describe("VerdictResolution", () => {
 
     expect(
       useProjectStore.getState().project?.uiState.manifest?.resolvedVerdicts?.["sub-01_01"],
-    ).toBeUndefined();
+    ).toEqual({ status: "pass", notes: "prior", setAt: 1 });
+    await expect(useProjectStore.getState().flushEdits()).rejects.toThrow(
+      "Complete pending Fail resolutions",
+    );
     expect(screen.getByTestId("resolution-state-sub-01_01")).toHaveTextContent("Pending");
     expect(screen.getByTestId("final-reason-sub-01_01")).toHaveAccessibleName(
       "Failure reason for sub-01_01",
@@ -252,9 +279,11 @@ describe("VerdictResolution", () => {
 
   it("bulk-copies each reviewer verdict only into unresolved rows and derives completion", async () => {
     const user = userEvent.setup();
-    setState(disagreements, {
+    const reply = setState(disagreements, {
       "sub-01_01": { status: "pass", notes: "manual", setAt: 1 },
     });
+    reply.document.uiState.manifest.resolvedVerdicts["sub-02_02"] = { status: "pass", setAt: 20 };
+    vi.mocked(invoke).mockResolvedValueOnce(reply);
 
     renderResolution();
 

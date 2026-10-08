@@ -40,15 +40,13 @@ function isMultiReviewerMode(
 function resolveFinalVerdict(
   subjectSession: string,
   reviewers: readonly Reviewer[] | undefined,
-  verdicts: Record<string, ManifestVerdict> | NestedVerdicts,
+  verdicts: NestedVerdicts,
   resolvedVerdicts: Record<string, ManifestVerdict> | undefined,
 ): ManifestVerdict | undefined {
   const resolved = resolvedVerdicts?.[subjectSession];
   if (resolved) return resolved;
-  if (!isMultiReviewerMode(reviewers)) {
-    return (verdicts as Record<string, ManifestVerdict>)[subjectSession];
-  }
-  const reviewerVerdicts = verdicts as NestedVerdicts;
+  if (!reviewers?.length) return undefined;
+  const reviewerVerdicts = verdicts;
   const entries = reviewers.map((reviewer) => reviewerVerdicts[reviewer.id]?.[subjectSession]);
   if (entries.some((verdict) => verdict === undefined)) return undefined;
   return entries.every((verdict) => verdict?.status === entries[0]?.status)
@@ -118,12 +116,11 @@ function agreementFor(
 
 function hasVerdictEntries(
   reviewers: readonly Reviewer[] | undefined,
-  verdicts: Record<string, ManifestVerdict> | NestedVerdicts | undefined,
+  verdicts: NestedVerdicts | undefined,
 ): boolean {
   if (!verdicts) return false;
-  if (!isMultiReviewerMode(reviewers)) return Object.keys(verdicts).length > 0;
-  return reviewers.some(
-    (reviewer) => Object.keys((verdicts as NestedVerdicts)[reviewer.id] ?? {}).length > 0,
+  return Boolean(
+    reviewers?.some((reviewer) => Object.keys(verdicts[reviewer.id] ?? {}).length > 0),
   );
 }
 
@@ -170,8 +167,7 @@ function useBuildManifestPayload(): ManifestPayload {
 
   const reviewers = project?.uiState?.manifest?.reviewers as Reviewer[] | undefined;
   const multiReviewers = isMultiReviewerMode(reviewers) ? reviewers : undefined;
-  const verdicts = (project?.uiState?.manifest?.verdicts ?? {}) as
-    Record<string, ManifestVerdict> | NestedVerdicts;
+  const verdicts = project?.uiState?.manifest?.verdicts ?? {};
   const resolvedVerdicts = project?.uiState?.manifest?.resolvedVerdicts;
   const lastRun = project?.uiState?.processing?.population?.lastRun;
   const versions = {
@@ -410,10 +406,10 @@ function useBuildManifestPayload(): ManifestPayload {
 
   const pipelineParagraph = `Data were processed with ExploreASL (version ${versions.exploreASL ?? "unknown"}) running in MATLAB ${versions.matlab ?? "unknown"} through the ExploreASL GUI (version ${versions.gui ?? "unknown"}). This manifest covers ${nSubjects} subjects across ${nGroups} groups.`;
 
-  const fullDataPar: DataParState = {
+  const fullDataPar = {
     ...getDefaultDataPar(),
     ...flattenRunDataPar((dataPar ?? {}) as Record<string, unknown>),
-  };
+  } as DataParState;
   const { paragraphs: methodsParagraphs, references: methodsReferences } =
     generateMethodsParagraph(fullDataPar);
 
@@ -459,8 +455,7 @@ export default function ManifestPreview() {
   const payload = useBuildManifestPayload();
   const project = useProjectStore((s) => s.project);
   const reviewers = project?.uiState?.manifest?.reviewers as Reviewer[] | undefined;
-  const rawVerdicts = project?.uiState?.manifest?.verdicts as
-    Record<string, ManifestVerdict> | NestedVerdicts | undefined;
+  const rawVerdicts = project?.uiState?.manifest?.verdicts;
   const exportDisabled = !hasVerdictEntries(reviewers, rawVerdicts);
 
   const sanitisedDataPar = sanitiseDataPar(payload.dataPar as Record<string, unknown>);
@@ -521,7 +516,7 @@ export default function ManifestPreview() {
             await writeTextFile(
               path,
               generateVerdictsCsv({
-                reviewers,
+                reviewers: reviewers ?? [],
                 subjectSessions: useProcessingStore
                   .getState()
                   .availableSubjects.map((subject) => subject.subjectSession),

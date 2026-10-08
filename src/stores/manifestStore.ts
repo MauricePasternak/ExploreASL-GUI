@@ -1,11 +1,7 @@
 import { create } from "zustand";
 import { readAllSubjectQcOutputs, type SubjectQcOutputs } from "../lib/manifestQc";
 import { cohensKappa, fleissKappa, type KappaResult } from "../lib/interRaterAgreement";
-import {
-  ManifestVerdictSchema,
-  type ManifestUiState,
-  type ManifestVerdict,
-} from "../schemas/project";
+import { type ManifestUiState, type ManifestVerdict } from "../schemas/project";
 import type { ReviewerMode } from "../schemas/manifestSchemas";
 import { useProjectStore } from "./projectStore";
 import { useProcessingStore } from "./processingStore";
@@ -26,7 +22,7 @@ export interface AgreementResults {
   perGroup: Record<string, KappaResult>;
 }
 
-export type StaleVerdicts = Set<string> | Record<string, Set<string>>;
+export type StaleVerdicts = Record<string, Set<string>>;
 
 interface ManifestState {
   step: 0 | 1 | 2;
@@ -59,7 +55,7 @@ function createInitialManifestState() {
     reviewerMode: "single" as const,
     disagreements: [],
     agreementResults: null,
-    staleVerdicts: new Set<string>(),
+    staleVerdicts: {} as StaleVerdicts,
     priorModulesMtimes: {},
     qcData: null,
     qcLoaded: false,
@@ -68,40 +64,12 @@ function createInitialManifestState() {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isManifestVerdict(value: unknown): value is ManifestVerdict {
-  return ManifestVerdictSchema.safeParse(value).success;
-}
-
-function isFlatManifestVerdicts(value: unknown): value is FlatManifestVerdicts {
-  return isRecord(value) && Object.values(value).every(isManifestVerdict);
-}
-
 function reviewerMode(manifest: ManifestUiState | undefined): ReviewerMode {
   return (manifest?.reviewers?.length ?? 0) >= 2 ? "multi" : "single";
 }
 
-function flatVerdicts(manifest: ManifestUiState | undefined): FlatManifestVerdicts {
-  return isFlatManifestVerdicts(manifest?.verdicts) ? manifest.verdicts : {};
-}
-
-function nestedVerdicts(manifest: ManifestUiState | undefined): NestedManifestVerdicts {
-  if (!isRecord(manifest?.verdicts)) return {};
-
-  return Object.entries(manifest.verdicts).reduce<NestedManifestVerdicts>(
-    (slices, [reviewerId, verdicts]) => {
-      if (isFlatManifestVerdicts(verdicts)) slices[reviewerId] = verdicts;
-      return slices;
-    },
-    {},
-  );
-}
-
 function registeredReviewerVerdicts(manifest: ManifestUiState | undefined): NestedManifestVerdicts {
-  const verdicts = nestedVerdicts(manifest);
+  const verdicts = manifest?.verdicts ?? {};
   return (manifest?.reviewers ?? []).reduce<NestedManifestVerdicts>((slices, reviewer) => {
     slices[reviewer.id] = verdicts[reviewer.id] ?? {};
     return slices;
@@ -114,7 +82,7 @@ function completeSubjectSessions(verdictsByReviewer: NestedManifestVerdicts): st
 
   return Array.from(new Set(reviewerVerdicts.flatMap(Object.keys)))
     .filter((subjectSession) =>
-      reviewerVerdicts.every((verdicts) => isManifestVerdict(verdicts[subjectSession])),
+      reviewerVerdicts.every((verdicts) => verdicts[subjectSession] !== undefined),
     )
     .sort();
 }
@@ -126,7 +94,7 @@ function completeVerdictsForSubject(
   const fullVerdicts: Record<string, ManifestVerdict> = {};
   for (const [reviewerId, verdicts] of Object.entries(verdictsByReviewer)) {
     const verdict = verdicts[subjectSession];
-    if (!isManifestVerdict(verdict)) return null;
+    if (!verdict) return null;
     fullVerdicts[reviewerId] = verdict;
   }
   return fullVerdicts;
@@ -190,7 +158,6 @@ function computeKappa(verdictsByReviewer: NestedManifestVerdicts): KappaResult {
 }
 
 function emptyStaleVerdicts(manifest: ManifestUiState | undefined): StaleVerdicts {
-  if (reviewerMode(manifest) === "single") return new Set();
   return Object.fromEntries((manifest?.reviewers ?? []).map(({ id }) => [id, new Set<string>()]));
 }
 
@@ -235,10 +202,7 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
     const currentManifest = () => useProjectStore.getState().project?.uiState?.manifest;
 
     const manifest = project?.uiState?.manifest;
-    const verdicts =
-      reviewerMode(manifest) === "multi"
-        ? Object.values(registeredReviewerVerdicts(manifest)).flatMap(Object.keys)
-        : Object.keys(flatVerdicts(manifest));
+    const verdicts = Object.values(registeredReviewerVerdicts(manifest)).flatMap(Object.keys);
 
     let subjects = useProcessingStore.getState().availableSubjects;
     if (subjects.length === 0) {
@@ -328,36 +292,20 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
     const manifest = project?.uiState?.manifest;
     const priorModulesMtimes = get().priorModulesMtimes;
 
-    if (reviewerMode(manifest) === "multi") {
-      const staleByReviewer = Object.fromEntries(
-        Object.entries(registeredReviewerVerdicts(manifest)).map(([reviewerId, verdicts]) => {
-          const stale = new Set<string>();
-          for (const [subjectSession, verdict] of Object.entries(verdicts)) {
-            if (verdict.setAt === 0) continue;
-            const current = priorModulesMtimes[subjectSession];
-            if (current !== undefined && current !== null && verdict.setAt !== current) {
-              stale.add(subjectSession);
-            }
+    const staleByReviewer = Object.fromEntries(
+      Object.entries(registeredReviewerVerdicts(manifest)).map(([reviewerId, verdicts]) => {
+        const stale = new Set<string>();
+        for (const [subjectSession, verdict] of Object.entries(verdicts)) {
+          if (verdict.setAt === 0) continue;
+          const current = priorModulesMtimes[subjectSession];
+          if (current !== undefined && current !== null && verdict.setAt !== current) {
+            stale.add(subjectSession);
           }
-          return [reviewerId, stale];
-        }),
-      );
-      set({ reviewerMode: "multi", staleVerdicts: staleByReviewer });
-      return;
-    }
-
-    const stale = new Set<string>();
-    for (const [ss, v] of Object.entries(flatVerdicts(manifest))) {
-      // setAt: 0 means the mtime was unknown at capture time (race / missing
-      // subject). Treat as unset rather than stale so the user's freshly-clicked
-      // verdict isn't immediately flagged.
-      if (v.setAt === 0) continue;
-      const current = priorModulesMtimes[ss];
-      if (current !== undefined && current !== null && v.setAt !== current) {
-        stale.add(ss);
-      }
-    }
-    set({ reviewerMode: "single", staleVerdicts: new Set(stale) });
+        }
+        return [reviewerId, stale];
+      }),
+    );
+    set({ reviewerMode: reviewerMode(manifest), staleVerdicts: staleByReviewer });
   },
 
   loadQcData: async (projectRoot) => {

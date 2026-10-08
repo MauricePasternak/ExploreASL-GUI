@@ -42,24 +42,21 @@ export default function ManifestPage() {
         .map(({ subjectSession }) => subjectSession),
     [availableSubjects, qcData, qcLoaded],
   );
-  const multiReviewerNextReady = useMemo(() => {
-    if (!multiReviewer) return false;
-    if (typeof verdicts !== "object" || verdicts === null || Array.isArray(verdicts)) return false;
-
-    const verdictSlices = verdicts as Record<string, Record<string, unknown>>;
-    return reviewers.every((reviewer) => {
-      const reviewerVerdicts = verdictSlices[reviewer.id];
-      return (
-        typeof reviewerVerdicts === "object" &&
-        reviewerVerdicts !== null &&
-        eligibleSubjectSessions.every((subjectSession) => subjectSession in reviewerVerdicts)
-      );
-    });
-  }, [eligibleSubjectSessions, multiReviewer, reviewers, verdicts]);
+  const allReviewersReady =
+    reviewers.length > 0 &&
+    reviewers.every((reviewer) =>
+      eligibleSubjectSessions.every((subjectSession) =>
+        Boolean(verdicts?.[reviewer.id]?.[subjectSession]),
+      ),
+    );
   const disagreements = useMemo(() => deriveDisagreements(manifest), [manifest]);
-  const qcNextReady = multiReviewer ? multiReviewerNextReady : singleReviewerNextReady;
+  const draftErrors = useProjectStore((s) => s.draftErrors);
+  const hasReviewDrafts = Object.keys(draftErrors).some((field) => field.startsWith("manifest:"));
+  const qcNextReady =
+    allReviewersReady && (multiReviewer || singleReviewerNextReady) && !hasReviewDrafts;
   const hasResolutionStep = multiReviewer && disagreements.length > 0;
-  const resolutionsReady = areDisagreementsResolved(disagreements, resolvedVerdicts);
+  const resolutionsReady =
+    areDisagreementsResolved(disagreements, resolvedVerdicts) && !hasReviewDrafts;
   const previewStep = hasResolutionStep ? 2 : 1;
   const activeStep =
     hasResolutionStep && step === 2 && !resolutionsReady ? 1 : Math.min(step, previewStep);
@@ -70,17 +67,6 @@ export default function ManifestPage() {
       loadQcData(projectRoot);
       loadDataPar(projectRoot);
 
-      // Hydrate processing config/phase from project file if available, and scan subjects / lock statuses
-      const project = useProjectStore.getState().project;
-      if (project) {
-        const processing = project.uiState.processing;
-        if (processing?.config) {
-          useProcessingStore.getState().setConfig(processing.config);
-        }
-        if (processing?.currentPhase !== undefined) {
-          useProcessingStore.getState().setPhase(processing.currentPhase);
-        }
-      }
       useProcessingStore.getState().scanAvailableSubjects().catch(console.error);
       useProcessingStore.getState().loadLockFileStatus().catch(console.error);
     }

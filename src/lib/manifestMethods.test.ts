@@ -10,7 +10,7 @@ import {
 } from "./manifestMethods";
 
 function fullState(overrides: Partial<DataParState> = {}): DataParState {
-  return { ...getDefaultDataPar(), ...overrides };
+  return Object.assign(getDefaultDataPar(), overrides);
 }
 
 describe("flattenRunDataPar", () => {

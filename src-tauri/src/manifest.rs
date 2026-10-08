@@ -33,7 +33,7 @@ pub async fn read_prior_modules_mtimes(
 /// `.easl_staging/derivatives/ExploreASL` tree for lock ready files and logs.
 /// Log directories are scanned exactly once and grouped by subject session to
 /// keep the per-subject lookup O(1) rather than O(total log entries).
-fn read_prior_modules_mtimes_impl(
+pub(crate) fn read_prior_modules_mtimes_impl(
     project_root: &Path,
     subject_sessions: &[String],
 ) -> std::collections::HashMap<String, Option<i64>> {

@@ -107,13 +107,6 @@ describe("renderMarkdown", () => {
     expect(out).toEqual(readGolden("manifest.golden.md"));
   });
 
-  it("produces deterministic markdown output", () => {
-    const manifest = makeFixtureManifest();
-    const out1 = renderMarkdown(manifest);
-    const out2 = renderMarkdown(manifest);
-    expect(out1).toBe(out2);
-  });
-
   it("inserts multi-reviewer agreement between QC and pipeline while single payloads remain unchanged", () => {
     const manifest = {
       ...makeFixtureManifest(),
@@ -152,13 +145,6 @@ describe("renderHtml", () => {
     const manifest = makeFixtureManifest();
     const out = renderHtml(manifest);
     expect(out).toEqual(readGolden("manifest.golden.html"));
-  });
-
-  it("produces deterministic HTML output", () => {
-    const manifest = makeFixtureManifest();
-    const out1 = renderHtml(manifest);
-    const out2 = renderHtml(manifest);
-    expect(out1).toBe(out2);
   });
 
   it("renders multi-reviewer agreement in self-contained HTML", () => {

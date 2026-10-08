@@ -1,12 +1,6 @@
-import {
-  ManifestVerdictSchema,
-  MANIFEST_FAIL_REASONS,
-  ReviewerSchema,
-  type ManifestFailReason,
-  type Reviewer,
-} from "./project";
+import { MANIFEST_FAIL_REASONS, type ManifestFailReason, type Reviewer } from "./project";
 
-export { ManifestVerdictSchema, MANIFEST_FAIL_REASONS, ReviewerSchema };
+export { MANIFEST_FAIL_REASONS };
 export type { ManifestFailReason, Reviewer };
 
 export const MAX_REVIEWERS = 5;

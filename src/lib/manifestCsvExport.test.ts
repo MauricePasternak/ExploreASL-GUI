@@ -28,9 +28,10 @@ describe("escapeCsvField", () => {
 describe("generateVerdictsCsv", () => {
   it("renders the exact simplified single-reviewer columns without agreement data", () => {
     const csv = generateVerdictsCsv({
+      reviewers: [{ id: "reviewer-a", label: "First" }],
       subjectSessions: ["sub-01_01"],
       verdicts: {
-        "sub-01_01": { status: "pass", notes: "looks good" },
+        "reviewer-a": { "sub-01_01": { status: "pass", notes: "looks good" } },
       },
       qcMetrics: {
         "sub-01_01": {
@@ -53,7 +54,9 @@ describe("generateVerdictsCsv", () => {
   });
 
   it("retains headers when single-reviewer verdict data is empty", () => {
-    expect(generateVerdictsCsv({ verdicts: {} })).toBe(
+    expect(
+      generateVerdictsCsv({ reviewers: [{ id: "reviewer-a", label: "First" }], verdicts: {} }),
+    ).toBe(
       "SubjectSession,Verdict,Reason,Notes,Coverage_Pct,SpatialCoV,Motion_mm,Motion_Exclusion_Pct",
     );
   });

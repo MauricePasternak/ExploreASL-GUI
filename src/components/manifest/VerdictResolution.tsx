@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
   Box,
@@ -56,7 +56,6 @@ export default function VerdictResolution({
 }: VerdictResolutionProps) {
   const storedDisagreements = useManifestStore((state) => state.disagreements);
   const disagreements = suppliedDisagreements ?? storedDisagreements;
-  const priorModulesMtimes = useManifestStore((state) => state.priorModulesMtimes);
   const qcData = useManifestStore((state) => state.qcData);
   const projectRoot = useProjectStore((state) => state.project?.projectMeta.rootPath);
   const reviewers = useProjectStore(
@@ -66,9 +65,16 @@ export default function VerdictResolution({
     (state) => state.project?.uiState.manifest?.resolvedVerdicts,
   );
   const setResolvedVerdict = useProjectStore((state) => state.setResolvedVerdict);
-  const removeResolvedVerdict = useProjectStore((state) => state.removeResolvedVerdict);
 
   const [pendingFails, setPendingFails] = useState<Record<string, PendingFail>>({});
+  const setDraftError = useProjectStore((state) => state.setDraftError);
+  useEffect(() => {
+    setDraftError(
+      "manifest:resolution",
+      Object.keys(pendingFails).length ? "Complete pending Fail resolutions" : null,
+    );
+    return () => setDraftError("manifest:resolution", null);
+  }, [pendingFails, setDraftError]);
   const [reportSubjectSession, setReportSubjectSession] = useState<string | null>(null);
   const [logSubjectSession, setLogSubjectSession] = useState<string | null>(null);
   const [logContent, setLogContent] = useState<LogContent | null>(null);
@@ -100,22 +106,20 @@ export default function VerdictResolution({
         });
         setResolvedVerdict(subjectSession, "pass", {
           notes: existing?.notes,
-          setAt: priorModulesMtimes[subjectSession] ?? 0,
-        });
+        }).catch(() => undefined);
         return;
       }
 
       if (status === "fail") {
         const existing =
           useProjectStore.getState().project?.uiState.manifest?.resolvedVerdicts?.[subjectSession];
-        if (existing?.status === "pass") removeResolvedVerdict(subjectSession);
         setPendingFails((current) => ({
           ...current,
           [subjectSession]: current[subjectSession] ?? { notes: existing?.notes },
         }));
       }
     },
-    [priorModulesMtimes, removeResolvedVerdict, setResolvedVerdict],
+    [setResolvedVerdict],
   );
 
   const handleReasonChange = useCallback(
@@ -125,14 +129,16 @@ export default function VerdictResolution({
       setResolvedVerdict(subjectSession, "fail", {
         reason,
         notes: pendingFail?.notes,
-        setAt: priorModulesMtimes[subjectSession] ?? 0,
-      });
-      setPendingFails((current) => {
-        const { [subjectSession]: _, ...remaining } = current;
-        return remaining;
-      });
+      })
+        .then(() =>
+          setPendingFails((current) => {
+            const { [subjectSession]: _, ...remaining } = current;
+            return remaining;
+          }),
+        )
+        .catch(() => undefined);
     },
-    [pendingFails, priorModulesMtimes, setResolvedVerdict],
+    [pendingFails, setResolvedVerdict],
   );
 
   const handleNotesBlur = useCallback(
@@ -143,10 +149,9 @@ export default function VerdictResolution({
       setResolvedVerdict(subjectSession, verdict.status, {
         reason: verdict.reason,
         notes: notes || undefined,
-        setAt: priorModulesMtimes[subjectSession] ?? 0,
-      });
+      }).catch(() => undefined);
     },
-    [priorModulesMtimes, setResolvedVerdict],
+    [setResolvedVerdict],
   );
 
   const handleBulkResolve = useCallback(
@@ -160,11 +165,10 @@ export default function VerdictResolution({
         setResolvedVerdict(disagreement.subjectSession, verdict.status, {
           reason: verdict.reason,
           notes: verdict.notes,
-          setAt: priorModulesMtimes[disagreement.subjectSession] ?? 0,
-        });
+        }).catch(() => undefined);
       }
     },
-    [disagreements, priorModulesMtimes, setResolvedVerdict],
+    [disagreements, setResolvedVerdict],
   );
 
   const handleViewLogs = useCallback(
@@ -252,11 +256,11 @@ export default function VerdictResolution({
                   data-testid={`final-verdict-${row.subjectSession}`}
                 />
                 <Badge
-                  color={row.resolution ? "teal" : "yellow"}
+                  color={row.resolution && !pendingFail ? "teal" : "yellow"}
                   variant="light"
                   data-testid={`resolution-state-${row.subjectSession}`}
                 >
-                  {row.resolution ? "Resolved" : "Pending"}
+                  {row.resolution && !pendingFail ? "Resolved" : "Pending"}
                 </Badge>
               </Group>
               {selectedStatus === "fail" && (

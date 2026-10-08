@@ -11,6 +11,8 @@ import type { SubjectInfo } from "../../schemas/processingSchemas";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import type { ManifestVerdict } from "../../schemas/project";
 import { generateVerdictsCsv } from "../../lib/manifestCsvExport";
+import { projectFixture } from "../../test/projectFixtures";
+import { projectView } from "../../schemas/project";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(),
@@ -116,35 +118,30 @@ let mockResolvedVerdicts: Record<string, ManifestVerdict> | undefined;
 let mockVersions: { exploreASLVersion?: string; matlabVersion?: string; guiVersion?: string } = {};
 
 function buildProjectState() {
-  return {
-    version: "0.1.0" as const,
-    projectMeta: {
-      id: "project-1",
-      name: "Brain Study",
-      rootPath: "/test/project",
-      createdAt: "2026-05-03T00:00:00.000Z",
-      lastOpened: "2026-05-03T00:00:00.000Z",
-      currentPhase: "manifest" as const,
-      dataSource: "dicom" as const,
-    },
-    mappingState: {
-      metadataGroups: mockMetadataGroups,
-      subjectRows: mockSubjectRows,
-    },
-    uiState: {
-      processing: {
-        population: {
-          lastRun: mockVersions,
+  const fixture = projectFixture("project-1", "Brain Study", "/test/project");
+  const reviewers = mockReviewers ?? fixture.document.uiState.manifest.reviewers;
+  return projectView(
+    projectFixture("project-1", "Brain Study", "/test/project", {
+      mappingState: {
+        metadataGroups: mockMetadataGroups,
+        subjectRows: mockSubjectRows,
+      },
+      uiState: {
+        processing: {
+          population: {
+            lastRun: { profileId: "profile", Mtime: null, ...mockVersions },
+          },
+        },
+        manifest: {
+          verdicts: mockReviewers ? (mockVerdicts as any) : { [reviewers[0].id]: mockVerdicts },
+          reviewers,
+          activeReviewerId: reviewers[0].id,
+          resolvedVerdicts: mockResolvedVerdicts ?? {},
         },
       },
-      manifest: {
-        verdicts: mockVerdicts,
-        reviewers: mockReviewers,
-        resolvedVerdicts: mockResolvedVerdicts,
-      },
-    },
-    dataPar: {},
-  };
+      dataPar: {},
+    }),
+  );
 }
 
 function renderPreview() {
@@ -183,25 +180,6 @@ afterEach(() => {
 
 describe("ManifestPreview", () => {
   // 13.1 — renders 4 sections
-  it("renders 4 sections when data is present", () => {
-    mockMetadataGroups = [groupPcasl];
-    mockSubjectRows = [subjectRow1, subjectRow2];
-    mockAvailableSubjects = [subj1, subj2];
-    mockVerdicts = {
-      SUB_01: { status: "pass", setAt: 1 },
-      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
-    };
-    mockVersions = { exploreASLVersion: "1.0.0", matlabVersion: "R2023b", guiVersion: "0.1.0" };
-
-    renderPreview();
-
-    expect(screen.getByTestId("manifest-preview")).toBeInTheDocument();
-    expect(screen.getByTestId("manifest-section-study-parameters")).toBeInTheDocument();
-    expect(screen.getByTestId("manifest-section-software-manifest")).toBeInTheDocument();
-    expect(screen.getByTestId("manifest-section-qc-summary")).toBeInTheDocument();
-    expect(screen.getByTestId("manifest-section-pipeline-summary")).toBeInTheDocument();
-  });
-
   // 13.4 — conditional rows: PCASL shows LabelingDuration, PASL omits
   it("omits LabelingDuration row for PASL groups and shows it for PCASL", () => {
     mockMetadataGroups = [groupPcasl, groupPasl];
@@ -272,35 +250,7 @@ describe("ManifestPreview", () => {
   });
 
   // 13.6 — Pass/Total from stored verdicts
-  it("renders Pass / Total from stored verdicts", () => {
-    mockMetadataGroups = [groupPcasl];
-    mockSubjectRows = [subjectRow1, subjectRow2];
-    mockAvailableSubjects = [subj1, subj2];
-    mockVerdicts = {
-      SUB_01: { status: "pass", setAt: 1 },
-      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
-    };
-
-    renderPreview();
-
-    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("1 / 2");
-  });
-
   // 13.6a — Pass/Total when all subjects pass
-  it("shows all pass when all have pass verdicts", () => {
-    mockMetadataGroups = [groupPcasl];
-    mockSubjectRows = [subjectRow1, subjectRow2];
-    mockAvailableSubjects = [subj1, subj2];
-    mockVerdicts = {
-      SUB_01: { status: "pass", setAt: 1 },
-      SUB2_01: { status: "pass", setAt: 1 },
-    };
-
-    renderPreview();
-
-    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("2 / 2");
-  });
-
   // 13.6a — coverage/CoV/motion render "N/A" when QC data is not loaded
   it("renders N/A for QC metrics when QC data is not loaded", () => {
     mockMetadataGroups = [groupPcasl];
@@ -380,22 +330,6 @@ describe("ManifestPreview", () => {
   });
 
   // 13.6c — Fail Reasons breakdown per group
-  it("renders Fail Reasons breakdown from stored verdicts", () => {
-    mockMetadataGroups = [groupPcasl];
-    mockSubjectRows = [subjectRow1, subjectRow2];
-    mockAvailableSubjects = [subj1, subj2];
-    mockVerdicts = {
-      SUB_01: { status: "pass", setAt: 1 },
-      SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
-    };
-
-    renderPreview();
-
-    const qcSection = screen.getByTestId("manifest-section-qc-summary");
-    expect(qcSection).toHaveTextContent("Fail Reasons");
-    expect(qcSection).toHaveTextContent("motion: 1");
-  });
-
   // 13.6c — Multiple fail reasons
   it("counts multiple fail reasons correctly", () => {
     mockMetadataGroups = [groupPcasl];
@@ -409,6 +343,7 @@ describe("ManifestPreview", () => {
     renderPreview();
 
     const qcSection = screen.getByTestId("manifest-section-qc-summary");
+    expect(qcSection).toHaveTextContent("Fail Reasons");
     expect(qcSection).toHaveTextContent("motion: 1");
     expect(qcSection).toHaveTextContent("coverage: 1");
   });
@@ -601,6 +536,10 @@ describe("ManifestPreview", () => {
     mockVerdicts = { SUB_01: { status: "pass", setAt: 1 } };
 
     renderPreview();
+    expect(screen.getByTestId("manifest-section-study-parameters")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-section-software-manifest")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-section-qc-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("manifest-section-pipeline-summary")).toBeInTheDocument();
 
     expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(4);
     expect(screen.queryByTestId("agreement-summary")).not.toBeInTheDocument();

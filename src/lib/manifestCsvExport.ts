@@ -32,10 +32,10 @@ export interface AgreementCsvPayload {
 
 export interface VerdictsCsvPayload {
   /** Registry order determines reviewer column order. Two or more reviewers enable multi mode. */
-  reviewers?: readonly CsvReviewer[];
+  reviewers: readonly CsvReviewer[];
   /** When supplied, this order controls verdict data row order. */
   subjectSessions?: readonly string[];
-  verdicts: Record<string, CsvVerdict> | Record<string, Record<string, CsvVerdict>>;
+  verdicts: Record<string, Record<string, CsvVerdict>>;
   resolvedVerdicts?: Record<string, CsvVerdict>;
   qcMetrics?: Record<string, CsvQcMetrics | undefined>;
   agreement?: AgreementCsvPayload;
@@ -84,21 +84,16 @@ function qcValues(metrics: CsvQcMetrics | undefined): string[] {
   ];
 }
 
-function subjectSessions(payload: VerdictsCsvPayload, multiReviewerMode: boolean): string[] {
+function subjectSessions(payload: VerdictsCsvPayload): string[] {
   if (payload.subjectSessions) return [...payload.subjectSessions];
 
   const keys = new Set<string>([
     ...Object.keys(payload.resolvedVerdicts ?? {}),
     ...Object.keys(payload.qcMetrics ?? {}),
   ]);
-  if (multiReviewerMode) {
-    for (const reviewerVerdicts of Object.values(
-      payload.verdicts as Record<string, Record<string, CsvVerdict>>,
-    )) {
-      for (const subjectSession of Object.keys(reviewerVerdicts)) keys.add(subjectSession);
-    }
-  } else {
-    for (const subjectSession of Object.keys(payload.verdicts)) keys.add(subjectSession);
+  for (const reviewer of payload.reviewers) {
+    for (const subjectSession of Object.keys(payload.verdicts[reviewer.id] ?? {}))
+      keys.add(subjectSession);
   }
 
   return [...keys].sort();
@@ -134,7 +129,7 @@ function defaultAgreement(
     reviewers.length === 2
       ? cohensKappa(reviewerStatuses[reviewers[0].id], reviewerStatuses[reviewers[1].id])
       : fleissKappa(reviewerStatuses);
-  const numberOfDisagreements = subjectSessions(payload, true).filter((subjectSession) => {
+  const numberOfDisagreements = subjectSessions(payload).filter((subjectSession) => {
     const statuses = reviewers.map((reviewer) => verdicts[reviewer.id]?.[subjectSession]?.status);
     return (
       statuses.every((status) => status !== undefined) &&
@@ -179,14 +174,14 @@ export function generateAgreementCsv(payload: AgreementCsvPayload): string {
 }
 
 export function generateVerdictsCsv(payload: VerdictsCsvPayload): string {
-  const reviewers = payload.reviewers ?? [];
+  const reviewers = payload.reviewers;
   const multiReviewerMode = reviewers.length >= 2;
   const rows: string[] = [];
 
   if (!multiReviewerMode) {
     rows.push(csvRow(["SubjectSession", "Verdict", "Reason", "Notes", ...QC_HEADERS]));
-    const verdicts = payload.verdicts as Record<string, CsvVerdict>;
-    for (const subjectSession of subjectSessions(payload, false)) {
+    const verdicts = payload.verdicts[reviewers[0]?.id] ?? {};
+    for (const subjectSession of subjectSessions(payload)) {
       const verdict = verdicts[subjectSession];
       rows.push(
         csvRow([
@@ -213,8 +208,8 @@ export function generateVerdictsCsv(payload: VerdictsCsvPayload): string {
   header.push("Final_Verdict", "Resolution_Notes", ...QC_HEADERS);
   rows.push(csvRow(header));
 
-  const verdicts = payload.verdicts as Record<string, Record<string, CsvVerdict>>;
-  for (const subjectSession of subjectSessions(payload, true)) {
+  const verdicts = payload.verdicts;
+  for (const subjectSession of subjectSessions(payload)) {
     const resolution = payload.resolvedVerdicts?.[subjectSession];
     const reviewerValues = reviewers.flatMap((reviewer) => {
       const verdict = verdicts[reviewer.id]?.[subjectSession];

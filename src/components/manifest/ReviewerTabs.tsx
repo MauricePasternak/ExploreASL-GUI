@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { ActionIcon, Badge, Box, Button, Group, Modal, Tabs, Text, Tooltip } from "@mantine/core";
 import { IconPlus, IconX } from "@tabler/icons-react";
 
@@ -8,23 +8,10 @@ import { useProjectStore } from "../../stores/projectStore";
 export interface ReviewerTabsProps {
   /** Subject-sessions eligible for review; excludes No Info rows. */
   eligibleSubjectSessions: Iterable<string>;
-  /** Reports whether every reviewer completed every eligible subject-session. */
-  onMultiReviewerReady?: (ready: boolean) => void;
   children: (reviewerId?: string, addControl?: ReactNode) => ReactNode;
 }
 
-type ReviewerVerdictSlices = Record<string, Record<string, unknown>>;
-
-function verdictSlices(value: unknown): ReviewerVerdictSlices {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-  return value as ReviewerVerdictSlices;
-}
-
-export default function ReviewerTabs({
-  eligibleSubjectSessions,
-  onMultiReviewerReady,
-  children,
-}: ReviewerTabsProps) {
+export default function ReviewerTabs({ eligibleSubjectSessions, children }: ReviewerTabsProps) {
   const manifest = useProjectStore((state) => state.project?.uiState.manifest);
   const addReviewer = useProjectStore((state) => state.addReviewer);
   const removeReviewer = useProjectStore((state) => state.removeReviewer);
@@ -33,10 +20,8 @@ export default function ReviewerTabs({
 
   const reviewers = manifest?.reviewers ?? [];
   const multiReviewer = reviewers.length > 1;
-  const activeReviewerId = reviewers.some((reviewer) => reviewer.id === manifest?.activeReviewerId)
-    ? manifest?.activeReviewerId
-    : (reviewers[0]?.id ?? null);
-  const slices = verdictSlices(manifest?.verdicts);
+  const activeReviewerId = manifest?.activeReviewerId;
+  const slices = useMemo(() => manifest?.verdicts ?? {}, [manifest?.verdicts]);
   const eligibleSessions = useMemo(
     () => Array.from(new Set(eligibleSubjectSessions)),
     [eligibleSubjectSessions],
@@ -53,14 +38,6 @@ export default function ReviewerTabs({
     },
     [eligibleSessions, slices],
   );
-  const multiReviewerReady =
-    multiReviewer &&
-    reviewers.every((reviewer) => completion(reviewer.id) === eligibleSessions.length);
-
-  useEffect(() => {
-    if (multiReviewer) onMultiReviewerReady?.(multiReviewerReady);
-  }, [multiReviewer, multiReviewerReady, onMultiReviewerReady]);
-
   const requestRemoval = useCallback(
     (reviewerId: string) => {
       if (Object.keys(slices[reviewerId] ?? {}).length === 0) {
@@ -95,7 +72,7 @@ export default function ReviewerTabs({
   );
 
   if (!multiReviewer) {
-    return <Box data-testid="reviewer-tabs-controls">{children(undefined, addControl)}</Box>;
+    return <Box data-testid="reviewer-tabs-controls">{children(activeReviewerId, addControl)}</Box>;
   }
 
   return (

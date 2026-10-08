@@ -3,6 +3,8 @@ import { TestMantineProvider as MantineProvider } from "../test/render";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ManifestPage from "./ManifestPage";
+import { projectFixture } from "../test/projectFixtures";
+import { projectView } from "../schemas/project";
 
 let mockStep = 0;
 const mockSetStep = vi.fn();
@@ -40,7 +42,7 @@ vi.mock("../stores/manifestStore", () => ({
       step: mockStep,
       setStep: mockSetStep,
       filter: "all",
-      staleVerdicts: new Set(),
+      staleVerdicts: {},
       loadPriorModulesMtimes: mockLoadPriorModulesMtimes,
       computeStaleVerdicts: mockComputeStaleVerdicts,
       loadQcData: mockLoadQcData,
@@ -81,8 +83,7 @@ vi.mock("../components/manifest/VerdictResolution", () => ({
 vi.mock("../components/manifest/ReviewerTabs", () => ({
   default: vi.fn(({ children }) => {
     const reviewers = (mockProjectState.project.uiState.manifest as any).reviewers ?? [];
-    const reviewerIds =
-      reviewers.length > 1 ? reviewers.map((reviewer: any) => reviewer.id) : [undefined];
+    const reviewerIds = reviewers.map((reviewer: any) => reviewer.id);
     return (
       <div data-testid="reviewer-tabs-wrapper">
         {reviewerIds.map((reviewerId: string | undefined) => {
@@ -115,10 +116,8 @@ vi.mock("../stores/processingStore", () => {
 });
 
 const mockProjectState = {
-  project: {
-    projectMeta: { rootPath: "/test/project" },
-    uiState: { manifest: { verdicts: {}, resolvedVerdicts: {} } },
-  },
+  project: projectView(projectFixture("project-1", "Manifest", "/test/project")),
+  draftErrors: {},
 };
 
 vi.mock("../stores/projectStore", () => {
@@ -148,7 +147,8 @@ describe("ManifestPage", () => {
     mockQcLoaded = false;
     mockAvailableSubjects = [];
     renderedReviewerIds = [];
-    delete (mockProjectState.project.uiState.manifest as any).reviewers;
+    mockProjectState.project.uiState.manifest.reviewers =
+      projectFixture().document.uiState.manifest.reviewers;
     mockProjectState.project.uiState.manifest.resolvedVerdicts = {};
     mockProjectState.project.uiState.manifest.verdicts = {};
     vi.clearAllMocks();
@@ -293,7 +293,7 @@ describe("ManifestPage", () => {
     expect(screen.getByTestId("next-button")).toBeEnabled();
   });
 
-  it("passes reviewer IDs to every tab panel and undefined to the single-reviewer panel", () => {
+  it("passes registered reviewer IDs to every panel including the sole reviewer", () => {
     const reviewerOne = "11111111-1111-4111-8111-111111111111";
     const reviewerTwo = "22222222-2222-4222-8222-222222222222";
     (mockProjectState.project.uiState.manifest as any).reviewers = [
@@ -309,9 +309,10 @@ describe("ManifestPage", () => {
 
     cleanup();
     renderedReviewerIds = [];
-    delete (mockProjectState.project.uiState.manifest as any).reviewers;
+    mockProjectState.project.uiState.manifest.reviewers =
+      projectFixture().document.uiState.manifest.reviewers;
     renderPage();
-    expect(renderedReviewerIds).toEqual([undefined]);
+    expect(renderedReviewerIds).toEqual([reviewerOne]);
   });
 
   it("keeps one page-owned Next button in each QC flow", () => {
