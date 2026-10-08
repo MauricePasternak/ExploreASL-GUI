@@ -52,21 +52,62 @@ struct WriteOptions {
     failure: Option<FailurePoint>,
 }
 
-#[tauri::command]
-pub fn atomic_write_project(
-    state: tauri::State<'_, crate::app::state::AppState>,
-    project_path: String,
-    canonical_bytes: String,
+/// Configuration callers already hold the project transition guard. Keep the
+/// existing writer internal; never recursively acquire that guard here.
+pub(crate) fn write_current_owned(
+    ownership: &crate::project::ownership::ActiveProject,
+    bytes: &[u8],
     preserve_backup: bool,
 ) -> Result<AtomicWriteOutcome, AtomicWriteError> {
-    atomic_write_project_for_state(
-        &state,
-        Path::new(&project_path),
-        canonical_bytes.as_bytes(),
-        preserve_backup,
+    crate::project::validation::parse_document(bytes)
+        .map_err(|err| error(WriteErrorCategory::InvalidSerialization, &err.to_string()))?;
+    ownership.verify_root_identity().map_err(|err| {
+        storage_error(
+            WriteErrorCategory::PermissionDenied,
+            err,
+            "Project directory identity changed",
+        )
+    })?;
+    let primary = ownership.root().join("project.easl");
+    let previous = crate::project::config::read_document(&primary);
+    let preserve_backup = preserve_backup
+        || match previous {
+            Ok(Some(_)) => false,
+            Ok(None) => true,
+            Err(err)
+                if err
+                    .downcast_ref::<crate::project::validation::ProjectParseError>()
+                    .is_some() =>
+            {
+                true
+            }
+            Err(err) => {
+                let category = if err.chain().any(|cause| {
+                    cause
+                        .downcast_ref::<io::Error>()
+                        .is_some_and(|io| io.kind() == io::ErrorKind::PermissionDenied)
+                }) {
+                    WriteErrorCategory::PermissionDenied
+                } else {
+                    WriteErrorCategory::Backup
+                };
+                return Err(error(
+                    category,
+                    &format!("Could not validate previous primary: {err:#}"),
+                ));
+            }
+        };
+    atomic_write(
+        &primary,
+        bytes,
+        WriteOptions {
+            preserve_backup,
+            failure: None,
+        },
     )
 }
 
+#[cfg(test)]
 pub(crate) fn atomic_write_project_for_state(
     state: &crate::app::state::AppState,
     project_path: &Path,
@@ -92,14 +133,21 @@ pub(crate) fn atomic_write_project_for_state(
     )
 }
 
-#[tauri::command]
-pub fn cleanup_project_temps(
-    state: tauri::State<'_, crate::app::state::AppState>,
-    project_path: String,
-) -> Result<(), String> {
-    cleanup_project_temps_for_state(&state, Path::new(&project_path))
+pub(crate) fn cleanup_current_owned(
+    ownership: &crate::project::ownership::ActiveProject,
+) -> Result<(), AtomicWriteError> {
+    ownership.verify_root_identity().map_err(|error| {
+        storage_error(
+            WriteErrorCategory::PermissionDenied,
+            error,
+            "Project directory identity changed",
+        )
+    })?;
+    cleanup_stale_temps(&ProjectPaths::new(&ownership.root().join("project.easl"))?);
+    Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn cleanup_project_temps_for_state(
     state: &crate::app::state::AppState,
     project_path: &Path,

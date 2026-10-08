@@ -381,21 +381,21 @@ fn import_run_recovery_blocks_candidate_activation_without_replacing_active_root
 fn setup_recovery_blocks_candidate_activation_without_replacing_active_root() {
     let active = tempfile::tempdir().unwrap();
     let candidate = tempfile::tempdir().unwrap();
-    let app_data = tempfile::tempdir().unwrap();
     fs::write(
-        app_data.path().join("pending-bids-setup-transactions.json"),
-        "not a setup registry",
+        candidate
+            .path()
+            .join(".easl-gui-setup-journal-00000000-0000-4000-8000-000000000001.json"),
+        "not a setup journal",
     )
     .unwrap();
     let state = AppState::default();
     let active_root = active.path().canonicalize().unwrap();
     crate::project::ownership::own_project(&state, &active_root);
-    *state.setup_app_data.lock().unwrap() = Some(app_data.path().to_path_buf());
 
     let error = set_active_project_impl(candidate.path().display().to_string(), &state)
         .expect_err("blocked setup recovery must prevent activation");
 
-    assert!(error.contains("Malformed setup pending registry"));
+    assert!(error.contains("Malformed setup journal"));
     assert_eq!(
         state.active_project_root.lock().unwrap().as_deref(),
         Some(active_root.as_path())

@@ -55,4 +55,8 @@ fn symlink_escaping_project_is_external() {
     let result = inspect_source_path_impl(&project, &linked).expect("inspect symlink");
     assert_eq!(result.ownership, PathOwnership::External);
     assert_eq!(result.absolute_path, external.canonicalize().unwrap());
+    assert!(
+        inspect_source_path_impl(&project, std::path::Path::new("linked-source")).is_err(),
+        "saved project-relative references cannot escape through a symlink"
+    );
 }

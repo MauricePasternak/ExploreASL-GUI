@@ -95,6 +95,9 @@ pub fn inspect_source_path_impl(
     let canonical_source = candidate
         .canonicalize()
         .with_context(|| format!("Failed to resolve source path {}", candidate.display()))?;
+    if !source_path.is_absolute() && !canonical_source.starts_with(&canonical_project) {
+        bail!("Project-relative source escapes its root through a symlink");
+    }
     let is_directory = canonical_source.is_dir();
     let readable = if is_directory {
         fs::read_dir(&canonical_source).is_ok()
