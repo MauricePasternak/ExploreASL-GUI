@@ -29,7 +29,9 @@
     "format:check": "pnpm format:check:frontend && pnpm format:check:backend",
     "format:check:frontend": "prettier --check .",
     "format:check:backend": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
-    "typecheck": "tsc --noEmit"
+    "bindings:generate": "cargo run --manifest-path src-tauri/Cargo.toml --example export_project_types",
+    "bindings:check": "cargo run --manifest-path src-tauri/Cargo.toml --example export_project_types -- --check",
+    "typecheck": "pnpm bindings:check && tsc --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -49,7 +51,6 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-store": "^2.4.4",
     "@tauri-apps/plugin-updater": "^2.11.0",
-    "fflate": "^0.8.3",
     "mantine-datatable": "^9.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
