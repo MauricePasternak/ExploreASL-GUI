@@ -1,4 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
+import type { ProjectInspection } from "../generated/project/ProjectInspection";
+import type { ProjectEdit } from "../generated/project/ProjectEdit";
+import type { RecentProject } from "../schemas/globalSettings";
 
 export type ProjectStorageErrorCategory =
   | "invalid_serialization"
@@ -56,12 +60,6 @@ export function projectStorageErrorMessage(error: ProjectStorageError) {
   }
 }
 
-export type AtomicWriteProjectInput = {
-  projectPath: string;
-  canonicalBytes: string;
-  preserveBackup: boolean;
-};
-
 function storageError(error: unknown): ProjectStorageError {
   if (error instanceof ProjectStorageError) return error;
   if (typeof error === "string") {
@@ -82,18 +80,59 @@ function storageError(error: unknown): ProjectStorageError {
       );
     }
   }
-  return new ProjectStorageError("temporary_write", String(error));
+  return new ProjectStorageError(
+    "temporary_write",
+    typeof error === "object" && error !== null && "message" in error
+      ? String(error.message)
+      : String(error),
+  );
 }
 
-/** Commits already schema-validated canonical bytes through the native writer. */
-export async function atomicWriteProject(input: AtomicWriteProjectInput): Promise<void> {
+export async function projectRequest<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   try {
-    await invoke("atomic_write_project", input);
+    return await invoke<T>(command, args);
   } catch (error) {
+    if (typeof error === "object" && error !== null && "kind" in error && "message" in error) {
+      throw Object.assign(new Error(String(error.message)), { cause: error });
+    }
     throw storageError(error);
   }
 }
 
-export async function cleanupProjectTemps(projectPath: string): Promise<void> {
-  await invoke("cleanup_project_temps", { projectPath });
-}
+export const inspectProject = (path: string, recents: RecentProject[] = []) =>
+  projectRequest<ProjectInspection>("inspect_project", {
+    path,
+    recents: recents.map(({ path, projectId }) => ({ path, projectId: projectId ?? null })),
+  });
+export const activateProject = async (
+  candidate: ProjectInspection,
+  confirmBackup: boolean,
+  copied = false,
+) => {
+  const candidateId = copied
+    ? (
+        await projectRequest<ProjectInspection>("copy_project_candidate", {
+          candidateId: candidate.candidateId,
+          confirmBackup,
+        })
+      ).candidateId
+    : candidate.candidateId;
+  return projectRequest<ProjectSnapshot>("activate_project", { candidateId, confirmBackup });
+};
+export const createNativeProject = (
+  root: string,
+  name: string,
+  source: "dicom" | "bids",
+  profileId: string,
+) => projectRequest<ProjectInspection>("create_project", { root, name, source, profileId });
+export const currentProjectSnapshot = () =>
+  projectRequest<ProjectSnapshot | null>("current_project_snapshot");
+export const readProjectSnapshot = (generation: number) =>
+  projectRequest<ProjectSnapshot>("get_project_snapshot", { generation });
+export const acceptProjectEdit = (generation: number, edit: ProjectEdit) =>
+  projectRequest<ProjectSnapshot>("accept_project_edit", { generation, edit });
+export const saveNativeProject = (generation: number) =>
+  projectRequest<ProjectSnapshot>("save_project", { generation });

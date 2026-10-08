@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
 
-import { DEFAULT_PROJECT_FILE } from "../schemas/project";
+import { projectView } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useProcessingStore } from "../stores/processingStore";
@@ -13,8 +14,48 @@ import {
 } from "./projectLifecycle";
 import { closeProjectRuntime, transitionProjectRuntime } from "./projectCoordinator";
 
+const candidate = {
+  candidateId: "candidate",
+  projectId: "b",
+  name: "B",
+  rootPath: "/b",
+  recoveredFromBackup: false,
+  duplicatePath: null,
+  movedFrom: null,
+  setupRecovered: 0,
+};
+
+beforeEach(() => {
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
+  vi.mocked(invoke).mockImplementation(async (command) => {
+    if (command === "save_project") {
+      const project = useProjectStore.getState().project!;
+      return {
+        ...projectFixture(
+          project.projectMeta.id,
+          project.projectMeta.name,
+          project.projectMeta.rootPath,
+        ),
+        activationGeneration: project.activationGeneration,
+      };
+    }
+    if (command === "activate_project") return projectFixture("b", "B", "/b");
+    if (command === "get_active_import_run" || command === "get_active_run") return null;
+    if (command === "read_import_status") return [];
+    if (command === "shutdown_project_runtime")
+      return {
+        success: true,
+        importProcess: { success: true },
+        processingWorkers: { success: true },
+        lockWatcher: { success: true },
+      };
+    throw new Error(`Unexpected command ${command}`);
+  });
+});
+
 afterEach(() => {
   resetProjectLifecycleForTests();
+  useProjectStore.getState().cancelAutosave();
   useImportStore.getState().resetImport();
   useProjectStore.setState({ project: null, loaded: false, isDirty: false });
   vi.mocked(notifications.show).mockClear();
@@ -33,37 +74,41 @@ afterEach(() => {
 
 describe("project coordinator", () => {
   it("preserves project A when shutdown fails", async () => {
-    const projectA = DEFAULT_PROJECT_FILE("a", "A", "/a");
-    const projectB = DEFAULT_PROJECT_FILE("b", "B", "/b");
+    const snapshotA = projectFixture("a", "A", "/a");
+    snapshotA.document.mappingState.sourceDataPath = "/a/source";
+    const projectA = projectView(snapshotA);
+    vi.mocked(invoke).mockResolvedValueOnce(snapshotA);
     useProjectStore.setState({ project: projectA, loaded: true, isDirty: false });
-    useImportStore.setState({ sourceDataPath: "/a/source", importLog: ["A"] });
+    useImportStore.setState({ importLog: ["A"] });
     activateProjectLease("a", "/a");
 
     await expect(
-      transitionProjectRuntime(projectB, false, {
-        shutdownRuntime: async () => ({
-          success: false,
-          importProcess: { success: false, error: "cannot stop import" },
-          processingWorkers: { success: true },
-          lockWatcher: { success: true },
-        }),
-      }),
+      transitionProjectRuntime(
+        candidate,
+        {},
+        {
+          shutdownRuntime: async () => ({
+            success: false,
+            importProcess: { success: false, error: "cannot stop import" },
+            processingWorkers: { success: true },
+            lockWatcher: { success: true },
+          }),
+        },
+      ),
     ).rejects.toThrow(/cannot stop import/i);
 
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("a");
+    expect(useProjectStore.getState().project?.mappingState.sourceDataPath).toBe("/a/source");
     expect(useImportStore.getState()).toMatchObject({
-      sourceDataPath: "/a/source",
       importLog: ["A"],
     });
   });
 
   it("stops, resets, then hydrates project B", async () => {
     const order: string[] = [];
-    const projectA = DEFAULT_PROJECT_FILE("a", "A", "/a");
-    const projectB = {
-      ...DEFAULT_PROJECT_FILE("b", "B", "/b"),
-      mappingState: { sourceDataPath: "./source" },
-    };
+    const projectA = projectView(projectFixture("a", "A", "/a"));
+    const projectB = projectFixture("b", "B", "/b");
+    projectB.document.mappingState = { sourceDataPath: "./source" };
     useProjectStore.setState({ project: projectA, loaded: true, isDirty: false });
     useImportStore.setState({ importLog: ["A"] });
     activateProjectLease("a", "/a");
@@ -72,68 +117,81 @@ describe("project coordinator", () => {
       if (state.project?.projectMeta.id === "b") order.push("hydrate");
     });
 
-    await transitionProjectRuntime(projectB, true, {
-      shutdownRuntime: async () => {
-        order.push("shutdown");
-        return {
-          success: true,
-          importProcess: { success: true },
-          processingWorkers: { success: true },
-          lockWatcher: { success: true },
-        };
+    await transitionProjectRuntime(
+      candidate,
+      {},
+      {
+        shutdownRuntime: async () => {
+          order.push("shutdown");
+          return {
+            success: true,
+            importProcess: { success: true },
+            processingWorkers: { success: true },
+            lockWatcher: { success: true },
+          };
+        },
+        cleanupListeners: () => order.push("listeners"),
+        activateCandidate: async () => {
+          order.push("native:/b");
+          return projectB;
+        },
       },
-      cleanupListeners: () => order.push("listeners"),
-      setActiveProject: async (root) => {
-        order.push(`native:${root}`);
-      },
-    });
+    );
     unsubscribe();
 
     expect(order).toEqual(["shutdown", "listeners", "native:/b", "reset", "hydrate"]);
     expect(useProjectStore.getState()).toMatchObject({
       project: { projectMeta: { id: "b" } },
-      isDirty: true,
+      isDirty: false,
     });
-    expect(useImportStore.getState()).toMatchObject({ sourceDataPath: "./source", importLog: [] });
+    expect(useProjectStore.getState().project?.mappingState.sourceDataPath).toBe("./source");
+    expect(useImportStore.getState().importLog).toEqual([]);
   });
 
   it("serializes concurrent replacements", async () => {
     const order: string[] = [];
     let release!: () => void;
-    const projectB = DEFAULT_PROJECT_FILE("b", "B", "/b");
-    const projectC = DEFAULT_PROJECT_FILE("c", "C", "/c");
     useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("a", "A", "/a"),
+      project: projectView(projectFixture("a", "A", "/a")),
       loaded: true,
     });
     activateProjectLease("a", "/a");
 
-    const first = transitionProjectRuntime(projectB, false, {
-      shutdownRuntime: async () => {
-        order.push("first-start");
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        order.push("first-end");
-        return {
-          success: true,
-          importProcess: { success: true },
-          processingWorkers: { success: true },
-          lockWatcher: { success: true },
-        };
+    const first = transitionProjectRuntime(
+      candidate,
+      {},
+      {
+        shutdownRuntime: async () => {
+          order.push("first-start");
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          order.push("first-end");
+          return {
+            success: true,
+            importProcess: { success: true },
+            processingWorkers: { success: true },
+            lockWatcher: { success: true },
+          };
+        },
       },
-    });
-    const second = transitionProjectRuntime(projectC, false, {
-      shutdownRuntime: async () => {
-        order.push("second");
-        return {
-          success: true,
-          importProcess: { success: true },
-          processingWorkers: { success: true },
-          lockWatcher: { success: true },
-        };
+    );
+    const second = transitionProjectRuntime(
+      { ...candidate, candidateId: "c", projectId: "c", rootPath: "/c" },
+      {},
+      {
+        activateCandidate: async () => projectFixture("c", "C", "/c"),
+        shutdownRuntime: async () => {
+          order.push("second");
+          return {
+            success: true,
+            importProcess: { success: true },
+            processingWorkers: { success: true },
+            lockWatcher: { success: true },
+          };
+        },
       },
-    });
+    );
 
     await vi.waitFor(() => expect(order).toEqual(["first-start"]));
     release();
@@ -142,34 +200,44 @@ describe("project coordinator", () => {
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("c");
   });
 
-  it("keeps work admission closed when candidate native activation fails", async () => {
-    const projectA = DEFAULT_PROJECT_FILE("a", "A", "/a");
-    const projectB = DEFAULT_PROJECT_FILE("b", "B", "/b");
+  it("retains A and its lease when candidate native activation fails", async () => {
+    const projectA = projectView(projectFixture("a", "A", "/a"));
     useProjectStore.setState({ project: projectA, loaded: true });
     activateProjectLease("a", "/a");
 
     await expect(
-      transitionProjectRuntime(projectB, false, {
-        setActiveProject: async () => Promise.reject(new Error("native denied")),
-      }),
+      transitionProjectRuntime(
+        candidate,
+        {},
+        {
+          activateCandidate: async () => Promise.reject(new Error("native denied")),
+        },
+      ),
     ).rejects.toThrow(/native denied/);
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("a");
-    expect(isProjectWorkAccepted()).toBe(false);
+    expect(isProjectWorkAccepted()).toBe(true);
   });
 
   it("reports relocation recovery before hydrating the candidate project", async () => {
     const order: string[] = [];
-    await transitionProjectRuntime(DEFAULT_PROJECT_FILE("b", "B", "/b"), false, {
-      setActiveProject: async () => {
-        order.push("native");
-        return {
-          preservedSubjects: ["A"],
-          restoredSubjects: ["B"],
-          cleanedSubjects: ["A", "B"],
-          cleanupErrors: [],
-        };
+    await transitionProjectRuntime(
+      candidate,
+      {},
+      {
+        activateCandidate: async () => {
+          order.push("native");
+          return {
+            ...projectFixture("b", "B", "/b"),
+            recovery: {
+              preservedSubjects: ["A"],
+              restoredSubjects: ["B"],
+              cleanedSubjects: ["A", "B"],
+              cleanupErrors: [],
+            },
+          };
+        },
       },
-    });
+    );
 
     expect(order).toEqual(["native"]);
     expect(vi.mocked(notifications.show)).toHaveBeenCalledWith(
@@ -186,21 +254,29 @@ describe("project coordinator", () => {
     const unsubscribe = useProjectStore.subscribe((state) => {
       if (state.project?.projectMeta.id === "b") order.push("hydrate");
     });
-    await transitionProjectRuntime(DEFAULT_PROJECT_FILE("b", "B", "/b"), false, {
-      setActiveProject: async () => {
-        order.push("native-recovery");
+    await transitionProjectRuntime(
+      candidate,
+      {},
+      {
+        activateCandidate: async () => {
+          order.push("native-recovery");
+          return projectFixture("b", "B", "/b");
+        },
+        reconcileImportRun: async () => {
+          order.push("import-reconcile");
+        },
       },
-      reconcileImportRun: async () => {
-        order.push("import-reconcile");
-      },
-    });
+    );
     unsubscribe();
     expect(order).toEqual(["native-recovery", "hydrate", "import-reconcile"]);
   });
 
   it("clears native root before resetting project stores", async () => {
     const order: string[] = [];
-    useProjectStore.setState({ project: DEFAULT_PROJECT_FILE("a", "A", "/a"), loaded: true });
+    useProjectStore.setState({
+      project: projectView(projectFixture("a", "A", "/a")),
+      loaded: true,
+    });
     activateProjectLease("a", "/a");
     const unsubscribe = useProjectStore.subscribe((state) => {
       if (!state.project) order.push("reset");
@@ -221,15 +297,32 @@ describe("project coordinator", () => {
     expect(order).toEqual(["listeners", "native-clear", "reset"]);
   });
 
-  it("keeps admission closed when native root clearing fails", async () => {
-    useProjectStore.setState({ project: DEFAULT_PROJECT_FILE("a", "A", "/a"), loaded: true });
+  it("retains A and permits retry when native root clearing fails", async () => {
+    useProjectStore.setState({
+      project: projectView(projectFixture("a", "A", "/a")),
+      loaded: true,
+    });
     activateProjectLease("a", "/a");
     await expect(
       closeProjectRuntime({
         clearActiveProject: async () => Promise.reject(new Error("clear denied")),
       }),
     ).rejects.toThrow(/clear denied/);
-    expect(isProjectWorkAccepted()).toBe(false);
+    expect(isProjectWorkAccepted()).toBe(true);
+    expect(useProjectStore.getState().project?.projectMeta.id).toBe("a");
+  });
+
+  it("rejects an expired renderer attachment without replacing B", async () => {
+    const b = { ...projectFixture("b", "B", "/b"), activationGeneration: 2 };
+    useProjectStore.setState({ project: projectView(b), loaded: true });
+    activateProjectLease("b", "/b");
+    vi.mocked(invoke).mockReset().mockRejectedValueOnce({ message: "Project activation expired" });
+    await expect(transitionProjectRuntime(projectFixture("a", "A", "/a"))).rejects.toThrow(
+      "Project activation expired",
+    );
+    expect(useProjectStore.getState().project?.projectMeta.id).toBe("b");
+    expect(isProjectWorkAccepted()).toBe(true);
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("get_project_snapshot", { generation: 1 });
   });
 
   it("rejects startProcessing during project switch before native reservation", async () => {
@@ -239,7 +332,7 @@ describe("project coordinator", () => {
       shutdownStarted = resolve;
     });
     useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("a", "A", "/a"),
+      project: projectView(projectFixture("a", "A", "/a")),
       loaded: true,
     });
     activateProjectLease("a", "/a");
@@ -249,22 +342,26 @@ describe("project coordinator", () => {
       processingPhase: "idle",
     });
 
-    const transition = transitionProjectRuntime(DEFAULT_PROJECT_FILE("b", "B", "/b"), false, {
-      shutdownRuntime: async () => {
-        shutdownStarted();
-        await new Promise<void>((resolve) => {
-          releaseShutdown = resolve;
-        });
-        return {
-          success: true,
-          importProcess: { success: true },
-          processingWorkers: { success: true },
-          lockWatcher: { success: true },
-        };
+    const transition = transitionProjectRuntime(
+      candidate,
+      {},
+      {
+        shutdownRuntime: async () => {
+          shutdownStarted();
+          await new Promise<void>((resolve) => {
+            releaseShutdown = resolve;
+          });
+          return {
+            success: true,
+            importProcess: { success: true },
+            processingWorkers: { success: true },
+            lockWatcher: { success: true },
+          };
+        },
+        cleanupListeners: () => undefined,
+        activateCandidate: async () => projectFixture("b", "B", "/b"),
       },
-      cleanupListeners: () => undefined,
-      setActiveProject: async () => undefined,
-    });
+    );
     await started;
 
     expect(() => useProcessingStore.getState().startProcessing()).toThrow(/transition/i);

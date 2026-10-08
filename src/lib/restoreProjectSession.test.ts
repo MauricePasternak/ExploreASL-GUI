@@ -1,35 +1,50 @@
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
 import { seedValidProfileGate } from "../test/landingProfileGate";
 import { writeSessionCheckpoint } from "./sessionCheckpoint";
 import { resolveRestoredPhase, tryRestoreProjectSession } from "./restoreProjectSession";
+import { projectFixture } from "../test/projectFixtures";
+import { projectView } from "../schemas/project";
+import { resetProjectLifecycleForTests } from "./projectLifecycle";
 
-const PROJECT_JSON = {
-  version: "0.1.0",
-  projectMeta: {
-    id: "project-1",
-    name: "Brain Study",
-    rootPath: "/tmp/brain-study",
-    createdAt: "2026-05-03T00:00:00.000Z",
-    lastOpened: "2026-05-03T00:00:00.000Z",
-    currentPhase: "import",
-    dataSource: "dicom",
-  },
-  uiState: {},
-  mappingState: {},
-  dataPar: {},
+const snapshot = projectFixture("project-1", "Brain Study", "/tmp/brain-study");
+const inspection = {
+  candidateId: "candidate",
+  projectId: "project-1",
+  name: "Brain Study",
+  rootPath: snapshot.rootPath,
+  recoveredFromBackup: false,
+  duplicatePath: null,
+  movedFrom: null,
+  setupRecovered: 0,
 };
+
+afterEach(() => {
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
+});
 
 describe("restoreProjectSession", () => {
   beforeEach(() => {
     sessionStorage.clear();
     seedValidProfileGate();
-    useProjectStore.setState({ project: null, isDirty: false, loaded: false });
-    vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(PROJECT_JSON));
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "inspect_project") return inspection;
+      if (command === "activate_project") return snapshot;
+      if (
+        command === "current_project_snapshot" ||
+        command === "get_active_import_run" ||
+        command === "get_active_run"
+      )
+        return null;
+      if (command === "read_import_status") return [];
+      throw new Error(`Unexpected command ${command}`);
+    });
   });
 
   it("prefers the session checkpoint for the route project id", async () => {
@@ -41,7 +56,11 @@ describe("restoreProjectSession", () => {
 
     await expect(tryRestoreProjectSession("project-1")).resolves.toBe(true);
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-1");
-    expect(readTextFile).toHaveBeenCalledWith("/tmp/brain-study/project.easl");
+    expect(invoke).toHaveBeenCalledWith(
+      "inspect_project",
+      expect.objectContaining({ path: "/tmp/brain-study/project.easl" }),
+    );
+    expect(readTextFile).not.toHaveBeenCalled();
   });
 
   it("falls back to a matching recent project path", async () => {
@@ -61,8 +80,14 @@ describe("restoreProjectSession", () => {
     }));
 
     await expect(tryRestoreProjectSession("project-1")).resolves.toBe(true);
-    expect(readTextFile).toHaveBeenCalledWith("/tmp/brain-study/project.easl");
-    expect(readTextFile).not.toHaveBeenCalledWith("/tmp/other/project.easl");
+    expect(invoke).toHaveBeenCalledWith(
+      "inspect_project",
+      expect.objectContaining({ path: "/tmp/brain-study/project.easl" }),
+    );
+    expect(invoke).not.toHaveBeenCalledWith(
+      "inspect_project",
+      expect.objectContaining({ path: "/tmp/other/project.easl" }),
+    );
   });
 
   it("fills project identity when restoring an unmatched legacy recent path", async () => {
@@ -95,12 +120,11 @@ describe("restoreProjectSession", () => {
       projectId: "project-1",
       phase: "import",
     });
-    vi.mocked(readTextFile)
-      .mockResolvedValueOnce("{")
-      .mockResolvedValueOnce("{")
-      .mockResolvedValueOnce(
-        JSON.stringify({ schemaVersion: 1, ...PROJECT_JSON, version: undefined }),
-      );
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "current_project_snapshot") return null;
+      if (command === "inspect_project") return { ...inspection, recoveredFromBackup: true };
+      throw new Error(`Unexpected command ${command}`);
+    });
 
     await expect(tryRestoreProjectSession("project-1")).resolves.toBe(true);
 
@@ -112,22 +136,19 @@ describe("restoreProjectSession", () => {
         projectId: "project-1",
       },
     });
-    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
+    expect(invoke).not.toHaveBeenCalledWith("activate_project", expect.any(Object));
   });
 
   it("keeps the route phase when it is accessible", () => {
-    const mockProject = {
-      projectMeta: { currentPhase: "processing" },
-      uiState: { import: { completed: true } },
-    } as any;
+    const mockProject = projectView({
+      ...snapshot,
+      allowedPhases: ["import", "parameters", "processing"],
+    });
     expect(resolveRestoredPhase("parameters", mockProject)).toBe("parameters");
   });
 
   it("falls back to the saved current phase for inaccessible routes", () => {
-    const mockProject = {
-      projectMeta: { currentPhase: "import" },
-      uiState: { import: { completed: false } },
-    } as any;
+    const mockProject = projectView(snapshot);
     expect(resolveRestoredPhase("processing", mockProject)).toBe("import");
   });
 });

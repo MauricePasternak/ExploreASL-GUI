@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DEFAULT_PROJECT_FILE } from "../schemas/project";
+import { projectView } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
 import {
   clearSessionCheckpoint,
   projectEaslPath,
@@ -34,7 +35,7 @@ describe("sessionCheckpoint", () => {
   });
 
   it("syncs from a loaded project file", () => {
-    const project = DEFAULT_PROJECT_FILE("project-1", "Brain Study", "/tmp/brain-study");
+    const project = projectView(projectFixture("project-1", "Brain Study", "/tmp/brain-study"));
     project.projectMeta.currentPhase = "parameters";
 
     syncSessionCheckpointFromProject(project, "import");

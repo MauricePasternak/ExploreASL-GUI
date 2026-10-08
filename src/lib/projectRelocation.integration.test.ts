@@ -1,9 +1,8 @@
 import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { join } from "node:path";
 
 import { invoke } from "@tauri-apps/api/core";
-import { readTextFile } from "@tauri-apps/plugin-fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeMatlabProfile } from "../test/profileFixtures";
@@ -12,31 +11,21 @@ import { readSessionCheckpoint } from "./sessionCheckpoint";
 import { resolveLogicalSource } from "./projectPaths";
 import { resetProjectLifecycleForTests } from "./projectLifecycle";
 import { useGlobalStore } from "../stores/globalStore";
-import { useProjectStore, __resetProjectRevisionForTests } from "../stores/projectStore";
+import { useProjectStore } from "../stores/projectStore";
+import { projectFixture } from "../test/projectFixtures";
 
 const roots: string[] = [];
-const accessedPaths: string[] = [];
 
 function projectBytes(dataSource: "bids" | "dicom", oldRoot: string): string {
-  return JSON.stringify({
-    version: "0.1.0",
-    projectMeta: {
-      id: `relocated-${dataSource}`,
-      name: `Relocated ${dataSource}`,
-      rootPath: oldRoot,
-      createdAt: "2026-01-01T00:00:00.000Z",
-      lastOpened: "2026-01-01T00:00:00.000Z",
-      currentPhase: "processing",
-      dataSource,
-    },
-    uiState: {},
+  const fixture = projectFixture(`relocated-${dataSource}`, `Relocated ${dataSource}`, oldRoot, {
     mappingState: {
-      sourceDataPath: dataSource === "bids" ? oldRoot : "./sourcedata",
+      sourceDataPath: dataSource === "bids" ? "." : "./sourcedata",
       rawPaths: dataSource === "dicom" ? ["sub-01/ASL"] : [],
       pathPatterns: [],
     },
-    dataPar: {},
   });
+  fixture.document.projectMeta.dataSource = dataSource;
+  return JSON.stringify(fixture.document);
 }
 
 async function makeMovedProject(dataSource: "bids" | "dicom") {
@@ -53,9 +42,8 @@ async function makeMovedProject(dataSource: "bids" | "dicom") {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
-  accessedPaths.length = 0;
   resetProjectLifecycleForTests();
-  __resetProjectRevisionForTests();
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
   useProjectStore.setState({
     project: null,
     isDirty: false,
@@ -69,49 +57,10 @@ beforeEach(() => {
     settings: { ...DEFAULT_SETTINGS, executionProfiles: [profile] },
     profileValidationState: { [profile.id]: { valid: true, errors: [] } },
   });
-
-  vi.mocked(readTextFile).mockImplementation(async (path) => {
-    const value = String(path);
-    accessedPaths.push(value);
-    return readFile(value, "utf8");
-  });
-  vi.mocked(invoke).mockImplementation(async (command, args) => {
-    if (command === "shutdown_project_runtime") {
-      return {
-        success: true,
-        importProcess: { success: true },
-        processingWorkers: { success: true },
-        lockWatcher: { success: true },
-      };
-    }
-    if (command === "inspect_source_path") {
-      const { projectRoot, sourcePath } = args as { projectRoot: string; sourcePath: string };
-      const absolutePath = resolve(projectRoot, sourcePath);
-      accessedPaths.push(projectRoot, absolutePath);
-      const projectRelativePath = `./${relative(projectRoot, absolutePath).replace(/\\/g, "/")}`;
-      return {
-        absolutePath,
-        exists: true,
-        readable: true,
-        isDirectory: true,
-        ownership: "internal",
-        projectRelativePath,
-      };
-    }
-    if (command === "atomic_write_project") {
-      const { projectPath, canonicalBytes } = args as {
-        projectPath: string;
-        canonicalBytes: string;
-      };
-      accessedPaths.push(projectPath);
-      await writeFile(projectPath, canonicalBytes);
-      return null;
-    }
-    return null;
-  });
 });
 
 afterEach(async () => {
+  useProjectStore.getState().cancelAutosave();
   resetProjectLifecycleForTests();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -119,6 +68,37 @@ afterEach(async () => {
 describe.each(["bids", "dicom"] as const)("%s project relocation", (dataSource) => {
   it("uses only the opened location for owned reads and saves; native owns watchers", async () => {
     const { oldRoot, newRoot, easlPath } = await makeMovedProject(dataSource);
+    const before = await readFile(easlPath, "utf8");
+    const opened = projectFixture(`relocated-${dataSource}`, `Relocated ${dataSource}`, newRoot, {
+      mappingState: {
+        sourceDataPath: dataSource === "bids" ? "." : "./sourcedata",
+        rawPaths: dataSource === "dicom" ? ["sub-01/ASL"] : [],
+        pathPatterns: [],
+      },
+    });
+    opened.document.projectMeta.dataSource = dataSource;
+    const edited = structuredClone(opened);
+    edited.acceptedRevision = 1;
+    edited.document.uiState.navbarCollapsed = false;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "inspect_project")
+        return {
+          candidateId: "moved",
+          projectId: opened.document.projectMeta.id,
+          name: opened.document.projectMeta.name,
+          rootPath: newRoot,
+          recoveredFromBackup: false,
+          duplicatePath: null,
+          movedFrom: null,
+          setupRecovered: 0,
+        };
+      if (command === "activate_project") return opened;
+      if (command === "accept_project_edit") return edited;
+      if (command === "save_project") return { ...edited, persistedRevision: 1 };
+      if (command === "get_active_import_run" || command === "get_active_run") return null;
+      if (command === "read_import_status") return [];
+      throw new Error(`Unexpected command ${command}`);
+    });
 
     await useProjectStore.getState().loadProject(easlPath);
     const project = useProjectStore.getState().project!;
@@ -127,12 +107,13 @@ describe.each(["bids", "dicom"] as const)("%s project relocation", (dataSource) 
       resolveLogicalSource(newRoot, project.mappingState.sourceDataPath ?? "", dataSource),
     ).toBe(dataSource === "bids" ? newRoot : join(newRoot, "sourcedata"));
     expect(readSessionCheckpoint()?.easlPath).toBe(easlPath);
+    expect(await readFile(easlPath, "utf8")).toBe(before);
 
-    useProjectStore.getState().toggleNavbar();
+    await useProjectStore.getState().toggleNavbar();
     await useProjectStore.getState().saveProject();
     expect(JSON.parse(await readFile(easlPath, "utf8")).projectMeta.rootPath).toBeUndefined();
-    expect(accessedPaths).toContain(easlPath);
-    expect(accessedPaths).not.toContain(oldRoot);
-    expect(accessedPaths.every((path) => !path.startsWith(oldRoot))).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("inspect_project", { path: easlPath, recents: [] });
+    expect(invoke).toHaveBeenCalledWith("save_project", { generation: 1 });
+    expect(JSON.stringify(vi.mocked(invoke).mock.calls)).not.toContain(oldRoot);
   });
 });

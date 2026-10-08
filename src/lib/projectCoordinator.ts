@@ -1,16 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
-
-import type { ProjectFile } from "../schemas/project";
+import type { ProjectInspection } from "../generated/project/ProjectInspection";
+import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
+import { activateProject, readProjectSnapshot } from "./projectPersistence";
 import { reconcileProcessingRunAfterShutdown } from "./processingTerminalCoordinator";
-import { useProcessingStore } from "../stores/processingStore";
-import { clearProcessingListeners } from "../stores/processingStore";
+import { clearProcessingListeners, useProcessingStore } from "../stores/processingStore";
 import { clearImportListeners } from "./importEvents";
 import {
   reconcileImportRunAfterShutdown,
   reconcileImportRunForActivation,
 } from "./importTerminalCoordinator";
-import { hydrateProjectStores, resetProjectStores } from "../stores/projectStoreHydration";
+import { resetProjectStores } from "../stores/projectStoreHydration";
+import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { clearSessionCheckpoint, syncSessionCheckpointFromProject } from "./sessionCheckpoint";
 import {
@@ -22,133 +23,118 @@ import {
   runProjectTransition,
 } from "./projectLifecycle";
 
-export interface RuntimeResourceShutdown {
-  success: boolean;
-  error?: string;
-}
-
 export interface ProjectRuntimeShutdownResult {
   success: boolean;
-  importProcess: RuntimeResourceShutdown;
-  processingWorkers: RuntimeResourceShutdown;
-  lockWatcher: RuntimeResourceShutdown;
+  importProcess: { success: boolean; error?: string };
+  processingWorkers: { success: boolean; error?: string };
+  lockWatcher: { success: boolean; error?: string };
 }
-
 export interface TransitionDependencies {
   shutdownRuntime?: () => Promise<ProjectRuntimeShutdownResult>;
   cleanupListeners?: () => void;
-  setActiveProject?: (rootPath: string) => Promise<RelocationRecoverySummary | void>;
+  activateCandidate?: (
+    candidate: ProjectInspection,
+    confirmBackup: boolean,
+    copied: boolean,
+  ) => Promise<ProjectSnapshot>;
   clearActiveProject?: () => Promise<void>;
   reconcileImportRun?: () => Promise<unknown>;
   reconcileImportAfterShutdown?: () => Promise<void>;
   reconcileProcessingRun?: () => Promise<unknown>;
   reconcileProcessingAfterShutdown?: () => Promise<void>;
 }
+export const shutdownProjectRuntime = () =>
+  invoke<ProjectRuntimeShutdownResult>("shutdown_project_runtime");
 
-export interface RelocationRecoverySummary {
-  preservedSubjects: string[];
-  restoredSubjects: string[];
-  cleanedSubjects: string[];
-  cleanupErrors: string[];
-}
-
-export async function shutdownProjectRuntime(): Promise<ProjectRuntimeShutdownResult> {
-  return invoke<ProjectRuntimeShutdownResult>("shutdown_project_runtime");
-}
-
-function cleanupProjectListeners(): void {
+function cleanupListeners() {
   clearImportListeners();
   clearProcessingListeners();
 }
 
-async function setNativeActiveProject(rootPath: string): Promise<RelocationRecoverySummary> {
-  return invoke<RelocationRecoverySummary>("set_active_project", { rootPath });
-}
-
-async function clearNativeActiveProject(): Promise<void> {
-  await invoke("clear_active_project");
-}
-
-function shutdownError(result: ProjectRuntimeShutdownResult): Error {
-  const failures = [
-    ["import process", result.importProcess],
-    ["processing workers", result.processingWorkers],
-    ["lock watcher", result.lockWatcher],
-  ]
-    .filter(([, resource]) => !(resource as RuntimeResourceShutdown).success)
-    .map(([label, resource]) => {
-      const error = (resource as RuntimeResourceShutdown).error;
-      return error ? `${label}: ${error}` : String(label);
-    });
-  return new Error(
-    failures.length > 0
-      ? `Project runtime shutdown failed (${failures.join("; ")}). Retry after stopping project work.`
-      : "Project runtime shutdown failed. Retry after stopping project work.",
-  );
-}
-
-export function transitionProjectRuntime(
-  candidate: ProjectFile,
-  isDirty: boolean,
-  dependencies: TransitionDependencies = {},
-): Promise<void> {
-  return runProjectTransition(async () => {
-    const currentProject = useProjectStore.getState().project;
-    closeProjectWorkAdmission();
+async function settle(dependencies: TransitionDependencies): Promise<void> {
+  closeProjectWorkAdmission();
+  try {
+    await useProjectStore.getState().saveProject({ allowClosedAdmission: true });
     await drainProjectTasks();
-
-    if (currentProject) {
+    if (useProjectStore.getState().project) {
       const result = await (dependencies.shutdownRuntime ?? shutdownProjectRuntime)();
-      if (!result.success) {
-        reopenProjectWorkAdmission();
-        throw shutdownError(result);
-      }
+      if (!result.success)
+        throw new Error(
+          `Project runtime shutdown failed: ${[
+            result.importProcess,
+            result.processingWorkers,
+            result.lockWatcher,
+          ]
+            .filter((resource) => !resource.success)
+            .map((resource) => resource.error ?? "resource did not stop")
+            .join("; ")}`,
+        );
       await (dependencies.reconcileImportAfterShutdown ?? reconcileImportRunAfterShutdown)();
       await (
         dependencies.reconcileProcessingAfterShutdown ?? reconcileProcessingRunAfterShutdown
       )();
+      await useProjectStore.getState().saveProject({ allowClosedAdmission: true });
     }
+  } catch (error) {
+    reopenProjectWorkAdmission();
+    throw error;
+  }
+  useProjectStore.getState().cancelAutosave();
+  (dependencies.cleanupListeners ?? cleanupListeners)();
+}
 
-    (dependencies.cleanupListeners ?? cleanupProjectListeners)();
-    invalidateProjectLease();
+export function transitionProjectRuntime(
+  candidate: ProjectInspection | ProjectSnapshot,
+  options: { confirmBackup?: boolean; copied?: boolean } = {},
+  dependencies: TransitionDependencies = {},
+): Promise<void> {
+  return runProjectTransition(async () => {
+    // Renderer reload attaches to accepted native state without stopping its run.
+    if (!("document" in candidate)) await settle(dependencies);
+    let snapshot: ProjectSnapshot;
     try {
-      const recovery = await (dependencies.setActiveProject ?? setNativeActiveProject)(
-        candidate.projectMeta.rootPath,
-      );
-      if (
-        recovery &&
-        (recovery.preservedSubjects.length > 0 ||
-          recovery.restoredSubjects.length > 0 ||
-          recovery.cleanupErrors.length > 0)
-      ) {
-        notifications.show({
-          color: recovery.cleanupErrors.length > 0 ? "orange" : "blue",
-          title: "Import relocation recovery completed",
-          message: [
-            recovery.preservedSubjects.length > 0
-              ? `Preserved: ${recovery.preservedSubjects.join(", ")}`
-              : "",
-            recovery.restoredSubjects.length > 0
-              ? `Restored: ${recovery.restoredSubjects.join(", ")}`
-              : "",
-            ...recovery.cleanupErrors,
-          ]
-            .filter(Boolean)
-            .join(". "),
-        });
-      }
+      snapshot =
+        "document" in candidate
+          ? await readProjectSnapshot(candidate.activationGeneration)
+          : await (dependencies.activateCandidate ?? activateProject)(
+              candidate,
+              options.confirmBackup ?? false,
+              options.copied ?? false,
+            );
     } catch (error) {
-      // Candidate native root was not admitted. Do not reactivate old frontend work.
-      throw new Error(
-        `Failed to activate native project root: ${error instanceof Error ? error.message : String(error)}`,
-        // @ts-expect-error ErrorOptions is absent from the ES2020 target library.
-        { cause: error },
-      );
+      reopenProjectWorkAdmission();
+      throw error;
     }
-    hydrateProjectStores(candidate, isDirty);
-    activateProjectLease(candidate.projectMeta.id, candidate.projectMeta.rootPath);
-    syncSessionCheckpointFromProject(candidate);
+    invalidateProjectLease();
+    const recovery = snapshot.recovery;
+    if (
+      recovery &&
+      (recovery.preservedSubjects.length ||
+        recovery.restoredSubjects.length ||
+        recovery.cleanupErrors.length)
+    ) {
+      notifications.show({
+        title: "Import relocation recovery completed",
+        color: recovery.cleanupErrors.length ? "orange" : "blue",
+        message: [
+          recovery.preservedSubjects.length
+            ? `Preserved: ${recovery.preservedSubjects.join(", ")}`
+            : "",
+          recovery.restoredSubjects.length
+            ? `Restored: ${recovery.restoredSubjects.join(", ")}`
+            : "",
+          ...recovery.cleanupErrors,
+        ]
+          .filter(Boolean)
+          .join(". "),
+      });
+    }
+    resetProjectStores();
+    useProjectStore.getState().acceptSnapshot(snapshot);
+    activateProjectLease(snapshot.document.projectMeta.id, snapshot.rootPath);
+    syncSessionCheckpointFromProject(useProjectStore.getState().project!);
     try {
+      await useImportStore.getState().inspectSourceAvailability();
       await (dependencies.reconcileImportRun ?? reconcileImportRunForActivation)();
       await (
         dependencies.reconcileProcessingRun ??
@@ -156,45 +142,21 @@ export function transitionProjectRuntime(
       )();
     } catch (error) {
       closeProjectWorkAdmission();
-      throw new Error(
-        `Failed to reconcile native execution authority: ${error instanceof Error ? error.message : String(error)}`,
-        // @ts-expect-error ErrorOptions is absent from the ES2020 target library.
-        { cause: error },
-      );
+      throw error;
     }
   });
 }
 
 export function closeProjectRuntime(dependencies: TransitionDependencies = {}): Promise<void> {
   return runProjectTransition(async () => {
-    const currentProject = useProjectStore.getState().project;
-    closeProjectWorkAdmission();
-    await drainProjectTasks();
-
-    if (currentProject) {
-      const result = await (dependencies.shutdownRuntime ?? shutdownProjectRuntime)();
-      if (!result.success) {
-        reopenProjectWorkAdmission();
-        throw shutdownError(result);
-      }
-      await (dependencies.reconcileImportAfterShutdown ?? reconcileImportRunAfterShutdown)();
-      await (
-        dependencies.reconcileProcessingAfterShutdown ?? reconcileProcessingRunAfterShutdown
-      )();
-    }
-
-    (dependencies.cleanupListeners ?? cleanupProjectListeners)();
-    invalidateProjectLease();
+    await settle(dependencies);
     try {
-      await (dependencies.clearActiveProject ?? clearNativeActiveProject)();
+      await (dependencies.clearActiveProject ?? (() => invoke("clear_active_project")))();
     } catch (error) {
-      // Keep admission closed: frontend root could no longer match native state.
-      throw new Error(
-        `Failed to clear native project root: ${error instanceof Error ? error.message : String(error)}`,
-        // @ts-expect-error ErrorOptions is absent from the ES2020 target library.
-        { cause: error },
-      );
+      reopenProjectWorkAdmission();
+      throw error;
     }
+    invalidateProjectLease();
     resetProjectStores();
     clearSessionCheckpoint();
   });

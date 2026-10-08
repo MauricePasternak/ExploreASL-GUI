@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalInternalSource,
-  canonicalRawPath,
-  canonicalSourcePath,
   isAbsolutePath,
   normalizeRawPath,
   resolveLogicalSource,
@@ -38,16 +36,6 @@ describe("project path contract", () => {
     expect(resolveRawPath("C:\\dicom", "subject/session/scan")).toBe(
       "C:\\dicom\\subject\\session\\scan",
     );
-    expect(canonicalRawPath("/media/dicom/subject/session/scan", "/media/dicom")).toBe(
-      "subject/session/scan",
-    );
-  });
-
-  it("canonicalizes source ownership without changing external paths", () => {
-    expect(canonicalSourcePath("/project", "/project/sourcedata", "dicom")).toBe("./sourcedata");
-    expect(canonicalSourcePath("/project", "/media/dicom", "dicom")).toBe("/media/dicom");
-    expect(canonicalSourcePath("/project", "/old/project", "bids")).toBe(".");
-    expect(canonicalSourcePath("C:\\Project", "c:\\project\\source", "dicom")).toBe("./source");
   });
 
   it.each(["../outside", "subject/../../outside", "/absolute", "C:\\absolute", "\\\\host\\x"])(

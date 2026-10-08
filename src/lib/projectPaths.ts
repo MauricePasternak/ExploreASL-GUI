@@ -20,10 +20,6 @@ export function isAbsolutePath(path: string): boolean {
   );
 }
 
-export function hasParentTraversal(path: string): boolean {
-  return !isAbsolutePath(path) && path.replace(/\\/g, "/").split("/").includes("..");
-}
-
 function relativeSegments(path: string): string[] {
   if (isAbsolutePath(path)) {
     throw new Error(`Path must be relative: ${path}`);
@@ -70,39 +66,6 @@ export function resolveLogicalSource(
 
 export function resolveRawPath(sourceRoot: string, rawPath: string): string {
   return joinHostPath(sourceRoot, relativeSegments(normalizeRawPath(rawPath)));
-}
-
-function relativeUnderRoot(path: string, root: string): string | null {
-  if (root.length === 0) return null;
-  const normalizedPath = path.replace(/\\/g, "/").replace(/\/$/, "");
-  const normalizedRoot = root.replace(/\\/g, "/").replace(/\/$/, "");
-  const windowsPath = WINDOWS_DRIVE_ABSOLUTE.test(path) || WINDOWS_UNC_ABSOLUTE.test(path);
-  const comparedPath = windowsPath ? normalizedPath.toLowerCase() : normalizedPath;
-  const comparedRoot = windowsPath ? normalizedRoot.toLowerCase() : normalizedRoot;
-  if (comparedPath === comparedRoot) return "";
-  if (!comparedPath.startsWith(`${comparedRoot}/`)) return null;
-  return normalizedPath.slice(normalizedRoot.length + 1);
-}
-
-export function canonicalSourcePath(
-  projectRoot: string,
-  sourcePath: string,
-  dataSource: "dicom" | "bids",
-): string {
-  if (dataSource === "bids") return ".";
-  if (sourcePath.length === 0) return "";
-  if (!isAbsolutePath(sourcePath)) return canonicalInternalSource(sourcePath);
-  const relative = relativeUnderRoot(sourcePath, projectRoot);
-  return relative === null ? sourcePath : canonicalInternalSource(relative);
-}
-
-export function canonicalRawPath(rawPath: string, resolvedSourceRoot: string): string {
-  if (!isAbsolutePath(rawPath)) return normalizeRawPath(rawPath);
-  const relative = relativeUnderRoot(rawPath, resolvedSourceRoot);
-  if (relative === null || relative.length === 0) {
-    throw new Error(`Raw path must be contained by its logical source: ${rawPath}`);
-  }
-  return normalizeRawPath(relative);
 }
 
 export function logicalSourceIdentity(sourcePath: string): string {

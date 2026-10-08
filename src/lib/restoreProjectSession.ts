@@ -1,81 +1,50 @@
-import { readTextFile } from "@tauri-apps/plugin-fs";
 import {
   canAccessPhase,
   PROJECT_PHASES,
   type ProjectPhase,
   type ProjectFile,
-  parseProject,
 } from "../schemas/project";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
+import { inspectProject } from "./projectPersistence";
 import { clearSessionCheckpoint, readSessionCheckpoint } from "./sessionCheckpoint";
-
-function isProjectPhase(value: string | undefined): value is ProjectPhase {
-  return PROJECT_PHASES.includes(value as ProjectPhase);
-}
 
 export function resolveRestoredPhase(
   routePhase: string | undefined,
   project: ProjectFile,
 ): ProjectPhase {
-  if (isProjectPhase(routePhase) && canAccessPhase(project, routePhase)) {
-    return routePhase;
-  }
-
-  return project.projectMeta.currentPhase;
+  return PROJECT_PHASES.includes(routePhase as ProjectPhase) &&
+    canAccessPhase(project, routePhase as ProjectPhase)
+    ? (routePhase as ProjectPhase)
+    : project.projectMeta.currentPhase;
 }
 
-/**
- * Reloads in-memory project state after a full page refresh.
- * Returns true when the route project id loaded or matching recovery is pending.
- */
-export async function tryRestoreProjectSession(routeProjectId: string): Promise<boolean> {
-  const { loadProject, closeProject } = useProjectStore.getState();
-
-  async function tryLoadFromPath(easlPath: string): Promise<boolean> {
-    try {
-      const raw = await readTextFile(easlPath);
-      const parsed = parseProject(raw);
-      if (parsed.projectMeta.id === routeProjectId) {
-        await loadProject(easlPath);
-        useGlobalStore.getState().addRecentProject(easlPath, parsed.projectMeta.id);
-        return true;
-      }
-    } catch {
-      // Let the store classify missing/malformed primary data and validate a
-      // backup. A matched recovery remains pending for LandingPage to confirm.
-      try {
-        await loadProject(easlPath);
-        const recovery = useProjectStore.getState().recovery;
-        if (recovery?.projectId === routeProjectId) return true;
-        if (recovery) useProjectStore.getState().declineRecovery();
-      } catch {
-        // Ignore unavailable, malformed, future-version, and permission failures.
-      }
-    }
-    return false;
-  }
-
-  const globalState = useGlobalStore.getState();
-  if (!globalState.loaded) {
-    await globalState.loadSettings();
-  }
-
+export async function tryRestoreProjectSession(id: string): Promise<boolean> {
+  const global = useGlobalStore.getState();
+  if (!global.loaded) await global.loadSettings();
+  if (!useGlobalStore.getState().hasValidProfile()) return false;
+  if (await useProjectStore.getState().attachCurrentProject(id)) return true;
   const checkpoint = readSessionCheckpoint();
-  if (checkpoint?.projectId === routeProjectId && (await tryLoadFromPath(checkpoint.easlPath))) {
-    return true;
-  }
-
-  for (const recentProject of useGlobalStore.getState().settings.recentProjects) {
-    if (
-      (!recentProject.projectId || recentProject.projectId === routeProjectId) &&
-      (await tryLoadFromPath(recentProject.path))
-    ) {
+  const recent = useGlobalStore.getState().settings.recentProjects;
+  const paths = [
+    checkpoint?.projectId === id ? checkpoint.easlPath : null,
+    ...recent
+      .filter((project) => !project.projectId || project.projectId === id)
+      .map((project) => project.path),
+  ];
+  for (const path of new Set(paths)) {
+    if (!path) continue;
+    try {
+      const inspection = await inspectProject(path, recent);
+      if (inspection.projectId !== id) continue;
+      await useProjectStore.getState().loadProject(path, { inspection });
+      if (!useProjectStore.getState().recovery)
+        useGlobalStore.getState().addRecentProject(path, id);
       return true;
+    } catch {
+      /* Unavailable candidates do not replace the active project. */
     }
   }
-
-  await closeProject();
   clearSessionCheckpoint();
   return false;
 }
