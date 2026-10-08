@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use super::super::filesystem::{EntryKind, hash, random_id};
-use super::super::journal::{PendingEntry, journal_name};
 use super::super::{OperationKind, SetupPlan};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -148,7 +147,7 @@ pub(super) fn write_bids_fixture(root: &Path, bidsignore: Option<&[u8]>) {
 
 pub(super) fn project(source: &str) -> Vec<u8> {
     serde_json::to_string_pretty(&serde_json::json!({
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "projectMeta": {
             "id": "11111111-1111-4111-8111-111111111111",
             "name": "name",
@@ -157,7 +156,11 @@ pub(super) fn project(source: &str) -> Vec<u8> {
             "currentPhase": "import",
             "dataSource": source,
         },
-        "uiState": {},
+        "uiState": {"manifest": {
+            "reviewers": [{"id": "11111111-1111-4111-8111-111111111111", "label": "Reviewer 1", "createdAt": "2026-01-01T00:00:00Z"}],
+            "activeReviewerId": "11111111-1111-4111-8111-111111111111",
+            "verdicts": {}, "resolvedVerdicts": {}
+        }},
         "mappingState": {},
         "dataPar": {},
     }))
@@ -171,19 +174,4 @@ pub(super) fn identities() -> (String, String, String) {
         random_id("journal"),
         random_id("registry"),
     )
-}
-
-pub(super) fn entry_for(
-    root: &Path,
-    transaction_id: String,
-    journal_id: String,
-    registry_id: String,
-) -> PendingEntry {
-    PendingEntry {
-        registry_id,
-        transaction_id,
-        journal_name: journal_name(&journal_id),
-        journal_id,
-        root: root.canonicalize().unwrap().to_string_lossy().into_owned(),
-    }
 }

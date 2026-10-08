@@ -35,9 +35,8 @@ fn every_structured_command_error_category_has_a_stable_wire_kind() {
 }
 
 #[test]
-fn command_errors_distinguish_rollback_from_pending_recovery() {
+fn command_errors_report_completed_rollback() {
     let root = TempDir::new().unwrap();
-    let app_data = TempDir::new().unwrap();
     let plans = SetupPlans::default();
     let plan = preflight_for_state(
         &plans,
@@ -47,27 +46,10 @@ fn command_errors_distinguish_rollback_from_pending_recovery() {
     )
     .unwrap();
     let _guard = inject_setup_fault(SetupFault::CandidateCreate);
-    let error = commit_for_state(&plans, &plan.plan_id, app_data.path()).unwrap_err();
+    let error = commit_for_state(&plans, &plan.plan_id).unwrap_err();
     assert!(matches!(
         command_error(error),
         SetupCommandError::Rollback { .. }
     ));
     drop(_guard);
-
-    let root = TempDir::new().unwrap();
-    let app_data = TempDir::new().unwrap();
-    let plans = SetupPlans::default();
-    let plan = preflight_for_state(
-        &plans,
-        root.path().to_string_lossy().into_owned(),
-        SetupMode::Bids,
-        Some(String::from_utf8(project("bids")).unwrap()),
-    )
-    .unwrap();
-    let _guard = inject_setup_fault(SetupFault::JournalWrite);
-    let error = commit_for_state(&plans, &plan.plan_id, app_data.path()).unwrap_err();
-    assert!(matches!(
-        command_error(error),
-        SetupCommandError::RecoveryRequired { .. }
-    ));
 }

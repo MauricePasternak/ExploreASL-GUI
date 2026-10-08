@@ -8,15 +8,6 @@ use anyhow::Result as AnyResult;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use tauri::Manager;
-
-fn setup_app_data(app: &tauri::AppHandle) -> Result<std::path::PathBuf, SetupCommandError> {
-    app.path()
-        .app_data_dir()
-        .map_err(|error| SetupCommandError::Failed {
-            message: format!("Could not resolve platform app-data directory: {error}"),
-        })
-}
 
 /// Repair is available only for the active project. Unlike new-project
 /// preflight, accepting a renderer-selected root here would let arbitrary IPC
@@ -42,6 +33,7 @@ fn verify_active_repair_root(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BidsCheckResult {
+    pub setup_recovered: usize,
     pub is_bids: bool,
     pub has_dataset_description: bool,
     pub dataset_desc_error: Option<String>,
@@ -59,7 +51,6 @@ pub struct BidsCheckResult {
 #[tauri::command]
 pub fn check_bids_dataset(
     state: tauri::State<'_, crate::app::state::AppState>,
-    app: tauri::AppHandle,
     root_path: String,
 ) -> Result<BidsCheckResult, String> {
     let trace = CommandTrace::new("check_bids_dataset");
@@ -70,13 +61,10 @@ pub fn check_bids_dataset(
         .lock()
         .map_err(|_| "Project transition lock was poisoned".to_string())?;
     let root = Path::new(&root_path);
-    let app_data = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not resolve platform app-data directory: {error}"))?;
     let ownership = crate::project::ownership::for_setup(&state, root)?;
-    setup::recover_root_owned(&app_data, &ownership).into_command_result()?;
-    let result = check_bids_dataset_impl(root).into_command_result()?;
+    let recovery = setup::recover_root_owned(&ownership).into_command_result()?;
+    let mut result = check_bids_dataset_impl(root).into_command_result()?;
+    result.setup_recovered = recovery.recovered;
     trace.success(&result);
     Ok(result)
 }
@@ -209,6 +197,7 @@ pub(crate) fn check_bids_dataset_impl(root: &Path) -> AnyResult<BidsCheckResult>
     };
 
     Ok(BidsCheckResult {
+        setup_recovered: 0,
         is_bids,
         has_dataset_description,
         dataset_desc_error,
@@ -253,37 +242,33 @@ fn scan_bids_sidecars_impl(root: &Path) -> AnyResult<BidsSidecarScan> {
 }
 
 #[tauri::command]
-pub fn preflight_bids_project_mutations(
-    state: tauri::State<'_, crate::app::state::AppState>,
+pub async fn preflight_bids_project_mutations(
     app: tauri::AppHandle,
     root_path: String,
     mode: SetupMode,
-    canonical_project_bytes: String,
+    name: String,
+    profile_id: String,
 ) -> Result<SetupPlan, SetupCommandError> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| SetupCommandError::Failed {
-            message: "Project transition lock was poisoned".into(),
-        })?;
-    let app_data = setup_app_data(&app)?;
-    let ownership = crate::project::ownership::for_setup(&state, Path::new(&root_path))
-        .map_err(anyhow::Error::msg)
-        .map_err(setup::command_error)?;
-    setup::recover_root_owned(&app_data, &ownership).map_err(setup::command_error)?;
-    setup::preflight_for_state(
-        &state.setup_plans,
-        root_path,
-        mode,
-        Some(canonical_project_bytes),
-    )
-    .map_err(setup::command_error)
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::project::config::preflight_creation_for_state(
+            &app.state(),
+            root_path,
+            mode,
+            name,
+            profile_id,
+        )
+        .map_err(setup::command_error)
+    })
+    .await
+    .map_err(|error| SetupCommandError::Failed {
+        message: error.to_string(),
+    })?
 }
 
 #[tauri::command]
 pub fn preflight_bids_setup_repair(
     state: tauri::State<'_, crate::app::state::AppState>,
-    app: tauri::AppHandle,
     root_path: String,
 ) -> Result<SetupPlan, SetupCommandError> {
     let _transition = state
@@ -293,29 +278,47 @@ pub fn preflight_bids_setup_repair(
             message: "Project transition lock was poisoned".into(),
         })?;
     verify_active_repair_root(&state, Path::new(&root_path)).map_err(setup::command_error)?;
-    let app_data = setup_app_data(&app)?;
     let ownership = crate::project::ownership::for_setup(&state, Path::new(&root_path))
         .map_err(anyhow::Error::msg)
         .map_err(setup::command_error)?;
-    setup::recover_root_owned(&app_data, &ownership).map_err(setup::command_error)?;
-    setup::preflight_for_state(&state.setup_plans, root_path, SetupMode::Repair, None)
-        .map_err(setup::command_error)
+    let recovery = setup::recover_root_owned(&ownership).map_err(setup::command_error)?;
+    let mut plan =
+        setup::preflight_for_state(&state.setup_plans, root_path, SetupMode::Repair, None)
+            .map_err(setup::command_error)?;
+    if recovery.recovered > 0 {
+        plan.warnings.push(format!(
+            "Recovered {} prior setup transaction(s) before this read-only plan.",
+            recovery.recovered
+        ));
+    }
+    Ok(plan)
 }
 
 #[tauri::command]
-pub fn commit_bids_project_mutations(
-    state: tauri::State<'_, crate::app::state::AppState>,
+pub async fn commit_bids_project_mutations(
     app: tauri::AppHandle,
     plan_id: String,
 ) -> Result<SetupCommitResult, SetupCommandError> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| SetupCommandError::Failed {
-            message: "Project transition lock was poisoned".into(),
-        })?;
-    let app_data = setup_app_data(&app)?;
-    setup::commit_for_app_state(&state, &plan_id, &app_data).map_err(setup::command_error)
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<crate::app::state::AppState>();
+        let _transition =
+            state
+                .project_transition
+                .lock()
+                .map_err(|_| SetupCommandError::Failed {
+                    message: "Project transition lock was poisoned".into(),
+                })?;
+        let mut result =
+            setup::commit_for_app_state(&state, &plan_id).map_err(setup::command_error)?;
+        crate::project::config::retain_committed(&state, &mut result)
+            .map_err(setup::command_error)?;
+        Ok(result)
+    })
+    .await
+    .map_err(|error| SetupCommandError::Failed {
+        message: error.to_string(),
+    })?
 }
 
 #[cfg(test)]

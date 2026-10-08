@@ -8,7 +8,7 @@ use super::super::{
     commit_for_state, plan_bidsignore, preflight_for_state, verify,
 };
 use super::common::{project, source_snapshot};
-use crate::project::validation::{parse_summary, validate_canonical_project_v1};
+use crate::project::validation::{ProjectParseError, parse_document, parse_summary};
 
 #[test]
 fn snapshots_prove_detection_and_all_preflight_paths_are_read_only() {
@@ -34,38 +34,94 @@ fn snapshots_prove_detection_and_all_preflight_paths_are_read_only() {
 }
 
 #[test]
-fn planning_accepts_the_canonical_schema_v1_envelope_only() {
+fn planning_accepts_the_current_schema_envelope_only() {
     let summary = parse_summary(&project("bids")).unwrap();
-    assert_eq!(summary.schema_version, "1");
+    assert_eq!(summary.schema_version, "2");
     assert!(
         parse_summary(
             br#"{"version":"0.1.0","projectMeta":{"id":"id","name":"name","dataSource":"bids"}}"#
         )
         .is_err()
     );
+    for envelope in [
+        serde_json::json!({"schemaVersion": 1}),
+        serde_json::json!({"schemaVersion": 3}),
+    ] {
+        assert!(matches!(
+            parse_document(&serde_json::to_vec(&envelope).unwrap()),
+            Err(ProjectParseError::Unsupported { .. })
+        ));
+    }
+    assert!(matches!(
+        parse_document(br#"{"schemaVersion":"2"}"#),
+        Err(ProjectParseError::Malformed { .. })
+    ));
+    for malformed in [b"{".as_slice(), br#"{"schemaVersion":2}"#, b"{}"] {
+        assert!(matches!(
+            parse_document(malformed),
+            Err(ProjectParseError::Malformed { .. })
+        ));
+    }
 }
 
 #[test]
 fn canonical_project_validation_rejects_untrusted_shape_and_path_payloads() {
     let valid: serde_json::Value = serde_json::from_slice(&project("bids")).unwrap();
-    assert!(validate_canonical_project_v1(&valid).is_ok());
+    assert!(parse_document(&serde_json::to_vec(&valid).unwrap()).is_ok());
     let mut processing_settings = valid.clone();
     processing_settings["dataPar"] = serde_json::json!({
         "bPVCGaussianMM": 1,
         "ExternalQuantificationSmoothGaussianMM": [5.5, 5, 1.5],
         "bMasking": [0, 0, 0, 0]
     });
-    assert!(validate_canonical_project_v1(&processing_settings).is_ok());
+    assert!(parse_document(&serde_json::to_vec(&processing_settings).unwrap()).is_ok());
     processing_settings["dataPar"]["bPVCGaussianMM"] = serde_json::json!(2);
-    assert!(validate_canonical_project_v1(&processing_settings).is_err());
+    assert!(parse_document(&serde_json::to_vec(&processing_settings).unwrap()).is_err());
+    for mode in [
+        serde_json::json!("separate_scan"),
+        serde_json::json!("UseControlAsM0"),
+        serde_json::json!("Absent"),
+        serde_json::json!(0.0),
+    ] {
+        processing_settings["dataPar"]["bPVCGaussianMM"] = serde_json::json!(0);
+        processing_settings["dataPar"]["M0"] = mode.clone();
+        let parsed = parse_document(&serde_json::to_vec(&processing_settings).unwrap()).unwrap();
+        assert_eq!(serde_json::to_value(parsed.data_par).unwrap()["M0"], mode);
+    }
     for mutation in [
-        ("schemaVersion", serde_json::json!(2)),
+        ("schemaVersion", serde_json::json!(1)),
         ("uiState", serde_json::json!([])),
         (
             "mappingState",
             serde_json::json!({"sourceDataPath":"../escape"}),
         ),
+        (
+            "mappingState",
+            serde_json::json!({"metadataGroups":[{"id":"g","label":"Group","bidsParams":{"ASLContext":"other"}}]}),
+        ),
         ("dataPar", serde_json::json!([])),
+        (
+            "dataPar",
+            serde_json::json!({"ApplyQuantification":[1,0,-0.1,0,1,0]}),
+        ),
+        (
+            "dataPar",
+            serde_json::json!({"ApplyQuantification":[1,0,1.1,0,1,0]}),
+        ),
+        ("dataPar", serde_json::json!({"TissueThreshold":[-0.1]})),
+        ("dataPar", serde_json::json!({"TissueThreshold":[1.1]})),
+        ("dataPar", serde_json::json!({"M0":"InvalidValue"})),
+        ("dataPar", serde_json::json!({"PVCNativeSpaceKernel":[5,5]})),
+        ("dataPar", serde_json::json!({"bPVCGaussianMM":true})),
+        (
+            "mappingState",
+            serde_json::json!({"rawPaths":["subject/../../outside"]}),
+        ),
+        (
+            "uiState",
+            serde_json::json!({"dataVis":{"qcbfSource":{"relativePath":"../outside.tsv","fileHash":"hash"}},"manifest":valid["uiState"]["manifest"]}),
+        ),
+        ("uiState", serde_json::json!({})),
         ("unexpected", serde_json::json!(true)),
     ] {
         let mut invalid = valid.clone();
@@ -74,28 +130,115 @@ fn canonical_project_validation_rejects_untrusted_shape_and_path_payloads() {
             .unwrap()
             .insert(mutation.0.into(), mutation.1);
         assert!(
-            validate_canonical_project_v1(&invalid).is_err(),
+            parse_document(&serde_json::to_vec(&invalid).unwrap()).is_err(),
             "{}",
             mutation.0
         );
     }
     let mut invalid = valid;
     invalid["projectMeta"]["currentPhase"] = serde_json::json!("other");
-    assert!(validate_canonical_project_v1(&invalid).is_err());
+    let error = parse_document(&serde_json::to_vec(&invalid).unwrap()).unwrap_err();
+    assert!(error.to_string().contains("projectMeta.currentPhase"));
+    for (metadata, accepted) in [
+        (serde_json::json!({"PostLabelingDelay":1800}), false),
+        (serde_json::json!({"PostLabelingDelay":[1.8,0.005]}), false),
+        (
+            serde_json::json!({"PostLabelingDelay":[0,0.01,10],"M0_GMScaleFactor":1,"BackgroundSuppression":true}),
+            true,
+        ),
+        (serde_json::json!({"M0_GMScaleFactor":0}), false),
+        (
+            serde_json::json!({"BackgroundSuppression":true,"BackgroundSuppressionNumberPulses":0}),
+            false,
+        ),
+        (
+            serde_json::json!({"BackgroundSuppression":false,"BackgroundSuppressionNumberPulses":0}),
+            true,
+        ),
+        (
+            serde_json::json!({"PostLabelingDelay":0.01,"BackgroundSuppression":true,"BackgroundSuppressionNumberPulses":2}),
+            true,
+        ),
+    ] {
+        let mut document: serde_json::Value = serde_json::from_slice(&project("bids")).unwrap();
+        document["mappingState"]["metadataGroups"] =
+            serde_json::json!([{"id":"g","label":"Group","bidsParams":metadata}]);
+        assert_eq!(
+            parse_document(&serde_json::to_vec(&document).unwrap()).is_ok(),
+            accepted,
+            "{metadata}"
+        );
+    }
 }
 
 #[test]
-fn canonical_project_bytes_reject_noncanonical_encoding_and_schema_refinements() {
+fn current_manifest_checks_registered_identity_unicode_and_fail_reason() {
+    let mut current: serde_json::Value = serde_json::from_slice(&project("bids")).unwrap();
+    let id = "11111111-1111-4111-8111-111111111111";
+    current["uiState"]["manifest"]["reviewers"][0]["label"] = serde_json::json!("界".repeat(100));
+    current["uiState"]["manifest"]["verdicts"][id] =
+        serde_json::json!({"sub-01_01": {"status": "pass", "notes": "界".repeat(500), "setAt": 1}});
+    assert!(parse_document(&serde_json::to_vec(&current).unwrap()).is_ok());
+    let mut oversized_label = current["uiState"]["manifest"]["reviewers"].clone();
+    oversized_label[0]["label"] = serde_json::json!("界".repeat(101));
+    for (field, value) in [
+        ("reviewers", oversized_label),
+        (
+            "verdicts",
+            serde_json::json!({id:{"sub-01_01":{"status":"pass","notes":"界".repeat(501),"setAt":1}}}),
+        ),
+        (
+            "activeReviewerId",
+            serde_json::json!("22222222-2222-4222-8222-222222222222"),
+        ),
+        (
+            "verdicts",
+            serde_json::json!({"22222222-2222-4222-8222-222222222222": {}}),
+        ),
+        (
+            "verdicts",
+            serde_json::json!({id: {"sub-01_01": {"status": "fail", "setAt": 1}}}),
+        ),
+    ] {
+        let mut invalid = current.clone();
+        invalid["uiState"]["manifest"][field] = value;
+        assert!(
+            parse_document(&serde_json::to_vec(&invalid).unwrap()).is_err(),
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn current_project_bytes_accept_json_formatting_and_reject_invalid_known_fields() {
     let valid = project("bids");
     assert!(parse_summary(&valid).is_ok());
-    assert!(parse_summary(format!("{}\n", String::from_utf8_lossy(&valid)).as_bytes()).is_err());
-    assert!(parse_summary(
-            br#"{"schemaVersion":1,"projectMeta":{"id":"11111111-1111-4111-8111-111111111111","name":"name","createdAt":"2026-01-01T00:00:00.000Z","lastOpened":"2026-01-01T00:00:00.000Z","currentPhase":"import","dataSource":"bids"},"uiState":{},"mappingState":{},"dataPar":{}}"#
-        ).is_err());
+    let mut encoded: serde_json::Value = serde_json::from_slice(&valid).unwrap();
+    encoded["uiState"]["import"] = serde_json::json!({"mostRecentConfig":"encoded snapshot"});
+    assert!(
+        parse_document(&serde_json::to_vec(&encoded).unwrap())
+            .unwrap_err()
+            .to_string()
+            .contains("uiState.import.mostRecentConfig")
+    );
+    let with_newline = format!("{}\n", String::from_utf8_lossy(&valid));
+    assert!(parse_summary(with_newline.as_bytes()).is_ok());
+    assert_ne!(
+        parse_summary(&valid).unwrap().content_hash,
+        parse_summary(with_newline.as_bytes()).unwrap().content_hash
+    );
+    let mut snapshot: serde_json::Value =
+        serde_json::from_slice(&super::common::project("bids")).unwrap();
+    let baseline = serde_json::json!({"sourceDataPath":"../outside","pathPatterns":[],"tokenizerConfigs":{},"bMatchDirectories":true,"modalityAliases":[],"sessionAliases":[],"runAliases":[],"subjectRenames":[],"metadataGroups":[],"subjectRows":[]});
+    snapshot["uiState"]["import"] = serde_json::json!({"mostRecentConfig":baseline});
+    assert!(
+        parse_document(&serde_json::to_vec(&snapshot).unwrap())
+            .unwrap_err()
+            .to_string()
+            .contains("uiState.import.mostRecentConfig.sourceDataPath")
+    );
 
-    // ProjectMetaSchema accepts legacy non-UUID project identifiers and
-    // arbitrary timestamp strings; the native boundary must not reject a
-    // project that the persisted frontend schema accepts.
+    // Project metadata strings have no reviewer-specific UUID/UTC constraint.
     let mut legacy: serde_json::Value = serde_json::from_slice(&valid).unwrap();
     legacy["projectMeta"]["id"] = serde_json::json!("legacy-project-id");
     legacy["projectMeta"]["createdAt"] = serde_json::json!("legacy date");
@@ -244,7 +387,6 @@ fn repair_requires_an_existing_bids_project_and_revalidates_its_identity() {
     assert_eq!(source_snapshot(root.path()), before);
 
     fs::write(root.path().join("project.easl"), project("bids")).unwrap();
-    let app_data = TempDir::new().unwrap();
     let plans = SetupPlans::default();
     let plan = preflight_for_state(
         &plans,
@@ -255,7 +397,7 @@ fn repair_requires_an_existing_bids_project_and_revalidates_its_identity() {
     .unwrap();
     fs::write(root.path().join("project.easl"), project("dicom")).unwrap();
     let before_commit = source_snapshot(root.path());
-    assert!(commit_for_state(&plans, &plan.plan_id, app_data.path()).is_err());
+    assert!(commit_for_state(&plans, &plan.plan_id).is_err());
     assert_eq!(source_snapshot(root.path()), before_commit);
 }
 

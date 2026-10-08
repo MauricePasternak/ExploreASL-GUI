@@ -61,6 +61,7 @@ pub(crate) fn native_exit_decision(
     }
 }
 
+#[cfg(test)]
 pub fn set_active_project_impl(
     root_path: String,
     state: &crate::app::state::AppState,
@@ -68,6 +69,7 @@ pub fn set_active_project_impl(
     set_active_project_inner(root_path, state).into_command_result()
 }
 
+#[cfg(test)]
 fn set_active_project_inner(
     root_path: String,
     state: &crate::app::state::AppState,
@@ -76,6 +78,23 @@ fn set_active_project_inner(
         &state.project_transition,
         Some("Project transition lock was poisoned"),
     )?;
+    set_active_project_locked(root_path, state)
+}
+
+/// Root-capability regression fixtures exercise recovery without configuration.
+#[cfg(test)]
+pub(crate) fn set_active_project_locked(
+    root_path: String,
+    state: &crate::app::state::AppState,
+) -> AnyResult<crate::import::relocation::RelocationRecoverySummary> {
+    set_active_project_with_config_locked(root_path, state, None)
+}
+
+pub(crate) fn set_active_project_with_config_locked(
+    root_path: String,
+    state: &crate::app::state::AppState,
+    mut configuration: Option<crate::project::config::ActiveProjectConfig>,
+) -> AnyResult<crate::import::relocation::RelocationRecoverySummary> {
     ensure_processing_runtime_released(state)?;
     let path = std::fs::canonicalize(&root_path)
         .inspect_err(|error| log::error!("set_active_project failed canonicalizing: {error}"))
@@ -85,14 +104,7 @@ fn set_active_project_inner(
     crate::import::recover_processing_before_import(&path)?;
     // BIDS setup recovery is separate from import relocation. A pending setup
     // transaction must settle before this root is made observable as active.
-    if let Some(app_data) = state
-        .setup_app_data
-        .lock()
-        .map_err(|_| anyhow::anyhow!("Setup app-data state lock was poisoned"))?
-        .clone()
-    {
-        crate::project::setup::recover_root_after_processing_recovery(&app_data, &ownership)?;
-    }
+    crate::project::setup::recover_root_after_processing_recovery(&ownership)?;
     // Recovery must finish before this candidate can become observable through
     // active-root IPC or frontend hydration.
     let recovery = crate::import::relocation::recover(&path)?;
@@ -113,7 +125,11 @@ fn set_active_project_inner(
         lock_state(&state.processing_state, None)?.current_run = record
             .filter(|r| !r.acknowledged)
             .map(crate::processing::ProcessingRun::from_record);
-        replace_active_project_state(state, Some(ownership.clone()))
+        if let Some(configuration) = &mut configuration {
+            configuration.ownership = ownership.clone();
+            crate::project::config::reconcile_candidate_locked(state, configuration)?;
+        }
+        replace_active_project_state(state, Some(ownership.clone()), configuration)
     })();
     if let Err(error) = activation {
         let mut import = lock_state(&state.import_state, None)?;
@@ -122,18 +138,6 @@ fn set_active_project_inner(
         *processing = previous_processing;
         return Err(error);
     }
-    Ok(recovery)
-}
-
-#[tauri::command]
-pub fn set_active_project(
-    root_path: String,
-    state: State<'_, crate::app::state::AppState>,
-) -> Result<crate::import::relocation::RelocationRecoverySummary, String> {
-    let _trace = crate::tracing::CommandTrace::new("set_active_project");
-    log::info!("set_active_project: root_path = {}", root_path);
-    let recovery = set_active_project_impl(root_path, &state)?;
-    log::info!("set_active_project success");
     Ok(recovery)
 }
 
@@ -147,12 +151,23 @@ fn clear_active_project_inner(state: &crate::app::state::AppState) -> AnyResult<
         Some("Project transition lock was poisoned"),
     )?;
     ensure_processing_runtime_released(state)?;
-    replace_active_project_state(state, None)
+    replace_active_project_state(state, None, None)
 }
 
 /// Direct active-root IPC must not bypass project-runtime shutdown. Frontend
 /// transitions drain/stop first; callers that skip that contract fail closed.
-fn ensure_processing_runtime_released(state: &crate::app::state::AppState) -> AnyResult<()> {
+pub(crate) fn ensure_processing_runtime_released(
+    state: &crate::app::state::AppState,
+) -> AnyResult<()> {
+    if lock_state(&state.project_config, None)?
+        .active
+        .as_ref()
+        .is_some_and(|active| {
+            active.accepted_revision != active.persisted_revision || active.recovered_from_backup
+        })
+    {
+        anyhow::bail!("Accepted project configuration must be saved before replacement or clear");
+    }
     crate::project::ownership::ensure_import_released(state).map_err(anyhow::Error::msg)?;
     crate::project::ownership::ensure_processing_released(state).map_err(anyhow::Error::msg)
 }
@@ -160,14 +175,20 @@ fn ensure_processing_runtime_released(state: &crate::app::state::AppState) -> An
 fn replace_active_project_state(
     state: &crate::app::state::AppState,
     ownership: Option<std::sync::Arc<crate::project::ownership::ActiveProject>>,
+    configuration: Option<crate::project::config::ActiveProjectConfig>,
 ) -> AnyResult<()> {
     // Obtain every fallible state guard before publishing any replacement.
+    let mut config = lock_state(&state.project_config, None)?;
     let mut root = lock_state(&state.active_project_root, None)?;
     let mut active = lock_state(&state.active_project, None)?;
     let mut data = lock_state(&state.active_data, None)?;
     *root = ownership.as_ref().map(|lease| lease.root().to_path_buf());
     *active = ownership;
     *data = None;
+    config.generation = configuration
+        .as_ref()
+        .map_or(config.generation + 1, |accepted| accepted.generation);
+    config.active = configuration;
     Ok(())
 }
 
@@ -329,7 +350,16 @@ pub fn shutdown_project_runtime_impl(state: &AppState) -> ProjectRuntimeShutdown
     };
     // Domain reservations retain in-process ownership while stop waits. Never
     // hold transition mutex across process or supervisor completion.
-    shutdown_project_runtime_with(state, shutdown_import, shutdown_workers, shutdown_watcher)
+    let mut result =
+        shutdown_project_runtime_with(state, shutdown_import, shutdown_workers, shutdown_watcher);
+    if result.success
+        && let Err(error) = crate::project::config::reconcile_settled_for_state(state)
+    {
+        result.success = false;
+        result.import_process =
+            ResourceShutdown::failure(format!("Native result reconciliation failed: {error:#}"));
+    }
+    result
 }
 
 pub(crate) fn shutdown_project_runtime_with<Import, Workers, Watcher>(

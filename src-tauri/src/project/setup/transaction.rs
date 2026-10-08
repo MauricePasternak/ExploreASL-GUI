@@ -6,8 +6,8 @@ use super::filesystem::{
     safe_relative, sync_parent, validate_fixed_hierarchy,
 };
 use super::journal::{
-    OperationPhase, PendingEntry, TransactionPhase, initial_journal, journal_name, persist_phase,
-    register_pending, update_operation, validate_registry_entry, write_journal,
+    OperationPhase, TransactionPhase, initial_journal, persist_phase, update_operation,
+    write_journal,
 };
 use super::planning::{CachedPlan, check_fresh};
 use super::recovery::{cleanup_terminal, rollback};
@@ -130,25 +130,13 @@ fn install_candidate(
     Ok(())
 }
 
-fn commit_plan(plan: &CachedPlan, app_data: &Path) -> Result<SetupCommitResult> {
+fn commit_plan(plan: &CachedPlan) -> Result<SetupCommitResult> {
     check_fresh(plan)?;
-    fs::create_dir_all(app_data).context("Could not create platform app-data directory")?;
     let transaction_id = random_id("transaction");
     let journal_id = random_id("journal");
     let registry_id = random_id("registry");
-    let entry = PendingEntry {
-        registry_id: registry_id.clone(),
-        transaction_id: transaction_id.clone(),
-        journal_id: journal_id.clone(),
-        root: plan.root.to_string_lossy().into_owned(),
-        journal_name: journal_name(&journal_id),
-    };
-    validate_registry_entry(&entry)?;
-    register_pending(app_data, entry)?; // durable global intent precedes every root mutation.
     let mut journal = initial_journal(plan, transaction_id, journal_id, registry_id)?;
-    if let Err(error) = write_journal(&plan.root, &journal) {
-        return Err(error.context("Setup recovery required: pending registry remains"));
-    }
+    write_journal(&plan.root, &journal)?;
     let attempt = (|| -> Result<SetupCommitResult> {
         persist_phase(&plan.root, &mut journal, TransactionPhase::Preparing)?;
         if matches!(plan.mode, SetupMode::Bids | SetupMode::Repair)
@@ -252,10 +240,12 @@ fn commit_plan(plan: &CachedPlan, app_data: &Path) -> Result<SetupCommitResult> 
                     .to_string_lossy()
                     .into_owned()
             }),
-            canonical_project_bytes: plan
+            project_document: plan
                 .project_bytes
-                .as_ref()
-                .and_then(|bytes| String::from_utf8(bytes.clone()).ok()),
+                .as_deref()
+                .map(crate::project::validation::parse_document)
+                .transpose()?,
+            candidate_id: None,
             directory_sync_supported: durable,
         };
         journal.phase = TransactionPhase::Committed;
@@ -265,14 +255,14 @@ fn commit_plan(plan: &CachedPlan, app_data: &Path) -> Result<SetupCommitResult> 
     })();
     match attempt {
         Ok(result) => {
-            if let Err(error) = cleanup_terminal(&plan.root, &journal, app_data) {
+            if let Err(error) = cleanup_terminal(&plan.root, &journal) {
                 log::warn!("Setup committed; deferred terminal cleanup: {error:#}");
             }
             Ok(result)
         }
         Err(error) => match rollback(&plan.root, &mut journal) {
             Ok(()) => {
-                let _ = cleanup_terminal(&plan.root, &journal, app_data);
+                let _ = cleanup_terminal(&plan.root, &journal);
                 Err(anyhow!(
                     "Setup changes rolled back after failure: {error:#}"
                 ))
@@ -288,28 +278,19 @@ fn commit_plan(plan: &CachedPlan, app_data: &Path) -> Result<SetupCommitResult> 
     }
 }
 
-pub fn commit_for_state(
-    plans: &SetupPlans,
-    plan_id: &str,
-    app_data: &Path,
-) -> Result<SetupCommitResult> {
-    commit_with_ownership(plans, plan_id, app_data, |root| {
+pub fn commit_for_state(plans: &SetupPlans, plan_id: &str) -> Result<SetupCommitResult> {
+    commit_with_ownership(plans, plan_id, |root| {
         Ok(std::sync::Arc::new(ActiveProject::open(root)?))
     })
 }
-pub(crate) fn commit_for_app_state(
-    state: &AppState,
-    plan_id: &str,
-    app_data: &Path,
-) -> Result<SetupCommitResult> {
-    commit_with_ownership(&state.setup_plans, plan_id, app_data, |root| {
+pub(crate) fn commit_for_app_state(state: &AppState, plan_id: &str) -> Result<SetupCommitResult> {
+    commit_with_ownership(&state.setup_plans, plan_id, |root| {
         ownership::for_setup(state, root).map_err(anyhow::Error::msg)
     })
 }
 fn commit_with_ownership(
     plans: &SetupPlans,
     plan_id: &str,
-    app_data: &Path,
     acquire: impl FnOnce(&Path) -> Result<std::sync::Arc<ActiveProject>>,
 ) -> Result<SetupCommitResult> {
     let mut cache = plans
@@ -330,7 +311,7 @@ fn commit_with_ownership(
     }
     let _ownership = acquire(&plan.root)?;
     plan.claimed = true;
-    let result = commit_plan(plan, app_data);
+    let result = commit_plan(plan);
     match &result {
         Ok(value) => plan.result = Some(value.clone()),
         Err(error) => plan.terminal_failure = Some(format!("{error:#}")),

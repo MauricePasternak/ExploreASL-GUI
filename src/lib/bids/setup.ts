@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
+import type { ProjectDocument } from "../../generated/project/ProjectDocument";
 
 export const SetupModeSchema = z.enum(["bids", "dicom", "repair"]);
 export type SetupMode = z.infer<typeof SetupModeSchema>;
@@ -32,13 +33,13 @@ export const SetupPlanSchema = z.object({
 });
 export type SetupPlan = z.infer<typeof SetupPlanSchema>;
 
-export const SetupCommitResultSchema = z.object({
-  outcome: z.literal("committed"),
-  projectPath: z.string().nullable().optional(),
-  canonicalProjectBytes: z.string().nullable().optional(),
-  directorySyncSupported: z.boolean(),
-});
-export type SetupCommitResult = z.infer<typeof SetupCommitResultSchema>;
+export type SetupCommitResult = {
+  outcome: "committed";
+  projectPath: string | null;
+  projectDocument: ProjectDocument | null;
+  candidateId: string | null;
+  directorySyncSupported: boolean;
+};
 
 export const SetupCommandErrorSchema = z.object({
   kind: z.enum([
@@ -56,10 +57,11 @@ export type SetupCommandError = z.infer<typeof SetupCommandErrorSchema>;
 export async function preflightBidsProjectMutations(
   rootPath: string,
   mode: Exclude<SetupMode, "repair">,
-  canonicalProjectBytes: string,
+  name: string,
+  profileId: string,
 ): Promise<SetupPlan> {
   return SetupPlanSchema.parse(
-    await invoke("preflight_bids_project_mutations", { rootPath, mode, canonicalProjectBytes }),
+    await invoke("preflight_bids_project_mutations", { rootPath, mode, name, profileId }),
   );
 }
 
@@ -68,5 +70,5 @@ export async function preflightBidsSetupRepair(rootPath: string): Promise<SetupP
 }
 
 export async function commitBidsProjectMutations(planId: string): Promise<SetupCommitResult> {
-  return SetupCommitResultSchema.parse(await invoke("commit_bids_project_mutations", { planId }));
+  return invoke<SetupCommitResult>("commit_bids_project_mutations", { planId });
 }

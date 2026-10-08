@@ -101,7 +101,7 @@ pub(super) fn validate_fixed_hierarchy(root: &Path, path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn open_regular_no_follow(path: &Path) -> Result<File> {
+pub(crate) fn open_regular_no_follow(path: &Path) -> Result<File> {
     let metadata = fs::symlink_metadata(path)
         .with_context(|| format!("Could not inspect {}", path.display()))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -255,8 +255,6 @@ pub(super) fn sync_parent(path: &Path) -> Result<bool> {
 }
 pub(super) fn persist_bytes(path: &Path, bytes: &[u8], replace: bool) -> Result<bool> {
     let parent = path.parent().ok_or_else(|| anyhow!("Path has no parent"))?;
-    fs::create_dir_all(parent)
-        .with_context(|| format!("Could not create app-data directory {}", parent.display()))?;
     let temporary = parent.join(format!(
         ".{}.{}.tmp",
         path.file_name().and_then(|x| x.to_str()).unwrap_or("setup"),

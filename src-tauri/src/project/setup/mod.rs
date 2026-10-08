@@ -11,8 +11,9 @@ pub use crate::project::validation::ProjectSummary;
 #[cfg(test)]
 pub use fault_injection::{SetupFault, SetupFaultGuard, inject_setup_fault};
 pub use filesystem::classify_marker;
+pub(crate) use filesystem::open_regular_no_follow;
 pub use planning::{IgnorePlan, plan_bidsignore, preflight_for_state, verify};
-pub use recovery::{recover_all, recover_at_startup, recover_root};
+pub use recovery::recover_root;
 pub(crate) use recovery::{recover_root_after_processing_recovery, recover_root_owned};
 pub(crate) use transaction::commit_for_app_state;
 pub use transaction::commit_for_state;
@@ -63,12 +64,13 @@ pub struct SetupPlan {
     pub temporary_artifacts: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupCommitResult {
     pub outcome: String,
     pub project_path: Option<String>,
-    pub canonical_project_bytes: Option<String>,
+    pub project_document: Option<crate::project::model::ProjectDocument>,
+    pub candidate_id: Option<String>,
     pub directory_sync_supported: bool,
 }
 

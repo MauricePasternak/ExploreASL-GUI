@@ -1,18 +1,16 @@
-//! Rollback, terminal cleanup, and startup/targeted recovery for project setup.
+//! Rollback, terminal cleanup, and selected-root recovery for project setup.
 use super::fault_injection::fail;
 use super::filesystem::{
-    EntryKind, canonical_root, find_owned_sibling, fixed_path, inspect, safe_relative, sync_parent,
+    EntryKind, find_owned_sibling, fixed_path, inspect, safe_relative, sync_parent,
 };
 use super::journal::{
-    OperationPhase, PendingEntry, REGISTRY_VERSION, SetupJournal, TransactionPhase, load_registry,
-    persist_phase, read_journal, remove_owned_journal, remove_pending, validate_registry_entry,
-    write_journal,
+    JOURNAL_PREFIX, OperationPhase, SetupJournal, TransactionPhase, journal_name, persist_phase,
+    read_journal, remove_owned_journal, write_journal,
 };
 use super::{SetupCommitResult, SetupMode, SetupRecoverySummary};
 use crate::project::ownership::ActiveProject;
 use anyhow::{Result, anyhow, bail};
 use std::fs;
-use std::io;
 use std::path::Path;
 
 pub(super) fn rollback(root: &Path, journal: &mut SetupJournal) -> Result<()> {
@@ -117,13 +115,14 @@ pub(super) fn rollback(root: &Path, journal: &mut SetupJournal) -> Result<()> {
     journal.terminal = Some(SetupCommitResult {
         outcome: "rolled_back".into(),
         project_path: None,
-        canonical_project_bytes: None,
+        project_document: None,
+        candidate_id: None,
         directory_sync_supported: sync_parent(root)?,
     });
     write_journal(root, journal)?;
     Ok(())
 }
-pub(super) fn cleanup_terminal(root: &Path, journal: &SetupJournal, app_data: &Path) -> Result<()> {
+pub(super) fn cleanup_terminal(root: &Path, journal: &SetupJournal) -> Result<()> {
     fail("cleanup")?;
     for operation in &journal.operations {
         if let Some(candidate) = &operation.candidate {
@@ -150,12 +149,6 @@ pub(super) fn cleanup_terminal(root: &Path, journal: &SetupJournal, app_data: &P
         }
     }
     sync_parent(root)?;
-    // Remove durable global discovery before deleting its paired journal. If
-    // the registry write fails after journal deletion, a future startup has a
-    // dangling entry it cannot validate or clean up and blocks the root
-    // forever. A crash after registry removal can leave only a terminal
-    // journal, which is inert and safe to retain as cleanup debris.
-    remove_pending(app_data, &journal.registry_id)?;
     remove_owned_journal(root, journal)
 }
 
@@ -178,44 +171,9 @@ fn complete_after_state(root: &Path, journal: &SetupJournal) -> Result<bool> {
     }
     Ok(!journal.operations.is_empty())
 }
-fn recover_entry(app_data: &Path, entry: &PendingEntry) -> Result<bool> {
-    validate_registry_entry(entry)?;
-    let root = match canonical_root(Path::new(&entry.root)) {
-        Ok(root) => root,
-        Err(error) => {
-            if matches!(
-                error.downcast_ref::<io::Error>().map(io::Error::kind),
-                Some(io::ErrorKind::NotFound)
-            ) {
-                return Ok(false);
-            }
-            return Err(error.context("Setup recovery root is unavailable"));
-        }
-    };
-    let ownership = ActiveProject::open(&root)?;
-    crate::import::recover_processing_before_import(&root)?;
-    recover_entry_owned(app_data, entry, &ownership)
-}
-fn recover_entry_owned(
-    app_data: &Path,
-    entry: &PendingEntry,
-    ownership: &ActiveProject,
-) -> Result<bool> {
-    validate_registry_entry(entry)?;
-    let root = ownership.root();
-    if canonical_root(Path::new(&entry.root))? != root {
-        bail!("Setup recovery native ownership mismatch");
-    }
-    let mut journal = read_journal(root, &entry.journal_id)?;
-    if journal.registry_id != entry.registry_id
-        || journal.transaction_id != entry.transaction_id
-        || journal.journal_id != entry.journal_id
-    {
-        bail!("Setup registry and journal identities diverge");
-    }
-    if let Some(result) = &journal.terminal {
-        cleanup_terminal(root, &journal, app_data)?;
-        return Ok(result.outcome == "committed");
+fn recover_journal(root: &Path, mut journal: SetupJournal) -> Result<()> {
+    if journal.terminal.is_some() {
+        return cleanup_terminal(root, &journal);
     }
     if complete_after_state(root, &journal)? {
         journal.phase = TransactionPhase::Committed;
@@ -223,87 +181,69 @@ fn recover_entry_owned(
             outcome: "committed".into(),
             project_path: (journal.mode != SetupMode::Repair)
                 .then(|| root.join("project.easl").to_string_lossy().into_owned()),
-            canonical_project_bytes: None,
+            project_document: None,
+            candidate_id: None,
             directory_sync_supported: sync_parent(root)?,
         });
         write_journal(root, &journal)?;
-        cleanup_terminal(root, &journal, app_data)?;
-        return Ok(true);
+        return cleanup_terminal(root, &journal);
     }
     rollback(root, &mut journal)?;
-    cleanup_terminal(root, &journal, app_data)?;
-    Ok(true)
+    cleanup_terminal(root, &journal)
 }
-pub fn recover_all(app_data: &Path) -> Result<SetupRecoverySummary> {
-    let registry = load_registry(app_data)?;
-    if registry.version != REGISTRY_VERSION {
-        bail!("Unsupported setup pending registry version");
-    }
-    let mut summary = SetupRecoverySummary {
-        recovered: 0,
-        deferred_roots: vec![],
-        blocked: vec![],
-    };
-    for entry in registry.entries {
-        match recover_entry(app_data, &entry) {
-            Ok(true) => summary.recovered += 1,
-            Ok(false) => summary.deferred_roots.push(entry.root),
-            Err(error) => summary.blocked.push(format!("{}: {error:#}", entry.root)),
-        }
-    }
-    if !summary.blocked.is_empty() {
-        bail!(
-            "BIDS setup recovery blocked: {}",
-            summary.blocked.join("; ")
-        );
-    }
-    Ok(summary)
-}
-/// Application startup entrypoint. Kept separate so startup recovery has a
-/// direct test target and cannot be accidentally bypassed by builder wiring.
-pub fn recover_at_startup(app_data: &Path) -> Result<SetupRecoverySummary> {
-    recover_all(app_data)
-}
-pub fn recover_root(app_data: &Path, root: &Path) -> Result<SetupRecoverySummary> {
+pub fn recover_root(root: &Path) -> Result<SetupRecoverySummary> {
     let ownership = ActiveProject::open(root)?;
-    recover_root_owned(app_data, &ownership)
+    recover_root_owned(&ownership)
 }
-pub(crate) fn recover_root_owned(
-    app_data: &Path,
-    ownership: &ActiveProject,
-) -> Result<SetupRecoverySummary> {
+pub(crate) fn recover_root_owned(ownership: &ActiveProject) -> Result<SetupRecoverySummary> {
     crate::import::recover_processing_before_import(ownership.root())?;
-    recover_root_after_processing_recovery(app_data, ownership)
+    recover_root_after_processing_recovery(ownership)
 }
 
 pub(crate) fn recover_root_after_processing_recovery(
-    app_data: &Path,
     ownership: &ActiveProject,
 ) -> Result<SetupRecoverySummary> {
-    let canonical = ownership.root().to_path_buf();
-    let registry = load_registry(app_data)?;
-    let entries = registry
-        .entries
-        .into_iter()
-        .filter(|entry| {
-            Path::new(&entry.root) == canonical
-                || fs::canonicalize(&entry.root).ok().as_ref() == Some(&canonical)
-        })
-        .collect::<Vec<_>>();
+    ownership.verify_root_identity()?;
+    let root = ownership.root();
+    // Validate every discovered journal before any recovery mutation.
+    let mut journals = Vec::new();
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if let Some(id) = name
+            .strip_prefix(JOURNAL_PREFIX)
+            .and_then(|name| name.strip_suffix(".json"))
+        {
+            let journal = read_journal(root, id).map_err(|error| anyhow!(
+                "Setup recovery blocked at {}: {error:#}. Preserve evidence and use a compatible build or manual recovery.", entry.path().display()
+            ))?;
+            if journal_name(&journal.journal_id) != name {
+                bail!(
+                    "Setup recovery blocked: journal filename and identity disagree; preserve evidence for manual recovery"
+                );
+            }
+            journals.push(journal);
+        }
+    }
     let mut summary = SetupRecoverySummary {
         recovered: 0,
         deferred_roots: vec![],
         blocked: vec![],
     };
-    for entry in entries {
-        match recover_entry_owned(app_data, &entry, ownership) {
-            Ok(true) => summary.recovered += 1,
-            Ok(false) => summary.deferred_roots.push(entry.root),
-            Err(error) => summary.blocked.push(format!("{}: {error:#}", entry.root)),
+    for journal in journals {
+        match recover_journal(root, journal) {
+            Ok(()) => summary.recovered += 1,
+            Err(error) => summary
+                .blocked
+                .push(format!("{}: {error:#}", root.display())),
         }
     }
     if !summary.deferred_roots.is_empty() || !summary.blocked.is_empty() {
-        bail!("BIDS setup recovery must finish before using this root");
+        bail!(
+            "Setup recovery blocked: {}. Preserve evidence for manual recovery before using this root",
+            summary.blocked.join("; ")
+        );
     }
     Ok(summary)
 }

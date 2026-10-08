@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { SetupCommandErrorSchema, SetupCommitResultSchema, SetupPlanSchema } from "./setup";
+import { SetupCommandErrorSchema, SetupPlanSchema } from "./setup";
 
 describe("native BIDS setup IPC contract", () => {
-  it("accepts the serialized native plan and committed outcome only", () => {
+  it("accepts the serialized native plan", () => {
     expect(
       SetupPlanSchema.parse({
         planId: "setup-opaque-id",
@@ -12,7 +12,7 @@ describe("native BIDS setup IPC contract", () => {
         warnings: [],
         conflicts: [],
         projectSummary: {
-          schemaVersion: "1",
+          schemaVersion: "2",
           name: "Dataset",
           projectId: "id",
           dataSource: "bids",
@@ -22,15 +22,6 @@ describe("native BIDS setup IPC contract", () => {
         temporaryArtifacts: ["same-parent candidate"],
       }),
     ).toMatchObject({ planId: "setup-opaque-id", mode: "bids" });
-    expect(
-      SetupCommitResultSchema.parse({
-        outcome: "committed",
-        projectPath: "/dataset/project.easl",
-        canonicalProjectBytes: "{}",
-        directorySyncSupported: true,
-      }),
-    ).toMatchObject({ outcome: "committed" });
-    expect(() => SetupCommitResultSchema.parse({ directorySyncSupported: true })).toThrow();
   });
 
   it("keeps structured native errors typed", () => {

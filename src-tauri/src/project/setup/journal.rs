@@ -1,4 +1,4 @@
-//! Setup journal and pending registry formats, validation, and persistence.
+//! Root-local setup journal validation and persistence.
 use super::fault_injection::fail;
 use super::filesystem::{
     EntryKind, Fingerprint, fixed_path, hash, owned_sibling, persist_bytes, persist_new_bytes,
@@ -11,11 +11,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
 use std::io;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 pub(super) const JOURNAL_VERSION: u32 = 1;
-pub(super) const REGISTRY_VERSION: u32 = 1;
-pub(super) const REGISTRY_FILE: &str = "pending-bids-setup-transactions.json";
 pub(super) const JOURNAL_PREFIX: &str = ".easl-gui-setup-";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -60,6 +58,7 @@ pub(super) struct SetupJournal {
     pub(super) version: u32,
     pub(super) transaction_id: String,
     pub(super) journal_id: String,
+    // Retained for version-1 journal readability; not an ownership authority.
     pub(super) registry_id: String,
     pub(super) root: String,
     pub(super) mode: SetupMode,
@@ -68,21 +67,6 @@ pub(super) struct SetupJournal {
     pub(super) directory_phase: OperationPhase,
     pub(super) terminal: Option<SetupCommitResult>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct PendingEntry {
-    pub(super) registry_id: String,
-    pub(super) transaction_id: String,
-    pub(super) journal_id: String,
-    pub(super) root: String,
-    pub(super) journal_name: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct PendingRegistry {
-    pub(super) version: u32,
-    pub(super) entries: Vec<PendingEntry>,
-}
 
 pub(super) fn journal_name(id: &str) -> String {
     format!("{JOURNAL_PREFIX}{id}.json")
@@ -90,84 +74,11 @@ pub(super) fn journal_name(id: &str) -> String {
 pub(super) fn journal_path(root: &Path, journal_id: &str) -> PathBuf {
     root.join(journal_name(journal_id))
 }
-pub(super) fn registry_path(app_data: &Path) -> PathBuf {
-    app_data.join(REGISTRY_FILE)
-}
 fn valid_identity(value: &str, prefix: &str) -> bool {
     value
         .strip_prefix(prefix)
         .and_then(|id| uuid::Uuid::parse_str(id).ok())
         .is_some()
-}
-pub(super) fn load_registry(app_data: &Path) -> Result<PendingRegistry> {
-    let path = registry_path(app_data);
-    match fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(PendingRegistry {
-            version: REGISTRY_VERSION,
-            entries: vec![],
-        }),
-        Ok(meta) if !meta.is_file() || meta.file_type().is_symlink() => {
-            bail!("Setup pending registry must be a regular file")
-        }
-        Ok(_) => {
-            serde_json::from_slice(&fs::read(&path)?).context("Malformed setup pending registry")
-        }
-        Err(error) => Err(error.into()),
-    }
-}
-fn save_registry(app_data: &Path, registry: &PendingRegistry) -> Result<()> {
-    if registry.version != REGISTRY_VERSION {
-        bail!("Unsupported setup registry version");
-    }
-    let path = registry_path(app_data);
-    let bytes = serde_json::to_vec(registry)?;
-    match fs::symlink_metadata(&path) {
-        // Initial global ownership must not replace a pre-existing registry.
-        // Every later update is a durable same-parent replacement rather than
-        // an in-place truncate/write.
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            persist_new_bytes(&path, &bytes).map(|_| ())
-        }
-        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
-            persist_bytes(&path, &bytes, true).map(|_| ())
-        }
-        Ok(_) => bail!("Setup pending registry must be a regular file"),
-        Err(error) => Err(error.into()),
-    }
-}
-pub(super) fn register_pending(app_data: &Path, entry: PendingEntry) -> Result<()> {
-    let mut registry = load_registry(app_data)?;
-    if registry.entries.iter().any(|old| {
-        old.registry_id == entry.registry_id
-            || old.transaction_id == entry.transaction_id
-            || old.journal_id == entry.journal_id
-    }) {
-        bail!("Setup transaction identity collision");
-    }
-    fail("registry")?;
-    registry.entries.push(entry);
-    save_registry(app_data, &registry)
-}
-pub(super) fn remove_pending(app_data: &Path, registry_id: &str) -> Result<()> {
-    let mut registry = load_registry(app_data)?;
-    registry
-        .entries
-        .retain(|entry| entry.registry_id != registry_id);
-    save_registry(app_data, &registry)
-}
-pub(super) fn validate_registry_entry(entry: &PendingEntry) -> Result<()> {
-    if !valid_identity(&entry.registry_id, "registry-")
-        || !valid_identity(&entry.transaction_id, "transaction-")
-        || !valid_identity(&entry.journal_id, "journal-")
-        || !Path::new(&entry.root).is_absolute()
-        || Path::new(&entry.root)
-            .components()
-            .any(|component| matches!(component, Component::ParentDir))
-        || entry.journal_name != journal_name(&entry.journal_id)
-    {
-        bail!("Malformed setup pending registry entry");
-    }
-    Ok(())
 }
 pub(super) fn journal_bytes(journal: &SetupJournal) -> Result<Vec<u8>> {
     serde_json::to_vec(journal).context("Could not serialize setup journal")
@@ -177,7 +88,6 @@ pub(super) fn validate_journal(root: &Path, journal: &SetupJournal) -> Result<()
         || journal.root != root.to_string_lossy()
         || !valid_identity(&journal.transaction_id, "transaction-")
         || !valid_identity(&journal.journal_id, "journal-")
-        || !valid_identity(&journal.registry_id, "registry-")
     {
         bail!("Foreign or malformed setup journal");
     }
@@ -233,7 +143,6 @@ pub(super) fn write_journal(root: &Path, journal: &SetupJournal) -> Result<bool>
             validate_journal(root, &current)?;
             if current.transaction_id != journal.transaction_id
                 || current.journal_id != journal.journal_id
-                || current.registry_id != journal.registry_id
             {
                 bail!("Setup journal ownership identity collision");
             }

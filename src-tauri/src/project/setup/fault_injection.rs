@@ -11,7 +11,6 @@ use std::path::Path;
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SetupFault {
-    RegistryWrite,
     JournalWrite,
     CandidateCreate,
     CandidateWrite,
@@ -78,7 +77,6 @@ pub(super) fn fail(_fault: &str) -> Result<()> {
     #[cfg(test)]
     {
         let selected = match _fault {
-            "registry" => SetupFault::RegistryWrite,
             "journal" => SetupFault::JournalWrite,
             "candidate-create" => SetupFault::CandidateCreate,
             "candidate-write" => SetupFault::CandidateWrite,

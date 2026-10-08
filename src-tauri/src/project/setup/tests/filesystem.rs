@@ -1,10 +1,9 @@
 use std::fs;
 use tempfile::TempDir;
 
-use super::super::filesystem::{fixed_path, safe_relative, sync_parent};
-use super::super::journal::REGISTRY_FILE;
+use super::super::filesystem::{fixed_path, sync_parent};
 use super::super::{
-    MarkerClassification, RAWDATA_MARKER_BYTES, RAWDATA_MARKER_PATH, classify_marker, recover_all,
+    MarkerClassification, RAWDATA_MARKER_BYTES, RAWDATA_MARKER_PATH, classify_marker,
 };
 
 #[test]
@@ -73,13 +72,4 @@ fn directory_flush_reports_supported_on_unix() {
 fn directory_flush_reports_reduced_durability_when_unsupported() {
     let root = TempDir::new().unwrap();
     assert!(!sync_parent(root.path()).unwrap());
-}
-
-#[test]
-fn malformed_registry_and_path_escape_fail_closed() {
-    let temp = TempDir::new().unwrap();
-    fs::write(temp.path().join(REGISTRY_FILE), b"not json").unwrap();
-    assert!(recover_all(temp.path()).is_err());
-    assert!(safe_relative("../escape").is_err());
-    assert!(safe_relative("/escape").is_err());
 }

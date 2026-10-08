@@ -260,7 +260,7 @@ pub(super) fn preflight(
             }
         }
     }
-    let displayed = SetupPlan { plan_id: random_id("setup"), root_path: root.to_string_lossy().into_owned(), mode, operations, warnings, conflicts, project_summary: summary, preserves_readme: true, temporary_artifacts: vec!["Same-parent candidates, validated backups, a root journal, and an app-data pending registry are removed after commit or recovery.".into()] };
+    let displayed = SetupPlan { plan_id: random_id("setup"), root_path: root.to_string_lossy().into_owned(), mode, operations, warnings, conflicts, project_summary: summary, preserves_readme: true, temporary_artifacts: vec!["Same-parent candidates, validated backups, and a root-local journal are removed after commit or recovery.".into()] };
     Ok(CachedPlan {
         displayed,
         root,
