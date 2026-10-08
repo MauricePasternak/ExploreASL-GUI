@@ -1,4 +1,3 @@
-/** Processing-specific terminal persistence through the existing project save queue. */
 import {
   captureProjectLease,
   isCurrentProjectLease,
@@ -6,16 +5,16 @@ import {
   registerProjectTask,
   type ProjectLease,
 } from "./projectLifecycle";
-import { acknowledgeProcessingRun, getActiveRun } from "./processingEvents";
+import { getActiveRun } from "./processingEvents";
 import {
   clearProcessingListeners,
   isActiveProcessingPhase,
   useProcessingStore,
 } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
+import { projectRequest } from "./projectPersistence";
+import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
 import type { ProcessingRunSnapshot } from "../schemas/processingSchemas";
-
-const pending = new Map<string, Promise<void>>();
 
 function ownsTerminal(snapshot: ProcessingRunSnapshot, lease: ProjectLease) {
   const state = useProcessingStore.getState();
@@ -31,52 +30,33 @@ function ownsTerminal(snapshot: ProcessingRunSnapshot, lease: ProjectLease) {
   );
 }
 
-function persistMetadata(snapshot: ProcessingRunSnapshot) {
-  const project = useProjectStore.getState();
-  project.syncProcessingState(useProcessingStore.getState());
-  if (!snapshot.populationExecutionCommitted) return;
-  const summary = snapshot.terminalSummary!;
-  project.setPopulationCompleted(summary.populationCompleted && summary.result === "completed");
-  project.setLastRunProfileId("population", summary.profileId, {
-    exploreASLVersion: snapshot.versions?.exploreAsl ?? summary.exploreAslVersion ?? "unknown",
-    matlabVersion: snapshot.versions?.matlab ?? "unknown",
-    guiVersion: snapshot.versions?.gui ?? "unknown",
-  });
-  project.setLastPopulationRunMtime(
-    summary.populationCompleted && summary.result === "completed"
-      ? snapshot.populationReadyMtimeMs
-      : null,
-  );
-}
-
 export function reconcileProcessingTerminal(
   lease = captureProjectLease(),
   allowClosedAdmission = false,
 ): Promise<void> {
   const snapshot = useProcessingStore.getState().snapshot;
+  const project = useProjectStore.getState().project;
   if (
     !lease ||
+    !project ||
     !snapshot ||
+    !isCurrentProjectLease(lease) ||
     snapshot.terminalRevision === null ||
-    !snapshot.terminalSummary ||
     snapshot.availableAction !== "acknowledge" ||
     !ownsTerminal(snapshot, lease) ||
     (!allowClosedAdmission && !isProjectWorkAccepted())
   )
     return Promise.resolve();
-  const key = `${lease.generation}:${snapshot.runId}:${snapshot.terminalRevision}`;
-  const existing = pending.get(key);
-  if (existing) return existing;
-  let stage = "save";
   const operation = async () => {
     try {
       if (!ownsTerminal(snapshot, lease)) return;
-      persistMetadata(snapshot);
-      await useProjectStore.getState().saveProject({ allowClosedAdmission });
+      const accepted = await projectRequest<ProjectSnapshot>("reconcile_processing_result", {
+        generation: project.activationGeneration,
+        runId: snapshot.runId,
+        terminalRevision: snapshot.terminalRevision,
+      });
       if (!ownsTerminal(snapshot, lease)) return;
-      stage = "acknowledgement";
-      await acknowledgeProcessingRun(snapshot.runId, snapshot.terminalRevision!);
-      if (!ownsTerminal(snapshot, lease)) return;
+      useProjectStore.getState().acceptSnapshot(accepted);
       clearProcessingListeners(snapshot.runId);
       useProcessingStore.setState({
         terminalRunId: null,
@@ -86,16 +66,12 @@ export function reconcileProcessingTerminal(
     } catch (error) {
       if (ownsTerminal(snapshot, lease))
         useProcessingStore.setState({
-          processingError: `Failed processing terminal ${stage}: ${error instanceof Error ? error.message : String(error)}`,
+          processingError: `Failed processing terminal reconciliation: ${error instanceof Error ? error.message : String(error)}`,
         });
       throw error;
-    } finally {
-      pending.delete(key);
     }
   };
-  const promise = allowClosedAdmission ? operation() : registerProjectTask(operation);
-  pending.set(key, promise);
-  return promise;
+  return allowClosedAdmission ? operation() : registerProjectTask(operation);
 }
 
 export async function reconcileProcessingRunAfterShutdown(): Promise<void> {

@@ -120,6 +120,20 @@ fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
         &reserve_state,
         &reserve_root.path().canonicalize().unwrap(),
     );
+    reserve_state.project_config.lock().unwrap().active =
+        Some(crate::project::config::ActiveProjectConfig {
+            document: crate::project::config::defaults(
+                "Import".into(),
+                crate::project::model::DataSource::Dicom,
+                "profile-1".into(),
+            )
+            .unwrap(),
+            ownership: crate::project::ownership::active(&reserve_state).unwrap(),
+            generation: 1,
+            accepted_revision: 0,
+            persisted_revision: 0,
+            recovered_from_backup: false,
+        });
     let plan =
         crate::import::runs::plan_import_relocation_for_state(&reserve_state, &["ONE".to_string()])
             .unwrap();
@@ -578,6 +592,20 @@ fn native_pipeline_checkpoint_and_finalizer_matrix_needs_no_parser_completion_or
         let state = app.state::<AppState>();
         let root = fs::canonicalize(&root).unwrap();
         crate::project::ownership::own_project(&state, &root.clone());
+        state.project_config.lock().unwrap().active =
+            Some(crate::project::config::ActiveProjectConfig {
+                document: crate::project::config::defaults(
+                    "Import".into(),
+                    crate::project::model::DataSource::Dicom,
+                    "profile-1".into(),
+                )
+                .unwrap(),
+                ownership: crate::project::ownership::active(&state).unwrap(),
+                generation: 1,
+                accepted_revision: 0,
+                persisted_revision: 0,
+                recovered_from_backup: false,
+            });
         let emitted_snapshots = Arc::new(Mutex::new(Vec::new()));
         let snapshot_log = emitted_snapshots.clone();
         let raw_lines = Arc::new(Mutex::new(Vec::new()));
@@ -790,6 +818,20 @@ fn stop_during_blocking_apptainer_probe_cancels_before_staging_or_scientific_spa
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
     crate::project::ownership::own_project(&state, &root);
+    state.project_config.lock().unwrap().active =
+        Some(crate::project::config::ActiveProjectConfig {
+            document: crate::project::config::defaults(
+                "Import".into(),
+                crate::project::model::DataSource::Dicom,
+                "probe".into(),
+            )
+            .unwrap(),
+            ownership: crate::project::ownership::active(&state).unwrap(),
+            generation: 1,
+            accepted_revision: 0,
+            persisted_revision: 0,
+            recovered_from_backup: false,
+        });
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "probe-plan".into())
         .unwrap();
     state
@@ -897,6 +939,20 @@ fn failed_running_checkpoint_reaps_the_already_spawned_import_scope() {
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
     crate::project::ownership::own_project(&state, &root);
+    state.project_config.lock().unwrap().active =
+        Some(crate::project::config::ActiveProjectConfig {
+            document: crate::project::config::defaults(
+                "Import".into(),
+                crate::project::model::DataSource::Dicom,
+                "scope".into(),
+            )
+            .unwrap(),
+            ownership: crate::project::ownership::active(&state).unwrap(),
+            generation: 1,
+            accepted_revision: 0,
+            persisted_revision: 0,
+            recovered_from_backup: false,
+        });
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "scope-plan".into())
         .unwrap();
     state
@@ -995,6 +1051,20 @@ fn launch_revalidation_failure_settles_only_the_reserved_run_without_staging_mut
     let state = app.state::<AppState>();
     let root = fs::canonicalize(root).unwrap();
     crate::project::ownership::own_project(&state, &root);
+    state.project_config.lock().unwrap().active =
+        Some(crate::project::config::ActiveProjectConfig {
+            document: crate::project::config::defaults(
+                "Import".into(),
+                crate::project::model::DataSource::Dicom,
+                "profile".into(),
+            )
+            .unwrap(),
+            ownership: crate::project::ownership::active(&state).unwrap(),
+            generation: 1,
+            accepted_revision: 0,
+            persisted_revision: 0,
+            recovered_from_backup: false,
+        });
     let plan = crate::import::relocation::create_plan(&root, &["ONE".into()], "stale-plan".into())
         .unwrap();
     state

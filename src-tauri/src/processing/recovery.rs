@@ -41,6 +41,36 @@ pub(crate) fn cleanup_archive(record: &ProcessingRecord) -> Result<()> {
     Ok(())
 }
 
+fn ready_mtime(directory: &ProjectDirectory, target: &ExpectedTarget) -> Result<u64> {
+    let file = directory
+        .open_regular(&relative(&target.ready_path()?)?)?
+        .into_std();
+    Ok(file
+        .metadata()?
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis() as u64)
+}
+
+pub(crate) fn module_ready_mtime(record: &ProcessingRecord, module: &str) -> Result<Option<i64>> {
+    let directory = ProjectDirectory::open(&record.project_root)?;
+    let mut latest = None;
+    for target in record
+        .expected_targets
+        .iter()
+        .filter(|target| target.module == module && target.complete)
+    {
+        if let Ok(mtime) = ready_mtime(&directory, target)
+            && record
+                .execution_committed_at_ms
+                .is_some_and(|boundary| mtime >= boundary)
+        {
+            latest = Some(latest.map_or(mtime, |value: u64| value.max(mtime)));
+        }
+    }
+    Ok(latest.map(|value| value as i64))
+}
+
 fn audit(record: &mut ProcessingRecord) -> Result<()> {
     let directory = ProjectDirectory::open(&record.project_root)?;
     let boundary = record
@@ -49,14 +79,7 @@ fn audit(record: &mut ProcessingRecord) -> Result<()> {
     let mut missing = Vec::new();
     for target in &mut record.expected_targets {
         let path = target.ready_path()?;
-        let evidence = (|| -> Result<u64> {
-            let file = directory.open_regular(&relative(&path)?)?.into_std();
-            Ok(file
-                .metadata()?
-                .modified()?
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_millis() as u64)
-        })();
+        let evidence = ready_mtime(&directory, target);
         target.complete = evidence.as_ref().is_ok_and(|mtime| *mtime >= boundary);
         if target.complete && target.module == "population" {
             record.population_ready_mtime_ms = evidence.ok();

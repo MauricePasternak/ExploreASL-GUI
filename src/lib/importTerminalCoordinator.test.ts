@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_PROJECT_FILE } from "../schemas/project";
+import { projectView } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
 import type { ImportRunSnapshot } from "../schemas/importSchemas";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -55,7 +56,7 @@ describe("import terminal coordinator", () => {
     vi.clearAllMocks();
     resetProjectLifecycleForTests();
     useImportStore.getState().resetImport();
-    const project = DEFAULT_PROJECT_FILE("project-1", "Project", "/project");
+    const project = projectView(projectFixture());
     useProjectStore.setState({
       project,
       loaded: true,
@@ -63,6 +64,7 @@ describe("import terminal coordinator", () => {
       saveProject: realSaveProject,
     });
     activateProjectLease("project-1", "/project");
+    vi.mocked(invoke).mockResolvedValue(projectFixture());
     useImportStore.getState().bindImportRunSnapshot(terminal());
   });
 
@@ -71,14 +73,14 @@ describe("import terminal coordinator", () => {
   });
 
   it("retains replay and never acknowledges when revision-safe save fails", async () => {
-    useProjectStore.setState({ saveProject: vi.fn().mockRejectedValue(new Error("disk full")) });
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("disk full"));
 
     await expect(reconcileImportTerminal("import-run-1")).rejects.toThrow("disk full");
 
     expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
     expect(useImportStore.getState()).toMatchObject({
       terminalRunId: "import-run-1",
-      importRunError: expect.stringContaining("terminal save"),
+      importRunError: expect.stringContaining("terminal reconciliation"),
     });
   });
 
@@ -86,11 +88,11 @@ describe("import terminal coordinator", () => {
     useProjectStore.setState({ saveProject: vi.fn().mockResolvedValue(undefined) });
     vi.mocked(invoke)
       .mockRejectedValueOnce(new Error("ack denied"))
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce(projectFixture());
 
     await expect(reconcileImportTerminal("import-run-1")).rejects.toThrow("ack denied");
     expect(useImportStore.getState().terminalRunId).toBe("import-run-1");
-    expect(useImportStore.getState().importRunError).toContain("terminal acknowledgement");
+    expect(useImportStore.getState().importRunError).toContain("ack denied");
     await expect(reconcileImportTerminal("import-run-1")).resolves.toBeUndefined();
     expect(useImportStore.getState().terminalRunId).toBeNull();
   });
@@ -133,16 +135,19 @@ describe("import terminal coordinator", () => {
     let release!: () => void;
     useProjectStore.setState({
       saveProject: vi.fn(async () => {
-        order.push("save-start");
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        order.push("save-end");
+        order.push("flush");
       }),
     });
     vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "acknowledge_import_run") order.push("ack");
-      return undefined;
+      if (command === "reconcile_import_result") {
+        order.push("reconcile-start");
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        order.push("reconcile-end");
+        return projectFixture();
+      }
+      return null;
     });
 
     const reconciliation = reconcileImportTerminal("import-run-1");
@@ -161,11 +166,12 @@ describe("import terminal coordinator", () => {
         order.push("clear");
       },
     });
-    await vi.waitFor(() => expect(order).toEqual(["save-start"]));
+    await vi.waitFor(() => expect(order).toContain("reconcile-start"));
     release();
     await Promise.all([reconciliation, close]);
 
-    expect(order).toEqual(["save-start", "save-end", "ack", "shutdown", "listeners", "clear"]);
+    expect(order.indexOf("reconcile-end")).toBeLessThan(order.indexOf("shutdown"));
+    expect(order.slice(-4)).toEqual(["shutdown", "flush", "listeners", "clear"]);
   });
 
   it("activation replay reconciles, saves, then acknowledges without Step 5", async () => {
@@ -174,15 +180,18 @@ describe("import terminal coordinator", () => {
     useImportStore.getState().resetImport();
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "get_active_import_run") return terminal("replayed-run");
-      return undefined;
+      return projectFixture();
     });
 
     await expect(reconcileImportRunForActivation()).resolves.toMatchObject({
       runId: "replayed-run",
     });
 
-    expect(saveProject).toHaveBeenCalledOnce();
-    expect(invoke).toHaveBeenCalledWith("acknowledge_import_run", { runId: "replayed-run" });
+    expect(saveProject).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("reconcile_import_result", {
+      runId: "replayed-run",
+      generation: 1,
+    });
     expect(useImportStore.getState().terminalRunId).toBeNull();
   });
 
@@ -203,13 +212,13 @@ describe("import terminal coordinator", () => {
       vi.mocked(invoke).mockImplementation(async (command) => {
         if (command === "get_active_import_run")
           return terminal(`replayed-${lifecycle}`, lifecycle);
-        if (command === "acknowledge_import_run") order.push(`ack:${result}`);
-        return undefined;
+        if (command === "reconcile_import_result") order.push(`reconcile:${result}`);
+        return projectFixture();
       });
 
       await reconcileImportRunForActivation();
 
-      expect(order).toEqual([`save:${result}`, `ack:${result}`]);
+      expect(order).toEqual([`reconcile:${result}`]);
       expect(useImportStore.getState().terminalRunId).toBeNull();
       expect(useImportStore.getState().importPhase).toBe(lifecycle);
     },
@@ -217,22 +226,21 @@ describe("import terminal coordinator", () => {
 
   it("never acknowledges a terminal result after project switch during save", async () => {
     let releaseSave!: () => void;
-    useProjectStore.setState({
-      saveProject: vi.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            releaseSave = resolve;
-          }),
-      ),
-    });
+    vi.mocked(invoke).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseSave = () => resolve(projectFixture());
+        }),
+    );
     const reconciliation = reconcileImportTerminal("import-run-1");
-    await vi.waitFor(() => expect(useProjectStore.getState().saveProject).toHaveBeenCalledOnce());
-    const replacement = DEFAULT_PROJECT_FILE("project-2", "Other", "/other");
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce());
+    const replacement = projectView(projectFixture("project-2", "Other", "/other"));
     useProjectStore.setState({ project: replacement });
     activateProjectLease("project-2", "/other");
     releaseSave();
     await reconciliation;
     expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
     expect(useImportStore.getState().terminalRunId).toBe("import-run-1");
+    expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-2");
   });
 });

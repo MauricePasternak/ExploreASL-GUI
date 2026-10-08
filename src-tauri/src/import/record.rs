@@ -139,6 +139,9 @@ pub struct ImportRunRecord {
     pub relocation_plan: Option<RelocationPlan>,
     pub snapshot: ImportRunSnapshot,
     pub acknowledged: bool,
+    /// Released records lack this field; do not reconstruct their baseline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admitted_config: Option<crate::project::model::ImportSnapshot>,
 }
 
 #[cfg(test)]
@@ -230,10 +233,17 @@ pub fn record_from_state(state: &ImportState) -> Result<ImportRunRecord> {
         relocation_plan: state.relocation_plan.clone(),
         snapshot: state.snapshot(),
         acknowledged: state.acknowledged,
+        admitted_config: state.admitted_config.clone(),
     })
 }
 
 pub fn validate_record(record: &ImportRunRecord, project_root: &Path) -> Result<()> {
+    if let Some(snapshot) = &record.admitted_config {
+        crate::project::validation::validate_import_snapshot(snapshot)?;
+        if snapshot.selected_profile_id.as_deref() != Some(&record.snapshot.profile_id) {
+            bail!("Admitted configuration profile does not match import authority");
+        }
+    }
     if record.version != IMPORT_RUN_RECORD_VERSION {
         bail!("Unsupported import run record version {}", record.version);
     }

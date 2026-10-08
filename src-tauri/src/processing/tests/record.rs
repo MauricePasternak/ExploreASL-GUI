@@ -83,45 +83,116 @@ fn guardian_era_current_record_is_rejected_with_guidance_and_preserved() {
 fn activation_marks_absent_processing_owner_interrupted_and_blocks_admission() {
     use tauri::Manager;
 
-    let temp = tempfile::tempdir().unwrap();
-    project(temp.path());
-    let admitted = admit(temp.path(), request(temp.path())).unwrap();
-    let app = tauri::test::mock_builder()
-        .manage(crate::app::state::AppState::default())
-        .build(tauri::test::mock_context(tauri::test::noop_assets()))
-        .unwrap();
-    let state = app.state::<crate::app::state::AppState>();
-
-    // Project activation remains viewable, but no absent native owner may be
-    // treated as settled or replaced before exact external-stop confirmation.
-    crate::project::lifecycle::set_active_project_impl(temp.path().display().to_string(), &state)
-        .unwrap();
-    let snapshot = crate::processing::runs::get_active_run_impl(&state)
-        .unwrap()
-        .unwrap();
-    assert_eq!(snapshot.run_id, admitted.run_id.to_string());
-    assert_eq!(snapshot.lifecycle, ProcessingLifecycle::Interrupted);
-    assert_eq!(snapshot.available_action, AvailableAction::ConfirmStopped);
-    assert!(
-        crate::processing::runs::reserve_request_impl(
-            &state,
-            request(temp.path()),
-            ProcessingAdmission {
-                project_root: temp.path().into(),
-            },
+    for (committed, population) in [(true, true), (false, true), (true, false)] {
+        let temp = tempfile::tempdir().unwrap();
+        let mut document = crate::project::config::defaults(
+            "Recovery".into(),
+            crate::project::model::DataSource::Bids,
+            "profile".into(),
         )
-        .is_err()
-    );
-    let error = crate::import::reserve_import_run(
-        app.state(),
-        vec!["subject".into()],
-        "plan".into(),
-        "profile".into(),
-        None,
-        false,
-    )
-    .unwrap_err();
-    assert!(error.contains("Processing runtime"), "{error}");
+        .unwrap();
+        document.project_meta.id = "legacy-project-id".into();
+        document.ui_state.processing = Some(
+            serde_json::from_value(serde_json::json!({
+                "population": {"completed": true, "lastRun": {"profileId": "prior", "Mtime": 42}}
+            }))
+            .unwrap(),
+        );
+        let reviewer = document.ui_state.manifest.active_reviewer_id.clone();
+        document.ui_state.manifest.verdicts = serde_json::from_value(serde_json::json!({
+            (reviewer): {"sub-ONE_1": {"status": "pass", "setAt": 1}}
+        }))
+        .unwrap();
+        let bytes = crate::project::config::serialize(&document).unwrap();
+        fs::write(temp.path().join("project.easl"), &bytes).unwrap();
+        let mut attempt = request(temp.path());
+        if !population {
+            attempt.selected_modules = vec!["structural".into()];
+            fs::create_dir_all(temp.path().join("sub-ONE/anat")).unwrap();
+            fs::write(temp.path().join("sub-ONE/anat/sub-ONE_T1w.nii"), "fixture").unwrap();
+        }
+        let admitted = admit(temp.path(), attempt).unwrap();
+        let mut running = admitted.clone();
+        if committed {
+            let previous = running.clone();
+            running.execution_committed = true;
+            running.execution_committed_at_ms = Some(1);
+            running.set_lifecycle(ProcessingLifecycle::Running).unwrap();
+            persist(&running, Some(&previous)).unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(crate::app::state::AppState::default())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let state = app.state::<crate::app::state::AppState>();
+
+        // Project activation remains viewable, but no absent native owner may be
+        // treated as settled or replaced before exact external-stop confirmation.
+        let inspected = crate::project::config::inspect_for_state(
+            &state,
+            temp.path().join("project.easl").display().to_string(),
+            Vec::new(),
+        )
+        .unwrap();
+        let opened =
+            crate::project::config::activate_for_state(&state, inspected.candidate_id, false)
+                .unwrap();
+        let mut expected = document.clone();
+        if committed && population {
+            expected
+                .ui_state
+                .processing
+                .as_mut()
+                .unwrap()
+                .population
+                .as_mut()
+                .unwrap()
+                .completed = Some(false);
+        }
+        assert_eq!(opened.document, expected);
+        assert_eq!(opened.accepted_revision, opened.persisted_revision);
+        assert_eq!(
+            crate::project::validation::parse_document(
+                &fs::read(temp.path().join("project.easl")).unwrap()
+            )
+            .unwrap(),
+            expected
+        );
+        if !(committed && population) {
+            assert_eq!(fs::read(temp.path().join("project.easl")).unwrap(), bytes);
+            assert!(!temp.path().join("project.easl.bak").exists());
+        }
+        let recovered = records(temp.path()).unwrap().pop().unwrap();
+        assert_eq!(recovered.execution_committed, committed);
+        assert!(!recovered.acknowledged);
+        assert_eq!(recovered.terminal_revision, None);
+        let snapshot = crate::processing::runs::get_active_run_impl(&state)
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.run_id, admitted.run_id.to_string());
+        assert_eq!(snapshot.lifecycle, ProcessingLifecycle::Interrupted);
+        assert_eq!(snapshot.available_action, AvailableAction::ConfirmStopped);
+        assert!(
+            crate::processing::runs::reserve_request_impl(
+                &state,
+                request(temp.path()),
+                ProcessingAdmission {
+                    project_root: temp.path().into(),
+                },
+            )
+            .is_err()
+        );
+        let error = crate::import::reserve_import_run(
+            app.state(),
+            vec!["subject".into()],
+            "plan".into(),
+            "profile".into(),
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(error.contains("Processing runtime"), "{error}");
+    }
 }
 
 #[test]

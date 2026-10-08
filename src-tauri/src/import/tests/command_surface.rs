@@ -12,7 +12,7 @@ fn public_import_command_surface_has_only_run_scoped_authority() {
         "attach_import_run",
         "launch_import_run",
         "cancel_import_run",
-        "acknowledge_import_run",
+        "reconcile_import_result",
         "read_import_status",
     ] {
         assert!(
@@ -21,6 +21,7 @@ fn public_import_command_surface_has_only_run_scoped_authority() {
         );
     }
     for obsolete in [
+        "acknowledge_import_run",
         "run_import_pipeline",
         "clean_import_status",
         "move_import_output",

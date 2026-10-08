@@ -141,6 +141,7 @@ pub struct ImportState {
     /// copied into the durable run record for finalization recovery.
     pub relocation_plan: Option<super::relocation::RelocationPlan>,
     pub profile_id: String,
+    pub admitted_config: Option<crate::project::model::ImportSnapshot>,
     pub created_at_ms: u128,
     pub updated_at_ms: u128,
     pub staging_generation: String,
@@ -170,6 +171,7 @@ impl ImportState {
             relocation_plan_id: None,
             relocation_plan: None,
             profile_id: String::new(),
+            admitted_config: None,
             created_at_ms: now_ms(),
             updated_at_ms: now_ms(),
             staging_generation: String::new(),
@@ -201,6 +203,7 @@ impl Default for ImportState {
             relocation_plan_id: None,
             relocation_plan: None,
             profile_id: String::new(),
+            admitted_config: None,
             created_at_ms: 0,
             updated_at_ms: 0,
             staging_generation: String::new(),

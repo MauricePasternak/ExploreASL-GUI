@@ -108,6 +108,7 @@ pub(crate) fn recover_import_run_after_processing_recovery(
         plan
     });
     run.acknowledged = false;
+    run.admitted_config = record.admitted_config;
     if matches!(
         run.lifecycle,
         ImportLifecycle::Preparing | ImportLifecycle::Running | ImportLifecycle::Cancelling
@@ -185,6 +186,7 @@ pub(super) fn reserve_import_run_for_state(
         bail!("Execution profile identity is required");
     }
     let project_root = active_project_root(state)?;
+    let admitted_config = crate::project::config::capture_import_locked(state, &profile_id)?;
     validate_subject_components(&subjects_to_preserve)?;
     validate_preserved_subjects_are_disjoint(&subject_list, &subjects_to_preserve)?;
     for subject in &subjects_to_preserve {
@@ -218,6 +220,7 @@ pub(super) fn reserve_import_run_for_state(
     let mut run = ImportState::new(staging_root, project_root, subject_list);
     run.run_id = format!("import-run-{}", uuid::Uuid::new_v4());
     run.profile_id = profile_id;
+    run.admitted_config = Some(admitted_config);
     run.relocation_plan_id = Some(relocation_plan_id.clone());
     run.relocation_plan = Some(relocation_plan);
     run.preserved_subjects = subjects_to_preserve;
@@ -286,7 +289,20 @@ pub(super) fn acknowledge_import_run_for_state(state: &AppState, run_id: &str) -
     let _transition = state
         .project_transition
         .lock_or_bail("Project transition")?;
+    acknowledge_import_run_locked(state, run_id)
+}
+
+pub(crate) fn acknowledge_import_run_locked(state: &AppState, run_id: &str) -> AnyResult<()> {
     let ownership = crate::project::ownership::active(state).map_err(anyhow::Error::msg)?;
+    acknowledge_import_run_owned(state, &ownership, run_id)
+}
+
+pub(crate) fn acknowledge_import_run_owned(
+    state: &AppState,
+    ownership: &crate::project::ownership::ActiveProject,
+    run_id: &str,
+) -> AnyResult<()> {
+    ownership.verify_root_identity()?;
     let project_root = ownership.root().to_path_buf();
     let mut import_state = state.import_state.lock_or_bail("Import state")?;
     if import_state.run_id != run_id || import_state.project_root != project_root {

@@ -12,6 +12,8 @@ mod pipeline;
 mod record;
 pub mod relocation;
 mod runs;
+pub(crate) use runs::acknowledge_import_run_locked;
+pub(crate) use runs::acknowledge_import_run_owned;
 pub(crate) mod staging;
 pub(crate) mod status;
 mod supervisor;

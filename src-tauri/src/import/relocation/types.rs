@@ -111,7 +111,7 @@ pub struct RelocationOutcome {
     pub staging_cleanup_complete: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct RelocationRecoverySummary {
     pub preserved_subjects: Vec<String>,

@@ -7,13 +7,13 @@ import {
   registerProjectTask,
   type ProjectLease,
 } from "./projectLifecycle";
-import { useImportStore } from "../stores/importStore";
+import { acceptedImportSettings, useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { ImportRunSnapshotSchema, type ImportRunSnapshot } from "../schemas/importSchemas";
 import { computeStaleness } from "./importStaleness";
 import { readImportStatus } from "./importStatus";
-
-const pending = new Set<string>();
+import { projectRequest } from "./projectPersistence";
+import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
 
 function ownsTerminal(runId: string, lease: ProjectLease): boolean {
   const project = useProjectStore.getState().project;
@@ -29,49 +29,38 @@ export function reconcileImportTerminal(
   runId: string,
   lease: ProjectLease | null = captureProjectLease(),
 ): Promise<void> {
-  const key = lease ? `${lease.generation}:${runId}` : runId;
   if (
     !lease ||
     !isCurrentProjectLease(lease) ||
     !isProjectWorkAccepted() ||
     useImportStore.getState().confirmationRequired ||
-    pending.has(key) ||
     !ownsTerminal(runId, lease)
   )
     return Promise.resolve();
-  pending.add(key);
-  let stage: "save" | "acknowledgement" = "save";
   // Register a thunk, not an already-started promise. Closing a project must
   // either drain this terminal save/acknowledgement or reject it before any
   // project mutation begins.
   const operation = async () => {
     try {
       if (!ownsTerminal(runId, lease)) return;
-      useProjectStore.getState().syncImportState(useImportStore.getState());
-      await useProjectStore.getState().saveProject();
-      if (!ownsTerminal(runId, lease)) return;
-      stage = "acknowledgement";
-      await invoke("acknowledge_import_run", { runId });
+      const accepted = await projectRequest<ProjectSnapshot>("reconcile_import_result", {
+        runId,
+        generation: useProjectStore.getState().project!.activationGeneration,
+      });
       if (ownsTerminal(runId, lease)) {
+        useProjectStore.getState().acceptSnapshot(accepted);
         useImportStore.setState({ terminalRunId: null, ownershipGeneration: null });
       }
     } catch (error) {
       if (ownsTerminal(runId, lease)) {
         useImportStore.setState({
-          importRunError: `Failed import terminal ${stage}: ${error instanceof Error ? error.message : String(error)}`,
+          importRunError: `Failed import terminal reconciliation: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
       throw error;
-    } finally {
-      pending.delete(key);
     }
   };
-  try {
-    return registerProjectTask(operation);
-  } catch (error) {
-    pending.delete(key);
-    throw error;
-  }
+  return registerProjectTask(operation);
 }
 
 /** Activation-level reconciliation. Components consume same coordinator but
@@ -110,10 +99,12 @@ export async function reconcileImportRunAfterShutdown(): Promise<void> {
     throw new Error(`Native import remained ${snapshot.lifecycle} after shutdown.`);
   }
   useImportStore.getState().bindImportRunSnapshot(snapshot);
-  useProjectStore.getState().syncImportState(useImportStore.getState());
-  await useProjectStore.getState().saveProject({ allowClosedAdmission: true });
+  const accepted = await projectRequest<ProjectSnapshot>("reconcile_import_result", {
+    runId: snapshot.runId,
+    generation: useProjectStore.getState().project!.activationGeneration,
+  });
   if (!ownsTerminal(snapshot.runId, lease)) return;
-  await invoke("acknowledge_import_run", { runId: snapshot.runId });
+  useProjectStore.getState().acceptSnapshot(accepted);
   if (ownsTerminal(snapshot.runId, lease)) {
     useImportStore.setState({ terminalRunId: null, ownershipGeneration: null });
   }
@@ -126,10 +117,13 @@ export async function reconcileCommittedImportStatus(
   const statuses = await readImportStatus();
   if (!isCurrentProjectLease(lease)) return;
   const store = useImportStore.getState();
-  const subjects = [...new Set(store.subjectRows.map((row) => row.subject))];
+  const subjects = [...new Set(acceptedImportSettings().subjectRows.map((row) => row.subject))];
   store.reconstructProgressFromLockFiles(
     statuses,
     subjects,
-    computeStaleness(store, store.mostRecentConfig),
+    computeStaleness(
+      acceptedImportSettings(),
+      useProjectStore.getState().project?.uiState.import?.mostRecentConfig ?? null,
+    ),
   );
 }

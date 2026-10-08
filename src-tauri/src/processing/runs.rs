@@ -294,7 +294,7 @@ pub fn confirm_processing_workers_stopped(
     confirm_processing_workers_stopped_impl(&state, run_id, revision)
 }
 
-fn acknowledge_locked(
+pub(crate) fn acknowledge_locked(
     root: &std::path::Path,
     processing: &mut ProcessState,
     run_id: uuid::Uuid,

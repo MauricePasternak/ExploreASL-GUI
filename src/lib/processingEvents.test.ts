@@ -6,7 +6,6 @@ import {
   resetProjectLifecycleForTests,
 } from "./projectLifecycle";
 import {
-  acknowledgeProcessingRun,
   attachRun,
   confirmProcessingWorkersStopped,
   getActiveRun,
@@ -17,12 +16,9 @@ import {
   setupProcessingListeners,
   stopProcessingPipeline,
 } from "./processingEvents";
-import {
-  processingProfile,
-  processingReplay,
-  processingSnapshot,
-} from "../test/processingFixtures";
-import { DEFAULT_PROJECT_FILE } from "../schemas/project";
+import { processingProfile, processingSnapshot } from "../test/processingFixtures";
+import { projectView } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
 import { useProjectStore } from "../stores/projectStore";
 import { useProcessingStore } from "../stores/processingStore";
 
@@ -52,7 +48,7 @@ describe("processing native IPC", () => {
     listeners.clear();
     resetProjectLifecycleForTests();
     await useProcessingStore.getState().resetProcessing();
-    useProjectStore.setState({ project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project") });
+    useProjectStore.setState({ project: projectView(projectFixture()) });
     activateProjectLease("project-1", "/project");
   });
   it("sends immutable request and admission", async () => {
@@ -77,18 +73,11 @@ describe("processing native IPC", () => {
     expect(invoke).toHaveBeenNthCalledWith(3, "run_pipeline", { runId: "run" });
     expect(invoke).toHaveBeenNthCalledWith(4, "kill_pipeline", { runId: "run" });
   });
-  it("requires advancing exact confirmation and acknowledgement", async () => {
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(processingSnapshot({ revision: 2 }))
-      .mockResolvedValueOnce(processingReplay());
+  it("requires advancing exact stopped-worker confirmation", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(processingSnapshot({ revision: 2 }));
     await expect(
       confirmProcessingWorkersStopped(processingSnapshot().runId, 1),
     ).resolves.toMatchObject({ revision: 2 });
-    await acknowledgeProcessingRun(processingSnapshot().runId, 5);
-    expect(invoke).toHaveBeenLastCalledWith("acknowledge_processing_run", {
-      runId: processingSnapshot().runId,
-      terminalRevision: 5,
-    });
   });
   it("drops confirmation snapshots from a stale project lease", async () => {
     const interrupted = processingSnapshot({

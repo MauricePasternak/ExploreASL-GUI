@@ -27,7 +27,7 @@ fn fixture_with_profile(
     script: &str,
     source: &str,
     workers: u32,
-    configure: impl FnOnce(&std::path::Path, &mut ExecutionProfile),
+    configure: impl FnOnce(&std::path::Path, &mut ProcessingRequest),
 ) -> (
     tempfile::TempDir,
     tauri::App<tauri::test::MockRuntime>,
@@ -36,12 +36,27 @@ fn fixture_with_profile(
     use std::os::unix::fs::PermissionsExt;
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
+    let mut document = crate::project::config::defaults(
+        "Processing".into(),
+        if source == "bids" {
+            crate::project::model::DataSource::Bids
+        } else {
+            crate::project::model::DataSource::Dicom
+        },
+        "profile".into(),
+    )
+    .unwrap();
+    document.project_meta.id = "native-processing".into();
+    document.ui_state.processing = Some(crate::project::model::ProcessingUiState {
+        population: Some(crate::project::model::ModuleResult {
+            completed: Some(true),
+            last_run: None,
+        }),
+        ..Default::default()
+    });
     fs::write(
         root.join("project.easl"),
-        serde_json::to_vec(
-            &serde_json::json!({"projectMeta":{"id":"native-processing","dataSource":source}}),
-        )
-        .unwrap(),
+        crate::project::config::serialize(&document).unwrap(),
     )
     .unwrap();
     fs::create_dir_all(root.join("installation")).unwrap();
@@ -56,6 +71,16 @@ fn fixture_with_profile(
         .unwrap();
     let state = app.state::<AppState>();
     crate::project::ownership::own_project(&state, root);
+    let ownership = crate::project::ownership::active(&state).unwrap();
+    state.project_config.lock().unwrap().active =
+        Some(crate::project::config::ActiveProjectConfig {
+            document,
+            ownership,
+            generation: 1,
+            accepted_revision: 0,
+            persisted_revision: 0,
+            recovered_from_backup: false,
+        });
     let mut request = ProcessingRequest {
         request_id: uuid::Uuid::new_v4(),
         project_id: "native-processing".into(),
@@ -74,7 +99,7 @@ fn fixture_with_profile(
         workers,
         rerun_bids2legacy: false,
     };
-    configure(root, &mut request.execution_profile);
+    configure(root, &mut request);
     let result = crate::processing::runs::reserve_request_impl(
         &state,
         request,
@@ -159,18 +184,59 @@ fn terminal(app: &tauri::App<tauri::test::MockRuntime>, run_id: &str) -> Process
 #[cfg(unix)]
 #[test]
 fn native_completion_audits_targets_without_renderer_and_keeps_nonzero_failure() {
-    for (script, expected) in [
-        (READY.to_string(), ProcessingLifecycle::Completed),
-        ("exit 0".into(), ProcessingLifecycle::Failed),
-        (format!("{READY}\nexit 7"), ProcessingLifecycle::Failed),
+    for (script, expected, subject_modules) in [
+        (READY.to_string(), ProcessingLifecycle::Completed, false),
+        ("exit 0".into(), ProcessingLifecycle::Failed, false),
+        (
+            format!("{READY}\nexit 7"),
+            ProcessingLifecycle::Failed,
+            false,
+        ),
         (
             format!(
                 "{READY}\ntouch -t 200001010000 derivatives/ExploreASL/lock/xASL_module_Population/xASL_module_Population/999_ready.status"
             ),
             ProcessingLifecycle::Failed,
+            false,
+        ),
+        (
+            r#"for target in \
+xASL_module_Structural/sub-ONE_1/xASL_module_Structural \
+xASL_module_ASL/sub-ONE_1/xASL_module_ASL_ASL_1; do
+mkdir -p derivatives/ExploreASL/lock/$target
+printf ready > derivatives/ExploreASL/lock/$target/999_ready.status
+done"#
+                .into(),
+            ProcessingLifecycle::Completed,
+            true,
         ),
     ] {
-        let (root, app, run_id) = fixture(&script, "dicom", 1);
+        let (root, app, run_id) = fixture_with_profile(&script, "dicom", 1, |root, request| {
+            if subject_modules {
+                request.selected_modules = vec!["structural".into(), "asl".into()];
+                for (directory, file) in [("anat", "sub-ONE_T1w.nii"), ("perf", "sub-ONE_asl.nii")]
+                {
+                    fs::create_dir_all(root.join("rawdata/sub-ONE").join(directory)).unwrap();
+                    fs::write(
+                        root.join("rawdata/sub-ONE").join(directory).join(file),
+                        "fixture",
+                    )
+                    .unwrap();
+                }
+            }
+        });
+        let state = app.state::<AppState>();
+        let prior = {
+            let mut config = state.project_config.lock().unwrap();
+            let document = &mut config.active.as_mut().unwrap().document;
+            document.ui_state.processing = Some(serde_json::from_value(serde_json::json!({"population": {"completed": true, "lastRun": {"profileId": "prior", "exploreASLVersion": "old", "Mtime": 42}}})).unwrap());
+            let reviewer = document.ui_state.manifest.active_reviewer_id.clone();
+            document.ui_state.manifest.verdicts = serde_json::from_value(
+                serde_json::json!({(reviewer): {"sub-ONE_1": {"status": "pass", "setAt": 1}}}),
+            )
+            .unwrap();
+            document.clone()
+        };
         crate::processing::run_pipeline(app.handle().clone(), app.state(), run_id.clone()).unwrap();
         let result = terminal(&app, &run_id);
         assert_eq!(result.lifecycle, expected);
@@ -189,6 +255,118 @@ fn native_completion_audits_targets_without_renderer_and_keeps_nonzero_failure()
             persisted.snapshot().terminal_revision,
             result.terminal_revision
         );
+        let interrupted_ack = expected == ProcessingLifecycle::Completed && !subject_modules;
+        if interrupted_ack {
+            crate::processing::journal::inject_fault("afterAcknowledge");
+        }
+        let reconciliation = crate::project::config::reconcile_processing_for_state(
+            &app.state::<AppState>(),
+            1,
+            persisted.run_id,
+            result.terminal_revision.unwrap(),
+        );
+        let saved = if interrupted_ack {
+            assert!(reconciliation.is_err());
+            assert!(records(root.path()).unwrap()[0].acknowledged);
+            crate::project::config::snapshot_for_state(&state, 1).unwrap()
+        } else {
+            reconciliation.unwrap()
+        };
+        let processing = saved.document.ui_state.processing.as_ref().unwrap();
+        if subject_modules {
+            assert_eq!(
+                processing.population,
+                prior.ui_state.processing.as_ref().unwrap().population
+            );
+        }
+        assert_eq!(saved.document.ui_state.manifest, prior.ui_state.manifest);
+        for module in &persisted.request.selected_modules {
+            let result = match module.as_str() {
+                "structural" => &processing.structural,
+                "asl" => &processing.asl,
+                _ => &processing.population,
+            }
+            .as_ref()
+            .unwrap();
+            assert_eq!(
+                result.completed,
+                Some(expected == ProcessingLifecycle::Completed)
+            );
+            let provenance = result.last_run.as_ref().unwrap();
+            assert_eq!(provenance.profile_id, "profile");
+            assert_eq!(provenance.explore_asl_version.as_deref(), Some("1.2.3"));
+            let versions = persisted.versions.as_ref().unwrap();
+            assert_eq!(
+                (
+                    provenance.matlab_version.as_ref(),
+                    provenance.gui_version.as_ref()
+                ),
+                (Some(&versions.matlab), Some(&versions.gui))
+            );
+            let mtime = if subject_modules {
+                let target = persisted
+                    .expected_targets
+                    .iter()
+                    .find(|target| &target.module == module)
+                    .unwrap();
+                assert!(target.complete);
+                Some(
+                    fs::metadata(root.path().join(target.ready_path().unwrap()))
+                        .unwrap()
+                        .modified()
+                        .unwrap()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis() as i64,
+                )
+            } else {
+                persisted
+                    .population_ready_mtime_ms
+                    .map(|value| value as i64)
+            };
+            assert_eq!(provenance.mtime, mtime);
+        }
+        assert_eq!(
+            crate::project::validation::parse_document(
+                &fs::read(root.path().join("project.easl")).unwrap()
+            )
+            .unwrap(),
+            saved.document
+        );
+        // Historical replay cannot flush a later unrelated edit, including a foreign request.
+        let edited = crate::project::config::edit_for_state(
+            &app.state::<AppState>(),
+            1,
+            crate::project::model::ProjectEdit::Navbar { collapsed: false },
+        )
+        .unwrap();
+        let before = fs::read(root.path().join("project.easl")).unwrap();
+        let backup = fs::read(root.path().join("project.easl.bak")).unwrap();
+        let replay = crate::project::config::reconcile_processing_for_state(
+            &app.state::<AppState>(),
+            1,
+            persisted.run_id,
+            result.terminal_revision.unwrap(),
+        )
+        .unwrap();
+        assert_eq!(replay.persisted_revision, saved.persisted_revision);
+        assert_eq!(replay.accepted_revision, edited.accepted_revision);
+        assert_ne!(replay.accepted_revision, replay.persisted_revision);
+        assert!(!root.path().join(CURRENT_RECORD).exists());
+        assert_eq!(
+            fs::read(root.path().join("project.easl.bak")).unwrap(),
+            backup
+        );
+        assert!(
+            crate::project::config::reconcile_processing_for_state(
+                &app.state::<AppState>(),
+                1,
+                uuid::Uuid::new_v4(),
+                result.terminal_revision.unwrap()
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read(root.path().join("project.easl")).unwrap(), before);
     }
 }
 
@@ -205,6 +383,25 @@ fn bids_verification_fails_before_configuration_and_historical_status_mutation()
     assert_eq!(result.error.as_ref().unwrap().code, "bidsCompatibility");
     assert_eq!(fs::read(path.join("dataPar.json")).unwrap(), b"prior");
     assert!(!result.terminal_summary.unwrap().execution_committed);
+    assert_eq!(
+        app.state::<AppState>()
+            .project_config
+            .lock()
+            .unwrap()
+            .active
+            .as_ref()
+            .unwrap()
+            .document
+            .ui_state
+            .processing
+            .as_ref()
+            .unwrap()
+            .population
+            .as_ref()
+            .unwrap()
+            .completed,
+        Some(true)
+    );
 }
 
 #[cfg(unix)]
@@ -233,6 +430,25 @@ fn first_and_partial_spawn_failure_keep_commit_and_settle_owned_workers() {
         let result = terminal(&app, &run_id);
         assert_eq!(result.lifecycle, ProcessingLifecycle::Failed);
         assert!(result.execution_committed);
+        assert_eq!(
+            app.state::<AppState>()
+                .project_config
+                .lock()
+                .unwrap()
+                .active
+                .as_ref()
+                .unwrap()
+                .document
+                .ui_state
+                .processing
+                .as_ref()
+                .unwrap()
+                .population
+                .as_ref()
+                .unwrap()
+                .completed,
+            Some(false)
+        );
         assert_ne!(
             fs::read(derivative.join("dataPar.json")).unwrap(),
             b"prior configuration"
@@ -480,10 +696,10 @@ fn padded_matlab_profile_consumes_validated_path_without_changing_request() {
         r#"case "$2" in "addpath('$PWD/installation'); ExploreASL("*) ;; *) exit 41;; esac
 {READY}"#
     );
-    let (root, app, run_id) = fixture_with_profile(&script, "dicom", 1, |_, profile| {
+    let (root, app, run_id) = fixture_with_profile(&script, "dicom", 1, |_, request| {
         let ExecutionProfile::Matlab {
             explore_asl_path, ..
-        } = profile
+        } = &mut request.execution_profile
         else {
             unreachable!()
         };
@@ -551,9 +767,9 @@ else
     printf 'warmup\n' >> invocations
 fi"#
         );
-        let (root, app, run_id) = fixture_with_profile(&script, "dicom", 1, |root, profile| {
+        let (root, app, run_id) = fixture_with_profile(&script, "dicom", 1, |root, request| {
             fs::write(root.join("image.sif"), b"fixture").unwrap();
-            *profile = ExecutionProfile::Apptainer {
+            request.execution_profile = ExecutionProfile::Apptainer {
                 id: "profile".into(),
                 label: "padded fixture".into(),
                 apptainer_path: root.join("matlab").display().to_string(),
@@ -614,9 +830,9 @@ if [ "$1" = '--version' ]; then printf 'apptainer 1.2'; exit 0; fi
 case "$*" in *'ls /opt/xasl/xASL_latest/'*) printf 'VERSION_1.2.3\n'; exit 0;; esac
 if [ "$#" -ne 15 ]; then printf warm > warm; sleep 30; fi
 "#;
-    let (root, app, run_id) = fixture_with_profile(script, "dicom", 1, |root, profile| {
+    let (root, app, run_id) = fixture_with_profile(script, "dicom", 1, |root, request| {
         fs::write(root.join("image.sif"), b"fixture").unwrap();
-        *profile = ExecutionProfile::Apptainer {
+        request.execution_profile = ExecutionProfile::Apptainer {
             id: "profile".into(),
             label: "fixture".into(),
             apptainer_path: root.join("matlab").display().to_string(),

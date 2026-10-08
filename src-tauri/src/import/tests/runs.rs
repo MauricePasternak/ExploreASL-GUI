@@ -19,6 +19,22 @@ use std::path::{Path, PathBuf};
 fn active_state(root: &Path) -> AppState {
     let state = AppState::default();
     crate::project::ownership::own_project(&state, root);
+    let ownership = crate::project::ownership::active(&state).unwrap();
+    let document = crate::project::config::defaults(
+        "Import".into(),
+        crate::project::model::DataSource::Dicom,
+        "profile-1".into(),
+    )
+    .unwrap();
+    state.project_config.lock().unwrap().active =
+        Some(crate::project::config::ActiveProjectConfig {
+            document,
+            ownership,
+            generation: 1,
+            accepted_revision: 0,
+            persisted_revision: 0,
+            recovered_from_backup: false,
+        });
     state
 }
 
@@ -26,6 +42,23 @@ fn active_state(root: &Path) -> AppState {
 fn reservation_is_mutation_free_and_blocks_duplicate_or_changed_scope() {
     let temp = tempfile::tempdir().unwrap();
     let state = active_state(temp.path());
+    let mut payload = serde_json::json!({
+        "sourceDataPath": "sourcedata", "pathPatterns": [{"signature": "VARYING", "samplePath": "original", "blocks": ["original"], "uniqueNames": {"0": ["original"]}, "count": 1, "depth": 1}],
+        "tokenizerConfigs": {"VARYING": [{"blockIndex": 0, "subBlockIndex": null, "tag": "Subject"}]},
+        "bMatchDirectories": false, "modalityAliases": [{"captured": "ASL", "mapped": "ASL4D"}],
+        "sessionAliases": [{"captured": "visit", "alias": "01", "index": 1}], "runAliases": [{"captured": "run", "alias": "02", "index": 2}],
+        "subjectRenames": [{"original": "original", "target": "ONE"}],
+        "metadataGroups": [{"id": "g", "label": "Group", "bidsParams": {"ArterialSpinLabelingType": "PCASL"}}],
+        "subjectRows": [{"id": "ONE/01", "subject": "ONE", "session": "01", "groupId": "g"}], "selectedProfileId": "profile-1"
+    });
+    let expected: crate::project::model::ImportSnapshot =
+        serde_json::from_value(payload.clone()).unwrap();
+    payload.as_object_mut().unwrap().remove("selectedProfileId");
+    {
+        let mut config = state.project_config.lock().unwrap();
+        config.active.as_mut().unwrap().document.mapping_state =
+            serde_json::from_value(payload).unwrap();
+    }
     let plan = plan_import_relocation_for_state(&state, &["ONE".to_string()]).unwrap();
     let snapshot = reserve_import_run_for_state(
         &state,
@@ -65,6 +98,23 @@ fn reservation_is_mutation_free_and_blocks_duplicate_or_changed_scope() {
     assert!(!temp.path().join(STAGING_DIRECTORY).exists());
     assert!(record_path(temp.path()).is_file());
     let record = load_record(temp.path()).unwrap().unwrap();
+    let admitted = record.admitted_config.clone().unwrap();
+    assert_eq!(admitted, expected);
+    assert_eq!(admitted.selected_profile_id.as_deref(), Some("profile-1"));
+    state
+        .project_config
+        .lock()
+        .unwrap()
+        .active
+        .as_mut()
+        .unwrap()
+        .document
+        .mapping_state
+        .source_data_path = Some("edited-after-admission".into());
+    assert_eq!(
+        load_record(temp.path()).unwrap().unwrap().admitted_config,
+        Some(admitted)
+    );
     let durable_plan = record.relocation_plan.unwrap();
     assert_eq!(
         record.relocation_plan_id.as_deref(),
@@ -347,6 +397,11 @@ fn exact_visibility_rejects_conflicting_valid_record_without_mutation() {
     let expected = load_record(temp.path()).unwrap().unwrap();
     let mut conflicting = expected.clone();
     conflicting.snapshot.profile_id = "profile-2".to_string();
+    conflicting
+        .admitted_config
+        .as_mut()
+        .unwrap()
+        .selected_profile_id = Some("profile-2".into());
     write_record(temp.path(), &conflicting).unwrap();
     let visible_bytes = fs::read(record_path(temp.path())).unwrap();
 
@@ -719,6 +774,27 @@ fn acknowledgement_is_terminal_exact_idempotent_and_required_for_replacement() {
         false,
     )
     .unwrap();
+    let mut baseline = state
+        .import_state
+        .lock()
+        .unwrap()
+        .admitted_config
+        .clone()
+        .unwrap();
+    baseline.source_data_path = "prior-success".into();
+    {
+        let mut config = state.project_config.lock().unwrap();
+        let import = config
+            .active
+            .as_mut()
+            .unwrap()
+            .document
+            .ui_state
+            .import
+            .as_mut()
+            .unwrap();
+        import.most_recent_config = Some(baseline.clone());
+    }
     assert!(acknowledge_import_run_for_state(&state, &snapshot.run_id).is_err());
     assert!(acknowledge_import_run_for_state(&state, "stale").is_err());
     {
@@ -727,8 +803,67 @@ fn acknowledgement_is_terminal_exact_idempotent_and_required_for_replacement() {
         run.terminal_result = Some(ImportTerminalResult::Interrupted);
         persist(&run).unwrap();
     }
+    let blocked = temp.path().join("project.easl");
+    fs::create_dir(&blocked).unwrap();
+    assert!(
+        crate::project::config::reconcile_import_for_state(&state, 1, snapshot.run_id.clone())
+            .is_err()
+    );
+    assert!(!state.import_state.lock().unwrap().acknowledged);
+    assert!(record_path(temp.path()).exists());
+    fs::remove_dir(&blocked).unwrap();
+    crate::import::record::fail_next_record_removal();
+    assert!(
+        crate::project::config::reconcile_import_for_state(&state, 1, snapshot.run_id.clone())
+            .is_err()
+    );
+    let saved = fs::read(&blocked).unwrap();
+    let document = crate::project::validation::parse_document(&saved).unwrap();
+    assert_eq!(
+        document.ui_state.import.unwrap().most_recent_config,
+        Some(baseline)
+    );
+    let revision = state
+        .project_config
+        .lock()
+        .unwrap()
+        .active
+        .as_ref()
+        .unwrap()
+        .accepted_revision;
+    crate::project::config::reconcile_import_for_state(&state, 1, snapshot.run_id.clone()).unwrap();
+    assert_eq!(fs::read(&blocked).unwrap(), saved);
+    assert_eq!(
+        state
+            .project_config
+            .lock()
+            .unwrap()
+            .active
+            .as_ref()
+            .unwrap()
+            .accepted_revision,
+        revision
+    );
     acknowledge_import_run_for_state(&state, &snapshot.run_id).unwrap();
-    acknowledge_import_run_for_state(&state, &snapshot.run_id).unwrap();
+    let edited = crate::project::config::edit_for_state(
+        &state,
+        1,
+        crate::project::model::ProjectEdit::Navbar { collapsed: false },
+    )
+    .unwrap();
+    let backup = fs::read(temp.path().join("project.easl.bak")).ok();
+    crate::import::record::fail_next_record_removal();
+    assert!(
+        crate::project::config::reconcile_import_for_state(&state, 1, snapshot.run_id.clone(),)
+            .is_err()
+    );
+    let replay =
+        crate::project::config::reconcile_import_for_state(&state, 1, snapshot.run_id.clone())
+            .unwrap();
+    assert_eq!(replay, edited);
+    assert_ne!(replay.accepted_revision, replay.persisted_revision);
+    assert_eq!(fs::read(&blocked).unwrap(), saved);
+    assert_eq!(fs::read(temp.path().join("project.easl.bak")).ok(), backup);
     assert!(get_active_import_run_for_state(&state).unwrap().is_none());
     assert!(!record_path(temp.path()).exists());
 

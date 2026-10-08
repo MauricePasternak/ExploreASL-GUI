@@ -276,6 +276,9 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
         next.set_lifecycle(ProcessingLifecycle::Running)?;
         Ok(())
     })?;
+    if snapshot.population_execution_committed {
+        crate::project::config::invalidate_population_for_state(&state, &reserved.project_root)?;
+    }
     publish(app, &snapshot);
     if cancelled(&state, run_id)? {
         return Ok(());

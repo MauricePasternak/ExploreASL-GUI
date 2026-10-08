@@ -12,6 +12,7 @@ use crate::import::{
     ImportExitEvidence, ImportLifecycle, ImportState, ImportSubjectOutcome,
     ImportSubjectOutcomeKind,
 };
+use crate::project::model::ExecutionPhase;
 use std::fs;
 use std::path::Path;
 
@@ -93,6 +94,14 @@ fn record_round_trip_preserves_all_recovery_checkpoints_and_rejects_each_authori
     );
 
     let mut invalid = Vec::new();
+    let snapshot: crate::project::model::ImportSnapshot = serde_json::from_value(serde_json::json!({
+        "sourceDataPath": "../escape", "pathPatterns": [], "tokenizerConfigs": {},
+        "bMatchDirectories": true, "modalityAliases": [], "sessionAliases": [], "runAliases": [],
+        "subjectRenames": [], "metadataGroups": [], "subjectRows": [], "selectedProfileId": "profile-1"
+    })).unwrap();
+    let mut r = record.clone();
+    r.admitted_config = Some(snapshot);
+    invalid.push(r);
     let mut r = record.clone();
     r.version = 99;
     invalid.push(r);
@@ -812,23 +821,89 @@ fn recovery_resumes_verification_and_relocation_checkpoints_then_replays_termina
 
     // Relocation checkpoint resumes terminal publication even after
     // staging cleanup; repeated recovery is replay-only.
-    let relocated = tempfile::tempdir().unwrap();
-    let mut record = finalizing_record(relocated.path());
-    record.snapshot.relocation_outcome = Some(committed_outcome());
-    write_record(relocated.path(), &record).unwrap();
-    let state = crate::app::state::AppState::default();
-    let first = crate::import::runs::recover_import_run_for_project(&state, relocated.path())
-        .unwrap()
+    for captured in [false, true] {
+        let relocated = tempfile::tempdir().unwrap();
+        let mut document = crate::project::config::defaults(
+            "Recovered import".into(),
+            crate::project::model::DataSource::Dicom,
+            "profile-1".into(),
+        )
         .unwrap();
-    let second = crate::import::runs::recover_import_run_for_project(&state, relocated.path())
-        .unwrap()
+        let baseline: crate::project::model::ImportSnapshot = serde_json::from_value(serde_json::json!({
+        "sourceDataPath": "prior", "pathPatterns": [{"signature": "VARYING", "samplePath": "ONE", "blocks": ["ONE"], "uniqueNames": {"0": ["ONE"]}, "count": 1, "depth": 1}],
+        "tokenizerConfigs": {"VARYING": [{"blockIndex": 0, "subBlockIndex": null, "tag": "Subject"}]},
+        "bMatchDirectories": true, "modalityAliases": [], "sessionAliases": [], "runAliases": [],
+        "subjectRenames": [], "metadataGroups": [{"id": "g", "label": "Group", "bidsParams": {"ArterialSpinLabelingType": "PCASL"}}],
+        "subjectRows": [{"id": "ONE/01", "subject": "ONE", "session": "01", "groupId": "g"}], "selectedProfileId": "profile-1"
+    })).unwrap();
+        document
+            .ui_state
+            .import
+            .as_mut()
+            .unwrap()
+            .most_recent_config = Some(baseline.clone());
+        document.mapping_state.source_data_path = Some("edited-current".into());
+        let primary = relocated.path().join("project.easl");
+        fs::write(
+            &primary,
+            crate::project::config::serialize(&document).unwrap(),
+        )
         .unwrap();
-    assert_eq!(first.lifecycle, ImportLifecycle::Completed);
-    assert_eq!(first, second);
-    assert_eq!(
-        load_record(relocated.path()).unwrap().unwrap().snapshot,
-        first
-    );
+        let mut record = finalizing_record(relocated.path());
+        let mut admitted = baseline.clone();
+        admitted.source_data_path = "admitted".into();
+        record.admitted_config = captured.then_some(admitted.clone());
+        record.snapshot.relocation_outcome = Some(committed_outcome());
+        write_record(relocated.path(), &record).unwrap();
+        let state = crate::app::state::AppState::default();
+        let first = crate::import::runs::recover_import_run_for_project(&state, relocated.path())
+            .unwrap()
+            .unwrap();
+        let second = crate::import::runs::recover_import_run_for_project(&state, relocated.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.lifecycle, ImportLifecycle::Completed);
+        assert_eq!(first, second);
+        assert_eq!(
+            load_record(relocated.path()).unwrap().unwrap().snapshot,
+            first
+        );
+        // A new native/renderer lifecycle cannot substitute current settings for the admitted attempt.
+        let reloaded = crate::app::state::AppState::default();
+        let inspected = crate::project::config::inspect_for_state(
+            &reloaded,
+            primary.to_string_lossy().into_owned(),
+            vec![],
+        )
+        .unwrap();
+        let accepted =
+            crate::project::config::activate_for_state(&reloaded, inspected.candidate_id, false)
+                .unwrap();
+        assert_eq!(
+            accepted
+                .document
+                .ui_state
+                .import
+                .as_ref()
+                .unwrap()
+                .most_recent_config,
+            Some(if captured { admitted } else { baseline })
+        );
+        assert_eq!(
+            accepted.document.mapping_state.source_data_path.as_deref(),
+            Some("edited-current")
+        );
+        assert_eq!(
+            crate::project::validation::parse_document(&fs::read(&primary).unwrap()).unwrap(),
+            accepted.document
+        );
+        let import = accepted.document.ui_state.import.as_ref().unwrap();
+        assert_eq!(
+            (import.current_phase, import.completed),
+            (Some(ExecutionPhase::Completed), Some(true))
+        );
+        assert!(load_record(relocated.path()).unwrap().is_none());
+    }
 }
 
 #[test]

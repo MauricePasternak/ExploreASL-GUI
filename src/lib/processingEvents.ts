@@ -8,7 +8,6 @@ import {
   ProcessingRunSnapshotSchema,
   ProcessingRequestSchema,
   ProcessingReservationSchema,
-  ProcessingHistoricalReplaySchema,
   StatusFileCreatedPayloadSchema,
   PROCESSING_MODULES,
   type ProcessingRequest,
@@ -19,6 +18,7 @@ import {
 import { aslRunsEqual, normalizeAslRunId } from "./aslRun";
 import { captureProjectLease, isCurrentProjectLease } from "./projectLifecycle";
 import { useProcessingStore } from "../stores/processingStore";
+import { useProjectStore } from "../stores/projectStore";
 import { reconcileProcessingTerminal } from "./processingTerminalCoordinator";
 
 export type {
@@ -72,15 +72,6 @@ export async function confirmProcessingWorkersStopped(runId: string, revision: n
   }
   return snapshot;
 }
-export async function acknowledgeProcessingRun(runId: string, terminalRevision: number) {
-  const replay = ProcessingHistoricalReplaySchema.parse(
-    await invoke("acknowledge_processing_run", { runId, terminalRevision }),
-  );
-  if (replay.runId !== runId || replay.terminalRevision !== terminalRevision)
-    throw new Error("Processing acknowledgement identity mismatch");
-  return replay;
-}
-
 export async function loadSubjects(
   projectRoot: string,
   dataSource?: "dicom" | "bids",
@@ -120,14 +111,22 @@ export async function projectProcessingSnapshot(
   lease = captureProjectLease(),
 ): Promise<void> {
   if (!isAttachedRunCurrent(snapshot.runId, lease)) return;
+  const previous = useProcessingStore.getState().snapshot;
   useProcessingStore.getState().reconcileRunSnapshot(snapshot);
   const state = useProcessingStore.getState();
   if (
     state.snapshot?.revision !== snapshot.revision ||
     state.snapshot.runId !== snapshot.runId ||
     !state.terminalRunId
-  )
+  ) {
+    if (
+      state.snapshot?.revision === snapshot.revision &&
+      snapshot.populationExecutionCommitted &&
+      !previous?.populationExecutionCommitted
+    )
+      await useProjectStore.getState().refreshProject();
     return;
+  }
   await reconcileProcessingTerminal(lease);
 }
 
