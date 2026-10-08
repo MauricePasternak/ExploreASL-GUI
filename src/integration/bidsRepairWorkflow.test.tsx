@@ -16,16 +16,12 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
 import ControlButtons from "../components/processing/ControlButtons";
-import { serializeProject, type VersionedProjectFile, parseProject } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { seedValidProfileGate } from "../test/landingProfileGate";
-import {
-  processingReplay,
-  processingSnapshot,
-  processingTerminal,
-} from "../test/processingFixtures";
+import { processingSnapshot } from "../test/processingFixtures";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 
 type Snapshot = Record<string, { type: string; size: number; hash?: string }>;
@@ -106,41 +102,34 @@ describe("existing BIDS project repair and retry integration", () => {
     await writeFile(join(root, "rawdata", "README.md"), "user README\r\n");
     await writeFile(join(root, "unrelated.bin"), "keep\0bytes");
     await writeFile(join(root, ".bidsignore"), "derivatives/\r\n");
-    const persisted: VersionedProjectFile = {
-      schemaVersion: 1,
-      version: "0.1.0",
-      projectMeta: {
-        id: "11111111-1111-4111-8111-111111111111",
-        name: "Legacy BIDS",
-        rootPath: root,
-        createdAt: "2026-01-01T00:00:00.000Z",
-        lastOpened: "2026-01-01T00:00:00.000Z",
-        currentPhase: "processing",
-        dataSource: "bids",
-      },
-      uiState: {},
+    const profile = useGlobalStore.getState().settings.executionProfiles[0]!;
+    const persisted = projectFixture("11111111-1111-4111-8111-111111111111", "Current BIDS", root, {
       mappingState: { sourceDataPath: "." },
-      dataPar: {},
-    };
-    projectBytes = serializeProject(persisted);
+      uiState: {
+        import: { bidsReviewConfirmed: true, mostRecentConfig: null },
+        processing: {
+          config: {
+            subjects: ["sub-01_01"],
+            modules: ["asl"],
+            selectedProfileId: profile.id,
+            workers: 1,
+          },
+        },
+      },
+    });
+    persisted.document.projectMeta.dataSource = "bids";
+    persisted.document.projectMeta.currentPhase = "processing";
+    persisted.allowedPhases = ["import", "parameters", "processing"];
+    const settled = structuredClone(persisted);
+    settled.acceptedRevision = settled.persistedRevision = 1;
+    settled.document.uiState.processing!.currentPhase = "failed";
+    projectBytes = JSON.stringify(persisted.document);
     await writeFile(join(root, "project.easl"), projectBytes);
 
-    // Open is deliberately modeled as persisted parse + runtime root hydrate;
-    // metadata review then calls the source scanner. Neither operation writes.
-    const opened = parseProject(await readFile(join(root, "project.easl"), "utf8"));
-    useProjectStore.setState({
-      project: { ...opened, projectMeta: { ...opened.projectMeta, rootPath: root } },
-      loaded: true,
-    });
+    // Static native acceptance; no renderer configuration parser or writer.
+    useProjectStore.getState().acceptSnapshot(persisted);
     activateProjectLease("11111111-1111-4111-8111-111111111111", root);
-    const profile = useGlobalStore.getState().settings.executionProfiles[0]!;
     useProcessingStore.setState({
-      config: {
-        subjects: ["sub-01_01"],
-        modules: ["asl"],
-        selectedProfileId: profile.id,
-        workers: 1,
-      },
       availableSubjects: [
         {
           subjectSession: "sub-01_01",
@@ -197,21 +186,9 @@ describe("existing BIDS project repair and retry integration", () => {
           runId: "12345678-1234-4234-8234-123456789011",
           lifecycle: "preparing",
         });
-      if (command === "acknowledge_processing_run")
-        return processingReplay(
-          processingTerminal({
-            runId: "12345678-1234-4234-8234-123456789011",
-            terminalRevision: 2,
-            terminalResult: "failed",
-            terminalSummary: {
-              result: "failed",
-              executionCommitted: false,
-              populationCompleted: false,
-              profileId: profile.id,
-              exploreAslVersion: null,
-            },
-          }),
-        );
+      if (command === "reconcile_processing_result") return settled;
+      if (command === "save_project" || command === "get_project_snapshot")
+        return runCalls ? settled : persisted;
       if (command === "preflight_bids_setup_repair") {
         reviewedPlan = repairPlan(root);
         return reviewedPlan;
@@ -226,21 +203,23 @@ describe("existing BIDS project repair and retry integration", () => {
         return {
           outcome: "committed",
           projectPath: null,
-          canonicalProjectBytes: null,
+          projectDocument: null,
+          candidateId: null,
           directorySyncSupported: true,
         };
       }
-      return null;
+      throw new Error(`Unexpected command ${command}`);
     });
   });
 
   afterEach(async () => {
     cleanup();
+    useProjectStore.getState().cancelAutosave();
     resetProjectLifecycleForTests();
     await rm(root, { recursive: true, force: true });
   });
 
-  it("keeps legacy open/review read-only, requires reviewed repair, then retries without another source mutation", async () => {
+  it("keeps current open/review read-only, requires reviewed repair, then retries without another source mutation", async () => {
     const openedBefore = await snapshot(root);
     await invoke("scan_bids_sidecars", { rootPath: root });
     expect(await snapshot(root)).toEqual(openedBefore);

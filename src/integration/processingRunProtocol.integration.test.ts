@@ -8,7 +8,8 @@ import {
   processingSnapshot,
   processingTerminal,
 } from "../test/processingFixtures";
-import { DEFAULT_PROJECT_FILE } from "../schemas/project";
+import { projectView } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
 import { useProjectStore } from "../stores/projectStore";
 import { useProcessingStore } from "../stores/processingStore";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -28,7 +29,7 @@ describe("processing run protocol", () => {
     vi.clearAllMocks();
     resetProjectLifecycleForTests();
     await useProcessingStore.getState().resetProcessing();
-    useProjectStore.setState({ project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project") });
+    useProjectStore.setState({ project: projectView(projectFixture()) });
     activateProjectLease("project-1", "/project");
   });
   it("distinguishes current reservation from historical replay", async () => {

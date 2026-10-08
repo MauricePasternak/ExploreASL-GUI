@@ -8,31 +8,27 @@ Define QC verdict selection for manifest subjects and reviewers.
 
 ### Requirement: QcSelection Table Shape
 
-The QC Selection step SHALL render a `DataTable` whose rows mirror the SubjectSelection rows used in the Processing phase (Subject, Session columns + Structural/ASL `ModuleDisplayStatus` as read-only badges). The table SHALL additionally render a "Metadata Group" column showing the row's assigned `MetadataGroup.label` and a "Verdict" column with a `SegmentedControl` offering `Neutral`, `Pass`, `Fail`. The table SHALL NOT include log/report columns or row selection checkboxes — those are Processing-phase concerns.
-
-When `reviewers` contains more than one entry, the QC Selection step SHALL wrap the `DataTable` inside Mantine `Tabs`. Each tab SHALL correspond to one registry entry, use the reviewer's `label`, bind `value` to `activeReviewerId`, and update selection through `setActiveReviewerId`. Each tab panel SHALL render its own table instance scoped to `verdicts[activeReviewerId]`.
-
-When `reviewers` is undefined or contains at most one entry, the `Tabs` wrapper SHALL NOT be rendered. The table SHALL use the flat verdict map and otherwise retain single-reviewer behavior.
+QC Selection SHALL retain Subject/Session columns, read-only Structural/ASL badges, metadata group labels, and Neutral/Pass/Fail controls without Processing log/report or row-selection controls. With multiple reviewers it SHALL render labeled tabs scoped to the active reviewer. With one reviewer it SHALL render the same table without tabs, reading the sole registered reviewer's indexed slice. Missing group assignment SHALL show dim "Ungrouped" and remain included in the manifest's Ungrouped bucket.
 
 #### Scenario: Row shows metadata group label
 
-- **WHEN** a SubjectSession belongs to a `MetadataGroup` with `label: "Philips PCASL"`
-- **THEN** the corresponding row's "Metadata Group" column SHALL render `"Philips PCASL"`
+- **WHEN** a SubjectSession belongs to a named metadata group
+- **THEN** its row SHALL show that label
 
 #### Scenario: Row with no metadata group assignment
 
-- **WHEN** a SubjectSession's import `SubjectRow` has no `groupId` matching any defined `MetadataGroup`
-- **THEN** the "Metadata Group" column SHALL render a dim "Ungrouped" marker; the row SHALL NOT be excluded from the manifest, but SHALL be reported in Section 1 of the manifest under an "Ungrouped" bucket
+- **WHEN** its assignment matches no group
+- **THEN** the row SHALL show Ungrouped and remain eligible for manifest grouping
 
 #### Scenario: Single-reviewer mode renders without tabs
 
-- **WHEN** the `reviewers` array contains exactly one entry (or is `undefined`)
-- **THEN** the QC Selection step SHALL render the `DataTable` directly without a `Tabs` wrapper and retain pre-multi-reviewer behavior
+- **WHEN** exactly one reviewer exists
+- **THEN** its table SHALL appear without tabs using its indexed verdicts
 
 #### Scenario: Multi-reviewer mode renders tabbed UI
 
-- **WHEN** the `reviewers` array contains reviewers labeled "Reviewer 1" and "Reviewer 2"
-- **THEN** the QC Selection step SHALL render two corresponding tabs, and the active tab SHALL correspond to `activeReviewerId`
+- **WHEN** multiple reviewers exist
+- **THEN** labeled tabs SHALL expose only the active registered slice
 
 ### Requirement: Blinded Review Across Tabs
 
@@ -69,23 +65,17 @@ In multi-reviewer mode, each reviewer tab SHALL display an inline completion bad
 
 ### Requirement: Derived No-Info Status
 
-The displayed verdict for a row SHALL be computed as follows, in order:
-
-1. If the Population QC outputs for the SubjectSession (`Coverage.tsv`, `SpatialCoV.tsv`, motion TSV) cannot be located on disk → display "No Info"; the SegmentedControl SHALL be disabled for this row.
-2. Otherwise, if a stored verdict exists for the SubjectSession → display its `status` (`Pass` or `Fail`), reading `verdicts[activeReviewerId][subjectSession]` in multi-reviewer mode and `verdicts[subjectSession]` in single-reviewer mode.
-3. Otherwise → display "Neutral".
-
-No Info SHALL NOT be a user-settable state.
+Missing Population QC data SHALL produce read-only No Info, not a user verdict. Otherwise, a stored verdict SHALL display its status from the active reviewer slice for every reviewer count; absence SHALL display Neutral. No Info rows SHALL not produce stored verdicts.
 
 #### Scenario: Missing QC outputs disable verdict control
 
-- **WHEN** a SubjectSession's Population output directory is absent or empty of QC CSVs
-- **THEN** the row SHALL render a "No Info" badge in place of the SegmentedControl and the SegmentedControl SHALL NOT be rendered or be interactive
+- **WHEN** QC output files cannot be located
+- **THEN** the row SHALL display No Info without an interactive verdict control
 
 #### Scenario: Stored verdict displayed for active reviewer
 
-- **WHEN** `activeReviewerId` is `r1` and `verdicts["r1"]["sub-X_01"].status === "fail"`
-- **THEN** the row's SegmentedControl SHALL render with value `"Fail"`
+- **WHEN** the active registered reviewer's indexed entry is Fail
+- **THEN** that row SHALL display Fail
 
 ### Requirement: Filter Chips With Counts
 
@@ -108,22 +98,22 @@ The QC Selection step SHALL display a `SegmentedControl` filter with five option
 
 ### Requirement: Neutral Gate For Step Progression
 
-The stepper's "Next" button proceeding from QC Selection SHALL be disabled whenever any required reviewer has at least one eligible Neutral row. In multi-reviewer mode, the gate SHALL evaluate all reviewers, not only the active reviewer or current filter. In single-reviewer mode, it SHALL evaluate the flat verdict map. The gate SHALL be re-evaluated on every verdict change. No Info rows SHALL NOT block progression or appear in manifest aggregation.
+Next SHALL require all registered reviewers to rate every eligible SubjectSession, independently of current filters. One reviewer SHALL use the same indexed completion rule. No Info SHALL not block progression or enter aggregation. Every accepted verdict change SHALL refresh the gate.
 
 #### Scenario: Next disabled while any reviewer has Neutral rows
 
-- **WHEN** reviewer `r1` has resolved all verdicts but reviewer `r2` still has 3 eligible Neutral rows
-- **THEN** the Next button SHALL be disabled and SHALL display a tooltip indicating that all reviewers must resolve Neutral verdicts
+- **WHEN** any registered reviewer lacks an eligible verdict
+- **THEN** Next SHALL remain disabled with incomplete-review guidance
 
 #### Scenario: Next enabled after all reviewers resolve eligible rows
 
-- **WHEN** the last eligible Neutral row for every required reviewer is set to Pass or Fail
-- **THEN** the stepper's Next button SHALL become enabled
+- **WHEN** every eligible row has a verdict for every reviewer
+- **THEN** Next SHALL become enabled
 
 #### Scenario: Single-reviewer gate unchanged
 
-- **WHEN** one reviewer exists (or `reviewers` is `undefined`) and all eligible rows are non-Neutral
-- **THEN** the Next button SHALL be enabled, consistent with pre-multi-reviewer behavior
+- **WHEN** the sole reviewer has no eligible Neutral rows
+- **THEN** Next SHALL be enabled
 
 ### Requirement: Bulk Mark Complete As Pass
 

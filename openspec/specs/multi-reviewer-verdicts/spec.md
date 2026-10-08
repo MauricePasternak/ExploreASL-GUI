@@ -8,77 +8,24 @@ Defines how verdicts are stored, accessed, and tracked in multi-reviewer mode. V
 
 **Notation:** Scenario identifiers such as `r1`, `r2`, `reviewer-abc`, and `reviewer-xyz` are readable aliases for distinct valid reviewer UUID values. When an alias appears as a reviewer ID, an `activeReviewerId`, or a verdict-map key, it denotes its corresponding UUID value.
 
-### Requirement: Multi-Reviewer Verdict Storage Shape
-
-When in multi-reviewer mode (i.e., `reviewers` array contains 2+ entries), `ManifestUiStateSchema.verdicts` SHALL have the shape `Record<reviewerId, Record<subjectSession, ManifestVerdict>>`, where each top-level key is a reviewer's UUID `id` and each nested record maps subjectSession strings to `ManifestVerdict` objects.
-
-In single-reviewer mode (i.e., `reviewers` is `undefined` or contains at most one entry), `verdicts` SHALL retain the existing flat shape `Record<subjectSession, ManifestVerdict>` as defined in the current `manifest-verdicts` spec.
-
-#### Scenario: Multi-reviewer verdicts stored under reviewer IDs
-
-- **WHEN** two reviewers exist with IDs `"r1"` and `"r2"`, and each has set verdicts for `"sub-01_01"`
-- **THEN** `uiState.manifest.verdicts` SHALL have shape `{ "r1": { "sub-01_01": { status: "pass", setAt: ... } }, "r2": { "sub-01_01": { status: "fail", reason: "motion", setAt: ... } } }`
-
-#### Scenario: Single-reviewer verdicts remain flat
-
-- **WHEN** `reviewers` is `undefined` and a verdict is set for `"sub-01_01"`
-- **THEN** `uiState.manifest.verdicts` SHALL have shape `{ "sub-01_01": { status: "pass", setAt: ... } }` (no reviewer ID nesting)
-
-#### Scenario: Transitioning to multi-reviewer wraps existing verdicts
-
-- **WHEN** `addReviewer` is called on a project with existing flat verdicts `{ "sub-01_01": { status: "pass", setAt: 1700000000000 } }`
-- **THEN** the existing verdicts SHALL be wrapped under the first reviewer's ID: `{ "r1-uuid": { "sub-01_01": { status: "pass", setAt: 1700000000000 } } }`, preserving all original verdict data
-
-### Requirement: Scoped setManifestVerdict Action
-
-`projectStore.setManifestVerdict` SHALL accept an optional `reviewerId` parameter. The action's behavior SHALL be:
-
-1. In multi-reviewer mode: if `reviewerId` is provided, write the verdict under `verdicts[reviewerId][subjectSession]`; if `reviewerId` is omitted, default to `activeReviewerId`.
-2. In single-reviewer mode: ignore `reviewerId` and write directly to `verdicts[subjectSession]` (existing behavior).
-3. The verdict's `setAt` SHALL be set to the current prior-module completion mtime, as per the existing `manifest-verdicts` spec.
-
-The action SHALL reject (Zod parse failure) if `status === "fail"` and no `reason` is provided, consistent with the existing `ManifestVerdictSchema` constraint.
-
-#### Scenario: Verdict written to specified reviewer in multi-reviewer mode
-
-- **WHEN** `setManifestVerdict("sub-01_01", "pass", {}, "reviewer-abc")` is called in multi-reviewer mode
-- **THEN** the verdict SHALL be stored at `verdicts["reviewer-abc"]["sub-01_01"]` and no other reviewer's verdicts SHALL be affected
-
-#### Scenario: Verdict defaults to activeReviewerId when reviewerId omitted
-
-- **WHEN** `setManifestVerdict("sub-02_01", "fail", { reason: "motion" })` is called in multi-reviewer mode with `activeReviewerId` set to `"reviewer-xyz"`
-- **THEN** the verdict SHALL be stored at `verdicts["reviewer-xyz"]["sub-02_01"]`
-
-#### Scenario: Single-reviewer mode ignores reviewerId parameter
-
-- **WHEN** `setManifestVerdict("sub-03_01", "pass", {}, "some-id")` is called in single-reviewer mode
-- **THEN** the verdict SHALL be stored at `verdicts["sub-03_01"]` (flat), not nested under any reviewer ID
-
-#### Scenario: Fail without reason rejected in multi-reviewer mode
-
-- **WHEN** `setManifestVerdict("sub-04_01", "fail", {}, "reviewer-abc")` is called without a `reason`
-- **THEN** the call SHALL be rejected with a Zod validation error and no verdict SHALL be written
-
 ### Requirement: Per-Reviewer Staleness Tracking
 
-In multi-reviewer mode, staleness SHALL be evaluated independently for every reviewer. A reviewer's verdict for a given subjectSession SHALL be considered stale iff that specific verdict's `setAt` differs from the current maximum completion mtime of the prior modules (Structural, ASL). The store SHALL compute every reviewer slice and expose `staleVerdicts` as `Record<reviewerId, Set<subjectSession>>`, including an empty `Set` for each reviewer with no stale verdicts. In single-reviewer mode, the store SHALL retain the existing flat `Set<subjectSession>` representation (or its equivalent single-reviewer helper).
-
-The QC Selection UI SHALL select only `staleVerdicts[activeReviewerId]` in multi-reviewer mode. It SHALL NOT read, render, or derive any indicator from another reviewer's staleness slice, preserving blinded review.
+Every reviewer SHALL have an indexed staleness result, including empty results and sole-reviewer projects. Staleness SHALL compare captured prior-module mtime with the current maximum Structural/ASL completion mtime. QC selection SHALL display only the active reviewer's staleness and SHALL not reveal another reviewer's verdicts or stale indicators.
 
 #### Scenario: One reviewer's verdict stale while another's is fresh
 
-- **WHEN** Reviewer A set a verdict at `setAt: 1700000000000` and Reviewer B set a verdict for the same subjectSession at `setAt: 1700000060000`, and the current prior-module mtime is `1700000060000`
-- **THEN** Reviewer A's verdict for that subjectSession SHALL be flagged as stale, and Reviewer B's verdict SHALL NOT be flagged as stale
+- **WHEN** only one captured timestamp differs from current prior-module mtime
+- **THEN** only that reviewer's result SHALL include the SubjectSession
 
 #### Scenario: Multi-reviewer staleness exposes every reviewer slice
 
-- **WHEN** reviewers A and B have verdict slices and only Reviewer A has a stale verdict
-- **THEN** `staleVerdicts` SHALL contain both reviewer IDs, with the affected SubjectSession in `staleVerdicts[reviewerAId]` and an empty `staleVerdicts[reviewerBId]`
+- **WHEN** a registered reviewer has no stale verdicts
+- **THEN** its indexed staleness result SHALL remain empty rather than absent or flat
 
 #### Scenario: Stale pill shown only for active reviewer's verdicts
 
-- **WHEN** the active reviewer tab is "Reviewer 1" and "Reviewer 1" has stale verdicts but "Reviewer 2" does not
-- **THEN** the QC Selection table SHALL display "Stale" pills on the affected rows; switching to "Reviewer 2"'s tab SHALL show no "Stale" pills
+- **WHEN** the user switches between a stale and fresh reviewer
+- **THEN** stale indicators SHALL follow only the selected slice
 
 ### Requirement: Blinded Review via Tab Isolation
 
@@ -138,3 +85,46 @@ In multi-reviewer mode, the stepper's "Next" button (proceeding from QC Selectio
 
 - **WHEN** all existing reviewers have completed verdicts and the "Next" button is enabled, then `addReviewer` is called
 - **THEN** the "Next" button SHALL become disabled because the new reviewer has zero verdicts (all Neutral)
+
+### Requirement: Uniform reviewer verdict representation
+
+Verdicts SHALL use a reviewer-ID-indexed map of SubjectSession verdict maps for one to five reviewers. Reviewer IDs SHALL belong to the current registry. Empty maps SHALL be valid. Reviewer-count changes SHALL never wrap or unwrap verdicts; UI mode alone SHALL depend on whether count exceeds one.
+
+#### Scenario: Multi-reviewer verdicts stored under reviewer IDs
+
+- **WHEN** two reviewers rate the same SubjectSession
+- **THEN** both values SHALL remain in their respective indexed slices
+
+#### Scenario: Single-reviewer verdicts remain indexed
+
+- **WHEN** a sole reviewer rates a SubjectSession
+- **THEN** the value SHALL use that reviewer's indexed slice
+
+#### Scenario: Transitioning to multi-reviewer preserves existing representation
+
+- **WHEN** another reviewer is added
+- **THEN** existing verdicts SHALL retain their shape and original identity
+
+### Requirement: Registered reviewer verdict edits
+
+Each accepted verdict edit SHALL target an explicit registered reviewer or the registered active reviewer when omitted. The same rule SHALL apply at every reviewer count. Timestamp capture SHALL retain the prior-module mtime contract. Invalid reviewer IDs and Fail without reason SHALL be rejected visibly without changing accepted state.
+
+#### Scenario: Verdict written to specified reviewer
+
+- **WHEN** an edit names a registered reviewer
+- **THEN** only that reviewer's slice SHALL change
+
+#### Scenario: Verdict defaults to active reviewer
+
+- **WHEN** an edit omits reviewer ID
+- **THEN** it SHALL target the active slice
+
+#### Scenario: Single-reviewer edit uses registered identity
+
+- **WHEN** one reviewer exists
+- **THEN** verdict edits SHALL use that registered ID rather than a flat-map exception
+
+#### Scenario: Fail without reason rejected
+
+- **WHEN** Fail lacks a controlled reason
+- **THEN** the edit SHALL fail without adding a verdict

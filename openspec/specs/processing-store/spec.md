@@ -204,22 +204,22 @@ The store SHALL maintain `subjectStatuses` as an array of `SubjectModuleStatus` 
 
 ### Requirement: Last Run Config Persistence
 
-The store SHALL persist the last run configuration (`ProcessConfig`) to the `.easl` project file under `uiState.processing.config` and `uiState.processing.currentPhase`. The persisted `ProcessConfig` SHALL use `selectedProfileId` instead of `matlabPath` and `exploreAslPath`. On page load, the config form SHALL be pre-filled with the last run's values, including the `selectedProfileId`. The sync SHALL spread the existing `uiState.processing` object to preserve sibling fields (e.g. `structural`, `asl`, `population` last-run metadata) that are managed by other parts of the processing lifecycle. If the referenced profile no longer exists in global settings, the profile selector SHALL show a "Profile not found" indicator and the Start button SHALL be disabled until a valid profile is selected.
+Accepted processing selections SHALL persist under `uiState.processing.config`, using `selectedProfileId`, and accepted native terminal phases SHALL persist under `uiState.processing.currentPhase`. The form SHALL read one accepted project configuration, not an independently editable persisted mirror. Selection edits SHALL preserve structural, ASL, and Population completion/provenance. A missing saved profile SHALL show "Profile not found" and disable Start until a valid profile is selected. Existing application startup/open/create profile gating SHALL remain unchanged.
 
 #### Scenario: Config restoration on page load
 
-- **WHEN** the user navigates to the processing page after a previous run
-- **THEN** the subject selection, module checkboxes, profile selector, and worker count SHALL be pre-filled from the persisted config
+- **WHEN** Processing is visited after an earlier saved selection
+- **THEN** subjects, modules, profile, and worker count SHALL show the accepted saved values
 
 #### Scenario: Persisted profile no longer exists
 
-- **WHEN** the persisted `selectedProfileId` does not match any profile in `executionProfiles`
-- **THEN** the profile selector SHALL show "(Profile not found)" and the Start button SHALL be disabled until a valid profile is selected
+- **WHEN** selected profile ID is absent from global profiles
+- **THEN** the selector SHALL show "Profile not found" and Start SHALL remain disabled
 
 #### Scenario: Sync preserving structural/population sibling fields
 
-- **WHEN** `syncProcessingState` is called with `{ config, processingPhase: "running" }` and `uiState.processing.population.completed` is `true` with `lastRun` metadata present
-- **THEN** after the sync, `uiState.processing.population.completed` SHALL remain `true` and `uiState.processing.population.lastRun` SHALL retain its prior values (profileId, versions, Mtime)
+- **WHEN** selections change with existing module completion and provenance
+- **THEN** those native-owned values SHALL remain unchanged
 
 ### Requirement: Native processing snapshot projection
 
@@ -242,24 +242,24 @@ The processing store SHALL build pure request inputs and project native processi
 
 ### Requirement: Exact processing terminal persistence
 
-The project activation coordinator SHALL save accepted native terminal processing metadata through the existing project save queue before acknowledging the exact run and terminal revision. It SHALL NOT save/acknowledge an Interrupted snapshot while `confirmStopped` remains required. Population completion and provenance SHALL derive from native accepted run evidence. Save/acknowledgement failure SHALL retain terminal replay and expose actionable error. Repeated replay SHALL be idempotent. Population completion SHALL remain unchanged before an accepted native execution-commit snapshot; an accepted Population commit SHALL invalidate prior completion, and accepted Completed evidence SHALL set completion with native versions and ready-file mtime. A post-commit failed first spawn SHALL therefore preserve the native committed artifact state and display failed completion without restoring old status claims. Non-Population runs SHALL NOT change Population completion. Existing manifest verdicts SHALL remain on disk under their existing staleness rules.
+Eligible native terminal evidence SHALL update and persist project configuration before acknowledgement of the exact run and terminal revision. The frontend SHALL request or display reconciliation, not derive and save result metadata. Interrupted evidence requiring external-stop confirmation SHALL not acknowledge or claim completion. Persistence or acknowledgement failure SHALL retain replay and expose actionable errors; repeated replay SHALL remain idempotent. Population completion/provenance SHALL derive solely from accepted native execution commit and terminal evidence. Pre-commit preparation failure SHALL preserve prior completion; accepted Population execution commit SHALL invalidate it; accepted Completed evidence SHALL set it with native versions and ready-file mtime. Post-commit spawn failure SHALL not restore historical claims. Non-Population runs SHALL preserve Population completion and all reviewer verdicts.
 
 #### Scenario: Terminal save fails
 
-- **WHEN** the project save queue rejects terminal metadata persistence
-- **THEN** the frontend SHALL retain terminal state and SHALL NOT acknowledge native authority
+- **WHEN** native configuration persistence rejects terminal metadata
+- **THEN** the run SHALL remain replayable and unacknowledged with a visible error
 
 #### Scenario: Population preparation fails before mutation
 
-- **WHEN** native Population preflight fails before execution commit
-- **THEN** the frontend SHALL NOT clear a previously valid Population completion solely because Start was clicked
+- **WHEN** Population preflight fails before execution commit
+- **THEN** previous Population completion SHALL remain unchanged
 
 #### Scenario: Historical replay arrives during a newer run
 
-- **WHEN** reservation returns `historicalReplay: true` for an older acknowledged request
-- **THEN** the store SHALL preserve the newer current attachment, controls and project metadata
+- **WHEN** an older acknowledged request replays during newer work
+- **THEN** current attachment, controls, and newer metadata SHALL remain unchanged
 
 #### Scenario: Interrupted snapshot awaits confirmation
 
-- **WHEN** an accepted Interrupted snapshot has `availableAction: confirmStopped`
-- **THEN** terminal metadata persistence and acknowledgement SHALL wait until exact native confirmation publishes `availableAction: acknowledge`
+- **WHEN** an Interrupted result requires exact stopped-worker confirmation
+- **THEN** terminal persistence/acknowledgement SHALL wait for existing native confirmation policy

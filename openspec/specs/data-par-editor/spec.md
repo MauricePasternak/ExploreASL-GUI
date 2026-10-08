@@ -6,17 +6,17 @@ Define editing and serialization of ExploreASL dataPar configuration.
 
 ### Requirement: DataPar parameter state schema
 
-The system SHALL define a Zod schema `DataParSchema` representing all dataPar.json fields in scope, using `.optional()` for every field. Field names SHALL match ExploreASL's exact JSON keys (e.g., `bTopUp`, `Initial_PLD`, `bPVCNativeSpace`). The schema SHALL be organized into sections matching the UI accordion panels: M0, Quantification, GeneralSettings, ASLProcessing, Atlases, Structural, Environment.
+The system SHALL represent supported flat DataPar settings through the shared current project contract with optional fields named exactly as ExploreASL requires. Known types, numeric flag representations, array sizes, and supported ranges SHALL validate before configuration acceptance. Unknown loose scientific extension keys SHALL survive. UI panels SHALL remain M0, Quantification, General Settings, ASL Processing, Atlases, Structural, and Environment. Form placeholders SHALL not inject processing defaults; ordinary editing SHALL not require a complete execution-ready configuration.
 
 #### Scenario: Empty state produces minimal JSON
 
-- **WHEN** all DataParSchema fields are undefined
-- **THEN** the assembly function produces `{ "x": {} }` with no keys
+- **WHEN** no DataPar field is explicitly set
+- **THEN** existing scientific assembly SHALL produce `{ "x": {} }`
 
 #### Scenario: Explicitly set field appears in output
 
-- **WHEN** `bTopUp` is set to `true` and all other fields are undefined
-- **THEN** the assembly function produces `{ "x": { "modules": { "asl": { "bTopUp": true } } } }`
+- **WHEN** only `bTopUp` is explicitly true
+- **THEN** existing scientific assembly SHALL produce `{ "x": { "modules": { "asl": { "bTopUp": true } } } }`
 
 ### Requirement: Field metadata constant
 
@@ -93,19 +93,17 @@ The `x.S.Atlases` field SHALL use a multi-select grouped into free and non-comme
 
 ### Requirement: PVC conditional reveal
 
-The GUI SHALL retain its initially on PVC switch display without forcing an unset field into state. Unset `bPVCNativeSpace` SHALL remain omitted, allowing ExploreASL's default of 0. When the displayed switch is on, advanced controls SHALL reveal `bPVCGaussianMM` and the three-dimensional kernel. Flat kernel dimensions SHALL use voxels and `[5, 5, 1]`; Gaussian kernel FWHM SHALL use mm and `[10, 10, 4]` when no explicit kernel exists. Explicit kernel values SHALL survive shape changes. Numeric 0/1 PVC flags SHALL pass normal project save/load validation.
-
-Project parsing SHALL also accept legacy boolean `bPVCGaussianMM` values and normalize true/false to numeric 1/0 in memory, preserving Gaussian/flat meaning for existing consumers. An absent flag SHALL remain absent. This normalization SHALL NOT rewrite projects on open.
+The initially on PVC display SHALL not force an unset field into saved state. Unset `bPVCNativeSpace` SHALL remain absent, preserving ExploreASL's default. When displayed on, advanced controls SHALL reveal `bPVCGaussianMM` and the three-dimensional kernel. Flat kernel dimensions SHALL use voxels and `[5, 5, 1]`; Gaussian FWHM SHALL use mm and `[10, 10, 4]` when no explicit kernel exists. Explicit kernels SHALL survive shape changes. Current persisted PVC flags SHALL use numeric 0/1 only; legacy boolean normalization SHALL not occur during project reading.
 
 #### Scenario: User enables PVC without Gaussian
 
-- **WHEN** user toggles `bPVCNativeSpace` on and leaves `bPVCGaussianMM` off
-- **THEN** PVCNativeSpaceKernel shows as [5, 5, 1] with label "Kernel size (voxels)"
+- **WHEN** PVC is enabled without Gaussian mode
+- **THEN** the unset kernel display SHALL show `[5, 5, 1]` in voxels
 
 #### Scenario: User enables Gaussian PVC
 
-- **WHEN** user toggles `bPVCGaussianMM` on
-- **THEN** kernel display SHALL use `[10, 10, 4]` and FWHM mm when no explicit kernel exists, without injecting that kernel into unset state
+- **WHEN** Gaussian mode is enabled without an explicit kernel
+- **THEN** the display SHALL show `[10, 10, 4]` in mm without injecting an unset kernel
 
 ### Requirement: Basic/advanced toggle
 
@@ -178,17 +176,17 @@ Edits SHALL persist as flat optional settings under `.easl` `dataPar`; parameter
 
 ### Requirement: Parameter route
 
-The `/project/:id/parameters` route SHALL render a page containing the dataPar editor — an accordion-based form with sections: M0 Configuration, Quantification, General Settings, ASL Processing, Atlases, Structural (advanced-only), Environment (advanced-only). The form SHALL load existing values from `.easl` project state on mount and save changes on every field interaction.
+The parameter route SHALL retain its existing accordion panels and previously accepted values. Valid field interactions SHALL submit to the shared configuration owner without a page-owned copy delay; unfinished input SHALL remain a draft. Phase navigation and Save SHALL flush pending submissions before leaving. Current optional-setting, atlas pairing, advanced visibility, scientific assembly, and field-help behavior SHALL remain unchanged.
 
 #### Scenario: User navigates to parameters page
 
-- **WHEN** user navigates to `/project/abc123/parameters`
-- **THEN** the page loads with 5 basic accordion panels (M0, Quantification, General Settings, ASL Processing, Atlases) and any previously saved values pre-filled
+- **WHEN** the parameter route opens
+- **THEN** five basic panels SHALL display alongside enabled advanced panels and saved values
 
 #### Scenario: User changes a field and navigates away
 
-- **WHEN** user changes Quality from undefined to 0 and navigates to processing page
-- **THEN** the change is persisted to `.easl` and available when returning to the parameters page
+- **WHEN** Quality changes from unset to 0 and the user immediately visits Processing
+- **THEN** Quality 0 SHALL persist and remain available without waiting for a parameter-page timer
 
 ### Requirement: (?) Tooltip pattern for field labels
 

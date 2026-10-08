@@ -8,22 +8,22 @@ Define read-only planning, explicit consent, and recoverable transactional appli
 
 ### Requirement: BIDS mutation preflight is read-only
 
-Selecting and scanning a candidate BIDS root, building or displaying its mutation plan, changing the selected import mode, and cancelling or dismissing the flow SHALL NOT create, modify, rename, or remove any entry beneath that root. Preflight SHALL report read, validation, and permission errors without attempting setup or cleanup writes.
+Scanning a candidate root, building/displaying a new mutation plan, changing import mode, and cancelling that plan SHALL not create, modify, rename, or remove source-tree entries. A previously confirmed unfinished setup transaction SHALL be diagnosed separately on root selection and recovered under its validated journal before new preflight begins. That recovery SHALL be disclosed and SHALL not authorize new setup mutations. A clean selected root SHALL remain byte-preserving throughout selection and preflight. Inspection errors SHALL report actionable failure without setup/cleanup writes.
 
 #### Scenario: Scan and review preserve source tree
 
-- **WHEN** the GUI scans a candidate BIDS root and displays its mutation plan
-- **THEN** a recursive snapshot of every source-tree entry, type, size, and content hash SHALL remain identical to the snapshot taken before selection
+- **WHEN** a clean candidate root is selected, scanned, and reviewed
+- **THEN** its entry types, sizes, and content hashes SHALL remain unchanged
 
 #### Scenario: Cancel preserves source tree
 
-- **WHEN** a user cancels or dismisses any pre-confirmation BIDS setup screen
-- **THEN** the source tree SHALL remain identical and no project SHALL be activated or added to Recent Projects
+- **WHEN** new plan review is cancelled
+- **THEN** no plan mutation, activation, or recent-project registration SHALL occur
 
 #### Scenario: Preflight failure preserves source tree
 
-- **WHEN** inspection encounters an unreadable file, unsupported entry, invalid root, or mutation conflict
-- **THEN** preflight SHALL return an actionable error and SHALL leave the source tree unchanged
+- **WHEN** preflight encounters unreadable input, unsupported entries, or conflicts
+- **THEN** it SHALL fail without changing source entries
 
 ### Requirement: Plan discloses exact durable mutations
 
@@ -112,29 +112,34 @@ Mutation SHALL require an explicit confirmation carrying the current opaque plan
 
 ### Requirement: Confirmed mutations are recoverable as one transaction
 
-Commit SHALL treat `project.easl`, `rawdata/`, `rawdata/.easl-gui-managed`, and `.bidsignore` changes applicable to the reviewed plan as one transaction. Before replacing an existing file or exposing a created entry, it SHALL durably record enough ownership and before-state information to restore all pre-transaction entries. New file content SHALL be validated and made durable before installation; existing files SHALL be replaced atomically from same-directory candidates. Success SHALL be reported only after all planned entries and the parent directory are durable where supported.
+Commit SHALL treat applicable project, compatibility marker/directory, and ignore-file changes as one reviewed transaction. Before exposing entries or replacing files, a durable root-local journal SHALL record transaction identity, owned paths, expected content, and before-state sufficient for safe rollback. New content SHALL validate and flush before installation; replacement SHALL use same-directory atomic candidates. Success SHALL require all planned entries and supported directory flushing to complete.
 
-Any ordinary commit failure SHALL roll back every applied operation, restore existing file bytes, remove only transaction-owned entries created by that attempt, and avoid project activation. If interruption prevents immediate rollback, startup recovery SHALL use a global pending-transaction registry plus the root-local journal to deterministically finish the complete commit or restore the complete before-state before that root can be planned, created, or opened. Recovery SHALL never infer ownership from filenames alone.
+Ordinary failure SHALL restore prior bytes and remove only transaction-owned additions without activation. Interrupted transactions SHALL reconcile from validated root-local journals when the root is next selected, before a new setup plan, creation, or activation. Recovery SHALL finish a provable complete after-state or restore the complete before-state; ambiguous ownership SHALL block mutation. Application startup SHALL NOT scan unrelated project roots or require a global application-data pending registry. Filenames alone SHALL identify possible journals, never authorize ownership or cleanup. Selection-triggered recovery SHALL be a disclosed operation before read-only preflight; an unresolved transaction SHALL prevent preflight from claiming a clean root.
 
 #### Scenario: Failure during each mutation stage
 
-- **WHEN** failure is injected while creating candidates, flushing content, recording the journal, creating `rawdata/`, installing the marker, replacing `.bidsignore`, installing `project.easl`, or flushing the root
-- **THEN** the operation SHALL fail visibly and recovery SHALL leave either the complete before-state or the complete confirmed after-state, never a mixed durable state
+- **WHEN** candidate creation, flushing, journal writing, directory/marker creation, ignore replacement, project installation, or root flushing fails
+- **THEN** the operation SHALL fail visibly and recovery SHALL retain a complete before-state or complete reviewed after-state
 
 #### Scenario: Rollback preserves prior bytes
 
-- **WHEN** `.bidsignore` and `rawdata/` existed before a failed transaction
-- **THEN** `.bidsignore` SHALL regain its exact original bytes, all pre-existing `rawdata/` entries SHALL remain unchanged, and transaction-owned additions SHALL be absent
+- **WHEN** a failed transaction follows existing ignore-file and rawdata entries
+- **THEN** original bytes and user entries SHALL remain and transaction-owned additions SHALL disappear
 
 #### Scenario: Interrupted transaction is recovered
 
-- **WHEN** the application restarts with a registered incomplete BIDS project transaction
-- **THEN** native recovery SHALL validate journal ownership, reconcile the selected root deterministically, remove owned temporary artifacts, and return a structured recovery outcome before project use
+- **WHEN** a selected root contains a valid unfinished setup journal
+- **THEN** recovery SHALL validate ownership and reconcile it before planning or activation, without user-directory writes
 
 #### Scenario: Recovery ownership is ambiguous
 
-- **WHEN** journal identity, registered root, or an owned candidate/backup cannot be validated
-- **THEN** automatic mutation SHALL stop with an actionable blocking error and SHALL preserve all ambiguous entries for manual recovery
+- **WHEN** journal identity, root binding, candidate, or backup evidence cannot establish ownership
+- **THEN** recovery SHALL preserve ambiguous entries and report an actionable blocking error
+
+#### Scenario: Clean root preflight remains read-only
+
+- **WHEN** selection finds no unfinished setup transaction
+- **THEN** scanning, plan review, mode changes, and cancellation SHALL retain the existing no-mutation preflight guarantee
 
 ### Requirement: Commit outcome gates application state
 

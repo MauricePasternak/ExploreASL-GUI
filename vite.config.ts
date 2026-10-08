@@ -41,7 +41,7 @@ const nodeTests = [
   "src-tauri/{dev-mode,capabilities/default}.test.ts",
   "src/test/nodeEnvironment.test.ts",
 ];
-const testExclude = ["**/node_modules/**", "**/.worktrees/**", "e2e-tests/**"];
+const testExclude = ["**/node_modules/**", "**/.worktrees/**", "e2e-tests/**", "tools/**"];
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;

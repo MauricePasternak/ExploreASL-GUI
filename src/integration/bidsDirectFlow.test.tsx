@@ -7,9 +7,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import BIDSReviewPanel from "../components/import/BIDSReviewPanel";
 import { useProjectStore } from "../stores/projectStore";
 import { useImportStore } from "../stores/importStore";
-import { canAccessPhase } from "../schemas/project";
-import type { DerivedMetadataGroup } from "../schemas/importSchemas";
-import type { ProjectFile } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
+import type { DerivedMetadataGroup, MetadataGroup } from "../schemas/importSchemas";
+import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
 
 const mockNavigate = vi.fn();
 vi.mock("react-router", async (importOriginal) => {
@@ -34,6 +35,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 afterEach(() => {
   cleanup();
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
   useImportStore.setState({
     bidsReview: {
@@ -64,7 +67,7 @@ const MOCK_GROUP: DerivedMetadataGroup = {
     MagneticFieldStrength: 3,
     Manufacturer: "Siemens",
     M0Type: "Included",
-  } as any,
+  },
   vendor: "Siemens",
   sequence: "3D_PCASL",
   labelingType: "CASL",
@@ -74,210 +77,79 @@ const MOCK_GROUP: DerivedMetadataGroup = {
   })),
 };
 
-function makeBidsProject(confirmed: boolean): ProjectFile {
-  return {
-    version: "0.1.0",
-    projectMeta: {
-      id: "test-project",
-      name: "DS000240",
-      rootPath: "/test/ds000240",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      lastOpened: "2026-01-01T00:00:00.000Z",
-      currentPhase: confirmed ? "parameters" : "import",
-      dataSource: "bids",
-    },
+function makeBidsProject(confirmed: boolean): ProjectSnapshot {
+  const snapshot = projectFixture("test-project", "DS000240", "/test/ds000240", {
     mappingState: {
       metadataGroups: confirmed
         ? [{ id: "g1", label: "Siemens_3T_PCASL_3D_Included", bidsParams: {} }]
         : [],
       subjectRows: confirmed
         ? Array.from({ length: 25 }, (_, i) => ({
-            id: `sub-${String(i + 1).padStart(2, "0")}/1`,
-            subject: `sub-${String(i + 1).padStart(2, "0")}`,
+            id: `sub-${String(i + 1).padStart(2, "0")}_1`,
+            subject: String(i + 1).padStart(2, "0"),
             session: "1",
             groupId: "g1",
           }))
         : [],
       ingestionComplete: confirmed,
-      sourceDataPath: "/test/ds000240",
+      sourceDataPath: ".",
     },
     uiState: {
       import: {
         bidsReviewConfirmed: confirmed,
         skippedSubjects: confirmed ? ["sub-UNK001_1"] : [],
-        step: 1,
+        mostRecentConfig: null,
       },
     },
-    dataPar: {},
-  } as unknown as ProjectFile;
+  });
+  snapshot.document.projectMeta.dataSource = "bids";
+  snapshot.document.projectMeta.currentPhase = confirmed ? "parameters" : "import";
+  return snapshot;
 }
 
 function seedBidsProject(confirmed: boolean) {
-  useProjectStore.setState({
-    project: makeBidsProject(confirmed),
-    loaded: true,
-  });
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
+  useProjectStore.getState().acceptSnapshot(makeBidsProject(confirmed));
+  activateProjectLease("test-project", "/test/ds000240");
 }
 
-// ---------------------------------------------------------------------------
-// 10.1 — BIDS project creation → review → confirmation → processing access
-// ---------------------------------------------------------------------------
-
-describe("BIDS-direct flow: creation → review → confirmation → processing gate", () => {
-  it("BIDSReviewPanel mounts, scans, and renders detected groups", async () => {
-    seedBidsProject(false);
-
-    mockInvoke.mockImplementation((cmd: string) => {
-      if (cmd === "scan_bids_sidecars")
-        return Promise.resolve({ groups: [MOCK_GROUP], skipped: ["sub-UNK001_1"] });
-      return Promise.resolve(null);
-    });
-
-    renderWithProviders(<BIDSReviewPanel />);
-
-    // Wait for scan to complete — look for the TextInput with group label
-    await waitFor(() => {
-      expect(screen.getByTestId("bids-group-label-input-g1")).toBeInTheDocument();
-    });
-
-    // Should show 25 subjects
-    expect(screen.getByText(/25 subjects/)).toBeInTheDocument();
-
-    // Should show skipped subjects warning
-    expect(screen.getByText(/sub-UNK001_1/)).toBeInTheDocument();
-
-    // Should have a Confirm button
-    expect(screen.getByRole("button", { name: /confirm/i })).toBeInTheDocument();
-  });
-
-  it("confirm calls confirmBidsReview and navigates to parameters", async () => {
-    seedBidsProject(false);
-
-    mockInvoke.mockImplementation((cmd: string) => {
-      if (cmd === "scan_bids_sidecars")
-        return Promise.resolve({ groups: [MOCK_GROUP], skipped: [] });
-      return Promise.resolve(null);
-    });
-
-    renderWithProviders(<BIDSReviewPanel />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("bids-group-label-input-g1")).toBeInTheDocument();
-    });
-
-    const confirmBtn = screen.getByRole("button", { name: /confirm/i });
-    await userEvent.click(confirmBtn);
-
-    // After confirmation, project should have bidsReviewConfirmed = true
-    await waitFor(() => {
-      const project = useProjectStore.getState().project;
-      expect(project?.uiState?.import?.bidsReviewConfirmed).toBe(true);
-    });
-
-    // Should navigate to parameters
-    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("/parameters"));
-  });
-
-  it("confirmed BIDS project can access processing phase", () => {
-    const project = makeBidsProject(true);
-    expect(canAccessPhase(project, "processing")).toBe(true);
-  });
-
-  it("unconfirmed BIDS project cannot access processing phase", () => {
-    const project = makeBidsProject(false);
-    expect(canAccessPhase(project, "processing")).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 10.5 — Revisit import after confirmation (persisted summary + re-scan)
-// ---------------------------------------------------------------------------
-
 describe("BIDS-direct revisit import after confirmation", () => {
-  it("renders persisted summary with re-scan action when bidsReviewConfirmed is true", async () => {
-    seedBidsProject(true);
-
-    // Pre-seed the import store with detected groups (as if scan was done previously)
-    useImportStore.setState({
-      bidsReview: {
-        scanComplete: true,
-        scanError: null,
-        detectedGroups: [MOCK_GROUP],
-        skippedSubjects: ["sub-UNK001_1"],
-      },
-    });
-
-    // Revisit should not automatically call scan_bids_sidecars.
-    mockInvoke.mockImplementation(() => Promise.resolve(null));
-
-    renderWithProviders(<BIDSReviewPanel />);
-
-    // Should show confirmed-summary banner
-    await waitFor(() => {
-      expect(screen.getByText(/confirmed/i)).toBeInTheDocument();
-    });
-
-    // Should show skipped subjects warning
-    expect(screen.getByText(/sub-UNK001_1/)).toBeInTheDocument();
-
-    // Should NOT have a Confirm button until user explicitly re-scans.
-    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /re-scan bids/i })).toBeInTheDocument();
-
-    // Should NOT invoke scan_bids_sidecars before the explicit re-scan action.
-    expect(mockInvoke).not.toHaveBeenCalledWith("scan_bids_sidecars", expect.anything());
-  });
-
-  it("explicit re-scan renders editable review and can re-confirm", async () => {
-    seedBidsProject(true);
-
-    mockInvoke.mockImplementation((cmd: string) => {
-      if (cmd === "scan_bids_sidecars")
-        return Promise.resolve({
-          groups: [{ ...MOCK_GROUP, label: "Updated_Label" }],
-          skipped: ["sub-NEW_1"],
-        });
-      return Promise.resolve(null);
-    });
-
-    renderWithProviders(<BIDSReviewPanel />);
-
-    await userEvent.click(screen.getByRole("button", { name: /re-scan bids/i }));
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("Updated_Label")).toBeInTheDocument();
-    });
-    expect(screen.getByText("sub-NEW_1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /confirm/i })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /confirm/i }));
-
-    await waitFor(() => {
-      const project = useProjectStore.getState().project;
-      expect(project?.mappingState.subjectRows).toHaveLength(25);
-      expect(project?.uiState?.import?.skippedSubjects).toEqual(["sub-NEW_1"]);
-    });
-  });
-
   it("updates subjectRows only after explicit re-scan and re-confirm when a subject is added externally", async () => {
     seedBidsProject(true); // confirmed project with 25 subjects
 
     // Check initial subjectRows length is 25
     expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(25);
 
+    const before = structuredClone(useProjectStore.getState().project!.mappingState);
+
     // Mock scan to return 26 subjects (adding sub-26)
     const mockGroupWithNewSubject: DerivedMetadataGroup = {
       ...MOCK_GROUP,
+      label: "Updated_Label",
       subjects: [...MOCK_GROUP.subjects, { subjectLabel: "sub-26", sessionLabels: ["1"] }],
     };
 
+    const accepted = makeBidsProject(true);
+    accepted.acceptedRevision = 1;
+    accepted.persistedRevision = 1;
+    accepted.document.mappingState.metadataGroups![0].label = "Updated_Label";
+    accepted.document.mappingState.metadataGroups![0].bidsParams =
+      MOCK_GROUP.bidsParams as MetadataGroup["bidsParams"];
+    accepted.document.mappingState.subjectRows!.push({
+      id: "sub-26_1",
+      subject: "26",
+      session: "1",
+      groupId: "g1",
+    });
+    accepted.document.uiState.import!.skippedSubjects = ["sub-NEW_1"];
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "scan_bids_sidecars") {
         return Promise.resolve({
           groups: [mockGroupWithNewSubject],
-          skipped: [],
+          skipped: ["sub-NEW_1"],
         });
       }
+      if (cmd === "accept_project_edit") return Promise.resolve(accepted);
       return Promise.resolve(null);
     });
 
@@ -287,17 +159,25 @@ describe("BIDS-direct revisit import after confirmation", () => {
     // The store's subjectRows remains 25.
     expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(25);
 
+    expect(screen.getByTestId("bids-group-label-input-g1")).toHaveAttribute("readonly");
+    expect(screen.getByText("sub-UNK001_1")).toBeInTheDocument();
+    expect(screen.queryByTestId("bids-review-confirm-btn")).not.toBeInTheDocument();
+    expect(mockInvoke).not.toHaveBeenCalled();
     // Click Re-scan BIDS
     await userEvent.click(screen.getByRole("button", { name: /re-scan bids/i }));
 
     // Wait for latest scan result to render in editable state
     await waitFor(() => {
-      expect(screen.getByTestId("bids-group-label-input-g1")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("Updated_Label")).toBeInTheDocument();
     });
 
     // The scan completed, but until Confirm is clicked, the persisted subjectRows MUST still be 25
     expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(25);
 
+    expect(useProjectStore.getState().project?.mappingState).toEqual(before);
+    expect(screen.getByDisplayValue("Updated_Label")).not.toHaveAttribute("readonly");
+    expect(screen.getByText("sub-NEW_1")).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
     // Click Confirm to persist the updated scan result
     await userEvent.click(screen.getByRole("button", { name: /confirm/i }));
 
@@ -305,5 +185,21 @@ describe("BIDS-direct revisit import after confirmation", () => {
     await waitFor(() => {
       expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(26);
     });
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith("/project/test-project/parameters"),
+    );
+    expect(useProjectStore.getState().isDirty).toBe(false);
+    expect(useProjectStore.getState().project?.projectMeta.currentPhase).toBe("parameters");
+    expect(useProjectStore.getState().project?.uiState.import?.skippedSubjects).toEqual([
+      "sub-NEW_1",
+    ]);
+    expect(useProjectStore.getState().project?.mappingState).toEqual(
+      accepted.document.mappingState,
+    );
+    expect(mockInvoke).toHaveBeenCalledWith("accept_project_edit", {
+      generation: 1,
+      edit: { kind: "confirmBids", groups: [mockGroupWithNewSubject], skipped: ["sub-NEW_1"] },
+    });
+    expect(mockInvoke).not.toHaveBeenCalledWith("save_project", expect.anything());
   });
 });

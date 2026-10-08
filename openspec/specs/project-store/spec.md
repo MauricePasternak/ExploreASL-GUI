@@ -6,97 +6,6 @@ Define project persistence, phase access, and shared project state.
 
 ## Requirements
 
-### Requirement: Processing Config Persistence
-
-The project store SHALL persist `processingConfig` and `processingPhase` in the `.easl` project file under `uiState.processing.config` and `uiState.processing.currentPhase`. The `ProjectFileSchema` SHALL extend the persisted `uiState.processing.config` shape to use `selectedProfileId: z.string().optional()` instead of `matlabPath: z.string()` and `exploreAslPath: z.string()`. The `ProjectFileSchema` SHALL also add `uiState.import.selectedProfileId: z.string().optional()` for persisting the import phase's profile selection. When syncing via `syncProcessingState`, the store SHALL spread the existing `uiState.processing` object to preserve sibling fields (`structural`, `asl`, `population` last-run metadata) that are managed by other parts of the processing lifecycle (e.g. `setLastRunProfileId`, `setPopulationCompleted`). The `ProjectFileSchema.uiState.processing` SHALL include an optional `population` object with a `completed` boolean flag and a `lastRun` object containing `profileId`, `exploreASLVersion`, `matlabVersion`, `guiVersion`, and `Mtime`. It SHALL also include optional `structural` and `asl` objects with the same `lastRun` shape (profileId + version fields). The `uiState` schema SHALL include optional `dataVis` and `manifest` objects for visualization contracts and reviewer/verdict state under their respective capability specs. Every field within `uiState.manifest` SHALL be `.optional()` so legacy `.easl` files without the slot parse via Zod without manual migration. The `PROJECT_PHASES` array SHALL be `["import", "parameters", "processing", "visualization", "manifest"]`. The `canAccessPhase` function SHALL return `true` for `"visualization"` when `uiState.processing?.population?.completed === true` and shall return `true` for `"manifest"` under the same condition, identical gate to visualization.
-
-#### Scenario: Config saved on processing start
-
-- **WHEN** the user clicks Start on the processing page
-- **THEN** the current `ProcessConfig` (with `selectedProfileId`) and `processingPhase` SHALL be written to `uiState.processing.config` and `uiState.processing.currentPhase` in the `.easl` file
-
-#### Scenario: Config restored on project load
-
-- **WHEN** a project with a prior processing run is opened
-- **THEN** the processing store SHALL be hydrated from `uiState.processing.config` and the subject selection form SHALL be pre-filled
-
-#### Scenario: New project format with selectedProfileId
-
-- **WHEN** a `.easl` file contains `uiState.processing.config.selectedProfileId: "abc-123"`
-- **THEN** the project loads with the processing config's profile selector set to profile "abc-123"
-
-#### Scenario: Import selectedProfileId persisted
-
-- **WHEN** a `.easl` file contains `uiState.import.selectedProfileId: "abc-123"`
-- **THEN** the import store's profile selector is initialized to "abc-123"
-
-#### Scenario: New project with no processing config
-
-- **WHEN** a new `.easl` file has no `uiState.processing.config` (default state)
-- **THEN** the project loads normally; processing config is created lazily on first visit to the processing page
-
-#### Scenario: syncProcessingState preserves sibling processing fields
-
-- **WHEN** `syncProcessingState({ config, processingPhase: "running" })` is called and `uiState.processing.population` already holds `{ completed: true, lastRun: { profileId: "p1", exploreASLVersion: "1.0.0" } }`
-- **THEN** after the sync, `uiState.processing.population.completed` SHALL remain `true` and `uiState.processing.population.lastRun` SHALL retain its prior profileId and version values
-
-#### Scenario: Visualization phase gate
-
-- **WHEN** `canAccessPhase` is called with `targetPhase = "visualization"`
-- **THEN** it SHALL return `true` if `project.uiState?.processing?.population?.completed === true`, otherwise `false`
-
-#### Scenario: Manifest phase gate
-
-- **WHEN** `canAccessPhase` is called with `targetPhase = "manifest"`
-- **THEN** it SHALL return `true` if `project.uiState?.processing?.population?.completed === true`, otherwise `false`
-
-#### Scenario: PROJECT_PHASES includes manifest
-
-- **WHEN** `PROJECT_PHASES` is referenced
-- **THEN** it SHALL be the tuple `["import", "parameters", "processing", "visualization", "manifest"]`
-
-#### Scenario: Legacy project without manifest slot parses
-
-- **WHEN** a `.easl` file from before this change (no `uiState.manifest` key) is loaded
-- **THEN** `ProjectFileSchema.parse` SHALL succeed, and `project.uiState.manifest` SHALL be `undefined` on the parsed value
-
-### Requirement: Module Last Run — profileId reference
-
-The `ProjectFileSchema` SHALL add `profileId: z.string()` alongside the existing `exploreASLVersion: z.string().optional()` and `matlabVersion: z.string().optional()` in `population.lastRun`. The `guiVersion: z.string().optional()` and `Mtime: z.number().int().nullable().optional()` fields SHALL remain unchanged. Both `profileId` (which profile was used) and version strings (actual versions on disk at runtime) are preserved — neither alone is sufficient for reproduction.
-
-The schema SHALL also include `structural` and `asl` lastRun shapes with the same pattern (profileId + all version fields):
-
-```typescript
-lastRun: z.object({
-  profileId: z.string(),
-  exploreASLVersion: z.string().optional(),
-  matlabVersion: z.string().optional(),
-  guiVersion: z.string().optional(),
-  Mtime: z.number().int().nullable().optional(),
-}).optional();
-```
-
-The `profileId` SHALL reference an `ExecutionProfile.id` from the global store. At display time, the profile is resolved to show `profile.label`, and the stored version strings provide an accurate historical record of what was on disk when the pipeline ran. If the profile was deleted, a "(Profile deleted)" indicator is shown with the raw `profileId` for reference.
-
-The `setLastRunVersions` store action SHALL be replaced by `setLastRunProfileId(module: "population" | "structural" | "asl", profileId: string, versions: { exploreASLVersion?: string, matlabVersion?: string, guiVersion?: string })`. The `setLastPopulationRunMtime` action SHALL remain unchanged (population-specific, uses Mtime for completion detection).
-
-#### Scenario: Population lastRun with profileId
-
-- **WHEN** a `.easl` file contains `uiState.processing.population.lastRun.profileId: "abc-123"`
-- **THEN** the last run record resolves profile "abc-123" from global store for display (label, version, paths)
-
-#### Scenario: Population lastRun with deleted profile
-
-- **WHEN** `lastRun.profileId` references a profile that no longer exists
-- **THEN** the UI shows "(Profile deleted)" alongside the raw profile ID
-
-#### Scenario: Structural lastRun with profileId
-
-- **WHEN** a `.easl` file contains `uiState.processing.structural.lastRun.profileId: "abc-123"`
-- **THEN** the structural lastRun is parsed and the profile reference is resolved for display
-
----
-
 ### Requirement: Project gating on valid profiles
 
 The project store's `createProject` and `loadProject` actions SHALL check that at least one valid execution profile exists before proceeding. Validity SHALL be determined from the global store's `profileValidationState`.
@@ -151,34 +60,6 @@ When a new project is created, the Import phase SHALL initialize `selectedProfil
 
 ---
 
-### Requirement: Population Completion Persistence
-
-The project store SHALL provide a `setPopulationCompleted(value: boolean)` action that sets `uiState.processing.population.completed` and persists the change to the `.easl` project file. The `population` object in `uiState.processing` SHALL be optional with a `completed: boolean` field and a `lastRun` metadata object.
-
-#### Scenario: Flag set to true
-
-- **WHEN** `setPopulationCompleted(true)` is called
-- **THEN** `uiState.processing.population.completed` SHALL be set to `true` in the project store and persisted to the `.easl` file
-
-#### Scenario: Flag cleared to false
-
-- **WHEN** `setPopulationCompleted(false)` is called
-- **THEN** `uiState.processing.population.completed` SHALL be set to `false` and persisted
-
-### Requirement: DataVis Contract Persistence
-
-The project store SHALL sync `uiState.dataVis` from the `visualizationStore` via the `useVisualizationSync` hook. The optional `dataVis` object SHALL declare `qcbfSource` and `joinConfig` as defined in `data-vis-contract`, plus `columnTypes`, `identifiers`, `levelOrderings`, `axisAssignment`, `domainFilters`, `stage`, `filtersExpanded`, and supported chart/viewer settings. Canonical schema v1 serialization SHALL persist only declared fields; the former `contractSources` array SHALL NOT be the current contract representation.
-
-#### Scenario: DataVis contract saved
-
-- **WHEN** the visualization store's persisted fields change
-- **THEN** `uiState.dataVis` SHALL be updated in the project store with a debounced save to the `.easl` file
-
-#### Scenario: DataVis contract restored
-
-- **WHEN** a project with a prior visualization contract is opened
-- **THEN** the `visualizationStore` SHALL be hydrated from `uiState.dataVis`
-
 ### Requirement: createProject accepts dataSource
 
 `createProject(path, name, options)` SHALL accept `options.dataSource: "dicom" | "bids"` (required — no default). The function MUST NOT silently default `dataSource` to `"dicom"` if the parameter is omitted; a missing `dataSource` SHALL throw a validation error.
@@ -209,33 +90,12 @@ The project store SHALL sync `uiState.dataVis` from the `visualizationStore` via
 
 ### Requirement: BIDS review confirm writes to mappingState
 
-When BIDS review confirms, the store action `confirmBidsReview()` SHALL:
-
-1. Project `importStore.BidsReviewState.detectedGroups` down to `MetadataGroup[]` (pick `id`, `label`, `bidsParams` per group).
-2. Flatten `detectedGroups[].subjects[]` into `SubjectRow[]` entries. For each `(subjectLabel, sessionLabel)` pair in a group:
-   - Strip the `sub-` prefix from `subjectLabel` for the `subject` field (e.g. `"sub-01"` → `"01"`).
-   - `session = sessionLabel` (e.g. `"1"` for cross-sectional default, `"01"` for explicit `ses-01`).
-   - `id = "sub-{strippedSubject}_{sessionLabel}"` (e.g. `"sub-01_1"`), matching `list_subjects` / `SubjectInfo.subject_session`.
-   - `groupId = group.id`.
-   - Merge duplicate `GroupSubject` entries by subject before flattening (one `SubjectRow` per subject/session pair).
-3. Write to `project.mappingState` ONLY these 4 fields:
-   - `metadataGroups` = projected `MetadataGroup[]`
-   - `subjectRows` = flattened `SubjectRow[]`
-   - `ingestionComplete = true`
-   - `sourceDataPath = rootPath`
-     Other `mappingState` fields (`rawPaths`, `pathPatterns`, `bMatchDirectories`, `tokenizerConfigs`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`) are left absent. These fields are optional and DICOM-wizard-specific; BIDS-direct consumers do not read them.
-4. Copy `BidsReviewState.skippedSubjects` to `project.uiState.import.skippedSubjects` (persists).
-5. Set `project.uiState.import.bidsReviewConfirmed = true` (persists).
-6. Set `project.projectMeta.currentPhase = "parameters"`.
-7. Save `project.easl`.
-8. Navigate to `/project/:id/parameters`.
+Confirmed BIDS review SHALL require detected groups with nonempty, case-insensitively unique labels. It SHALL derive metadata groups and one SubjectRow per subject/session pair, merging duplicate subject entries, stripping `sub-` for the subject value, and retaining IDs compatible with native subject listing. Accepted `mappingState` SHALL contain only metadata groups, subject rows, `ingestionComplete: true`, and `sourceDataPath: "."`. Skipped subjects and review confirmation SHALL persist under import UI state. Current phase SHALL advance to Parameters and configuration SHALL flush before navigation. Empty groups, invalid labels, or failed persistence SHALL not navigate or replace accepted mappings.
 
 #### Scenario: BIDS confirm populates mappingState and persists uiState
 
-- **WHEN** `confirmBidsReview()` is called for a 25-subject dataset with 2 detected groups and 1 skipped subject
-- **THEN** `mappingState.metadataGroups.length = 2`, `mappingState.subjectRows.length = 24`, `mappingState.ingestionComplete = true`, `uiState.import.skippedSubjects = ["sub-UNK001_1"]`, `uiState.import.bidsReviewConfirmed = true`, `projectMeta.currentPhase = "parameters"`, project file is saved, navigation goes to Parameters page
-
----
+- **WHEN** a valid 25-subject review with two groups and one skipped subject confirms
+- **THEN** 24 subject rows, both groups, the skipped list, confirmation, portable BIDS source, and Parameters phase SHALL persist before navigation
 
 ### Requirement: Project Dialog Default Directory Paths
 
@@ -256,157 +116,6 @@ The "New Project" and "Open Project" dialogs on the landing page SHALL use the f
 - **WHEN** `recentProjects` contains a valid project file path (e.g. `/tmp/brain-study/project.easl`)
 - **THEN** the New Project directory dialog SHALL use `/tmp/brain-study` as `defaultPath`, and the Open Project file dialog SHALL use `/tmp/brain-study/project.easl` as `defaultPath`
 
-### Requirement: Version-first project parsing
-
-The system SHALL parse a minimal project envelope before parsing any version-specific payload. A schema v1 file SHALL declare integer `schemaVersion: 1`. A legacy file declaring `version: "0.1.0"` and no `schemaVersion` SHALL be treated as a supported migration input. A file declaring a future `schemaVersion` greater than 1 SHALL be rejected as unsupported rather than corrupt.
-
-#### Scenario: Schema v1 project is recognized
-
-- **WHEN** a project file declares `schemaVersion: 1`
-- **THEN** the system SHALL validate its payload using the schema v1 contract
-
-#### Scenario: Current legacy project is recognized
-
-- **WHEN** a project file declares `version: "0.1.0"` and omits `schemaVersion`
-- **THEN** the system SHALL validate it as a legacy migration input before migrating it to schema v1
-
-#### Scenario: Future project version is rejected distinctly
-
-- **WHEN** a project file declares integer `schemaVersion: 2`
-- **THEN** opening SHALL fail with an actionable unsupported-version error and SHALL NOT report the file as corrupt
-
-#### Scenario: Malformed supported project is rejected
-
-- **WHEN** a project identifies a supported version but its payload fails that version's validation
-- **THEN** opening SHALL fail with an actionable malformed-project error identifying the invalid data
-
-### Requirement: Schema v1 persisted and runtime boundaries
-
-The persisted schema v1 project SHALL use `schemaVersion: 1` independently from application SemVer and SHALL NOT persist `projectMeta.rootPath` as an authoritative location. Runtime state SHALL derive the project root from the parent directory of the opened `project.easl` path. Serialization SHALL use an explicit persisted data transfer object rather than spreading runtime store state.
-
-#### Scenario: New schema v1 project is serialized
-
-- **WHEN** a schema v1 project is canonically serialized
-- **THEN** output SHALL contain integer `schemaVersion: 1`, SHALL omit legacy `version`, and SHALL omit `projectMeta.rootPath`
-
-#### Scenario: Project is opened after relocation
-
-- **WHEN** a valid schema v1 `project.easl` is opened from a different parent directory
-- **THEN** its runtime project root SHALL equal the opened file's parent directory without consulting a persisted root path
-
-#### Scenario: Runtime-only state is not persisted
-
-- **WHEN** runtime project state containing non-persisted fields is serialized
-- **THEN** only fields declared by the schema v1 persisted data transfer object SHALL appear in output
-
-### Requirement: Deterministic legacy migration
-
-The system SHALL provide a pure ordered migration from validated `version: "0.1.0"` data to schema v1. Migration SHALL preserve valid mapping state, `dataPar`, import and processing configuration, visualization configuration, reviewer registry, verdicts, and module completion and last-run metadata. Valuable fields with invalid values SHALL cause migration failure instead of being silently replaced with defaults. The complete migrated result SHALL pass schema v1 validation before it can be returned or serialized.
-
-#### Scenario: Valuable legacy state is preserved
-
-- **WHEN** a valid `0.1.0` project containing mappings, parameters, processing state, visualization state, reviewers, and verdicts is migrated
-- **THEN** the corresponding schema v1 fields SHALL retain equivalent values
-
-#### Scenario: Invalid mapping data fails migration
-
-- **WHEN** a legacy mapping field is present with an invalid value
-- **THEN** migration SHALL fail with an actionable validation error instead of replacing that field with an empty or default value
-
-#### Scenario: Migration is deterministic
-
-- **WHEN** identical legacy bytes are independently parsed and migrated twice
-- **THEN** both operations SHALL produce equivalent in-memory schema v1 state and byte-identical canonical serialized output
-
-#### Scenario: Migrated output fails v1 validation
-
-- **WHEN** migration produces a value that does not satisfy the complete schema v1 contract
-- **THEN** migration SHALL fail before the result is exposed or written
-
-### Requirement: Project opening is read-only
-
-Opening or migrating a project SHALL NOT modify its source bytes. In particular, opening SHALL NOT rewrite `project.easl` merely to update `lastOpened`. Any malformed input, unsupported version, or migration failure SHALL leave the source unchanged. A later explicit save is a separate operation; atomic replacement, backup, and recovery behavior are defined separately.
-
-#### Scenario: Valid project is opened without rewrite
-
-- **WHEN** a supported project opens successfully
-- **THEN** the bytes of its source `project.easl` SHALL remain unchanged
-
-#### Scenario: Failed migration leaves source unchanged
-
-- **WHEN** legacy migration fails validation
-- **THEN** opening SHALL fail and the source `project.easl` bytes SHALL remain unchanged
-
-### Requirement: Validated atomic project writes
-
-Every operation that persists `project.easl`, including project creation, normal Save, and repair after backup recovery, SHALL first produce and validate canonical schema v1 bytes. The system SHALL write those bytes to a uniquely named sibling temporary file, require the temporary file contents to be flushed, preserve the previous validated primary as `project.easl.bak` when one exists, and replace the primary atomically. Temporary and backup paths SHALL be derived from the selected `project.easl` path and SHALL remain in the same directory.
-
-#### Scenario: Existing project is saved atomically
-
-- **WHEN** a dirty project with a valid primary is saved successfully
-- **THEN** `project.easl` SHALL contain the new validated bytes and `project.easl.bak` SHALL contain the previous validated primary bytes
-
-#### Scenario: New project is created
-
-- **WHEN** a project is created where no primary project file exists
-- **THEN** validated schema v1 bytes SHALL become `project.easl` atomically and no backup SHALL be required
-
-#### Scenario: Serialization fails before writing
-
-- **WHEN** runtime project state cannot produce valid canonical schema v1 bytes
-- **THEN** no temporary, primary, or backup project file SHALL be created or modified
-
-#### Scenario: Temporary write or file flush fails
-
-- **WHEN** writing or flushing the sibling temporary file fails
-- **THEN** the save SHALL fail before primary replacement and the previous valid primary and backup SHALL remain recoverable
-
-#### Scenario: Replacement is interrupted
-
-- **WHEN** interruption occurs after the temporary file is durable but before replacement completes
-- **THEN** at least one of the primary or backup SHALL contain complete valid old or new project bytes and no partial primary SHALL be accepted
-
-### Requirement: Deterministic backup recovery
-
-Project loading SHALL prefer a valid supported primary. If the primary is missing or malformed and `project.easl.bak` is valid and supported, the system SHALL ask before opening recovered data. Confirmed recovery SHALL load the backup into memory without changing disk, mark the project dirty, and allow normal Save to repair the primary without replacing the valid backup with missing or malformed primary bytes.
-
-A primary declaring an unsupported future schema version SHALL stop with an unsupported-version error and SHALL NOT fall back to backup. A primary read failure, including permission denial, SHALL stop with its specific error unless the system has established that the primary is missing. A malformed or unsupported backup SHALL NOT be loaded.
-
-#### Scenario: Valid primary takes precedence
-
-- **WHEN** both primary and backup are valid supported project files
-- **THEN** the primary SHALL open and the backup SHALL not be offered
-
-#### Scenario: Missing primary offers backup recovery
-
-- **WHEN** `project.easl` is missing and `project.easl.bak` is valid and supported
-- **THEN** the system SHALL ask whether to open the recovered copy without modifying either file
-
-#### Scenario: Malformed primary offers backup recovery
-
-- **WHEN** `project.easl` is malformed and `project.easl.bak` is valid and supported
-- **THEN** the system SHALL ask whether to open the recovered copy and SHALL preserve the malformed primary for inspection until an explicit Save
-
-#### Scenario: User confirms backup recovery
-
-- **WHEN** the user confirms opening a valid backup
-- **THEN** recovered state SHALL load as dirty and no project file SHALL be written until normal Save is invoked
-
-#### Scenario: Normal Save repairs recovered project
-
-- **WHEN** a project loaded from backup is saved normally
-- **THEN** a new valid primary SHALL be committed while the valid recovery backup remains available until replacement succeeds
-
-#### Scenario: Future primary never falls back
-
-- **WHEN** the primary declares a future schema version and an older valid backup exists
-- **THEN** opening SHALL fail as unsupported and the backup SHALL NOT be offered
-
-#### Scenario: Permission failure never falls back
-
-- **WHEN** reading the primary fails with permission denied and a valid backup exists
-- **THEN** opening SHALL fail with a permission error and the backup SHALL NOT be offered
-
 ### Requirement: Stale temporary file handling
 
 Sibling temporary files left by interrupted saves SHALL NOT be treated as authoritative recovery candidates. After either the primary or confirmed backup has validated, the system SHALL remove only stale temporary files created by the atomic project writer for that exact project path. It SHALL NOT remove unrelated files or require temporary cleanup to succeed before opening the validated project.
@@ -420,20 +129,6 @@ Sibling temporary files left by interrupted saves SHALL NOT be treated as author
 
 - **WHEN** a primary or confirmed backup validates but stale temporary cleanup fails
 - **THEN** project opening SHALL continue and the cleanup failure SHALL be logged
-
-### Requirement: Ordered saves and dirty-state safety
-
-Concurrent save requests SHALL execute in revision order. An older queued revision SHALL NOT replace a newer committed revision. A successful save SHALL clear dirty state only when no newer in-memory revision exists. Any serialization or storage failure SHALL leave dirty state set and SHALL NOT destroy the last-known-good primary or backup.
-
-#### Scenario: Project changes during save
-
-- **WHEN** revision A is saving and the project advances to revision B before A completes
-- **THEN** completion of A SHALL NOT clear dirty state and the queued save SHALL persist revision B after A
-
-#### Scenario: Save fails
-
-- **WHEN** any save stage returns an error
-- **THEN** project dirty state SHALL remain set and a subsequent Save SHALL be able to retry the latest revision
 
 ### Requirement: Actionable storage errors and durability reporting
 
@@ -456,49 +151,6 @@ Flushing the temporary file SHALL be required. Parent-directory flushing SHALL b
 - **WHEN** parent-directory flushing is supported but fails after primary replacement
 - **THEN** Save SHALL report uncertain durability and dirty state SHALL remain set
 
-### Requirement: Portable project-internal paths
-
-Canonical schema v1 output SHALL persist project-internal paths relative to the project root and external source paths as explicit absolute paths. Runtime state SHALL resolve project-relative paths only against the parent of the currently opened `project.easl`. A project-relative path SHALL NOT escape that root. BIDS source paths SHALL always resolve to the current project root. DICOM source paths located within the project root SHALL move with the project; DICOM sources outside it SHALL retain their external absolute location. Generated qCBF and other project outputs SHALL remain project-relative.
-
-#### Scenario: BIDS project is moved
-
-- **WHEN** a BIDS project is opened from a new parent directory
-- **THEN** its source root and every project-internal read or write SHALL resolve beneath the new parent and SHALL NOT consult the former location
-
-#### Scenario: Internal DICOM source moves with project
-
-- **WHEN** a DICOM source was recorded within the project root and the whole project folder is moved
-- **THEN** the source and its project-internal raw paths SHALL resolve beneath the newly opened root
-
-#### Scenario: External DICOM source remains external
-
-- **WHEN** a DICOM source was recorded outside the project root and the project folder is moved
-- **THEN** the external absolute source path SHALL remain unchanged
-
-#### Scenario: Project-relative path attempts escape
-
-- **WHEN** a persisted project-relative path resolves outside the opened project root
-- **THEN** project validation SHALL reject that path without accessing the escaped location
-
-### Requirement: Read-only path normalization
-
-The system SHALL continue to accept valid legacy `0.1.0` and schema v1 path strings. It SHALL normalize paths in memory when their ownership is unambiguous. If canonical output would differ, the opened project SHALL be marked dirty, but opening SHALL NOT write any project file. A missing legacy absolute DICOM source whose prior ownership cannot be proven SHALL be classified as missing and SHALL require explicit relinking rather than filesystem guessing.
-
-#### Scenario: Older BIDS root is normalized after relocation
-
-- **WHEN** a supported BIDS project contains its former absolute root in import state and opens from a new location
-- **THEN** runtime state SHALL use the new root, the project SHALL be dirty, and no disk write SHALL occur until normal Save
-
-#### Scenario: Ambiguous legacy DICOM source is missing
-
-- **WHEN** an older project contains an unavailable absolute DICOM source and the system cannot prove that it was inside the former project root
-- **THEN** the project SHALL open with missing-source state and SHALL NOT search for or guess a replacement
-
-#### Scenario: Normal Save persists normalization
-
-- **WHEN** a dirty relocated or relinked project is saved
-- **THEN** normalized paths SHALL be persisted through the existing validated atomic Save operation
-
 ### Requirement: Relocation forbids former-root access
 
 After a relocated project becomes active, project-owned reads, writes, watchers, subprocess arguments, checkpoints, and autosaves SHALL use the new runtime root. The former project root SHALL NOT be accessed except while validating an explicitly selected external source or resolving a known Recent Projects entry.
@@ -513,26 +165,313 @@ After a relocated project becomes active, project-owned reads, writes, watchers,
 - **WHEN** processing starts after relocation
 - **THEN** worker arguments and the lock watcher SHALL use the new project root and SHALL NOT use the former root
 
-### Requirement: BIDS project creation delegates the durable commit
+### Requirement: Consistent configuration operations
 
-For a detected BIDS root, `createProject` SHALL construct and canonically validate the schema-v1 project payload before preflight, but SHALL delegate durable project creation to the native confirmed mutation transaction. It SHALL NOT write `project.easl` through a separate frontend atomic-write call and SHALL NOT perform a later best-effort `.bidsignore` write. Normal saves after successful activation SHALL continue to use validated atomic project writes and backups under the existing persistence contract.
+Project creation, opening, editing, autosaving, explicit saving, backup recovery, and setup planning SHALL use the same current configuration contract and validation rules. A rejected edit SHALL leave accepted configuration and project files unchanged. An edit to one configuration section SHALL preserve unrelated sections and native-owned execution results. Display caches and temporary form input SHALL NOT independently authorize persisted state or execution completion.
+
+#### Scenario: Same invalid value reaches different operations
+
+- **WHEN** opening and editing receive the same invalid current-schema field value
+- **THEN** both operations SHALL reject it under the same contract without saving a substituted default
+
+#### Scenario: Independent sections change
+
+- **WHEN** parameter and visualization edits are accepted while a native execution result updates completion metadata
+- **THEN** saving SHALL retain both edits and the native result without whole-project overwrite from a stale display cache
+
+### Requirement: Project-wide autosave
+
+Every accepted configuration edit SHALL schedule an autosave after two seconds without another accepted edit. Autosave SHALL remain active independently of the displayed page. Save, processing/import submission, phase navigation, project replacement, and ordinary close SHALL submit pending form changes and wait for the latest accepted configuration to persist. Invalid unfinished input SHALL remain a visible draft and SHALL block a requested flush until corrected; it SHALL NOT replace accepted values with defaults. No-op edits and transient progress, logs, images, or chart selection SHALL NOT schedule configuration writes. Confirmed relinking SHALL use this same save policy.
+
+#### Scenario: Parameter edit precedes immediate navigation
+
+- **WHEN** the user edits a parameter and immediately navigates to another phase
+- **THEN** navigation SHALL wait for that edit to validate and persist without relying on a page-owned delay
+
+#### Scenario: Verdict edit autosaves without navigation
+
+- **WHEN** a reviewer sets a valid verdict and remains on the page
+- **THEN** the accepted verdict SHALL persist after the shared autosave delay
+
+#### Scenario: Unfinished input reaches Save
+
+- **WHEN** Save encounters a form draft that cannot produce a valid configuration value
+- **THEN** the application SHALL show the invalid field, preserve the accepted value, and SHALL NOT claim all changes are saved
+
+#### Scenario: Autosave fails
+
+- **WHEN** autosave cannot persist accepted changes
+- **THEN** unsaved status and an actionable error SHALL remain visible and Save SHALL retry the latest configuration
+
+### Requirement: Current schema persisted and runtime boundaries
+
+The only supported project schema SHALL declare integer `schemaVersion: 2`, independently of application SemVer. Saved configuration SHALL retain the current top-level `projectMeta`, `mappingState`, `dataPar`, and `uiState` sections, SHALL omit legacy `version` and runtime `rootPath`, and SHALL contain no transient run ownership, loaded scientific data, or form drafts. The runtime root SHALL derive exclusively from the parent of the opened `project.easl`. Closed project-owned objects SHALL reject unknown fields. Declared loose scientific metadata and DataPar extension fields SHALL preserve unknown JSON values. Missing optional settings SHALL remain unset rather than acquire scientific defaults; equivalent absent nullable selections SHALL serialize consistently as `null`.
+
+#### Scenario: Current project is saved
+
+- **WHEN** a supported configuration is saved
+- **THEN** the output SHALL be readable JSON with `schemaVersion: 2`, no application-version envelope, and no authoritative absolute project root
+
+#### Scenario: Scientific extension fields survive
+
+- **WHEN** valid current configuration contains unknown BIDS metadata or DataPar extension values
+- **THEN** save and reopen SHALL preserve those values without treating them as project-schema extensions
+
+### Requirement: Current processing selection persistence
+
+Processing selections SHALL persist under `uiState.processing.config`, using `selectedProfileId` rather than copied MATLAB or ExploreASL paths. Import profile selection SHALL persist under `uiState.import.selectedProfileId`. Persisted terminal phase and module completion/provenance SHALL derive from accepted native execution evidence; nonterminal progress SHALL remain runtime state. Changing selections SHALL preserve sibling `structural`, `asl`, and `population` results, including `profileId`, `exploreASLVersion`, `matlabVersion`, `guiVersion`, and `Mtime`. A new project SHALL create processing selections lazily on the first Processing visit. Visualization and review configuration SHALL follow their current capability contracts. Phase order SHALL remain import, parameters, processing, visualization, manifest; Processing access SHALL require successful DICOM import or confirmed BIDS review, and Visualization/Manifest access SHALL require Population completion.
+
+#### Scenario: Config saved on processing start
+
+- **WHEN** the user starts processing
+- **THEN** the latest accepted selection and profile ID SHALL persist before submission
+
+#### Scenario: Config restored on project load
+
+- **WHEN** a project with saved processing selections opens
+- **THEN** subject selection, module selection, worker count, and profile selection SHALL show those saved values
+
+#### Scenario: New project format with selectedProfileId
+
+- **WHEN** current configuration contains a saved processing profile ID
+- **THEN** the selector SHALL restore that profile reference rather than machine paths
+
+#### Scenario: Import selectedProfileId persisted
+
+- **WHEN** a saved import profile selection is reopened
+- **THEN** the import selector SHALL restore that ID
+
+#### Scenario: New project with no processing config
+
+- **WHEN** a new project has not visited Processing
+- **THEN** processing selection configuration SHALL remain absent until needed
+
+#### Scenario: Processing edit preserves sibling processing fields
+
+- **WHEN** processing selections change while saved Population completion and provenance exist
+- **THEN** those native-owned sibling values SHALL remain unchanged
+
+#### Scenario: Visualization phase gate
+
+- **WHEN** Visualization access is requested
+- **THEN** access SHALL require saved or currently reconciled native Population completion
+
+#### Scenario: Manifest phase gate
+
+- **WHEN** Manifest access is requested
+- **THEN** access SHALL use the same Population completion condition as Visualization
+
+#### Scenario: Phase ordering includes manifest
+
+- **WHEN** project phases are listed
+- **THEN** their order SHALL be import, parameters, processing, visualization, manifest
+
+### Requirement: Shared visualization settings persistence
+
+Visualization settings SHALL persist under `uiState.dataVis` through project-wide autosave. They SHALL include the declared `qcbfSource`, `joinConfig`, column types, identifiers, level orderings, axis assignments, domain filters, stage, and supported chart/viewer settings. Loaded data and transient selection SHALL NOT persist. The obsolete `contractSources` representation SHALL NOT be accepted as current configuration.
+
+#### Scenario: DataVis contract saved
+
+- **WHEN** a valid visualization setting changes
+- **THEN** it SHALL enter accepted project configuration and use the shared autosave policy
+
+#### Scenario: DataVis contract restored
+
+- **WHEN** a project with saved visualization settings opens
+- **THEN** its display cache SHALL expose those settings without rehydrating a second editable persisted copy on page mount
+
+### Requirement: Current-only project parsing
+
+The system SHALL inspect the project envelope before validating the current payload. Only integer `schemaVersion: 2` SHALL be supported. Any other integer version and legacy application-version envelope SHALL produce an actionable unsupported-schema error without migration or file mutation. Missing or invalid version information SHALL produce a malformed-project error. Unsupported primary schemas SHALL NOT trigger fallback to an older backup.
+
+#### Scenario: Current project is recognized
+
+- **WHEN** a file declares `schemaVersion: 2`
+- **THEN** its payload SHALL use the complete current contract
+
+#### Scenario: Older project is rejected
+
+- **WHEN** a file declares `schemaVersion: 1` or only `version: "0.1.0"`
+- **THEN** opening SHALL fail as unsupported without conversion, guessed repair, or backup fallback
+
+#### Scenario: Future project version is rejected distinctly
+
+- **WHEN** a file declares an integer schema version greater than 2
+- **THEN** opening SHALL report unsupported schema rather than corruption
+
+#### Scenario: Malformed supported project is rejected
+
+- **WHEN** a schema-version-2 payload contains invalid data
+- **THEN** opening SHALL fail with an actionable field error and preserve the source bytes
+
+### Requirement: Read-only current project opening
+
+Reading a current configuration, deriving its root, inspecting source availability, refreshing its display cache, or confirming a valid backup SHALL NOT rewrite `project.easl` or update `lastOpened` on disk. Unsupported or malformed input SHALL remain unchanged. Separately required native transaction recovery and execution-result reconciliation SHALL retain their explicit mutation contracts; they SHALL NOT become schema-repair paths.
+
+#### Scenario: Valid project is opened without rewrite
+
+- **WHEN** a current project opens without pending native recovery or result reconciliation
+- **THEN** its project bytes SHALL remain unchanged and autosave SHALL NOT run merely because it opened
+
+#### Scenario: Unsupported input remains unchanged
+
+- **WHEN** an unsupported project is selected
+- **THEN** the application SHALL leave its source and backup untouched
+
+### Requirement: Validated current project writes
+
+Every creation, autosave, explicit Save, and repair of a recovered primary SHALL validate and serialize the current configuration before filesystem writes. The existing durable writer SHALL create a unique sibling candidate, flush its contents, preserve the previous validated primary as `project.easl.bak`, and atomically install the new primary. All candidates and backups SHALL remain in the project directory. Missing, malformed, or unsupported primary data SHALL NOT replace a valid recovery backup. Invalid values SHALL cause failure before candidates are created.
+
+#### Scenario: Existing project is saved atomically
+
+- **WHEN** changed current configuration saves successfully over a validated primary
+- **THEN** the primary SHALL contain the new complete JSON and its backup SHALL contain the previous complete JSON
+
+#### Scenario: New project is created
+
+- **WHEN** a project is created without an existing primary
+- **THEN** validated current bytes SHALL become the primary without requiring a backup
+
+#### Scenario: Serialization fails before writing
+
+- **WHEN** configuration cannot pass current validation
+- **THEN** no candidate, primary, or backup SHALL change
+
+#### Scenario: Temporary write or file flush fails
+
+- **WHEN** a candidate write or required file flush fails
+- **THEN** saving SHALL fail while previous valid primary/backup data remains recoverable
+
+#### Scenario: Replacement is interrupted
+
+- **WHEN** interruption occurs between durable candidate creation and completed replacement
+- **THEN** a complete old or new primary/backup SHALL remain recoverable and partial primary data SHALL NOT be accepted
+
+### Requirement: Current-schema backup recovery
+
+Loading SHALL prefer a valid current primary. A missing or malformed primary with a valid current backup SHALL require user confirmation before opening recovered data. Confirmation SHALL load the backup without writing, retain unsaved status, and preserve that backup until a later accepted edit, explicit Save, or ordinary close successfully repairs the primary. Permission errors and unsupported primary schemas SHALL stop without fallback; malformed or unsupported backups SHALL never load.
+
+#### Scenario: Valid primary takes precedence
+
+- **WHEN** primary and backup are both valid current projects
+- **THEN** the primary SHALL open without offering backup recovery
+
+#### Scenario: Missing primary offers backup recovery
+
+- **WHEN** the primary is missing and its backup is valid current configuration
+- **THEN** the application SHALL ask before opening the backup without modifying either path
+
+#### Scenario: Malformed primary offers backup recovery
+
+- **WHEN** the primary is malformed and its backup is valid current configuration
+- **THEN** the application SHALL offer recovery and preserve the malformed primary until repair is requested
+
+#### Scenario: User confirms backup recovery
+
+- **WHEN** recovery is confirmed
+- **THEN** the backup SHALL load as unsaved configuration without starting an opening-only autosave
+
+#### Scenario: Save repairs recovered project
+
+- **WHEN** a later edit or flush saves recovered configuration
+- **THEN** a valid primary SHALL be installed without rotating malformed primary bytes over the recovery backup
+
+#### Scenario: Unsupported primary never falls back
+
+- **WHEN** the primary uses an unsupported schema and a readable backup exists
+- **THEN** opening SHALL fail as unsupported without offering the backup
+
+#### Scenario: Permission failure never falls back
+
+- **WHEN** primary reading fails with permission denied
+- **THEN** opening SHALL report that error without offering a backup
+
+### Requirement: Native revision-ordered persistence
+
+Configuration writes SHALL execute in accepted revision order for the active lifecycle. A successful write SHALL clear unsaved status only through the revision actually persisted. A newer accepted edit SHALL remain pending until it persists. Failure SHALL retain unsaved state and the last-known-good files. A stale lifecycle request SHALL never save to a replacement project, including reopening the same project ID.
+
+#### Scenario: Project changes during save
+
+- **WHEN** revision A saves while revision B is accepted
+- **THEN** A's completion SHALL NOT mark B saved and the next write SHALL persist B
+
+#### Scenario: Save fails
+
+- **WHEN** validation or storage fails
+- **THEN** unsaved state SHALL remain and retry SHALL use the latest accepted revision
+
+### Requirement: Current portable source references
+
+Current output SHALL store project-internal sources relative to the project root and external sources as explicit absolute paths. Raw DICOM entries SHALL remain relative to their source. BIDS source SHALL be `.`; generated qCBF paths SHALL be project-relative. Runtime resolution SHALL use the currently opened root and SHALL reject relative traversal or symlink escape. Selecting or relinking a source SHALL establish this representation before acceptance; loading SHALL NOT repair older absolute internal-path conventions.
+
+#### Scenario: BIDS project is moved
+
+- **WHEN** current BIDS configuration opens from another directory
+- **THEN** all project-owned access SHALL resolve under the new root
+
+#### Scenario: Internal DICOM source moves with project
+
+- **WHEN** the project and relative DICOM source move together
+- **THEN** source and raw entries SHALL resolve beneath the new root
+
+#### Scenario: External DICOM source remains external
+
+- **WHEN** a project moves but its source is external
+- **THEN** the external absolute reference SHALL remain unchanged
+
+#### Scenario: Project-relative path attempts escape
+
+- **WHEN** a relative reference escapes the selected root
+- **THEN** validation SHALL reject it without accessing that escaped location
+
+### Requirement: Native-owned project creation planning
+
+For a detected BIDS root, project defaults, validation, and current JSON generation SHALL belong to the same native configuration contract used by normal saves. The reviewed setup plan SHALL retain those exact bytes. Confirmation SHALL commit project and compatibility artifacts together; no independent frontend project write or best-effort ignore-file write SHALL follow. Activation SHALL expose the committed configuration only after successful commit. Later edits SHALL use the shared validated project writer.
 
 #### Scenario: Preflight receives validated canonical project
 
-- **WHEN** the landing flow requests a mutation plan for a candidate BIDS-root project
-- **THEN** the planned `project.easl` content SHALL be canonical schema-v1 bytes that have passed the complete persisted-project validation contract
+- **WHEN** creation requests a setup plan
+- **THEN** the plan SHALL contain native-generated current-schema bytes and their content summary
 
 #### Scenario: Commit succeeds before hydration
 
-- **WHEN** native transaction commit succeeds for the current plan
-- **THEN** the project store SHALL hydrate and activate exactly the committed project payload before starting the project session
+- **WHEN** the reviewed plan commits successfully
+- **THEN** activation SHALL expose exactly its committed project configuration
 
 #### Scenario: Commit fails before activation
 
-- **WHEN** native transaction commit fails or rolls back
-- **THEN** the project store SHALL retain its prior active state and SHALL not start a session or schedule a save for the candidate project
+- **WHEN** commit fails or rolls back
+- **THEN** prior active state SHALL remain and no candidate autosave SHALL be scheduled
 
 #### Scenario: Later save behavior is unchanged
 
-- **WHEN** a successfully created BIDS project becomes dirty after activation
-- **THEN** normal Save SHALL use the existing validated atomic `project.easl` replacement, backup, ordering, and recovery behavior
+- **WHEN** the newly activated project receives an accepted edit
+- **THEN** shared autosave SHALL retain atomic replacement, backups, and ordered revisions
+
+### Requirement: Native module result persistence
+
+Module last-run metadata SHALL retain the actual execution profile ID, ExploreASL/MATLAB/GUI version strings, and completion mtime when available. Only accepted native evidence SHALL update it. Deleted profiles SHALL display "Profile deleted" with the saved ID rather than invent a replacement. Structural, ASL, and Population results SHALL use the same shape; frontend configuration edits SHALL not fabricate completion or provenance.
+
+#### Scenario: Population last-run profile is deleted
+
+- **WHEN** saved Population provenance references a deleted execution profile
+- **THEN** the display SHALL preserve historical versions and show the missing profile ID
+
+#### Scenario: Structural result is saved
+
+- **WHEN** accepted native Structural execution supplies provenance
+- **THEN** its profile and actual versions SHALL persist in Structural last-run metadata
+
+### Requirement: Native Population completion persistence
+
+Population completion SHALL persist under `uiState.processing.population.completed` only from accepted native commit/terminal evidence. Native execution commit SHALL clear prior completion; accepted successful completion SHALL set it. Pre-commit rejection and non-Population execution SHALL preserve prior Population results. Clearing completion SHALL not remove review verdicts.
+
+#### Scenario: Successful Population run completes
+
+- **WHEN** accepted native Population evidence verifies completion
+- **THEN** completion and associated provenance SHALL persist through the shared writer
+
+#### Scenario: Accepted Population execution invalidates earlier completion
+
+- **WHEN** a new Population attempt reaches native execution commit
+- **THEN** previous completion SHALL clear without deleting verdicts

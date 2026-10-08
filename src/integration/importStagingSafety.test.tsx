@@ -1,6 +1,8 @@
 import { TestMantineProvider as MantineProvider } from "../test/render";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { projectFixture } from "../test/projectFixtures";
 
 import ImportPreview from "../components/import/ImportPreview";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
@@ -14,40 +16,24 @@ afterEach(() => {
   cleanup();
   resetProjectLifecycleForTests();
   useImportStore.getState().resetImport();
+  useProjectStore.getState().cancelAutosave();
   useProjectStore.setState({ project: null, loaded: false, isDirty: false });
   useGlobalStore.setState({ settings: DEFAULT_SETTINGS, profileValidationState: {}, loaded: true });
 });
 
-describe("legacy import staging safety", () => {
-  it("keeps unsafe legacy values visible, then requires explicit repair and fresh native preflight", async () => {
+describe("current import staging safety", () => {
+  it("keeps unsafe values visible, then requires explicit repair and fresh native preflight", async () => {
     const profile = makeMatlabProfile({ id: "profile" });
     useGlobalStore.setState({
       settings: { ...DEFAULT_SETTINGS, executionProfiles: [profile] },
       profileValidationState: { profile: { valid: true, errors: [] } },
       loaded: true,
     });
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "p",
-          name: "P",
-          rootPath: "/project",
-          createdAt: "",
-          lastOpened: "",
-          currentPhase: "import",
-          dataSource: "dicom",
-        },
-        uiState: {},
-        mappingState: {},
-        dataPar: {},
-      },
-      loaded: true,
-    });
+    const snapshot = projectFixture("p", "P");
     activateProjectLease("p", "/project");
-    useImportStore.getState().loadPersistedState({
+    snapshot.document.mappingState = {
       ingestionComplete: true,
-      rawPaths: ["/source/FOO+BAR/ASL"],
+      rawPaths: ["FOO+BAR/ASL"],
       sourceDataPath: "/source",
       pathPatterns: [
         {
@@ -85,15 +71,23 @@ describe("legacy import staging safety", () => {
         },
       ],
       subjectRows: [{ id: "FOO+BAR/01", subject: "FOO+BAR", session: "01", groupId: "global" }],
-    });
+    };
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     render(
       <MantineProvider env="test">
         <ImportPreview />
       </MantineProvider>,
     );
     expect(screen.getByTestId("preview-next-btn")).toBeDisabled();
-    expect(useImportStore.getState().subjectRenames[0].target).toBe("FOO+BAR");
+    expect(useProjectStore.getState().project?.mappingState.subjectRenames?.[0].target).toBe(
+      "FOO+BAR",
+    );
 
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.mappingState.subjectRenames = [{ original: "FOO+BAR", target: "FOOBAR" }];
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
     useImportStore.getState().updateSubjectRename("FOO+BAR", "FOOBAR");
     await waitFor(() => expect(screen.getByTestId("preview-next-btn")).not.toBeDisabled());
   });

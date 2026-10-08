@@ -75,17 +75,17 @@
 
 ## 🛠 Built With
 
-| Layer                 | Technology                                                                        |
-| --------------------- | --------------------------------------------------------------------------------- |
-| **Desktop shell**     | [Tauri v2](https://v2.tauri.app/) (Rust backend, WebView2 / WebKit frontend)      |
-| **UI Framework**      | [React 19](https://react.dev/) + [TypeScript 7](https://www.typescriptlang.org/)  |
-| **Component Library** | [Mantine 9](https://mantine.dev/)                                                 |
-| **State Management**  | [Zustand 5](https://zustand-demo.pmnd.rs/)                                        |
-| **Schema Validation** | [Zod 4](https://zod.dev/)                                                         |
-| **Routing**           | [React Router 7](https://reactrouter.com/)                                        |
-| **Forms**             | [React Hook Form 7](https://react-hook-form.com/)                                 |
-| **Build Tool**        | [Vite 8](https://vitejs.dev/)                                                     |
-| **Testing**           | [Vitest 4](https://vitest.dev/) + [Testing Library](https://testing-library.com/) |
+| Layer                 | Technology                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| **Desktop shell**     | [Tauri v2](https://v2.tauri.app/) (Rust backend, WebView2 / WebKit frontend)                  |
+| **UI Framework**      | [React 19](https://react.dev/) + [TypeScript 7](https://www.typescriptlang.org/)              |
+| **Component Library** | [Mantine 9](https://mantine.dev/)                                                             |
+| **State Management**  | [Zustand 5](https://zustand-demo.pmnd.rs/)                                                    |
+| **Schema Validation** | Rust Serde for project configuration; [Zod 4](https://zod.dev/) for form drafts and other IPC |
+| **Routing**           | [React Router 7](https://reactrouter.com/)                                                    |
+| **Forms**             | [React Hook Form 7](https://react-hook-form.com/)                                             |
+| **Build Tool**        | [Vite 8](https://vitejs.dev/)                                                                 |
+| **Testing**           | [Vitest 4](https://vitest.dev/) + [Testing Library](https://testing-library.com/)             |
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -213,6 +213,36 @@ You can add multiple profiles and switch between them from the dropdown selector
 ---
 
 ## 🔄 Workflow
+
+### Project configuration and saving
+
+Projects use readable JSON in `<project_root>/project.easl` with integer `schemaVersion: 2`.
+Schema 1 and legacy application-version envelopes are rejected without migration or file changes.
+Create a new project for this build; retain older files with their matching build. Version-2 files
+are not converted for older builds.
+
+Rust owns defaults, validation, accepted edits, serialization, and execution results. React uses
+generated TypeScript types, one display cache, and unfinished form drafts. Successful import
+configuration is an ordinary JSON object (or `null` before success), not compressed data. Review
+verdicts are indexed by reviewer ID even with one reviewer.
+
+Accepted edits autosave after two seconds without another accepted edit, on every page. Save,
+the save shortcut, phase changes, run submission, project replacement, and ordinary close flush
+pending edits through the same writer. Invalid drafts block flushing; save failures retain unsaved
+state and visible retry guidance. Correct the field or storage problem and retry Save. There is no
+ordinary discard-and-leave path; active execution still requires abort confirmation.
+
+Opening current configuration is read-only unless separately required native recovery or result
+reconciliation runs. A missing or malformed primary can offer a valid current backup only with
+consent; opening that backup does not immediately rewrite the primary. A later edit or flush repairs
+it while preserving the recovery backup. Unsupported schemas and permission errors do not fall back.
+Configuration, `project.easl.bak`, save candidates, and setup journals remain project-local. Setup
+recovery checks only the selected root, not a global application-data registry; prior transaction
+recovery is disclosed before new setup preflight. Global settings and recent paths remain app-local.
+Workers use separate execution records; native results persist before exact-run acknowledgement.
+
+Opening, setup planning, and creation still require a valid execution profile. Profile validation
+timing and scientific execution checks are unchanged.
 
 ExploreASL GUI follows a three-phase analysis pipeline:
 

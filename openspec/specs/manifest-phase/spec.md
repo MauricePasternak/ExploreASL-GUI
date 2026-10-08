@@ -36,20 +36,6 @@ The Verdict Resolution step SHALL be omitted entirely when reviewers are unanimo
 - **WHEN** the project has 2 reviewers and at least one SubjectSession has differing verdicts between reviewers
 - **THEN** Step 1 (Verdict Resolution) SHALL be enabled, and clicking "Next" from Step 0 SHALL advance to Verdict Resolution
 
-### Requirement: Project Phases Tuple Extension
-
-The `PROJECT_PHASES` constant SHALL include `"manifest"` appended after `"visualization"`. Its ordering SHALL be exactly `["import", "parameters", "processing", "visualization", "manifest"]`. Migration of a supported legacy `.easl` file SHALL preserve any current phase from the original four values without a phase-specific transformation, and schema v1 SHALL accept all five values.
-
-#### Scenario: Existing project file loads without migration
-
-- **WHEN** a legacy `.easl` file with `currentPhase: "visualization"` is migrated during project loading
-- **THEN** the schema v1 project SHALL retain `projectMeta.currentPhase: "visualization"` without any phase-specific migration
-
-#### Scenario: Project file explicitly set to manifest phase
-
-- **WHEN** `projectStore.setPhase("manifest")` is called on a schema v1 project whose `uiState.processing.population.completed === true`
-- **THEN** the resulting `.easl` payload SHALL have `projectMeta.currentPhase === "manifest"` and SHALL round-trip through schema v1 parsing
-
 ### Requirement: Manifest Phase Access Gate
 
 `canAccessPhase` SHALL treat the `"manifest"` phase identically to `"visualization"` — access SHALL be granted iff `project.uiState?.processing?.population?.completed === true`. The `manifest` phase SHALL NOT be independently selectable without that flag.
@@ -91,3 +77,17 @@ The `HELP_DATA` map in `src/components/PageHelpButton.tsx` SHALL contain an entr
 
 - **WHEN** the help drawer is opened and the project has multiple reviewers
 - **THEN** the help text SHALL contain guidance about reviewer tabs, blinded review, and verdict resolution
+
+### Requirement: Current project phase ordering
+
+Current project phases SHALL be import, parameters, processing, visualization, and manifest in that order. The current schema SHALL accept all five values. Unsupported earlier project schemas SHALL be rejected without phase migration. Existing access gates SHALL remain unchanged.
+
+#### Scenario: Current project retains saved phase
+
+- **WHEN** current configuration with saved Visualization phase reopens
+- **THEN** the saved phase SHALL remain Visualization without rewriting the file
+
+#### Scenario: Project explicitly enters Manifest
+
+- **WHEN** accepted Population completion permits Manifest and the user selects it
+- **THEN** the current project SHALL persist Manifest phase through the shared writer

@@ -219,71 +219,69 @@ The data contract SHALL persist to `uiState.dataVis` in the `.easl` project file
 
 ### Requirement: Contract Hash-Based Invalidation
 
-The `qcbfSource` object SHALL store a SHA-256 hash. On Visualization page activation, if `joinConfig` is `null`, the system SHALL load the project-relative qCBF source from the current project root. If the returned `qcbfHash` does not match the persisted `qcbfSource.fileHash`, the contract SHALL be invalidated: `columnTypes`, `levelOrderings`, `axisAssignment`, and `stage` SHALL reset, and the stepper SHALL return to step 1 with a banner: "Data file has changed. Please reconfigure." If the project-relative qCBF source no longer exists, the contract SHALL be invalidated with: "File '{filename}' no longer exists."
+The qCBF source SHALL retain its SHA-256 hash and project-relative path. On page activation without a join, matching content SHALL preserve setup; changed content SHALL reset column types, level orderings, axes, and stage with "Data file has changed. Please reconfigure." Missing qCBF content SHALL invalidate its contract with "File '{filename}' no longer exists."
 
-If `joinConfig` is active, the system SHALL validate both the project-relative qCBF source and external absolute source. A missing or unreadable external source SHALL NOT delete or modify `joinConfig`; the project SHALL retain the saved path and configuration, show a persistent Relink banner, and disable joined-data actions while qCBF-only data remains available. Relinking to an external file with the same SHA-256 hash SHALL update only the absolute path and SHALL preserve join, column, level, axis, filter, and chart setup. Relinking to different content SHALL warn the user and SHALL make no change until confirmation. After confirmation, the new source SHALL be adopted, `joinConfig` keys and dependent column, level, axis, filter, and chart setup SHALL reset, and the project SHALL become dirty. Relink changes SHALL persist only through normal Save.
-
-If both sources are readable and the qCBF hash differs, the full contract SHALL be invalidated. If only the external hash differs during normal validation, the existing configuration SHALL remain unchanged until the user confirms resetting it for the changed source.
+Joined-data validation SHALL inspect both sources. Missing/unreadable external data SHALL preserve the complete saved join, allow available qCBF-only work, and disable joined actions with persistent Relink guidance. A same-hash external replacement SHALL change only its absolute path. Different replacement content SHALL require confirmation before adopting the source and resetting dependent join/column/level/axis/filter/chart setup. Accepted replacement edits SHALL use project-wide autosave without a manual-save-only mode; cancellation SHALL preserve configuration. If both sources are readable but qCBF changed, the full contract SHALL invalidate. External-only content changes SHALL preserve configuration until reset is confirmed.
 
 #### Scenario: Hash match preserves contract
 
-- **WHEN** the page activates and the returned `qcbfHash` matches the persisted hash
-- **THEN** the contract SHALL be preserved and the stepper SHALL resume at the persisted stage
+- **WHEN** qCBF content matches its stored hash
+- **THEN** the contract and saved stage SHALL remain
 
 #### Scenario: Hash mismatch invalidates contract
 
-- **WHEN** the page activates and the returned `qcbfHash` does not match the persisted hash
-- **THEN** the contract SHALL be invalidated and the stepper SHALL reset to step 1 with the banner "Data file has changed. Please reconfigure."
+- **WHEN** qCBF content differs
+- **THEN** setup SHALL reset to the first step with the changed-data banner
 
 #### Scenario: Source file deleted
 
-- **WHEN** the page activates and the qCBF source no longer exists under the current project root
-- **THEN** the qCBF contract SHALL be invalidated with the message "File '{filename}' no longer exists."
+- **WHEN** project-relative qCBF no longer exists
+- **THEN** its contract SHALL invalidate with the missing-file message
 
 #### Scenario: Join-active validation with qCBF hash mismatch
 
-- **WHEN** joined data is validated and the qCBF hash does not match `qcbfSource.fileHash`
-- **THEN** the full contract SHALL be invalidated and the stepper SHALL reset to step 1
+- **WHEN** readable joined sources include changed qCBF content
+- **THEN** the full contract SHALL reset
 
 #### Scenario: External source is missing
 
-- **WHEN** `joinConfig` is active and its external absolute path is missing or unreadable
-- **THEN** `joinConfig` SHALL remain unchanged, qCBF-only data SHALL remain available, joined-data actions SHALL be disabled, and a persistent Relink banner SHALL identify the missing source
+- **WHEN** joined external data is missing or unreadable
+- **THEN** saved join state SHALL remain, joined actions SHALL disable, and Relink guidance SHALL appear
 
 #### Scenario: Join-active validation with external hash mismatch only
 
-- **WHEN** joined data is validated, the qCBF hash matches, and only the external hash differs from `joinConfig.externalSource.fileHash`
-- **THEN** the complete saved contract SHALL remain unchanged until the user confirms resetting dependent setup for the changed source
+- **WHEN** qCBF matches but external content differs
+- **THEN** configuration SHALL remain unchanged until reset confirmation
 
 #### Scenario: Relinked external file matches
 
-- **WHEN** the user selects a readable replacement whose SHA-256 hash matches the persisted external hash
-- **THEN** only the external absolute path SHALL change, all compatible visualization setup SHALL remain, and the project SHALL become dirty
+- **WHEN** replacement external content has the same hash
+- **THEN** only its source path SHALL change and shared autosave SHALL persist that accepted edit
 
 #### Scenario: Relinked external file differs
 
-- **WHEN** the selected replacement's SHA-256 hash differs from the persisted external hash
-- **THEN** the system SHALL warn that dependent setup will reset and SHALL make no change until the user confirms
+- **WHEN** replacement content has a different hash
+- **THEN** no configuration SHALL change before confirmation
 
 #### Scenario: User confirms changed external file
 
-- **WHEN** the user confirms using a changed replacement
-- **THEN** the new external source SHALL be adopted, dependent join and visualization setup SHALL reset, and the project SHALL become dirty
+- **WHEN** replacement/reset is confirmed
+- **THEN** the new source and dependent resets SHALL enter one accepted autosaved change
 
 #### Scenario: User declines changed external file
 
-- **WHEN** the user declines the changed replacement
-- **THEN** the saved source and complete visualization contract SHALL remain unchanged
+- **WHEN** replacement/reset is declined
+- **THEN** the complete saved contract SHALL remain unchanged
 
 #### Scenario: Join-active validation with both hashes matching
 
-- **WHEN** joined data is validated and both source hashes match their persisted values
-- **THEN** the contract SHALL be preserved, active joined data SHALL be populated, and the stepper SHALL resume at the persisted stage
+- **WHEN** both hashes match
+- **THEN** joined data SHALL load and saved setup/stage SHALL remain
 
 #### Scenario: Join-active validation when external file deleted
 
-- **WHEN** the page activates with `joinConfig` active and the external file no longer exists
-- **THEN** `joinConfig` SHALL remain unchanged, joined-data actions SHALL be disabled, and a persistent Relink banner SHALL identify the missing source
+- **WHEN** joined external content disappears
+- **THEN** the saved join SHALL remain available for relinking while joined actions disable
 
 ### Requirement: Missing Data Handling in Type Inference
 

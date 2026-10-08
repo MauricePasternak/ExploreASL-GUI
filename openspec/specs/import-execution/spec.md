@@ -650,46 +650,46 @@ For each selected subject, native finalization SHALL verify a regular, non-symli
 
 ### Requirement: Durable finalization and terminal replay
 
-Before import preparation mutates staging, native code SHALL atomically persist a versioned project-local run record containing enough relative, validated ownership and plan evidence to classify interrupted work and resume idempotent finalization. It SHALL durably record process exit evidence before treating it as finalization authority and durably record terminal outcome before notifying the frontend. Live PID values SHALL NOT be trusted after native application restart.
+Before staging mutation, native code SHALL durably record project-local run identity, relative ownership/plan evidence, and the admitted attempt configuration needed for its successful freshness baseline. Exit evidence SHALL persist before finalization authority and terminal outcome before presentation. Remembered PIDs SHALL not authorize recovery after native restart.
 
-On project activation, a Preparing, Running, or Cancelling record without a matching in-process supervisor SHALL become Interrupted, preserve staging, and require external-stop confirmation before new execution. It SHALL NOT resume mutation or infer completion from process absence. After confirmation, a valid Finalizing record with durable exit and completion evidence SHALL resume safe cleanup/relocation using the existing relocation journal. A terminal record SHALL be replayed until the frontend has reconciled and successfully persisted matching project state, then explicitly acknowledges that exact run. Acknowledgement SHALL be idempotent and SHALL never remove unresolved recovery evidence.
+Existing interrupted-run external-stop confirmation, staging preservation, safe Finalizing resumption, relocation checkpoint reuse, and released execution-record compatibility SHALL remain. Eligible terminal results SHALL remain replayable until native reconciliation saves their exact project result and then acknowledges that exact run. Frontend listeners, caches, or caller-selected outcomes SHALL not authorize saved completion. Acknowledgement SHALL remain idempotent and SHALL not remove unresolved recovery evidence. Historical compatible records without captured attempt settings SHALL preserve the prior successful baseline rather than synthesize it from current settings.
 
-After settling rawdata custody, relocation recovery SHALL checkpoint the relocation outcome into the matching import-run record before finalizer resumption or relocation-journal retirement, even when derived cleanup remains pending. Existing durable relocation checkpoints SHALL remain unchanged and conflicting outcomes SHALL reject. Without an existing checkpoint, recovery MAY normalize a pending-derived message after a successful retry before recording the outcome. Finalization SHALL reuse the checkpoint rather than relocate committed rawdata again. Relocation recovery SHALL NOT delete staging, claim staging cleanup complete, or rewrite a historical terminal result when cleanup later succeeds.
+Relocation recovery SHALL checkpoint authoritative custody into the matching run record before finalizer resumption or journal retirement, even when derived cleanup remains pending. Existing checkpoints SHALL remain unchanged and conflicting outcomes SHALL reject. Safe cleanup retries SHALL not repeat relocation, delete retained staging, claim unproven cleanup, or rewrite historical terminal outcomes.
 
 #### Scenario: Crash before import-run relocation checkpoint
 
-- **WHEN** activation finds durably committed rawdata but no import-run relocation checkpoint and derived cleanup still fails
-- **THEN** recovery SHALL persist the authoritative custody outcome, retain staging and the relocation journal, and allow finalization to report pending cleanup without repeating rawdata relocation
+- **WHEN** committed rawdata lacks a run checkpoint and derived cleanup remains pending
+- **THEN** recovery SHALL persist custody, retain recovery artifacts, and avoid repeating relocation
 
 #### Scenario: Cleanup retry follows terminal failure
 
-- **WHEN** a terminal `Failed` run already contains a relocation checkpoint and a later derived-cleanup retry succeeds
-- **THEN** recovery SHALL retire safely cleaned relocation residue without changing the checkpoint or historical terminal result, and staging SHALL remain available
+- **WHEN** cleanup later succeeds for a checkpointed failed run
+- **THEN** historical checkpoint/outcome SHALL remain unchanged and staging SHALL remain available
 
 #### Scenario: Application stops during running import
 
-- **WHEN** activation finds a durable Running record but no current in-process supervisor
-- **THEN** the run SHALL become Interrupted, staging SHALL remain available, replacement execution SHALL require confirmation, and no completion SHALL be inferred from leftover output
+- **WHEN** a Running record has no current supervisor
+- **THEN** recovery SHALL expose Interrupted state and preserve staging without inferred completion
 
 #### Scenario: Application stops during finalization
 
-- **WHEN** activation finds valid durable process-exit and finalization evidence for an unfinished run after external-stop confirmation
-- **THEN** native recovery SHALL resume or complete idempotent verification and relocation before exposing the authoritative result
+- **WHEN** durable evidence and external-stop confirmation permit safe resumption
+- **THEN** native recovery SHALL finalize idempotently before exposing the result
 
 #### Scenario: Frontend misses terminal event
 
-- **WHEN** finalization reaches a durable terminal result while no frontend listener is active
-- **THEN** later discovery or attachment SHALL return the same terminal snapshot without repeating committed relocation
+- **WHEN** completion occurs without a frontend listener
+- **THEN** later native reconciliation SHALL persist the admitted snapshot and outcome without repeating relocation
 
 #### Scenario: Project persistence fails
 
-- **WHEN** the frontend applies a terminal snapshot but saving matching project completion state fails
-- **THEN** it SHALL NOT acknowledge the run and the terminal snapshot SHALL remain replayable
+- **WHEN** native result persistence fails
+- **THEN** the run SHALL remain unacknowledged and replayable
 
 #### Scenario: Matching terminal result is acknowledged
 
-- **WHEN** matching terminal state has been persisted and the frontend acknowledges the exact run
-- **THEN** native code SHALL safely retire replay metadata while preserving committed project artifacts and unresolved recovery data
+- **WHEN** native reconciliation durably saves the exact terminal project result
+- **THEN** exact-run acknowledgement SHALL retire eligible replay state while retaining unresolved recovery evidence
 
 ### Requirement: In-process import supervision
 

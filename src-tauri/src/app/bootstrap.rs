@@ -2,7 +2,7 @@
 use super::{single_instance, state::AppState};
 use crate::{
     bids, execution, import, manifest, processing,
-    project::{lifecycle, persistence, source_paths},
+    project::{config, lifecycle, source_paths},
     qc, system, visualization,
 };
 use tauri::Manager;
@@ -55,6 +55,16 @@ pub fn run() {
             system::get_cpu_cores,
             system::get_available_memory_mb,
             source_paths::inspect_source_path,
+            config::inspect_project,
+            config::activate_project,
+            config::copy_project_candidate,
+            config::create_project,
+            config::accept_project_edit,
+            config::get_project_snapshot,
+            config::current_project_snapshot,
+            config::save_project,
+            config::reconcile_import_result,
+            config::reconcile_processing_result,
             import::commands::preflight_staging_plan,
             import::commands::plan_import_relocation,
             import::commands::reserve_import_run,
@@ -63,12 +73,10 @@ pub fn run() {
             import::commands::launch_import_run,
             import::commands::cancel_import_run,
             import::commands::confirm_import_worker_stopped,
-            import::commands::acknowledge_import_run,
             import::commands::read_import_status,
             processing::subjects::list_subjects,
             processing::locks::read_lock_status,
             processing::runs::reserve_processing_run,
-            processing::runs::acknowledge_processing_run,
             processing::runs::confirm_processing_workers_stopped,
             processing::runs::get_active_run,
             processing::runs::attach_run,
@@ -85,7 +93,6 @@ pub fn run() {
             visualization::data::read_data_columns,
             visualization::external::inspect_external_data,
             visualization::join::execute_join,
-            lifecycle::set_active_project,
             lifecycle::clear_active_project,
             visualization::join::check_join_sanity,
             visualization::external::stat_file,
@@ -96,8 +103,6 @@ pub fn run() {
             bids::commands::preflight_bids_project_mutations,
             bids::commands::preflight_bids_setup_repair,
             bids::commands::commit_bids_project_mutations,
-            persistence::atomic_write_project,
-            persistence::cleanup_project_temps,
             lifecycle::shutdown_project_runtime,
         ])
         .register_uri_scheme_protocol(
@@ -105,16 +110,6 @@ pub fn run() {
             crate::visualization::niivue_protocol::handle_niivue_protocol,
         )
         .setup(|app| {
-            let app_data = app.path().app_data_dir()?;
-            *app.state::<AppState>()
-                .setup_app_data
-                .lock()
-                .map_err(|_| anyhow::anyhow!("Setup app-data state lock was poisoned"))? =
-                Some(app_data.clone());
-            let recovery = crate::project::setup::recover_at_startup(&app_data)?;
-            for root in recovery.deferred_roots {
-                log::warn!("Deferred BIDS setup recovery until root is available: {root}");
-            }
             let icon = tauri::image::Image::from_bytes(include_bytes!("../../icons/icon.png"))?;
             if let Some(window) = app.get_webview_window("main") {
                 window.set_icon(icon)?;

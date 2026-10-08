@@ -536,13 +536,22 @@ export default function OverviewPage() {
             </Accordion.Control>
             <Accordion.Panel>
               <Text size="sm" mb="xs">
-                A project acts as an isolated workspace. When you create or load a project, the GUI
-                creates a <code>project.easl</code> file in the root of the folder. This file tracks
-                your progress, BIDS tokenizer rules, and parameter selections.
+                A project acts as an isolated workspace. Creation writes readable schema-version-2
+                JSON to <code>project.easl</code> in its root. Rust validates and owns accepted
+                configuration; this file tracks progress, tokenizer rules, parameters, and ordinary
+                successful-import snapshots. Older project schemas are not migrated.
               </Text>
               <Text size="xs" c="dimmed" mb="md">
                 Keeping each study in its own folder prevents data mixing and makes it easy to
                 share, archive, or back up the entire cohort's raw data and configurations together.
+                Backups, save candidates, and setup recovery journals stay in that project folder;
+                setup recovery checks the selected root rather than a global registry.
+              </Text>
+              <Text size="sm" mb="xs" data-testid="project-saving-description">
+                Accepted edits autosave after two seconds without another edit, on every page. Save,
+                phase changes, run submission, replacement, and ordinary close flush pending edits
+                first. Invalid drafts or save failures block leaving and retain visible errors;
+                correct the problem and retry Save. Active runs still require abort confirmation.
               </Text>
 
               <Text fw={600} size="sm" mt="md" mb="xs" data-testid="project-structure-title">
@@ -649,7 +658,7 @@ export default function OverviewPage() {
             </Accordion.Control>
             <Accordion.Panel>
               <Text size="sm" mb="xs">
-                You can reload any previously created workspace in two ways:
+                You can reopen a current schema-version-2 workspace in two ways:
               </Text>
               <Text size="sm" component="div" mb="xs">
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -666,7 +675,10 @@ export default function OverviewPage() {
               </Text>
               <Text size="xs" c="dimmed">
                 The GUI automatically remembers your last active phase and import stepper step,
-                letting you pick up exactly where you left off.
+                letting you pick up exactly where you left off. Opening alone does not rewrite
+                configuration. A valid backup for a missing or malformed primary requires consent;
+                it stays unsaved until a later edit or flush repairs the primary. Separately
+                required native recovery and result persistence may run during opening.
               </Text>
             </Accordion.Panel>
           </Accordion.Item>
@@ -1740,9 +1752,9 @@ export default function OverviewPage() {
                   mt="xs"
                 >
                   <Text size="xs">
-                    Verdicts are saved automatically to your <code>project.easl</code> file as you
-                    work, so you can close and reopen the project without losing your triage
-                    decisions.
+                    Verdicts stay indexed by reviewer ID, including with one reviewer, and use
+                    shared project autosave. Ordinary close waits for pending edits and native
+                    result persistence; save failures retain your decisions for retry.
                   </Text>
                 </Alert>
               </Accordion.Panel>

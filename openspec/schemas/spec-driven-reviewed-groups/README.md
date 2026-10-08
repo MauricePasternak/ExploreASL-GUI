@@ -25,7 +25,9 @@ Parent approval is required before test edits when a proposed group adds more th
 
 ## Apply Gate
 
-The same implementer session performs a group's inventory, implementation, and accepted correction. A clean implementer may continue into a tightly coupled later group. Each group receives an independent read-only reviewer.
+Each group MUST receive a fresh implementer session and a fresh independent read-only reviewer session. Neither session may serve another group, even when groups are tightly coupled. The same implementer handles only that group's inventory, implementation, and accepted corrections; the same reviewer handles its bounded re-review. Sealed verification uses a fresh reviewer.
+
+Before dispatch, main verifies session IDs against preceding group evidence. New groups start without a prior session ID. Preserve numbered group IDs and separate session evidence. Only explicit user approval permits a shared integration gate to defer final checks and reviews. Main audits each partial handoff before the next group's fresh dispatch; all affected checkboxes remain unchecked until the complete tree passes mandatory checks and each group receives its own clean review. Shared checks never merge agent ownership or make a partial handoff a PASS.
 
 Implementers and reviewers never edit `tasks.md`. Main leaves every group checkbox unchecked until implementation evidence, mandatory checks, parent triage, and clean review are complete.
 
@@ -58,6 +60,10 @@ Spec/design changes, stronger guarantees, platform/workload support changes, new
 An aborted editing session is an unknown dirty transaction. Main audits status, changed paths, and diff integrity against the pre-dispatch scope before any further delegation. Never infer that abort rolled back writes. A reviewer write receives the same audit and cannot become legitimate merely because later tests pass.
 
 ## Evidence
+
+Evidence is a maintained current-state record, not an append-only log. Whenever new evidence is posted, main MUST reconcile affected group records in the same `tasks.md` update: replace superseded proofs/results/verdicts, remove contradictory or stale claims and resolved placeholders, and keep resolved/rejected findings only as concise triage/arbitration dispositions, not active blockers. Check reports against current files, requirements, commands, and review disposition; newer prose alone does not resolve a contradiction. Unverified claims remain pending or blocked.
+
+Writes that invalidate checks, task proofs, or reviews remove their current PASS/completion claims until fresh evidence exists. Reopen every checkbox together if a completed group loses a required gate; update its status. Include affected earlier groups and shared gates, leaving unaffected evidence unchanged. Preserve starting scope, session ownership, and intentional RED/baseline observations as explicitly historical context, never current-tree pass evidence. Reconcile before reviewer dispatch and completion.
 
 Main replaces pending evidence with concise records:
 

@@ -116,25 +116,6 @@ The navbar SHALL include a "Visualization" entry with `IconChartScatter` icon. T
 - **WHEN** the navbar is collapsed and the Visualization entry is enabled
 - **THEN** the `IconChartScatter` icon SHALL be visible with an accessible label "Visualization"
 
-### Requirement: Visualization Store and Sync Hook
-
-A `visualizationStore` SHALL be created as a Zustand store, mirroring the `processingStore` pattern. A `useVisualizationSync` hook SHALL hydrate the store from `uiState.dataVis` on mount and subscribe to store changes with debounced saves of persisted fields to the project store. Ephemeral fields (chart data, selected point, viewer state) SHALL NOT be persisted. The persisted shape SHALL use `qcbfSource` (singular, replaces former `contractSources` array) and `joinConfig` (join configuration or `null`).
-
-#### Scenario: Store hydrates on page mount
-
-- **WHEN** the Visualization page mounts and `uiState.dataVis` exists in the project file
-- **THEN** the `visualizationStore` SHALL be hydrated with persisted values (qcbfSource, joinConfig, column types, level orderings, axis assignment, domain filters, stage, filters expanded)
-
-#### Scenario: Persisted fields sync to project store
-
-- **WHEN** any persisted field in `visualizationStore` changes
-- **THEN** the change SHALL be synced to `uiState.dataVis` in the project store with a debounced save (2 second delay)
-
-#### Scenario: Ephemeral fields not persisted
-
-- **WHEN** ephemeral fields (chart data, selected point, viewer state, WebGL availability) change
-- **THEN** these changes SHALL NOT trigger a project store save
-
 ### Requirement: Setup Stepper Orchestration
 
 The Visualization page SHALL render a Mantine Stepper with fine-grained conditional steps: "Select Data" (renamed from "Select File"), "Column Types", "Level Ordering" (conditional), and "Visualize". The "Level Ordering" step SHALL be skipped when no ordinal or nominal columns exist. The stepper state SHALL persist in `uiState.dataVis.stage` using the value `"selectData"` (renamed from `"selectFile"`). On re-entry with a valid contract, the stepper SHALL resume at the persisted stage. The mount-time validation SHALL branch on `joinConfig` presence: if `joinConfig` is `null`, `load_qcbf_data` SHALL be called; if `joinConfig` is active, `execute_join` SHALL be called. Both commands populate `AppState.active_data`.
@@ -193,3 +174,22 @@ The Visualization page SHALL render a Mantine Stepper with fine-grained conditio
 
 - **WHEN** the page mounts with `joinConfig` as `null` and the qCBF hash matches
 - **THEN** `load_qcbf_data` SHALL be called, `active_data` SHALL be populated with qCBF-only data, and the stepper SHALL resume at the persisted stage
+
+### Requirement: Visualization configuration and transient state
+
+Visualization SHALL read accepted settings from the shared project configuration and submit valid setting changes through project-wide autosave. Settings SHALL include source contract, column types, level orderings, axes, domain filters, stage, expanded filters, and supported chart/viewer preferences. Chart data, selected point, live viewer objects, and WebGL availability SHALL remain transient. Page mount/unmount SHALL not create or destroy a configuration save owner.
+
+#### Scenario: Visualization page mounts
+
+- **WHEN** Visualization opens with saved current settings
+- **THEN** its controls SHALL show those settings without copying them into an independently editable persisted store
+
+#### Scenario: Persisted setting changes
+
+- **WHEN** a valid axis or chart preference changes
+- **THEN** shared autosave SHALL persist it after two seconds without another accepted edit
+
+#### Scenario: Ephemeral state changes
+
+- **WHEN** point selection, loaded data, or live viewer state changes
+- **THEN** no configuration write SHALL be scheduled solely for that transient change

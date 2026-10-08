@@ -29,7 +29,8 @@ rules:
     - "Prefer standard operating-system primitives. A helper, daemon, process registry, subreaper, pidfd/procfs accounting, or platform lockout requires explicit user approval and a documented product need."
 
   tasks:
-    - "Group related work under numbered headings; each group is one implementer/reviewer ownership unit."
+    - "Group related work under numbered headings; each group requires a fresh implementer session and a fresh read-only reviewer session. Neither session may serve another group; reuse is limited to that group's inventory, implementation, bounded corrections, and re-review. Sealed verification uses a fresh reviewer."
+    - "Preserve group IDs and separate session evidence. Coupling or a user-approved shared integration gate never authorizes cross-group session reuse, merged ownership, or work outside the assigned group."
     - "Every checkbox must be one independently observable action taking at most two minutes of agent work, excluding command runtime."
     - "Implementers must explicitly state the concrete evidence of how they fulfilled each task (exact command, file/symbol, or observation) before review."
     - "Before changing tests, classify affected coverage by surviving product invariant as Preserve, Migrate, Delete, or Consolidate; never preserve or delete by test count alone."

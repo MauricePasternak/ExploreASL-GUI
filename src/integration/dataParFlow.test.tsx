@@ -1,347 +1,167 @@
 import { cleanup, fireEvent, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
+import { projectFixture } from "../test/projectFixtures";
 import { renderWithMantine } from "../test/render";
 
 import DataParEditor from "../components/parameters/DataParEditor";
 import { assembleDataPar } from "../lib/assembleDataPar";
 import type { DataParState } from "../schemas/dataParSchema";
-import { useDataParStore } from "../stores/dataParStore";
+import {
+  acceptedDataPar,
+  DEFAULT_ADVANCED_VISIBILITY,
+  useDataParStore,
+} from "../stores/dataParStore";
 import { useProjectStore } from "../stores/projectStore";
 
-function clickSwitchByLabel(container: HTMLElement, pattern: RegExp) {
-  const w = within(container);
-  const label = w.getAllByText(pattern)[0];
-  const switchRoot = label.closest("[data-label-position]");
-  if (switchRoot) {
-    const body = switchRoot.querySelector(".mantine-Switch-body");
-    if (body) {
-      fireEvent.click(body);
-      return;
-    }
-  }
-  const group = label.closest(".mantine-Group-root");
-  if (group) {
-    const input = group.querySelector("input[type='checkbox']");
-    if (input) {
-      fireEvent.click(input);
-      return;
-    }
-  }
-  fireEvent.click(label);
-}
-
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
+});
 
 beforeEach(() => {
-  useDataParStore.setState({
-    dataPar: {},
-    advancedVisibility: {
-      showAdvancedSections: false,
-      showAdvancedM0Params: false,
-      showAdvancedQuantification: false,
-      showAdvancedGeneralSettings: false,
-      showAdvancedASLProcessing: false,
-      showAdvancedAtlases: false,
-    },
-  });
-  useProjectStore.setState({ project: null, isDirty: false, loaded: false });
+  useDataParStore.getState().resetDataPar();
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
+  useProjectStore.getState().acceptSnapshot(projectFixture());
+  activateProjectLease("project-1", "/project");
+  vi.mocked(invoke).mockReset();
 });
 
 // ---------------------------------------------------------------------------
 // 8.1 — End-to-end parameter flow
 // ---------------------------------------------------------------------------
 
-describe("dataPar flow: store ↔ project sync", () => {
-  it("setDataParField → saveToProject → project has the value", () => {
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "p1",
-          name: "Test",
-          rootPath: "/tmp",
-          createdAt: "",
-          lastOpened: "",
-          currentPhase: "parameters",
-          dataSource: "dicom" as const,
-        },
-        uiState: {
-          datapar: {
-            advancedVisibility: {
-              showAdvancedSections: false,
-              showAdvancedM0Params: false,
-              showAdvancedQuantification: false,
-              showAdvancedGeneralSettings: false,
-              showAdvancedASLProcessing: false,
-              showAdvancedAtlases: false,
-            },
-          },
-        },
-        mappingState: {},
-        dataPar: {},
-      },
-      isDirty: false,
-      loaded: true,
-    });
-
-    useDataParStore.getState().setDataParField("bTopUp", true);
-    useDataParStore.getState().setDataParField("Quality", 1);
-    useDataParStore.getState().saveToProject();
-
-    const project = useProjectStore.getState().project!;
-    expect(project.dataPar).toMatchObject({
-      bTopUp: true,
-      Quality: 1,
-    });
-    expect(useProjectStore.getState().isDirty).toBe(true);
-  });
-
-  it("multiple fields round-trip through saveToProject", () => {
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "p2",
-          name: "Test2",
-          rootPath: "/tmp",
-          createdAt: "",
-          lastOpened: "",
-          currentPhase: "parameters",
-          dataSource: "dicom" as const,
-        },
-        uiState: {
-          datapar: {
-            advancedVisibility: {
-              showAdvancedSections: false,
-              showAdvancedM0Params: false,
-              showAdvancedQuantification: false,
-              showAdvancedGeneralSettings: false,
-              showAdvancedASLProcessing: false,
-              showAdvancedAtlases: false,
-            },
-          },
-        },
-        mappingState: {},
-        dataPar: {},
-      },
-      isDirty: false,
-      loaded: true,
-    });
-
-    const fields: Partial<DataParState> = {
+describe("native accepted parameter flow", () => {
+  it("submits Quality zero before immediate phase navigation and preserves scientific output", async () => {
+    const fields: DataParState = {
       M0: "UseControlAsM0",
       bTopUp: true,
       Lambda: 0.9,
-      Quality: 1,
       Atlases: ["MNI_Structural"],
       WMHsegmAlg: "LGA",
       bRunLongReg: 1,
       nCompartments: 2,
       bRegisterM02ASL: 0,
       ExternalQuantificationSmoothGaussianMM: [5.5, 5, 1.5],
+      bAutomaticallyDetectFSL: false,
+      SpikeRemovalAbsoluteThreshold: 0,
     };
-
-    const store = useDataParStore.getState();
-    for (const [k, v] of Object.entries(fields)) {
-      store.setDataParField(k as keyof DataParState, v);
-    }
-    store.saveToProject();
-
-    const saved = useProjectStore.getState().project!.dataPar;
-    expect(saved).toMatchObject(fields);
-    store.loadDataPar(JSON.parse(JSON.stringify(saved)));
-    expect(useDataParStore.getState().dataPar).toEqual(saved);
-    expect(assembleDataPar(useDataParStore.getState().dataPar).x).toMatchObject({
+    const before = projectFixture();
+    before.document.dataPar = fields;
+    useProjectStore.getState().acceptSnapshot(before);
+    const pvc = { ...projectFixture(), acceptedRevision: 1 };
+    pvc.document.dataPar = { ...fields, bPVCNativeSpace: 0 };
+    const accepted = { ...projectFixture(), acceptedRevision: 2 };
+    accepted.document.dataPar = { ...fields, bPVCNativeSpace: 0, Quality: 0 };
+    const navigated = {
+      ...accepted,
+      acceptedRevision: 3,
+      document: {
+        ...accepted.document,
+        projectMeta: { ...accepted.document.projectMeta, currentPhase: "processing" as const },
+      },
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(pvc)
+      .mockResolvedValueOnce(accepted)
+      .mockResolvedValueOnce(navigated)
+      .mockResolvedValueOnce({ ...navigated, persistedRevision: 3 });
+    const { container, unmount } = renderWithMantine(<DataParEditor />);
+    const w = within(container);
+    fireEvent.click(w.getByRole("button", { name: "ASL Processing" }));
+    expect(w.getByTestId("field-bPVCNativeSpace")).toBeChecked();
+    expect(acceptedDataPar().bPVCNativeSpace).toBeUndefined();
+    fireEvent.click(w.getByTestId("field-bPVCNativeSpace"));
+    await vi.waitFor(() => expect(acceptedDataPar().bPVCNativeSpace).toBe(0));
+    fireEvent.click(w.getByRole("button", { name: "General Settings" }));
+    fireEvent.click(w.getByTestId("field-Quality"));
+    fireEvent.click(w.getByRole("option", { name: "Low quality (fast try-out)" }));
+    const navigation = useProjectStore
+      .getState()
+      .setPhase("processing")
+      .then(() => useProjectStore.getState().saveProject());
+    unmount();
+    await navigation;
+    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
+      "accept_project_edit",
+      "accept_project_edit",
+      "accept_project_edit",
+      "save_project",
+    ]);
+    expect(invoke).toHaveBeenNthCalledWith(
+      2,
+      "accept_project_edit",
+      expect.objectContaining({
+        edit: expect.objectContaining({
+          kind: "parameters",
+          values: { ...fields, bPVCNativeSpace: 0, Quality: 0 },
+        }),
+      }),
+    );
+    expect(useProjectStore.getState().isDirty).toBe(false);
+    expect(acceptedDataPar()).toEqual({ ...fields, bPVCNativeSpace: 0, Quality: 0 });
+    expect(assembleDataPar(acceptedDataPar()).x).toMatchObject({
       WMHsegmAlg: "LGA",
       modules: {
         bRunLongReg: 1,
-        asl: { bRegisterM02ASL: 0, ExternalQuantificationSmoothGaussianMM: [5.5, 5, 1.5] },
-      },
-      Q: { nCompartments: 2 },
-    });
-  });
-
-  it("showAdvancedSections syncs to project uiState.dataParametersAdvancedVisibility", () => {
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "p3",
-          name: "Test3",
-          rootPath: "/tmp",
-          createdAt: "",
-          lastOpened: "",
-          currentPhase: "parameters",
-          dataSource: "dicom" as const,
+        asl: {
+          bRegisterM02ASL: 0,
+          bTopUp: true,
+          ExternalQuantificationSmoothGaussianMM: [5.5, 5, 1.5],
+          SpikeRemovalAbsoluteThreshold: 0,
         },
-        uiState: {
-          datapar: {
-            advancedVisibility: {
-              showAdvancedSections: false,
-              showAdvancedM0Params: false,
-              showAdvancedQuantification: false,
-              showAdvancedGeneralSettings: false,
-              showAdvancedASLProcessing: false,
-              showAdvancedAtlases: false,
-            },
-          },
-        },
-        mappingState: {},
-        dataPar: {},
       },
-      isDirty: false,
-      loaded: true,
+      Q: { M0: "UseControlAsM0", Lambda: 0.9, nCompartments: 2 },
+      S: { Atlases: ["MNI_Structural"] },
+      settings: { Quality: 0 },
+      external: { bAutomaticallyDetectFSL: false },
     });
-
-    useDataParStore.getState().setAdvancedVisibility({ showAdvancedSections: true });
-    useDataParStore.getState().saveToProject();
-
     expect(
-      useProjectStore.getState().project!.uiState.datapar!.advancedVisibility!.showAdvancedSections,
-    ).toBe(true);
-  });
-});
-
-describe("dataPar flow: advanced toggle shows/hides sections", () => {
-  it("Structural and Environment hidden by default", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    const w = within(container);
-    expect(w.queryByText("Structural")).toBeNull();
-    expect(w.queryByText("Environment")).toBeNull();
+      assembleDataPar(acceptedDataPar()).x.modules?.asl?.SpikeRemovalThreshold,
+    ).toBeUndefined();
   });
 
-  it("Structural and Environment visible after toggle", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    clickSwitchByLabel(container, /Show advanced parameter sections/i);
-    const w = within(container);
-    expect(w.getAllByText("Structural").length).toBeGreaterThanOrEqual(1);
-    expect(w.getAllByText("Environment").length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("Structural and Environment hidden after toggle off", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    clickSwitchByLabel(container, /Show advanced parameter sections/i);
-    clickSwitchByLabel(container, /Show advanced parameter sections/i);
-    const w = within(container);
-    expect(w.queryByText("Structural")).toBeNull();
-    expect(w.queryByText("Environment")).toBeNull();
-  });
-
-  it("showAdvancedSections state updates in store on toggle", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    expect(useDataParStore.getState().advancedVisibility.showAdvancedSections).toBe(false);
-    clickSwitchByLabel(container, /Show advanced parameter sections/i);
-    expect(useDataParStore.getState().advancedVisibility.showAdvancedSections).toBe(true);
-  });
-});
-
-describe("dataPar flow: M0 conditional logic", () => {
-  it("BackgroundSuppressionPulseTime hidden when M0 is not UseControlAsM0", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    const w = within(container);
-    fireEvent.click(w.getByRole("button", { name: "M0 Configuration" }));
-    // Default M0 is not set — pulse time should be hidden
-    expect(w.queryAllByText(/background suppression pulse time/i).length).toBe(0);
-  });
-
-  it("BackgroundSuppressionPulseTime appears when UseControlAsM0 selected and pulses > 0", () => {
-    useDataParStore.getState().setDataParField("M0", "UseControlAsM0");
-    useDataParStore.getState().setDataParField("BackgroundSuppressionNumberPulses", 4);
-    const { container } = renderWithMantine(<DataParEditor />);
-    const w = within(container);
-    fireEvent.click(w.getByRole("button", { name: "M0 Configuration" }));
-    expect(w.getAllByText(/background suppression pulse time/i).length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("BackgroundSuppressionPulseTime hidden when pulses = 0 even with UseControlAsM0", () => {
-    useDataParStore.getState().setDataParField("M0", "UseControlAsM0");
-    useDataParStore.getState().setDataParField("BackgroundSuppressionNumberPulses", 0);
-    const { container } = renderWithMantine(<DataParEditor />);
-    const w = within(container);
-    fireEvent.click(w.getByRole("button", { name: "M0 Configuration" }));
-    expect(w.queryAllByText(/background suppression pulse time/i).length).toBe(0);
-  });
-});
-
-describe("dataPar flow: PVC conditional logic", () => {
-  it("PVC toggle renders in ASL Processing section", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    const w = within(container);
-    fireEvent.click(w.getByRole("button", { name: "ASL Processing" }));
-    expect(w.getAllByText(/native-space partial volume correction/i).length).toBeGreaterThanOrEqual(
-      1,
-    );
-  });
-
-  it("bPVCNativeSpace field is set in store via toggle", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    fireEvent.click(within(container).getByRole("button", { name: "ASL Processing" }));
-    clickSwitchByLabel(container, /native-space partial volume correction/i);
-    expect(useDataParStore.getState().dataPar.bPVCNativeSpace).toBeDefined();
-  });
-});
-
-describe("dataPar flow: assembly from filled state", () => {
-  it("assembles correct nested JSON after setting fields in store", () => {
-    useDataParStore.getState().setDataParField("M0", "separate_scan");
-    useDataParStore.getState().setDataParField("Lambda", 0.9);
-    useDataParStore.getState().setDataParField("bTopUp", true);
-    useDataParStore.getState().setDataParField("Quality", 1);
-    useDataParStore.getState().setDataParField("Atlases", ["MNI_Structural"]);
-    useDataParStore.getState().setDataParField("bRunLongReg", 1);
-    useDataParStore.getState().setDataParField("bAutomaticallyDetectFSL", true);
-
-    const result = assembleDataPar(useDataParStore.getState().dataPar);
-
-    expect(result.x.Q?.M0).toBe("separate_scan");
-    expect(result.x.Q?.Lambda).toBe(0.9);
-    expect(result.x.modules?.asl?.bTopUp).toBe(true);
-    expect(result.x.settings?.Quality).toBe(1);
-    expect(result.x.S?.Atlases).toEqual(["MNI_Structural"]);
-    expect(result.x.modules?.bRunLongReg).toBe(1);
-    expect(result.x.external?.bAutomaticallyDetectFSL).toBe(true);
-  });
-
-  it("assembles empty sections when only some fields set", () => {
-    useDataParStore.getState().setDataParField("Quality", 1);
-    const result = assembleDataPar(useDataParStore.getState().dataPar);
-
-    expect(result.x.Q).toBeUndefined();
-    expect(result.x.modules).toBeUndefined();
-    expect(result.x.S).toBeUndefined();
-    expect(result.x.external).toBeUndefined();
-    expect(result.x.settings).toEqual({ Quality: 1 });
-  });
-});
-
-describe("dataPar flow: loadDataPar → assemble round-trip", () => {
-  it("loading state then assembling produces same JSON", () => {
-    const state: DataParState = {
-      M0: "UseControlAsM0",
-      bTopUp: true,
-      Quality: 1,
-      Lambda: 0.9,
-      Atlases: ["TotalGM"],
-      bAutomaticallyDetectFSL: false,
-      WMHsegmAlg: "LGA",
-      nCompartments: 2,
-      bRegisterM02ASL: 0,
-      SpikeRemovalAbsoluteThreshold: 0,
+  it("keeps rejected unfinished input visible and blocks Save until corrected", async () => {
+    const before = projectFixture();
+    before.document.uiState.datapar = {
+      advancedVisibility: { ...DEFAULT_ADVANCED_VISIBILITY, showAdvancedQuantification: true },
     };
-
-    useDataParStore.getState().loadDataPar(state);
-    const assembled = assembleDataPar(useDataParStore.getState().dataPar);
-
-    expect(assembled.x.Q?.M0).toBe("UseControlAsM0");
-    expect(assembled.x.modules?.asl?.bTopUp).toBe(true);
-    expect(assembled.x.settings?.Quality).toBe(1);
-    expect(assembled.x.Q?.Lambda).toBe(0.9);
-    expect(assembled.x.S?.Atlases).toEqual(["TotalGM"]);
-    expect(assembled.x.external?.bAutomaticallyDetectFSL).toBe(false);
-    expect(assembled.x.WMHsegmAlg).toBe("LGA");
-    expect(assembled.x.Q?.nCompartments).toBe(2);
-    expect(assembled.x.modules?.asl?.bRegisterM02ASL).toBe(0);
-    expect(assembled.x.modules?.asl?.SpikeRemovalAbsoluteThreshold).toBe(0);
-    expect(assembled.x.modules?.asl?.SpikeRemovalThreshold).toBeUndefined();
+    useProjectStore.getState().acceptSnapshot(before);
+    vi.mocked(invoke).mockRejectedValueOnce({
+      category: "invalid_serialization",
+      message: "dataPar.Lambda must be a number",
+    });
+    const { container } = renderWithMantine(<DataParEditor />);
+    const w = within(container);
+    fireEvent.click(w.getByRole("button", { name: "Quantification" }));
+    fireEvent.change(w.getByTestId("field-Lambda"), { target: { value: "-" } });
+    await vi.waitFor(() =>
+      expect(w.getByTestId("datapar-draft-error")).toHaveTextContent(
+        "dataPar.Lambda must be a number",
+      ),
+    );
+    expect(useDataParStore.getState().drafts).toEqual({ Lambda: "-" });
+    expect(w.getByTestId("datapar-draft-error")).toHaveTextContent(
+      "dataPar.Lambda must be a number",
+    );
+    expect(acceptedDataPar()).toEqual({});
+    expect(w.getByTestId("field-Lambda")).toHaveValue("-");
+    await expect(useProjectStore.getState().saveProject()).rejects.toThrow(
+      "dataPar.Lambda must be a number",
+    );
+    expect(invoke).toHaveBeenCalledTimes(1);
+    const corrected = { ...projectFixture(), acceptedRevision: 1 };
+    corrected.document.dataPar = { Lambda: 0.9 };
+    corrected.document.uiState.datapar = before.document.uiState.datapar;
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(corrected)
+      .mockResolvedValueOnce({ ...corrected, persistedRevision: 1 });
+    fireEvent.change(w.getByTestId("field-Lambda"), { target: { value: "0.9" } });
+    await useProjectStore.getState().saveProject();
+    expect(useDataParStore.getState().drafts).toEqual({});
+    expect(w.queryByTestId("datapar-draft-error")).toBeNull();
+    expect(w.getByTestId("field-Lambda")).toHaveValue("0.9");
   });
 });

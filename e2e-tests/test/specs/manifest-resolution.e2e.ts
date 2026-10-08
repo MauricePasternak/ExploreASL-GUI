@@ -4,11 +4,15 @@ import {
   MANIFEST_DISAGREEMENTS_ROUTE,
   MANIFEST_DISAGREEMENTS_SCENARIO,
   resetAndLoadScenario,
+  resetToLanding,
 } from "../support/application";
 
 describe("Manifest verdict resolution", () => {
   beforeEach(async () => {
     await resetAndLoadScenario(MANIFEST_DISAGREEMENTS_SCENARIO, MANIFEST_DISAGREEMENTS_ROUTE);
+  });
+  afterEach(async () => {
+    await resetToLanding();
   });
 
   async function textContent(selector: string): Promise<string> {

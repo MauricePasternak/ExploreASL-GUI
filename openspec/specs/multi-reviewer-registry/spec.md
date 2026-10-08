@@ -6,119 +6,6 @@ Defines the reviewer registry data model and management actions for multi-review
 
 ## Requirements
 
-### Requirement: Reviewer Registry Schema
-
-`ManifestUiStateSchema` in `src/schemas/project.ts` SHALL include an optional `reviewers` field with Zod shape:
-
-```typescript
-reviewers: z.array(
-  z.object({
-    id: z.string().uuid(),
-    label: z.string().min(1).max(100),
-    createdAt: z.string().datetime(),
-  }),
-)
-  .max(5)
-  .optional();
-```
-
-When `reviewers` is `undefined` or contains at most one entry, the manifest operates in single-reviewer mode. When `reviewers` contains 2–5 entries, the manifest operates in multi-reviewer mode. More than five entries SHALL be rejected at schema validation. The field SHALL default to `undefined` for new projects and for pre-existing `.easl` files that lack it.
-
-#### Scenario: New project has no reviewer registry
-
-- **WHEN** a new project is created and `ManifestUiStateSchema` is initialized
-- **THEN** the `reviewers` field SHALL be `undefined`, and the manifest SHALL operate in single-reviewer mode
-
-#### Scenario: Pre-existing project without reviewers parses successfully
-
-- **WHEN** a `.easl` file created before the multi-reviewer feature (no `reviewers` key in `uiState.manifest`) is loaded
-- **THEN** `ProjectFileSchema.parse` SHALL succeed, `project.uiState.manifest.reviewers` SHALL be `undefined`, and the manifest SHALL operate in single-reviewer mode
-
-#### Scenario: Reviewer registry with valid entries parses
-
-- **WHEN** a `.easl` file contains `uiState.manifest.reviewers` with two entries each having a valid UUID `id`, non-empty `label`, and ISO 8601 `createdAt`
-- **THEN** `ProjectFileSchema.parse` SHALL succeed and the parsed `reviewers` array SHALL contain exactly those two entries
-
-#### Scenario: Reviewer with empty label is rejected
-
-- **WHEN** a `.easl` file contains a reviewer entry with `label: ""`
-- **THEN** `ProjectFileSchema.parse` SHALL throw a Zod validation error citing the `label` field's `min(1)` constraint
-
-#### Scenario: More than five reviewers are rejected
-
-- **WHEN** a `.easl` file contains six otherwise-valid reviewer entries
-- **THEN** `ProjectFileSchema.parse` SHALL throw a Zod validation error citing the reviewers array's `max(5)` constraint
-
-### Requirement: Add Reviewer Action
-
-`projectStore` SHALL expose an `addReviewer` action. When invoked, the action SHALL:
-
-1. Generate a new UUID v4 for the reviewer's `id`.
-2. Set the reviewer's `label` to `"Reviewer N"` where N equals the current `reviewers` array length plus 1 (or `1` if the array is `undefined`).
-3. Set `createdAt` to the current ISO 8601 datetime string.
-4. Append the new reviewer entry to the `reviewers` array (creating the array if `undefined`).
-5. Mark the project as dirty for subsequent save.
-
-If the `reviewers` array is `undefined` when `addReviewer` is first called, the action SHALL create the array with an initial "Reviewer 1" entry representing the existing single reviewer, THEN append the new "Reviewer 2" entry. If the array has exactly one entry, the action SHALL append the second reviewer to that existing registry. On either transition from single to multi-reviewer mode, the action SHALL wrap the existing flat verdict map under the first reviewer's ID, preserving every verdict entry. This ensures the transition preserves the original reviewer's identity and verdicts.
-
-#### Scenario: First addReviewer call on a single-reviewer project
-
-- **WHEN** `addReviewer` is called on a project where `reviewers` is `undefined`
-- **THEN** the `reviewers` array SHALL contain exactly two entries: the first with `label: "Reviewer 1"` and the second with `label: "Reviewer 2"`, both with valid UUID `id` values and ISO 8601 `createdAt` strings, and the project SHALL be marked dirty
-
-#### Scenario: Subsequent addReviewer call appends correctly
-
-- **WHEN** `addReviewer` is called on a project where `reviewers` already has entries `["Reviewer 1", "Reviewer 2"]`
-- **THEN** a third entry with `label: "Reviewer 3"` SHALL be appended, the array length SHALL be 3, and the existing entries SHALL be unchanged
-
-#### Scenario: Adding to an explicit one-reviewer registry wraps verdicts
-
-- **WHEN** `reviewers` contains one reviewer with ID `"11111111-1111-4111-8111-111111111111"`, flat verdicts contain `{ "sub-01_01": { status: "pass", setAt: 1700000000000 } }`, and `addReviewer` is called
-- **THEN** the registry SHALL contain two reviewers and verdicts SHALL become `{ "11111111-1111-4111-8111-111111111111": { "sub-01_01": { status: "pass", setAt: 1700000000000 } } }`
-
-#### Scenario: addReviewer respects 5-reviewer cap
-
-- **WHEN** `addReviewer` is called on a project where `reviewers` already contains 5 entries
-- **THEN** the action SHALL be a no-op: no entry SHALL be appended, the `reviewers` array length SHALL remain 5, and no error SHALL be thrown
-
-### Requirement: Remove Reviewer Action
-
-`projectStore` SHALL expose a `removeReviewer(id: string)` action. When invoked, the action SHALL:
-
-1. Locate the reviewer entry with the matching `id` in the `reviewers` array.
-2. Remove the reviewer entry from the `reviewers` array.
-3. Delete the reviewer's verdict slice from the `verdicts` record (`delete verdicts[id]`).
-4. If the removal leaves exactly one reviewer remaining, revert to single-reviewer mode: set `reviewers` to `undefined` and restructure `verdicts` from `Record<reviewerId, Record<subjectSession, Verdict>>` back to the single remaining reviewer's `Record<subjectSession, Verdict>`.
-5. If the removed reviewer was the `activeReviewerId`, set `activeReviewerId` to the first remaining reviewer's `id`.
-6. Mark the project as dirty.
-
-`removeReviewer` SHALL be a pure store action: it SHALL neither request nor await UI confirmation and SHALL remove immediately when called. `ReviewerTabs` SHALL own confirmation: before calling the action, it SHALL inspect the target `verdicts[id]` slice; if that slice is nonempty, it SHALL request confirmation with a permanent-data-loss warning, call `removeReviewer(id)` only after confirmation, and leave state unchanged after cancellation. For an absent or empty slice, `ReviewerTabs` SHALL call `removeReviewer(id)` directly.
-
-#### Scenario: Remove reviewer with no verdicts removes immediately
-
-- **WHEN** `removeReviewer("11111111-1111-4111-8111-111111111111")` is called and `verdicts["11111111-1111-4111-8111-111111111111"]` is `undefined` or `{}`
-- **THEN** the reviewer entry and verdict slice SHALL be removed immediately, and the project SHALL be marked dirty
-
-#### Scenario: Store removal with existing verdicts removes immediately
-
-- **WHEN** `removeReviewer("11111111-1111-4111-8111-111111111111")` is called and `verdicts["11111111-1111-4111-8111-111111111111"]` contains one or more verdict entries
-- **THEN** the reviewer and their verdict slice SHALL be removed immediately without a confirmation request
-
-#### Scenario: ReviewerTabs confirms removal of a nonempty verdict slice
-
-- **WHEN** a user requests removal in `ReviewerTabs` and `verdicts["11111111-1111-4111-8111-111111111111"]` contains one or more verdict entries
-- **THEN** `ReviewerTabs` SHALL display a confirmation warning about permanent verdict loss; it SHALL call `removeReviewer` only after confirmation, and cancellation SHALL leave project state unchanged
-
-#### Scenario: Removing second-to-last reviewer reverts to single-reviewer mode
-
-- **WHEN** `removeReviewer` is called and the `reviewers` array has exactly 2 entries, reducing it to 1
-- **THEN** the `reviewers` field SHALL be set to `undefined`, `verdicts` SHALL be restructured to `Record<subjectSession, Verdict>` containing only the remaining reviewer's verdicts, and `activeReviewerId` SHALL be set to `undefined`
-
-#### Scenario: Removing active reviewer reassigns activeReviewerId
-
-- **WHEN** `removeReviewer` is called with an `id` equal to the current `activeReviewerId` and more than one reviewer remains after removal
-- **THEN** `activeReviewerId` SHALL be set to the `id` of the first entry in the remaining `reviewers` array
-
 ### Requirement: Reviewer Cap
 
 The reviewer registry SHALL enforce a maximum of 5 reviewers. The `addReviewer` action SHALL be a no-op when 5 reviewers already exist. The UI's "Add Reviewer" button SHALL be disabled when the cap is reached.
@@ -132,25 +19,6 @@ The reviewer registry SHALL enforce a maximum of 5 reviewers. The `addReviewer` 
 
 - **WHEN** the `reviewers` array has 5 entries and `removeReviewer` is called (reducing to 4)
 - **THEN** the "Add Reviewer" button SHALL become enabled
-
-### Requirement: Active Reviewer ID Tracking
-
-`ManifestUiStateSchema` SHALL include an optional `activeReviewerId` field with Zod shape `z.string().uuid().optional()`. This field SHALL track which reviewer's tab is currently selected in the QC Selection UI. The field SHALL be `undefined` in single-reviewer mode.
-
-#### Scenario: activeReviewerId set when entering multi-reviewer mode
-
-- **WHEN** a second reviewer is added via `addReviewer` (transitioning from single to multi-reviewer mode)
-- **THEN** `activeReviewerId` SHALL be set to the `id` of the first reviewer in the `reviewers` array
-
-#### Scenario: activeReviewerId cleared when reverting to single-reviewer mode
-
-- **WHEN** a reviewer is removed via `removeReviewer` and only one reviewer remains
-- **THEN** `activeReviewerId` SHALL be set to `undefined`
-
-#### Scenario: Switching active reviewer updates activeReviewerId
-
-- **WHEN** the user clicks a different reviewer tab in the QC Selection UI
-- **THEN** `activeReviewerId` SHALL be updated to the selected reviewer's `id` and the project SHALL be marked dirty
 
 ### Requirement: Rename Reviewer Action
 
@@ -203,3 +71,101 @@ Reviewers SHALL use anonymous labels by default: `"Reviewer 1"`, `"Reviewer 2"`,
 
 - **WHEN** "Reviewer 2" is removed from a 3-reviewer setup and a new reviewer is added
 - **THEN** the new reviewer's label SHALL be `"Reviewer 3"` (based on current array length + 1, which is 3), not `"Reviewer 4"`
+
+### Requirement: Current reviewer registry
+
+Current project configuration SHALL contain one to five uniquely identified reviewers and a registered active ID. A reviewer SHALL have a UUID, nonempty label of at most 100 Unicode characters, and UTC creation timestamp. Creation SHALL initialize "Reviewer 1" with an empty verdict slice. A single reviewer SHALL retain the same registry and indexed verdict representation used by multiple reviewers. Older implicit-reviewer project formats SHALL not be accepted.
+
+#### Scenario: New project has one reviewer
+
+- **WHEN** a current project is created
+- **THEN** Reviewer 1 SHALL exist and be active without showing multi-reviewer tabs
+
+#### Scenario: Reviewer registry with valid entries parses
+
+- **WHEN** current configuration contains valid unique reviewers and a registered active ID
+- **THEN** it SHALL validate and preserve their order
+
+#### Scenario: Reviewer with empty label is rejected
+
+- **WHEN** a reviewer label is empty
+- **THEN** validation SHALL reject the label without changing accepted state
+
+#### Scenario: More than five reviewers are rejected
+
+- **WHEN** current configuration supplies six reviewers
+- **THEN** it SHALL be rejected
+
+### Requirement: Add registered reviewer
+
+Adding a reviewer SHALL append a new UUID, UTC timestamp, and label "Reviewer N", where N is current count plus one. Existing identities, order, active selection, and verdicts SHALL remain unchanged; no wrapping SHALL occur. The new reviewer SHALL start with no verdicts and the accepted edit SHALL autosave. At five reviewers, adding SHALL remain a no-op without an error.
+
+#### Scenario: First additional reviewer
+
+- **WHEN** a reviewer is added to a new one-reviewer project
+- **THEN** Reviewer 2 SHALL append and Reviewer 1's existing slice SHALL remain unchanged
+
+#### Scenario: Subsequent add appends correctly
+
+- **WHEN** a third reviewer is added
+- **THEN** the new label SHALL be Reviewer 3 and existing entries SHALL remain unchanged
+
+#### Scenario: Existing one-reviewer verdicts keep their shape
+
+- **WHEN** another reviewer is added after verdicts exist
+- **THEN** those verdicts SHALL remain under their original reviewer ID without conversion
+
+#### Scenario: Add respects reviewer cap
+
+- **WHEN** five reviewers already exist
+- **THEN** adding SHALL make no change and schedule no save
+
+### Requirement: Remove registered reviewer
+
+Removal SHALL delete the selected reviewer and only that reviewer's verdict slice, preserving remaining registry and indexed verdicts. Removing the active reviewer SHALL select the first remaining reviewer. The sole remaining reviewer SHALL not be removable. Reducing the count to one SHALL clear resolution entries but SHALL not clear reviewer identity, unwrap verdicts, or clear active selection. Valid removal SHALL autosave.
+
+UI removal of a nonempty verdict slice SHALL retain its permanent-data-loss confirmation. The configuration action SHALL not request confirmation itself; the UI SHALL call it only after required consent. Cancellation SHALL make no change.
+
+#### Scenario: Remove reviewer with no verdicts removes immediately
+
+- **WHEN** more than one reviewer exists and the selected slice is empty
+- **THEN** the reviewer SHALL be removable without confirmation
+
+#### Scenario: Configuration removal with existing verdicts removes immediately
+
+- **WHEN** a consented removal action reaches accepted configuration
+- **THEN** that reviewer and slice SHALL be removed without a second prompt
+
+#### Scenario: UI confirms removal of a nonempty verdict slice
+
+- **WHEN** removal targets a nonempty slice
+- **THEN** the UI SHALL warn about permanent verdict loss and cancellation SHALL preserve state
+
+#### Scenario: Removing second-to-last reviewer preserves sole identity
+
+- **WHEN** removal reduces two reviewers to one
+- **THEN** the remaining registry, active ID, and indexed verdicts SHALL remain while resolutions clear
+
+#### Scenario: Removing active reviewer reassigns selection
+
+- **WHEN** the active reviewer is removed
+- **THEN** the first remaining reviewer SHALL become active
+
+### Requirement: Registered active reviewer
+
+The active reviewer ID SHALL always refer to the registry, including single-reviewer projects. Creation SHALL select Reviewer 1. Adding reviewers SHALL preserve active selection. Switching tabs SHALL accept only a registered ID and autosave the selection. Removal SHALL select a surviving reviewer as defined by its removal contract.
+
+#### Scenario: Second reviewer is added
+
+- **WHEN** a second reviewer is created
+- **THEN** the original reviewer's active ID SHALL remain selected
+
+#### Scenario: Sole reviewer remains
+
+- **WHEN** removal leaves one reviewer
+- **THEN** that reviewer's ID SHALL remain active
+
+#### Scenario: Switching active reviewer updates selection
+
+- **WHEN** another registered tab is selected
+- **THEN** accepted active ID SHALL change and use shared autosave

@@ -195,8 +195,12 @@ artifacts:
       - Each `## N. Group Name` is one implementer/reviewer ownership and review unit.
       - Keep each group cohesive around one behavior slice or tightly coupled refactor.
       - Order groups by dependency. Do not duplicate acceptance coverage across groups.
-      - Each group receives an independent read-only reviewer. Implementer continuity across
-        tightly coupled groups is allowed when the previous group completed cleanly.
+      - Each group MUST receive a fresh implementer session and a fresh independent read-only
+        reviewer session. Neither session may serve another group, even when groups are coupled.
+        Reuse is limited to that group's inventory, implementation, bounded corrections, and
+        re-review. Sealed verification uses a fresh reviewer.
+      - Preserve numbered group IDs and separate evidence sections. A user-approved shared
+        integration gate may defer final checks and reviews, but never merges agent ownership.
       - Define the behavioral test envelope: approved requirements and invariants, existing
         suites to inspect, retired behavior, known exact tests where already evident, and
         explicit non-goals. Do not predeclare one exact test per task or scenario.
@@ -249,6 +253,10 @@ artifacts:
       test-retirement mapping, test-budget disposition, task-by-task fulfillment evidence,
       exact checks, parent review triage, any orchestrator arbitration and sealed verification,
       and the clean read-only review result.
+      Evidence is a maintained current-state record, not an append-only log. Require the
+      orchestrator to reconcile existing evidence whenever new evidence is posted: remove
+      contradictory or stale claims, replace superseded results, and invalidate affected
+      completion gates. Keep intentional RED/baseline observations explicitly historical.
       These are normal bullets, never checkboxes. The parent checks a whole group only
       after its independent reviewer returns a clean pass.
       Final checkboxes in every numbered group MUST require format-write on owned files only,
@@ -274,6 +282,8 @@ artifacts:
       ### Group 1 Evidence
 
       - Status: pending
+      - Implementer: pending
+      - Reviewer: pending
       - Test retirement: pending
       - Test-budget disposition: pending
       - Task evidence: pending
@@ -293,6 +303,8 @@ artifacts:
       ### Group 2 Evidence
 
       - Status: pending
+      - Implementer: pending
+      - Reviewer: pending
       ```
 
       Reference specs for what needs to be built, design for how to build it.
@@ -311,6 +323,36 @@ apply:
     - Implementers and reviewers MUST NOT edit tasks.md.
     - Leave every checkbox in the active group unchecked during implementation and review.
     - Check all group microtasks together only after the group passes every gate below.
+    - Before each dispatch, verify the session ID has never served another group. Create
+      new sessions without a prior session ID; resume only for the same group's work.
+      Record implementer/reviewer IDs separately in that group's evidence. Never assign
+      one implementer multiple groups or use a reviewer as implementer.
+    - Preserve group IDs and ownership even for tightly coupled work. Only explicit user
+      approval permits a shared integration gate to defer final checks and group reviews.
+      In that case, audit each partial handoff before the next group's fresh dispatch,
+      keep all affected checkboxes unchecked, and review each group separately on the
+      complete green tree. A partial handoff is not a PASS or completion.
+
+    Evidence maintenance:
+    - Whenever new evidence is posted, the orchestrator MUST reconcile the existing
+      `### Group N Evidence` records in the same tasks.md update, including other groups
+      affected by corrections, shared checks, or changed requirements. Do not append a new
+      result while leaving contradictory or stale claims in place.
+    - Compare new reports with the current files, requirements, commands, and review
+      disposition. Replace superseded task proofs, check results, findings, arbitration,
+      verdicts, and status; remove obsolete paths/symbols and pending placeholders once
+      resolved. Newer prose alone is not proof: unresolved contradictions remain pending
+      or blocked until inspected or rerun.
+    - After writes invalidate a check, task proof, or review, remove its current PASS or
+      completion claim and mark the affected gate pending until fresh evidence exists.
+      If a completed group loses a required gate, reopen all its checkboxes together and
+      update its status; unaffected evidence and groups remain unchanged.
+    - Resolved or rejected findings MUST NOT remain listed as active blockers. Keep only
+      concise disposition in review triage/arbitration. Preserve starting scope, session
+      ownership, and intentional RED/baseline observations as clearly labeled historical
+      context, never as proof that the current tree passes.
+    - Reconcile evidence before reviewer dispatch and before checking completion. Reviewers
+      receive the reconciled record, not superseded claims presented as current evidence.
 
     Preflight each pending group:
     1. Read all context files and current repository instructions. Enforce Delta Precedence:
@@ -334,9 +376,9 @@ apply:
        test does not prove missing behavior; equivalent and table-driven coverage count.
 
     Implementation and handoff:
-    6. Use the same implementer session for inventory, implementation, and accepted
-       corrections. A previous clean implementer may continue into a tightly coupled group;
-       implementer freshness is not mandatory. Never use a reviewer as implementer.
+    6. Create a fresh implementer session for this group. Use that same session only for
+       this group's inventory, implementation, and accepted corrections. Never continue
+       an implementer from another group, even when continuity would reduce rediscovery.
     7. Give the implementer only the approved group scope, behavioral envelope, context, and
        retirement disposition. Require RED/GREEN only for changed behavior and baseline-GREEN/
        change/GREEN for refactors, deletions, and already-covered behavior.
@@ -349,8 +391,9 @@ apply:
        pre-existing, and unrelated failures never authorize unrelated repair.
 
     Independent read-only review:
-    10. Create a fresh reviewer session for the group. Reviewer MUST NOT edit source, tests,
-        tasks, specs, configuration, formatting, or generated files. Any reviewer write is a
+    10. Create a fresh reviewer session used only for this group and its bounded re-review.
+        Reviewer MUST NOT edit source, tests, tasks, specs, configuration, formatting, or
+        generated files. Any reviewer write is a
         workflow failure and the review cannot pass.
     11. Give the reviewer the exact requirements/tasks, behavioral envelope, retirement map,
         implementer evidence, and diff baseline. It audits behavior, evidence, scope, code
@@ -404,8 +447,10 @@ apply:
     Completion:
     22. Main inspects final diff and structured evidence. Under `### Group N Evidence`, record
         starting scope, session IDs, method, retirement map, budget disposition, every task's
-        proof, exact checks, accepted/rejected findings, any arbitration and sealed-verification
-        result, and clean read-only verdict.
+         proof, exact checks, accepted/rejected findings, any arbitration and sealed-verification
+         result, and clean read-only verdict.
+         Reconcile every affected group's evidence first; no stale or contradictory current
+         claim may survive. Completion requires checks and review valid for the current tree.
     23. Only then check every group microtask together. Never oscillate individual checkboxes.
 
     Pause on ambiguity, blockers, or scope changes. Never claim completion from prose alone;

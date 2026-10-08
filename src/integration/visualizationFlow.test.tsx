@@ -37,8 +37,10 @@ vi.mock("@niivue/niivue", () => ({
 }));
 
 import { invoke } from "@tauri-apps/api/core";
-import { useVisualizationStore } from "../stores/visualizationStore";
+import { useVisualizationStore, acceptedVisualizationSettings } from "../stores/visualizationStore";
 import { useProjectStore } from "../stores/projectStore";
+import { projectView } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
 import VisualizationPage from "../pages/VisualizationPage";
 import {
   activateProjectLease,
@@ -47,6 +49,9 @@ import {
 } from "../lib/projectLifecycle";
 
 const mockInvoke = vi.mocked(invoke);
+let acceptedReply = projectFixture("test-id", "Test Project", "/tmp/test", {
+  uiState: { dataVis: {} },
+});
 
 const mockFiles = [
   {
@@ -145,46 +150,20 @@ describe("Visualization setup flow integration", () => {
   beforeEach(() => {
     resetProjectLifecycleForTests();
     // Reset stores
-    useVisualizationStore.setState({
-      qcbfSource: null,
-      joinConfig: null,
-      columnTypes: {},
-      identifiers: null,
-      levelOrderings: {},
-      axisAssignment: { x: null, y: null, colorBy: null },
-      domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
-      stage: "selectData",
-      splitRatio: 0.6,
-      filtersExpanded: false,
-      availableFiles: [],
-      inspection: null,
-      chartData: [],
-      selectedPointId: null,
-      viewerState: { status: "idle" },
-      viewerError: null,
-      webglAvailable: false,
-      exclusionCount: { plotted: 0, excluded: 0 },
-    });
+    useVisualizationStore.getState().reset();
+    acceptedReply = {
+      ...projectFixture("test-id", "Test Project", "/tmp/test", { uiState: { dataVis: {} } }),
+      acceptedRevision: 1,
+    };
 
     useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "test-id",
-          name: "Test Project",
-          rootPath: "/tmp/test",
-          createdAt: new Date().toISOString(),
-          lastOpened: new Date().toISOString(),
-          currentPhase: "visualization",
-          dataSource: "dicom" as const,
-        },
-        uiState: { processing: { population: { completed: true } } },
-        mappingState: {},
-        dataPar: {},
-      },
+      project: projectView(
+        projectFixture("test-id", "Test Project", "/tmp/test", { uiState: { dataVis: {} } }),
+      ),
       isDirty: false,
       loaded: true,
     });
+    activateProjectLease("test-id", "/tmp/test");
 
     // Default mock: list_stats_files returns files
     mockInvoke.mockImplementation((cmd: string) => {
@@ -193,12 +172,14 @@ describe("Visualization setup flow integration", () => {
       if (cmd === "read_data_columns") return Promise.resolve(mockRows);
       if (cmd === "set_active_project") return Promise.resolve(undefined);
       if (cmd === "inspect_external_data") return Promise.resolve(mockExtInspection);
+      if (cmd === "accept_project_edit") return Promise.resolve(acceptedReply);
       return Promise.resolve([]);
     });
   });
 
   afterEach(() => {
     cleanup();
+    useProjectStore.getState().cancelAutosave();
     resetProjectLifecycleForTests();
   });
 
@@ -243,7 +224,7 @@ describe("Visualization setup flow integration", () => {
       }
       return Promise.resolve([]);
     });
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "old.tsv", fileHash: "abc123" },
       stage: "visualize",
     });
@@ -254,11 +235,12 @@ describe("Visualization setup flow integration", () => {
     invalidateProjectLease();
     activateProjectLease("same-id", "/tmp/replacement");
     useVisualizationStore.getState().reset();
+    useProjectStore.getState().project!.uiState.dataVis = undefined;
     resolveInspection(mockInspection);
     await Promise.resolve();
 
-    expect(useVisualizationStore.getState()).toMatchObject({
-      inspection: null,
+    expect(useVisualizationStore.getState().inspection).toBeNull();
+    expect(acceptedVisualizationSettings()).toMatchObject({
       qcbfSource: null,
       stage: "selectData",
     });
@@ -281,7 +263,7 @@ describe("Visualization setup flow integration", () => {
       if (command === "inspect_external_data") return Promise.resolve(mockExtInspection);
       return Promise.resolve([]);
     });
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "old.tsv", fileHash: "abc123" },
       joinConfig: {
         externalSource: { absolutePath: "/external/old.csv", fileHash: "ext123", sheetName: null },
@@ -290,8 +272,8 @@ describe("Visualization setup flow integration", () => {
         naTokens: [""],
         delimiter: ",",
       },
-      _lastExtMtime: "1000",
     });
+    useVisualizationStore.getState()._setLastExtMtime("1000");
     activateProjectLease("same-id", "/tmp/test");
     renderWithMantine(<VisualizationPage />);
     await vi.waitFor(() => expect(useVisualizationStore.getState().inspection).not.toBeNull());
@@ -302,11 +284,12 @@ describe("Visualization setup flow integration", () => {
     invalidateProjectLease();
     activateProjectLease("same-id", "/tmp/replacement");
     useVisualizationStore.getState().reset();
+    useProjectStore.getState().project!.uiState.dataVis = undefined;
     resolveStat({ mtime: "2000", size: 2 });
     await Promise.resolve();
 
     expect(useVisualizationStore.getState()._lastExtMtime).toBeNull();
-    expect(useVisualizationStore.getState().joinConfig).toBeNull();
+    expect(acceptedVisualizationSettings().joinConfig).toBeNull();
   });
 
   it("renders the visualization page with stepper", async () => {
@@ -326,11 +309,12 @@ describe("Visualization setup flow integration", () => {
       if (cmd === "list_stats_files") return Promise.resolve(mockFiles);
       if (cmd === "load_qcbf_data")
         return Promise.resolve({ ...mockInspection, qcbfHash: "different_hash" });
+      if (cmd === "accept_project_edit") return Promise.resolve(acceptedReply);
       return Promise.resolve([]);
     });
 
     // Set a contract with a hash that won't match
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       stage: "visualize",
     });
@@ -341,7 +325,7 @@ describe("Visualization setup flow integration", () => {
   });
 
   it("re-populates inspection and enables next button when loaded with valid contract", async () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       stage: "selectData",
     });
@@ -357,11 +341,13 @@ describe("Visualization setup flow integration", () => {
   });
 
   it("keeps the selected point loaded when opening the settings drawer", async () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       stage: "visualize",
       axisAssignment: { x: "Site", y: "GM_vol", colorBy: null },
       columnTypes: { Site: "nominal", GM_vol: "continuous" },
+    });
+    useVisualizationStore.setState({
       inspection: mockInspection,
       chartData: [
         {
@@ -376,6 +362,17 @@ describe("Visualization setup flow integration", () => {
       ],
       selectedPointId: "sub-X_01",
     });
+    acceptedReply = {
+      ...projectFixture("test-id", "Test Project", "/tmp/test", {
+        uiState: {
+          dataVis: {
+            ...useProjectStore.getState().project!.uiState.dataVis,
+            filtersExpanded: true,
+          },
+        },
+      }),
+      acceptedRevision: 1,
+    };
 
     renderWithMantine(<VisualizationPage />);
 
@@ -387,6 +384,7 @@ describe("Visualization setup flow integration", () => {
 
     // Open settings drawer
     useVisualizationStore.getState().setFiltersExpanded(true);
+    await useProjectStore.getState().flushEdits();
 
     // Verify selected point is still selected
     expect(useVisualizationStore.getState().selectedPointId).toBe("sub-X_01");
@@ -420,10 +418,11 @@ describe("Visualization setup flow integration", () => {
         return Promise.resolve(mockJoinedInspection);
       }
       if (cmd === "inspect_external_data") return Promise.resolve(mockExtInspection);
+      if (cmd === "accept_project_edit") return Promise.resolve(acceptedReply);
       return Promise.resolve([]);
     });
 
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       joinConfig: {
         externalSource: { absolutePath: "/tmp/external.csv", fileHash: "ext123", sheetName: null },
@@ -433,8 +432,16 @@ describe("Visualization setup flow integration", () => {
         delimiter: ",",
       },
       stage: "selectData",
-      inspection: mockInspection,
     });
+    useVisualizationStore.getState().setInspection(mockInspection);
+    acceptedReply = {
+      ...projectFixture("test-id", "Test Project", "/tmp/test", {
+        uiState: {
+          dataVis: { ...useProjectStore.getState().project!.uiState.dataVis, stage: "columnTypes" },
+        },
+      }),
+      acceptedRevision: 1,
+    };
 
     renderWithMantine(<VisualizationPage />);
 
@@ -445,14 +452,14 @@ describe("Visualization setup flow integration", () => {
 
     // Wait for state transition
     await vi.waitFor(() => {
-      expect(useVisualizationStore.getState().stage).toBe("columnTypes");
+      expect(acceptedVisualizationSettings().stage).toBe("columnTypes");
     });
 
     expect(useVisualizationStore.getState().inspection).toEqual(mockJoinedInspection);
   });
 
   it("keeps missing external setup while exposing qCBF-only data and Relink", async () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       joinConfig: {
         externalSource: {
@@ -470,6 +477,8 @@ describe("Visualization setup flow integration", () => {
       axisAssignment: { x: "Diagnosis", y: "GM_vol", colorBy: null },
       domainFilters: { xMin: null, xMax: null, yMin: 10, yMax: 90 },
       stage: "selectData",
+    });
+    useVisualizationStore.setState({
       externalSourceAvailability: {
         status: "missing",
         savedPath: "/missing/external.csv",
@@ -497,7 +506,7 @@ describe("Visualization setup flow integration", () => {
     await vi.waitFor(() =>
       expect(useVisualizationStore.getState().inspection).toEqual(mockInspection),
     );
-    expect(useVisualizationStore.getState()).toMatchObject({
+    expect(acceptedVisualizationSettings()).toMatchObject({
       joinConfig: {
         externalSource: { absolutePath: "/missing/external.csv", fileHash: "ext123" },
         keys: [{ left: "participant_id", right: "SubjectID" }],
@@ -511,7 +520,7 @@ describe("Visualization setup flow integration", () => {
 
   it("re-validates external file on window focus", async () => {
     // Setup state
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       joinConfig: {
         externalSource: { absolutePath: "/tmp/external.csv", fileHash: "ext123", sheetName: null },
@@ -521,9 +530,8 @@ describe("Visualization setup flow integration", () => {
         delimiter: ",",
       },
       stage: "selectData",
-      inspection: mockInspection,
-      _lastExtMtime: "1000",
     });
+    useVisualizationStore.setState({ inspection: mockInspection, _lastExtMtime: "1000" });
 
     const mockJoinedInspection = {
       ...mockInspection,
@@ -574,7 +582,7 @@ describe("Visualization setup flow integration", () => {
     window.dispatchEvent(new Event("focus"));
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(useVisualizationStore.getState().joinConfig).not.toBeNull();
+    expect(acceptedVisualizationSettings().joinConfig).not.toBeNull();
     expect(screen.queryByTestId("invalidation-banner")).toBeNull();
 
     // Scenario 2: Focus event when mtime is changed (mtime = "2000"), but hash is identical ("ext123")
@@ -583,7 +591,7 @@ describe("Visualization setup flow integration", () => {
     await vi.waitFor(() => {
       expect(useVisualizationStore.getState()._lastExtMtime).toBe("2000");
     });
-    expect(useVisualizationStore.getState().joinConfig).not.toBeNull();
+    expect(acceptedVisualizationSettings().joinConfig).not.toBeNull();
     expect(screen.queryByTestId("invalidation-banner")).toBeNull();
 
     // Scenario 3: Focus event when mtime is changed (mtime = "3000"), and hash changes to "ext456"
@@ -593,14 +601,14 @@ describe("Visualization setup flow integration", () => {
     await vi.waitFor(() => {
       expect(useVisualizationStore.getState().externalSourceAvailability.status).toBe("changed");
     });
-    expect(useVisualizationStore.getState().joinConfig).not.toBeNull();
+    expect(acceptedVisualizationSettings().joinConfig).not.toBeNull();
     expect(useVisualizationStore.getState().inspection).toEqual(mockInspection);
     expect(await screen.findByTestId("visualization-missing-source-warning")).toHaveTextContent(
       "External data content changed",
     );
 
     // Scenario 4: Focus event when stat_file fails (file deleted)
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       qcbfSource: { relativePath: "test.tsv", fileHash: "abc123" },
       joinConfig: {
         externalSource: { absolutePath: "/tmp/external.csv", fileHash: "ext123", sheetName: null },
@@ -610,15 +618,14 @@ describe("Visualization setup flow integration", () => {
         delimiter: ",",
       },
       stage: "selectData",
-      inspection: mockInspection,
-      _lastExtMtime: "3000",
     });
+    useVisualizationStore.setState({ inspection: mockInspection, _lastExtMtime: "3000" });
     statShouldFail = true;
     window.dispatchEvent(new Event("focus"));
     await vi.waitFor(() => {
       expect(useVisualizationStore.getState().externalSourceAvailability.status).toBe("missing");
     });
-    expect(useVisualizationStore.getState().joinConfig).not.toBeNull();
+    expect(acceptedVisualizationSettings().joinConfig).not.toBeNull();
     expect(useVisualizationStore.getState().inspection).toEqual(mockInspection);
     const errorBanner = await screen.findByTestId("visualization-missing-source-warning");
     expect(errorBanner).toHaveTextContent("missing");

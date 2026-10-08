@@ -137,25 +137,6 @@ The progress table SHALL be populated from authoritative artifact reconstruction
 - **WHEN** a matching run event reports subject `GOOD` started
 - **THEN** its provisional row SHALL transition from pending to running without changing terminal authority
 
-### Requirement: DataPar state in project file schema
-
-The `ProjectFileSchema` in `src/schemas/project.ts` SHALL replace the current `dataPar` field from `z.object({}).passthrough()` with a structured Zod object `DataParSchema`. All fields within `DataParSchema` SHALL use `.optional()`. The `assembleDataPar` function SHALL convert stored `DataParSchema` state to the nested `x.*` JSON structure for ExploreASL consumption. The `uiState` object SHALL include `showAdvancedParameters: z.boolean().default(false)`.
-
-#### Scenario: Existing project file with empty dataPar loads successfully
-
-- **WHEN** a `.easl` file with `dataPar: {}` is loaded
-- **THEN** all dataPar fields initialize to `undefined` and the editor shows ghost placeholder defaults
-
-#### Scenario: Existing project file with passthrough dataPar loads successfully
-
-- **WHEN** a `.easl` file with `dataPar: { "x": { "Q": { "Lambda": 0.9 } } }` is loaded
-- **THEN** the `Lambda` value of 0.9 is parsed and displayed in the Quantification section
-
-#### Scenario: Toggle state persists across sessions
-
-- **WHEN** user enables "Show advanced parameter sections" and closes the app
-- **THEN** on next load, `uiState.showAdvancedParameters` is `true` and Structural and Environment sections are visible
-
 ### Requirement: BIDS review slice for scan lifecycle
 
 `importStore` SHALL add a `BidsReviewState` slice with:
@@ -203,91 +184,110 @@ Session-only state. Not persisted to `.easl`. The `confirmed` flag is NOT in thi
 
 ### Requirement: Portable DICOM source state
 
-For DICOM projects, the persisted source location SHALL distinguish a project-internal relative path from an external absolute path. Persisted raw DICOM entries SHALL be location-independent relative paths under the logical source root and SHALL resolve to absolute paths only at runtime. Older absolute source and raw-path strings SHALL remain accepted. BIDS projects SHALL resolve their source to the current project root and SHALL NOT depend on a persisted former root.
+DICOM sources SHALL distinguish project-relative internal locations from absolute external locations. Raw entries SHALL be source-relative and resolve to absolute paths only at runtime. Source selection and relinking SHALL establish this representation before configuration acceptance. Older absolute internal-source/raw-path repair SHALL not be supported. BIDS sources SHALL resolve to the current project root without consulting a former root.
 
 #### Scenario: User selects DICOM folder inside project
 
-- **WHEN** the selected DICOM source is contained by the active project root
-- **THEN** canonical project state SHALL preserve it as a project-relative source and its raw entries SHALL remain portable when the project moves
+- **WHEN** the chosen source is inside the active project
+- **THEN** its accepted source reference SHALL be project-relative and raw entries SHALL move with it
 
 #### Scenario: User selects external DICOM folder
 
-- **WHEN** the selected DICOM source is outside the active project root
-- **THEN** canonical project state SHALL preserve the source as an explicit absolute path while raw entries remain relative to that source
+- **WHEN** the chosen source is outside the project
+- **THEN** its source reference SHALL be absolute and raw entries SHALL remain source-relative
 
 ### Requirement: Missing DICOM source and relinking
 
-A missing or unreadable DICOM source SHALL NOT prevent the project from opening. The Import phase SHALL retain the saved source reference and mapping configuration, display a persistent Relink warning, and disable only actions that require source access. Relinking SHALL scan the replacement and compare its discovered path structure with the saved structure before changing project state. A compatible replacement SHALL preserve mapping setup. An incompatible replacement SHALL require confirmation and SHALL reset only source-dependent import setup. A successful relink SHALL mark the project dirty and SHALL persist only through normal Save.
+A missing/unreadable source SHALL preserve saved configuration and allow project opening after existing execution-profile gating. Source-dependent actions SHALL remain disabled with persistent Relink guidance. Replacement scanning SHALL compare path structure before acceptance. Compatible replacements SHALL preserve mappings and update current/successful-snapshot source identities together; incompatible replacements SHALL explain source-dependent resets and require confirmation. Accepted relinks SHALL use shared autosave; cancelled selections or declined resets SHALL leave configuration unchanged.
 
 #### Scenario: External DICOM source is missing
 
-- **WHEN** a project opens and its external DICOM source cannot be read
-- **THEN** the project SHALL open, the Import phase SHALL show a persistent Relink warning, and source-dependent scan or import actions SHALL remain disabled
+- **WHEN** a saved external source cannot be read
+- **THEN** project opening SHALL preserve source/mappings and show Relink guidance
 
 #### Scenario: Replacement structure matches
 
-- **WHEN** the user selects a readable replacement whose discovered structure matches the saved source structure
-- **THEN** the new source SHALL replace the missing reference, existing compatible token and metadata setup SHALL remain, and the project SHALL become dirty
+- **WHEN** the selected readable replacement matches saved structure
+- **THEN** its source reference SHALL replace the unavailable reference, preserve compatible setup, and schedule shared autosave
 
 #### Scenario: Replacement structure differs
 
-- **WHEN** the selected replacement has a different discovered structure
-- **THEN** the system SHALL explain which setup will reset and SHALL make no change until the user confirms
+- **WHEN** replacement structure differs
+- **THEN** no configuration SHALL change before reset confirmation
 
 #### Scenario: User confirms changed DICOM source
 
-- **WHEN** the user confirms an incompatible replacement
-- **THEN** the system SHALL adopt the source, reset source-dependent raw paths, patterns, token assignments, and incompatible mappings, and mark the project dirty
+- **WHEN** incompatible replacement is confirmed
+- **THEN** only source-dependent raw paths, patterns, tokens, and incompatible mappings SHALL reset through one accepted autosaved edit
 
 #### Scenario: User cancels DICOM relink
 
-- **WHEN** the user cancels selection or declines an incompatible replacement
-- **THEN** the saved source reference and all import setup SHALL remain unchanged
+- **WHEN** selection or reset confirmation is cancelled
+- **THEN** source and import configuration SHALL remain unchanged
 
 ### Requirement: Complete import hydration
 
-Opening a project SHALL first reset the complete import runtime slice, then hydrate validated project values, then reconcile any native replayable import run before controls become available. Missing optional mapping or UI fields SHALL apply defaults. Session-only logs, parser errors, provisional progress, run identity, and listener state SHALL not leak from a prior project. Persisted `preparing`, `running`, `finalizing`, or `cancelling` phases SHALL not be trusted without a matching native run.
+Opening SHALL reset transient import state, expose accepted current configuration, and reconcile native work before controls become available. Missing optional mapping/UI fields SHALL use current defaults. Logs, parser errors, provisional progress, run identity, and listeners SHALL never leak from another lifecycle. Persisted UI phase SHALL not independently authorize running work. Eligible terminal evidence SHALL update saved configuration natively before the frontend presents it as reconciled.
 
 #### Scenario: Persisted running phase has no native run
 
-- **WHEN** a project hydrates with a legacy nonterminal phase but native discovery finds no matching run or recovery record
-- **THEN** runtime state SHALL normalize to `interrupted` or `idle` as reported by native reconciliation and SHALL not claim active work
+- **WHEN** saved phase hints conflict with absence of native run ownership
+- **THEN** controls SHALL use native reconciliation and SHALL not claim active execution from configuration alone
 
 #### Scenario: Terminal replay overrides stale persistence
 
-- **WHEN** project persistence says running or failed but native discovery returns a matching replayable completed run
-- **THEN** the store SHALL reconcile to completed and persist that exact terminal result before acknowledgement
+- **WHEN** native evidence identifies an eligible completed result absent from saved configuration
+- **THEN** native reconciliation SHALL persist completion before acknowledgement and display the accepted result
 
 #### Scenario: Sparse project follows populated import state
 
-- **WHEN** project A has attached run state, logs, and progress and project B omits optional import fields
-- **THEN** project B SHALL expose defaults plus only its own native reconciliation result and SHALL contain none of A's state
+- **WHEN** sparse B replaces populated A
+- **THEN** B SHALL expose only its accepted settings, current defaults, and its own native work
 
 #### Scenario: Persisted import state belongs to project B
 
-- **WHEN** project B contains valid persisted import mapping and terminal UI state
-- **THEN** hydration SHALL expose B's values plus only B's native reconciliation and SHALL retain no project-A runtime fields
+- **WHEN** B supplies saved import configuration
+- **THEN** its displays SHALL use B's accepted values without a separately editable persisted mirror
 
 ### Requirement: Import run discovery and attachment reconciliation
 
-The import store SHALL expose typed discovery, attachment, launch, cancellation, and acknowledgement clients. On Import Step 5 entry or route remount, it SHALL install one run-scoped listener set, discover native work for the active project, bind the returned run identity, and perform a post-listener attachment read. It SHALL accept updates only for the bound run and current ProjectLease. A terminal snapshot SHALL remain correlated through project synchronization and save; acknowledgement SHALL occur only after that exact terminal result persists successfully.
+Import presentation SHALL retain typed discovery, attachment, launch, cancellation, and exact-run acknowledgement clients. Step entry SHALL install run-scoped listeners and perform discovery plus a post-listener snapshot read. Updates SHALL require current run and activation identities. The frontend SHALL not derive or save terminal project metadata; a native exact-run reconciliation operation SHALL persist that metadata before acknowledgement. Persistence failure SHALL retain replay and expose an error.
 
 #### Scenario: WebView reloads during running import
 
-- **WHEN** native ownership remains `Running` after frontend runtime state is reset
-- **THEN** discovery and attachment SHALL restore the running phase and subject progress without starting another run
+- **WHEN** native ownership remains Running after renderer reset
+- **THEN** discovery SHALL restore presentation without launching another worker
 
 #### Scenario: Run exits during attachment
 
-- **WHEN** exit occurs between discovery and the post-listener attachment read
-- **THEN** the later snapshot SHALL reconcile `Finalizing` or terminal state and no completion shall be missed
+- **WHEN** exit occurs between discovery and attachment read
+- **THEN** the later snapshot SHALL expose finalization or terminal state
 
 #### Scenario: Delayed old snapshot arrives
 
-- **WHEN** a snapshot belongs to another run or an expired ProjectLease
-- **THEN** the store SHALL discard it without changing progress, phase, persistence, or controls
+- **WHEN** an event belongs to another run or expired activation
+- **THEN** it SHALL not change progress, controls, or configuration
 
 #### Scenario: Terminal save and acknowledgement succeed
 
-- **WHEN** a matching terminal snapshot is synchronized and saved successfully
-- **THEN** the store SHALL acknowledge that run and retain the persisted terminal UI state
+- **WHEN** native exact-run reconciliation persists terminal metadata successfully
+- **THEN** that run SHALL acknowledge and the frontend SHALL expose the persisted result
+
+### Requirement: Current parameter configuration
+
+Project parameter state SHALL use the shared current configuration contract, with flat optional ExploreASL keys under `dataPar`. Unset fields SHALL remain absent; known invalid values SHALL be rejected; loose extension JSON SHALL survive unchanged. Runtime processing assembly SHALL retain its existing scientific key placement. Advanced visibility SHALL persist under `uiState.datapar.advancedVisibility`; obsolete nested-project repair and the old `showAdvancedParameters` representation SHALL not be supported.
+
+#### Scenario: Current project contains empty dataPar
+
+- **WHEN** current configuration contains `dataPar: {}`
+- **THEN** controls SHALL show UI placeholders without persisting scientific defaults
+
+#### Scenario: Current project contains flat parameters
+
+- **WHEN** current configuration contains `dataPar.Lambda: 0.9`
+- **THEN** the editor SHALL display 0.9 and processing assembly SHALL retain its operative destination
+
+#### Scenario: Toggle state persists across sessions
+
+- **WHEN** advanced visibility changes and autosave completes
+- **THEN** reopening SHALL restore `uiState.datapar.advancedVisibility`

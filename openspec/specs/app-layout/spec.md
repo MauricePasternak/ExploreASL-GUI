@@ -89,17 +89,27 @@ The navbar SHALL include a "Manifest" entry in `PHASE_NAV` appended after the "V
 
 ### Requirement: Safe project and application close
 
-Ordinary Return to Home, project replacement, and application close actions SHALL wait for project-owned import and processing shutdown. If shutdown cannot be confirmed, navigation or exit SHALL be cancelled, the current project SHALL remain visible, and the system SHALL show an actionable error with retry guidance. Operating-system force termination remains outside this guarantee.
+Return to Home, project replacement, and ordinary application close SHALL submit pending edits and wait for the latest accepted configuration to persist, then wait for project-owned import/processing shutdown and native result persistence. Save, validation, or shutdown failure SHALL cancel navigation/exit, keep current state visible, and show actionable retry guidance. The application SHALL not offer an ordinary "leave without saving" path. Active cancellable execution SHALL retain explicit abort confirmation, and non-cancellable finalization SHALL retain its wait policy. Operating-system force termination SHALL remain outside these guarantees.
 
 #### Scenario: Return to Home stops project work
 
-- **WHEN** the user returns to Home while project-owned work or watchers are active
-- **THEN** navigation SHALL occur only after those resources are confirmed stopped and project-scoped state is reset
+- **WHEN** the user confirms returning Home while project work is active
+- **THEN** edits SHALL flush and resources SHALL settle before navigation and reset
 
 #### Scenario: Normal close cannot stop work
 
-- **WHEN** the user requests application close and project-owned work cannot be confirmed stopped
-- **THEN** the application SHALL remain open and SHALL show an actionable shutdown error
+- **WHEN** project work cannot be confirmed stopped
+- **THEN** the application SHALL remain open and show the shutdown error
+
+#### Scenario: Close occurs before autosave delay expires
+
+- **WHEN** ordinary close follows an accepted edit immediately
+- **THEN** close SHALL wait for that edit to persist without a save/discard dialog
+
+#### Scenario: Close cannot persist changes
+
+- **WHEN** writing the latest configuration fails
+- **THEN** close SHALL be cancelled and unsaved changes SHALL remain visible for retry
 
 ### Requirement: Missing external source guidance
 
@@ -114,3 +124,12 @@ When a project opens with one or more unavailable external sources, the applicat
 
 - **WHEN** the user visits a phase whose external source is unavailable
 - **THEN** a persistent warning SHALL identify the source and offer Relink while only source-dependent actions remain disabled
+
+### Requirement: Unified project save status
+
+The shell SHALL expose saving, saved, and unsaved/error status for the active project. Save and the platform save shortcut SHALL flush pending form submissions and the configuration writer even when the accepted cache was previously clean. Failed autosave SHALL produce actionable visible feedback rather than console-only reporting. New controls SHALL retain accessible labels and stable test IDs.
+
+#### Scenario: Save flushes a pending form edit
+
+- **WHEN** the user invokes Save before the form edit has reached native acceptance
+- **THEN** Save SHALL submit that edit and SHALL report saved only after its successful persistence

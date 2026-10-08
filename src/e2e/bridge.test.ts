@@ -1,15 +1,67 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { projectFixture } from "../test/projectFixtures";
+import { captureProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 
-import { ProjectFileSchema } from "../schemas/project";
 import { deriveDisagreements, useManifestStore } from "../stores/manifestStore";
 import { useProjectStore } from "../stores/projectStore";
 import { installE2EBridge, isE2EEnabled, isE2EScenario, type E2EScenario } from "./bridge";
 
 const router = { navigate: vi.fn(() => Promise.resolve()) };
 const location = { hash: "", key: "default", pathname: "/", search: "", state: null };
+const snapshot = projectFixture();
+snapshot.document.projectMeta.currentPhase = "manifest";
+const manifest = snapshot.document.uiState.manifest;
+const a = manifest.activeReviewerId;
+const b = "22222222-2222-4222-8222-222222222222";
+manifest.reviewers.push({ id: b, label: "Reviewer B", createdAt: "2026-01-01T00:00:00Z" });
+manifest.verdicts = {
+  [a]: {
+    "sub-01_01": { status: "pass", setAt: 0 },
+    "sub-02_01": { status: "fail", reason: "motion", setAt: 0 },
+  },
+  [b]: {
+    "sub-01_01": { status: "fail", reason: "motion", setAt: 0 },
+    "sub-02_01": { status: "pass", setAt: 0 },
+  },
+};
+manifest.resolvedVerdicts = { "sub-01_01": { status: "pass", setAt: 0 } };
 
 describe("E2E bridge", () => {
   beforeEach(() => {
+    resetProjectLifecycleForTests();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    vi.mocked(invoke)
+      .mockReset()
+      .mockImplementation(async (command) => {
+        if (command === "inspect_project")
+          return {
+            candidateId: "seed",
+            projectId: "project-1",
+            name: "Project",
+            rootPath: "/project",
+            recoveredFromBackup: false,
+            duplicatePath: null,
+            movedFrom: null,
+            setupRecovered: 0,
+          };
+        if (command === "activate_project" || command === "save_project") return snapshot;
+        if (command === "shutdown_project_runtime")
+          return {
+            success: true,
+            importProcess: { success: true },
+            processingWorkers: { success: true },
+            lockWatcher: { success: true },
+          };
+        if (
+          command === "get_active_import_run" ||
+          command === "get_active_run" ||
+          command === "clear_active_project"
+        )
+          return null;
+        if (command === "read_import_status") return [];
+        throw new Error(`Unexpected command ${command}`);
+      });
     router.navigate.mockClear();
     delete (window as Window & { __E2E__?: unknown }).__E2E__;
   });
@@ -40,18 +92,26 @@ describe("E2E bridge", () => {
   it("rejects unknown scenarios", async () => {
     const control = installE2EBridge({ enabled: true, router });
 
-    await expect(control?.bridge.seed("unknown" as E2EScenario)).rejects.toThrow(
-      "Unknown E2E scenario",
-    );
+    await expect(
+      control?.bridge.seed("unknown" as E2EScenario, "/project/project.easl"),
+    ).rejects.toThrow("Unknown E2E scenario");
   });
 
-  it("seeds schema-valid manifest disagreements", async () => {
+  it("seeds manifest disagreements", async () => {
     const control = installE2EBridge({ enabled: true, router });
 
-    await control?.bridge.seed("manifest-disagreements");
+    await control?.bridge.seed("manifest-disagreements", "/project/project.easl");
+    expect(invoke).toHaveBeenCalledWith("inspect_project", {
+      path: "/project/project.easl",
+      recents: [],
+    });
+    expect(invoke).toHaveBeenCalledWith("activate_project", {
+      candidateId: "seed",
+      confirmBackup: false,
+    });
+    expect(captureProjectLease()?.rootPath).toBe("/project");
 
     const project = useProjectStore.getState().project;
-    expect(ProjectFileSchema.safeParse(project).success).toBe(true);
     expect(project?.projectMeta.currentPhase).toBe("manifest");
     expect(useManifestStore.getState()).toMatchObject({
       step: 1,
@@ -65,7 +125,7 @@ describe("E2E bridge", () => {
 
   it("clears scenario and project state on reset", async () => {
     const control = installE2EBridge({ enabled: true, router });
-    await control?.bridge.seed("manifest-disagreements");
+    await control?.bridge.seed("manifest-disagreements", "/project/project.easl");
 
     await control?.bridge.reset();
 

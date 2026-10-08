@@ -115,35 +115,27 @@ Each row in the Resolution DataTable SHALL provide three quick-access action but
 
 ### Requirement: Resolved Verdict Storage
 
-Resolutions SHALL be stored in a new `resolvedVerdicts` field on `ManifestUiStateSchema` with Zod shape:
-
-```typescript
-resolvedVerdicts: z.record(z.string(), ManifestVerdictSchema).optional();
-```
-
-The record SHALL be keyed by subjectSession string. Each entry SHALL be a standard `ManifestVerdict` object (`{ status, reason?, notes?, setAt }`). No resolver identity SHALL be tracked — the resolution simply records the final verdict per subjectSession.
-
-The `resolvedVerdicts` field SHALL be `undefined` when no resolutions have been recorded and SHALL be cleared when the manifest reverts to single-reviewer mode.
+Current manifest configuration SHALL store resolutions in `resolvedVerdicts`, a SubjectSession-keyed map of standard verdicts. No resolver identity SHALL be recorded. No resolutions SHALL use an empty map. Reducing the reviewer registry to one SHALL clear this map. Replacing a resolution SHALL replace only the selected SubjectSession entry; validation, prior-module timestamp capture, invalidation after changed reviewer verdicts, and shared autosave SHALL use the same review contract.
 
 #### Scenario: Setting a resolved verdict persists correctly
 
-- **WHEN** the user selects "Fail" with reason "motion" and notes "Low CBF quality" for `"sub-01_01"` in the Resolution DataTable
-- **THEN** `uiState.manifest.resolvedVerdicts["sub-01_01"]` SHALL equal `{ status: "fail", reason: "motion", notes: "Low CBF quality", setAt: <current prior-module mtime> }`
+- **WHEN** a valid Fail resolution includes reason and notes
+- **THEN** its SubjectSession entry SHALL contain those values and the current prior-module mtime
 
 #### Scenario: Resolved verdict overwrites previous resolution
 
-- **WHEN** `"sub-01_01"` already has a resolved verdict of Pass and the user changes it to Fail with reason "artifact"
-- **THEN** `resolvedVerdicts["sub-01_01"]` SHALL be updated to `{ status: "fail", reason: "artifact", setAt: <current mtime> }` and no trace of the previous Pass resolution SHALL remain
+- **WHEN** an existing resolution changes
+- **THEN** only its SubjectSession entry SHALL contain the later verdict
 
 #### Scenario: Resolved verdicts cleared on revert to single-reviewer
 
-- **WHEN** `removeReviewer` is called and the manifest reverts to single-reviewer mode
-- **THEN** `resolvedVerdicts` SHALL be set to `undefined`
+- **WHEN** reviewer removal leaves one reviewer
+- **THEN** the resolution map SHALL become empty
 
 #### Scenario: Resolved verdict survives save and reload
 
-- **WHEN** the user resolves a disagreement, saves the project, closes and reopens the GUI
-- **THEN** `uiState.manifest.resolvedVerdicts` SHALL contain the same resolved verdict with the same values
+- **WHEN** a resolution autosaves and the project reopens
+- **THEN** its values SHALL remain unchanged
 
 ### Requirement: Resolution Gate For Preview
 

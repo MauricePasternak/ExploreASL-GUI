@@ -4,47 +4,6 @@ Define import configuration snapshots and safe selective import re-runs.
 
 ## Requirements
 
-### Requirement: Import snapshot persistence
-
-The system SHALL capture an `ImportSnapshot` for the reserved import attempt and retain it as pending runtime state. Only reconciliation of that run's authoritative Completed result SHALL replace the successful freshness baseline persisted at `uiState.import.mostRecentConfig`; rejected starts and failed, cancelled, or interrupted attempts SHALL preserve the prior baseline. The snapshot SHALL contain: `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`, `metadataGroups`, and `subjectRows` (including `groupId` assignments). The baseline SHALL be `null` before the first successful import run. Its source location SHALL use the same project-relative-internal or absolute-external representation as current import state so moving a project does not change the logical source.
-
-When persisted to `.easl`, the snapshot SHALL be serialized as a gzip-compressed, base64-encoded string (algorithm: gzip, level 9). The in-memory store and staleness computation SHALL operate on a fully validated `ImportSnapshot` object. Schema v1 parsing SHALL decompress and validate a persisted string before exposing the snapshot. Migration of a legacy `.easl` file SHALL preserve either a valid compressed snapshot or a valid full-object snapshot, and canonical schema v1 serialization SHALL emit the compressed form. An invalid object, base64 value, gzip payload, JSON payload, snapshot shape, or escaping project-relative path SHALL produce an actionable project validation or migration error instead of silently replacing the snapshot with `null`.
-
-#### Scenario: First import creates snapshot
-
-- **WHEN** the first reserved import attempt reaches authoritative Completed and terminal reconciliation succeeds
-- **THEN** its captured location-independent configuration SHALL become `uiState.import.mostRecentConfig` and persist before acknowledgement
-
-#### Scenario: Re-run overwrites snapshot
-
-- **WHEN** a reserved re-run with selected subjects reaches authoritative Completed
-- **THEN** its captured configuration SHALL replace the previous baseline at `uiState.import.mostRecentConfig` through terminal reconciliation
-
-#### Scenario: Failed attempt preserves successful baseline
-
-- **WHEN** a re-run fails, is cancelled, or becomes interrupted
-- **THEN** `uiState.import.mostRecentConfig` SHALL retain the prior successful configuration so failed work cannot make changed subjects appear fresh
-
-#### Scenario: Snapshot persists across sessions
-
-- **WHEN** a schema v1 project containing a valid compressed snapshot is closed and reopened
-- **THEN** the validated full snapshot SHALL be restored to runtime state
-
-#### Scenario: Snapshot survives project relocation
-
-- **WHEN** a project and its internal DICOM source move together and the project reopens from the new location
-- **THEN** current configuration and snapshot SHALL resolve to the same logical source without making subjects stale solely because the root changed
-
-#### Scenario: Legacy object snapshot is migrated
-
-- **WHEN** a valid legacy project contains a full-object `mostRecentConfig`
-- **THEN** migration SHALL preserve the snapshot in runtime state and canonical schema v1 serialization SHALL encode it as a gzip-compressed base64 string
-
-#### Scenario: Invalid compressed snapshot fails safely
-
-- **WHEN** a supported project contains an invalid compressed `mostRecentConfig`
-- **THEN** opening or migration SHALL fail with an actionable error and SHALL leave the project source unchanged
-
 ### Requirement: Two-tier staleness detection
 
 On entering import step 5, the system SHALL compare the current import configuration against `uiState.import.mostRecentConfig` to determine per-subject staleness. Source locations SHALL be compared by normalized logical identity rather than resolved absolute runtime path.
@@ -384,3 +343,44 @@ Selective retry defaults and retry-lock preservation SHALL use reconciled native
 
 - **WHEN** application recovery reports `Interrupted` with uncommitted staging artifacts
 - **THEN** those artifacts SHALL not qualify any selected subject as fresh completed for retry planning
+
+### Requirement: Readable successful import configuration
+
+Each admitted import attempt SHALL capture its immutable configuration before staging mutation. Only an authoritative Completed result SHALL replace the persisted successful baseline at `uiState.import.mostRecentConfig`; rejected, failed, cancelled, or interrupted attempts SHALL preserve the prior baseline. The snapshot SHALL include source location, path patterns, tokenizer assignments, directory matching, modality/session/run aliases, subject renames, metadata groups, subject/group rows, and selected profile reference when configured. It SHALL be `null` before the first successful import. Internal sources SHALL remain project-relative and external sources absolute, matching current configuration's logical identity.
+
+The baseline SHALL persist as an ordinary JSON object or `null`. Strings, gzip/base64 data, invalid snapshot values, and escaping paths SHALL be rejected without substitution or migration. Native result reconciliation SHALL persist the admitted attempt's snapshot before acknowledging that run, regardless of renderer presence. Existing execution-record compatibility SHALL not reconstruct missing historical attempt settings from currently edited configuration.
+
+#### Scenario: First import creates snapshot
+
+- **WHEN** the first admitted import completes and native project persistence succeeds
+- **THEN** its captured configuration SHALL become the successful baseline before acknowledgement
+
+#### Scenario: Re-run overwrites snapshot
+
+- **WHEN** an admitted selective re-run completes
+- **THEN** its captured configuration SHALL replace the successful baseline through native reconciliation
+
+#### Scenario: Failed attempt preserves successful baseline
+
+- **WHEN** a re-run fails, cancels, or becomes interrupted
+- **THEN** the prior successful baseline SHALL remain unchanged
+
+#### Scenario: Snapshot persists across sessions
+
+- **WHEN** current configuration containing an ordinary JSON snapshot reopens
+- **THEN** the same validated snapshot SHALL supply staleness comparison
+
+#### Scenario: Snapshot survives project relocation
+
+- **WHEN** a project and internal source move together
+- **THEN** source identity SHALL remain equivalent and relocation alone SHALL not make subjects stale
+
+#### Scenario: Encoded snapshot is rejected
+
+- **WHEN** current configuration supplies a string instead of a snapshot object or `null`
+- **THEN** opening SHALL report invalid configuration and leave the source unchanged
+
+#### Scenario: Renderer reloads before import completes
+
+- **WHEN** accepted import work completes after renderer reload
+- **THEN** native reconciliation SHALL use the admitted attempt snapshot rather than current edited settings

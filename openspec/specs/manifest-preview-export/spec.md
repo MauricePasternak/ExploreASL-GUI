@@ -27,28 +27,22 @@ The manifest preview SHALL render all sections inside a Mantine `Accordion` with
 
 ### Requirement: Final Verdict Computation
 
-For each SubjectSession, the final verdict used in preview aggregation and export SHALL be computed in this order:
-
-1. Use `resolvedVerdicts[subjectSession]` when present.
-2. Otherwise, when all reviewers have identical `status`, use the unanimous verdict.
-3. Otherwise, treat the SubjectSession as an unresolved disagreement. Preview & Export SHALL be unreachable until such disagreements are resolved.
-
-In single-reviewer mode, the final verdict SHALL be the sole flat-map verdict. QC Summary Pass/Total counts and all metric aggregation SHALL use final verdicts exclusively.
+Preview/export SHALL use SubjectSession resolution when present, otherwise unanimous reviewer status, otherwise unresolved disagreement. Unresolved disagreements SHALL block Preview & Export. A sole reviewer SHALL supply its final verdict from its indexed slice without a separate flat-map path. QC counts and metric aggregation SHALL use these final verdicts exclusively; output formats and methods content SHALL remain unchanged.
 
 #### Scenario: Resolved verdict takes precedence
 
-- **WHEN** reviewers disagree on `sub-01_01` and its resolved verdict is Pass
-- **THEN** the final verdict SHALL be Pass
+- **WHEN** reviewers disagree and a resolution exists
+- **THEN** its status SHALL supply the final verdict
 
 #### Scenario: Unanimous verdict used without resolution
 
-- **WHEN** all reviewers set `sub-02_01` to Fail and no resolved verdict exists
-- **THEN** the final verdict SHALL be Fail
+- **WHEN** every reviewer agrees and no resolution exists
+- **THEN** that unanimous status SHALL supply the final verdict
 
 #### Scenario: Single-reviewer mode uses sole verdict
 
-- **WHEN** a single-reviewer project has a Pass verdict for `sub-01_01`
-- **THEN** the final verdict SHALL be Pass, preserving pre-multi-reviewer behavior
+- **WHEN** the sole reviewer's indexed slice contains Pass
+- **THEN** the final verdict SHALL be Pass
 
 ### Requirement: Manifest Section 1 Study Parameters
 

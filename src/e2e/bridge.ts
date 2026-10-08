@@ -1,18 +1,12 @@
 import type { Location } from "react-router";
 
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
-import { ProjectFileSchema, type ProjectFile } from "../schemas/project";
-import { useDataParStore } from "../stores/dataParStore";
+import { inspectProject } from "../lib/projectPersistence";
+import { transitionProjectRuntime } from "../lib/projectCoordinator";
 import { useGlobalStore } from "../stores/globalStore";
-import { useImportStore } from "../stores/importStore";
 import { deriveDisagreements, useManifestStore } from "../stores/manifestStore";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
-import { useVisualizationStore } from "../stores/visualizationStore";
-
-const REVIEWER_A_ID = "11111111-1111-4111-8111-111111111111";
-const REVIEWER_B_ID = "22222222-2222-4222-8222-222222222222";
-const E2E_TIMESTAMP = "2026-01-01T00:00:00.000Z";
 
 export const E2E_SCENARIOS = ["manifest-disagreements"] as const;
 export type E2EScenario = (typeof E2E_SCENARIOS)[number];
@@ -24,7 +18,7 @@ type RouterController = {
 export interface E2EBridge {
   ready(): Promise<void>;
   navigate(path: string): Promise<void>;
-  seed(scenario: E2EScenario): Promise<void>;
+  seed(scenario: E2EScenario, easlPath: string): Promise<void>;
   reset(): Promise<void>;
   readonly currentRoute: string | null;
   readonly currentScenario: E2EScenario | null;
@@ -48,67 +42,9 @@ export function isE2EScenario(value: string): value is E2EScenario {
   return E2E_SCENARIOS.some((scenario) => scenario === value);
 }
 
-function manifestDisagreementsProject(): ProjectFile {
-  return ProjectFileSchema.parse({
-    version: "0.1.0",
-    projectMeta: {
-      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      name: "Manifest disagreements",
-      rootPath: "",
-      createdAt: E2E_TIMESTAMP,
-      lastOpened: E2E_TIMESTAMP,
-      currentPhase: "manifest",
-      dataSource: "bids",
-    },
-    uiState: {
-      processing: {
-        population: {
-          completed: true,
-          lastRun: {
-            profileId: "33333333-3333-4333-8333-333333333333",
-            Mtime: null,
-          },
-        },
-      },
-      manifest: {
-        reviewers: [
-          { id: REVIEWER_A_ID, label: "Reviewer A", createdAt: E2E_TIMESTAMP },
-          { id: REVIEWER_B_ID, label: "Reviewer B", createdAt: E2E_TIMESTAMP },
-        ],
-        activeReviewerId: REVIEWER_A_ID,
-        verdicts: {
-          [REVIEWER_A_ID]: {
-            "sub-01_01": { status: "pass", setAt: 0 },
-            "sub-02_01": { status: "fail", reason: "motion", setAt: 0 },
-            "sub-03_01": { status: "pass", setAt: 0 },
-          },
-          [REVIEWER_B_ID]: {
-            "sub-01_01": { status: "fail", reason: "motion", setAt: 0 },
-            "sub-02_01": { status: "pass", setAt: 0 },
-            "sub-03_01": { status: "pass", setAt: 0 },
-          },
-        },
-        resolvedVerdicts: {
-          "sub-01_01": { status: "pass", setAt: 0 },
-        },
-      },
-    },
-    mappingState: {
-      sourceDataPath: "",
-      ingestionComplete: true,
-      metadataGroups: [],
-      subjectRows: [
-        { id: "sub-01_01", subject: "sub-01", session: "01", groupId: "ungrouped" },
-        { id: "sub-02_01", subject: "sub-02", session: "01", groupId: "ungrouped" },
-        { id: "sub-03_01", subject: "sub-03", session: "01", groupId: "ungrouped" },
-      ],
-    },
-    dataPar: {},
-  });
-}
-
-async function seedManifestDisagreements() {
-  const project = manifestDisagreementsProject();
+async function seedManifestDisagreements(easlPath: string) {
+  await transitionProjectRuntime(await inspectProject(easlPath));
+  const project = useProjectStore.getState().project!;
   const manifest = project.uiState.manifest;
   const disagreements = deriveDisagreements(manifest);
 
@@ -118,15 +54,8 @@ async function seedManifestDisagreements() {
     loaded: false,
     profileValidationState: {},
   });
-  useImportStore.getState().resetImport();
-  useDataParStore.getState().resetDataPar();
-  await useProcessingStore.getState().resetProcessing();
-  useVisualizationStore.getState().reset();
-  useManifestStore.getState().resetManifest();
-  useProjectStore.setState({ project, isDirty: false, loaded: true });
   useProcessingStore.setState({
     processingPhase: "completed",
-    config: null,
     availableSubjects: [
       {
         subjectSession: "sub-01_01",
@@ -164,10 +93,7 @@ async function seedManifestDisagreements() {
     reviewerMode: "multi",
     disagreements,
     agreementResults: null,
-    staleVerdicts: {
-      [REVIEWER_A_ID]: new Set(),
-      [REVIEWER_B_ID]: new Set(),
-    },
+    staleVerdicts: Object.fromEntries(manifest.reviewers.map(({ id }) => [id, new Set<string>()])),
     priorModulesMtimes: {
       "sub-01_01": null,
       "sub-02_01": null,
@@ -186,12 +112,6 @@ async function seedManifestDisagreements() {
 }
 
 async function resetStores() {
-  useGlobalStore.setState({ loaded: false });
-  useImportStore.getState().resetImport();
-  useDataParStore.getState().resetDataPar();
-  await useProcessingStore.getState().resetProcessing();
-  useVisualizationStore.getState().reset();
-  useManifestStore.getState().resetManifest();
   await useProjectStore.getState().closeProject();
   useGlobalStore.setState({
     settings: DEFAULT_SETTINGS,
@@ -240,11 +160,11 @@ export function installE2EBridge(options: E2EBridgeOptions): E2EBridgeControl | 
       // The existing render already proves this route is ready in that case.
       if (currentRoute === path) resolveReady();
     },
-    seed: async (scenario) => {
+    seed: async (scenario, easlPath) => {
       if (scenario !== "manifest-disagreements") {
         throw new Error(`Unknown E2E scenario: ${scenario}`);
       }
-      await seedManifestDisagreements();
+      await seedManifestDisagreements(easlPath);
       currentScenario = scenario;
     },
     reset: async () => {

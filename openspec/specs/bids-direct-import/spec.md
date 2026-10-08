@@ -95,19 +95,19 @@ Other `mappingState` fields (`rawPaths`, `pathPatterns`, `bMatchDirectories`, `t
 
 ### Requirement: BIDS-direct creation uses confirmed mutation transaction
 
-A BIDS-direct project SHALL be created only by committing the current reviewed BIDS mutation plan. The canonical schema-v1 `project.easl` bytes and compatibility artifacts SHALL belong to the same transaction. The resulting project SHALL retain `projectMeta.dataSource = "bids"`, `projectMeta.currentPhase = "import"`, `uiState.import.bidsReviewConfirmed = false`, and project-root-relative BIDS source state. Independent best-effort `.bidsignore` or compatibility writes after project-file creation SHALL NOT occur.
+BIDS-direct creation SHALL occur only by committing the current reviewed mutation plan. Validated schema-version-2 project bytes and compatibility artifacts SHALL commit together. The project SHALL retain BIDS data source, initial Import phase, unconfirmed BIDS review, and project-root-relative source state. Independent best-effort ignore-file or compatibility writes after project creation SHALL NOT occur.
 
 #### Scenario: Confirmed BIDS-direct creation
 
-- **WHEN** a user confirms a current BIDS-direct mutation plan
-- **THEN** project metadata and all displayed compatibility artifacts SHALL commit together before the project becomes active
+- **WHEN** the current BIDS-direct plan is confirmed
+- **THEN** current-schema project metadata and displayed compatibility artifacts SHALL commit before activation
 
 #### Scenario: Compatibility mutation fails
 
-- **WHEN** marker, directory, or `.bidsignore` installation fails during BIDS-direct creation
-- **THEN** `project.easl` SHALL NOT remain as a successfully created project and the GUI SHALL remain outside the import flow
+- **WHEN** compatibility installation fails
+- **THEN** no successfully created candidate project SHALL remain active and the GUI SHALL stay outside its import flow
 
 #### Scenario: Post-commit BIDS review scan
 
-- **WHEN** the committed BIDS-direct project opens its metadata review panel
-- **THEN** sidecar scanning SHALL read the source tree without performing project-setup mutations
+- **WHEN** the committed project enters BIDS review
+- **THEN** sidecar scanning SHALL not perform setup mutations

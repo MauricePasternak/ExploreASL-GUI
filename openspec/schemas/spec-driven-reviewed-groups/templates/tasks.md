@@ -1,3 +1,8 @@
+<!-- Main maintains each evidence section as current state, not an append-only log.
+On every evidence update, replace/remove stale or contradictory claims across affected groups.
+Invalidate affected checks/reviews; reopen all completed-group checkboxes together if a gate is lost.
+Keep RED/baseline observations explicitly historical. Reconcile before review and completion. -->
+
 ## 1. <!-- Cohesive behavior or refactor group -->
 
 - [ ] 1.1 <!-- Inventory requirements, existing coverage, and affected tests -->
@@ -13,6 +18,8 @@
 
 - Status: pending
 - Starting scope: pending
+- Implementer: pending
+- Reviewer: pending
 - Test retirement: pending
 - Test-budget disposition: pending
 - Task evidence: pending
@@ -22,7 +29,7 @@
 - Sealed verification: not needed | pending
 - Review: pending
 
-## 2. <!-- Next cohesive group; receives an independent read-only reviewer -->
+## 2. <!-- Next cohesive group; receives a fresh implementer and a fresh read-only reviewer -->
 
 - [ ] 2.1 <!-- One independently observable action -->
 - [ ] 2.2 <!-- Preserve each surviving invariant once; remove only superseded behavior -->
@@ -32,3 +39,6 @@
 ### Group 2 Evidence
 
 - Status: pending
+- Starting scope: pending
+- Implementer: pending
+- Reviewer: pending
