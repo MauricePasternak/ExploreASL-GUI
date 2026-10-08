@@ -1,22 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  MetadataGroup,
-  PathPattern,
-  ImportSnapshot,
-  ImportRunSnapshot,
-  ImportProgress,
-} from "../schemas/importSchemas";
+import type { ImportRunSnapshot, ImportProgress } from "../schemas/importSchemas";
 import type { ExecutionProfile } from "../schemas/executionProfile";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
-import { computeStaleness } from "../lib/importStaleness";
 import {
   activateProjectLease,
   closeProjectWorkAdmission,
   resetProjectLifecycleForTests,
 } from "../lib/projectLifecycle";
 import { useGlobalStore } from "./globalStore";
-import { useImportStore } from "./importStore";
+import { acceptedImportSettings, useImportStore } from "./importStore";
+import { useProjectStore } from "./projectStore";
+import { projectFixture } from "../test/projectFixtures";
+import { invoke } from "@tauri-apps/api/core";
 
 const MATLAB_PROFILE: ExecutionProfile = {
   id: "profile-1",
@@ -64,12 +60,22 @@ beforeEach(() => {
     settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
     profileValidationState: { "profile-1": { valid: true, errors: [] } },
   });
-  useImportStore.setState({ selectedProfileId: "profile-1" });
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
+  const snapshot = projectFixture();
+  snapshot.document.uiState.import = {
+    mostRecentConfig: null,
+    selectedProfileId: "profile-1",
+    currentPhase: "running",
+  };
+  useProjectStore.getState().acceptSnapshot(snapshot);
+  activateProjectLease("project-1", "/project");
+  vi.mocked(invoke).mockReset();
 });
 
 // Reset store state between tests
 afterEach(() => {
   useImportStore.getState().resetImport();
+  useProjectStore.getState().cancelAutosave();
   resetProjectLifecycleForTests();
 });
 
@@ -77,70 +83,10 @@ afterEach(() => {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const SAMPLE_PATTERNS: PathPattern[] = [
-  {
-    signature: "VARYING/VARYING/VARYING",
-    samplePath: "BAR/05022026_01/sernum-0001_ser-AAHead_Scout",
-    blocks: ["BAR", "05022026_01", "sernum-0001_ser-AAHead_Scout"],
-    uniqueNames: {
-      0: ["BAR"],
-      1: ["05022026_01"],
-      2: ["sernum-0001_ser-AAHead_Scout"],
-    },
-    count: 1,
-    depth: 3,
-  },
-];
-
-const SAMPLE_PATHS = ["/data/BAR/05022026_01/sernum-0001_ser-AAHead_Scout"];
-
-const VALID_METADATA_GROUP: MetadataGroup = {
-  id: "global-defaults",
-  label: "Global Defaults",
-  bidsParams: {
-    ArterialSpinLabelingType: "PCASL",
-    PostLabelingDelay: [1.8],
-    MRAcquisitionType: "3D",
-    MagneticFieldStrength: 3,
-    Manufacturer: "Siemens",
-    ASLContext: "control,label",
-    M0Type: "Separate",
-    LabelingDuration: 1.8,
-    BackgroundSuppression: false,
-  },
-};
-
 // ---------------------------------------------------------------------------
 // Initial State
 // ---------------------------------------------------------------------------
 describe("importStore initial state", () => {
-  it("starts with activeStep 0", () => {
-    expect(useImportStore.getState().activeStep).toBe(0);
-  });
-
-  it("starts with empty paths and patterns", () => {
-    const state = useImportStore.getState();
-    expect(state.rawPaths).toEqual([]);
-    expect(state.pathPatterns).toEqual([]);
-    expect(state.ingestionComplete).toBe(false);
-  });
-
-  it("starts with bMatchDirectories true", () => {
-    expect(useImportStore.getState().bMatchDirectories).toBe(true);
-  });
-
-  it("starts with empty tokenizer configs", () => {
-    expect(useImportStore.getState().tokenizerConfigs).toEqual({});
-  });
-
-  it("starts with empty aliases", () => {
-    const state = useImportStore.getState();
-    expect(state.modalityAliases).toEqual([]);
-    expect(state.sessionAliases).toEqual([]);
-    expect(state.runAliases).toEqual([]);
-    expect(state.subjectRenames).toEqual([]);
-  });
-
   it("starts with import not running", () => {
     const state = useImportStore.getState();
     expect(state.importRunning).toBe(false);
@@ -151,245 +97,58 @@ describe("importStore initial state", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Step 1: Ingestion
-// ---------------------------------------------------------------------------
-describe("importStore ingestion actions", () => {
-  it("setIngestionResults stores paths and patterns", () => {
-    const { setIngestionResults } = useImportStore.getState();
-    setIngestionResults(SAMPLE_PATHS, SAMPLE_PATTERNS);
-
-    const state = useImportStore.getState();
-    expect(state.rawPaths).toEqual(SAMPLE_PATHS);
-    expect(state.pathPatterns).toEqual(SAMPLE_PATTERNS);
-    expect(state.ingestionComplete).toBe(true);
-  });
-
-  it("setIngestionResults with empty paths sets ingestionComplete false", () => {
-    const { setIngestionResults } = useImportStore.getState();
-    setIngestionResults([], []);
-
-    expect(useImportStore.getState().ingestionComplete).toBe(false);
-  });
-
-  it("setBMatchDirectories updates the flag", () => {
-    const { setBMatchDirectories } = useImportStore.getState();
-    setBMatchDirectories(false);
-    expect(useImportStore.getState().bMatchDirectories).toBe(false);
-  });
-
-  it("setSourceDataPath stores the path", () => {
-    const { setSourceDataPath } = useImportStore.getState();
-    setSourceDataPath("/data/project/sourcedata");
-    expect(useImportStore.getState().sourceDataPath).toBe("/data/project/sourcedata");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Step 2: Tokenizer
-// ---------------------------------------------------------------------------
-describe("importStore tokenizer actions", () => {
-  it("setTokenAssignment adds assignment for a pattern", () => {
-    const { setTokenAssignment } = useImportStore.getState();
-    setTokenAssignment("VARYING/VARYING/VARYING", 0, null, "Subject");
-
-    const configs = useImportStore.getState().tokenizerConfigs;
-    expect(configs["VARYING/VARYING/VARYING"]).toHaveLength(1);
-    expect(configs["VARYING/VARYING/VARYING"][0]).toEqual({
-      blockIndex: 0,
-      subBlockIndex: null,
-      tag: "Subject",
+describe("accepted import edits", () => {
+  it("targets token positions and preserves unrelated groups and rows", async () => {
+    const before = projectFixture();
+    before.document.mappingState = {
+      tokenizerConfigs: {
+        sig: [
+          { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+          { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+        ],
+      },
+      metadataGroups: [
+        { id: "global-defaults", label: "Global", bidsParams: {} },
+        { id: "override", label: "Override", bidsParams: {} },
+      ],
+      subjectRows: [
+        { id: "BAR/01", subject: "BAR", session: "01", groupId: "override" },
+        { id: "FOO/01", subject: "FOO", session: "01", groupId: "global-defaults" },
+      ],
+    };
+    useProjectStore.getState().acceptSnapshot(before);
+    const renamed = structuredClone(before);
+    renamed.acceptedRevision = 1;
+    renamed.document.mappingState.tokenizerConfigs!.sig = [
+      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+      { blockIndex: 0, subBlockIndex: null, tag: "Session" },
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(renamed);
+    useImportStore.getState().setTokenAssignment("sig", 0, null, "Session");
+    await useProjectStore.getState().flushEdits();
+    expect(vi.mocked(invoke).mock.calls[0][1]).toMatchObject({
+      edit: { kind: "import", mapping: renamed.document.mappingState },
     });
-  });
-
-  it("setTokenAssignment replaces existing assignment at same position", () => {
-    const { setTokenAssignment } = useImportStore.getState();
-    setTokenAssignment("sig", 0, null, "Subject");
-    setTokenAssignment("sig", 0, null, "Session");
-
-    const configs = useImportStore.getState().tokenizerConfigs;
-    expect(configs["sig"]).toHaveLength(1);
-    expect(configs["sig"][0].tag).toBe("Session");
-  });
-
-  it("setTokenAssignment accumulates assignments at different positions", () => {
-    const { setTokenAssignment } = useImportStore.getState();
-    setTokenAssignment("sig", 0, null, "Subject");
-    setTokenAssignment("sig", 2, null, "Modality");
-
-    const configs = useImportStore.getState().tokenizerConfigs;
-    expect(configs["sig"]).toHaveLength(2);
-  });
-
-  it("removeTokenAssignment removes specific assignment", () => {
-    const { setTokenAssignment, removeTokenAssignment } = useImportStore.getState();
-    setTokenAssignment("sig", 0, null, "Subject");
-    setTokenAssignment("sig", 2, null, "Modality");
-    removeTokenAssignment("sig", 0, null);
-
-    const configs = useImportStore.getState().tokenizerConfigs;
-    expect(configs["sig"]).toHaveLength(1);
-    expect(configs["sig"][0].blockIndex).toBe(2);
-  });
-
-  it("setTokenizerConfig replaces all assignments for a pattern", () => {
-    const { setTokenAssignment, setTokenizerConfig } = useImportStore.getState();
-    setTokenAssignment("sig", 0, null, "Subject");
-
-    setTokenizerConfig("sig", [{ blockIndex: 1, subBlockIndex: null, tag: "Session" }]);
-
-    const configs = useImportStore.getState().tokenizerConfigs;
-    expect(configs["sig"]).toHaveLength(1);
-    expect(configs["sig"][0].tag).toBe("Session");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Step 3: Aliases
-// ---------------------------------------------------------------------------
-describe("importStore alias actions", () => {
-  it("setModalityAliases stores aliases", () => {
-    const { setModalityAliases } = useImportStore.getState();
-    const aliases = [
-      { captured: "t1_mpr", mapped: "T1w" as const },
-      { captured: "pcasl", mapped: "ASL4D" as const },
-    ];
-    setModalityAliases(aliases);
-    expect(useImportStore.getState().modalityAliases).toEqual(aliases);
-  });
-
-  it("updateModalityAlias updates a specific alias", () => {
-    const { setModalityAliases, updateModalityAlias } = useImportStore.getState();
-    setModalityAliases([
-      { captured: "t1_mpr", mapped: "T1w" },
-      { captured: "pcasl", mapped: "ASL4D" },
-    ]);
-    updateModalityAlias("t1_mpr", "T2w");
-
-    const aliases = useImportStore.getState().modalityAliases;
-    expect(aliases[0].mapped).toBe("T2w");
-    expect(aliases[1].mapped).toBe("ASL4D");
-  });
-
-  it("setSessionAliases stores session aliases", () => {
-    const { setSessionAliases } = useImportStore.getState();
-    const aliases = [
-      { captured: "visit_1", alias: "ASL_1", index: 1 },
-      { captured: "visit_2", alias: "ASL_2", index: 2 },
-    ];
-    setSessionAliases(aliases);
-    expect(useImportStore.getState().sessionAliases).toEqual(aliases);
-  });
-
-  it("setRunAliases stores run aliases", () => {
-    const { setRunAliases } = useImportStore.getState();
-    const aliases = [
-      { captured: "run_a", alias: "ASL_1", index: 1 },
-      { captured: "run_b", alias: "ASL_2", index: 2 },
-    ];
-    setRunAliases(aliases);
-    expect(useImportStore.getState().runAliases).toEqual(aliases);
-  });
-
-  it("setSubjectRenames stores renames", () => {
-    const { setSubjectRenames } = useImportStore.getState();
-    const renames = [
-      { original: "BAR", target: "sub-BAR" },
-      { original: "FOO", target: "sub-FOO" },
-    ];
-    setSubjectRenames(renames);
-    expect(useImportStore.getState().subjectRenames).toEqual(renames);
-  });
-
-  it("updateSubjectRename updates a specific rename", () => {
-    const { setSubjectRenames, updateSubjectRename } = useImportStore.getState();
-    setSubjectRenames([
-      { original: "BAR", target: "BAR" },
-      { original: "FOO", target: "FOO" },
-    ]);
-    updateSubjectRename("BAR", "sub-001");
-
-    const renames = useImportStore.getState().subjectRenames;
-    expect(renames[0].target).toBe("sub-001");
-    expect(renames[1].target).toBe("FOO");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Step 4: Metadata Groups
-// ---------------------------------------------------------------------------
-describe("importStore metadata group actions", () => {
-  const defaultGroup: MetadataGroup = {
-    id: "global",
-    label: "Global Defaults",
-    bidsParams: { ArterialSpinLabelingType: "PCASL" },
-  };
-
-  it("addMetadataGroup appends a group", () => {
-    const { addMetadataGroup } = useImportStore.getState();
-    addMetadataGroup(defaultGroup);
-
-    expect(useImportStore.getState().metadataGroups).toHaveLength(1);
-    expect(useImportStore.getState().metadataGroups[0].id).toBe("global");
-  });
-
-  it("removeMetadataGroup removes by id", () => {
-    const { addMetadataGroup, removeMetadataGroup } = useImportStore.getState();
-    addMetadataGroup(defaultGroup);
-    addMetadataGroup({ ...defaultGroup, id: "override-1", label: "Override" });
-    removeMetadataGroup("global");
-
-    const groups = useImportStore.getState().metadataGroups;
-    expect(groups).toHaveLength(1);
-    expect(groups[0].id).toBe("override-1");
-  });
-
-  it("updateMetadataGroup partially updates a group", () => {
-    const { addMetadataGroup, updateMetadataGroup } = useImportStore.getState();
-    addMetadataGroup(defaultGroup);
-    updateMetadataGroup("global", { label: "Updated Label" });
-
-    const group = useImportStore.getState().metadataGroups[0];
-    expect(group.label).toBe("Updated Label");
-    expect(group.bidsParams.ArterialSpinLabelingType).toBe("PCASL");
-  });
-
-  it("setSubjectRows stores rows", () => {
-    const { setSubjectRows } = useImportStore.getState();
-    const rows = [
-      {
-        id: "BAR/01",
-        subject: "BAR",
-        session: "01",
-        groupId: "global",
-      },
-    ];
-    setSubjectRows(rows);
-    expect(useImportStore.getState().subjectRows).toEqual(rows);
-  });
-
-  it("updateSubjectRowGroup changes group for selected rows", () => {
-    const { setSubjectRows, updateSubjectRowGroup } = useImportStore.getState();
-    setSubjectRows([
-      {
-        id: "BAR/01",
-        subject: "BAR",
-        session: "01",
-        groupId: "global",
-      },
-      {
-        id: "FOO/01",
-        subject: "FOO",
-        session: "01",
-        groupId: "global",
-      },
-    ]);
-
-    updateSubjectRowGroup(["BAR/01"], "override-1");
-
-    const rows = useImportStore.getState().subjectRows;
-    expect(rows[0].groupId).toBe("override-1");
-    expect(rows[1].groupId).toBe("global");
+    const removed = structuredClone(renamed);
+    removed.acceptedRevision = 2;
+    removed.document.mappingState.tokenizerConfigs!.sig.splice(1, 1);
+    vi.mocked(invoke).mockResolvedValueOnce(removed);
+    useImportStore.getState().removeTokenAssignment("sig", 0, null);
+    await useProjectStore.getState().flushEdits();
+    expect(vi.mocked(invoke).mock.calls[1][1]).toMatchObject({
+      edit: { mapping: removed.document.mappingState },
+    });
+    const regrouped = structuredClone(removed);
+    regrouped.acceptedRevision = 3;
+    regrouped.document.mappingState.metadataGroups!.splice(1, 1);
+    regrouped.document.mappingState.subjectRows![0].groupId = "global-defaults";
+    vi.mocked(invoke).mockResolvedValueOnce(regrouped);
+    useImportStore.getState().removeMetadataGroup("override");
+    await useProjectStore.getState().flushEdits();
+    expect(vi.mocked(invoke).mock.calls[2][1]).toMatchObject({
+      edit: { mapping: regrouped.document.mappingState },
+    });
+    expect(acceptedImportSettings()).toMatchObject(regrouped.document.mappingState);
   });
 });
 
@@ -399,7 +158,7 @@ describe("importStore metadata group actions", () => {
 describe("importStore import execution actions", () => {
   it("startImport prepares progress rows from subject rows", () => {
     const store = useImportStore.getState();
-    store.setSubjectRows([
+    useProjectStore.getState().project!.mappingState.subjectRows = [
       {
         id: "BAR/01",
         subject: "BAR",
@@ -412,7 +171,7 @@ describe("importStore import execution actions", () => {
         session: "02",
         groupId: "global",
       },
-    ]);
+    ];
     useImportStore.setState({
       importLog: ["stale line"],
       importProgress: {
@@ -569,70 +328,13 @@ describe("importStore import execution actions", () => {
       error: "Bad metadata",
     });
   });
-
-  it("normalizes persisted preparing imports to interrupted on hydration", () => {
-    const store = useImportStore.getState();
-
-    store.loadPersistedState({
-      importPhase: "preparing",
-      importCompleted: true,
-    });
-
-    expect(useImportStore.getState()).toMatchObject({
-      importPhase: "interrupted",
-      importCompleted: false,
-      importRunning: false,
-    });
-  });
-
-  it("normalizes persisted running imports to interrupted on hydration", () => {
-    const store = useImportStore.getState();
-
-    store.loadPersistedState({
-      importPhase: "running",
-      importCompleted: true,
-    });
-
-    expect(useImportStore.getState()).toMatchObject({
-      importPhase: "interrupted",
-      importCompleted: false,
-      importRunning: false,
-    });
-  });
-
-  it("restores to Preview because native preflight is session-only", () => {
-    const store = useImportStore.getState();
-
-    store.loadPersistedState({
-      activeStep: 5,
-      rawPaths: SAMPLE_PATHS,
-      pathPatterns: SAMPLE_PATTERNS,
-      ingestionComplete: true,
-      tokenizerConfigs: {
-        "VARYING/VARYING/VARYING": [
-          { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-          { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-        ],
-      },
-      modalityAliases: [{ captured: "sernum-0001_ser-AAHead_Scout", mapped: "ASL4D" }],
-      metadataGroups: [VALID_METADATA_GROUP],
-      subjectRows: [{ id: "SUB/01", subject: "SUB", session: "01", groupId: "global-defaults" }],
-    });
-
-    expect(useImportStore.getState().activeStep).toBe(4);
-  });
 });
 
 // ---------------------------------------------------------------------------
 // Execution profile selection (Group 8.1)
 // ---------------------------------------------------------------------------
 describe("importStore execution profile selection", () => {
-  it("setSelectedProfileId updates the selected profile", () => {
-    useImportStore.getState().setSelectedProfileId("profile-2");
-    expect(useImportStore.getState().selectedProfileId).toBe("profile-2");
-  });
-
-  it("autoSelectProfile selects the first valid profile, skipping invalid ones", () => {
+  it("autoSelectProfile selects the first valid profile, skipping invalid ones", async () => {
     const invalid: ExecutionProfile = {
       id: "profile-0",
       type: "matlab",
@@ -647,17 +349,26 @@ describe("importStore execution profile selection", () => {
         "profile-1": { valid: true, errors: [] },
       },
     });
-    useImportStore.setState({ selectedProfileId: null });
+    useProjectStore.getState().project!.uiState.import!.selectedProfileId = undefined;
 
+    const accepted = { ...projectFixture(), acceptedRevision: 1 };
+    accepted.document.uiState.import = { mostRecentConfig: null, selectedProfileId: "profile-1" };
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
     useImportStore.getState().autoSelectProfile();
+    await useProjectStore.getState().flushEdits();
+    expect(invoke).toHaveBeenCalledWith(
+      "accept_project_edit",
+      expect.objectContaining({
+        edit: expect.objectContaining({ preferences: { selectedProfileId: "profile-1" } }),
+      }),
+    );
 
-    expect(useImportStore.getState().selectedProfileId).toBe("profile-1");
+    expect(useProjectStore.getState().project?.uiState.import?.selectedProfileId).toBe("profile-1");
   });
 
   it("autoSelectProfile does not override an existing selection", () => {
-    useImportStore.setState({ selectedProfileId: "profile-1" });
     useImportStore.getState().autoSelectProfile();
-    expect(useImportStore.getState().selectedProfileId).toBe("profile-1");
+    expect(useProjectStore.getState().project?.uiState.import?.selectedProfileId).toBe("profile-1");
   });
 
   it("autoSelectProfile leaves selection null when no valid profile exists", () => {
@@ -665,33 +376,15 @@ describe("importStore execution profile selection", () => {
       settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
       profileValidationState: { "profile-1": { valid: false, errors: ["bad"] } },
     });
-    useImportStore.setState({ selectedProfileId: null });
+    useProjectStore.getState().project!.uiState.import!.selectedProfileId = undefined;
 
     useImportStore.getState().autoSelectProfile();
 
-    expect(useImportStore.getState().selectedProfileId).toBeNull();
-  });
-
-  it("restores selectedProfileId from persisted .easl state", () => {
-    useImportStore.setState({ selectedProfileId: null });
-    useImportStore.getState().loadPersistedState({ selectedProfileId: "profile-restored" });
-    expect(useImportStore.getState().selectedProfileId).toBe("profile-restored");
-  });
-
-  it("startImport captures selectedProfileId in the snapshot", () => {
-    const store = useImportStore.getState();
-    store.setSelectedProfileId("profile-1");
-    store.setSubjectRows([
-      { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-    ]);
-
-    store.startImport();
-
-    expect(useImportStore.getState().pendingImportConfig?.selectedProfileId).toBe("profile-1");
+    expect(useProjectStore.getState().project?.uiState.import?.selectedProfileId).toBeUndefined();
   });
 
   it("startImport blocks with an inline error when no profile is selected (no failed transition)", () => {
-    useImportStore.setState({ selectedProfileId: null });
+    useProjectStore.getState().project!.uiState.import!.selectedProfileId = undefined;
     const store = useImportStore.getState();
 
     store.startImport();
@@ -706,7 +399,6 @@ describe("importStore execution profile selection", () => {
       settings: { ...DEFAULT_SETTINGS, executionProfiles: [MATLAB_PROFILE] },
       profileValidationState: { "profile-1": { valid: false, errors: ["MATLAB not found"] } },
     });
-    useImportStore.setState({ selectedProfileId: "profile-1" });
     const store = useImportStore.getState();
 
     store.startImport();
@@ -717,7 +409,7 @@ describe("importStore execution profile selection", () => {
   });
 
   it("startImport clears a stale profileError once a valid profile resolves", () => {
-    useImportStore.setState({ selectedProfileId: "profile-1", profileError: "stale" });
+    useImportStore.setState({ profileError: "stale" });
     const store = useImportStore.getState();
 
     store.startImport();
@@ -734,25 +426,12 @@ describe("importStore reset", () => {
   it("resetImport clears all state", () => {
     const store = useImportStore.getState();
 
-    // Set various state
-    store.setActiveStep(3);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(SAMPLE_PATHS, SAMPLE_PATTERNS);
-    store.setTokenAssignment("sig", 0, null, "Subject");
-    store.setModalityAliases([{ captured: "t1", mapped: "T1w" }]);
-    useImportStore.setState({ importRunning: true });
-
+    store.bindImportRunSnapshot(nativeSnapshot("running"));
+    store.addLogLines(["old log"]);
     // Reset
     store.resetImport();
 
     const state = useImportStore.getState();
-    expect(state.activeStep).toBe(0);
-    expect(state.sourceDataPath).toBe("");
-    expect(state.rawPaths).toEqual([]);
-    expect(state.pathPatterns).toEqual([]);
-    expect(state.ingestionComplete).toBe(false);
-    expect(state.tokenizerConfigs).toEqual({});
-    expect(state.modalityAliases).toEqual([]);
     expect(state.importRunning).toBe(false);
     expect(state.importSummary).toBeNull();
     expect(state.importPhase).toBe("idle");
@@ -764,199 +443,9 @@ describe("importStore reset", () => {
 // ---------------------------------------------------------------------------
 // Step Navigation
 // ---------------------------------------------------------------------------
-describe("importStore step navigation", () => {
-  it("setActiveStep updates step", () => {
-    const { setActiveStep } = useImportStore.getState();
-    setActiveStep(2);
-    expect(useImportStore.getState().activeStep).toBe(2);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // mostRecentConfig (ImportSnapshot)
-// ---------------------------------------------------------------------------
-describe("importStore mostRecentConfig", () => {
-  it("updates current and snapshot identity for a compatible source relink", () => {
-    const snapshot = {
-      sourceDataPath: "/old/source",
-      pathPatterns: [],
-      tokenizerConfigs: {},
-      bMatchDirectories: true,
-      modalityAliases: [],
-      sessionAliases: [],
-      runAliases: [],
-      subjectRenames: [],
-      metadataGroups: [],
-      subjectRows: [],
-    };
-    useImportStore.setState({ sourceDataPath: "/old/source", mostRecentConfig: snapshot });
-
-    useImportStore.getState().relinkCompatibleSource("/new/source");
-
-    expect(useImportStore.getState().sourceDataPath).toBe("/new/source");
-    expect(useImportStore.getState().mostRecentConfig?.sourceDataPath).toBe("/new/source");
-    expect(useImportStore.getState().requiresManualSave).toBe(true);
-    expect(useImportStore.getState().sourceAvailability.status).toBe("available");
-  });
-
-  it("selectively resets source-dependent setup for a confirmed incompatible relink", () => {
-    useImportStore.setState({
-      activeStep: 5,
-      sourceDataPath: "/old/source",
-      rawPaths: ["old/scan"],
-      pathPatterns: SAMPLE_PATTERNS,
-      tokenizerConfigs: { saved: [] },
-      modalityAliases: [{ captured: "asl", mapped: "ASL4D" }],
-      metadataGroups: [VALID_METADATA_GROUP],
-      subjectRows: [{ id: "OLD/01", subject: "OLD", session: "01", groupId: "global-defaults" }],
-      importPhase: "completed",
-      importCompleted: true,
-      importLog: ["old log"],
-      importRunning: false,
-      importProgress: {
-        OLD: { subject: "OLD", session: "01", status: "completed" },
-      },
-      mostRecentConfig: {
-        sourceDataPath: "/old/source",
-        pathPatterns: SAMPLE_PATTERNS,
-        tokenizerConfigs: { saved: [] },
-        bMatchDirectories: true,
-        modalityAliases: [],
-        sessionAliases: [],
-        runAliases: [],
-        subjectRenames: [],
-        metadataGroups: [],
-        subjectRows: [],
-      },
-      selectedProfileId: "profile-1",
-    });
-
-    useImportStore
-      .getState()
-      .relinkIncompatibleSource("/new/source", ["new/scan"], SAMPLE_PATTERNS);
-
-    expect(useImportStore.getState()).toMatchObject({
-      activeStep: 0,
-      sourceDataPath: "/new/source",
-      rawPaths: ["new/scan"],
-      tokenizerConfigs: {},
-      modalityAliases: [],
-      metadataGroups: [],
-      subjectRows: [],
-      importPhase: "idle",
-      importCompleted: false,
-      importLog: [],
-      importProgress: {},
-      mostRecentConfig: null,
-      selectedProfileId: "profile-1",
-      requiresManualSave: true,
-    });
-  });
-  it("starts as null", () => {
-    expect(useImportStore.getState().mostRecentConfig).toBeNull();
-  });
-
-  it("setMostRecentConfig updates the snapshot", () => {
-    const snapshot: import("../schemas/importSchemas").ImportSnapshot = {
-      sourceDataPath: "/data",
-      pathPatterns: SAMPLE_PATTERNS,
-      tokenizerConfigs: {},
-      bMatchDirectories: true,
-      modalityAliases: [],
-      sessionAliases: [],
-      runAliases: [],
-      subjectRenames: [],
-      metadataGroups: [],
-      subjectRows: [],
-    };
-    useImportStore.getState().setMostRecentConfig(snapshot);
-    expect(useImportStore.getState().mostRecentConfig).toEqual(snapshot);
-  });
-
-  it("startImport captures current config as a pending attempt", () => {
-    const store = useImportStore.getState();
-    store.setSourceDataPath("/scan/data");
-    store.setIngestionResults(SAMPLE_PATHS, SAMPLE_PATTERNS);
-    store.setTokenAssignment("VARYING/VARYING/VARYING", 0, null, "Subject");
-    store.setSubjectRows([
-      { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-    ]);
-
-    store.startImport();
-
-    const { pendingImportConfig } = useImportStore.getState();
-    expect(pendingImportConfig).not.toBeNull();
-    expect(pendingImportConfig!.sourceDataPath).toBe("/scan/data");
-    expect(pendingImportConfig!.pathPatterns).toEqual(SAMPLE_PATTERNS);
-    expect(pendingImportConfig!.tokenizerConfigs).toEqual({
-      "VARYING/VARYING/VARYING": [{ blockIndex: 0, subBlockIndex: null, tag: "Subject" }],
-    });
-    expect(pendingImportConfig!.subjectRows).toEqual([
-      { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-    ]);
-  });
-
-  it("mostRecentConfig is persisted via loadPersistedState round-trip", () => {
-    const snapshot: import("../schemas/importSchemas").ImportSnapshot = {
-      sourceDataPath: "/persisted",
-      pathPatterns: [],
-      tokenizerConfigs: {},
-      bMatchDirectories: true,
-      modalityAliases: [],
-      sessionAliases: [],
-      runAliases: [],
-      subjectRenames: [],
-      metadataGroups: [
-        { id: "g1", label: "G1", bidsParams: { ArterialSpinLabelingType: "PCASL" } },
-      ],
-      subjectRows: [{ id: "SUB/01", subject: "SUB", session: "01", groupId: "g1" }],
-    };
-
-    useImportStore.getState().loadPersistedState({
-      sourceDataPath: "/persisted",
-      pathPatterns: [],
-      tokenizerConfigs: {},
-      bMatchDirectories: true,
-      metadataGroups: snapshot.metadataGroups,
-      subjectRows: snapshot.subjectRows,
-      mostRecentConfig: snapshot,
-    });
-
-    expect(useImportStore.getState().mostRecentConfig).toEqual(snapshot);
-  });
-
-  it("loadPersistedState falls back to null for missing mostRecentConfig", () => {
-    useImportStore.getState().loadPersistedState({});
-    expect(useImportStore.getState().mostRecentConfig).toBeNull();
-  });
-
-  it("loadPersistedState recovers gracefully using catch fallbacks for wrong-typed fields", () => {
-    const store = useImportStore.getState();
-    store.loadPersistedState({
-      sourceDataPath: 12345,
-      rawPaths: "not-an-array",
-      pathPatterns: [{ signature: 123 }],
-      bMatchDirectories: "yes",
-      tokenizerConfigs: null,
-      runAliases: ["corrupted"],
-      activeStep: -1,
-      importPhase: "not-a-phase",
-      importCompleted: 42,
-    });
-
-    const state = useImportStore.getState();
-    expect(state.sourceDataPath).toBe("");
-    expect(state.rawPaths).toEqual([]);
-    expect(state.pathPatterns).toEqual([]);
-    expect(state.bMatchDirectories).toBe(true);
-    expect(state.tokenizerConfigs).toEqual({});
-    expect(state.runAliases).toEqual([]);
-    expect(state.activeStep).toBe(0);
-    expect(state.importPhase).toBe("idle");
-    expect(state.importCompleted).toBe(false);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // applyStaleness
 // ---------------------------------------------------------------------------
@@ -1023,7 +512,7 @@ describe("importStore staging preflight", () => {
   });
 });
 
-describe("legacy staging identifiers", () => {
+describe("current staging identifiers", () => {
   it("hydrates unsafe aliases and rename values unchanged without runtime preflight persistence", () => {
     const persisted = {
       subjectRenames: [
@@ -1038,12 +527,17 @@ describe("legacy staging identifiers", () => {
         { captured: "four", alias: "é", index: 4 },
       ],
     };
-    useImportStore.getState().loadPersistedState(persisted);
-    const state = useImportStore.getState();
+    const snapshot = projectFixture();
+    snapshot.document.mappingState = persisted;
+    useProjectStore.getState().acceptSnapshot(snapshot);
+    const state = acceptedImportSettings();
     expect(state.subjectRenames).toEqual(persisted.subjectRenames);
     expect(state.sessionAliases).toEqual(persisted.sessionAliases);
     expect(state.runAliases).toEqual(persisted.runAliases);
-    expect(state.stagingPreflight).toMatchObject({ status: "idle", issues: [] });
+    expect(useImportStore.getState().stagingPreflight).toMatchObject({
+      status: "idle",
+      issues: [],
+    });
   });
 });
 
@@ -1053,10 +547,10 @@ describe("legacy staging identifiers", () => {
 describe("importStore reconstructProgressFromLockFiles", () => {
   it("maps lock file completed/failed statuses to importProgress", () => {
     const store = useImportStore.getState();
-    store.setSubjectRows([
+    useProjectStore.getState().project!.mappingState.subjectRows = [
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
       { id: "FOO/01", subject: "FOO", session: "01", groupId: "global-defaults" },
-    ]);
+    ];
 
     const statuses: import("../lib/importStatus").ImportSubjectStatus[] = [
       { subject: "BAR", status: "completed" },
@@ -1072,10 +566,10 @@ describe("importStore reconstructProgressFromLockFiles", () => {
 
   it("marks subjects not in lock files as pending", () => {
     const store = useImportStore.getState();
-    store.setSubjectRows([
+    useProjectStore.getState().project!.mappingState.subjectRows = [
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
       { id: "FOO/01", subject: "FOO", session: "01", groupId: "global-defaults" },
-    ]);
+    ];
 
     const statuses: import("../lib/importStatus").ImportSubjectStatus[] = [
       { subject: "BAR", status: "completed" },
@@ -1090,10 +584,10 @@ describe("importStore reconstructProgressFromLockFiles", () => {
 
   it("applies staleness per subject", () => {
     const store = useImportStore.getState();
-    store.setSubjectRows([
+    useProjectStore.getState().project!.mappingState.subjectRows = [
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
       { id: "FOO/01", subject: "FOO", session: "01", groupId: "global-defaults" },
-    ]);
+    ];
 
     const statuses: import("../lib/importStatus").ImportSubjectStatus[] = [
       { subject: "BAR", status: "completed" },
@@ -1109,9 +603,9 @@ describe("importStore reconstructProgressFromLockFiles", () => {
 
   it("is a no-op when importPhase is running", () => {
     const store = useImportStore.getState();
-    store.setSubjectRows([
+    useProjectStore.getState().project!.mappingState.subjectRows = [
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-    ]);
+    ];
     updateImportProgress("BAR", { subject: "BAR", session: "01", status: "running" });
     setImportPhase("running");
 
@@ -1126,9 +620,9 @@ describe("importStore reconstructProgressFromLockFiles", () => {
 
   it("is a no-op when importPhase is preparing", () => {
     const store = useImportStore.getState();
-    store.setSubjectRows([
+    useProjectStore.getState().project!.mappingState.subjectRows = [
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-    ]);
+    ];
     updateImportProgress("BAR", { subject: "BAR", session: "01", status: "pending" });
     setImportPhase("preparing");
 
@@ -1141,166 +635,11 @@ describe("importStore reconstructProgressFromLockFiles", () => {
     expect(useImportStore.getState().importProgress.BAR.status).toBe("pending");
   });
 
-  it("first import (no snapshot) → complete → re-visit → change metadata → re-run", () => {
-    const store = useImportStore.getState();
-
-    // Set up initial state
-    store.setSourceDataPath("/data/project/sourcedata");
-    store.setIngestionResults(SAMPLE_PATHS, SAMPLE_PATTERNS);
-    store.setSubjectRows([
-      { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-      { id: "FOO/01", subject: "FOO", session: "01", groupId: "global-defaults" },
-    ]);
-    store.addMetadataGroup(VALID_METADATA_GROUP);
-
-    // startImport captures snapshot, sets phase to preparing
-    store.startImport();
-    expect(useImportStore.getState().importPhase).toBe("preparing");
-    expect(useImportStore.getState().pendingImportConfig).not.toBeNull();
-
-    const snapshot = useImportStore.getState().pendingImportConfig!;
-    expect(snapshot.sourceDataPath).toBe("/data/project/sourcedata");
-
-    // Mark subjects running, then completed
-    store.markSubjectRunning("BAR");
-    store.markSubjectRunning("FOO");
-    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
-    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("completed"));
-
-    expect(useImportStore.getState().importCompleted).toBe(true);
-    expect(useImportStore.getState().importPhase).toBe("completed");
-
-    // Re-visit: reconstructProgressFromLockFiles with completed statuses
-    store.reconstructProgressFromLockFiles(
-      [
-        { subject: "BAR", status: "completed" },
-        { subject: "FOO", status: "completed" },
-      ],
-      ["BAR", "FOO"],
-      {},
-    );
-
-    expect(useImportStore.getState().importProgress.BAR.status).toBe("completed");
-    expect(useImportStore.getState().importProgress.FOO.status).toBe("completed");
-    expect(useImportStore.getState().importProgress.BAR.stale).toBe(false);
-
-    // Change metadata group — computeStaleness should detect it
-    store.updateMetadataGroup("global-defaults", {
-      label: "Changed Label",
-      bidsParams: {
-        ...VALID_METADATA_GROUP.bidsParams,
-        ArterialSpinLabelingType: "PASL" as const,
-      },
-    });
-
-    const staleness = computeStaleness(useImportStore.getState(), snapshot);
-    expect(staleness.BAR).toBe(true);
-    expect(staleness.FOO).toBe(true);
-
-    // applyStaleness sets stale flags
-    store.applyStaleness(staleness);
-    expect(useImportStore.getState().importProgress.BAR.stale).toBe(true);
-    expect(useImportStore.getState().importProgress.FOO.stale).toBe(true);
-  });
-
-  it("structural change → all stale → re-run → snapshot updated", () => {
-    const store = useImportStore.getState();
-
-    // Initial config
-    store.setSourceDataPath("/data/project/sourcedata");
-    store.setIngestionResults(SAMPLE_PATHS, SAMPLE_PATTERNS);
-    store.setSubjectRows([
-      { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-      { id: "FOO/01", subject: "FOO", session: "01", groupId: "global-defaults" },
-    ]);
-
-    store.startImport();
-    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
-    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("completed"));
-    const oldSnapshot = useImportStore.getState().mostRecentConfig;
-    expect(oldSnapshot!.sourceDataPath).toBe("/data/project/sourcedata");
-
-    // Mark completed, then re-visit
-    store.markSubjectRunning("BAR");
-    store.markSubjectRunning("FOO");
-
-    // Change sourceDataPath (structural change)
-    store.setSourceDataPath("/data/new-project/sourcedata");
-
-    const staleness = computeStaleness(useImportStore.getState(), oldSnapshot);
-
-    // All subjects stale due to structural change
-    expect(staleness.BAR).toBe(true);
-    expect(staleness.FOO).toBe(true);
-
-    // re-run: startImport captures new snapshot
-    store.startImport();
-    const newSnapshot = useImportStore.getState().pendingImportConfig;
-
-    expect(newSnapshot).not.toBeNull();
-    expect(newSnapshot!.sourceDataPath).toBe("/data/new-project/sourcedata");
-    expect(newSnapshot!.sourceDataPath).not.toBe(oldSnapshot!.sourceDataPath);
-  });
-
-  it("namespace restructure — nested format persists correctly", () => {
-    const store = useImportStore.getState();
-
-    const nestedSnapshot: ImportSnapshot = {
-      sourceDataPath: "/persisted/scan",
-      pathPatterns: SAMPLE_PATTERNS,
-      tokenizerConfigs: {
-        "VARYING/VARYING/VARYING": [
-          { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-          { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-        ],
-      },
-      bMatchDirectories: true,
-      modalityAliases: [{ captured: "sernum-0001_ser-AAHead_Scout", mapped: "ASL4D" }],
-      sessionAliases: [],
-      runAliases: [],
-      subjectRenames: [],
-      metadataGroups: [VALID_METADATA_GROUP],
-      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" }],
-    };
-
-    store.loadPersistedState({
-      sourceDataPath: "/persisted/scan",
-      rawPaths: SAMPLE_PATHS,
-      pathPatterns: SAMPLE_PATTERNS,
-      ingestionComplete: true,
-      tokenizerConfigs: {
-        "VARYING/VARYING/VARYING": [
-          { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-          { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-        ],
-      },
-      bMatchDirectories: true,
-      modalityAliases: [{ captured: "sernum-0001_ser-AAHead_Scout", mapped: "ASL4D" }],
-      metadataGroups: [VALID_METADATA_GROUP],
-      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" }],
-      mostRecentConfig: nestedSnapshot,
-      activeStep: 5,
-      importPhase: "completed" as const,
-    });
-
-    const state = useImportStore.getState();
-    expect(state.mostRecentConfig).toEqual(nestedSnapshot);
-    expect(state.mostRecentConfig!.sourceDataPath).toBe("/persisted/scan");
-    expect(state.activeStep).toBe(4);
-    expect(state.importPhase).toBe("completed");
-
-    // Verify nested keys are preserved (not flattened)
-    expect(state.metadataGroups).toHaveLength(1);
-    expect(state.metadataGroups[0].id).toBe("global-defaults");
-    expect(state.subjectRows).toHaveLength(1);
-    expect(state.subjectRows[0].groupId).toBe("global-defaults");
-  });
-
   it("preserves existing session when reconstructing", () => {
     const store = useImportStore.getState();
-    store.setSubjectRows([
+    useProjectStore.getState().project!.mappingState.subjectRows = [
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-    ]);
+    ];
     updateImportProgress("BAR", { subject: "BAR", session: "01", status: "running" });
     setImportPhase("idle");
 
@@ -1662,41 +1001,4 @@ describe("authoritative import snapshot reconciliation", () => {
       expect(useImportStore.getState().importProgress.BAR.status).toBe(lifecycle);
     },
   );
-
-  it("commits attempted configuration only for authoritative completion", () => {
-    const oldConfig = {
-      sourceDataPath: "/old",
-      pathPatterns: [],
-      tokenizerConfigs: {},
-      bMatchDirectories: true,
-      modalityAliases: [],
-      sessionAliases: [],
-      runAliases: [],
-      subjectRenames: [],
-      metadataGroups: [],
-      subjectRows: [],
-    };
-    useImportStore.setState({
-      sourceDataPath: "/new",
-      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" }],
-      mostRecentConfig: oldConfig,
-    });
-    useImportStore.getState().startImport(["BAR"]);
-    expect(useImportStore.getState().mostRecentConfig).toBe(oldConfig);
-    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
-    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("failed"));
-    expect(useImportStore.getState().mostRecentConfig).toBe(oldConfig);
-
-    useImportStore.getState().resetImport();
-    useImportStore.setState({
-      selectedProfileId: "profile-1",
-      sourceDataPath: "/new",
-      subjectRows: [{ id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" }],
-      mostRecentConfig: oldConfig,
-    });
-    useImportStore.getState().startImport(["BAR"]);
-    useImportStore.getState().bindImportRunSnapshot(nativeSnapshot("running"));
-    useImportStore.getState().reconcileImportRunSnapshot(nativeSnapshot("completed"));
-    expect(useImportStore.getState().mostRecentConfig?.sourceDataPath).toBe("/new");
-  });
 });

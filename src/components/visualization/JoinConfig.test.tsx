@@ -1,10 +1,16 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 
-import { useVisualizationStore } from "../../stores/visualizationStore";
+import {
+  useVisualizationStore,
+  acceptedVisualizationSettings,
+} from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { projectView } from "../../schemas/project";
+import { projectFixture } from "../../test/projectFixtures";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 import JoinConfig from "./JoinConfig";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -33,6 +39,9 @@ const mockInvoke = vi.mocked(invoke);
 
 afterEach(() => {
   cleanup();
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
+  vi.useRealTimers();
 });
 
 function renderComponent() {
@@ -47,30 +56,15 @@ describe("JoinConfig", () => {
   beforeEach(() => {
     // Reset stores
     useVisualizationStore.getState().reset();
-    useVisualizationStore.setState({
-      joinConfig: null,
-      qcbfSource: null,
-      inspection: null,
-    });
+    resetProjectLifecycleForTests();
     useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "test-id",
-          name: "Test Project",
-          rootPath: "/tmp/test",
-          createdAt: new Date().toISOString(),
-          lastOpened: new Date().toISOString(),
-          currentPhase: "visualization",
-          dataSource: "dicom" as const,
-        },
-        uiState: { processing: { population: { completed: true } } },
-        mappingState: {},
-        dataPar: {},
-      },
+      project: projectView(
+        projectFixture("test-id", "Test Project", "/tmp/test", { uiState: { dataVis: {} } }),
+      ),
       isDirty: false,
       loaded: true,
     });
+    activateProjectLease("test-id", "/tmp/test");
     mockInvoke.mockReset();
   });
 
@@ -97,7 +91,7 @@ describe("JoinConfig", () => {
       return Promise.resolve([]);
     });
 
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       joinConfig: {
         externalSource: { absolutePath: "/tmp/external.csv", fileHash: "ext123", sheetName: null },
         keys: [{ left: "participant_id", right: "" }],
@@ -145,7 +139,7 @@ describe("JoinConfig", () => {
     });
 
     // Set initial state with some existing keys
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       joinConfig: {
         externalSource: {
           absolutePath: "/tmp/old_external.csv",
@@ -167,7 +161,7 @@ describe("JoinConfig", () => {
     changeBtn.click();
 
     expect(await screen.findByTestId("external-relink-mismatch-dialog")).toBeInTheDocument();
-    expect(useVisualizationStore.getState().joinConfig).toMatchObject({
+    expect(acceptedVisualizationSettings().joinConfig).toMatchObject({
       externalSource: { absolutePath: "/tmp/old_external.csv", fileHash: "ext123" },
       keys: [{ left: "participant_id", right: "SubjectID" }],
     });
@@ -175,6 +169,7 @@ describe("JoinConfig", () => {
   });
 
   it("updates only the path when a replacement hash matches", async () => {
+    vi.useFakeTimers();
     const { open } = await import("@tauri-apps/plugin-dialog");
     vi.mocked(open).mockResolvedValue("/tmp/new_external.csv");
     const inspection = {
@@ -183,10 +178,7 @@ describe("JoinConfig", () => {
       fileHash: "ext123",
       sheetName: null,
     };
-    mockInvoke.mockImplementation((command) =>
-      command === "inspect_external_data" ? Promise.resolve(inspection) : Promise.resolve([]),
-    );
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       joinConfig: {
         externalSource: {
           absolutePath: "/tmp/old_external.csv",
@@ -204,26 +196,120 @@ describe("JoinConfig", () => {
       domainFilters: { xMin: null, xMax: null, yMin: 1, yMax: 2 },
       stage: "visualize",
     });
+    const saved = useProjectStore.getState().project!.uiState.dataVis!;
+    const accepted = {
+      ...projectFixture("test-id", "Test Project", "/tmp/test", {
+        uiState: {
+          dataVis: {
+            ...saved,
+            joinConfig: {
+              ...saved.joinConfig!,
+              externalSource: {
+                absolutePath: "/tmp/new_external.csv",
+                fileHash: "ext123",
+                sheetName: null,
+              },
+            },
+          },
+        },
+      }),
+      acceptedRevision: 1,
+    };
+    let acceptRelink!: () => void;
+    const acceptance = new Promise<void>((resolve) => {
+      acceptRelink = resolve;
+    });
+    mockInvoke.mockImplementation(async (command, args) => {
+      if (
+        command === "inspect_external_data" &&
+        (args as { absolutePath: string }).absolutePath === "/tmp/old_external.csv"
+      )
+        return Promise.reject(new Error("Source unreadable"));
+      if (command === "accept_project_edit") await acceptance;
+      return Promise.resolve(
+        command === "inspect_external_data"
+          ? inspection
+          : command === "save_project"
+            ? { ...accepted, persistedRevision: 1 }
+            : accepted,
+      );
+    });
 
     renderComponent();
-    await userEvent.click(screen.getByTestId("change-external-btn"));
-    await waitFor(() =>
-      expect(useVisualizationStore.getState().joinConfig?.externalSource.absolutePath).toBe(
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("external-source-warning")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("change-external-btn"));
+    await vi.waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith("accept_project_edit", expect.anything()),
+    );
+    expect(useVisualizationStore.getState().externalSourceAvailability.status).toBe("unreadable");
+    expect(acceptedVisualizationSettings().joinConfig?.externalSource.absolutePath).toBe(
+      "/tmp/old_external.csv",
+    );
+    acceptRelink();
+    await vi.waitFor(() =>
+      expect(acceptedVisualizationSettings().joinConfig?.externalSource.absolutePath).toBe(
         "/tmp/new_external.csv",
       ),
     );
+    expect(useVisualizationStore.getState().externalSourceAvailability).toEqual({
+      status: "available",
+      savedPath: "/tmp/new_external.csv",
+      message: null,
+    });
+    expect(screen.queryByTestId("external-source-warning")).not.toBeInTheDocument();
 
-    expect(useVisualizationStore.getState()).toMatchObject({
+    expect(acceptedVisualizationSettings()).toMatchObject({
       joinConfig: { keys: [{ left: "participant_id", right: "SubjectID" }] },
       columnTypes: { Diagnosis: "nominal" },
       levelOrderings: { Diagnosis: ["A"] },
       axisAssignment: { x: "Diagnosis", y: "qCBF", colorBy: null },
       domainFilters: { xMin: null, xMax: null, yMin: 1, yMax: 2 },
       stage: "visualize",
-      requiresManualSave: true,
     });
     expect(useProjectStore.getState().isDirty).toBe(true);
-    expect(mockInvoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(mockInvoke).toHaveBeenCalledWith("save_project", { generation: 1 });
+    expect(useProjectStore.getState().isDirty).toBe(false);
+  });
+
+  it("preserves queued delimiter and drop-column edits until both are accepted", async () => {
+    const join = {
+      externalSource: { absolutePath: "/tmp/external.csv", fileHash: "saved", sheetName: null },
+      keys: [],
+      dropRightOn: true,
+      naTokens: [""],
+      delimiter: ",",
+    };
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, { joinConfig: join });
+    let acceptFirst!: () => void;
+    const firstAcceptance = new Promise<void>((resolve) => {
+      acceptFirst = resolve;
+    });
+    const submitted: (typeof join)[] = [];
+    mockInvoke.mockImplementation(async (command, args) => {
+      if (command === "inspect_external_data")
+        return { columns: [], rowCount: 10, fileHash: "saved", sheetName: null };
+      const config = (args as { edit: { config: { joinConfig: typeof join } } }).edit.config;
+      submitted.push(config.joinConfig);
+      if (submitted.length === 1) await firstAcceptance;
+      return {
+        ...projectFixture("test-id", "Test Project", "/tmp/test", { uiState: { dataVis: config } }),
+        acceptedRevision: submitted.length,
+      };
+    });
+    renderComponent();
+    await userEvent.click(screen.getByTestId("delimiter-select"));
+    await userEvent.click(screen.getByRole("option", { name: "Semicolon (;)" }));
+    await waitFor(() => expect(submitted).toHaveLength(1));
+    await userEvent.click(screen.getByTestId("drop-right-on-toggle"));
+    expect(submitted).toHaveLength(1);
+    expect(acceptedVisualizationSettings().joinConfig).toEqual(join);
+    acceptFirst();
+    await useProjectStore.getState().flushEdits();
+    expect(submitted[1]).toEqual({ ...join, delimiter: ";", dropRightOn: false });
+    expect(acceptedVisualizationSettings().joinConfig).toEqual(submitted[1]);
   });
 
   it("preserves setup when a changed replacement is declined", async () => {
@@ -250,14 +336,17 @@ describe("JoinConfig", () => {
       naTokens: [""],
       delimiter: ",",
     };
-    useVisualizationStore.setState({ joinConfig: saved, columnTypes: { Diagnosis: "nominal" } });
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
+      joinConfig: saved,
+      columnTypes: { Diagnosis: "nominal" },
+    });
 
     renderComponent();
     await userEvent.click(screen.getByTestId("change-external-btn"));
     await userEvent.click(await screen.findByTestId("external-relink-cancel-btn"));
 
-    expect(useVisualizationStore.getState().joinConfig).toEqual(saved);
-    expect(useVisualizationStore.getState().columnTypes).toEqual({ Diagnosis: "nominal" });
+    expect(acceptedVisualizationSettings().joinConfig).toEqual(saved);
+    expect(acceptedVisualizationSettings().columnTypes).toEqual({ Diagnosis: "nominal" });
     expect(useProjectStore.getState().isDirty).toBe(false);
   });
 
@@ -278,7 +367,7 @@ describe("JoinConfig", () => {
       }
       return Promise.resolve([]);
     });
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       joinConfig: {
         externalSource: {
           absolutePath: "/tmp/old_external.csv",
@@ -297,15 +386,44 @@ describe("JoinConfig", () => {
       domainFilters: { xMin: 1, xMax: 2, yMin: 3, yMax: 4 },
       stage: "visualize",
     });
+    const saved = useProjectStore.getState().project!.uiState.dataVis!;
+    const accepted = {
+      ...projectFixture("test-id", "Test Project", "/tmp/test", {
+        uiState: {
+          dataVis: {
+            ...saved,
+            joinConfig: {
+              ...saved.joinConfig!,
+              externalSource: {
+                absolutePath: "/tmp/new_external.csv",
+                fileHash: "changed",
+                sheetName: null,
+              },
+              keys: [],
+            },
+            columnTypes: {},
+            identifiers: null,
+            levelOrderings: {},
+            axisAssignment: { x: null, y: null, colorBy: null },
+            domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
+            stage: "selectData",
+          },
+        },
+      }),
+      acceptedRevision: 1,
+    };
+    useVisualizationStore.getState().selectPoint("old");
 
     renderComponent();
     await userEvent.click(screen.getByTestId("change-external-btn"));
-    expect(useVisualizationStore.getState().joinConfig?.externalSource.absolutePath).toBe(
+    expect(acceptedVisualizationSettings().joinConfig?.externalSource.absolutePath).toBe(
       "/tmp/old_external.csv",
     );
+    mockInvoke.mockResolvedValueOnce(accepted);
     await userEvent.click(await screen.findByTestId("external-relink-confirm-btn"));
 
-    expect(useVisualizationStore.getState()).toMatchObject({
+    await useProjectStore.getState().flushEdits();
+    expect(acceptedVisualizationSettings()).toMatchObject({
       joinConfig: {
         externalSource: { absolutePath: "/tmp/new_external.csv", fileHash: "changed" },
         keys: [],
@@ -316,9 +434,9 @@ describe("JoinConfig", () => {
       axisAssignment: { x: null, y: null, colorBy: null },
       domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
       stage: "selectData",
-      requiresManualSave: true,
     });
     expect(useProjectStore.getState().isDirty).toBe(true);
+    expect(useVisualizationStore.getState().selectedPointId).toBeNull();
   });
 
   it("uses the project root as defaultPath when selecting external file for the first time", async () => {
@@ -327,7 +445,7 @@ describe("JoinConfig", () => {
     mockOpen.mockResolvedValue("/tmp/external.csv");
 
     // Initial state: joinConfig is null
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       joinConfig: null,
     });
 
@@ -366,7 +484,7 @@ describe("JoinConfig", () => {
     });
 
     // Initial state: joinConfig points to /tmp/old_external.csv
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       joinConfig: {
         externalSource: {
           absolutePath: "/tmp/some_dir/old_external.csv",

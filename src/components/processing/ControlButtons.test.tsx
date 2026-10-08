@@ -7,7 +7,7 @@ import type { SubjectModuleStatus } from "../../schemas/processingSchemas";
 import { findCompletedSubjects } from "./ControlButton.helpers";
 
 const mockKillProcessing = vi.fn();
-const mockStartProcessing = vi.fn();
+const mockStartProcessing = vi.fn().mockResolvedValue(undefined);
 const mockConfirmProcessingStopped = vi.fn();
 const mockClearBidsCompatibilityError = vi.fn();
 const mockPreflightBidsSetupRepair = vi.fn();
@@ -76,9 +76,21 @@ vi.mock("../../stores/processingStore", () => ({
 }));
 
 vi.mock("../../stores/projectStore", () => ({
-  useProjectStore: (
-    selector: (state: { project: { projectMeta: { rootPath: string } } }) => unknown,
-  ) => selector({ project: { projectMeta: { rootPath: "/test/bids" } } }),
+  useProjectStore: Object.assign(
+    (selector: (state: unknown) => unknown) =>
+      selector({
+        project: {
+          projectMeta: { rootPath: "/test/bids" },
+          uiState: { processing: { config: mockConfig } },
+        },
+      }),
+    {
+      getState: () => ({
+        flushEdits: () => Promise.resolve(),
+        project: { uiState: { processing: { config: mockConfig } } },
+      }),
+    },
+  ),
 }));
 
 vi.mock("../../lib/bids/setup", () => ({

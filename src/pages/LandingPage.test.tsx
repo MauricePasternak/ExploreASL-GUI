@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { exists } from "@tauri-apps/plugin-fs";
 import { notifications } from "@mantine/notifications";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TestMantineProvider as MantineProvider } from "../test/render";
@@ -18,23 +18,19 @@ import {
 import { makeMatlabProfile } from "../test/profileFixtures";
 import { ProjectStorageError } from "../lib/projectPersistence";
 import LandingPage from "./LandingPage";
+import { projectFixture } from "../test/projectFixtures";
+import { projectView } from "../schemas/project";
 
-function identityProjectBytes(id: string) {
-  return JSON.stringify({
-    schemaVersion: 1,
-    projectMeta: {
-      id,
-      name: "Identity Project",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      lastOpened: "2026-01-01T00:00:00.000Z",
-      currentPhase: "import",
-      dataSource: "bids",
-    },
-    uiState: {},
-    mappingState: { sourceDataPath: "." },
-    dataPar: {},
-  });
-}
+const inspection = {
+  candidateId: "candidate",
+  projectId: "same-id",
+  name: "Identity Project",
+  rootPath: "/new",
+  recoveredFromBackup: false,
+  duplicatePath: null as string | null,
+  movedFrom: null,
+  setupRecovered: 0,
+};
 
 describe("LandingPage", () => {
   afterEach(() => cleanup());
@@ -50,7 +46,11 @@ describe("LandingPage", () => {
     });
     vi.mocked(open).mockResolvedValue(null);
     vi.mocked(exists).mockResolvedValue(false);
-    vi.mocked(invoke).mockResolvedValue(true);
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "inspect_project") return inspection;
+      if (command === "is_writable") return true;
+      throw new Error(`Unexpected command ${command}`);
+    });
   });
 
   it("renders the primary landing actions", async () => {
@@ -98,11 +98,13 @@ describe("LandingPage", () => {
     });
   });
 
-  it("rejects project creation when an easl file already exists", async () => {
+  it("discloses prior setup recovery before rejecting an existing project", async () => {
     const createProject = vi.fn();
     useProjectStore.setState({ createProject });
     vi.mocked(open).mockResolvedValue("/tmp/existing-project");
-    vi.mocked(invoke).mockResolvedValue(true);
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "check_bids_dataset" ? { setupRecovered: 1 } : true,
+    );
     vi.mocked(exists).mockImplementation(async (path) => {
       return path === `/tmp/existing-project/${PROJECT_FILE_NAME}`;
     });
@@ -119,6 +121,13 @@ describe("LandingPage", () => {
 
     await waitFor(() => {
       expect(createProject).not.toHaveBeenCalled();
+      expect(notifications.show).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          title: "Prior setup recovered",
+          message: expect.stringContaining("1"),
+        }),
+      );
       expect(notifications.show).toHaveBeenCalledWith(
         expect.objectContaining({
           color: "red",
@@ -242,8 +251,10 @@ describe("LandingPage", () => {
       loadProject: vi.fn(async () => {
         useProjectStore.setState({
           recovery: {
+            ...inspection,
+            copied: false,
+            recoveredFromBackup: true,
             easlPath: "/tmp/recovery/project.easl",
-            backupPath: "/tmp/recovery/project.easl.bak",
             projectId: "recovered-project",
           },
         });
@@ -276,8 +287,10 @@ describe("LandingPage", () => {
       loadProject: vi.fn(async () => {
         useProjectStore.setState({
           recovery: {
+            ...inspection,
+            copied: false,
+            recoveredFromBackup: true,
             easlPath: "/tmp/recovery/project.easl",
-            backupPath: "/tmp/recovery/project.easl.bak",
             projectId: "recovered-project",
           },
         });
@@ -380,6 +393,7 @@ describe("LandingPage", () => {
     const loadProject = vi.fn().mockRejectedValue(new Error("Expected project.easl"));
     useProjectStore.setState({ loadProject });
     vi.mocked(open).mockResolvedValue("/tmp/custom-name.easl");
+    vi.mocked(invoke).mockRejectedValueOnce({ message: "Expected project.easl" });
 
     render(
       <MantineProvider env="test">
@@ -392,7 +406,11 @@ describe("LandingPage", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /open project/i })[0]);
 
     await waitFor(() => {
-      expect(loadProject).toHaveBeenCalledWith("/tmp/custom-name.easl");
+      expect(loadProject).not.toHaveBeenCalled();
+      expect(invoke).toHaveBeenCalledWith(
+        "inspect_project",
+        expect.objectContaining({ path: "/tmp/custom-name.easl" }),
+      );
       expect(notifications.show).toHaveBeenCalledWith(
         expect.objectContaining({
           color: "red",
@@ -413,11 +431,7 @@ describe("LandingPage", () => {
     }));
     vi.mocked(open).mockResolvedValue("/new/project.easl");
     vi.mocked(exists).mockResolvedValue(true);
-    vi.mocked(readTextFile).mockImplementation(async (path) =>
-      path === "/old/project.easl"
-        ? identityProjectBytes("same-id")
-        : identityProjectBytes("same-id"),
-    );
+    vi.mocked(invoke).mockResolvedValue({ ...inspection, duplicatePath: "/old/project.easl" });
 
     render(
       <MantineProvider env="test">
@@ -443,21 +457,7 @@ describe("LandingPage", () => {
   it("replaces the recent path when duplicate identity is confirmed as moved", async () => {
     const loadProject = vi.fn(async () => {
       useProjectStore.setState({
-        project: {
-          version: "0.1.0",
-          projectMeta: {
-            id: "same-id",
-            name: "Identity Project",
-            rootPath: "/new",
-            createdAt: "2026-01-01T00:00:00.000Z",
-            lastOpened: "2026-01-01T00:00:00.000Z",
-            currentPhase: "import",
-            dataSource: "bids",
-          },
-          uiState: {},
-          mappingState: { sourceDataPath: "." },
-          dataPar: {},
-        },
+        project: projectView(projectFixture("same-id", "Identity Project", "/new")),
         loaded: true,
         isDirty: false,
       });
@@ -471,7 +471,7 @@ describe("LandingPage", () => {
     }));
     vi.mocked(open).mockResolvedValue("/new/project.easl");
     vi.mocked(exists).mockResolvedValue(true);
-    vi.mocked(readTextFile).mockResolvedValue(identityProjectBytes("same-id"));
+    vi.mocked(invoke).mockResolvedValue({ ...inspection, duplicatePath: "/old/project.easl" });
 
     render(
       <MantineProvider env="test">
@@ -490,33 +490,20 @@ describe("LandingPage", () => {
         projectId: "same-id",
       }),
     );
-    expect(loadProject).toHaveBeenCalledWith("/new/project.easl", { forceDirty: false });
+    expect(loadProject).toHaveBeenCalledWith("/new/project.easl", {
+      inspection: { ...inspection, duplicatePath: "/old/project.easl" },
+      copied: false,
+    });
   });
 
-  it("opens a confirmed copy under a new dirty runtime identity", async () => {
-    const loadProject = vi.fn(
-      async (_path: string, options?: { projectIdOverride?: string; forceDirty?: boolean }) => {
-        useProjectStore.setState({
-          project: {
-            version: "0.1.0",
-            projectMeta: {
-              id: options?.projectIdOverride ?? "same-id",
-              name: "Identity Project",
-              rootPath: "/copy",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              lastOpened: "2026-01-01T00:00:00.000Z",
-              currentPhase: "import",
-              dataSource: "bids",
-            },
-            uiState: {},
-            mappingState: { sourceDataPath: "." },
-            dataPar: {},
-          },
-          loaded: true,
-          isDirty: options?.forceDirty === true,
-        });
-      },
-    );
+  it("opens a confirmed native copy under its persisted identity", async () => {
+    const loadProject = vi.fn(async () => {
+      useProjectStore.setState({
+        project: projectView(projectFixture("copy-id", "Identity Project", "/copy")),
+        loaded: true,
+        isDirty: false,
+      });
+    });
     useProjectStore.setState({ loadProject });
     useGlobalStore.setState((state) => ({
       settings: {
@@ -526,7 +513,11 @@ describe("LandingPage", () => {
     }));
     vi.mocked(open).mockResolvedValue("/copy/project.easl");
     vi.mocked(exists).mockResolvedValue(true);
-    vi.mocked(readTextFile).mockResolvedValue(identityProjectBytes("same-id"));
+    vi.mocked(invoke).mockResolvedValue({
+      ...inspection,
+      rootPath: "/copy",
+      duplicatePath: "/old/project.easl",
+    });
 
     render(
       <MantineProvider env="test">
@@ -542,7 +533,11 @@ describe("LandingPage", () => {
     await waitFor(() => expect(useProjectStore.getState().project).not.toBeNull());
     const copiedId = useProjectStore.getState().project!.projectMeta.id;
     expect(copiedId).not.toBe("same-id");
-    expect(useProjectStore.getState().isDirty).toBe(true);
+    expect(useProjectStore.getState().isDirty).toBe(false);
+    expect(loadProject).toHaveBeenCalledWith(
+      "/copy/project.easl",
+      expect.objectContaining({ copied: true }),
+    );
     expect(useGlobalStore.getState().settings.recentProjects).toEqual([
       { path: "/copy/project.easl", projectId: copiedId },
       { path: "/old/project.easl", projectId: "same-id" },
@@ -623,7 +618,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       warnings: ["rawdata/ contains 2 sub-* directories"],
       conflicts,
       projectSummary: {
-        schemaVersion: "1",
+        schemaVersion: "2",
         name: "Dataset",
         projectId: "project-id",
         dataSource: mode,
@@ -662,7 +657,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       "create rawdata/.easl-gui-managed",
     );
     expect(screen.getByTestId("bids-setup-project-summary")).toHaveTextContent(
-      /Dataset.*schema 1.*project-id/i,
+      /Dataset.*schema 2.*project-id/i,
     );
     expect(screen.getByTestId("bids-setup-readme-notice")).toBeInTheDocument();
     expect(screen.getByTestId("bids-setup-warning")).toHaveTextContent("2 sub-*");

@@ -1,16 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_PROJECT_FILE } from "../schemas/project";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { projectView } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
 import { ProcessingRunSnapshotSchema } from "../schemas/processingSchemas";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 import { processingSnapshot } from "../test/processingFixtures";
 import { useProjectStore } from "./projectStore";
 import { useProcessingStore } from "./processingStore";
+import { projectProcessingSnapshot } from "../lib/processingEvents";
 
 describe("native processing projection", () => {
   beforeEach(async () => {
     resetProjectLifecycleForTests();
     await useProcessingStore.getState().resetProcessing();
-    useProjectStore.setState({ project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project") });
+    vi.clearAllMocks();
+    useProjectStore.setState({ project: projectView(projectFixture()) });
     activateProjectLease("project-1", "/project");
   });
   afterEach(() => resetProjectLifecycleForTests());
@@ -28,16 +32,24 @@ describe("native processing projection", () => {
     );
     expect(useProcessingStore.getState().processingPhase).toBe("running");
   });
-  it("invalidates previous Population metadata only on accepted native execution commit", () => {
-    useProjectStore.getState().setPopulationCompleted(true);
+  it("refreshes native Population metadata only on accepted execution commit, not progress", async () => {
+    const accepted = projectFixture();
+    accepted.document.uiState.processing = { population: { completed: true } };
+    useProjectStore.getState().acceptSnapshot(accepted);
     const store = useProcessingStore.getState();
     store.bindRunSnapshot(processingSnapshot({ selectedModules: ["population"] }));
     expect(useProjectStore.getState().project?.uiState.processing?.population?.completed).toBe(
       true,
     );
-    store.reconcileRunSnapshot(
+    await projectProcessingSnapshot(processingSnapshot({ revision: 2 }));
+    expect(invoke).not.toHaveBeenCalled();
+    const committed = projectFixture();
+    committed.acceptedRevision = 1;
+    committed.document.uiState.processing = { population: { completed: false } };
+    vi.mocked(invoke).mockResolvedValueOnce(committed);
+    await projectProcessingSnapshot(
       processingSnapshot({
-        revision: 2,
+        revision: 3,
         selectedModules: ["population"],
         populationExecutionCommitted: true,
         executionCommitted: true,
@@ -46,5 +58,7 @@ describe("native processing projection", () => {
     expect(useProjectStore.getState().project?.uiState.processing?.population?.completed).toBe(
       false,
     );
+    expect(invoke).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledWith("get_project_snapshot", { generation: 1 });
   });
 });

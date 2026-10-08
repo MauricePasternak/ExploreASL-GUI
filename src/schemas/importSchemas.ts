@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { hasParentTraversal } from "../lib/projectPaths";
 import {
   parseCommaSeparatedNumbers,
   parseNumberOrArray,
@@ -113,27 +112,6 @@ export const TokenAssignmentSchema = z.object({
 
 export type TokenAssignment = z.infer<typeof TokenAssignmentSchema>;
 
-/**
- * Complete tokenizer configuration for one pattern.
- * Generates the folderHierarchy regex array and tokenOrdering.
- */
-export const TokenizerConfigSchema = z.object({
-  /** Pattern signature this config applies to */
-  patternSignature: z.string(),
-  /** Generated regex array — one entry per folder depth level */
-  folderHierarchy: z.array(z.string()),
-  /**
-   * ExploreASL tokenOrdering: [Subject, Visit, Session, Scan]
-   * GUI mapping: Subject=Subject, Session=Visit(1), Run=Session(2), Modality=Scan(3)
-   * Values are 0-based capture group indices. -1 means "not captured" (use default).
-   */
-  tokenOrdering: z.tuple([z.number(), z.number(), z.number(), z.number()]),
-  /** Per-block tag assignments */
-  assignments: z.array(TokenAssignmentSchema),
-});
-
-export type TokenizerConfig = z.infer<typeof TokenizerConfigSchema>;
-
 // =============================================================================
 // Step 3: Alias Resolution
 // =============================================================================
@@ -175,14 +153,7 @@ export const SessionAliasSchema = z.object({
 
 export type SessionAlias = z.infer<typeof SessionAliasSchema>;
 
-export const SubjectRenameSchema = z.object({
-  /** Original captured subject name */
-  original: z.string(),
-  /** Target BIDS-compliant name */
-  target: z.string(),
-});
-
-export type SubjectRename = z.infer<typeof SubjectRenameSchema>;
+export type { SubjectRename } from "../generated/project/SubjectRename";
 
 // =============================================================================
 // Step 4: BIDS ASL Metadata (studyPar.json)
@@ -765,7 +736,7 @@ export const MetadataGroupSchema = z.object({
   bidsParams: BidsAslMetadataBaseSchema,
 });
 
-export type MetadataGroup = z.infer<typeof MetadataGroupSchema>;
+export type { MetadataGroup } from "../generated/project/MetadataGroup";
 
 export const DerivedMetadataGroupSchema = MetadataGroupSchema.extend({
   vendor: z.string(),
@@ -781,58 +752,9 @@ export const DerivedMetadataGroupSchema = MetadataGroupSchema.extend({
 
 export type DerivedMetadataGroup = z.infer<typeof DerivedMetadataGroupSchema>;
 
-/** A row in the subjects DataTable for metadata group assignment */
-export const SubjectRowSchema = z.object({
-  /** Unique row ID: "subject/session" */
-  id: z.string(),
-  subject: z.string(),
-  session: z.string(),
-  /** ID of the MetadataGroup this row belongs to */
-  groupId: z.string(),
-});
+export type { SubjectRow } from "../generated/project/SubjectRow";
 
-export type SubjectRow = z.infer<typeof SubjectRowSchema>;
-
-// =============================================================================
-// Import Snapshot (staleness detection)
-// =============================================================================
-
-export const StoredPathSchema = z
-  .string()
-  .refine((path) => !hasParentTraversal(path), "Project-relative path cannot escape its root.");
-
-export const ImportSnapshotSchema = z.object({
-  sourceDataPath: StoredPathSchema,
-  pathPatterns: z.array(PathPatternSchema),
-  tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)),
-  bMatchDirectories: z.boolean(),
-  modalityAliases: z.array(ModalityAliasSchema),
-  sessionAliases: z.array(SessionAliasSchema),
-  runAliases: z.array(SessionAliasSchema),
-  subjectRenames: z.array(SubjectRenameSchema),
-  metadataGroups: z.array(MetadataGroupSchema),
-  subjectRows: z.array(SubjectRowSchema),
-  selectedProfileId: z.string().optional(),
-});
-
-export type ImportSnapshot = z.infer<typeof ImportSnapshotSchema>;
-
-export const MappingStateSchema = z.object({
-  sourceDataPath: StoredPathSchema.optional(),
-  rawPaths: z.array(StoredPathSchema).optional(),
-  pathPatterns: z.array(PathPatternSchema).optional(),
-  bMatchDirectories: z.boolean().optional(),
-  ingestionComplete: z.boolean().optional(),
-  tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)).optional(),
-  modalityAliases: z.array(ModalityAliasSchema).optional(),
-  sessionAliases: z.array(SessionAliasSchema).optional(),
-  runAliases: z.array(SessionAliasSchema).optional(),
-  subjectRenames: z.array(SubjectRenameSchema).optional(),
-  metadataGroups: z.array(MetadataGroupSchema).optional(),
-  subjectRows: z.array(SubjectRowSchema).optional(),
-});
-
-export type MappingState = z.infer<typeof MappingStateSchema>;
+export type { ImportSnapshot } from "../generated/project/ImportSnapshot";
 
 // =============================================================================
 // Staging Entry (for symlink tree creation)

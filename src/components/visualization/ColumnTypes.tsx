@@ -1,6 +1,8 @@
 import { Badge, Group, Select, Stack, Table, Text } from "@mantine/core";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
+import { useProjectStore } from "../../stores/projectStore";
 
 const TYPE_OPTIONS = [
   { value: "continuous", label: "Continuous" },
@@ -11,9 +13,9 @@ const TYPE_OPTIONS = [
 
 export default function ColumnTypes() {
   const inspection = useVisualizationStore((s) => s.inspection);
-  const columnTypes = useVisualizationStore((s) => s.columnTypes);
+  const columnTypes = useProjectStore((s) => visualizationSettings(s.project).columnTypes);
   const setColumnType = useVisualizationStore((s) => s.setColumnType);
-  const joinConfig = useVisualizationStore((s) => s.joinConfig);
+  const joinConfig = useProjectStore((s) => visualizationSettings(s.project).joinConfig);
 
   if (!inspection) {
     return (

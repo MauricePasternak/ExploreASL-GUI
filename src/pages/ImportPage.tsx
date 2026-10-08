@@ -8,7 +8,6 @@ import {
   IconTags,
   IconAlertTriangle,
 } from "@tabler/icons-react";
-import { useEffect, useRef } from "react";
 
 import AliasResolution from "../components/import/AliasResolution";
 import BIDSReviewPanel from "../components/import/BIDSReviewPanel";
@@ -19,11 +18,6 @@ import MetadataGrouping from "../components/import/MetadataGrouping";
 import PathTokenizer from "../components/import/PathTokenizer";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
-import {
-  captureProjectLease,
-  isCurrentProjectLease,
-  isProjectWorkAccepted,
-} from "../lib/projectLifecycle";
 
 const IMPORT_STEPS = [
   { label: "Ingest DICOMs", icon: IconDatabase, description: "Scan folders" },
@@ -33,8 +27,6 @@ const IMPORT_STEPS = [
   { label: "Preview Import", icon: IconEye, description: "Review" },
   { label: "Run Import Module", icon: IconPlayerPlay, description: "Execute" },
 ] as const;
-
-const AUTOSAVE_DEBOUNCE_MS = 2000;
 
 /** Keep in sync with Layout AppShell header/footer heights and padding. */
 const APP_SHELL_HEADER_HEIGHT = 56;
@@ -47,51 +39,19 @@ const IMPORT_STEPPER_MAX_HEIGHT = `calc(100vh - ${APP_SHELL_HEADER_HEIGHT}px - $
 /**
  * Import wizard page with vertical stepper on the left.
  * Each step renders its own content panel on the right.
- * Auto-syncs import state to project file with debounced saves.
  *
  * The stepper is display-only — navigation happens via
  * Next/Back buttons inside each step component.
  */
 export default function ImportPage() {
-  const activeStep = useImportStore((s) => s.activeStep);
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedStep = useProjectStore((s) => s.project?.uiState.import?.activeStep ?? 0);
+  const phase = useImportStore((s) => s.importPhase);
+  const stagingStatus = useImportStore((s) => s.stagingPreflight.status);
+  const activeStep =
+    savedStep === 5 && phase === "idle" && stagingStatus !== "valid" ? 4 : savedStep;
   const dataSource = useProjectStore((s) => s.project?.projectMeta?.dataSource);
   const sourceAvailability = useImportStore((s) => s.sourceAvailability);
   const setActiveStep = useImportStore((s) => s.setActiveStep);
-
-  // Auto-sync import state → project mappingState → file (debounced)
-  useEffect(() => {
-    const unsubscribe = useImportStore.subscribe((state) => {
-      const project = useProjectStore.getState().project;
-      if (!project) return;
-      const lease = captureProjectLease();
-      if (!lease || !isProjectWorkAccepted()) return;
-
-      useProjectStore.getState().syncImportState(state);
-
-      if (autosaveTimerRef.current !== null) {
-        clearTimeout(autosaveTimerRef.current);
-      }
-      if (state.requiresManualSave) {
-        autosaveTimerRef.current = null;
-        return;
-      }
-      autosaveTimerRef.current = setTimeout(() => {
-        const current = useProjectStore.getState();
-        if (isCurrentProjectLease(lease) && isProjectWorkAccepted() && current.project) {
-          void current.saveProject();
-        }
-        autosaveTimerRef.current = null;
-      }, AUTOSAVE_DEBOUNCE_MS);
-    });
-
-    return () => {
-      unsubscribe();
-      if (autosaveTimerRef.current !== null) {
-        clearTimeout(autosaveTimerRef.current);
-      }
-    };
-  }, []);
 
   // BIDS-direct: render BIDSReviewPanel only (skip stepper sidebar)
   if (dataSource === "bids") {

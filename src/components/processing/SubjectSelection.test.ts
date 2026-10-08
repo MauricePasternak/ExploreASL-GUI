@@ -46,10 +46,6 @@ describe("resolveLogBadge", () => {
     expect(resolveLogBadge("complete", [makeLog()])).toBe("logs");
   });
 
-  it("complete + logs (hasError, filtered mutex) = logs", () => {
-    expect(resolveLogBadge("complete", [makeLog({ hasError: false })])).toBe("logs");
-  });
-
   it("incomplete + logs (mutex-only, hasError false) = errors", () => {
     expect(resolveLogBadge("incomplete", [makeLog({ hasError: false })])).toBe("errors");
   });

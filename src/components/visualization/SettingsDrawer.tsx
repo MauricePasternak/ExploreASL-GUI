@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { useProjectStore } from "../../stores/projectStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
 import {
   Drawer,
   Stack,
@@ -22,61 +24,63 @@ import { translateColumnName } from "../../lib/tsvUtils";
 
 export default function SettingsDrawer() {
   const chartData = useVisualizationStore((s) => s.chartData);
-  const domainFilters = useVisualizationStore((s) => s.domainFilters);
+  const domainFilters = useProjectStore((s) => visualizationSettings(s.project).domainFilters);
   const setDomainFilters = useVisualizationStore((s) => s.setDomainFilters);
-  const filtersExpanded = useVisualizationStore((s) => s.filtersExpanded);
+  const filtersExpanded = useProjectStore((s) => visualizationSettings(s.project).filtersExpanded);
   const setFiltersExpanded = useVisualizationStore((s) => s.setFiltersExpanded);
 
   // Nivo Settings
-  const pointSize = useVisualizationStore((s) => s.pointSize);
+  const pointSize = useProjectStore((s) => visualizationSettings(s.project).pointSize);
   const setPointSize = useVisualizationStore((s) => s.setPointSize);
-  const swarmSpacing = useVisualizationStore((s) => s.swarmSpacing);
+  const swarmSpacing = useProjectStore((s) => visualizationSettings(s.project).swarmSpacing);
   const setSwarmSpacing = useVisualizationStore((s) => s.setSwarmSpacing);
-  const chartOpacity = useVisualizationStore((s) => s.chartOpacity);
+  const chartOpacity = useProjectStore((s) => visualizationSettings(s.project).chartOpacity);
   const setChartOpacity = useVisualizationStore((s) => s.setChartOpacity);
-  const showGridX = useVisualizationStore((s) => s.showGridX);
+  const showGridX = useProjectStore((s) => visualizationSettings(s.project).showGridX);
   const setShowGridX = useVisualizationStore((s) => s.setShowGridX);
-  const showGridY = useVisualizationStore((s) => s.showGridY);
+  const showGridY = useProjectStore((s) => visualizationSettings(s.project).showGridY);
   const setShowGridY = useVisualizationStore((s) => s.setShowGridY);
 
   // NiiVue Settings
-  const nvRadiological = useVisualizationStore((s) => s.nvRadiological);
+  const nvRadiological = useProjectStore((s) => visualizationSettings(s.project).nvRadiological);
   const setNvRadiological = useVisualizationStore((s) => s.setNvRadiological);
-  const nvColorbar = useVisualizationStore((s) => s.nvColorbar);
+  const nvColorbar = useProjectStore((s) => visualizationSettings(s.project).nvColorbar);
   const setNvColorbar = useVisualizationStore((s) => s.setNvColorbar);
-  const nvCrosshair = useVisualizationStore((s) => s.nvCrosshair);
+  const nvCrosshair = useProjectStore((s) => visualizationSettings(s.project).nvCrosshair);
   const setNvCrosshair = useVisualizationStore((s) => s.setNvCrosshair);
-  const nvCornerOrientation = useVisualizationStore((s) => s.nvCornerOrientation);
+  const nvCornerOrientation = useProjectStore(
+    (s) => visualizationSettings(s.project).nvCornerOrientation,
+  );
   const setNvCornerOrientation = useVisualizationStore((s) => s.setNvCornerOrientation);
-  const nvColormap = useVisualizationStore((s) => s.nvColormap);
+  const nvColormap = useProjectStore((s) => visualizationSettings(s.project).nvColormap);
   const setNvColormap = useVisualizationStore((s) => s.setNvColormap);
-  const nvSliceType = useVisualizationStore((s) => s.nvSliceType);
+  const nvSliceType = useProjectStore((s) => visualizationSettings(s.project).nvSliceType);
   const setNvSliceType = useVisualizationStore((s) => s.setNvSliceType);
-  const nvBackColor = useVisualizationStore((s) => s.nvBackColor);
+  const nvBackColor = useProjectStore((s) => visualizationSettings(s.project).nvBackColor);
   const setNvBackColor = useVisualizationStore((s) => s.setNvBackColor);
 
   // Axis Assignments & Customizations
-  const axisAssignment = useVisualizationStore((s) => s.axisAssignment);
-  const xTickSize = useVisualizationStore((s) => s.xTickSize);
+  const axisAssignment = useProjectStore((s) => visualizationSettings(s.project).axisAssignment);
+  const xTickSize = useProjectStore((s) => visualizationSettings(s.project).xTickSize);
   const setXTickSize = useVisualizationStore((s) => s.setXTickSize);
-  const xTickPadding = useVisualizationStore((s) => s.xTickPadding);
+  const xTickPadding = useProjectStore((s) => visualizationSettings(s.project).xTickPadding);
   const setXTickPadding = useVisualizationStore((s) => s.setXTickPadding);
-  const xTickRotation = useVisualizationStore((s) => s.xTickRotation);
+  const xTickRotation = useProjectStore((s) => visualizationSettings(s.project).xTickRotation);
   const setXTickRotation = useVisualizationStore((s) => s.setXTickRotation);
-  const xLegendOverride = useVisualizationStore((s) => s.xLegendOverride);
+  const xLegendOverride = useProjectStore((s) => visualizationSettings(s.project).xLegendOverride);
   const setXLegendOverride = useVisualizationStore((s) => s.setXLegendOverride);
-  const xLegendOffset = useVisualizationStore((s) => s.xLegendOffset);
+  const xLegendOffset = useProjectStore((s) => visualizationSettings(s.project).xLegendOffset);
   const setXLegendOffset = useVisualizationStore((s) => s.setXLegendOffset);
 
-  const yTickSize = useVisualizationStore((s) => s.yTickSize);
+  const yTickSize = useProjectStore((s) => visualizationSettings(s.project).yTickSize);
   const setYTickSize = useVisualizationStore((s) => s.setYTickSize);
-  const yTickPadding = useVisualizationStore((s) => s.yTickPadding);
+  const yTickPadding = useProjectStore((s) => visualizationSettings(s.project).yTickPadding);
   const setYTickPadding = useVisualizationStore((s) => s.setYTickPadding);
-  const yTickRotation = useVisualizationStore((s) => s.yTickRotation);
+  const yTickRotation = useProjectStore((s) => visualizationSettings(s.project).yTickRotation);
   const setYTickRotation = useVisualizationStore((s) => s.setYTickRotation);
-  const yLegendOverride = useVisualizationStore((s) => s.yLegendOverride);
+  const yLegendOverride = useProjectStore((s) => visualizationSettings(s.project).yLegendOverride);
   const setYLegendOverride = useVisualizationStore((s) => s.setYLegendOverride);
-  const yLegendOffset = useVisualizationStore((s) => s.yLegendOffset);
+  const yLegendOffset = useProjectStore((s) => visualizationSettings(s.project).yLegendOffset);
   const setYLegendOffset = useVisualizationStore((s) => s.setYLegendOffset);
 
   const { xMin, xMax, yMin, yMax } = useMemo(() => {

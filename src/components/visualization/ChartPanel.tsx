@@ -6,6 +6,7 @@ import { ResponsiveScatterPlotCanvas } from "@nivo/scatterplot";
 import { ResponsiveSwarmPlotCanvas } from "@nivo/swarmplot";
 
 import { useVisualizationStore, type ChartPoint } from "../../stores/visualizationStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 import { transformToChartData, translateColumnName } from "../../lib/tsvUtils";
@@ -51,35 +52,35 @@ function computeLinearScaleBounds(
 }
 
 export default function ChartPanel() {
-  const axisAssignment = useVisualizationStore((s) => s.axisAssignment);
-  const columnTypes = useVisualizationStore((s) => s.columnTypes);
+  const axisAssignment = useProjectStore((s) => visualizationSettings(s.project).axisAssignment);
+  const columnTypes = useProjectStore((s) => visualizationSettings(s.project).columnTypes);
   const inspection = useVisualizationStore((s) => s.inspection);
-  const qcbfSource = useVisualizationStore((s) => s.qcbfSource);
+  const qcbfSource = useProjectStore((s) => visualizationSettings(s.project).qcbfSource);
   const chartData = useVisualizationStore((s) => s.chartData);
   const setChartData = useVisualizationStore((s) => s.setChartData);
   const selectPoint = useVisualizationStore((s) => s.selectPoint);
   const setExclusionCount = useVisualizationStore((s) => s.setExclusionCount);
-  const domainFilters = useVisualizationStore((s) => s.domainFilters);
+  const domainFilters = useProjectStore((s) => visualizationSettings(s.project).domainFilters);
   const exclusionCount = useVisualizationStore((s) => s.exclusionCount);
 
   // New settings
-  const pointSize = useVisualizationStore((s) => s.pointSize);
-  const swarmSpacing = useVisualizationStore((s) => s.swarmSpacing);
-  const chartOpacity = useVisualizationStore((s) => s.chartOpacity);
-  const showGridX = useVisualizationStore((s) => s.showGridX);
-  const showGridY = useVisualizationStore((s) => s.showGridY);
+  const pointSize = useProjectStore((s) => visualizationSettings(s.project).pointSize);
+  const swarmSpacing = useProjectStore((s) => visualizationSettings(s.project).swarmSpacing);
+  const chartOpacity = useProjectStore((s) => visualizationSettings(s.project).chartOpacity);
+  const showGridX = useProjectStore((s) => visualizationSettings(s.project).showGridX);
+  const showGridY = useProjectStore((s) => visualizationSettings(s.project).showGridY);
 
-  const xTickSize = useVisualizationStore((s) => s.xTickSize);
-  const xTickPadding = useVisualizationStore((s) => s.xTickPadding);
-  const xTickRotation = useVisualizationStore((s) => s.xTickRotation);
-  const xLegendOverride = useVisualizationStore((s) => s.xLegendOverride);
-  const xLegendOffset = useVisualizationStore((s) => s.xLegendOffset);
+  const xTickSize = useProjectStore((s) => visualizationSettings(s.project).xTickSize);
+  const xTickPadding = useProjectStore((s) => visualizationSettings(s.project).xTickPadding);
+  const xTickRotation = useProjectStore((s) => visualizationSettings(s.project).xTickRotation);
+  const xLegendOverride = useProjectStore((s) => visualizationSettings(s.project).xLegendOverride);
+  const xLegendOffset = useProjectStore((s) => visualizationSettings(s.project).xLegendOffset);
 
-  const yTickSize = useVisualizationStore((s) => s.yTickSize);
-  const yTickPadding = useVisualizationStore((s) => s.yTickPadding);
-  const yTickRotation = useVisualizationStore((s) => s.yTickRotation);
-  const yLegendOverride = useVisualizationStore((s) => s.yLegendOverride);
-  const yLegendOffset = useVisualizationStore((s) => s.yLegendOffset);
+  const yTickSize = useProjectStore((s) => visualizationSettings(s.project).yTickSize);
+  const yTickPadding = useProjectStore((s) => visualizationSettings(s.project).yTickPadding);
+  const yTickRotation = useProjectStore((s) => visualizationSettings(s.project).yTickRotation);
+  const yLegendOverride = useProjectStore((s) => visualizationSettings(s.project).yLegendOverride);
+  const yLegendOffset = useProjectStore((s) => visualizationSettings(s.project).yLegendOffset);
 
   const project = useProjectStore((s) => s.project);
   const { colorScheme } = useMantineColorScheme();

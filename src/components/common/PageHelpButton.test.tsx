@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useImportStore } from "../../stores/importStore";
-import { useVisualizationStore } from "../../stores/visualizationStore";
+import { useProjectStore } from "../../stores/projectStore";
+import { projectFixture } from "../../test/projectFixtures";
 import PageHelpButton from "./PageHelpButton";
 
 const mockNavigate = vi.fn();
@@ -20,6 +21,8 @@ describe("PageHelpButton", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useImportStore.getState().resetImport();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useProjectStore.getState().acceptSnapshot(projectFixture());
   });
 
   afterEach(() => {
@@ -53,7 +56,6 @@ describe("PageHelpButton", () => {
   });
 
   it("renders on project import route and displays step 1 help", async () => {
-    useImportStore.setState({ activeStep: 0 });
     renderComponent("/project/proj1/import");
 
     const helpBtn = screen.getByTestId("page-help-btn");
@@ -75,7 +77,9 @@ describe("PageHelpButton", () => {
   });
 
   it("renders step 3 help on import route when activeStep is 2", async () => {
-    useImportStore.setState({ activeStep: 2 });
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 2 };
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderComponent("/project/proj1/import");
 
     const helpBtn = screen.getByTestId("page-help-btn");
@@ -122,7 +126,6 @@ describe("PageHelpButton", () => {
   });
 
   it("navigates to overview page when clicking overview button in modal", async () => {
-    useImportStore.setState({ activeStep: 0 });
     renderComponent("/project/proj1/import");
 
     const helpBtn = screen.getByTestId("page-help-btn");
@@ -146,7 +149,11 @@ describe("PageHelpButton", () => {
   });
 
   it("renders selectData help on visualization route", async () => {
-    useVisualizationStore.setState({ stage: "selectData" });
+    useProjectStore.getState().acceptSnapshot(
+      projectFixture("project-1", "Project", "/project", {
+        uiState: { dataVis: { stage: "selectData" } },
+      }),
+    );
     renderComponent("/project/proj1/visualization");
 
     const helpBtn = screen.getByTestId("page-help-btn");
@@ -161,7 +168,11 @@ describe("PageHelpButton", () => {
   });
 
   it("renders columnTypes help on visualization route", async () => {
-    useVisualizationStore.setState({ stage: "columnTypes" });
+    useProjectStore.getState().acceptSnapshot(
+      projectFixture("project-1", "Project", "/project", {
+        uiState: { dataVis: { stage: "columnTypes" } },
+      }),
+    );
     renderComponent("/project/proj1/visualization");
 
     const helpBtn = screen.getByTestId("page-help-btn");
@@ -176,7 +187,11 @@ describe("PageHelpButton", () => {
   });
 
   it("renders levelOrdering help on visualization route", async () => {
-    useVisualizationStore.setState({ stage: "levelOrdering" });
+    useProjectStore.getState().acceptSnapshot(
+      projectFixture("project-1", "Project", "/project", {
+        uiState: { dataVis: { stage: "levelOrdering" } },
+      }),
+    );
     renderComponent("/project/proj1/visualization");
 
     const helpBtn = screen.getByTestId("page-help-btn");
@@ -189,7 +204,11 @@ describe("PageHelpButton", () => {
   });
 
   it("renders visualize help on visualization route", async () => {
-    useVisualizationStore.setState({ stage: "visualize" });
+    useProjectStore.getState().acceptSnapshot(
+      projectFixture("project-1", "Project", "/project", {
+        uiState: { dataVis: { stage: "visualize" } },
+      }),
+    );
     renderComponent("/project/proj1/visualization");
 
     const helpBtn = screen.getByTestId("page-help-btn");

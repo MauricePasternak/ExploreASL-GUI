@@ -9,6 +9,7 @@ import {
 
 import { useGlobalStore } from "../../stores/globalStore";
 import { useProcessingStore } from "../../stores/processingStore";
+import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingEnvironment } from "../../hooks/useProcessingEnvironment";
 
 export interface PreflightResult {
@@ -24,7 +25,7 @@ interface ProcessingStatusAlertProps {
 }
 
 export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAlertProps) {
-  const config = useProcessingStore((s) => s.config);
+  const config = useProjectStore((s) => s.project?.uiState.processing?.config);
   const executionProfiles = useGlobalStore((s) => s.settings.executionProfiles);
   const profileValidationState = useGlobalStore((s) => s.profileValidationState);
   const hasValidProfile = useGlobalStore((s) => s.hasValidProfile);

@@ -350,7 +350,7 @@ const FILTER_OPTIONS = [
 export default function SubjectSelection() {
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
-  const config = useProcessingStore((s) => s.config);
+  const config = useProjectStore((s) => s.project?.uiState.processing?.config);
   const setConfig = useProcessingStore((s) => s.setConfig);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
@@ -522,9 +522,12 @@ export default function SubjectSelection() {
   const selectedRecords = useMemo(() => paginatedRows.filter((r) => r._selected), [paginatedRows]);
 
   const updateSubjects = useCallback(
-    (next: string[]) => {
+    (next: string[] | ((subjects: string[]) => string[])) => {
       if (!config) return;
-      setConfig({ ...config, subjects: next });
+      void setConfig((current) => ({
+        ...current!,
+        subjects: typeof next === "function" ? next(current!.subjects) : next,
+      })).catch(() => undefined);
     },
     [config, setConfig],
   );
@@ -532,10 +535,17 @@ export default function SubjectSelection() {
   const handleSelectedRecordsChange = useCallback(
     (selected: SubjectRow[]) => {
       const selectedSessions = new Set(selected.map((r) => r.subjectSession));
-      const next = rowsRef.current
-        .filter((r) => selectedSessions.has(r.subjectSession))
-        .map((r) => r.subjectSession);
-      updateSubjects(next);
+      const changed = rowsRef.current.filter(
+        (row) => row._selected !== selectedSessions.has(row.subjectSession),
+      );
+      updateSubjects((subjects) => {
+        const next = new Set(subjects);
+        for (const row of changed) {
+          if (selectedSessions.has(row.subjectSession)) next.add(row.subjectSession);
+          else next.delete(row.subjectSession);
+        }
+        return [...next];
+      });
     },
     [updateSubjects],
   );

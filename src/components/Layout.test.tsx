@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TestMantineProvider as MantineProvider } from "../test/render";
 import { notifications } from "@mantine/notifications";
 import { MemoryRouter, Route, Routes } from "react-router";
+import { invoke } from "@tauri-apps/api/core";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { useGlobalStore } from "../stores/globalStore";
@@ -14,6 +16,10 @@ import { useImportStore } from "../stores/importStore";
 import { useVisualizationStore } from "../stores/visualizationStore";
 import ProjectPage from "../pages/ProjectPage";
 import Layout from "./Layout";
+import { projectFixture } from "../test/projectFixtures";
+import { projectView } from "../schemas/project";
+
+const snapshot = projectFixture("project-1", "Brain Study", "/tmp/brain-study");
 
 const realCloseProject = useProjectStore.getState().closeProject;
 
@@ -41,6 +47,41 @@ describe("Layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    resetProjectLifecycleForTests();
+    activateProjectLease("project-1", "/tmp/brain-study");
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "save_project") return snapshot;
+      if (command === "accept_project_edit")
+        return {
+          ...snapshot,
+          acceptedRevision: 1,
+          document: {
+            ...snapshot.document,
+            uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
+          },
+        };
+      if (command === "shutdown_project_runtime")
+        return {
+          success: true,
+          importProcess: { success: true },
+          processingWorkers: { success: true },
+          lockWatcher: { success: true },
+        };
+      if (
+        command === "clear_active_project" ||
+        command === "get_active_import_run" ||
+        command === "get_active_run"
+      )
+        return null;
+      if (
+        command === "read_import_status" ||
+        command === "list_subjects" ||
+        command === "read_lock_status"
+      )
+        return [];
+      throw new Error(`Unexpected command ${command}`);
+    });
     useGlobalStore.setState({
       loaded: true,
       settings: DEFAULT_SETTINGS,
@@ -67,6 +108,8 @@ describe("Layout", () => {
 
   afterEach(() => {
     cleanup();
+    useProjectStore.getState().cancelAutosave();
+    resetProjectLifecycleForTests();
   });
 
   it("renders the global shell without a project navbar", () => {
@@ -81,7 +124,7 @@ describe("Layout", () => {
   it("shows project name and phase navigation when a project is loaded", () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -91,7 +134,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -120,10 +163,10 @@ describe("Layout", () => {
     );
   });
 
-  it("summarizes unavailable sources without blocking unaffected phase navigation", () => {
+  it("summarizes unavailable sources and flushes unaffected phase navigation without reverting it", async () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -133,7 +176,7 @@ describe("Layout", () => {
           currentPhase: "parameters",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: { sourceDataPath: "/missing/dicom" },
         dataPar: {},
       },
@@ -155,11 +198,48 @@ describe("Layout", () => {
       "data-disabled",
       "true",
     );
+    let finishSave!: () => void;
+    const edits = [
+      { ...snapshot, acceptedRevision: 1 },
+      {
+        ...snapshot,
+        acceptedRevision: 2,
+        document: {
+          ...snapshot.document,
+          projectMeta: { ...snapshot.document.projectMeta, currentPhase: "parameters" as const },
+        },
+      },
+    ];
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "accept_project_edit") {
+        const reply = edits.shift();
+        if (!reply) throw new Error("Unexpected third phase edit");
+        return reply;
+      }
+      if (command === "save_project") {
+        await new Promise<void>((resolve) => {
+          finishSave = resolve;
+        });
+        return { ...snapshot, acceptedRevision: 1, persistedRevision: 1 };
+      }
+      if (command === "read_import_status") return [];
+      throw new Error(`Unexpected command ${command}`);
+    });
+    fireEvent.click(screen.getByTestId("layout-nav-import"));
+    await waitFor(() => expect(finishSave).toBeTypeOf("function"));
+    expect(screen.getByTestId("data-par-editor")).toBeInTheDocument();
+    expect(
+      vi.mocked(invoke).mock.calls.filter(([command]) => command === "accept_project_edit"),
+    ).toEqual([
+      ["accept_project_edit", { generation: 1, edit: { kind: "phase", phase: "import" } }],
+    ]);
+    finishSave();
+    await waitFor(() => expect(screen.queryByTestId("data-par-editor")).not.toBeInTheDocument());
   });
 
   it("returns to the landing page immediately when leaving a clean project", async () => {
     const projectJson = {
-      version: "0.1.0" as const,
+      ...projectView(snapshot),
       projectMeta: {
         id: "project-1",
         name: "Brain Study",
@@ -169,7 +249,7 @@ describe("Layout", () => {
         currentPhase: "import" as const,
         dataSource: "dicom" as const,
       },
-      uiState: { navbarCollapsed: false },
+      uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
       mappingState: {},
       dataPar: {},
     };
@@ -205,7 +285,7 @@ describe("Layout", () => {
     });
   });
 
-  it("asks whether to save before leaving a dirty project", async () => {
+  it("closes a dirty project without an ordinary discard dialog", async () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
     const closeProject = vi.fn(async () => {
       useProjectStore.setState({
@@ -217,7 +297,7 @@ describe("Layout", () => {
 
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -227,7 +307,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -242,78 +322,23 @@ describe("Layout", () => {
     fireEvent.click(getLastButton(/return to home/i));
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /save and leave/i }).length).toBeGreaterThan(0);
-    });
-
-    fireEvent.click(getLastButton(/save and leave/i));
-
-    await waitFor(() => {
-      expect(saveProject).toHaveBeenCalled();
       expect(closeProject).toHaveBeenCalled();
       expect(screen.getAllByText("Landing content").length).toBeGreaterThan(0);
     });
-  });
-
-  it("can leave a dirty project without saving", async () => {
-    const saveProject = vi.fn().mockResolvedValue(undefined);
-    const closeProject = vi.fn(async () => {
-      useProjectStore.setState({
-        project: null,
-        isDirty: false,
-        loaded: false,
-      });
-    });
-
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0" as const,
-        projectMeta: {
-          id: "project-1",
-          name: "Brain Study",
-          rootPath: "/tmp/brain-study",
-          createdAt: "2026-05-03T00:00:00.000Z",
-          lastOpened: "2026-05-03T00:00:00.000Z",
-          currentPhase: "import",
-          dataSource: "dicom" as const,
-        },
-        uiState: { navbarCollapsed: false },
-        mappingState: {},
-        dataPar: {},
-      },
-      isDirty: true,
-      loaded: true,
-      saveProject,
-      closeProject,
-    });
-
-    renderLayout("/project/project-1/import");
-
-    fireEvent.click(getLastButton(/return to home/i));
-
-    await waitFor(() => {
-      expect(
-        screen.getAllByRole("button", { name: /leave without saving/i }).length,
-      ).toBeGreaterThan(0);
-    });
-
-    fireEvent.click(getLastButton(/leave without saving/i));
-
-    await waitFor(() => {
-      expect(saveProject).not.toHaveBeenCalled();
-      expect(closeProject).toHaveBeenCalled();
-      expect(screen.getAllByText("Landing content").length).toBeGreaterThan(0);
-    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("shows an error and stays in the project when save-and-leave fails", async () => {
     const saveProject = vi
       .fn()
       .mockRejectedValue(new ProjectStorageError("insufficient_space", "temporary write failed"));
-    const closeProject = vi.fn().mockResolvedValue(undefined);
+    const closeProject = vi
+      .fn()
+      .mockRejectedValue(new ProjectStorageError("insufficient_space", "Free space and retry"));
 
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -323,7 +348,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -338,18 +363,11 @@ describe("Layout", () => {
     fireEvent.click(getLastButton(/return to home/i));
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /save and leave/i }).length).toBeGreaterThan(0);
-    });
-
-    fireEvent.click(getLastButton(/save and leave/i));
-
-    await waitFor(() => {
-      expect(saveProject).toHaveBeenCalled();
-      expect(closeProject).not.toHaveBeenCalled();
+      expect(closeProject).toHaveBeenCalled();
       expect(notifications.show).toHaveBeenCalledWith(
         expect.objectContaining({
           color: "red",
-          title: expect.stringMatching(/failed to save project/i),
+          title: "Could not leave project",
           message: expect.stringMatching(/free space/i),
         }),
       );
@@ -360,7 +378,7 @@ describe("Layout", () => {
   it("defaults to collapsed navbar for new projects", () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -370,7 +388,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: {},
+        uiState: snapshot.document.uiState,
         mappingState: {},
         dataPar: {},
       },
@@ -388,7 +406,7 @@ describe("Layout", () => {
   it("expands navbar when toggle is clicked", async () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -398,7 +416,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: true },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: true },
         mappingState: {},
         dataPar: {},
       },
@@ -423,9 +441,17 @@ describe("Layout", () => {
   });
 
   it("collapses navbar when toggle is clicked while expanded", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      ...snapshot,
+      acceptedRevision: 1,
+      document: {
+        ...snapshot.document,
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: true },
+      },
+    });
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -435,7 +461,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -458,7 +484,7 @@ describe("Layout", () => {
   it("persists navbar collapsed state to uiState", async () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -468,7 +494,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: true },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: true },
         mappingState: {},
         dataPar: {},
       },
@@ -489,7 +515,8 @@ describe("Layout", () => {
   it("renders Manifest nav button when population is completed", () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
+        allowedPhases: ["import", "parameters", "processing", "visualization", "manifest"],
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -499,7 +526,11 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false, processing: { population: { completed: true } } },
+        uiState: {
+          ...snapshot.document.uiState,
+          navbarCollapsed: false,
+          processing: { population: { completed: true } },
+        },
         mappingState: {},
         dataPar: {},
       },
@@ -517,7 +548,8 @@ describe("Layout", () => {
   it("renders ManifestPage on manifest route", () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
+        allowedPhases: ["import", "parameters", "processing", "visualization", "manifest"],
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -527,7 +559,11 @@ describe("Layout", () => {
           currentPhase: "manifest",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false, processing: { population: { completed: true } } },
+        uiState: {
+          ...snapshot.document.uiState,
+          navbarCollapsed: false,
+          processing: { population: { completed: true } },
+        },
         mappingState: {},
         dataPar: {},
       },
@@ -543,7 +579,8 @@ describe("Layout", () => {
   it("disables visualization and manifest NavLinks when processing is active (running or preparing)", () => {
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
+        allowedPhases: ["import", "parameters", "processing", "visualization", "manifest"],
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -553,7 +590,11 @@ describe("Layout", () => {
           currentPhase: "processing",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false, processing: { population: { completed: true } } },
+        uiState: {
+          ...snapshot.document.uiState,
+          navbarCollapsed: false,
+          processing: { population: { completed: true } },
+        },
         mappingState: {},
         dataPar: {},
       },
@@ -606,7 +647,7 @@ describe("Layout", () => {
     );
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -616,7 +657,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -649,7 +690,7 @@ describe("Layout", () => {
     const closeProject = vi.fn().mockRejectedValue(new Error("cannot stop watcher"));
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -659,7 +700,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -687,7 +728,7 @@ describe("Layout", () => {
     const closeProject = vi.fn().mockRejectedValue(new Error("cannot stop worker"));
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -697,7 +738,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -723,11 +764,11 @@ describe("Layout", () => {
     );
   });
 
-  it("intercepts close request and prompts when project is dirty, can save and exit", async () => {
+  it("flushes a dirty project on ordinary close without a discard dialog", async () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -737,7 +778,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -757,15 +798,7 @@ describe("Layout", () => {
 
     expect(preventDefault).toHaveBeenCalled();
 
-    await waitFor(() => {
-      expect(screen.getByText("Exit application")).toBeInTheDocument();
-      expect(
-        screen.getByText("Save your changes before exiting the application?"),
-      ).toBeInTheDocument();
-    });
-
-    const saveAndExitBtn = screen.getByRole("button", { name: /save and exit/i });
-    fireEvent.click(saveAndExitBtn);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const appWindow = getCurrentWindow();
@@ -776,61 +809,12 @@ describe("Layout", () => {
     });
   });
 
-  it("intercepts close request and prompts when project is dirty, can exit without saving", async () => {
-    const saveProject = vi.fn().mockResolvedValue(undefined);
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0" as const,
-        projectMeta: {
-          id: "project-1",
-          name: "Brain Study",
-          rootPath: "/tmp/brain-study",
-          createdAt: "2026-05-03T00:00:00.000Z",
-          lastOpened: "2026-05-03T00:00:00.000Z",
-          currentPhase: "import",
-          dataSource: "dicom" as const,
-        },
-        uiState: { navbarCollapsed: false },
-        mappingState: {},
-        dataPar: {},
-      },
-      isDirty: true,
-      loaded: true,
-      saveProject,
-    });
-
-    renderLayout("/project/project-1/import");
-
-    await waitFor(() => {
-      expect((window as any).__mockCloseRequestedListener).toBeDefined();
-    });
-
-    const preventDefault = vi.fn();
-    await (window as any).__mockCloseRequestedListener({ preventDefault });
-
-    expect(preventDefault).toHaveBeenCalled();
-
-    await waitFor(() => {
-      expect(screen.getByText("Exit application")).toBeInTheDocument();
-    });
-
-    const exitWithoutSavingBtn = screen.getByRole("button", { name: /exit without saving/i });
-    fireEvent.click(exitWithoutSavingBtn);
-
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    const appWindow = getCurrentWindow();
-
-    await waitFor(() => {
-      expect(saveProject).not.toHaveBeenCalled();
-      expect(appWindow.destroy).toHaveBeenCalled();
-    });
-  });
-
   it("prompts for abort when close request is sent and processing is running", async () => {
     const closeProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
+        allowedPhases: ["import", "parameters", "processing"],
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -840,7 +824,7 @@ describe("Layout", () => {
           currentPhase: "processing",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -888,7 +872,7 @@ describe("Layout", () => {
     const closeProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -898,7 +882,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -937,11 +921,11 @@ describe("Layout", () => {
     });
   });
 
-  it("shows clean/fresh status icon and disables manual save when project is not dirty", async () => {
+  it("allows Save even when accepted project cache is clean", async () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -951,7 +935,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -965,17 +949,17 @@ describe("Layout", () => {
     const saveBtn = screen.getByTestId("layout-save-status-btn");
     expect(saveBtn).toBeInTheDocument();
     expect(saveBtn).toHaveAttribute("aria-label", "Project changes in sync");
-    expect(saveBtn).toBeDisabled();
+    expect(saveBtn).not.toBeDisabled();
 
     fireEvent.click(saveBtn);
-    expect(saveProject).not.toHaveBeenCalled();
+    expect(saveProject).toHaveBeenCalled();
   });
 
   it("shows dirty/staleness status icon and triggers save immediately on click", async () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -985,7 +969,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },
@@ -1012,7 +996,7 @@ describe("Layout", () => {
     const saveProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({
       project: {
-        version: "0.1.0" as const,
+        ...projectView(snapshot),
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -1022,7 +1006,7 @@ describe("Layout", () => {
           currentPhase: "import",
           dataSource: "dicom" as const,
         },
-        uiState: { navbarCollapsed: false },
+        uiState: { ...snapshot.document.uiState, navbarCollapsed: false },
         mappingState: {},
         dataPar: {},
       },

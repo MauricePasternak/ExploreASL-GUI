@@ -14,9 +14,8 @@ import {
 import { IconBook, IconChevronRight, IconHelp, IconInfoCircle } from "@tabler/icons-react";
 import { useState } from "react";
 import { useInRouterContext, useLocation, useNavigate, useParams } from "react-router";
-import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { useVisualizationStore } from "../../stores/visualizationStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
 
 interface HelpContent {
   title: string;
@@ -246,8 +245,8 @@ function PageHelpButtonInner() {
   const navigate = useNavigate();
 
   const phase = params.phase;
-  const activeStep = useImportStore((s) => s.activeStep);
-  const vizStage = useVisualizationStore((s) => s.stage);
+  const activeStep = useProjectStore((s) => s.project?.uiState.import?.activeStep ?? 0);
+  const vizStage = useProjectStore((s) => visualizationSettings(s.project).stage);
 
   const dataSource = useProjectStore((s) => s.project?.projectMeta?.dataSource);
 

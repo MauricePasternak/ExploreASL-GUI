@@ -35,7 +35,12 @@ import {
 } from "../../lib/importTerminalCoordinator";
 import { resolveLogicalSource } from "../../lib/projectPaths";
 import { useGlobalStore } from "../../stores/globalStore";
-import { type ImportPhase, useImportStore } from "../../stores/importStore";
+import {
+  acceptedImportSettings,
+  EMPTY_IMPORT_SETTINGS,
+  type ImportPhase,
+  useImportStore,
+} from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
 import HeaderCard from "../common/HeaderCard";
 import ProfileSelector from "../common/ProfileSelector";
@@ -68,7 +73,7 @@ interface RelocationPlan {
 }
 
 function importPlan(projectRoot: string) {
-  const store = useImportStore.getState();
+  const store = acceptedImportSettings();
   const sourceRoot = resolveLogicalSource(projectRoot, store.sourceDataPath, "dicom");
   return buildImportPlan({
     rawPaths: store.rawPaths,
@@ -146,8 +151,12 @@ export default function ImportExecution() {
   const runError = useImportStore((state) => state.importRunError);
   const summary = useImportStore((state) => state.importSummary);
   const stagingIssues = useImportStore((state) => state.stagingPreflight.issues);
-  const subjectRows = useImportStore((state) => state.subjectRows);
-  const selectedProfileId = useImportStore((state) => state.selectedProfileId);
+  const subjectRows = useProjectStore(
+    (s) => s.project?.mappingState.subjectRows ?? EMPTY_IMPORT_SETTINGS.subjectRows,
+  );
+  const selectedProfileId = useProjectStore(
+    (s) => s.project?.uiState.import?.selectedProfileId ?? null,
+  );
   const setSelectedProfileId = useImportStore((state) => state.setSelectedProfileId);
   const profileError = useImportStore((state) => state.profileError);
   const sourceAvailability = useImportStore((state) => state.sourceAvailability);
@@ -247,7 +256,7 @@ export default function ImportExecution() {
       if (starting || discovery !== "ready" || activeRunId) return;
       const lease = captureProjectLease();
       if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
-      if (!useImportStore.getState().selectedProfileId) {
+      if (!useProjectStore.getState().project?.uiState.import?.selectedProfileId) {
         useImportStore.getState().autoSelectProfile();
       }
       const profile = effectiveProfileId
@@ -264,6 +273,15 @@ export default function ImportExecution() {
       if (subjects.length === 0) return;
       setStarting(true);
       try {
+        await useProjectStore.getState().saveProject();
+        if (!isCurrentProjectLease(lease)) return;
+        const global = useGlobalStore.getState();
+        const acceptedProfileId =
+          useProjectStore.getState().project?.uiState.import?.selectedProfileId;
+        const profile = acceptedProfileId ? global.getProfileById(acceptedProfileId) : undefined;
+        if (!profile || !global.profileValidationState[profile.id]?.valid) {
+          throw new Error("Select a valid execution profile before running import.");
+        }
         const relocation =
           confirmed?.plan ??
           (await invoke<RelocationPlan>("plan_import_relocation", { subjectList: subjects }));
@@ -313,11 +331,12 @@ export default function ImportExecution() {
           void reconcileImportTerminal(launched.runId, lease).catch(() => undefined);
         }
       } catch (error) {
+        if (!isCurrentProjectLease(lease)) return;
         useImportStore.setState({
           importRunError: error instanceof Error ? error.message : String(error),
         });
       } finally {
-        setStarting(false);
+        if (isCurrentProjectLease(lease)) setStarting(false);
       }
     },
     [
@@ -612,12 +631,19 @@ export default function ImportExecution() {
         </Button>
         <Button
           disabled={locked}
-          onClick={() => {
+          onClick={async () => {
+            const lease = captureProjectLease();
             const project = useProjectStore.getState().project;
-            if (project) {
-              useProjectStore.getState().setPhase("parameters");
-              void useProjectStore.getState().saveProject();
-              navigate(`/project/${project.projectMeta.id}/parameters`);
+            if (project && lease && isCurrentProjectLease(lease) && isProjectWorkAccepted()) {
+              try {
+                await useProjectStore.getState().setPhase("parameters");
+                if (!isCurrentProjectLease(lease)) return;
+                await useProjectStore.getState().saveProject();
+                if (!isCurrentProjectLease(lease)) return;
+                navigate(`/project/${project.projectMeta.id}/parameters`);
+              } catch {
+                // Shared save status retains the error; navigation stays here.
+              }
             }
           }}
           data-testid="import-next-params-btn"

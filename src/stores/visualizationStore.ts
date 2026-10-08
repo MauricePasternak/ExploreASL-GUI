@@ -1,43 +1,16 @@
 import { create } from "zustand";
+import type { VisualizationConfig } from "../generated/project/VisualizationConfig";
+import type { ProjectFile } from "../schemas/project";
+import { useProjectStore } from "./projectStore";
+import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 
-// Types from the schema
-interface QcbfSource {
-  relativePath: string;
-  fileHash: string;
-}
-
-export interface ExternalSource {
-  absolutePath: string;
-  fileHash: string;
-  sheetName: string | null;
-}
-
-export interface JoinConfig {
-  externalSource: ExternalSource;
-  keys: Array<{ left: string; right: string }>;
-  dropRightOn: boolean;
-  naTokens: string[];
-  delimiter: string;
-}
-
-interface Identifiers {
-  subject: string;
-  session: string;
-  run: string;
-}
-
-interface AxisAssignment {
-  x: string | null;
-  y: string | null;
-  colorBy: string | null;
-}
-
-interface DomainFilters {
-  xMin: number | null;
-  xMax: number | null;
-  yMin: number | null;
-  yMax: number | null;
-}
+import type { QcbfSource } from "../generated/project/QcbfSource";
+import type { ExternalSource } from "../generated/project/ExternalSource";
+import type { JoinConfig } from "../generated/project/JoinConfig";
+import type { Identifiers } from "../generated/project/Identifiers";
+import type { AxisAssignment } from "../generated/project/AxisAssignment";
+import type { DomainFilters } from "../generated/project/DomainFilters";
+export type { ExternalSource, JoinConfig };
 
 export type StepperStage = "selectData" | "columnTypes" | "levelOrdering" | "visualize";
 
@@ -59,49 +32,6 @@ export interface ChartPoint {
 interface ViewerState {
   status: "idle" | "loading" | "loaded" | "error";
   errorMessage?: string;
-}
-
-// Persisted fields (synced to uiState.dataVis)
-interface PersistedState {
-  qcbfSource: QcbfSource | null;
-  joinConfig: JoinConfig | null;
-  columnTypes: Record<string, string>;
-  identifiers: Identifiers | null;
-  levelOrderings: Record<string, string[]>;
-  axisAssignment: AxisAssignment;
-  domainFilters: DomainFilters;
-  stage: StepperStage;
-  splitRatio: number;
-  filtersExpanded: boolean;
-
-  // Nivo Chart settings
-  pointSize: number;
-  swarmSpacing: number;
-  chartOpacity: number;
-  showGridX: boolean;
-  showGridY: boolean;
-
-  // NiiVue Options
-  nvRadiological: boolean;
-  nvColorbar: boolean;
-  nvCrosshair: boolean;
-  nvCornerOrientation: boolean;
-  nvColormap: string;
-  nvSliceType: NvSliceType;
-  nvBackColor: NvBackColor;
-
-  // Axis tick options
-  xTickSize: number;
-  xTickPadding: number;
-  xTickRotation: number;
-  xLegendOverride: string | null;
-  xLegendOffset: number;
-
-  yTickSize: number;
-  yTickPadding: number;
-  yTickRotation: number;
-  yLegendOverride: string | null;
-  yLegendOffset: number;
 }
 
 export interface DataInspection {
@@ -132,7 +62,6 @@ interface EphemeralState {
   exclusionCount: { plotted: number; excluded: number };
   _lastExtMtime: string | null;
   externalSourceAvailability: ExternalSourceAvailability;
-  requiresManualSave: boolean;
 }
 
 export type ExternalSourceAvailability =
@@ -142,7 +71,9 @@ export type ExternalSourceAvailability =
 interface VisualizationActions {
   // Persisted actions
   setQcbfSource: (source: QcbfSource | null) => void;
-  setJoinConfig: (config: JoinConfig | null) => void;
+  setJoinConfig: (
+    config: JoinConfig | null | ((current: JoinConfig | null) => JoinConfig | null),
+  ) => void;
   setColumnType: (column: string, type: string) => void;
   setColumnTypes: (types: Record<string, string>) => void;
   setIdentifiers: (ids: Identifiers) => void;
@@ -194,14 +125,12 @@ interface VisualizationActions {
   setExternalSourceAvailability: (availability: ExternalSourceAvailability) => void;
   relinkMatchingExternalSource: (source: ExternalSource) => void;
   relinkChangedExternalSource: (source: ExternalSource) => void;
-  clearManualSaveRequirement: () => void;
-  hydrate: (persisted?: Record<string, unknown>) => void;
   reset: () => void;
 }
 
-type VisualizationState = PersistedState & EphemeralState & VisualizationActions;
+type VisualizationState = EphemeralState & VisualizationActions;
 
-const INITIAL_PERSISTED: PersistedState = {
+const INITIAL_PERSISTED: Required<VisualizationConfig> = {
   qcbfSource: null,
   joinConfig: null,
   columnTypes: {},
@@ -251,16 +180,10 @@ const INITIAL_EPHEMERAL: EphemeralState = {
   exclusionCount: { plotted: 0, excluded: 0 },
   _lastExtMtime: null,
   externalSourceAvailability: { status: "unconfigured", savedPath: null, message: null },
-  requiresManualSave: false,
 };
 
 function createInitialVisualizationState() {
   return {
-    ...INITIAL_PERSISTED,
-    axisAssignment: { ...INITIAL_PERSISTED.axisAssignment },
-    domainFilters: { ...INITIAL_PERSISTED.domainFilters },
-    columnTypes: {},
-    levelOrderings: {},
     ...INITIAL_EPHEMERAL,
     availableFiles: [],
     chartData: [],
@@ -269,77 +192,100 @@ function createInitialVisualizationState() {
   };
 }
 
-const PERSISTED_KEYS = Object.keys(INITIAL_PERSISTED) as Array<keyof PersistedState>;
+/** Presentation defaults only; no editable persisted slice. */
+export function visualizationSettings(project: ProjectFile | null) {
+  return { ...INITIAL_PERSISTED, ...project?.uiState.dataVis };
+}
+export const acceptedVisualizationSettings = () =>
+  visualizationSettings(useProjectStore.getState().project);
 
-function hydratedVisualizationState(persisted?: Record<string, unknown>) {
-  const next = createInitialVisualizationState() as Record<string, unknown>;
-  for (const key of PERSISTED_KEYS) {
-    const value = persisted?.[key];
-    if (value !== undefined) next[key] = value;
-  }
-  return next as ReturnType<typeof createInitialVisualizationState>;
+const EMPTY_CONFIG: VisualizationConfig = {
+  qcbfSource: null,
+  joinConfig: null,
+  identifiers: null,
+  xLegendOverride: null,
+  yLegendOverride: null,
+};
+function editVisualization(
+  update:
+    | Partial<VisualizationConfig>
+    | ((settings: Required<VisualizationConfig>) => Partial<VisualizationConfig>),
+) {
+  void useProjectStore
+    .getState()
+    .submitEdit((project) => ({
+      kind: "visualization",
+      config: {
+        ...(project.uiState.dataVis ?? EMPTY_CONFIG),
+        ...(typeof update === "function" ? update(visualizationSettings(project)) : update),
+      },
+    }))
+    .catch(() => undefined);
 }
 
 export const useVisualizationStore = create<VisualizationState>((set) => ({
-  ...INITIAL_PERSISTED,
   ...INITIAL_EPHEMERAL,
 
   // Persisted actions
-  setQcbfSource: (source) => set({ qcbfSource: source }),
-  setJoinConfig: (config) => set({ joinConfig: config }),
+  setQcbfSource: (source) => editVisualization({ qcbfSource: source }),
+  setJoinConfig: (config) =>
+    editVisualization((state) => ({
+      joinConfig: typeof config === "function" ? config(state.joinConfig) : config,
+    })),
   setColumnType: (column, type) =>
-    set((state) => ({
+    editVisualization((state) => ({
       columnTypes: { ...state.columnTypes, [column]: type },
     })),
-  setColumnTypes: (types) => set({ columnTypes: types }),
-  setIdentifiers: (ids) => set({ identifiers: ids }),
+  setColumnTypes: (types) => editVisualization({ columnTypes: types }),
+  setIdentifiers: (ids) => editVisualization({ identifiers: ids }),
   setLevelOrdering: (column, levels) =>
-    set((state) => ({
+    editVisualization((state) => ({
       levelOrderings: { ...state.levelOrderings, [column]: levels },
     })),
-  setLevelOrderings: (orderings) => set({ levelOrderings: orderings }),
+  setLevelOrderings: (orderings) => editVisualization({ levelOrderings: orderings }),
   setAxisAssignment: (axis) =>
-    set((state) => ({
+    editVisualization((state) => ({
       axisAssignment: { ...state.axisAssignment, ...axis },
     })),
   setDomainFilters: (filters) =>
-    set((state) => ({
+    editVisualization((state) => ({
       domainFilters: { ...state.domainFilters, ...filters },
     })),
-  setStage: (stage) => set({ stage }),
-  setSplitRatio: (ratio) => set({ splitRatio: ratio }),
-  setFiltersExpanded: (expanded) => set({ filtersExpanded: expanded }),
-  invalidateContract: () =>
-    set({
-      ...INITIAL_PERSISTED,
-      stage: "selectData",
-    }),
+  setStage: (stage) => editVisualization({ stage }),
+  setSplitRatio: (ratio) => editVisualization({ splitRatio: ratio }),
+  setFiltersExpanded: (expanded) => editVisualization({ filtersExpanded: expanded }),
+  invalidateContract: () => {
+    void useProjectStore
+      .getState()
+      .submitEdit({ kind: "visualization", config: EMPTY_CONFIG })
+      .catch(() => undefined);
+  },
 
   // New settings actions
-  setPointSize: (size) => set({ pointSize: size }),
-  setSwarmSpacing: (spacing) => set({ swarmSpacing: spacing }),
-  setChartOpacity: (opacity) => set({ chartOpacity: opacity }),
-  setShowGridX: (show) => set({ showGridX: show }),
-  setShowGridY: (show) => set({ showGridY: show }),
-  setNvRadiological: (val) => set({ nvRadiological: val }),
-  setNvColorbar: (val) => set({ nvColorbar: val }),
-  setNvCrosshair: (val) => set({ nvCrosshair: val }),
-  setNvCornerOrientation: (val) => set({ nvCornerOrientation: val }),
-  setNvColormap: (colormap) => set({ nvColormap: colormap }),
-  setNvSliceType: (sliceType) => set({ nvSliceType: sliceType }),
-  setNvBackColor: (color) => set({ nvBackColor: color }),
+  setPointSize: (size) => editVisualization({ pointSize: size }),
+  setSwarmSpacing: (spacing) => editVisualization({ swarmSpacing: spacing }),
+  setChartOpacity: (opacity) => editVisualization({ chartOpacity: opacity }),
+  setShowGridX: (show) => editVisualization({ showGridX: show }),
+  setShowGridY: (show) => editVisualization({ showGridY: show }),
+  setNvRadiological: (val) => editVisualization({ nvRadiological: val }),
+  setNvColorbar: (val) => editVisualization({ nvColorbar: val }),
+  setNvCrosshair: (val) => editVisualization({ nvCrosshair: val }),
+  setNvCornerOrientation: (val) => editVisualization({ nvCornerOrientation: val }),
+  setNvColormap: (colormap) => editVisualization({ nvColormap: colormap }),
+  setNvSliceType: (sliceType) => editVisualization({ nvSliceType: sliceType }),
+  setNvBackColor: (color) => editVisualization({ nvBackColor: color }),
 
-  setXTickSize: (val) => set({ xTickSize: val }),
-  setXTickPadding: (val) => set({ xTickPadding: val }),
-  setXTickRotation: (val) => set({ xTickRotation: val }),
-  setXLegendOverride: (val) => set({ xLegendOverride: val }),
-  setXLegendOffset: (val) => set({ xLegendOffset: val }),
+  setXTickSize: (val) => editVisualization({ xTickSize: val }),
+  setXTickPadding: (val) => editVisualization({ xTickPadding: val }),
+  setXTickRotation: (val) => editVisualization({ xTickRotation: val }),
+  setXLegendOverride: (val) => editVisualization({ xLegendOverride: val }),
+  setXLegendOffset: (val) => editVisualization({ xLegendOffset: val }),
 
-  setYTickSize: (val) => set({ yTickSize: val }),
-  setYTickPadding: (val) => set({ yTickPadding: val }),
-  setYTickRotation: (val) => set({ yTickRotation: val }),
-  setYLegendOverride: (val) => set({ yLegendOverride: val }),
-  setYLegendOffset: (val) => set({ yLegendOffset: val }),
+  setYTickSize: (val) => editVisualization({ yTickSize: val }),
+  setYTickPadding: (val) => editVisualization({ yTickPadding: val }),
+  setYTickRotation: (val) => editVisualization({ yTickRotation: val }),
+  setYLegendOverride: (val) => editVisualization({ yLegendOverride: val }),
+  setYLegendOffset: (val) => editVisualization({ yLegendOffset: val }),
 
   // Ephemeral actions
   setAvailableFiles: (files) => set({ availableFiles: files }),
@@ -353,42 +299,44 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
   _setLastExtMtime: (mtime) => set({ _lastExtMtime: mtime }),
   setExternalSourceAvailability: (externalSourceAvailability) =>
     set({ externalSourceAvailability }),
-  relinkMatchingExternalSource: (source) =>
-    set((state) => ({
-      joinConfig: state.joinConfig
-        ? { ...state.joinConfig, externalSource: source }
-        : state.joinConfig,
-      externalSourceAvailability: {
-        status: "available",
-        savedPath: source.absolutePath,
-        message: null,
-      },
-      requiresManualSave: true,
-    })),
-  relinkChangedExternalSource: (source) =>
-    set((state) => ({
-      joinConfig: state.joinConfig
-        ? { ...state.joinConfig, externalSource: source, keys: [] }
-        : state.joinConfig,
-      columnTypes: {},
-      identifiers: null,
-      levelOrderings: {},
-      axisAssignment: { ...INITIAL_PERSISTED.axisAssignment },
-      domainFilters: { ...INITIAL_PERSISTED.domainFilters },
-      stage: "selectData",
-      inspection: null,
-      chartData: [],
-      selectedPointId: null,
-      viewerState: { status: "idle" },
-      exclusionCount: { plotted: 0, excluded: 0 },
-      externalSourceAvailability: {
-        status: "available",
-        savedPath: source.absolutePath,
-        message: null,
-      },
-      requiresManualSave: true,
-    })),
-  clearManualSaveRequirement: () => set({ requiresManualSave: false }),
-  hydrate: (persisted) => set(hydratedVisualizationState(persisted)),
+  relinkMatchingExternalSource: (source) => {
+    const lease = captureProjectLease();
+    void useProjectStore
+      .getState()
+      .submitEdit({ kind: "relinkExternal", source, compatible: true })
+      .then(() => {
+        if (isCurrentProjectLease(lease))
+          set({
+            externalSourceAvailability: {
+              status: "available",
+              savedPath: source.absolutePath,
+              message: null,
+            },
+          });
+      })
+      .catch(() => undefined);
+  },
+  relinkChangedExternalSource: (source) => {
+    const lease = captureProjectLease();
+    void useProjectStore
+      .getState()
+      .submitEdit({ kind: "relinkExternal", source, compatible: false })
+      .then(() => {
+        if (isCurrentProjectLease(lease))
+          set({
+            externalSourceAvailability: {
+              status: "available",
+              savedPath: source.absolutePath,
+              message: null,
+            },
+            inspection: null,
+            chartData: [],
+            selectedPointId: null,
+            viewerState: { status: "idle" },
+            exclusionCount: { plotted: 0, excluded: 0 },
+          });
+      })
+      .catch(() => undefined);
+  },
   reset: () => set(createInitialVisualizationState()),
 }));

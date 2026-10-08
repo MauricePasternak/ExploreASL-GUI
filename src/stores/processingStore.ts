@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
   ProcessingRequestSchema,
-  type ProcessConfig,
   type ProcessingPhase,
   type ProcessingRunSnapshot,
   type ProcessingAvailableAction,
@@ -10,8 +9,9 @@ import {
   type SubjectModuleStatus,
 } from "../schemas/processingSchemas";
 import { useProjectStore } from "./projectStore";
+import type { ProcessingConfig as ProcessConfig } from "../generated/project/ProcessingConfig";
 import { useGlobalStore } from "./globalStore";
-import { useDataParStore } from "./dataParStore";
+import { acceptedDataPar } from "./dataParStore";
 import { aslRunsEqual, normalizeAslRunId } from "../lib/aslRun";
 import { assembleDataPar } from "../lib/assembleDataPar";
 import {
@@ -35,7 +35,6 @@ import {
 
 export interface ProcessingState {
   processingPhase: ProcessingPhase;
-  config: ProcessConfig | null;
   availableSubjects: SubjectInfo[];
   subjectStatuses: SubjectModuleStatus[];
   activeRunId: string | null;
@@ -48,7 +47,9 @@ export interface ProcessingState {
   bidsCompatibilityError: string | null;
   profileError: string | null;
   preparingMessage: string | null;
-  setConfig: (config: ProcessConfig) => void;
+  setConfig: (
+    update: ProcessConfig | ((current: ProcessConfig | undefined) => ProcessConfig),
+  ) => Promise<void>;
   bindRunSnapshot: (snapshot: ProcessingRunSnapshot) => void;
   reconcileRunSnapshot: (snapshot: ProcessingRunSnapshot) => void;
   synchronizeProcessingRun: () => Promise<void>;
@@ -61,10 +62,7 @@ export interface ProcessingState {
   setAvailableSubjects: (subjects: SubjectInfo[]) => void;
   scanAvailableSubjects: () => Promise<void>;
   loadLockFileStatus: () => Promise<void>;
-  hydrateProcessing: (persisted?: {
-    config?: ProcessConfig;
-    currentPhase?: ProcessingPhase;
-  }) => void;
+  hydrateProcessing: () => void;
   resetProcessing: () => Promise<void>;
   clearBidsCompatibilityError: () => Promise<void>;
   clearProfileError: () => void;
@@ -73,7 +71,6 @@ export interface ProcessingState {
 function createInitialProcessingState() {
   return {
     processingPhase: "idle" as ProcessingPhase,
-    config: null as ProcessConfig | null,
     availableSubjects: [] as SubjectInfo[],
     subjectStatuses: [] as SubjectModuleStatus[],
     activeRunId: null as string | null,
@@ -209,38 +206,15 @@ export const useProcessingStore = create<ProcessingState>()(
           ? { subjectStatuses: statuses }
           : {}),
       });
-      if (snapshot.populationExecutionCommitted) {
-        useProjectStore.getState().setPopulationCompleted(false);
-        useProjectStore.getState().setLastPopulationRunMtime(null);
-      }
     };
     return {
       ...createInitialProcessingState(),
-      setConfig: (config) => {
-        const prevModules = useProcessingStore.getState().config?.modules ?? [];
-        let modules = [...config.modules];
-
-        const hasPop = modules.includes("population");
-        const hasSubject = modules.includes("structural") || modules.includes("asl");
-
-        if (hasPop && hasSubject) {
-          const prevHasPop = prevModules.includes("population");
-          if (prevHasPop) {
-            modules = modules.filter((m) => m !== "population");
-          } else {
-            modules = ["population"];
-          }
-        }
-
-        const needsBids2LegacyRerun = modules.includes("structural") || modules.includes("asl");
-        const patched = {
-          ...config,
-          modules,
-          ...(modules.includes("population") && { workers: 1 }),
-          ...(!needsBids2LegacyRerun && { rerunBids2Legacy: false }),
-        };
-        set({ config: patched });
-      },
+      setConfig: (update) =>
+        useProjectStore.getState().submitEdit((project) => ({
+          kind: "processing",
+          config:
+            typeof update === "function" ? update(project.uiState.processing?.config) : update,
+        })),
 
       bindRunSnapshot: (snapshot) => projectSnapshot(snapshot, true),
       reconcileRunSnapshot: (snapshot) => projectSnapshot(snapshot, false),
@@ -264,6 +238,8 @@ export const useProcessingStore = create<ProcessingState>()(
             return;
           }
           useProcessingStore.getState().bindRunSnapshot(active);
+          await useProjectStore.getState().refreshProject();
+          if (!isCurrentProjectLease(lease)) return;
           await attachProcessingListeners(active.runId);
           await projectProcessingSnapshot(active, lease);
         }),
@@ -273,66 +249,71 @@ export const useProcessingStore = create<ProcessingState>()(
           const lease = captureProjectLease();
           const state = useProcessingStore.getState();
           if (state.activeRunId || state.terminalRunId || state.actionPending) return;
-          const config = state.config;
-          if (!config) throw new Error("No config set");
-          if (!config.modules.length) throw new Error("No modules selected");
-          const project = useProjectStore.getState().project;
-          if (!project || !lease || !hasActiveProcessingProject())
-            throw new Error("No project loaded");
-          const global = useGlobalStore.getState();
-          const profile = global.getProfileById(config.selectedProfileId);
-          if (!profile) {
-            set({
-              profileError:
-                "Selected profile was deleted or is invalid. Choose a valid profile before running.",
-            });
-            return;
-          }
-          const profileValidation = global.profileValidationState[profile.id];
-          if (!profileValidation?.valid) {
-            set({
-              profileError: `Execution profile "${profile.label}" is invalid: ${profileValidation?.errors.join("; ") || "Fix it in Settings before running."}`,
-            });
-            return;
-          }
-          for (const subject of config.subjects) {
-            if (!/^sub-[^\s]+_[^_\s]+$/.test(subject))
-              throw new Error(
-                `Subject session "${subject}" does not match BIDS syntax (sub-<subject>_<session>)`,
-              );
-            if (!state.availableSubjects.some((s) => s.subjectSession === subject))
-              throw new Error(
-                `Selected subject session "${subject}" is not present in the project`,
-              );
-          }
-          const dataPar = useDataParStore.getState().dataPar;
-          const mapping = project.mappingState;
-          const request = ProcessingRequestSchema.parse({
-            requestId: crypto.randomUUID(),
-            projectId: lease.projectId,
-            selectedModules: [...config.modules],
-            selectedSubjectSessions: [...config.subjects],
-            executionProfile: structuredClone(profile),
-            dataPar: assembleDataPar(dataPar),
-            participants: {
-              correction: dataPar.enableMetadataGroupingCorrection ?? false,
-              subjectRows: (mapping?.subjectRows ?? []).map((row) => ({
-                subject: row.subject,
-                session: row.session,
-                groupId: row.groupId ?? null,
-              })),
-              metadataGroups: (mapping?.metadataGroups ?? []).map((group) => ({
-                id: group.id,
-                label: group.label,
-              })),
-            },
-            workers: config.subjects.length
-              ? Math.min(config.workers, config.subjects.length)
-              : config.workers,
-            rerunBids2legacy: config.rerunBids2Legacy ?? false,
-          });
-          set({ actionPending: true, profileError: null, processingError: null });
+          set({ actionPending: true });
           try {
+            await useProjectStore.getState().flushEdits();
+            if (lease && !isCurrentProjectLease(lease)) return;
+            const config = useProjectStore.getState().project?.uiState.processing?.config;
+            if (!config) throw new Error("No config set");
+            if (!config.modules.length) throw new Error("No modules selected");
+            const project = useProjectStore.getState().project;
+            if (!project || !lease || !hasActiveProcessingProject())
+              throw new Error("No project loaded");
+            const global = useGlobalStore.getState();
+            const profile = global.getProfileById(config.selectedProfileId);
+            if (!profile) {
+              set({
+                profileError:
+                  "Selected profile was deleted or is invalid. Choose a valid profile before running.",
+              });
+              return;
+            }
+            const profileValidation = global.profileValidationState[profile.id];
+            if (!profileValidation?.valid) {
+              set({
+                profileError: `Execution profile "${profile.label}" is invalid: ${profileValidation?.errors.join("; ") || "Fix it in Settings before running."}`,
+              });
+              return;
+            }
+            for (const subject of config.subjects) {
+              if (!/^sub-[^\s]+_[^_\s]+$/.test(subject))
+                throw new Error(
+                  `Subject session "${subject}" does not match BIDS syntax (sub-<subject>_<session>)`,
+                );
+              if (!state.availableSubjects.some((s) => s.subjectSession === subject))
+                throw new Error(
+                  `Selected subject session "${subject}" is not present in the project`,
+                );
+            }
+            const dataPar = acceptedDataPar();
+            const mapping = project.mappingState;
+            const request = ProcessingRequestSchema.parse({
+              requestId: crypto.randomUUID(),
+              projectId: lease.projectId,
+              selectedModules: [...config.modules],
+              selectedSubjectSessions: [...config.subjects],
+              executionProfile: structuredClone(profile),
+              dataPar: assembleDataPar(dataPar),
+              participants: {
+                correction: dataPar.enableMetadataGroupingCorrection ?? false,
+                subjectRows: (mapping?.subjectRows ?? []).map((row) => ({
+                  subject: row.subject,
+                  session: row.session,
+                  groupId: row.groupId ?? null,
+                })),
+                metadataGroups: (mapping?.metadataGroups ?? []).map((group) => ({
+                  id: group.id,
+                  label: group.label,
+                })),
+              },
+              workers: config.subjects.length
+                ? Math.min(config.workers, config.subjects.length)
+                : config.workers,
+              rerunBids2legacy: config.rerunBids2Legacy ?? false,
+            });
+            set({ profileError: null, processingError: null });
+            await useProjectStore.getState().saveProject();
+            if (!isCurrentProjectLease(lease)) return;
             const reservation = await reserveProcessingRun(request, lease.rootPath);
             if (!isCurrentProjectLease(lease) || reservation.kind === "historical") return;
             const snapshot = reservation.snapshot;
@@ -498,15 +479,7 @@ export const useProcessingStore = create<ProcessingState>()(
         set({ subjectStatuses: statuses });
       },
 
-      hydrateProcessing: (persisted) =>
-        set({
-          ...createInitialProcessingState(),
-          config: persisted?.config ?? null,
-          processingPhase:
-            persisted?.currentPhase && !isActiveProcessingPhase(persisted.currentPhase)
-              ? persisted.currentPhase
-              : "idle",
-        }),
+      hydrateProcessing: () => set(createInitialProcessingState()),
       resetProcessing: async () => {
         clearProcessingListeners();
         set(createInitialProcessingState());

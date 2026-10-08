@@ -11,12 +11,22 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
 import { logAction } from "../../lib/debug";
+import {
+  captureProjectLease,
+  isCurrentProjectLease,
+  isProjectWorkAccepted,
+  type ProjectLease,
+} from "../../lib/projectLifecycle";
 import { discoverPathPatterns } from "../../lib/pathUtils";
 import { inspectSourcePath, resolveLogicalSource } from "../../lib/projectPaths";
 import { areDicomStructuresCompatible } from "../../lib/dicomRelink";
 import type { PathPattern } from "../../schemas/importSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
-import { useImportStore } from "../../stores/importStore";
+import {
+  acceptedImportSettings,
+  EMPTY_IMPORT_SETTINGS,
+  useImportStore,
+} from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
 import HeaderCard from "../common/HeaderCard";
 import HelpTooltip from "../common/HelpTooltip";
@@ -30,22 +40,28 @@ import HelpTooltip from "../common/HelpTooltip";
 export default function DicomIngestion() {
   const project = useProjectStore((state) => state.project);
   const tokenSubDelimiters = useGlobalStore((s) => s.settings.tokenSubDelimiters);
-  const sourceDataPath = useImportStore((s) => s.sourceDataPath);
+  const sourceDataPath = useProjectStore((s) => s.project?.mappingState.sourceDataPath ?? "");
   const setSourceDataPath = useImportStore((s) => s.setSourceDataPath);
-  const bMatchDirectories = useImportStore((s) => s.bMatchDirectories);
+  const bMatchDirectories = useProjectStore(
+    (s) => s.project?.mappingState.bMatchDirectories ?? true,
+  );
   const setBMatchDirectories = useImportStore((s) => s.setBMatchDirectories);
-  const pathPatterns = useImportStore((s) => s.pathPatterns);
-  const ingestionComplete = useImportStore((s) => s.ingestionComplete);
+  const pathPatterns = useProjectStore(
+    (s) => s.project?.mappingState.pathPatterns ?? EMPTY_IMPORT_SETTINGS.pathPatterns,
+  );
+  const ingestionComplete = useProjectStore(
+    (s) => s.project?.mappingState.ingestionComplete ?? false,
+  );
   const setIngestionResults = useImportStore((s) => s.setIngestionResults);
   const setActiveStep = useImportStore((s) => s.setActiveStep);
   const sourceAvailability = useImportStore((s) => s.sourceAvailability);
-  const setSourceAvailability = useImportStore((s) => s.setSourceAvailability);
   const relinkCompatibleSource = useImportStore((s) => s.relinkCompatibleSource);
   const relinkIncompatibleSource = useImportStore((s) => s.relinkIncompatibleSource);
 
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingRelink, setPendingRelink] = useState<{
+    lease: ProjectLease;
     path: string;
     rawPaths: string[];
     patterns: PathPattern[];
@@ -65,6 +81,8 @@ export default function DicomIngestion() {
   }
 
   async function handleSelectFolder() {
+    const lease = captureProjectLease();
+    if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
     logAction("dicom_select_folder");
     const selected = await open({
       defaultPath: project?.projectMeta.rootPath,
@@ -72,16 +90,18 @@ export default function DicomIngestion() {
       multiple: false,
       title: "Select DICOM source directory",
     });
-
+    if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
     if (selected) {
       try {
         const selectedPath = selected as string;
         const logicalPath = await logicalSelectedPath(selectedPath);
-        setSourceDataPath(logicalPath);
-        setSourceAvailability({ status: "available", savedPath: logicalPath, message: null });
+        if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
+        await setSourceDataPath(selectedPath, lease);
+        if (!isCurrentProjectLease(lease)) return;
         setError(null);
         logAction("dicom_folder_selected", { path: logicalPath });
       } catch (err) {
+        if (!isCurrentProjectLease(lease)) return;
         setError(
           `Failed to inspect source directory: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -90,18 +110,22 @@ export default function DicomIngestion() {
   }
 
   async function handleRelink() {
+    const lease = captureProjectLease();
+    if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
     const selected = await open({
       defaultPath: project?.projectMeta.rootPath,
       directory: true,
       multiple: false,
       title: "Relink DICOM source directory",
     });
-    if (typeof selected !== "string") return;
+    if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted() || typeof selected !== "string")
+      return;
 
     setScanning(true);
     setError(null);
     try {
       const logicalPath = await logicalSelectedPath(selected);
+      if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
       const resolvedSource = resolveLogicalSource(
         project?.projectMeta.rootPath ?? "",
         logicalPath,
@@ -112,30 +136,33 @@ export default function DicomIngestion() {
         maxDepth: 20,
         bMatchDirectories,
       });
+      if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
       if (paths.length === 0) throw new Error("Replacement contains no DICOM locations.");
       const patterns = discoverPathPatterns(paths, "", tokenSubDelimiters);
       if (
         areDicomStructuresCompatible(
-          useImportStore.getState().rawPaths,
+          acceptedImportSettings().rawPaths,
           pathPatterns,
           paths,
           patterns,
         )
       ) {
-        relinkCompatibleSource(logicalPath);
-        useProjectStore.getState().syncImportState(useImportStore.getState());
+        await relinkCompatibleSource(selected, lease);
       } else {
-        setPendingRelink({ path: logicalPath, rawPaths: paths, patterns });
+        setPendingRelink({ lease, path: selected, rawPaths: paths, patterns });
       }
     } catch (err) {
+      if (!isCurrentProjectLease(lease)) return;
       setError(`Failed to relink source: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setScanning(false);
+      if (isCurrentProjectLease(lease)) setScanning(false);
     }
   }
 
   async function handleScan() {
-    if (!sourceDataPath) return;
+    const lease = captureProjectLease();
+    if (!sourceDataPath || !lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted())
+      return;
 
     setScanning(true);
     setError(null);
@@ -152,30 +179,31 @@ export default function DicomIngestion() {
         maxDepth: 20,
         bMatchDirectories,
       });
-
+      if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
       if (paths.length === 0) {
         setError(
           "No DICOM (.dcm) files found in the provided directory tree. Check that the folders contain valid DICOM data.",
         );
-        setIngestionResults([], []);
+        setIngestionResults([], [], lease);
         logAction("dicom_scan_empty", { path: sourceDataPath });
         return;
       }
 
       const patterns = discoverPathPatterns(paths, "", tokenSubDelimiters);
 
-      setIngestionResults(paths, patterns);
+      setIngestionResults(paths, patterns, lease);
       logAction("dicom_scan_success", {
         path: sourceDataPath,
         pathCount: paths.length,
         patternCount: patterns.length,
       });
     } catch (err) {
+      if (!isCurrentProjectLease(lease)) return;
       setError(`Failed to scan directory: ${err instanceof Error ? err.message : String(err)}`);
-      setIngestionResults([], []);
+      setIngestionResults([], [], lease);
       logAction("dicom_scan_error", { path: sourceDataPath, error: String(err) });
     } finally {
-      setScanning(false);
+      if (isCurrentProjectLease(lease)) setScanning(false);
     }
   }
 
@@ -316,14 +344,25 @@ export default function DicomIngestion() {
             </Button>
             <Button
               color="orange"
-              onClick={() => {
+              onClick={async () => {
                 if (pendingRelink) {
-                  relinkIncompatibleSource(
-                    pendingRelink.path,
-                    pendingRelink.rawPaths,
-                    pendingRelink.patterns,
-                  );
-                  useProjectStore.getState().syncImportState(useImportStore.getState());
+                  if (!isCurrentProjectLease(pendingRelink.lease) || !isProjectWorkAccepted())
+                    return;
+                  try {
+                    await relinkIncompatibleSource(
+                      pendingRelink.path,
+                      pendingRelink.rawPaths,
+                      pendingRelink.patterns,
+                      pendingRelink.lease,
+                    );
+                  } catch (err) {
+                    if (!isCurrentProjectLease(pendingRelink.lease)) return;
+                    setError(
+                      `Failed to relink source: ${err instanceof Error ? err.message : String(err)}`,
+                    );
+                    return;
+                  }
+                  if (!isCurrentProjectLease(pendingRelink.lease)) return;
                 }
                 setPendingRelink(null);
               }}

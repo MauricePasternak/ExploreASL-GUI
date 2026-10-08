@@ -7,12 +7,13 @@ import ProfileSelector from "../common/ProfileSelector";
 import { PROCESSING_MODULES } from "../../schemas/processingSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
 import { useProcessingStore } from "../../stores/processingStore";
+import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingEnvironment } from "../../hooks/useProcessingEnvironment";
 
 export default function PipelineConfig() {
   const executionProfiles = useGlobalStore((s) => s.settings.executionProfiles);
   const profileValidationState = useGlobalStore((s) => s.profileValidationState);
-  const config = useProcessingStore((s) => s.config);
+  const config = useProjectStore((s) => s.project?.uiState.processing?.config);
   const setConfig = useProcessingStore((s) => s.setConfig);
 
   const { systemCores, defaultWorkers } = useProcessingEnvironment();
@@ -23,12 +24,15 @@ export default function PipelineConfig() {
     const firstValid = executionProfiles.find(
       (profile) => profileValidationState[profile.id]?.valid === true,
     );
-    setConfig({
-      subjects: [],
-      modules: [],
-      selectedProfileId: firstValid?.id ?? "",
-      workers: defaultWorkers,
-    });
+    void setConfig(
+      (current) =>
+        current ?? {
+          subjects: [],
+          modules: [],
+          selectedProfileId: firstValid?.id ?? "",
+          workers: defaultWorkers,
+        },
+    ).catch(() => undefined);
   }, [config, executionProfiles, profileValidationState, defaultWorkers, setConfig]);
 
   useEffect(() => {
@@ -37,14 +41,18 @@ export default function PipelineConfig() {
       (profile) => profileValidationState[profile.id]?.valid === true,
     );
     if (firstValid) {
-      setConfig({ ...config, selectedProfileId: firstValid.id });
+      void setConfig((current) =>
+        current!.selectedProfileId ? current! : { ...current!, selectedProfileId: firstValid.id },
+      ).catch(() => undefined);
     }
   }, [config, executionProfiles, profileValidationState, setConfig]);
 
   const handleProfileChange = useCallback(
     (profileId: string) => {
       if (!config) return;
-      setConfig({ ...config, selectedProfileId: profileId });
+      void setConfig((current) => ({ ...current!, selectedProfileId: profileId })).catch(
+        () => undefined,
+      );
     },
     [config, setConfig],
   );
@@ -52,15 +60,17 @@ export default function PipelineConfig() {
   const handleModuleToggle = useCallback(
     (module: (typeof PROCESSING_MODULES)[number]) => {
       if (!config) return;
-      let modules = config.modules.includes(module)
-        ? config.modules.filter((m) => m !== module)
-        : [...config.modules, module];
+      void setConfig((current) => {
+        let modules = current!.modules.includes(module)
+          ? current!.modules.filter((m) => m !== module)
+          : [...current!.modules, module];
 
-      if (modules.includes(module) && (module === "structural" || module === "asl")) {
-        modules = modules.filter((m) => m !== "population");
-      }
+        if (modules.includes(module) && (module === "structural" || module === "asl")) {
+          modules = modules.filter((m) => m !== "population");
+        }
 
-      setConfig({ ...config, modules });
+        return { ...current!, modules };
+      }).catch(() => undefined);
     },
     [config, setConfig],
   );
@@ -70,7 +80,7 @@ export default function PipelineConfig() {
       if (!config) return;
       const workers = typeof value === "string" ? parseInt(value, 10) : value;
       if (Number.isNaN(workers) || workers < 1) return;
-      setConfig({ ...config, workers });
+      void setConfig((current) => ({ ...current!, workers })).catch(() => undefined);
     },
     [config, setConfig],
   );
@@ -78,7 +88,9 @@ export default function PipelineConfig() {
   const handleRerunBids2LegacyToggle = useCallback(
     (checked: boolean) => {
       if (!config) return;
-      setConfig({ ...config, rerunBids2Legacy: checked });
+      void setConfig((current) => ({ ...current!, rerunBids2Legacy: checked })).catch(
+        () => undefined,
+      );
     },
     [config, setConfig],
   );

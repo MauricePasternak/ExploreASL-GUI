@@ -21,6 +21,7 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const params = useParams();
   const project = useProjectStore((state) => state.project);
+  const activationGeneration = project?.activationGeneration;
   const setPhase = useProjectStore((state) => state.setPhase);
   const saveProject = useProjectStore((state) => state.saveProject);
   const processingPhase = useProcessingStore((state) => state.processingPhase);
@@ -90,6 +91,9 @@ export default function ProjectPage() {
 
   // Route guarding based on phase accessibility
   useEffect(() => {
+    // React to route/activation changes, not native acceptance of a phase
+    // before Layout finishes saving and navigates to that phase.
+    const project = useProjectStore.getState().project;
     if (!project) {
       return;
     }
@@ -128,10 +132,11 @@ export default function ProjectPage() {
     }
 
     if (project.projectMeta.currentPhase !== params.phase) {
-      setPhase(params.phase);
-      void saveProject();
+      void setPhase(params.phase)
+        .then(() => saveProject())
+        .catch(() => undefined);
     }
-  }, [navigate, params.phase, project, saveProject, setPhase, isProcessingActive]);
+  }, [navigate, params.phase, activationGeneration, saveProject, setPhase, isProcessingActive]);
 
   if (!project) {
     if (restoring) {

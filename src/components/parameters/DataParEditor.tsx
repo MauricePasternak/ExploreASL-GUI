@@ -1,8 +1,9 @@
 import { Accordion, Alert, Stack, Switch, Text } from "@mantine/core";
 import { IconAdjustments, IconAlertTriangle } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import type { DataParState } from "../../schemas/dataParSchema";
-import { useDataParStore } from "../../stores/dataParStore";
+import { DEFAULT_ADVANCED_VISIBILITY, useDataParStore } from "../../stores/dataParStore";
+import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import HeaderCard from "../common/HeaderCard";
 import { ASLProcessingSection } from "./ASLProcessingSection";
@@ -14,44 +15,36 @@ import { QuantificationSection } from "./QuantificationSection";
 import { StructuralSection } from "./StructuralSection";
 
 export default function DataParEditor() {
-  const dataPar = useDataParStore((s) => s.dataPar);
-  const advancedVisibility = useDataParStore((s) => s.advancedVisibility);
+  const accepted = useProjectStore((state) => state.project?.dataPar);
+  const drafts = useDataParStore((state) => state.drafts);
+  const dataPar = { ...accepted, ...drafts } as DataParState;
+  const advancedVisibility = useProjectStore(
+    (state) => state.project?.uiState.datapar?.advancedVisibility ?? DEFAULT_ADVANCED_VISIBILITY,
+  );
+  const draftErrors = useProjectStore((state) => state.draftErrors);
   const setDataParField = useDataParStore((s) => s.setDataParField);
   const clearDataParField = useDataParStore((s) => s.clearDataParField);
   const setAdvancedVisibility = useDataParStore((s) => s.setAdvancedVisibility);
-  const saveToProject = useDataParStore((s) => s.saveToProject);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
-
-  // Debounced save to project
-  const saveTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const debouncedSave = useCallback(() => {
-    clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => saveToProject(), 500);
-  }, [saveToProject]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => clearTimeout(saveTimeout.current);
-  }, []);
 
   const handleFieldChange = useCallback(
     (field: string, value: unknown) => {
       if (value === undefined) {
-        clearDataParField(field as keyof DataParState);
+        void clearDataParField(field as keyof DataParState).catch(() => undefined);
       } else {
-        setDataParField(field as keyof DataParState, value);
+        void setDataParField(field as keyof DataParState, value).catch(() => undefined);
       }
-      debouncedSave();
     },
-    [setDataParField, clearDataParField, debouncedSave],
+    [setDataParField, clearDataParField],
   );
 
   const handleAdvancedToggle = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setAdvancedVisibility({ showAdvancedSections: e.currentTarget.checked });
-      debouncedSave();
+      void setAdvancedVisibility({ showAdvancedSections: e.currentTarget.checked }).catch(
+        () => undefined,
+      );
     },
-    [setAdvancedVisibility, debouncedSave],
+    [setAdvancedVisibility],
   );
 
   return (
@@ -71,6 +64,15 @@ export default function DataParEditor() {
           />
         }
       />
+
+      {Object.keys(draftErrors).some((field) => field.startsWith("dataPar.")) && (
+        <Alert color="red" data-testid="datapar-draft-error">
+          {Object.entries(draftErrors)
+            .filter(([field]) => field.startsWith("dataPar."))
+            .map(([, message]) => message)
+            .join(". ")}
+        </Alert>
+      )}
 
       {(["preparing", "running", "finalizing", "cancelling"] as string[]).includes(
         processingPhase,
@@ -107,10 +109,9 @@ export default function DataParEditor() {
               onFieldChange={handleFieldChange}
               showAdvanced={advancedVisibility.showAdvancedGeneralSettings}
               onToggleAdvanced={() => {
-                setAdvancedVisibility({
+                void setAdvancedVisibility({
                   showAdvancedGeneralSettings: !advancedVisibility.showAdvancedGeneralSettings,
-                });
-                debouncedSave();
+                }).catch(() => undefined);
               }}
             />
           </Accordion.Panel>
@@ -128,10 +129,9 @@ export default function DataParEditor() {
               onFieldChange={handleFieldChange}
               showAdvanced={advancedVisibility.showAdvancedM0Params}
               onToggleAdvanced={() => {
-                setAdvancedVisibility({
+                void setAdvancedVisibility({
                   showAdvancedM0Params: !advancedVisibility.showAdvancedM0Params,
-                });
-                debouncedSave();
+                }).catch(() => undefined);
               }}
             />
           </Accordion.Panel>
@@ -149,10 +149,9 @@ export default function DataParEditor() {
               onFieldChange={handleFieldChange}
               showAdvanced={advancedVisibility.showAdvancedQuantification}
               onToggleAdvanced={() => {
-                setAdvancedVisibility({
+                void setAdvancedVisibility({
                   showAdvancedQuantification: !advancedVisibility.showAdvancedQuantification,
-                });
-                debouncedSave();
+                }).catch(() => undefined);
               }}
             />
           </Accordion.Panel>
@@ -170,10 +169,9 @@ export default function DataParEditor() {
               onFieldChange={handleFieldChange}
               showAdvanced={advancedVisibility.showAdvancedASLProcessing}
               onToggleAdvanced={() => {
-                setAdvancedVisibility({
+                void setAdvancedVisibility({
                   showAdvancedASLProcessing: !advancedVisibility.showAdvancedASLProcessing,
-                });
-                debouncedSave();
+                }).catch(() => undefined);
               }}
             />
           </Accordion.Panel>
@@ -191,10 +189,9 @@ export default function DataParEditor() {
               onFieldChange={handleFieldChange}
               showAdvanced={advancedVisibility.showAdvancedAtlases}
               onToggleAdvanced={() => {
-                setAdvancedVisibility({
+                void setAdvancedVisibility({
                   showAdvancedAtlases: !advancedVisibility.showAdvancedAtlases,
-                });
-                debouncedSave();
+                }).catch(() => undefined);
               }}
             />
           </Accordion.Panel>

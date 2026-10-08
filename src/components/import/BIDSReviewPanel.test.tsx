@@ -3,6 +3,10 @@ import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exists } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
+import { projectFixture } from "../../test/projectFixtures";
+import { projectView } from "../../schemas/project";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 
 import BIDSReviewPanel from "./BIDSReviewPanel";
 import { useImportStore } from "../../stores/importStore";
@@ -53,30 +57,21 @@ const MOCK_GROUP_2: DerivedMetadataGroup = {
 };
 
 function makeProject(overrides: Record<string, unknown> = {}) {
+  const snapshot = projectFixture("proj-1", "Test Project", "/tmp/test-project");
+  snapshot.document.projectMeta.dataSource = "bids";
+  snapshot.document.mappingState = {
+    metadataGroups: [],
+    subjectRows: [],
+    ingestionComplete: false,
+    sourceDataPath: ".",
+  };
+  snapshot.document.uiState.import = {
+    mostRecentConfig: null,
+    bidsReviewConfirmed: false,
+    skippedSubjects: [],
+  };
   return {
-    version: "0.1.0",
-    projectMeta: {
-      id: "proj-1",
-      name: "Test Project",
-      rootPath: "/tmp/test-project",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      lastOpened: "2026-01-01T00:00:00.000Z",
-      currentPhase: "import" as const,
-      dataSource: "bids" as const,
-    },
-    uiState: {
-      import: {
-        bidsReviewConfirmed: false,
-        skippedSubjects: [] as string[],
-      },
-    },
-    mappingState: {
-      metadataGroups: [],
-      subjectRows: [],
-      ingestionComplete: false,
-      sourceDataPath: "/tmp/test-project",
-    },
-    dataPar: {},
+    ...projectView(snapshot),
     ...overrides,
   };
 }
@@ -94,6 +89,8 @@ function renderPanel() {
 describe("BIDSReviewPanel", () => {
   afterEach(() => {
     cleanup();
+    useProjectStore.getState().cancelAutosave();
+    resetProjectLifecycleForTests();
     mockNavigate.mockReset();
   });
 
@@ -101,6 +98,7 @@ describe("BIDSReviewPanel", () => {
     vi.clearAllMocks();
     vi.mocked(exists).mockResolvedValue(false);
     useImportStore.getState().resetBidsReview();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
     useProjectStore.setState({
       project: makeProject() as any,
       loaded: true,
@@ -318,14 +316,54 @@ describe("BIDSReviewPanel", () => {
     });
   });
 
-  it("calls confirmBidsReview and navigates on valid Confirm", async () => {
-    const confirmSpy = vi.fn().mockResolvedValue(undefined);
-    useProjectStore.setState({
-      project: makeProject() as any,
-      confirmBidsReview: confirmSpy,
-      loaded: true,
+  it("accepts BIDS review and waits for durable saving before navigation", async () => {
+    activateProjectLease("proj-1", "/tmp/test-project");
+    const accepted = {
+      ...projectFixture("proj-1", "Test Project", "/tmp/test-project"),
+      acceptedRevision: 1,
+    };
+    accepted.document.projectMeta = {
+      ...accepted.document.projectMeta,
+      dataSource: "bids",
+      currentPhase: "parameters",
+    };
+    accepted.document.mappingState = {
+      sourceDataPath: ".",
+      ingestionComplete: true,
+      metadataGroups: [
+        {
+          id: "group-1",
+          label: MOCK_GROUP.label,
+          bidsParams: MOCK_GROUP.bidsParams as NonNullable<
+            typeof accepted.document.mappingState.metadataGroups
+          >[number]["bidsParams"],
+        },
+      ],
+      subjectRows: [
+        { id: "sub-01_1", subject: "01", session: "1", groupId: "group-1" },
+        { id: "sub-02_1", subject: "02", session: "1", groupId: "group-1" },
+        { id: "sub-03_1", subject: "03", session: "1", groupId: "group-1" },
+      ],
+    };
+    accepted.document.uiState.import = {
+      mostRecentConfig: null,
+      bidsReviewConfirmed: true,
+      skippedSubjects: [],
+    };
+    const prior = useProjectStore.getState().project;
+    let release!: () => void;
+    let reject!: (error: Error) => void;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "scan_bids_sidecars") return { groups: [MOCK_GROUP], skipped: [] };
+      if (command === "accept_project_edit") {
+        await new Promise<void>((resolve, fail) => {
+          release = resolve;
+          reject = fail;
+        });
+        return { ...accepted, persistedRevision: 1 };
+      }
+      return null;
     });
-
     useImportStore.setState({
       bidsReview: {
         scanComplete: true,
@@ -338,10 +376,31 @@ describe("BIDSReviewPanel", () => {
     renderPanel();
     fireEvent.click(screen.getByTestId("bids-review-confirm-btn"));
 
+    await waitFor(() => expect(release).toBeTypeOf("function"));
+    expect(invoke).toHaveBeenCalledWith("accept_project_edit", {
+      generation: 1,
+      edit: { kind: "confirmBids", groups: [MOCK_GROUP], skipped: [] },
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().project).toEqual(prior);
+    reject(new Error("Project storage unavailable"));
+    await waitFor(() =>
+      expect(useProjectStore.getState().saveError).toContain("storage unavailable"),
+    );
+    expect(useProjectStore.getState().project).toEqual(prior);
+    expect(mockNavigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("bids-review-confirm-btn"));
+    await waitFor(() =>
+      expect(
+        vi.mocked(invoke).mock.calls.filter(([command]) => command === "accept_project_edit"),
+      ).toHaveLength(2),
+    );
+    release();
     await waitFor(() => {
-      expect(confirmSpy).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith("/project/proj-1/parameters");
     });
+    expect(useProjectStore.getState().isDirty).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith("save_project", expect.anything());
   });
 
   describe("participants.tsv banner (D21)", () => {

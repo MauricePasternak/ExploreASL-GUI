@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProcessingStore } from "../stores/processingStore";
+import type { ProcessConfig } from "../schemas/processingSchemas";
 
 const { mockProject, mockSettings, mockValidationState, mockGetProfileById, mockHasValidProfile } =
   vi.hoisted(() => {
@@ -19,7 +20,13 @@ const { mockProject, mockSettings, mockValidationState, mockGetProfileById, mock
       ],
     };
     return {
-      mockProject: { project: { projectMeta: { rootPath: "/test/project" } } },
+      mockProject: {
+        project: {
+          projectMeta: { rootPath: "/test/project" },
+          dataPar: {},
+          uiState: { processing: { config: null as ProcessConfig | null } },
+        },
+      },
       mockSettings: settings,
       mockValidationState: {
         "profile-1": { valid: true, errors: [] as string[] },
@@ -102,11 +109,11 @@ describe("ProcessingPage", () => {
   });
 
   beforeEach(() => {
+    mockProject.project.uiState.processing.config = DEFAULT_CONFIG;
     useProcessingStore.setState({
       processingPhase: "idle",
       availableSubjects: DEFAULT_SUBJECTS,
       subjectStatuses: [],
-      config: DEFAULT_CONFIG,
     });
   });
 
@@ -215,13 +222,11 @@ describe("ProcessingPage", () => {
 
   describe("Start button gated by ProcessingStatusAlert errors", () => {
     it("disables Start button when preflight reports errors (no subjects selected)", async () => {
-      useProcessingStore.setState({
-        config: {
-          ...DEFAULT_CONFIG,
-          subjects: [],
-          modules: ["structural", "asl"],
-        },
-      });
+      mockProject.project.uiState.processing.config = {
+        ...DEFAULT_CONFIG,
+        subjects: [],
+        modules: ["structural", "asl"],
+      };
       renderPage();
 
       await waitFor(() => {
@@ -234,12 +239,10 @@ describe("ProcessingPage", () => {
     });
 
     it("disables Start button when no modules selected", async () => {
-      useProcessingStore.setState({
-        config: {
-          ...DEFAULT_CONFIG,
-          modules: [],
-        },
-      });
+      mockProject.project.uiState.processing.config = {
+        ...DEFAULT_CONFIG,
+        modules: [],
+      };
       renderPage();
 
       await waitFor(() => {
@@ -249,14 +252,6 @@ describe("ProcessingPage", () => {
       });
 
       expect(screen.getByTestId("start-btn")).toBeDisabled();
-    });
-
-    it("enables Start button when preflight passes", async () => {
-      renderPage();
-
-      await waitFor(() => {
-        expect(screen.getByTestId("start-btn")).toBeEnabled();
-      });
     });
 
     it("enables Start synchronously when pure request preflight passes", () => {

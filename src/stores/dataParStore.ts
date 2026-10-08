@@ -1,29 +1,11 @@
 import { create } from "zustand";
-
 import type { DataParState } from "../schemas/dataParSchema";
+import type { AdvancedVisibility } from "../generated/project/AdvancedVisibility";
 import { useProjectStore } from "./projectStore";
+import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 
-export interface DataParametersAdvancedVisibility {
-  showAdvancedSections: boolean;
-  showAdvancedM0Params: boolean;
-  showAdvancedQuantification: boolean;
-  showAdvancedGeneralSettings: boolean;
-  showAdvancedASLProcessing: boolean;
-  showAdvancedAtlases: boolean;
-}
-
-interface DataParSlice {
-  dataPar: DataParState;
-  advancedVisibility: DataParametersAdvancedVisibility;
-  setDataParField: (field: keyof DataParState, value: unknown) => void;
-  clearDataParField: (field: keyof DataParState) => void;
-  setAdvancedVisibility: (visibility: Partial<DataParametersAdvancedVisibility>) => void;
-  loadDataPar: (state: DataParState) => void;
-  resetDataPar: () => void;
-  saveToProject: () => void;
-}
-
-const DEFAULT_ADVANCED_VISIBILITY: DataParametersAdvancedVisibility = {
+export type DataParametersAdvancedVisibility = AdvancedVisibility;
+export const DEFAULT_ADVANCED_VISIBILITY: AdvancedVisibility = {
   showAdvancedSections: false,
   showAdvancedM0Params: false,
   showAdvancedQuantification: false,
@@ -31,115 +13,75 @@ const DEFAULT_ADVANCED_VISIBILITY: DataParametersAdvancedVisibility = {
   showAdvancedASLProcessing: false,
   showAdvancedAtlases: false,
 };
+const EMPTY: DataParState = {};
+export const acceptedDataPar = () => useProjectStore.getState().project?.dataPar ?? EMPTY;
 
-export function createInitialDataParState() {
-  return {
-    dataPar: {
-      Atlases: ["Total", "DeepWM"],
-      TissueMasking: ["GM", "WM"],
-      TissueThreshold: [0.7, 0.7],
-    } as DataParState,
-    advancedVisibility: { ...DEFAULT_ADVANCED_VISIBILITY },
-  };
+interface ParameterDrafts {
+  drafts: Record<string, unknown>;
+  setDataParField: (field: keyof DataParState, value: unknown) => Promise<void>;
+  clearDataParField: (field: keyof DataParState) => Promise<void>;
+  setAdvancedVisibility: (values: Partial<AdvancedVisibility>) => Promise<void>;
+  resetDataPar: () => void;
 }
 
-function alignAtlasesFields(
-  atlases?: string[],
-  tissueMasking?: string[],
-  tissueThreshold?: number[],
-) {
-  const finalAtlases = atlases ?? ["Total", "DeepWM"];
-  const finalMasking = [...(tissueMasking ?? [])];
-  const finalThreshold = [...(tissueThreshold ?? [])];
-
-  if (finalMasking.length > finalAtlases.length) {
-    finalMasking.length = finalAtlases.length;
-  } else {
-    while (finalMasking.length < finalAtlases.length) {
-      const idx = finalMasking.length;
-      const atlas = finalAtlases[idx];
-      const defaultMask = atlas === "DeepWM" ? "WM" : "GM";
-      finalMasking.push(defaultMask);
-    }
-  }
-
-  if (finalThreshold.length > finalAtlases.length) {
-    finalThreshold.length = finalAtlases.length;
-  } else {
-    while (finalThreshold.length < finalAtlases.length) {
-      finalThreshold.push(0.7);
-    }
-  }
-
-  return {
-    Atlases: finalAtlases,
-    TissueMasking: finalMasking,
-    TissueThreshold: finalThreshold,
-  };
-}
-
-export const useDataParStore = create<DataParSlice>((set, get) => ({
-  dataPar: {
-    Atlases: ["Total", "DeepWM"],
-    TissueMasking: ["GM", "WM"],
-    TissueThreshold: [0.7, 0.7],
-  },
-  advancedVisibility: { ...DEFAULT_ADVANCED_VISIBILITY },
-
-  setDataParField: (field, value) => {
-    set((state) => {
-      const nextDataPar = { ...state.dataPar, [field]: value };
-      if (field === "Atlases" || field === "TissueMasking" || field === "TissueThreshold") {
-        const aligned = alignAtlasesFields(
-          nextDataPar.Atlases,
-          nextDataPar.TissueMasking as string[],
-          nextDataPar.TissueThreshold as number[],
-        );
-        Object.assign(nextDataPar, aligned);
+export const useDataParStore = create<ParameterDrafts>((set, get) => ({
+  drafts: {},
+  resetDataPar: () => set({ drafts: {} }),
+  setDataParField: async (field, value) => {
+    const lease = captureProjectLease();
+    const key = String(field);
+    set({ drafts: { ...get().drafts, [key]: value } });
+    useProjectStore.getState().setDraftError(`dataPar.${key}`, null);
+    try {
+      if (typeof value === "number" && !Number.isFinite(value))
+        throw new Error(`${key} requires a finite number`);
+      await useProjectStore.getState().submitEdit((project) => {
+        const values = { ...project.dataPar };
+        if (value === undefined) delete values[key];
+        else values[key] = value as DataParState[string];
+        if (["Atlases", "TissueMasking", "TissueThreshold"].includes(key)) {
+          if (key === "Atlases" && value === undefined) {
+            delete values.TissueMasking;
+            delete values.TissueThreshold;
+          } else {
+            const atlases = values.Atlases ?? ["Total", "DeepWM"];
+            values.Atlases = atlases;
+            values.TissueMasking = atlases.map(
+              (atlas, index) => values.TissueMasking?.[index] ?? (atlas === "DeepWM" ? "WM" : "GM"),
+            );
+            values.TissueThreshold = atlases.map(
+              (_, index) => values.TissueThreshold?.[index] ?? 0.7,
+            );
+          }
+        }
+        return {
+          kind: "parameters",
+          values,
+          visibility: project.uiState.datapar?.advancedVisibility ?? DEFAULT_ADVANCED_VISIBILITY,
+        };
+      });
+      if (isCurrentProjectLease(lease) && get().drafts[key] === value) {
+        const drafts = { ...get().drafts };
+        delete drafts[key];
+        set({ drafts });
+        useProjectStore.getState().setDraftError(`dataPar.${key}`, null);
       }
-      return { dataPar: nextDataPar };
-    });
+    } catch (error) {
+      if (isCurrentProjectLease(lease))
+        useProjectStore
+          .getState()
+          .setDraftError(`dataPar.${key}`, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
   },
-
-  clearDataParField: (field) => {
-    set((state) => {
-      const nextDataPar = { ...state.dataPar, [field]: undefined };
-      if (field === "Atlases" || field === "TissueMasking" || field === "TissueThreshold") {
-        const aligned = alignAtlasesFields(
-          nextDataPar.Atlases,
-          nextDataPar.TissueMasking as string[],
-          nextDataPar.TissueThreshold as number[],
-        );
-        Object.assign(nextDataPar, aligned);
-      }
-      return { dataPar: nextDataPar };
-    });
-  },
-
-  setAdvancedVisibility: (visibility) => {
-    set((state) => ({
-      advancedVisibility: { ...state.advancedVisibility, ...visibility },
-    }));
-  },
-
-  loadDataPar: (state) => {
-    const aligned = alignAtlasesFields(state.Atlases, state.TissueMasking, state.TissueThreshold);
-    set({
-      dataPar: {
-        ...state,
-        ...aligned,
+  clearDataParField: (field) => get().setDataParField(field, undefined),
+  setAdvancedVisibility: (visibility) =>
+    useProjectStore.getState().submitEdit((project) => ({
+      kind: "parameters",
+      values: project.dataPar,
+      visibility: {
+        ...(project.uiState.datapar?.advancedVisibility ?? DEFAULT_ADVANCED_VISIBILITY),
+        ...visibility,
       },
-    });
-  },
-
-  resetDataPar: () => {
-    set(createInitialDataParState());
-  },
-
-  saveToProject: () => {
-    const { dataPar, advancedVisibility } = get();
-    if (!useProjectStore.getState().project) return;
-
-    useProjectStore.getState().syncDataParState(dataPar, advancedVisibility);
-  },
+    })),
 }));

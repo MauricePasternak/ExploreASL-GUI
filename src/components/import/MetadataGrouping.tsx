@@ -14,15 +14,14 @@ import {
   validateBidsMetadataGroup,
 } from "../../schemas/importSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
-import { useImportStore } from "../../stores/importStore";
+import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
+import { useProjectStore } from "../../stores/projectStore";
+import type { PathPattern } from "../../generated/project/PathPattern";
 import MetadataModal from "./MetadataModal";
 
 const DEFAULT_GROUP_ID = "global-defaults";
 
-function pathMatchesPattern(
-  segments: string[],
-  pattern: ReturnType<typeof useImportStore.getState>["pathPatterns"][number],
-): boolean {
+function pathMatchesPattern(segments: string[], pattern: PathPattern): boolean {
   if (segments.length !== pattern.depth) {
     return false;
   }
@@ -58,9 +57,9 @@ function deriveSubjectRows({
 }: {
   rawPaths: string[];
   sourceDataPath: string;
-  pathPatterns: ReturnType<typeof useImportStore.getState>["pathPatterns"];
-  tokenizerConfigs: ReturnType<typeof useImportStore.getState>["tokenizerConfigs"];
-  subjectRenames: ReturnType<typeof useImportStore.getState>["subjectRenames"];
+  pathPatterns: PathPattern[];
+  tokenizerConfigs: Record<string, TokenAssignment[]>;
+  subjectRenames: typeof EMPTY_IMPORT_SETTINGS.subjectRenames;
   tokenSubDelimiters: string[];
 }): SubjectRow[] {
   const renameMap = new Map(subjectRenames.map((entry) => [entry.original, entry.target]));
@@ -110,13 +109,25 @@ function deriveSubjectRows({
 
 export default function MetadataGrouping() {
   const setActiveStep = useImportStore((state) => state.setActiveStep);
-  const rawPaths = useImportStore((state) => state.rawPaths);
-  const sourceDataPath = useImportStore((state) => state.sourceDataPath);
-  const pathPatterns = useImportStore((state) => state.pathPatterns);
-  const tokenizerConfigs = useImportStore((state) => state.tokenizerConfigs);
-  const subjectRenames = useImportStore((state) => state.subjectRenames);
-  const metadataGroups = useImportStore((state) => state.metadataGroups);
-  const subjectRows = useImportStore((state) => state.subjectRows);
+  const rawPaths = useProjectStore(
+    (s) => s.project?.mappingState.rawPaths ?? EMPTY_IMPORT_SETTINGS.rawPaths,
+  );
+  const sourceDataPath = useProjectStore((s) => s.project?.mappingState.sourceDataPath ?? "");
+  const pathPatterns = useProjectStore(
+    (s) => s.project?.mappingState.pathPatterns ?? EMPTY_IMPORT_SETTINGS.pathPatterns,
+  );
+  const tokenizerConfigs = useProjectStore(
+    (s) => s.project?.mappingState.tokenizerConfigs ?? EMPTY_IMPORT_SETTINGS.tokenizerConfigs,
+  );
+  const subjectRenames = useProjectStore(
+    (s) => s.project?.mappingState.subjectRenames ?? EMPTY_IMPORT_SETTINGS.subjectRenames,
+  );
+  const metadataGroups = useProjectStore(
+    (s) => s.project?.mappingState.metadataGroups ?? EMPTY_IMPORT_SETTINGS.metadataGroups,
+  );
+  const subjectRows = useProjectStore(
+    (s) => s.project?.mappingState.subjectRows ?? EMPTY_IMPORT_SETTINGS.subjectRows,
+  );
   const setSubjectRows = useImportStore((state) => state.setSubjectRows);
   const addMetadataGroup = useImportStore((state) => state.addMetadataGroup);
   const removeMetadataGroup = useImportStore((state) => state.removeMetadataGroup);
@@ -239,7 +250,7 @@ export default function MetadataGrouping() {
     if (modalMode === "edit" && editingGroupId) {
       updateMetadataGroup(editingGroupId, {
         label: values.label,
-        bidsParams: values.bidsParams,
+        bidsParams: values.bidsParams as MetadataGroup["bidsParams"],
       });
     }
 
@@ -248,7 +259,7 @@ export default function MetadataGrouping() {
       const overrideGroup: MetadataGroup = {
         id: groupId,
         label: values.label,
-        bidsParams: values.bidsParams,
+        bidsParams: values.bidsParams as MetadataGroup["bidsParams"],
       };
 
       addMetadataGroup(overrideGroup);

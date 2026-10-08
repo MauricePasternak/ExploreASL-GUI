@@ -3,7 +3,9 @@ import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProcessingStore } from "../../stores/processingStore";
-import { useDataParStore } from "../../stores/dataParStore";
+import type { ProcessConfig } from "../../schemas/processingSchemas";
+let mockConfig: ProcessConfig;
+let mockAtlases: string[] = [];
 import PopulationSection from "./PopulationSection";
 
 // Mock tauri-apps core to avoid loading tauri native APIs in jsdom
@@ -19,7 +21,11 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 vi.mock("../../stores/projectStore", () => ({
   useProjectStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
-      project: { projectMeta: { rootPath: "/test/project" } },
+      project: {
+        projectMeta: { rootPath: "/test/project" },
+        dataPar: { Atlases: mockAtlases },
+        uiState: { processing: { config: mockConfig } },
+      },
     }),
 }));
 
@@ -41,22 +47,18 @@ afterEach(() => cleanup());
 describe("PopulationSection", () => {
   beforeEach(() => {
     // Reset stores to default state
+    mockConfig = {
+      subjects: [],
+      modules: [],
+      selectedProfileId: "",
+      workers: 4,
+    };
     useProcessingStore.setState({
-      config: {
-        subjects: [],
-        modules: [],
-        selectedProfileId: "",
-        workers: 4,
-      },
       availableSubjects: [],
       subjectStatuses: [],
     });
 
-    useDataParStore.setState({
-      dataPar: {
-        Atlases: [],
-      },
-    });
+    mockAtlases = [];
   });
 
   it("renders eligibility summary", () => {
@@ -156,13 +158,13 @@ describe("PopulationSection", () => {
   });
 
   it("disables checkbox when structural is selected", () => {
+    mockConfig = {
+      subjects: [],
+      modules: ["structural"],
+      selectedProfileId: "",
+      workers: 4,
+    };
     useProcessingStore.setState({
-      config: {
-        subjects: [],
-        modules: ["structural"],
-        selectedProfileId: "",
-        workers: 4,
-      },
       availableSubjects: [
         {
           subjectSession: "sub-01_01",
@@ -198,12 +200,6 @@ describe("PopulationSection", () => {
 
   it("disables checkbox when no subjects eligible", () => {
     useProcessingStore.setState({
-      config: {
-        subjects: [],
-        modules: [],
-        selectedProfileId: "",
-        workers: 4,
-      },
       availableSubjects: [
         {
           subjectSession: "sub-01_01",
@@ -238,11 +234,7 @@ describe("PopulationSection", () => {
   });
 
   it("renders atlas badges with display names", () => {
-    useDataParStore.setState({
-      dataPar: {
-        Atlases: ["Total", "DeepWM"],
-      },
-    });
+    mockAtlases = ["Total", "DeepWM"];
 
     renderSection();
     const badges = screen.getAllByTestId("population-atlas-badge");
@@ -252,20 +244,14 @@ describe("PopulationSection", () => {
   });
 
   it("shows 'No atlases configured' when atlases empty", () => {
-    useDataParStore.setState({
-      dataPar: { Atlases: [] },
-    });
+    mockAtlases = [];
 
     renderSection();
     expect(screen.getByTestId("population-atlas-recap")).toHaveTextContent("No atlases configured");
   });
 
   it("falls back to raw name for unknown atlas codes", () => {
-    useDataParStore.setState({
-      dataPar: {
-        Atlases: ["UnknownAtlas"],
-      },
-    });
+    mockAtlases = ["UnknownAtlas"];
 
     renderSection();
     const badges = screen.getAllByTestId("population-atlas-badge");

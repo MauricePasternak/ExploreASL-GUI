@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ImportSnapshot } from "../schemas/importSchemas";
-import type { ImportState } from "../stores/importStore";
+import { EMPTY_IMPORT_SETTINGS } from "../stores/importStore";
 import { computeStaleness } from "./importStaleness";
 
 const BASE_SNAPSHOT: ImportSnapshot = {
@@ -17,62 +17,10 @@ const BASE_SNAPSHOT: ImportSnapshot = {
   subjectRows: [],
 };
 
-function makeState(overrides: Partial<ImportState> = {}): ImportState {
+function makeState(overrides: Partial<typeof EMPTY_IMPORT_SETTINGS> = {}) {
   return {
-    ...useImportStoreInitialState(),
+    ...EMPTY_IMPORT_SETTINGS,
     ...overrides,
-  } as ImportState;
-}
-
-function useImportStoreInitialState() {
-  return {
-    activeStep: 0,
-    sourceDataPath: "",
-    rawPaths: [],
-    pathPatterns: [],
-    bMatchDirectories: true,
-    ingestionComplete: false,
-    tokenizerConfigs: {},
-    modalityAliases: [],
-    sessionAliases: [],
-    runAliases: [],
-    subjectRenames: [],
-    metadataGroups: [],
-    subjectRows: [],
-    importPhase: "idle" as const,
-    importCompleted: false,
-    importLog: [],
-    importProgress: {},
-    importRunning: false,
-    importSummary: null,
-    mostRecentConfig: null,
-    setActiveStep: () => {},
-    setSourceDataPath: () => {},
-    relinkCompatibleSource: () => {},
-    setIngestionResults: () => {},
-    setBMatchDirectories: () => {},
-    setTokenAssignment: () => {},
-    removeTokenAssignment: () => {},
-    setTokenizerConfig: () => {},
-    setModalityAliases: () => {},
-    updateModalityAlias: () => {},
-    setSessionAliases: () => {},
-    setRunAliases: () => {},
-    setSubjectRenames: () => {},
-    updateSubjectRename: () => {},
-    addMetadataGroup: () => {},
-    removeMetadataGroup: () => {},
-    updateMetadataGroup: () => {},
-    setSubjectRows: () => {},
-    updateSubjectRowGroup: () => {},
-    startImport: () => {},
-    addLogLines: () => {},
-    markSubjectRunning: () => {},
-    setMostRecentConfig: () => {},
-    applyStaleness: () => {},
-    reconstructProgressFromLockFiles: () => {},
-    loadPersistedState: () => {},
-    resetImport: () => {},
   };
 }
 

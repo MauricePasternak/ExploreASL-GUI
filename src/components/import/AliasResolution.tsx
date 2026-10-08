@@ -15,7 +15,8 @@ import { hasTokenizerTag, isAliasResolutionComplete } from "../../lib/importStep
 import { extractUniqueValues } from "../../lib/tokenizerUtils";
 import type { SessionAlias } from "../../schemas/importSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
-import { useImportStore } from "../../stores/importStore";
+import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
+import { useProjectStore } from "../../stores/projectStore";
 import ModalityMappingTable from "./ModalityMappingTable";
 import OrderAliasTable from "./SessionRunOrder";
 import SubjectRenameTable from "./SubjectRenameTable";
@@ -51,14 +52,28 @@ function buildOrderAliases(
  * 4. Modality Map — map raw scan names to ExploreASL modality types
  */
 export default function AliasResolution() {
-  const sourceDataPath = useImportStore((s) => s.sourceDataPath);
-  const rawPaths = useImportStore((s) => s.rawPaths);
-  const pathPatterns = useImportStore((s) => s.pathPatterns);
-  const tokenizerConfigs = useImportStore((s) => s.tokenizerConfigs);
-  const modalityAliases = useImportStore((s) => s.modalityAliases);
-  const sessionAliases = useImportStore((s) => s.sessionAliases);
-  const runAliases = useImportStore((s) => s.runAliases);
-  const subjectRenames = useImportStore((s) => s.subjectRenames);
+  const sourceDataPath = useProjectStore((s) => s.project?.mappingState.sourceDataPath ?? "");
+  const rawPaths = useProjectStore(
+    (s) => s.project?.mappingState.rawPaths ?? EMPTY_IMPORT_SETTINGS.rawPaths,
+  );
+  const pathPatterns = useProjectStore(
+    (s) => s.project?.mappingState.pathPatterns ?? EMPTY_IMPORT_SETTINGS.pathPatterns,
+  );
+  const tokenizerConfigs = useProjectStore(
+    (s) => s.project?.mappingState.tokenizerConfigs ?? EMPTY_IMPORT_SETTINGS.tokenizerConfigs,
+  );
+  const modalityAliases = useProjectStore(
+    (s) => s.project?.mappingState.modalityAliases ?? EMPTY_IMPORT_SETTINGS.modalityAliases,
+  );
+  const sessionAliases = useProjectStore(
+    (s) => s.project?.mappingState.sessionAliases ?? EMPTY_IMPORT_SETTINGS.sessionAliases,
+  );
+  const runAliases = useProjectStore(
+    (s) => s.project?.mappingState.runAliases ?? EMPTY_IMPORT_SETTINGS.runAliases,
+  );
+  const subjectRenames = useProjectStore(
+    (s) => s.project?.mappingState.subjectRenames ?? EMPTY_IMPORT_SETTINGS.subjectRenames,
+  );
   const setModalityAliases = useImportStore((s) => s.setModalityAliases);
   const setSessionAliases = useImportStore((s) => s.setSessionAliases);
   const setRunAliases = useImportStore((s) => s.setRunAliases);

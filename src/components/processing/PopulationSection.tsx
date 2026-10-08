@@ -11,7 +11,6 @@ import {
 
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { useDataParStore } from "../../stores/dataParStore";
 import type { SubjectModuleStatus } from "../../schemas/processingSchemas";
 import type { LogFileInfo, LogContent } from "../../lib/logViewer";
 import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
@@ -108,13 +107,13 @@ function PopulationStatusIcon({
 }
 
 export default function PopulationSection() {
-  const config = useProcessingStore((s) => s.config);
+  const config = useProjectStore((s) => s.project?.uiState.processing?.config);
   const setConfig = useProcessingStore((s) => s.setConfig);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
-  const atlases = useDataParStore((s) => s.dataPar.Atlases);
+  const atlases = useProjectStore((state) => state.project?.dataPar.Atlases);
 
   const populationSelected = config?.modules.includes("population") ?? false;
   const structuralSelected = config?.modules.includes("structural") ?? false;
@@ -155,12 +154,11 @@ export default function PopulationSection() {
 
   const handleToggle = useCallback(() => {
     if (!config) return;
-    if (populationSelected) {
-      setConfig({ ...config, modules: [] });
-    } else {
-      setConfig({ ...config, modules: ["population"] });
-    }
-  }, [config, populationSelected, setConfig]);
+    void setConfig((current) => ({
+      ...current!,
+      modules: current!.modules.includes("population") ? [] : ["population"],
+    })).catch(() => undefined);
+  }, [config, setConfig]);
 
   // Log viewing logic
   const [logs, setLogs] = useState<LogFileInfo[]>([]);

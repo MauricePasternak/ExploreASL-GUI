@@ -4,11 +4,12 @@ import { notifications } from "@mantine/notifications";
 import { Button, Divider, Group, Image, Modal, Radio, Stack, Text, Alert } from "@mantine/core";
 import { IconAlertTriangle, IconFolderOpen, IconPlus } from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { exists, readTextFile } from "@tauri-apps/plugin-fs";
+import { exists } from "@tauri-apps/plugin-fs";
 import { homeDir } from "@tauri-apps/api/path";
 import { useNavigate, useOutletContext } from "react-router";
 
-import { parseProject, PROJECT_FILE_NAME } from "../schemas/project";
+import { PROJECT_FILE_NAME } from "../schemas/project";
+import { inspectProject } from "../lib/projectPersistence";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
 import RecentProjectsList from "../components/landing/RecentProjectsList";
@@ -22,6 +23,7 @@ import type { SetupPlan } from "../lib/bids/setup";
 
 /** Shape returned by the Rust `check_bids_dataset` command. */
 interface BidsCheckResult {
+  setupRecovered?: number;
   isBids: boolean;
   hasDatasetDescription: boolean;
   datasetDescError: string | null;
@@ -168,38 +170,25 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   }
 
   async function openProjectWithIdentity(path: string): Promise<boolean> {
-    let candidateId: string | null = null;
-    try {
-      candidateId = parseProject(await readTextFile(path)).projectMeta.id;
-    } catch {
-      await loadProject(path);
-    }
-
-    if (candidateId) {
-      const resolution = await resolveProjectIdentity(path, candidateId, recentProjects, {
-        chooseDuplicate: chooseDuplicateIdentity,
+    if (!useGlobalStore.getState().hasValidProfile())
+      throw new Error("Cannot open a project without a valid execution profile.");
+    const inspection = await inspectProject(path, recentProjects);
+    if (inspection.setupRecovered)
+      notifications.show({
+        color: "blue",
+        title: "Previous setup recovered",
+        message: `Recovered ${inspection.setupRecovered} prior setup transaction(s).`,
       });
-      if (resolution.status === "cancelled") return false;
-
-      await loadProject(path, {
-        ...(resolution.projectId !== candidateId
-          ? { projectIdOverride: resolution.projectId }
-          : {}),
-        forceDirty: resolution.dirty,
-      });
-      if (useProjectStore.getState().recovery?.easlPath === path) return false;
-
-      if (resolution.recentAction.kind === "replace") {
-        replaceRecentProject(resolution.recentAction.oldPath, path, resolution.projectId);
-      } else {
-        addRecentProject(path, resolution.projectId);
-      }
-      return true;
-    }
-
+    const resolution = await resolveProjectIdentity(path, inspection, chooseDuplicateIdentity);
+    if (resolution.cancelled) return false;
+    await loadProject(path, { inspection, copied: resolution.copied });
     if (useProjectStore.getState().recovery?.easlPath === path) return false;
     const openedProject = useProjectStore.getState().project;
-    if (openedProject) addRecentProject(path, openedProject.projectMeta.id);
+    if (openedProject) {
+      if (resolution.replacePath)
+        replaceRecentProject(resolution.replacePath, path, openedProject.projectMeta.id);
+      else addRecentProject(path, openedProject.projectMeta.id);
+    }
     return openedProject !== null;
   }
 
@@ -248,16 +237,23 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         return;
       }
 
+      // Selection settles prior setup before inspection or new plan review.
+      const bidsResult = (await invoke("check_bids_dataset", {
+        rootPath: selected,
+      })) as BidsCheckResult;
+      if (bidsResult.setupRecovered) {
+        notifications.show({
+          title: "Prior setup recovered",
+          message: `Recovered ${bidsResult.setupRecovered} prior setup transaction(s) in ${selected}. No new setup changes were authorized.`,
+          color: "yellow",
+          autoClose: false,
+        });
+      }
       if (await exists(projectPath)) {
         showError("Project exists", `An ExploreASL GUI project already exists in ${selected}.`);
         logAction("landing_new_project_error", { reason: "exists", path: selected });
         return;
       }
-
-      // Invoke BIDS detection before creating the project
-      const bidsResult = (await invoke("check_bids_dataset", {
-        rootPath: selected,
-      })) as BidsCheckResult;
 
       setPendingFolder({
         path: selected,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DataParSchema, type DataParState } from "../schemas/dataParSchema";
+import type { DataParState } from "../schemas/dataParSchema";
 import { assembleDataPar } from "./assembleDataPar";
 
 describe("assembleDataPar", () => {
@@ -151,7 +151,7 @@ describe("assembleDataPar", () => {
       ATTSDBASIL: 1.5,
       bCleanUpExternal: false,
     };
-    const result = assembleDataPar(DataParSchema.parse(state));
+    const result = assembleDataPar(state);
     expect(result.x.modules?.asl).toEqual({
       bUseExternalQuantification: true,
       ExternalQuantificationType: "BASIL",
@@ -192,7 +192,7 @@ describe("assembleDataPar", () => {
     ];
     for (const [state, expected] of cases) {
       const saved = JSON.parse(JSON.stringify(state));
-      expect(assembleDataPar(DataParSchema.parse(saved))).toEqual(expected);
+      expect(assembleDataPar(saved)).toEqual(expected);
     }
   });
 

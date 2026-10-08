@@ -55,7 +55,7 @@ describe("UpdateManager", () => {
     __resetStartupUpdateCheckForTests();
     vi.mocked(check).mockResolvedValue(null);
     vi.mocked(platform).mockResolvedValue("linux");
-    useProjectStore.setState({ isDirty: false });
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
     useProcessingStore.setState({ processingPhase: "idle" });
     useImportStore.setState({ importPhase: "idle", importRunning: false });
   });
@@ -164,7 +164,7 @@ describe("UpdateManager", () => {
     expect(screen.getByTestId("update-confirmation-modal")).toBeInTheDocument();
     await userEvent.setup().click(await screen.findByTestId("update-confirmation-confirm"));
 
-    await waitFor(() => expect(saveProject).toHaveBeenCalledOnce());
+    await waitFor(() => expect(saveProject).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(available.install).toHaveBeenCalledOnce());
     expect(saveProject.mock.invocationCallOrder[0]).toBeLessThan(
       available.install.mock.invocationCallOrder[0],

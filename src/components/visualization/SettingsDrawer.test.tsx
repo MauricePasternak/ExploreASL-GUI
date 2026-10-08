@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import SettingsDrawer from "./SettingsDrawer";
+import { useProjectStore } from "../../stores/projectStore";
+import { projectView } from "../../schemas/project";
+import { projectFixture } from "../../test/projectFixtures";
 
 afterEach(cleanup);
 
@@ -17,8 +20,13 @@ function renderComponent() {
 
 describe("SettingsDrawer", () => {
   beforeEach(() => {
-    useVisualizationStore.setState({
-      chartData: [],
+    useVisualizationStore.setState({ chartData: [] });
+    useProjectStore.setState({
+      project: projectView(
+        projectFixture("project-1", "Project", "/project", { uiState: { dataVis: {} } }),
+      ),
+    });
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
       filtersExpanded: false,
       pointSize: 6,
@@ -52,7 +60,7 @@ describe("SettingsDrawer", () => {
   });
 
   it("renders settings drawer when filtersExpanded is true", () => {
-    useVisualizationStore.setState({ filtersExpanded: true });
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, { filtersExpanded: true });
     renderComponent();
 
     // Verify drawer container and sections exist
@@ -60,33 +68,15 @@ describe("SettingsDrawer", () => {
     expect(screen.getByText("Nivo Chart Settings")).toBeInTheDocument();
     expect(screen.getByText("Axes Range Filters")).toBeInTheDocument();
     expect(screen.getByText("NiiVue Image Viewer Settings")).toBeInTheDocument();
-  });
-
-  it("renders chart options and switches correctly", () => {
-    useVisualizationStore.setState({ filtersExpanded: true });
-    renderComponent();
-
     expect(screen.getByTestId("setting-point-size")).toBeInTheDocument();
     expect(screen.getByTestId("setting-swarm-spacing")).toBeInTheDocument();
     expect(screen.getByTestId("setting-chart-opacity")).toBeInTheDocument();
     expect(screen.getByTestId("setting-show-grid-x")).toBeInTheDocument();
     expect(screen.getByTestId("setting-show-grid-y")).toBeInTheDocument();
-  });
-
-  it("renders axis range inputs", () => {
-    useVisualizationStore.setState({ filtersExpanded: true });
-    renderComponent();
-
     expect(screen.getByTestId("filter-x-min")).toBeInTheDocument();
     expect(screen.getByTestId("filter-x-max")).toBeInTheDocument();
     expect(screen.getByTestId("filter-y-min")).toBeInTheDocument();
     expect(screen.getByTestId("filter-y-max")).toBeInTheDocument();
-  });
-
-  it("renders X-Axis and Y-Axis settings", () => {
-    useVisualizationStore.setState({ filtersExpanded: true });
-    renderComponent();
-
     expect(screen.getByTestId("setting-x-legend-override")).toBeInTheDocument();
     expect(screen.getByTestId("setting-x-legend-offset")).toBeInTheDocument();
     expect(screen.getByTestId("setting-x-tick-size")).toBeInTheDocument();
@@ -98,12 +88,6 @@ describe("SettingsDrawer", () => {
     expect(screen.getByTestId("setting-y-tick-size")).toBeInTheDocument();
     expect(screen.getByTestId("setting-y-tick-padding")).toBeInTheDocument();
     expect(screen.getByTestId("setting-y-tick-rotation")).toBeInTheDocument();
-  });
-
-  it("renders NiiVue viewer settings", () => {
-    useVisualizationStore.setState({ filtersExpanded: true });
-    renderComponent();
-
     expect(screen.getByTestId("setting-nv-slice-type")).toBeInTheDocument();
     expect(screen.getByTestId("setting-nv-colormap")).toBeInTheDocument();
     expect(screen.getByTestId("setting-nv-back-color")).toBeInTheDocument();

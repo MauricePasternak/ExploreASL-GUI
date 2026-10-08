@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import ImportPreview from "./ImportPreview";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { projectFixture } from "../../test/projectFixtures";
 
 afterEach(() => {
   cleanup();
@@ -14,27 +15,10 @@ afterEach(() => {
 
 describe("ImportPreview staging validation", () => {
   it("shows aggregate local validation and locks Run navigation", () => {
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "p",
-          name: "P",
-          rootPath: "/project",
-          createdAt: "",
-          lastOpened: "",
-          currentPhase: "import",
-          dataSource: "dicom",
-        },
-        uiState: {},
-        mappingState: {},
-        dataPar: {},
-      },
-      loaded: true,
-    });
-    useImportStore.setState({
+    const snapshot = projectFixture();
+    snapshot.document.mappingState = {
       ingestionComplete: true,
-      rawPaths: ["/source/FOO+BAR/ASL"],
+      rawPaths: ["FOO+BAR/ASL"],
       sourceDataPath: "/source",
       pathPatterns: [
         {
@@ -54,7 +38,9 @@ describe("ImportPreview staging validation", () => {
       },
       subjectRenames: [{ original: "FOO+BAR", target: "FOO+BAR" }],
       modalityAliases: [{ captured: "ASL", mapped: "ASL4D" }],
-    });
+    };
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     render(
       <MantineProvider env="test">
         <ImportPreview />

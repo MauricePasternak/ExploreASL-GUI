@@ -35,7 +35,6 @@ let mockAvailableSubjects = [
 vi.mock("../../stores/processingStore", () => ({
   useProcessingStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
-      config: mockConfig,
       subjectStatuses: mockSubjectStatuses,
       availableSubjects: mockAvailableSubjects,
       processingPhase: "running",
@@ -45,7 +44,10 @@ vi.mock("../../stores/processingStore", () => ({
 vi.mock("../../stores/projectStore", () => ({
   useProjectStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
-      project: { projectMeta: { rootPath: "/test/project" } },
+      project: {
+        projectMeta: { rootPath: "/test/project" },
+        uiState: { processing: { config: mockConfig } },
+      },
     }),
 }));
 

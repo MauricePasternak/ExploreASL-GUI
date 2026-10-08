@@ -17,9 +17,9 @@ import ColumnTypes from "../components/visualization/ColumnTypes";
 import DataSelection from "../components/visualization/DataSelection";
 import LevelOrdering from "../components/visualization/LevelOrdering";
 import VisualizeStep from "../components/visualization/VisualizeStep";
-import { useVisualizationSync } from "../hooks/useVisualizationSync";
 import { useProjectStore } from "../stores/projectStore";
 import { DataInspection, useVisualizationStore } from "../stores/visualizationStore";
+import { visualizationSettings, acceptedVisualizationSettings } from "../stores/visualizationStore";
 import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 
 interface FileStats {
@@ -28,18 +28,17 @@ interface FileStats {
 }
 
 export default function VisualizationPage() {
-  useVisualizationSync();
   const { colorScheme } = useMantineColorScheme();
 
-  const stage = useVisualizationStore((s) => s.stage);
+  const stage = useProjectStore((s) => visualizationSettings(s.project).stage);
   const setStage = useVisualizationStore((s) => s.setStage);
   const inspection = useVisualizationStore((s) => s.inspection);
-  const columnTypes = useVisualizationStore((s) => s.columnTypes);
+  const columnTypes = useProjectStore((s) => visualizationSettings(s.project).columnTypes);
   const setAvailableFiles = useVisualizationStore((s) => s.setAvailableFiles);
-  const joinConfig = useVisualizationStore((s) => s.joinConfig);
+  const joinConfig = useProjectStore((s) => visualizationSettings(s.project).joinConfig);
   const externalSourceAvailability = useVisualizationStore((s) => s.externalSourceAvailability);
 
-  const project = useProjectStore((s) => s.project);
+  const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
   const [invalidationBanner, setInvalidationBanner] = useState<string | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,11 +58,11 @@ export default function VisualizationPage() {
     const lease = captureProjectLease();
     const isCurrent = () => !lease || isCurrentProjectLease(lease);
     async function scanStats() {
-      if (!project) return;
+      if (!projectRoot) return;
       try {
         const files = await invoke<
           Array<{ fileName: string; relativePath: string; size: number; modified: string }>
-        >("list_stats_files", { projectRoot: project.projectMeta.rootPath });
+        >("list_stats_files", { projectRoot });
         if (!isCurrent()) return;
         setAvailableFiles(files);
         if (files.length === 0) {
@@ -82,8 +81,7 @@ export default function VisualizationPage() {
       await scanStats();
       if (!isCurrent()) return;
 
-      const joinConfig = useVisualizationStore.getState().joinConfig;
-      const qcbfSource = useVisualizationStore.getState().qcbfSource;
+      const { joinConfig, qcbfSource } = acceptedVisualizationSettings();
       const currentProject = useProjectStore.getState().project;
       if (!joinConfig || !qcbfSource || !currentProject) return;
 
@@ -183,15 +181,14 @@ export default function VisualizationPage() {
 
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [project, setAvailableFiles]);
+  }, [projectRoot, setAvailableFiles]);
 
   useEffect(() => {
     const lease = captureProjectLease();
     const isCurrent = () => !lease || isCurrentProjectLease(lease);
     async function validateContract() {
       const currentProject = useProjectStore.getState().project;
-      const qcbfSource = useVisualizationStore.getState().qcbfSource;
-      const joinConfig = useVisualizationStore.getState().joinConfig;
+      const { qcbfSource, joinConfig } = acceptedVisualizationSettings();
       if (!currentProject || !qcbfSource) return;
 
       if (joinConfig) {
@@ -316,8 +313,7 @@ export default function VisualizationPage() {
 
   async function handleSelectDataNext() {
     const lease = captureProjectLease();
-    const joinConfig = useVisualizationStore.getState().joinConfig;
-    const qcbfSource = useVisualizationStore.getState().qcbfSource;
+    const { joinConfig, qcbfSource } = acceptedVisualizationSettings();
     const project = useProjectStore.getState().project;
     if (!project || !qcbfSource) return;
 

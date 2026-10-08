@@ -5,22 +5,25 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { formatBidsScanValidationError } from "../lib/bids/errorFormatter";
 import { logAction } from "../lib/debug";
+import { inspectSourcePath } from "../lib/projectPaths";
 import { type ImportSubjectStatus } from "../lib/importStatus";
-import { getMaxRestorableImportStep } from "../lib/importStepAccess";
 import {
+  captureProjectLease,
   isCurrentProjectLease,
   isProjectWorkAccepted,
   type ProjectLease,
 } from "../lib/projectLifecycle";
 import { portableKey, type StagingValidationIssue } from "../lib/stagingValidation";
 import { useGlobalStore } from "./globalStore";
+import { useProjectStore } from "./projectStore";
+import type { ProjectFile } from "../schemas/project";
+import type { MappingState } from "../generated/project/MappingState";
 
 import type {
   DerivedMetadataGroup,
   ImportLifecycle,
   ImportProgress,
   ImportRunSnapshot,
-  ImportSnapshot,
   MetadataGroup,
   ModalityAlias,
   PathPattern,
@@ -30,18 +33,46 @@ import type {
   TokenAssignment,
   TokenTag,
 } from "../schemas/importSchemas";
-import {
-  DerivedMetadataGroupSchema,
-  IMPORT_EXECUTION_PHASES,
-  ImportSnapshotSchema,
-  MetadataGroupSchema,
-  ModalityAliasSchema,
-  PathPatternSchema,
-  SessionAliasSchema,
-  SubjectRenameSchema,
-  SubjectRowSchema,
-  TokenAssignmentSchema,
-} from "../schemas/importSchemas";
+import { DerivedMetadataGroupSchema } from "../schemas/importSchemas";
+
+/** Display defaults only. Accepted settings live in the project cache. */
+export const EMPTY_IMPORT_SETTINGS: Required<MappingState> = {
+  sourceDataPath: "",
+  rawPaths: [],
+  pathPatterns: [],
+  bMatchDirectories: true,
+  ingestionComplete: false,
+  tokenizerConfigs: {},
+  modalityAliases: [],
+  sessionAliases: [],
+  runAliases: [],
+  subjectRenames: [],
+  metadataGroups: [],
+  subjectRows: [],
+};
+export function importSettings(project: ProjectFile | null) {
+  return { ...EMPTY_IMPORT_SETTINGS, ...project?.mappingState };
+}
+export const acceptedImportSettings = () => importSettings(useProjectStore.getState().project);
+
+function editMapping(
+  update: Partial<MappingState> | ((mapping: Required<MappingState>) => Partial<MappingState>),
+) {
+  void useProjectStore
+    .getState()
+    .submitEdit((project) => ({
+      kind: "import",
+      mapping: {
+        ...project.mappingState,
+        ...(typeof update === "function" ? update(importSettings(project)) : update),
+      },
+      preferences: {
+        activeStep: project.uiState.import?.activeStep,
+        selectedProfileId: project.uiState.import?.selectedProfileId,
+      },
+    }))
+    .catch(() => undefined);
+}
 
 // =============================================================================
 // State Interface
@@ -78,30 +109,6 @@ export type DicomSourceAvailability =
   | { status: "missing" | "unreadable" | "ambiguous"; savedPath: string; message: string };
 
 export interface ImportState {
-  // Step tracking
-  activeStep: number;
-
-  // Step 1: Ingestion
-  sourceDataPath: string;
-  rawPaths: string[];
-  pathPatterns: PathPattern[];
-  bMatchDirectories: boolean;
-  ingestionComplete: boolean;
-
-  // Step 2: Tokenizer
-  /** pattern signature → assignments for that pattern */
-  tokenizerConfigs: Record<string, TokenAssignment[]>;
-
-  // Step 3: Aliases
-  modalityAliases: ModalityAlias[];
-  sessionAliases: SessionAlias[];
-  runAliases: SessionAlias[];
-  subjectRenames: SubjectRename[];
-
-  // Step 4: Metadata
-  metadataGroups: MetadataGroup[];
-  subjectRows: SubjectRow[];
-
   // Step 5: Import execution
   importPhase: ImportPhase;
   importCompleted: boolean;
@@ -125,19 +132,11 @@ export interface ImportState {
   confirmingStoppedGeneration: number | null;
   importRunError: string | null;
 
-  // Snapshot
-  mostRecentConfig: ImportSnapshot | null;
-  /** Runtime-only configuration captured for current native reservation. */
-  pendingImportConfig: ImportSnapshot | null;
-
   // BIDS review (session-only, not persisted)
   bidsReview: BidsReviewState;
   sourceAvailability: DicomSourceAvailability;
-  requiresManualSave: boolean;
   stagingPreflight: StagingPreflightState;
 
-  // Execution profile selection (persisted to .easl via uiState.import.selectedProfileId)
-  selectedProfileId: string | null;
   /** Inline pre-run error (e.g. missing/invalid profile). Not persisted. */
   profileError: string | null;
   setSelectedProfileId: (id: string | null) => void;
@@ -146,11 +145,16 @@ export interface ImportState {
 
   // Actions
   setActiveStep: (step: number) => void;
-  setSourceDataPath: (path: string) => void;
-  relinkCompatibleSource: (path: string) => void;
-  relinkIncompatibleSource: (path: string, paths: string[], patterns: PathPattern[]) => void;
+  setSourceDataPath: (path: string, lease?: ProjectLease | null) => Promise<void>;
+  relinkCompatibleSource: (path: string, lease?: ProjectLease | null) => Promise<void>;
+  relinkIncompatibleSource: (
+    path: string,
+    paths: string[],
+    patterns: PathPattern[],
+    lease?: ProjectLease | null,
+  ) => Promise<void>;
   setSourceAvailability: (availability: DicomSourceAvailability) => void;
-  clearManualSaveRequirement: () => void;
+  inspectSourceAvailability: () => Promise<void>;
   beginStagingPreflight: (fingerprint: string, lease: ProjectLease | null) => number;
   resolveStagingPreflight: (
     requestId: number,
@@ -165,7 +169,11 @@ export interface ImportState {
     error: string,
   ) => void;
   resetStagingPreflight: () => void;
-  setIngestionResults: (paths: string[], patterns: PathPattern[]) => void;
+  setIngestionResults: (
+    paths: string[],
+    patterns: PathPattern[],
+    lease?: ProjectLease | null,
+  ) => void;
   setBMatchDirectories: (value: boolean) => void;
   setTokenAssignment: (
     patternSignature: string,
@@ -196,14 +204,12 @@ export interface ImportState {
   bindImportRunSnapshot: (snapshot: ImportRunSnapshot) => void;
   reconcileImportRunSnapshot: (snapshot: ImportRunSnapshot, lease?: ProjectLease | null) => void;
   markSubjectDiagnosticFailure: (subject: string, message: string) => void;
-  setMostRecentConfig: (snapshot: ImportSnapshot) => void;
   applyStaleness: (staleness: Record<string, boolean>) => void;
   reconstructProgressFromLockFiles: (
     statuses: ImportSubjectStatus[],
     subjects: string[],
     staleness: Record<string, boolean>,
   ) => void;
-  loadPersistedState: (persisted: Record<string, unknown>) => void;
   resetImport: () => void;
   // BIDS review actions
   startBidsScan: (rootPath: string) => Promise<void>;
@@ -219,19 +225,6 @@ export interface ImportState {
 // =============================================================================
 
 const INITIAL_STATE = {
-  activeStep: 0,
-  sourceDataPath: "",
-  rawPaths: [] as string[],
-  pathPatterns: [] as PathPattern[],
-  bMatchDirectories: true,
-  ingestionComplete: false,
-  tokenizerConfigs: {} as Record<string, TokenAssignment[]>,
-  modalityAliases: [] as ModalityAlias[],
-  sessionAliases: [] as SessionAlias[],
-  runAliases: [] as SessionAlias[],
-  subjectRenames: [] as SubjectRename[],
-  metadataGroups: [] as MetadataGroup[],
-  subjectRows: [] as SubjectRow[],
   importPhase: "idle" as ImportPhase,
   importCompleted: false,
   importLog: [] as string[],
@@ -246,22 +239,18 @@ const INITIAL_STATE = {
   confirmingStoppedRunId: null as string | null,
   confirmingStoppedGeneration: null as number | null,
   importRunError: null as string | null,
-  mostRecentConfig: null as ImportSnapshot | null,
-  pendingImportConfig: null as ImportSnapshot | null,
   bidsReview: {
     scanComplete: false,
     scanError: null,
     detectedGroups: [] as DerivedMetadataGroup[],
     skippedSubjects: [] as string[],
   },
-  selectedProfileId: null as string | null,
   profileError: null as string | null,
   sourceAvailability: {
     status: "unconfigured",
     savedPath: null,
     message: null,
   } as DicomSourceAvailability,
-  requiresManualSave: false,
   stagingPreflight: {
     status: "idle" as StagingPreflightStatus,
     fingerprint: null,
@@ -295,15 +284,6 @@ function snapshotRegressesLifecycle(current: ImportPhase, incoming: ImportPhase)
 function createInitialImportState() {
   return {
     ...INITIAL_STATE,
-    rawPaths: [],
-    pathPatterns: [],
-    tokenizerConfigs: {},
-    modalityAliases: [],
-    sessionAliases: [],
-    runAliases: [],
-    subjectRenames: [],
-    metadataGroups: [],
-    subjectRows: [],
     importLog: [],
     failedSubjects: [],
     importProgress: {},
@@ -324,29 +304,6 @@ function subjectProgress(subject: string, existing?: ImportProgress): ImportProg
       status: "pending",
     }
   );
-}
-
-function normalizePersistedImportPhase(phase: unknown): ImportPhase {
-  if (
-    phase === "preparing" ||
-    phase === "running" ||
-    phase === "finalizing" ||
-    phase === "cancelling"
-  ) {
-    return "interrupted";
-  }
-
-  if (
-    phase === "idle" ||
-    phase === "completed" ||
-    phase === "failed" ||
-    phase === "cancelled" ||
-    phase === "interrupted"
-  ) {
-    return phase;
-  }
-
-  return INITIAL_STATE.importPhase;
 }
 
 async function scanBidsSidecars(rootPath: string) {
@@ -391,52 +348,108 @@ export const useImportStore = create<ImportState>((set, get) => ({
   ...INITIAL_STATE,
 
   setActiveStep: (step) => {
-    set({ activeStep: step });
+    void useProjectStore
+      .getState()
+      .submitEdit((project) => ({
+        kind: "import",
+        mapping: project.mappingState,
+        preferences: {
+          activeStep: step,
+          selectedProfileId: project.uiState.import?.selectedProfileId,
+        },
+      }))
+      .catch(() => undefined);
   },
 
-  setSourceDataPath: (path) => {
-    set({ sourceDataPath: path });
-  },
-
-  relinkCompatibleSource: (path) => {
-    set((state) => ({
-      sourceDataPath: path,
-      mostRecentConfig: state.mostRecentConfig
-        ? { ...state.mostRecentConfig, sourceDataPath: path }
-        : null,
-      sourceAvailability: { status: "available", savedPath: path, message: null },
-      requiresManualSave: true,
+  setSourceDataPath: async (path, lease = captureProjectLease()) => {
+    if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
+    await useProjectStore.getState().submitEdit((project) => ({
+      kind: "import",
+      mapping: { ...project.mappingState, sourceDataPath: path },
+      preferences: {
+        activeStep: project.uiState.import?.activeStep,
+        selectedProfileId: project.uiState.import?.selectedProfileId,
+      },
     }));
+    if (!isCurrentProjectLease(lease)) return;
+    const accepted = acceptedImportSettings().sourceDataPath;
+    set({ sourceAvailability: { status: "available", savedPath: accepted, message: null } });
   },
 
-  relinkIncompatibleSource: (path, paths, patterns) => {
+  relinkCompatibleSource: async (path, lease = captureProjectLease()) => {
+    if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
+    await useProjectStore
+      .getState()
+      .submitEdit({ kind: "relinkDicom", path, rawPaths: [], patterns: [], compatible: true });
+    if (isCurrentProjectLease(lease))
+      set({
+        sourceAvailability: {
+          status: "available",
+          savedPath: acceptedImportSettings().sourceDataPath,
+          message: null,
+        },
+      });
+  },
+
+  relinkIncompatibleSource: async (path, paths, patterns, lease = captureProjectLease()) => {
+    if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
+    await useProjectStore
+      .getState()
+      .submitEdit({ kind: "relinkDicom", path, rawPaths: paths, patterns, compatible: false });
+    if (!isCurrentProjectLease(lease)) return;
     set({
-      activeStep: 0,
-      sourceDataPath: path,
-      rawPaths: paths,
-      pathPatterns: patterns,
-      ingestionComplete: paths.length > 0,
-      tokenizerConfigs: {},
-      modalityAliases: [],
-      sessionAliases: [],
-      runAliases: [],
-      subjectRenames: [],
-      metadataGroups: [],
-      subjectRows: [],
       importProgress: {},
       importPhase: "idle",
       importCompleted: false,
       importLog: [],
       importRunning: false,
       importSummary: null,
-      mostRecentConfig: null,
-      sourceAvailability: { status: "available", savedPath: path, message: null },
-      requiresManualSave: true,
+      sourceAvailability: {
+        status: "available",
+        savedPath: acceptedImportSettings().sourceDataPath,
+        message: null,
+      },
     });
   },
 
   setSourceAvailability: (sourceAvailability) => set({ sourceAvailability }),
-  clearManualSaveRequirement: () => set({ requiresManualSave: false }),
+  inspectSourceAvailability: async () => {
+    const project = useProjectStore.getState().project;
+    const path = project?.mappingState.sourceDataPath;
+    const lease = captureProjectLease();
+    if (!project || project.projectMeta.dataSource !== "dicom" || !path) return;
+    set({
+      sourceAvailability: {
+        status: "unreadable",
+        savedPath: path,
+        message: "Checking saved DICOM source.",
+      },
+    });
+    try {
+      const inspected = await inspectSourcePath(project.projectMeta.rootPath, path);
+      if (!isCurrentProjectLease(lease)) return;
+      set({
+        sourceAvailability:
+          inspected.exists && inspected.readable && inspected.isDirectory
+            ? { status: "available", savedPath: path, message: null }
+            : {
+                status: inspected.exists ? "unreadable" : "missing",
+                savedPath: path,
+                message:
+                  "Saved DICOM source is unavailable. Relink it before scanning or importing.",
+              },
+      });
+    } catch (error) {
+      if (isCurrentProjectLease(lease))
+        set({
+          sourceAvailability: {
+            status: "unreadable",
+            savedPath: path,
+            message: `Cannot inspect saved DICOM source. Relink it before scanning or importing. ${error instanceof Error ? error.message : String(error)}`,
+          },
+        });
+    }
+  },
 
   beginStagingPreflight: (fingerprint, lease) => {
     const requestId = get().stagingPreflight.requestId + 1;
@@ -502,8 +515,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
     });
   },
 
-  setIngestionResults: (paths, patterns) => {
-    set({
+  setIngestionResults: (paths, patterns, lease = captureProjectLease()) => {
+    if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
+    editMapping({
       rawPaths: paths,
       pathPatterns: patterns,
       ingestionComplete: paths.length > 0,
@@ -511,11 +525,11 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   setBMatchDirectories: (value) => {
-    set({ bMatchDirectories: value });
+    editMapping({ bMatchDirectories: value });
   },
 
   setTokenAssignment: (patternSignature, blockIndex, subBlockIndex, tag) => {
-    set((state) => {
+    editMapping((state) => {
       const existing = state.tokenizerConfigs[patternSignature] ?? [];
 
       // Remove any existing assignment at this exact position
@@ -536,7 +550,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   removeTokenAssignment: (patternSignature, blockIndex, subBlockIndex) => {
-    set((state) => {
+    editMapping((state) => {
       const existing = state.tokenizerConfigs[patternSignature] ?? [];
       const filtered = existing.filter(
         (a) => !(a.blockIndex === blockIndex && a.subBlockIndex === subBlockIndex),
@@ -552,7 +566,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   setTokenizerConfig: (patternSignature, assignments) => {
-    set((state) => ({
+    editMapping((state) => ({
       tokenizerConfigs: {
         ...state.tokenizerConfigs,
         [patternSignature]: assignments,
@@ -561,11 +575,11 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   setModalityAliases: (aliases) => {
-    set({ modalityAliases: aliases });
+    editMapping({ modalityAliases: aliases });
   },
 
   updateModalityAlias: (captured, mapped) => {
-    set((state) => ({
+    editMapping((state) => ({
       modalityAliases: state.modalityAliases.map((a) =>
         a.captured === captured ? { ...a, mapped } : a,
       ),
@@ -573,19 +587,19 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   setSessionAliases: (aliases) => {
-    set({ sessionAliases: aliases });
+    editMapping({ sessionAliases: aliases });
   },
 
   setRunAliases: (aliases) => {
-    set({ runAliases: aliases });
+    editMapping({ runAliases: aliases });
   },
 
   setSubjectRenames: (renames) => {
-    set({ subjectRenames: renames });
+    editMapping({ subjectRenames: renames });
   },
 
   updateSubjectRename: (original, target) => {
-    set((state) => ({
+    editMapping((state) => ({
       subjectRenames: state.subjectRenames.map((r) =>
         r.original === original ? { ...r, target } : r,
       ),
@@ -593,7 +607,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   addMetadataGroup: (group) => {
-    set((state) => {
+    editMapping((state) => {
       if (state.metadataGroups.some((g) => g.id === group.id)) {
         return {};
       }
@@ -604,7 +618,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   removeMetadataGroup: (id) => {
-    set((state) => ({
+    editMapping((state) => ({
       metadataGroups: state.metadataGroups.filter((g) => g.id !== id),
       subjectRows: state.subjectRows.map((row) =>
         row.groupId === id ? { ...row, groupId: "global-defaults" } : row,
@@ -613,17 +627,17 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   updateMetadataGroup: (id, updates) => {
-    set((state) => ({
+    editMapping((state) => ({
       metadataGroups: state.metadataGroups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
     }));
   },
 
   setSubjectRows: (rows) => {
-    set({ subjectRows: rows });
+    editMapping({ subjectRows: rows });
   },
 
   updateSubjectRowGroup: (rowIds, groupId) => {
-    set((state) => ({
+    editMapping((state) => ({
       subjectRows: state.subjectRows.map((row) =>
         rowIds.includes(row.id) ? { ...row, groupId } : row,
       ),
@@ -635,7 +649,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
     // an inline error and block — we do NOT transition to the `failed` phase
     // (nothing has started yet).
     const global = useGlobalStore.getState();
-    const selectedId = get().selectedProfileId;
+    const selectedId = useProjectStore.getState().project?.uiState.import?.selectedProfileId;
     const profile = selectedId ? global.getProfileById(selectedId) : undefined;
     if (!profile) {
       set({
@@ -652,22 +666,8 @@ export const useImportStore = create<ImportState>((set, get) => ({
     }
 
     set((state) => {
-      const snapshot: ImportSnapshot = {
-        sourceDataPath: state.sourceDataPath,
-        pathPatterns: state.pathPatterns,
-        tokenizerConfigs: state.tokenizerConfigs,
-        bMatchDirectories: state.bMatchDirectories,
-        modalityAliases: state.modalityAliases,
-        sessionAliases: state.sessionAliases,
-        runAliases: state.runAliases,
-        subjectRenames: state.subjectRenames,
-        metadataGroups: state.metadataGroups,
-        subjectRows: state.subjectRows,
-        selectedProfileId: profile.id,
-      };
-
       const rowsBySubject = new Map<string, SubjectRow>();
-      for (const row of state.subjectRows) {
+      for (const row of acceptedImportSettings().subjectRows) {
         if (!rowsBySubject.has(row.subject)) {
           rowsBySubject.set(row.subject, row);
         }
@@ -707,7 +707,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
         importProgress,
         importRunning: false,
         importSummary: null,
-        pendingImportConfig: snapshot,
         profileError: null,
       };
     });
@@ -854,31 +853,32 @@ export const useImportStore = create<ImportState>((set, get) => ({
               error: null,
             }
           : state.stagingPreflight,
-        mostRecentConfig:
-          snapshot.lifecycle === "completed" && state.pendingImportConfig
-            ? state.pendingImportConfig
-            : state.mostRecentConfig,
-        pendingImportConfig: terminal ? null : state.pendingImportConfig,
       };
     });
   },
 
-  setMostRecentConfig: (snapshot) => {
-    set({ mostRecentConfig: snapshot });
-  },
-
   setSelectedProfileId: (id) => {
-    set({ selectedProfileId: id });
+    void useProjectStore
+      .getState()
+      .submitEdit((project) => ({
+        kind: "import",
+        mapping: project.mappingState,
+        preferences: {
+          activeStep: project.uiState.import?.activeStep,
+          ...(id === null ? {} : { selectedProfileId: id }),
+        },
+      }))
+      .catch(() => undefined);
   },
 
   autoSelectProfile: () => {
-    if (get().selectedProfileId) return;
+    if (useProjectStore.getState().project?.uiState.import?.selectedProfileId) return;
     const { settings, profileValidationState } = useGlobalStore.getState();
     const firstValid = settings.executionProfiles.find(
       (p) => profileValidationState[p.id]?.valid === true,
     );
     if (firstValid) {
-      set({ selectedProfileId: firstValid.id });
+      get().setSelectedProfileId(firstValid.id);
     }
   },
 
@@ -932,85 +932,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
       }
 
       return { importProgress };
-    });
-  },
-
-  loadPersistedState: (persisted) => {
-    const schema = z.object({
-      sourceDataPath: z.string().catch("").default(""),
-      rawPaths: z.array(z.string()).catch([]).default([]),
-      pathPatterns: z.array(PathPatternSchema).catch([]).default([]),
-      bMatchDirectories: z.boolean().catch(true).default(true),
-      ingestionComplete: z.boolean().catch(false).default(false),
-      tokenizerConfigs: z.record(z.string(), z.array(TokenAssignmentSchema)).catch({}).default({}),
-      modalityAliases: z.array(ModalityAliasSchema).catch([]).default([]),
-      sessionAliases: z.array(SessionAliasSchema).catch([]).default([]),
-      runAliases: z.array(SessionAliasSchema).catch([]).default([]),
-      subjectRenames: z.array(SubjectRenameSchema).catch([]).default([]),
-      metadataGroups: z.array(MetadataGroupSchema).catch([]).default([]),
-      subjectRows: z.array(SubjectRowSchema).catch([]).default([]),
-      activeStep: z
-        .number()
-        .int()
-        .min(0)
-        .catch(INITIAL_STATE.activeStep)
-        .default(INITIAL_STATE.activeStep),
-      importPhase: z
-        .enum(IMPORT_EXECUTION_PHASES)
-        .catch(INITIAL_STATE.importPhase)
-        .default(INITIAL_STATE.importPhase),
-      importCompleted: z
-        .boolean()
-        .catch(INITIAL_STATE.importCompleted)
-        .default(INITIAL_STATE.importCompleted),
-      mostRecentConfig: ImportSnapshotSchema.nullable().catch(null).default(null),
-      selectedProfileId: z.string().nullable().catch(null).default(null),
-    });
-
-    const parsed = schema.parse(persisted);
-
-    const importPhase = normalizePersistedImportPhase(parsed.importPhase);
-    const importCompleted =
-      parsed.importCompleted && (importPhase === "completed" || importPhase === "idle");
-    const persistedPhase: ImportPhase =
-      importCompleted && importPhase === "idle" ? "completed" : importPhase;
-
-    const partialState = {
-      sourceDataPath: parsed.sourceDataPath,
-      rawPaths: parsed.rawPaths,
-      pathPatterns: parsed.pathPatterns,
-      bMatchDirectories: parsed.bMatchDirectories,
-      ingestionComplete: parsed.ingestionComplete,
-      tokenizerConfigs: parsed.tokenizerConfigs,
-      modalityAliases: parsed.modalityAliases,
-      sessionAliases: parsed.sessionAliases,
-      runAliases: parsed.runAliases,
-      subjectRenames: parsed.subjectRenames,
-      metadataGroups: parsed.metadataGroups,
-      subjectRows: parsed.subjectRows,
-      mostRecentConfig: parsed.mostRecentConfig,
-      selectedProfileId: parsed.selectedProfileId,
-      importPhase: persistedPhase,
-      importCompleted,
-      importRunning: false,
-      activeRunId: null,
-      ownershipGeneration: null,
-      nativeSnapshotUpdatedAtMs: null,
-      confirmationRequired: false,
-      terminalRunId: null,
-      confirmingStoppedRunId: null,
-      confirmingStoppedGeneration: null,
-      importRunError: null,
-      pendingImportConfig: null,
-    };
-
-    const requestedStep = parsed.activeStep;
-    const maxStep = getMaxRestorableImportStep(partialState);
-
-    set({
-      ...createInitialImportState(),
-      ...partialState,
-      activeStep: Math.min(requestedStep, maxStep),
     });
   },
 

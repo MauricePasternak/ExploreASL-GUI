@@ -5,6 +5,10 @@ import type { PreflightResult } from "./ProcessingStatusAlert";
 import { makeMatlabProfile } from "../../test/profileFixtures";
 
 let mockConfig: Record<string, unknown> | null = null;
+vi.mock("../../stores/projectStore", () => ({
+  useProjectStore: (selector: (state: unknown) => unknown) =>
+    selector({ project: { uiState: { processing: { config: mockConfig } } } }),
+}));
 let mockAvailableSubjects: { subjectSession: string; module: string }[] = [];
 let mockSubjectStatuses: { subjectSession: string; module: string }[] = [];
 const validProfile = makeMatlabProfile({ id: "profile-1", label: "R2024a" });

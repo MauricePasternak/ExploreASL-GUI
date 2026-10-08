@@ -1,7 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { projectFixture } from "../../test/projectFixtures";
+import { useProjectStore } from "../../stores/projectStore";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 
 import AliasResolution from "./AliasResolution";
 import { useImportStore } from "../../stores/importStore";
@@ -17,16 +21,19 @@ function renderWithProviders() {
 afterEach(() => {
   cleanup();
   useImportStore.getState().resetImport();
+  useProjectStore.getState().cancelAutosave();
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
+  resetProjectLifecycleForTests();
 });
 
 describe("AliasResolution", () => {
   it("derives alias tables from tokenizer output when store aliases are empty", async () => {
     const user = userEvent.setup();
-    const store = useImportStore.getState();
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/BAR/05022026_01/sernum-0001_ser-AAHead_Scout"],
-      [
+    const snapshot = projectFixture();
+    snapshot.document.mappingState = {
+      sourceDataPath: "/data",
+      rawPaths: ["BAR/05022026_01/sernum-0001_ser-AAHead_Scout"],
+      pathPatterns: [
         {
           signature: "VARYING/VARYING/VARYING",
           samplePath: "BAR/05022026_01/sernum-0001_ser-AAHead_Scout",
@@ -40,13 +47,27 @@ describe("AliasResolution", () => {
           depth: 3,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
-      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-      { blockIndex: 1, subBlockIndex: 0, tag: "Session" },
-      { blockIndex: 1, subBlockIndex: 1, tag: "Run" },
-      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
+      tokenizerConfigs: {
+        "VARYING/VARYING/VARYING": [
+          { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
+          { blockIndex: 1, subBlockIndex: 0, tag: "Session" },
+          { blockIndex: 1, subBlockIndex: 1, tag: "Run" },
+          { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
+        ],
+      },
+    };
+    useProjectStore.getState().acceptSnapshot(snapshot);
+    activateProjectLease("project-1", "/project");
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.mappingState = {
+      ...accepted.document.mappingState,
+      modalityAliases: [{ captured: "sernum-0001_ser-AAHead_Scout", mapped: null }],
+      sessionAliases: [{ captured: "05022026", alias: "05022026", index: 1 }],
+      runAliases: [{ captured: "01", alias: "ASL_1", index: 1 }],
+      subjectRenames: [{ original: "BAR", target: "BAR" }],
+    };
+    vi.mocked(invoke).mockResolvedValue(accepted);
 
     renderWithProviders();
 
@@ -61,6 +82,13 @@ describe("AliasResolution", () => {
 
     await user.click(screen.getByTestId("alias-tab-subjects"));
     expect(screen.getByDisplayValue("BAR")).toBeInTheDocument();
+    await useProjectStore.getState().flushEdits();
+    expect(invoke).toHaveBeenLastCalledWith(
+      "accept_project_edit",
+      expect.objectContaining({
+        edit: expect.objectContaining({ kind: "import", mapping: accepted.document.mappingState }),
+      }),
+    );
   });
 
   it("renders the title", () => {
@@ -89,10 +117,12 @@ describe("AliasResolution", () => {
   });
 
   it("shows modality aliases when present", () => {
-    useImportStore.getState().setModalityAliases([
+    const snapshot = projectFixture();
+    snapshot.document.mappingState.modalityAliases = [
       { captured: "t1_mpr_tra", mapped: "T1w" },
       { captured: "pcasl_3d", mapped: "ASL4D" },
-    ]);
+    ];
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     const t1 = screen.queryAllByText("t1_mpr_tra");
@@ -103,10 +133,12 @@ describe("AliasResolution", () => {
 
   it("shows subject renames when present and tab is clicked", async () => {
     const user = userEvent.setup();
-    useImportStore.getState().setSubjectRenames([
+    const snapshot = projectFixture();
+    snapshot.document.mappingState.subjectRenames = [
       { original: "BAR", target: "BAR" },
       { original: "FOO", target: "FOO" },
-    ]);
+    ];
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     await user.click(screen.getByTestId("alias-tab-subjects"));
@@ -122,7 +154,9 @@ describe("AliasResolution", () => {
   });
 
   it("blocks metadata until ASL4D or T1w is mapped", () => {
-    useImportStore.getState().setModalityAliases([{ captured: "scout", mapped: null }]);
+    const snapshot = projectFixture();
+    snapshot.document.mappingState.modalityAliases = [{ captured: "scout", mapped: null }];
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     expect(screen.getByTestId("alias-next-btn")).toBeDisabled();
@@ -130,7 +164,9 @@ describe("AliasResolution", () => {
   });
 
   it("allows metadata when ASL4D or T1w is mapped", () => {
-    useImportStore.getState().setModalityAliases([{ captured: "t1", mapped: "T1w" }]);
+    const snapshot = projectFixture();
+    snapshot.document.mappingState.modalityAliases = [{ captured: "t1", mapped: "T1w" }];
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     expect(screen.getByTestId("alias-next-btn")).not.toBeDisabled();

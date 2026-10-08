@@ -25,6 +25,7 @@ import { useNavigate } from "react-router";
 import { sanitizeLabel } from "../../lib/bids/normalize";
 import { summarizeAslContext } from "../../lib/bids/sidecar";
 import { logAction } from "../../lib/debug";
+import { resolveLogicalSource } from "../../lib/projectPaths";
 import type { DerivedMetadataGroup, MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -200,7 +201,7 @@ export default function BIDSReviewPanel() {
   }
 
   function getScanRootPath() {
-    return persistedSourceDataPath || rootPath;
+    return resolveLogicalSource(rootPath, persistedSourceDataPath, "bids");
   }
 
   function handleRescanConfirmedProject() {

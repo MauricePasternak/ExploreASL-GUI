@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_PROJECT_FILE } from "../schemas/project";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { projectView } from "../schemas/project";
+import { projectFixture } from "../test/projectFixtures";
+import { cleanup, renderHook } from "@testing-library/react";
+import { useProcessingSync } from "../hooks/useProcessingSync";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 import {
@@ -27,7 +30,6 @@ vi.mock("../lib/processingEvents", () => ({
 }));
 import {
   attachRun,
-  acknowledgeProcessingRun,
   confirmProcessingWorkersStopped,
   getActiveRun,
   loadLockStatus,
@@ -51,22 +53,22 @@ describe("processing store", () => {
     clearProcessingListeners();
     resetProjectLifecycleForTests();
     await useProcessingStore.getState().resetProcessing();
-    useProjectStore.setState({ project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project") });
+    useProjectStore.setState({ project: projectView(projectFixture()) });
     activateProjectLease("project-1", "/project");
     useGlobalStore.setState({
       settings: { ...DEFAULT_SETTINGS, executionProfiles: [processingProfile] },
       profileValidationState: { [processingProfile.id]: { valid: true, errors: [] } },
     });
     useDataParStore.getState().resetDataPar();
+    vi.spyOn(useProjectStore.getState(), "saveProject").mockResolvedValue(undefined);
   });
-  it("hydrates initial state and enforces module/population mutual exclusion", () => {
-    expect(useProcessingStore.getState().processingPhase).toBe("idle");
-    useProcessingStore.getState().setConfig({ ...config, modules: ["structural", "population"] });
-    expect(useProcessingStore.getState().config?.modules).toEqual(["population"]);
-    expect(useProcessingStore.getState().config?.workers).toBe(1);
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
   });
   it("hydrates active-looking persisted phases to idle with complete initial authority state", () => {
-    useProcessingStore.getState().hydrateProcessing({ currentPhase: "running", config });
+    useProjectStore.getState().project!.uiState.processing = { currentPhase: "running", config };
+    useProcessingStore.getState().hydrateProcessing();
     expect(useProcessingStore.getState()).toMatchObject({
       processingPhase: "idle",
       activeRunId: null,
@@ -74,22 +76,6 @@ describe("processing store", () => {
       snapshot: null,
       availableAction: "none",
       actionPending: false,
-      config,
-    });
-  });
-  it.each([
-    { modules: ["population", "asl"] as ("population" | "asl")[], expected: ["asl"], workers: 2 },
-    { modules: ["population"] as "population"[], expected: ["population"], workers: 1 },
-  ])("normalizes config $modules", ({ modules, expected, workers }) => {
-    if (modules.length > 1)
-      useProcessingStore.getState().setConfig({ ...config, modules: ["population"] });
-    useProcessingStore
-      .getState()
-      .setConfig({ ...config, modules, workers: 2, rerunBids2Legacy: true });
-    expect(useProcessingStore.getState().config).toMatchObject({
-      modules: expected,
-      workers,
-      rerunBids2Legacy: expected[0] === "population" ? false : true,
     });
   });
   it("rejects missing config before native reservation", async () => {
@@ -97,7 +83,7 @@ describe("processing store", () => {
     expect(reserveProcessingRun).not.toHaveBeenCalled();
   });
   it("rejects empty module selection before native reservation", async () => {
-    useProcessingStore.getState().setConfig({ ...config, modules: [] });
+    useProjectStore.getState().project!.uiState.processing = { config: { ...config, modules: [] } };
 
     await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
       "No modules selected",
@@ -105,14 +91,16 @@ describe("processing store", () => {
     expect(reserveProcessingRun).not.toHaveBeenCalled();
   });
   it("blocks deleted and invalid execution profiles without creating a native reservation", async () => {
-    useProcessingStore.getState().setConfig({ ...config, selectedProfileId: "deleted-profile" });
+    useProjectStore.getState().project!.uiState.processing = {
+      config: { ...config, selectedProfileId: "deleted-profile" },
+    };
     await useProcessingStore.getState().startProcessing();
     expect(useProcessingStore.getState().profileError).toContain(
       "Selected profile was deleted or is invalid",
     );
     expect(reserveProcessingRun).not.toHaveBeenCalled();
 
-    useProcessingStore.getState().setConfig(config);
+    useProjectStore.getState().project!.uiState.processing = { config };
     useGlobalStore.setState({
       profileValidationState: {
         [processingProfile.id]: { valid: false, errors: ["MATLAB missing"] },
@@ -136,10 +124,17 @@ describe("processing store", () => {
         },
       },
     });
-    useDataParStore.getState().setDataParField("enableMetadataGroupingCorrection", true);
-    useDataParStore.getState().setDataParField("WMHsegmAlg", "LGA");
-    useDataParStore.getState().setDataParField("bRunLongReg", 1);
-    useDataParStore.getState().setDataParField("nCompartments", 2);
+    useProjectStore.setState({
+      project: {
+        ...useProjectStore.getState().project!,
+        dataPar: {
+          enableMetadataGroupingCorrection: true,
+          WMHsegmAlg: "LGA",
+          bRunLongReg: 1,
+          nCompartments: 2,
+        },
+      },
+    });
     useProcessingStore.getState().setAvailableSubjects([
       {
         subjectSession: "sub-001_01",
@@ -150,7 +145,7 @@ describe("processing store", () => {
         aslRuns: [],
       },
     ]);
-    useProcessingStore.getState().setConfig(config);
+    useProjectStore.getState().project!.uiState.processing = { config };
     vi.mocked(reserveProcessingRun).mockResolvedValue({
       kind: "current",
       snapshot: processingSnapshot(),
@@ -162,7 +157,19 @@ describe("processing store", () => {
     vi.mocked(attachRun).mockResolvedValue(
       processingSnapshot({ lifecycle: "running", revision: 2 }),
     );
-    await useProcessingStore.getState().startProcessing();
+    let release!: () => void;
+    const save = vi.spyOn(useProjectStore.getState(), "saveProject").mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const start = useProcessingStore.getState().startProcessing();
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    expect(reserveProcessingRun).not.toHaveBeenCalled();
+    release();
+    await start;
+    save.mockRestore();
     expect(reserveProcessingRun).toHaveBeenCalledWith(
       expect.objectContaining({
         projectId: "project-1",
@@ -205,7 +212,7 @@ describe("processing store", () => {
         aslRuns: [],
       },
     ]);
-    useProcessingStore.getState().setConfig(config);
+    useProjectStore.getState().project!.uiState.processing = { config };
     vi.mocked(reserveProcessingRun).mockResolvedValue({
       kind: "historical",
       replay: processingReplay(),
@@ -213,20 +220,33 @@ describe("processing store", () => {
     await useProcessingStore.getState().startProcessing();
     expect(runProcessingPipeline).not.toHaveBeenCalled();
   });
+  it("blocks native reservation and launch when Start persistence fails", async () => {
+    useProjectStore.getState().project!.uiState.processing = {
+      config: { ...config, subjects: [], modules: ["population"], workers: 1 },
+    };
+    vi.mocked(useProjectStore.getState().saveProject).mockRejectedValueOnce(new Error("Disk full"));
+    await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow("Disk full");
+    expect(reserveProcessingRun).not.toHaveBeenCalled();
+    expect(runProcessingPipeline).not.toHaveBeenCalled();
+    expect(useProcessingStore.getState()).toMatchObject({
+      actionPending: false,
+      processingError: "Disk full",
+    });
+  });
   it.each([
     ["malformed", "not-a-subject"],
     ["missing", "sub-missing_01"],
   ])("rejects a %s selected subject before reservation", async (_case, subject) => {
-    useProcessingStore.getState().setConfig({ ...config, subjects: [subject] });
+    useProjectStore.getState().project!.uiState.processing = {
+      config: { ...config, subjects: [subject] },
+    };
 
     await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow();
     expect(reserveProcessingRun).not.toHaveBeenCalled();
   });
   it("rejects processing without the active project capability", async () => {
     resetProjectLifecycleForTests();
-    useProjectStore.setState({ project: null });
-    useProcessingStore.getState().setConfig(config);
-
+    useProjectStore.getState().project!.uiState.processing = { config };
     await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
       "No project loaded",
     );
@@ -356,7 +376,9 @@ describe("processing store", () => {
     await vi.waitFor(() => expect(confirmProcessingWorkersStopped).toHaveBeenCalledOnce());
 
     await useProcessingStore.getState().resetProcessing();
-    useProjectStore.setState({ project: DEFAULT_PROJECT_FILE("project-2", "Other", "/other") });
+    useProjectStore.setState({
+      project: projectView(projectFixture("project-2", "Other", "/other")),
+    });
     activateProjectLease("project-2", "/other");
     const replacement = processingSnapshot({
       projectRoot: "/other",
@@ -374,7 +396,6 @@ describe("processing store", () => {
       runId: replacement.runId,
       lifecycle: "running",
     });
-    expect(acknowledgeProcessingRun).not.toHaveBeenCalled();
   });
   it("normalizes subject and lock-status results for the current project", async () => {
     vi.mocked(loadSubjects).mockResolvedValue([
@@ -397,10 +418,13 @@ describe("processing store", () => {
         locked: true,
       },
     ]);
-    await useProcessingStore.getState().scanAvailableSubjects();
-    await useProcessingStore.getState().loadLockFileStatus();
+    const edits = vi.spyOn(useProjectStore.getState(), "submitEdit");
+    renderHook(useProcessingSync);
+    await vi.waitFor(() => expect(useProcessingStore.getState().subjectStatuses).toHaveLength(1));
     expect(useProcessingStore.getState().availableSubjects[0].aslRuns).toEqual(["1"]);
     expect(useProcessingStore.getState().subjectStatuses[0].run).toBe("1");
+    expect(edits).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().saveProject).not.toHaveBeenCalled();
   });
   it("drops subject reads resolving after lease replacement", async () => {
     let resolveSubjects!: (subjects: Awaited<ReturnType<typeof loadSubjects>>) => void;
@@ -451,6 +475,7 @@ describe("processing store", () => {
     expect(useProcessingStore.getState().subjectStatuses).toEqual([]);
   });
   it("cleans actual listener state on reset and discovers active snapshot", async () => {
+    vi.spyOn(useProjectStore.getState(), "refreshProject").mockResolvedValue(undefined);
     vi.mocked(getActiveRun).mockResolvedValue(processingSnapshot({ lifecycle: "running" }));
     const cleanup = vi.fn();
     vi.mocked(setupProcessingListeners).mockResolvedValue(cleanup);

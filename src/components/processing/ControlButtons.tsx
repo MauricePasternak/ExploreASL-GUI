@@ -4,6 +4,7 @@ import { Virtuoso } from "react-virtuoso";
 
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 import {
   commitBidsProjectMutations,
   preflightBidsSetupRepair,
@@ -101,11 +102,19 @@ const ControlButtons = memo(function ControlButtons({
   const { label, color, icon: Icon, action } = getButtonProps(phase, availableAction);
   const isStartAction = action === "start";
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback(async () => {
     if (action === "kill") {
       setConfirmOpen(true);
     } else if (action === "start") {
-      const { config, subjectStatuses } = useProcessingStore.getState();
+      const lease = captureProjectLease();
+      try {
+        await useProjectStore.getState().flushEdits();
+      } catch {
+        return;
+      }
+      if (lease && !isCurrentProjectLease(lease)) return;
+      const { subjectStatuses } = useProcessingStore.getState();
+      const config = useProjectStore.getState().project?.uiState.processing?.config;
       if (!config) return;
 
       const completed = findCompletedSubjects(config.subjects, config.modules, subjectStatuses);
@@ -113,7 +122,7 @@ const ControlButtons = memo(function ControlButtons({
       if (completed.length > 0) {
         setReprocessEntries(completed);
       } else {
-        startProcessing();
+        void startProcessing().catch(() => undefined);
       }
     }
   }, [action, startProcessing]);
@@ -129,7 +138,7 @@ const ControlButtons = memo(function ControlButtons({
 
   const handleConfirmReprocess = useCallback(() => {
     setReprocessEntries([]);
-    startProcessing();
+    void startProcessing().catch(() => undefined);
   }, [startProcessing]);
 
   const handleCancelReprocess = useCallback(() => {

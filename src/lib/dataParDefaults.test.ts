@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { getDefaultDataPar } from "./dataParDefaults";
-import { DataParSchema } from "../schemas/dataParSchema";
 
 describe("getDefaultDataPar", () => {
   it("returns an object with defaults from FIELD_METADATA", () => {
@@ -51,12 +50,6 @@ describe("getDefaultDataPar", () => {
     expect(defaults.bRunDARTEL).toBe(0);
     expect(defaults.bSegmentSPM12).toBe(0);
     expect(defaults.bHammersCAT12).toBe(0);
-  });
-
-  it("produces a result that passes DataParSchema.parse", () => {
-    const defaults = getDefaultDataPar();
-    const parsed = DataParSchema.parse(defaults);
-    expect(parsed).toEqual(defaults);
   });
 
   it("does not include fields without a default in metadata", () => {

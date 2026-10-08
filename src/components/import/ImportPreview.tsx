@@ -7,25 +7,47 @@ import { buildImportPlan } from "../../lib/importPlan";
 import { canEnterStep5 } from "../../lib/importStepAccess";
 import { useStagingPreflight } from "../../hooks/useStagingPreflight";
 import { useGlobalStore } from "../../stores/globalStore";
-import { useImportStore } from "../../stores/importStore";
+import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { resolveLogicalSource } from "../../lib/projectPaths";
 import ConfigPreview from "./ConfigPreview";
 import StagingMappingTable from "./StagingMappingTable";
 
 export default function ImportPreview() {
-  const rawPaths = useImportStore((s) => s.rawPaths);
-  const sourceDataPath = useImportStore((s) => s.sourceDataPath);
-  const ingestionComplete = useImportStore((s) => s.ingestionComplete);
-  const pathPatterns = useImportStore((s) => s.pathPatterns);
-  const tokenizerConfigs = useImportStore((s) => s.tokenizerConfigs);
-  const modalityAliases = useImportStore((s) => s.modalityAliases);
-  const sessionAliases = useImportStore((s) => s.sessionAliases);
-  const runAliases = useImportStore((s) => s.runAliases);
-  const subjectRenames = useImportStore((s) => s.subjectRenames);
-  const bMatchDirectories = useImportStore((s) => s.bMatchDirectories);
-  const metadataGroups = useImportStore((s) => s.metadataGroups);
-  const subjectRows = useImportStore((s) => s.subjectRows);
+  const rawPaths = useProjectStore(
+    (s) => s.project?.mappingState.rawPaths ?? EMPTY_IMPORT_SETTINGS.rawPaths,
+  );
+  const sourceDataPath = useProjectStore((s) => s.project?.mappingState.sourceDataPath ?? "");
+  const ingestionComplete = useProjectStore(
+    (s) => s.project?.mappingState.ingestionComplete ?? false,
+  );
+  const pathPatterns = useProjectStore(
+    (s) => s.project?.mappingState.pathPatterns ?? EMPTY_IMPORT_SETTINGS.pathPatterns,
+  );
+  const tokenizerConfigs = useProjectStore(
+    (s) => s.project?.mappingState.tokenizerConfigs ?? EMPTY_IMPORT_SETTINGS.tokenizerConfigs,
+  );
+  const modalityAliases = useProjectStore(
+    (s) => s.project?.mappingState.modalityAliases ?? EMPTY_IMPORT_SETTINGS.modalityAliases,
+  );
+  const sessionAliases = useProjectStore(
+    (s) => s.project?.mappingState.sessionAliases ?? EMPTY_IMPORT_SETTINGS.sessionAliases,
+  );
+  const runAliases = useProjectStore(
+    (s) => s.project?.mappingState.runAliases ?? EMPTY_IMPORT_SETTINGS.runAliases,
+  );
+  const subjectRenames = useProjectStore(
+    (s) => s.project?.mappingState.subjectRenames ?? EMPTY_IMPORT_SETTINGS.subjectRenames,
+  );
+  const bMatchDirectories = useProjectStore(
+    (s) => s.project?.mappingState.bMatchDirectories ?? true,
+  );
+  const metadataGroups = useProjectStore(
+    (s) => s.project?.mappingState.metadataGroups ?? EMPTY_IMPORT_SETTINGS.metadataGroups,
+  );
+  const subjectRows = useProjectStore(
+    (s) => s.project?.mappingState.subjectRows ?? EMPTY_IMPORT_SETTINGS.subjectRows,
+  );
   const setActiveStep = useImportStore((s) => s.setActiveStep);
   const settings = useGlobalStore((s) => s.settings);
   const profileValidationState = useGlobalStore((s) => s.profileValidationState);

@@ -21,10 +21,9 @@ import {
   initConsoleBridge,
   initDebugKeyboardShortcuts,
 } from "./lib/debug";
-import { compressSnapshot, decompressSnapshot } from "./lib/snapshotCompression";
 import { useGlobalStore } from "./stores/globalStore";
 import { useImportStore } from "./stores/importStore";
-import { useDataParStore } from "./stores/dataParStore";
+import { acceptedDataPar, useDataParStore } from "./stores/dataParStore";
 import { useProjectStore } from "./stores/projectStore";
 
 // Initialize debug tooling before React mounts
@@ -32,7 +31,7 @@ initConsoleBridge();
 initDebugKeyboardShortcuts(
   () => useGlobalStore.getState(),
   () => useProjectStore.getState(),
-  () => useDataParStore.getState().dataPar,
+  acceptedDataPar,
 );
 
 // Expose debug utilities to window for devtools console access
@@ -40,8 +39,6 @@ initDebugKeyboardShortcuts(
 // Usage: window.__DEBUG__.stores.globalStore → current global store state
 // Usage: window.__DEBUG__.log → recent action log
 // Usage: window.__DEBUG__.route → current hash route
-// Usage: window.__DEBUG__.compressSnapshot(obj) → gzip+base64 string for .easl
-// Usage: window.__DEBUG__.decompressSnapshot(str) → full ImportSnapshot object
 // @ts-expect-error -- intentional global for debugging
 window.__DEBUG__ = {
   get stores() {
@@ -62,15 +59,13 @@ window.__DEBUG__ = {
     const snapshot = await captureSnapshot(
       () => useGlobalStore.getState(),
       () => useProjectStore.getState(),
-      () => useDataParStore.getState().dataPar,
+      acceptedDataPar,
     );
     await copySnapshotToClipboard(snapshot);
 
     console.log("[DEBUG] Snapshot copied to clipboard");
     return snapshot;
   },
-  compressSnapshot,
-  decompressSnapshot,
 };
 
 const e2eControlRef: { current: E2EBridgeControl | undefined } = { current: undefined };
@@ -110,7 +105,9 @@ async function bootstrap() {
     const scenario = new URLSearchParams(window.location.search).get("e2eScenario");
     if (scenario) {
       if (isE2EScenario(scenario)) {
-        await e2eControl.bridge.seed(scenario);
+        const easlPath = new URLSearchParams(window.location.search).get("easlPath");
+        if (!easlPath) throw new Error("E2E scenario requires easlPath for native activation.");
+        await e2eControl.bridge.seed(scenario, easlPath);
       } else {
         console.error(`[E2E] Unsupported e2eScenario: ${scenario}`);
       }

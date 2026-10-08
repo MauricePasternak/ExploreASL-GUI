@@ -11,7 +11,11 @@ let mockConfig: Record<string, unknown> | null = {
   workers: 1,
 };
 
-const mockSetConfig = vi.fn();
+const mockSetConfig = vi.fn().mockResolvedValue(undefined);
+vi.mock("../../stores/projectStore", () => ({
+  useProjectStore: (selector: (state: unknown) => unknown) =>
+    selector({ project: { uiState: { processing: { config: mockConfig } } } }),
+}));
 
 vi.mock("../../stores/processingStore", () => ({
   useProcessingStore: (selector: (state: Record<string, unknown>) => unknown) =>
@@ -27,7 +31,7 @@ vi.mock("../../stores/globalStore", () => ({
   useGlobalStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       settings: {
-        executionProfiles: [profile],
+        executionProfiles: [{ ...profile, id: "invalid", label: "Invalid" }, profile],
       },
       profileValidationState: {
         [profile.id]: { valid: true, errors: [] },
@@ -60,6 +64,21 @@ afterEach(() => cleanup());
 describe("PipelineConfig", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  it("initializes lazily with the first valid profile but retains a missing saved ID", async () => {
+    mockConfig = null;
+    const mounted = renderConfig();
+    await vi.waitFor(() =>
+      expect(mockSetConfig.mock.calls[0]?.[0](undefined)).toMatchObject({
+        selectedProfileId: profile.id,
+      }),
+    );
+    mounted.unmount();
+    mockSetConfig.mockClear();
+    mockConfig = { subjects: [], modules: [], selectedProfileId: "deleted", workers: 1 };
+    renderConfig();
+    expect(mockSetConfig).not.toHaveBeenCalled();
+    expect(screen.getByText("(Profile not found)")).toBeInTheDocument();
   });
 
   describe("module selection labels", () => {
@@ -96,25 +115,16 @@ describe("PipelineConfig", () => {
       mockSetConfig.mockClear();
     });
 
-    it("unchecks population when structural checkbox is clicked", () => {
+    it.each(["structural", "asl"])("unchecks population when %s checkbox is clicked", (module) => {
       renderConfig();
-      const structuralCheckbox = screen.getByLabelText("Structural");
+      const structuralCheckbox = screen.getByLabelText(
+        module === "structural" ? "Structural" : "ASL",
+      );
       fireEvent.click(structuralCheckbox);
 
       expect(mockSetConfig).toHaveBeenCalled();
-      const calledConfig = mockSetConfig.mock.calls[0][0];
-      expect(calledConfig.modules).toContain("structural");
-      expect(calledConfig.modules).not.toContain("population");
-    });
-
-    it("unchecks population when ASL checkbox is clicked", () => {
-      renderConfig();
-      const aslCheckbox = screen.getByLabelText("ASL");
-      fireEvent.click(aslCheckbox);
-
-      expect(mockSetConfig).toHaveBeenCalled();
-      const calledConfig = mockSetConfig.mock.calls[0][0];
-      expect(calledConfig.modules).toContain("asl");
+      const calledConfig = mockSetConfig.mock.calls[0][0](mockConfig);
+      expect(calledConfig.modules).toContain(module);
       expect(calledConfig.modules).not.toContain("population");
     });
   });
@@ -148,7 +158,7 @@ describe("PipelineConfig", () => {
       fireEvent.click(checkbox);
 
       expect(mockSetConfig).toHaveBeenCalled();
-      const calledConfig = mockSetConfig.mock.calls[0][0];
+      const calledConfig = mockSetConfig.mock.calls[0][0](mockConfig);
       expect(calledConfig.rerunBids2Legacy).toBe(true);
     });
 

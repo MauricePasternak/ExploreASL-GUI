@@ -12,7 +12,10 @@ import { useGlobalStore } from "../stores/globalStore";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useProcessingStore } from "../stores/processingStore";
-import { hydrateProjectStores } from "../stores/projectStoreHydration";
+import { resetProjectStores } from "../stores/projectStoreHydration";
+import { projectFixture } from "../test/projectFixtures";
+import { projectView } from "../schemas/project";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 import { seedValidProfileGate } from "../test/landingProfileGate";
 import ProjectPage from "./ProjectPage";
 
@@ -25,22 +28,18 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 
 afterEach(() => {
   cleanup();
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
 });
 
-const PROJECT_JSON = {
-  version: "0.1.0",
-  projectMeta: {
-    id: "project-1",
-    name: "Brain Study",
-    rootPath: "/tmp/brain-study",
-    createdAt: "2026-05-03T00:00:00.000Z",
-    lastOpened: "2026-05-03T00:00:00.000Z",
-    currentPhase: "import",
-    dataSource: "dicom",
+const snapshot = projectFixture("project-1", "Brain Study", "/tmp/brain-study");
+const parameters = {
+  ...snapshot,
+  acceptedRevision: 1,
+  document: {
+    ...snapshot.document,
+    projectMeta: { ...snapshot.document.projectMeta, currentPhase: "parameters" as const },
   },
-  uiState: {},
-  mappingState: {},
-  dataPar: {},
 };
 
 describe("ProjectPage", () => {
@@ -48,11 +47,52 @@ describe("ProjectPage", () => {
     vi.clearAllMocks();
     sessionStorage.clear();
     seedValidProfileGate();
+    resetProjectLifecycleForTests();
+    activateProjectLease("project-1", "/tmp/brain-study");
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "accept_project_edit") return parameters;
+      if (command === "save_project") return { ...parameters, persistedRevision: 1 };
+      if (
+        command === "current_project_snapshot" ||
+        command === "get_active_import_run" ||
+        command === "get_active_run" ||
+        command === "clear_active_project"
+      )
+        return null;
+      if (
+        command === "read_import_status" ||
+        command === "list_subjects" ||
+        command === "read_lock_status"
+      )
+        return [];
+      if (command === "inspect_project")
+        return {
+          candidateId: "candidate",
+          projectId: "project-1",
+          name: "Brain Study",
+          rootPath: snapshot.rootPath,
+          recoveredFromBackup: false,
+          duplicatePath: null,
+          movedFrom: null,
+          setupRecovered: 0,
+        };
+      if (command === "activate_project") return snapshot;
+      if (command === "shutdown_project_runtime")
+        return {
+          success: true,
+          importProcess: { success: true },
+          processingWorkers: { success: true },
+          lockWatcher: { success: true },
+        };
+      throw new Error(`Unexpected command ${command}`);
+    });
     useImportStore.getState().resetImport();
     useDataParStore.getState().resetDataPar();
     useProjectStore.setState({
       project: {
-        version: "0.1.0",
+        ...projectView(snapshot),
+        allowedPhases: ["import", "parameters", "processing"],
         projectMeta: {
           id: "project-1",
           name: "Brain Study",
@@ -62,7 +102,7 @@ describe("ProjectPage", () => {
           currentPhase: "processing",
           dataSource: "dicom",
         },
-        uiState: {},
+        uiState: snapshot.document.uiState,
         mappingState: {},
         dataPar: {},
       },
@@ -87,7 +127,7 @@ describe("ProjectPage", () => {
 
     await waitFor(() => {
       expect(useProjectStore.getState().project?.projectMeta.currentPhase).toBe("parameters");
-      expect(invoke).toHaveBeenCalledWith("atomic_write_project", expect.any(Object));
+      expect(invoke).toHaveBeenCalledWith("save_project", { generation: 1 });
     });
 
     expect(screen.getByText("ExploreASL Processing Parameters")).toBeInTheDocument();
@@ -98,6 +138,7 @@ describe("ProjectPage", () => {
       project: state.project
         ? {
             ...state.project,
+            allowedPhases: ["import", "parameters", "processing", "visualization", "manifest"],
             projectMeta: { ...state.project.projectMeta, currentPhase: "visualization" },
             uiState: {
               ...state.project.uiState,
@@ -130,6 +171,7 @@ describe("ProjectPage", () => {
       project: state.project
         ? {
             ...state.project,
+            allowedPhases: ["import", "parameters", "processing", "visualization", "manifest"],
             projectMeta: { ...state.project.projectMeta, currentPhase: "processing" },
             uiState: {
               ...state.project.uiState,
@@ -162,10 +204,26 @@ describe("ProjectPage", () => {
   });
 
   it("redirects from manifest to processing when currentPhase is manifest and processing starts", async () => {
+    const processing = {
+      ...snapshot,
+      acceptedRevision: 1,
+      allowedPhases: ["import", "parameters", "processing", "visualization", "manifest"] as const,
+      document: {
+        ...snapshot.document,
+        projectMeta: { ...snapshot.document.projectMeta, currentPhase: "processing" as const },
+      },
+    };
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "accept_project_edit" || command === "save_project") return processing;
+      if (command === "get_active_run") return null;
+      if (command === "list_subjects" || command === "read_lock_status") return [];
+      throw new Error(`Unexpected command ${command}`);
+    });
     useProjectStore.setState((state) => ({
       project: state.project
         ? {
             ...state.project,
+            allowedPhases: ["import", "parameters", "processing", "visualization", "manifest"],
             projectMeta: { ...state.project.projectMeta, currentPhase: "manifest" },
             uiState: {
               ...state.project.uiState,
@@ -204,7 +262,6 @@ describe("ProjectPage", () => {
       projectId: "project-1",
       phase: "import",
     });
-    vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(PROJECT_JSON));
 
     render(
       <MantineProvider env="test">
@@ -225,13 +282,17 @@ describe("ProjectPage", () => {
 
   it("uses import execution state pre-hydrated by project activation", async () => {
     const current = useProjectStore.getState().project!;
-    hydrateProjectStores(
-      {
-        ...current,
+    resetProjectStores();
+    useProjectStore.getState().acceptSnapshot({
+      ...snapshot,
+      document: {
+        ...snapshot.document,
+        projectMeta: { ...snapshot.document.projectMeta, currentPhase: "import" },
         uiState: {
           ...current.uiState,
           import: {
             completed: true,
+            mostRecentConfig: null,
             currentPhase: "completed",
             bidsReviewConfirmed: false,
             skippedSubjects: [],
@@ -239,8 +300,8 @@ describe("ProjectPage", () => {
         },
         mappingState: {},
       },
-      false,
-    );
+    });
+    useImportStore.setState({ importPhase: "completed", importCompleted: true });
 
     render(
       <MantineProvider env="test">
@@ -268,7 +329,6 @@ describe("ProjectPage", () => {
         recentProjects: [{ path: "/tmp/brain-study/project.easl", projectId: "project-1" }],
       },
     });
-    vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(PROJECT_JSON));
 
     render(
       <MantineProvider env="test">
@@ -286,7 +346,7 @@ describe("ProjectPage", () => {
     });
 
     vi.mocked(readTextFile).mockClear();
-    useProjectStore.getState().closeProject();
+    void useProjectStore.getState().closeProject();
 
     await waitFor(() => {
       expect(useProjectStore.getState().project).toBeNull();

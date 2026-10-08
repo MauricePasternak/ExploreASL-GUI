@@ -9,6 +9,8 @@ import {
 } from "@mantine/core";
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react";
 import { useVisualizationStore } from "../../stores/visualizationStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
+import { useProjectStore } from "../../stores/projectStore";
 
 interface AxisComboboxItem extends ComboboxItem {
   type?: string;
@@ -16,10 +18,10 @@ interface AxisComboboxItem extends ComboboxItem {
 
 export default function AxisAssignment() {
   const inspection = useVisualizationStore((s) => s.inspection);
-  const columnTypes = useVisualizationStore((s) => s.columnTypes);
-  const axisAssignment = useVisualizationStore((s) => s.axisAssignment);
+  const columnTypes = useProjectStore((s) => visualizationSettings(s.project).columnTypes);
+  const axisAssignment = useProjectStore((s) => visualizationSettings(s.project).axisAssignment);
   const setAxisAssignment = useVisualizationStore((s) => s.setAxisAssignment);
-  const filtersExpanded = useVisualizationStore((s) => s.filtersExpanded);
+  const filtersExpanded = useProjectStore((s) => visualizationSettings(s.project).filtersExpanded);
   const setFiltersExpanded = useVisualizationStore((s) => s.setFiltersExpanded);
 
   if (!inspection) return null;

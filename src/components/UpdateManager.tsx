@@ -98,6 +98,7 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
     });
 
     try {
+      await useProjectStore.getState().saveProject();
       await availableUpdate.download((event: DownloadEvent) => {
         if (event.event === "Started") {
           contentLength = event.data.contentLength;
@@ -203,9 +204,7 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
         useImportStore.getState().reconcileImportRunSnapshot(snapshot);
         await reconcileImportTerminal(snapshot.runId);
       }
-      if (useProjectStore.getState().isDirty) {
-        await useProjectStore.getState().saveProject();
-      }
+      await useProjectStore.getState().saveProject();
 
       const activeAfterPreparation = activeWork();
       if (

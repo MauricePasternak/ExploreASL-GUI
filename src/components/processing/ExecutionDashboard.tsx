@@ -24,6 +24,7 @@ import type {
   SubjectModuleStatus,
 } from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";
+import { useProjectStore } from "../../stores/projectStore";
 import type { ModuleName, StepStatus } from "./ExecutionDashboard.helpers";
 import {
   calcModuleProgress,
@@ -256,7 +257,7 @@ const MODULE_LABELS: Record<ModuleName, string> = {
 
 export default function ExecutionDashboard() {
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
-  const config = useProcessingStore((s) => s.config);
+  const config = useProjectStore((s) => s.project?.uiState.processing?.config);
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
 

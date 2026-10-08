@@ -1,14 +1,17 @@
 import { Button, Card, Stack, Table, Text, TextInput } from "@mantine/core";
 
 import { componentValidationMessage, portableKey } from "../../lib/stagingValidation";
-import { useImportStore } from "../../stores/importStore";
+import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
+import { useProjectStore } from "../../stores/projectStore";
 
 /**
  * Subject rename table.
  * Shows original subject names with editable target names.
  */
 export default function SubjectRenameTable() {
-  const subjectRenames = useImportStore((s) => s.subjectRenames);
+  const subjectRenames = useProjectStore(
+    (s) => s.project?.mappingState.subjectRenames ?? EMPTY_IMPORT_SETTINGS.subjectRenames,
+  );
   const updateSubjectRename = useImportStore((s) => s.updateSubjectRename);
   const conflicts = new Map<string, number[]>();
   subjectRenames.forEach((rename, index) => {

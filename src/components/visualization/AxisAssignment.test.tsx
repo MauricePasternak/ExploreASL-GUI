@@ -1,9 +1,12 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import AxisAssignment from "./AxisAssignment";
+import { useProjectStore } from "../../stores/projectStore";
+import { projectView } from "../../schemas/project";
+import { projectFixture } from "../../test/projectFixtures";
 
 afterEach(cleanup);
 
@@ -17,10 +20,13 @@ function renderComponent() {
 
 describe("AxisAssignment", () => {
   beforeEach(() => {
+    useProjectStore.setState({
+      project: projectView(
+        projectFixture("project-1", "Project", "/project", { uiState: { dataVis: {} } }),
+      ),
+    });
     useVisualizationStore.setState({
       inspection: null,
-      columnTypes: {},
-      axisAssignment: { x: null, y: null, colorBy: null },
     });
   });
 
@@ -66,11 +72,6 @@ describe("AxisAssignment", () => {
         qcbfHash: "abc",
         externalHash: null,
       },
-      columnTypes: {
-        age: "continuous",
-        group: "nominal",
-        score: "continuous",
-      },
     });
 
     renderComponent();
@@ -78,6 +79,9 @@ describe("AxisAssignment", () => {
     expect(screen.getByTestId("x-axis-select")).toBeInTheDocument();
     expect(screen.getByTestId("y-axis-select")).toBeInTheDocument();
     expect(screen.getByTestId("color-by-select")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("y-axis-select"));
+    expect(screen.queryByRole("option", { name: /group/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /age/ })).toBeInTheDocument();
   });
 
   it("filters excluded columns from all selects", () => {
@@ -117,52 +121,13 @@ describe("AxisAssignment", () => {
         qcbfHash: "abc",
         externalHash: null,
       },
-      columnTypes: {
-        age: "continuous",
-        id: "excluded",
-        group: "nominal",
-      },
+    });
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
+      columnTypes: { id: "excluded" },
     });
 
     renderComponent();
-    expect(screen.getByTestId("axis-assignment")).toBeInTheDocument();
-  });
-
-  it("only shows continuous columns in Y-axis select", () => {
-    useVisualizationStore.setState({
-      inspection: {
-        columns: [
-          {
-            name: "age",
-            originalName: "age",
-            source: "qcbf",
-            units: "years",
-            inferredType: "continuous",
-            levels: [],
-            isIdentifier: false,
-          },
-          {
-            name: "group",
-            originalName: "group",
-            source: "qcbf",
-            units: "",
-            inferredType: "nominal",
-            levels: ["A", "B"],
-            isIdentifier: false,
-          },
-        ],
-        rowCount: 10,
-        qcbfRowCount: 10,
-        qcbfHash: "abc",
-        externalHash: null,
-      },
-      columnTypes: {
-        age: "continuous",
-        group: "nominal",
-      },
-    });
-
-    renderComponent();
-    expect(screen.getByTestId("y-axis-select")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("x-axis-select"));
+    expect(screen.queryByRole("option", { name: /id/ })).not.toBeInTheDocument();
   });
 });

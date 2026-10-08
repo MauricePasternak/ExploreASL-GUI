@@ -3,6 +3,8 @@ import { MULTIPLANAR_TYPE, Niivue, SHOW_RENDER } from "@niivue/niivue";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
+import { useProjectStore } from "../../stores/projectStore";
 import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 
 const getBackColor = (color: string): [number, number, number, number] => {
@@ -16,10 +18,7 @@ const getFontColor = (color: string): [number, number, number, number] => {
   return [1, 1, 1, 1];
 };
 
-function configureViewerLayout(
-  nv: Niivue,
-  sliceType: "multiplanar" | "axial" | "coronal" | "sagittal" | "render",
-) {
+function configureViewerLayout(nv: Niivue, sliceType: string) {
   if (sliceType === "multiplanar") {
     nv.setSliceType(nv.sliceTypeMultiplanar);
     nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID);
@@ -47,13 +46,15 @@ export default function NiftiViewer() {
   const webglAvailable = useVisualizationStore((s) => s.webglAvailable);
 
   // New settings
-  const nvRadiological = useVisualizationStore((s) => s.nvRadiological);
-  const nvColorbar = useVisualizationStore((s) => s.nvColorbar);
-  const nvCrosshair = useVisualizationStore((s) => s.nvCrosshair);
-  const nvCornerOrientation = useVisualizationStore((s) => s.nvCornerOrientation);
-  const nvColormap = useVisualizationStore((s) => s.nvColormap);
-  const nvSliceType = useVisualizationStore((s) => s.nvSliceType);
-  const nvBackColor = useVisualizationStore((s) => s.nvBackColor);
+  const nvRadiological = useProjectStore((s) => visualizationSettings(s.project).nvRadiological);
+  const nvColorbar = useProjectStore((s) => visualizationSettings(s.project).nvColorbar);
+  const nvCrosshair = useProjectStore((s) => visualizationSettings(s.project).nvCrosshair);
+  const nvCornerOrientation = useProjectStore(
+    (s) => visualizationSettings(s.project).nvCornerOrientation,
+  );
+  const nvColormap = useProjectStore((s) => visualizationSettings(s.project).nvColormap);
+  const nvSliceType = useProjectStore((s) => visualizationSettings(s.project).nvSliceType);
+  const nvBackColor = useProjectStore((s) => visualizationSettings(s.project).nvBackColor);
 
   const { colorScheme } = useMantineColorScheme();
   const [contextLost, setContextLost] = useState(false);

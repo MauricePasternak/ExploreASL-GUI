@@ -1,4 +1,4 @@
-import type { ImportState } from "../stores/importStore";
+import type { acceptedImportSettings } from "../stores/importStore";
 import type { GlobalSettings } from "../schemas/globalSettings";
 import type { TokenAssignment, TokenTag } from "../schemas/importSchemas";
 import { SourcestructureJsonSchema, StudyParJsonSchema } from "../schemas/importSchemas";
@@ -6,16 +6,17 @@ import { assembleSourcestructure, assembleStudyPar } from "./tokenizerUtils";
 import type { StagingPreflightState } from "../stores/importStore";
 
 export const TOTAL_IMPORT_STEPS = 6;
+type ImportSettings = ReturnType<typeof acceptedImportSettings>;
 
 type StepPrerequisiteState = Pick<
-  ImportState,
+  ImportSettings,
   "ingestionComplete" | "pathPatterns" | "tokenizerConfigs" | "modalityAliases"
 >;
 
 type Step5State = StepPrerequisiteState &
   Partial<
     Pick<
-      ImportState,
+      ImportSettings,
       "sessionAliases" | "runAliases" | "bMatchDirectories" | "metadataGroups" | "subjectRows"
     >
   >;
@@ -38,14 +39,14 @@ export function hasValidExecutionProfile(gate: ImportExecutionGate): boolean {
 
 /** Step 0 complete: scan finished with at least one path pattern. */
 export function isIngestionComplete(
-  state: Pick<ImportState, "ingestionComplete" | "pathPatterns">,
+  state: Pick<ImportSettings, "ingestionComplete" | "pathPatterns">,
 ): boolean {
   return state.ingestionComplete && state.pathPatterns.length > 0;
 }
 
 /** Step 1 complete: every pattern has Subject and Modality tags. */
 export function isTokenizerComplete(
-  state: Pick<ImportState, "ingestionComplete" | "pathPatterns" | "tokenizerConfigs">,
+  state: Pick<ImportSettings, "ingestionComplete" | "pathPatterns" | "tokenizerConfigs">,
 ): boolean {
   if (!isIngestionComplete(state)) {
     return false;
@@ -69,7 +70,7 @@ export function hasTokenizerTag(
 }
 
 /** Step 2 complete: at least one core pipeline modality is mapped. */
-export function isAliasResolutionComplete(state: Pick<ImportState, "modalityAliases">): boolean {
+export function isAliasResolutionComplete(state: Pick<ImportSettings, "modalityAliases">): boolean {
   return state.modalityAliases.some((alias) => alias.mapped === "ASL4D" || alias.mapped === "T1w");
 }
 

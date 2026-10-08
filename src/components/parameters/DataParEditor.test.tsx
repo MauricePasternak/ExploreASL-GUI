@@ -1,26 +1,26 @@
 import { cleanup, fireEvent, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { projectFixture } from "../../test/projectFixtures";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 import DataParEditor from "./DataParEditor";
 import { renderWithMantine } from "../../test/render";
 
 import { useDataParStore } from "../../stores/dataParStore";
 import { useProjectStore } from "../../stores/projectStore";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
+});
 
 beforeEach(() => {
-  useDataParStore.setState({
-    dataPar: {},
-    advancedVisibility: {
-      showAdvancedSections: false,
-      showAdvancedM0Params: false,
-      showAdvancedQuantification: false,
-      showAdvancedGeneralSettings: false,
-      showAdvancedASLProcessing: false,
-      showAdvancedAtlases: false,
-    },
-  });
-  useProjectStore.setState({ project: null });
+  useDataParStore.getState().resetDataPar();
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
+  useProjectStore.getState().acceptSnapshot(projectFixture());
+  activateProjectLease("project-1", "/project");
+  vi.mocked(invoke).mockReset();
 });
 
 describe("DataParEditor", () => {
@@ -49,7 +49,19 @@ describe("DataParEditor", () => {
     expect(within(container).queryByText("Environment")).toBeNull();
   });
 
-  it("shows Structural and Environment when advanced toggle is on", () => {
+  it("shows Structural and Environment when advanced toggle is on", async () => {
+    const accepted = { ...projectFixture(), acceptedRevision: 1 };
+    accepted.document.uiState.datapar = {
+      advancedVisibility: {
+        showAdvancedSections: true,
+        showAdvancedM0Params: false,
+        showAdvancedQuantification: false,
+        showAdvancedGeneralSettings: false,
+        showAdvancedASLProcessing: false,
+        showAdvancedAtlases: false,
+      },
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
     const label = w.getAllByText("Show advanced parameter sections")[0];
@@ -57,8 +69,13 @@ describe("DataParEditor", () => {
       .closest("[data-label-position]")
       ?.querySelector(".mantine-Switch-body");
     fireEvent.click(switchBody!);
+    await vi.waitFor(() => expect(w.queryAllByText("Structural").length).toBeGreaterThan(0));
     expect(w.getAllByText("Structural").length).toBeGreaterThanOrEqual(1);
     expect(w.getAllByText("Environment").length).toBeGreaterThanOrEqual(1);
+    vi.mocked(invoke).mockResolvedValueOnce({ ...projectFixture(), acceptedRevision: 2 });
+    fireEvent.click(switchBody!);
+    await vi.waitFor(() => expect(w.queryByText("Structural")).toBeNull());
+    expect(w.queryByText("Environment")).toBeNull();
   });
 
   it("renders advanced toggle switch", () => {

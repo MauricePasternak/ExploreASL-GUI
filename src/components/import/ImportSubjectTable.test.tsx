@@ -9,6 +9,8 @@ import { invoke } from "@tauri-apps/api/core";
 import ImportSubjectTable from "./ImportSubjectTable";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { projectFixture } from "../../test/projectFixtures";
+import { projectView } from "../../schemas/project";
 import type { ImportProgress } from "../../schemas/importSchemas";
 
 function renderWithProviders(
@@ -238,21 +240,7 @@ describe("ImportSubjectTable", () => {
 
   it("opens LogViewerModal on View Logs click", async () => {
     useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "project-1",
-          name: "Brain Study",
-          rootPath: "/tmp/brain-study",
-          createdAt: "2026-05-03T00:00:00.000Z",
-          lastOpened: "2026-05-03T00:00:00.000Z",
-          currentPhase: "import",
-          dataSource: "dicom" as const,
-        },
-        uiState: {},
-        mappingState: {},
-        dataPar: {},
-      },
+      project: projectView(projectFixture("project-1", "Brain Study", "/tmp/brain-study")),
       isDirty: false,
       loaded: true,
     });

@@ -2,11 +2,13 @@ import { Button, Group, Paper, Stack, Text } from "@mantine/core";
 import { IconArrowDown, IconArrowUp } from "@tabler/icons-react";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
+import { useProjectStore } from "../../stores/projectStore";
 
 export default function LevelOrdering() {
   const inspection = useVisualizationStore((s) => s.inspection);
-  const columnTypes = useVisualizationStore((s) => s.columnTypes);
-  const levelOrderings = useVisualizationStore((s) => s.levelOrderings);
+  const columnTypes = useProjectStore((s) => visualizationSettings(s.project).columnTypes);
+  const levelOrderings = useProjectStore((s) => visualizationSettings(s.project).levelOrderings);
   const setLevelOrdering = useVisualizationStore((s) => s.setLevelOrdering);
 
   if (!inspection) return null;

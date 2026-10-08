@@ -1,5 +1,5 @@
 import type { ImportSnapshot } from "../schemas/importSchemas";
-import type { ImportState } from "../stores/importStore";
+import type { acceptedImportSettings } from "../stores/importStore";
 import { logicalSourceIdentity } from "./projectPaths";
 
 type StructuralKey = keyof Pick<
@@ -26,7 +26,7 @@ const STRUCTURAL_KEYS: StructuralKey[] = [
 ];
 
 export function computeStaleness(
-  currentState: ImportState,
+  currentState: ReturnType<typeof acceptedImportSettings>,
   snapshot: ImportSnapshot | null,
 ): Record<string, boolean> {
   if (snapshot === null) {

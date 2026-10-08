@@ -8,7 +8,6 @@ import {
   DerivedMetadataGroupSchema,
   ImportProgressSchema,
   ImportRunSnapshotSchema,
-  ImportSnapshotSchema,
   MetadataGroupSchema,
   ModalityAliasSchema,
   PathPatternSchema,
@@ -20,10 +19,7 @@ import {
   StagingEntrySchema,
   StudyParEntrySchema,
   StudyParJsonSchema,
-  SubjectRenameSchema,
-  SubjectRowSchema,
   TokenAssignmentSchema,
-  TokenizerConfigSchema,
   validateBidsMetadataGroup,
 } from "./importSchemas";
 
@@ -223,34 +219,6 @@ describe("TokenAssignmentSchema", () => {
 });
 
 // ---------------------------------------------------------------------------
-// TokenizerConfigSchema
-// ---------------------------------------------------------------------------
-describe("TokenizerConfigSchema", () => {
-  it("accepts valid tokenizer config", () => {
-    const data = {
-      patternSignature: "SUBJECT/FIXED/VARYING",
-      folderHierarchy: ["^(.*)$", "^.*$", "^(.*)$", "^(.*)$"],
-      tokenOrdering: [1, 2, 3, 4],
-      assignments: [
-        { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-        { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-      ],
-    };
-    expect(TokenizerConfigSchema.parse(data)).toMatchObject(data);
-  });
-
-  it("rejects tokenOrdering with wrong length", () => {
-    const data = {
-      patternSignature: "A",
-      folderHierarchy: [],
-      tokenOrdering: [0, 1, 2],
-      assignments: [],
-    };
-    expect(() => TokenizerConfigSchema.parse(data)).toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // ModalityAliasSchema
 // ---------------------------------------------------------------------------
 describe("ModalityAliasSchema", () => {
@@ -282,16 +250,6 @@ describe("SessionAliasSchema", () => {
   it("rejects index < 1", () => {
     const data = { captured: "a", alias: "ASL_0", index: 0 };
     expect(() => SessionAliasSchema.parse(data)).toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// SubjectRenameSchema
-// ---------------------------------------------------------------------------
-describe("SubjectRenameSchema", () => {
-  it("accepts valid subject rename", () => {
-    const data = { original: "BAR", target: "sub-BAR" };
-    expect(SubjectRenameSchema.parse(data)).toEqual(data);
   });
 });
 
@@ -1077,21 +1035,6 @@ describe("MetadataGroupSchema", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SubjectRowSchema
-// ---------------------------------------------------------------------------
-describe("SubjectRowSchema", () => {
-  it("accepts valid subject row", () => {
-    const data = {
-      id: "BAR/01",
-      subject: "BAR",
-      session: "01",
-      groupId: "global-defaults",
-    };
-    expect(SubjectRowSchema.parse(data)).toEqual(data);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // StagingEntrySchema
 // ---------------------------------------------------------------------------
 describe("staging identifier schemas", () => {
@@ -1265,56 +1208,5 @@ describe("DerivedMetadataGroupSchema", () => {
       },
     };
     expect(() => DerivedMetadataGroupSchema.parse(data)).toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ImportSnapshotSchema
-// ---------------------------------------------------------------------------
-describe("ImportSnapshotSchema", () => {
-  const validSnapshot = {
-    sourceDataPath: "/data/sourcedata",
-    pathPatterns: [
-      {
-        signature: "SUBJECT/MODALITY",
-        samplePath: "sub-01/M0",
-        blocks: ["sub-01", "M0"],
-        uniqueNames: { 0: ["sub-01"], 1: ["M0"] },
-        count: 1,
-        depth: 2,
-      },
-    ],
-    tokenizerConfigs: {},
-    bMatchDirectories: false,
-    modalityAliases: [],
-    sessionAliases: [],
-    runAliases: [],
-    subjectRenames: [],
-    metadataGroups: [
-      {
-        id: "grp-1",
-        label: "default",
-        bidsParams: {},
-      },
-    ],
-    subjectRows: [],
-  };
-
-  it("parses a valid snapshot", () => {
-    const parsed = ImportSnapshotSchema.parse(validSnapshot);
-    expect(parsed.sourceDataPath).toBe("/data/sourcedata");
-  });
-
-  it("accepts selectedProfileId", () => {
-    const parsed = ImportSnapshotSchema.parse({
-      ...validSnapshot,
-      selectedProfileId: "abc-123",
-    });
-    expect(parsed.selectedProfileId).toBe("abc-123");
-  });
-
-  it("omits selectedProfileId when not provided", () => {
-    const parsed = ImportSnapshotSchema.parse(validSnapshot);
-    expect(parsed.selectedProfileId).toBeUndefined();
   });
 });

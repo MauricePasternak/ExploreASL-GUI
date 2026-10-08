@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import ChartPanel from "./ChartPanel";
+import { useProjectStore } from "../../stores/projectStore";
+import { projectView } from "../../schemas/project";
+import { projectFixture } from "../../test/projectFixtures";
 import {
   activateProjectLease,
   invalidateProjectLease,
@@ -29,13 +32,6 @@ vi.mock("@nivo/swarmplot", () => ({
   ),
 }));
 
-vi.mock("../../stores/projectStore", () => ({
-  useProjectStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({
-      project: { projectMeta: { rootPath: "/test/project" } },
-    }),
-}));
-
 function renderComponent() {
   return render(
     <MantineProvider env="test">
@@ -48,15 +44,22 @@ describe("ChartPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetProjectLifecycleForTests();
-    useVisualizationStore.setState({
+    useProjectStore.setState({
+      project: projectView(
+        projectFixture("same-id", "Test", "/test/project", { uiState: { dataVis: {} } }),
+      ),
+    });
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: null, y: null, colorBy: null },
       columnTypes: {},
-      inspection: null,
       qcbfSource: null,
       joinConfig: null,
+      domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
+    });
+    useVisualizationStore.setState({
+      inspection: null,
       chartData: [],
       selectedPointId: null,
-      domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
     });
   });
 
@@ -74,9 +77,12 @@ describe("ChartPanel", () => {
         }),
     );
     activateProjectLease("same-id", "/test/project");
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: "score", colorBy: null },
       columnTypes: { age: "continuous", score: "continuous" },
+      qcbfSource: { relativePath: "old.tsv", fileHash: "old" },
+    });
+    useVisualizationStore.setState({
       inspection: {
         columns: [
           {
@@ -103,7 +109,6 @@ describe("ChartPanel", () => {
         qcbfHash: "old",
         externalHash: null,
       },
-      qcbfSource: { relativePath: "old.tsv", fileHash: "old" },
     });
     renderComponent();
     await waitFor(() => expect(resolveRows).toBeTypeOf("function"));
@@ -133,7 +138,7 @@ describe("ChartPanel", () => {
   });
 
   it("shows prompt when only X selected", () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: null, colorBy: null },
     });
     renderComponent();
@@ -143,9 +148,11 @@ describe("ChartPanel", () => {
   });
 
   it("shows unsupported message when Y is not continuous", () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: "group", colorBy: null },
       columnTypes: { age: "continuous", group: "nominal" },
+    });
+    useVisualizationStore.setState({
       inspection: {
         columns: [
           {
@@ -178,9 +185,13 @@ describe("ChartPanel", () => {
   });
 
   it("shows empty data message when no plottable points", () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: "score", colorBy: null },
       columnTypes: { age: "continuous", score: "continuous" },
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
+    });
+    useVisualizationStore.setState({
       inspection: {
         columns: [
           {
@@ -208,17 +219,19 @@ describe("ChartPanel", () => {
         externalHash: null,
       },
       chartData: [],
-      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
-      joinConfig: null,
     });
     renderComponent();
     expect(screen.getByTestId("chart-panel")).toHaveTextContent("No plottable data");
   });
 
   it("renders scatter canvas for continuous×continuous", () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: "score", colorBy: null },
       columnTypes: { age: "continuous", score: "continuous" },
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
+    });
+    useVisualizationStore.setState({
       inspection: {
         columns: [
           {
@@ -249,17 +262,19 @@ describe("ChartPanel", () => {
         { x: 25, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
         { x: 30, y: 110, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
-      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
-      joinConfig: null,
     });
     renderComponent();
     expect(screen.getByTestId("scatter-canvas")).toBeInTheDocument();
   });
 
   it("renders swarm canvas for categorical×continuous", () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "group", y: "score", colorBy: null },
       columnTypes: { group: "nominal", score: "continuous" },
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
+    });
+    useVisualizationStore.setState({
       inspection: {
         columns: [
           {
@@ -290,17 +305,19 @@ describe("ChartPanel", () => {
         { x: "A", y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
         { x: "B", y: 110, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
-      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
-      joinConfig: null,
     });
     renderComponent();
     expect(screen.getByTestId("swarm-canvas")).toBeInTheDocument();
   });
 
   it("computes linear scale bounds with 5% padding by default", () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: "score", colorBy: null },
       columnTypes: { age: "continuous", score: "continuous" },
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
+    });
+    useVisualizationStore.setState({
       inspection: {
         columns: [
           {
@@ -331,8 +348,6 @@ describe("ChartPanel", () => {
         { x: 20, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
         { x: 40, y: 200, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
-      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
-      joinConfig: null,
     });
     renderComponent();
 
@@ -350,9 +365,14 @@ describe("ChartPanel", () => {
   });
 
   it("respects domain filters exactly when provided", () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: "score", colorBy: null },
       columnTypes: { age: "continuous", score: "continuous" },
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
+      domainFilters: { xMin: 15, xMax: 45, yMin: 90, yMax: 210 },
+    });
+    useVisualizationStore.setState({
       inspection: {
         columns: [
           {
@@ -383,9 +403,6 @@ describe("ChartPanel", () => {
         { x: 20, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
         { x: 40, y: 200, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
-      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
-      joinConfig: null,
-      domainFilters: { xMin: 15, xMax: 45, yMin: 90, yMax: 210 },
     });
     renderComponent();
 
@@ -400,9 +417,13 @@ describe("ChartPanel", () => {
   });
 
   it("does not reset selected point when unrelated visualization store state changes", () => {
-    useVisualizationStore.setState({
+    Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: "score", colorBy: null },
       columnTypes: { age: "continuous", score: "continuous" },
+      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
+      joinConfig: null,
+    });
+    useVisualizationStore.setState({
       inspection: {
         columns: [
           {
@@ -432,8 +453,6 @@ describe("ChartPanel", () => {
       chartData: [
         { x: 25, y: 100, id: "1", participantId: "p1", subject: "s1", session: "01", run: "01" },
       ],
-      qcbfSource: { relativePath: "test.tsv", fileHash: "abc" },
-      joinConfig: null,
       selectedPointId: "1",
     });
 
@@ -444,7 +463,17 @@ describe("ChartPanel", () => {
     selectPointSpy.mockClear();
 
     // Simulate opening settings drawer
-    useVisualizationStore.setState({ filtersExpanded: true });
+    useProjectStore.getState().acceptSnapshot({
+      ...projectFixture("same-id", "Test", "/test/project", {
+        uiState: {
+          dataVis: {
+            ...useProjectStore.getState().project!.uiState.dataVis,
+            filtersExpanded: true,
+          },
+        },
+      }),
+      acceptedRevision: 1,
+    });
 
     expect(selectPointSpy).not.toHaveBeenCalledWith(null);
   });

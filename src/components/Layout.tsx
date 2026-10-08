@@ -40,7 +40,6 @@ import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useVisualizationStore } from "../stores/visualizationStore";
 import { logAction } from "../lib/debug";
-import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import ProcessingStatusBar from "./processing/ProcessingStatusBar";
 
 const PHASE_NAV = [
@@ -65,6 +64,8 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const [leaveTarget, setLeaveTarget] = useState<"home" | "exit">("home");
   const project = useProjectStore((state) => state.project);
   const isDirty = useProjectStore((state) => state.isDirty);
+  const saving = useProjectStore((state) => state.saving);
+  const saveError = useProjectStore((state) => state.saveError);
   const setPhase = useProjectStore((state) => state.setPhase);
   const toggleNavbar = useProjectStore((state) => state.toggleNavbar);
   const saveProject = useProjectStore((state) => state.saveProject);
@@ -73,7 +74,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const location = useLocation();
 
   const saveNow = useCallback(async () => {
-    if (!project || !isDirty) return;
+    if (!project) return;
     try {
       await saveProject();
       notifications.show({
@@ -81,20 +82,10 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         title: "Project Saved",
         message: "All changes successfully saved to file.",
       });
-    } catch (err) {
-      notifications.show({
-        color: "red",
-        title: "Failed to save project",
-        message:
-          err instanceof ProjectStorageError
-            ? projectStorageErrorMessage(err)
-            : err instanceof Error
-              ? err.message
-              : "ExploreASL GUI could not save your project.",
-        autoClose: 10000,
-      });
+    } catch {
+      // Shared client retains and reports the save failure.
     }
-  }, [isDirty, project, saveProject]);
+  }, [project, saveProject]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -135,7 +126,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       try {
         const appWindow = getCurrentWindow();
         unlisten = await appWindow.onCloseRequested(async (event) => {
-          const { project: currentProject, isDirty: currentIsDirty } = useProjectStore.getState();
+          const { project: currentProject } = useProjectStore.getState();
           const currentProcessingPhase = useProcessingStore.getState().processingPhase;
           const currentImportPhase = useImportStore.getState().importPhase;
           const currentImportRunning = useImportStore.getState().importRunning;
@@ -146,7 +137,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
 
           if (!currentProject) return;
           event.preventDefault();
-          if (currentIsDirty || activeProcess) {
+          if (activeProcess) {
             setLeaveTarget("exit");
             setLeaveModalOpen(true);
             return;
@@ -197,33 +188,13 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     }
 
     logAction("layout_navigate_phase", { phase });
-    setPhase(phase);
+    await setPhase(phase);
     await saveProject();
     navigate(`/project/${project.projectMeta.id}/${phase}`);
   }
 
-  async function leaveProject({ saveChanges }: { saveChanges: boolean }) {
-    logAction("layout_leave_project", { saveChanges });
-
-    if (saveChanges) {
-      try {
-        await saveProject();
-      } catch (error) {
-        notifications.show({
-          color: "red",
-          title: "Failed to save project",
-          message:
-            error instanceof ProjectStorageError
-              ? projectStorageErrorMessage(error)
-              : error instanceof Error
-                ? error.message
-                : "ExploreASL GUI could not save your project before leaving.",
-          autoClose: 10000,
-        });
-        return;
-      }
-    }
-
+  async function leaveProject() {
+    logAction("layout_leave_project");
     try {
       await closeProject();
       setLeaveModalOpen(false);
@@ -248,7 +219,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   }
 
   async function handleReturnHome() {
-    const { project: currentProject, isDirty: currentIsDirty } = useProjectStore.getState();
+    const { project: currentProject } = useProjectStore.getState();
     const currentProcessingPhase = useProcessingStore.getState().processingPhase;
     const currentImportPhase = useImportStore.getState().importPhase;
     const currentImportRunning = useImportStore.getState().importRunning;
@@ -262,7 +233,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       return;
     }
 
-    if (currentIsDirty || activeProcess) {
+    if (activeProcess) {
       setLeaveTarget("home");
       setLeaveModalOpen(true);
       return;
@@ -330,12 +301,20 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                 withArrow
               >
                 <ActionIcon
-                  aria-label={isDirty ? "Save project changes" : "Project changes in sync"}
+                  aria-label={
+                    saving
+                      ? "Saving project"
+                      : saveError
+                        ? "Project save failed; retry"
+                        : isDirty
+                          ? "Save project changes"
+                          : "Project changes in sync"
+                  }
                   variant="subtle"
                   color={isDirty ? "yellow" : "gray"}
                   onClick={() => void saveNow()}
                   data-testid="layout-save-status-btn"
-                  disabled={!isDirty}
+                  disabled={saving}
                 >
                   {isDirty ? <IconRefreshAlert size={18} /> : <IconRefresh size={18} />}
                 </ActionIcon>
@@ -488,29 +467,12 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
               {isProcessRunning ? (
                 <Button
                   color="red"
-                  onClick={() => void leaveProject({ saveChanges: project ? isDirty : false })}
+                  onClick={() => void leaveProject()}
                   data-testid="layout-leave-modal-abort-btn"
                 >
                   {leaveTarget === "exit" ? "Abort and exit" : "Abort and leave"}
                 </Button>
-              ) : (
-                <>
-                  <Button
-                    variant="light"
-                    color="red"
-                    onClick={() => void leaveProject({ saveChanges: false })}
-                    data-testid="layout-leave-modal-leave-without-saving-btn"
-                  >
-                    {leaveTarget === "exit" ? "Exit without saving" : "Leave without saving"}
-                  </Button>
-                  <Button
-                    onClick={() => void leaveProject({ saveChanges: true })}
-                    data-testid="layout-leave-modal-save-and-leave-btn"
-                  >
-                    {leaveTarget === "exit" ? "Save and exit" : "Save and leave"}
-                  </Button>
-                </>
-              )}
+              ) : null}
             </Group>
           </Stack>
         </Modal>

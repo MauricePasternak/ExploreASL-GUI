@@ -17,10 +17,10 @@ import { useEffect, useRef, useState } from "react";
 
 import { useProjectStore } from "../../stores/projectStore";
 import { useVisualizationStore } from "../../stores/visualizationStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
 import JoinDiagram from "./JoinDiagram";
 import SanityChecks from "./SanityChecks";
 import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
-import { extractPersistedVisualizationState } from "../../hooks/useVisualizationSync";
 
 const DEFAULT_NA_TOKENS = ["", "NaN", "NA", "n/a", "<NA>"];
 const IDENTIFIER_COLUMNS = ["participant_id", "subject", "session", "run"];
@@ -33,9 +33,9 @@ interface ExternalInspection {
 }
 
 export default function JoinConfig() {
-  const joinConfig = useVisualizationStore((s) => s.joinConfig);
+  const joinConfig = useProjectStore((s) => visualizationSettings(s.project).joinConfig);
   const setJoinConfig = useVisualizationStore((s) => s.setJoinConfig);
-  const qcbfSource = useVisualizationStore((s) => s.qcbfSource);
+  const qcbfSource = useProjectStore((s) => visualizationSettings(s.project).qcbfSource);
   const inspection = useVisualizationStore((s) => s.inspection);
   const project = useProjectStore((s) => s.project);
   const externalSourceAvailability = useVisualizationStore((s) => s.externalSourceAvailability);
@@ -127,12 +127,6 @@ export default function JoinConfig() {
     };
   }, [joinConfig, extInspection, setExternalSourceAvailability]);
 
-  function syncRelinkToProject() {
-    useProjectStore
-      .getState()
-      .syncVisualizationState(extractPersistedVisualizationState(useVisualizationStore.getState()));
-  }
-
   async function handleBrowse() {
     const lease = captureProjectLease();
     let defaultPath: string | undefined = undefined;
@@ -187,7 +181,6 @@ export default function JoinConfig() {
             fileHash: result.fileHash,
             sheetName: result.sheetName,
           });
-          syncRelinkToProject();
         } else {
           setPendingRelink({ absolutePath: selected, inspection: result });
         }
@@ -224,44 +217,52 @@ export default function JoinConfig() {
 
   function handleAddKeyPair() {
     if (!joinConfig) return;
-    setJoinConfig({
-      ...joinConfig,
-      keys: [...joinConfig.keys, { left: "", right: "" }],
-    });
+    setJoinConfig(
+      (current) =>
+        current && {
+          ...current,
+          keys: [...current.keys, { left: "", right: "" }],
+        },
+    );
   }
 
   function handleKeyPairChange(index: number, side: "left" | "right", value: string | null) {
     if (!joinConfig) return;
-    const newKeys = joinConfig.keys.map((key, i) => {
-      if (i !== index) return key;
-      return { ...key, [side]: value ?? "" };
-    });
-    setJoinConfig({ ...joinConfig, keys: newKeys });
+    setJoinConfig(
+      (current) =>
+        current && {
+          ...current,
+          keys: current.keys.map((key, i) => (i === index ? { ...key, [side]: value ?? "" } : key)),
+        },
+    );
   }
 
   function handleRemoveKeyPair(index: number) {
     if (!joinConfig) return;
-    setJoinConfig({
-      ...joinConfig,
-      keys: joinConfig.keys.filter((_, i) => i !== index),
-    });
+    setJoinConfig(
+      (current) =>
+        current && {
+          ...current,
+          keys: current.keys.filter((_, i) => i !== index),
+        },
+    );
   }
 
   function handleNaTokensChange(tokens: string[]) {
     if (!joinConfig) return;
-    setJoinConfig({ ...joinConfig, naTokens: tokens });
+    setJoinConfig((current) => current && { ...current, naTokens: tokens });
   }
 
   function handleDropRightOnChange(checked: boolean) {
     if (!joinConfig) return;
-    setJoinConfig({ ...joinConfig, dropRightOn: checked });
+    setJoinConfig((current) => current && { ...current, dropRightOn: checked });
   }
 
   async function handleDelimiterChange(value: string | null) {
     if (!joinConfig || !project) return;
     const lease = captureProjectLease();
     const newDelimiter = value ?? "auto";
-    setJoinConfig({ ...joinConfig, delimiter: newDelimiter });
+    setJoinConfig((current) => current && { ...current, delimiter: newDelimiter });
     try {
       const result = await invoke<ExternalInspection>("inspect_external_data", {
         absolutePath: joinConfig.externalSource.absolutePath,
@@ -399,7 +400,6 @@ export default function JoinConfig() {
                     sheetName: pendingRelink.inspection.sheetName,
                   });
                   setExtInspection(pendingRelink.inspection);
-                  syncRelinkToProject();
                 }
                 setPendingRelink(null);
               }}

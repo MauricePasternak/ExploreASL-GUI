@@ -1,222 +1,84 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { useVisualizationStore } from "./visualizationStore";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { useVisualizationStore, acceptedVisualizationSettings } from "./visualizationStore";
+import { useProjectStore } from "./projectStore";
+import { projectFixture } from "../test/projectFixtures";
+import { projectView } from "../schemas/project";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 
 describe("visualizationStore", () => {
   beforeEach(() => {
+    resetProjectLifecycleForTests();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useProjectStore.setState({ project: projectView(projectFixture()) });
+    activateProjectLease("project-1", "/project");
+    vi.mocked(invoke).mockReset();
     useVisualizationStore.getState().reset();
   });
-
-  it("has qcbfSource null by default", () => {
-    expect(useVisualizationStore.getState().qcbfSource).toBeNull();
-  });
-
-  it("has joinConfig null by default", () => {
-    expect(useVisualizationStore.getState().joinConfig).toBeNull();
-  });
-
-  it("setQcbfSource updates the source", () => {
-    useVisualizationStore.getState().setQcbfSource({ relativePath: "test.tsv", fileHash: "abc" });
-    expect(useVisualizationStore.getState().qcbfSource).toEqual({
-      relativePath: "test.tsv",
-      fileHash: "abc",
-    });
-  });
-
-  it("setQcbfSource accepts null", () => {
-    useVisualizationStore.getState().setQcbfSource({ relativePath: "test.tsv", fileHash: "abc" });
-    useVisualizationStore.getState().setQcbfSource(null);
-    expect(useVisualizationStore.getState().qcbfSource).toBeNull();
-  });
-
-  it("setJoinConfig updates join config", () => {
-    const config = {
-      externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
-      keys: [{ left: "participant_id", right: "SubjectID" }],
-      dropRightOn: true,
-      naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
-      delimiter: ",",
-    };
-    useVisualizationStore.getState().setJoinConfig(config);
-    expect(useVisualizationStore.getState().joinConfig).toEqual(config);
-  });
-
-  it("setJoinConfig accepts null", () => {
-    useVisualizationStore.getState().setJoinConfig({
-      externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
-      keys: [{ left: "participant_id", right: "SubjectID" }],
-      dropRightOn: true,
-      naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
-      delimiter: ",",
-    });
-    useVisualizationStore.getState().setJoinConfig(null);
-    expect(useVisualizationStore.getState().joinConfig).toBeNull();
-  });
-
-  it("invalidateContract resets qcbfSource and joinConfig to null", () => {
-    const store = useVisualizationStore.getState();
-    store.setQcbfSource({ relativePath: "test.tsv", fileHash: "abc" });
-    store.setJoinConfig({
-      externalSource: { absolutePath: "/tmp/test.csv", fileHash: "def", sheetName: null },
-      keys: [{ left: "participant_id", right: "SubjectID" }],
-      dropRightOn: true,
-      naTokens: ["", "NaN", "NA", "n/a", "<NA>"],
-      delimiter: ",",
-    });
-    store.invalidateContract();
-    expect(useVisualizationStore.getState().qcbfSource).toBeNull();
-    expect(useVisualizationStore.getState().joinConfig).toBeNull();
-  });
-
-  it("setStage updates the stepper stage", () => {
-    const { setStage } = useVisualizationStore.getState();
-    setStage("columnTypes");
-    expect(useVisualizationStore.getState().stage).toBe("columnTypes");
+  afterEach(() => {
+    useProjectStore.getState().cancelAutosave();
+    resetProjectLifecycleForTests();
   });
 
   it("selectPoint sets selectedPointId", () => {
     const { selectPoint } = useVisualizationStore.getState();
     selectPoint("sub-X_01_ASL_1");
     expect(useVisualizationStore.getState().selectedPointId).toBe("sub-X_01_ASL_1");
+    useVisualizationStore.getState().setChartData([]);
+    useVisualizationStore.getState().setViewerState({ status: "loaded" });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().pendingEdits).toBe(0);
   });
 
-  it("invalidateContract resets contract fields", () => {
-    const store = useVisualizationStore.getState();
-    store.setColumnType("GM_vol", "continuous");
-    store.invalidateContract();
-    expect(useVisualizationStore.getState().columnTypes).toEqual({});
-    expect(useVisualizationStore.getState().stage).toBe("selectData");
-  });
-
-  it("setAxisAssignment merges with existing", () => {
+  it("setAxisAssignment merges with existing", async () => {
+    const first = {
+      ...projectFixture("project-1", "Project", "/project", {
+        uiState: { dataVis: { axisAssignment: { x: "GM_vol", y: null, colorBy: null } } },
+      }),
+      acceptedRevision: 1,
+    };
+    const second = {
+      ...projectFixture("project-1", "Project", "/project", {
+        uiState: { dataVis: { axisAssignment: { x: "GM_vol", y: "Total_GM_B", colorBy: null } } },
+      }),
+      acceptedRevision: 2,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(first).mockResolvedValueOnce(second);
     const { setAxisAssignment } = useVisualizationStore.getState();
     setAxisAssignment({ x: "GM_vol" });
     setAxisAssignment({ y: "Total_GM_B" });
-    const { axisAssignment } = useVisualizationStore.getState();
+    await useProjectStore.getState().flushEdits();
+    const { axisAssignment } = acceptedVisualizationSettings();
     expect(axisAssignment.x).toBe("GM_vol");
     expect(axisAssignment.y).toBe("Total_GM_B");
     expect(axisAssignment.colorBy).toBeNull();
+    expect(vi.mocked(invoke).mock.calls[1]![1]).toMatchObject({
+      edit: { kind: "visualization", config: { axisAssignment } },
+    });
   });
 
   it("reset clears all state", () => {
     const store = useVisualizationStore.getState();
-    store.setStage("visualize");
-    store.setPointSize(12);
-    store.setNvColormap("hot");
     store.setChartData([
       { id: "test", x: 1, y: 2, participantId: "p", subject: "s", session: "01", run: "ASL_1" },
     ]);
     store.reset();
-    expect(useVisualizationStore.getState().stage).toBe("selectData");
     expect(useVisualizationStore.getState().chartData).toEqual([]);
-    expect(useVisualizationStore.getState().pointSize).toBe(10);
-    expect(useVisualizationStore.getState().nvColormap).toBe("gray");
+    expect(useVisualizationStore.getState().selectedPointId).toBeNull();
   });
 
-  it("sets new Nivo and NiiVue parameters", () => {
-    const store = useVisualizationStore.getState();
-    store.setPointSize(10);
-    store.setSwarmSpacing(5);
-    store.setChartOpacity(0.5);
-    store.setShowGridX(false);
-    store.setNvRadiological(true);
-    store.setNvBackColor("white");
-
-    const state = useVisualizationStore.getState();
-    expect(state.pointSize).toBe(10);
-    expect(state.swarmSpacing).toBe(5);
-    expect(state.chartOpacity).toBe(0.5);
-    expect(state.showGridX).toBe(false);
-    expect(state.nvRadiological).toBe(true);
-    expect(state.nvBackColor).toBe("white");
-  });
-
-  it("preserves all setup and changes only the external path for a matching relink", () => {
-    useVisualizationStore.setState({
-      qcbfSource: { relativePath: "qcbf.tsv", fileHash: "qcbf" },
-      joinConfig: {
-        externalSource: { absolutePath: "/old.csv", fileHash: "same", sheetName: null },
-        keys: [{ left: "participant_id", right: "SubjectID" }],
-        dropRightOn: true,
-        naTokens: [""],
-        delimiter: ",",
-      },
-      columnTypes: { Diagnosis: "nominal" },
-      identifiers: { subject: "subject", session: "session", run: "run" },
-      levelOrderings: { Diagnosis: ["A", "B"] },
-      axisAssignment: { x: "Diagnosis", y: "qCBF", colorBy: null },
-      domainFilters: { xMin: 1, xMax: 2, yMin: 3, yMax: 4 },
-      stage: "visualize",
-      chartData: [
-        { id: "p", x: 1, y: 2, participantId: "p", subject: "p", session: "01", run: "01" },
-      ],
-    });
-
-    useVisualizationStore.getState().relinkMatchingExternalSource({
-      absolutePath: "/new.csv",
-      fileHash: "same",
-      sheetName: null,
-    });
-
-    expect(useVisualizationStore.getState()).toMatchObject({
-      qcbfSource: { relativePath: "qcbf.tsv", fileHash: "qcbf" },
-      joinConfig: {
-        externalSource: { absolutePath: "/new.csv", fileHash: "same" },
-        keys: [{ left: "participant_id", right: "SubjectID" }],
-      },
-      columnTypes: { Diagnosis: "nominal" },
-      identifiers: { subject: "subject", session: "session", run: "run" },
-      levelOrderings: { Diagnosis: ["A", "B"] },
-      axisAssignment: { x: "Diagnosis", y: "qCBF", colorBy: null },
-      domainFilters: { xMin: 1, xMax: 2, yMin: 3, yMax: 4 },
-      stage: "visualize",
-      requiresManualSave: true,
-    });
-  });
-
-  it("resets only external-dependent setup for a confirmed changed relink", () => {
-    useVisualizationStore.setState({
-      qcbfSource: { relativePath: "qcbf.tsv", fileHash: "qcbf" },
-      joinConfig: {
-        externalSource: { absolutePath: "/old.csv", fileHash: "old", sheetName: null },
-        keys: [{ left: "participant_id", right: "SubjectID" }],
-        dropRightOn: false,
-        naTokens: ["NA"],
-        delimiter: ";",
-      },
-      columnTypes: { Diagnosis: "nominal" },
-      identifiers: { subject: "subject", session: "session", run: "run" },
-      levelOrderings: { Diagnosis: ["A", "B"] },
-      axisAssignment: { x: "Diagnosis", y: "qCBF", colorBy: null },
-      domainFilters: { xMin: 1, xMax: 2, yMin: 3, yMax: 4 },
-      stage: "visualize",
-      chartData: [
-        { id: "p", x: 1, y: 2, participantId: "p", subject: "p", session: "01", run: "01" },
-      ],
-    });
-
-    useVisualizationStore.getState().relinkChangedExternalSource({
-      absolutePath: "/changed.csv",
-      fileHash: "changed",
-      sheetName: "Data",
-    });
-
-    expect(useVisualizationStore.getState()).toMatchObject({
-      qcbfSource: { relativePath: "qcbf.tsv", fileHash: "qcbf" },
-      joinConfig: {
-        externalSource: { absolutePath: "/changed.csv", fileHash: "changed", sheetName: "Data" },
-        keys: [],
-        dropRightOn: false,
-        naTokens: ["NA"],
-        delimiter: ";",
-      },
-      columnTypes: {},
-      identifiers: null,
-      levelOrderings: {},
-      axisAssignment: { x: null, y: null, colorBy: null },
-      domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
-      stage: "selectData",
-      chartData: [],
-      requiresManualSave: true,
-    });
+  it("sets new Nivo and NiiVue parameters", async () => {
+    const accepted = {
+      ...projectFixture("project-1", "Project", "/project", {
+        uiState: { dataVis: { nvBackColor: "white" } },
+      }),
+      acceptedRevision: 1,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
+    useVisualizationStore.getState().setNvBackColor("white");
+    expect(acceptedVisualizationSettings().nvBackColor).toBe("black");
+    await useProjectStore.getState().flushEdits();
+    expect(acceptedVisualizationSettings().nvBackColor).toBe("white");
+    expect(useProjectStore.getState().isDirty).toBe(true);
   });
 });

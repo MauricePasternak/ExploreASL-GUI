@@ -1,6 +1,7 @@
 import { Card, Select, Stack, Table, Text } from "@mantine/core";
 
-import { useImportStore } from "../../stores/importStore";
+import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
+import { useProjectStore } from "../../stores/projectStore";
 import { EXPLOREASL_MODALITIES } from "../../schemas/importSchemas";
 import type { ModalityAlias } from "../../schemas/importSchemas";
 
@@ -15,7 +16,9 @@ const MODALITY_OPTIONS = [
  * to map each to an ExploreASL modality type or "Ignore".
  */
 export default function ModalityMappingTable() {
-  const modalityAliases = useImportStore((s) => s.modalityAliases);
+  const modalityAliases = useProjectStore(
+    (s) => s.project?.mappingState.modalityAliases ?? EMPTY_IMPORT_SETTINGS.modalityAliases,
+  );
   const updateModalityAlias = useImportStore((s) => s.updateModalityAlias);
 
   function handleChange(captured: string, value: string | null) {

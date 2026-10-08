@@ -33,7 +33,7 @@ vi.mock("@niivue/niivue", () => {
 vi.mock("../../stores/projectStore", () => ({
   useProjectStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
-      project: { projectMeta: { rootPath: "/test/project" } },
+      project: { projectMeta: { rootPath: "/test/project" }, uiState: {} },
     }),
 }));
 
@@ -55,15 +55,10 @@ describe("VisualizeStep", () => {
       return originalGetContext.call(document.createElement("canvas"), type);
     }) as typeof originalGetContext;
     useVisualizationStore.setState({
-      splitRatio: 0.6,
       selectedPointId: null,
       chartData: [],
       viewerState: { status: "idle" },
       webglAvailable: false,
-      axisAssignment: { x: null, y: null, colorBy: null },
-      qcbfSource: null,
-      joinConfig: null,
-      domainFilters: { xMin: null, xMax: null, yMin: null, yMax: null },
     });
   });
 

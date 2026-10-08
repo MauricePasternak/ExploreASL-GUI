@@ -1,5 +1,6 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
+import { projectFixture } from "../test/projectFixtures";
 import { TestMantineProvider as MantineProvider } from "../test/render";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,39 +15,33 @@ describe("Import autosave loop", () => {
     sessionStorage.clear();
     resetProjectLifecycleForTests();
     useImportStore.getState().resetImport();
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "project-1",
-          name: "Brain Study",
-          rootPath: "/tmp/brain-study",
-          createdAt: "2026-05-03T00:00:00.000Z",
-          lastOpened: "2026-05-03T00:00:00.000Z",
-          currentPhase: "import",
-          dataSource: "dicom" as const,
-        },
-        uiState: {},
-        mappingState: {
-          sourceDataPath: "/tmp/brain-study/sourcedata",
-          ingestionComplete: true,
-        },
-        dataPar: {},
-      },
-      isDirty: false,
-      loaded: true,
-    });
-    vi.mocked(writeTextFile).mockResolvedValue(undefined);
+    const snapshot = projectFixture("project-1", "Brain Study", "/tmp/brain-study");
+    snapshot.document.mappingState = { sourceDataPath: "./sourcedata", ingestionComplete: true };
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     activateProjectLease("project-1", "/tmp/brain-study");
   });
 
   afterEach(() => {
     cleanup();
+    useProjectStore.getState().cancelAutosave();
     resetProjectLifecycleForTests();
   });
 
   it("does not re-hydrate import state on every mapping autosave", async () => {
-    const loadSpy = vi.spyOn(useImportStore.getState(), "loadPersistedState");
+    useImportStore.setState({
+      importLog: ["scan log"],
+      importProgress: { BAR: { subject: "BAR", session: "01", status: "pending" } },
+    });
+    const accepted = {
+      ...projectFixture("project-1", "Brain Study", "/tmp/brain-study"),
+      acceptedRevision: 1,
+    };
+    accepted.document.mappingState = {
+      sourceDataPath: "./sourcedata/updated",
+      ingestionComplete: true,
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
 
     render(
       <MantineProvider env="test">
@@ -58,17 +53,17 @@ describe("Import autosave loop", () => {
       </MantineProvider>,
     );
 
-    expect(loadSpy).not.toHaveBeenCalled();
-
-    useImportStore.getState().setSourceDataPath("/tmp/brain-study/sourcedata/updated");
+    await useImportStore.getState().setSourceDataPath("/tmp/brain-study/sourcedata/updated");
 
     await waitFor(() => {
       expect(useProjectStore.getState().project?.mappingState.sourceDataPath).toBe(
-        "/tmp/brain-study/sourcedata/updated",
+        "./sourcedata/updated",
       );
     });
 
-    expect(loadSpy).not.toHaveBeenCalled();
-    loadSpy.mockRestore();
+    expect(useImportStore.getState()).toMatchObject({
+      importLog: ["scan log"],
+      importProgress: { BAR: { subject: "BAR", session: "01", status: "pending" } },
+    });
   });
 });

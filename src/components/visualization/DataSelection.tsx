@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 
 import { useVisualizationStore, DataInspection } from "../../stores/visualizationStore";
+import { visualizationSettings } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { parseStatsFileName } from "../../lib/tsvUtils";
 import JoinConfig from "./JoinConfig";
@@ -12,7 +13,7 @@ import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLif
 export default function DataSelection() {
   const availableFiles = useVisualizationStore((s) => s.availableFiles);
   const setInspection = useVisualizationStore((s) => s.setInspection);
-  const qcbfSource = useVisualizationStore((s) => s.qcbfSource);
+  const qcbfSource = useProjectStore((s) => visualizationSettings(s.project).qcbfSource);
   const setQcbfSource = useVisualizationStore((s) => s.setQcbfSource);
   const setColumnTypes = useVisualizationStore((s) => s.setColumnTypes);
   const setIdentifiers = useVisualizationStore((s) => s.setIdentifiers);

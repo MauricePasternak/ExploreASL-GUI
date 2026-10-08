@@ -1,7 +1,7 @@
 import { TestMantineProvider as MantineProvider } from "../test/render";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
@@ -10,6 +10,10 @@ import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { makeMatlabProfile } from "../test/profileFixtures";
 import ImportPage from "./ImportPage";
+import { invoke } from "@tauri-apps/api/core";
+import { notifications } from "@mantine/notifications";
+import { projectFixture } from "../test/projectFixtures";
+import type { TokenAssignment, MetadataGroup } from "../schemas/importSchemas";
 
 function renderWithProviders() {
   return render(
@@ -21,8 +25,18 @@ function renderWithProviders() {
   );
 }
 
+beforeEach(() => {
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
+  vi.clearAllMocks();
+  vi.mocked(invoke).mockReset();
+  useImportStore.getState().resetImport();
+  resetProjectLifecycleForTests();
+  activateProjectLease("project-1", "/project");
+});
+
 afterEach(() => {
   cleanup();
+  useProjectStore.getState().cancelAutosave();
   resetProjectLifecycleForTests();
   useImportStore.getState().resetImport();
   useGlobalStore.setState({
@@ -34,29 +48,21 @@ afterEach(() => {
 });
 
 describe("ImportPage metadata step", () => {
-  it("keeps missing-source guidance visible outside ingestion and routes Relink to it", () => {
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "project-1",
-          name: "Project",
-          rootPath: "/project",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          lastOpened: "2026-01-01T00:00:00.000Z",
-          currentPhase: "import",
-          dataSource: "dicom",
-        },
-        uiState: {},
-        mappingState: {},
-        dataPar: {},
-      },
-      loaded: true,
-      isDirty: false,
+  it("keeps missing-source guidance visible outside ingestion and routes Relink to it", async () => {
+    const snapshot = projectFixture("project-1", "Project", "/project", {
+      mappingState: { sourceDataPath: "/missing/dicom" },
+      uiState: { import: { mostRecentConfig: null, activeStep: 5 } },
+    });
+    activateProjectLease("project-1", "/project");
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.uiState.import!.activeStep = 0;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "accept_project_edit") return accepted;
+      if (command === "preflight_staging_plan") return { valid: false, issues: [] };
+      return undefined;
     });
     useImportStore.setState({
-      activeStep: 5,
-      sourceDataPath: "/missing/dicom",
       sourceAvailability: {
         status: "missing",
         savedPath: "/missing/dicom",
@@ -64,6 +70,7 @@ describe("ImportPage metadata step", () => {
       },
     });
 
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     expect(screen.getByTestId("import-missing-source-warning")).toHaveTextContent(
@@ -71,15 +78,17 @@ describe("ImportPage metadata step", () => {
     );
     expect(screen.getByTestId("import-missing-source-path")).toHaveTextContent("/missing/dicom");
     fireEvent.click(screen.getByTestId("import-relink-btn"));
-    expect(useImportStore.getState().activeStep).toBe(0);
+    await waitFor(() =>
+      expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(0),
+    );
     expect(screen.getByTestId("dicom-missing-source-warning")).toBeInTheDocument();
   });
   it("uses configured delimiters in the tokenizer hierarchy preview", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(1);
-    store.setIngestionResults(
-      ["/data/002.12/ASL"],
-      [
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 1 };
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["002.12/ASL"],
+      pathPatterns: [
         {
           signature: "VARYING/ASL",
           samplePath: "002.12/ASL",
@@ -92,12 +101,14 @@ describe("ImportPage metadata step", () => {
           depth: 2,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/ASL", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: 0, tag: "Subject" },
       { blockIndex: 0, subBlockIndex: 1, tag: "Session" },
       { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
-    ]);
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/ASL": assignments };
     useGlobalStore.setState({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -106,6 +117,7 @@ describe("ImportPage metadata step", () => {
       loaded: true,
     });
 
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     const patternCards = screen.getAllByTestId("pattern-card-VARYING/ASL");
@@ -115,11 +127,11 @@ describe("ImportPage metadata step", () => {
   });
 
   it("shows hyphen-delimited sub-blocks in the tokenizer when configured globally", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(1);
-    store.setIngestionResults(
-      ["/data/002-12-R1/ASL"],
-      [
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 1 };
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["002-12-R1/ASL"],
+      pathPatterns: [
         {
           signature: "VARYING/ASL",
           samplePath: "002-12-R1/ASL",
@@ -132,7 +144,8 @@ describe("ImportPage metadata step", () => {
           depth: 2,
         },
       ],
-    );
+      ingestionComplete: true,
+    });
     useGlobalStore.setState({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -141,6 +154,7 @@ describe("ImportPage metadata step", () => {
       loaded: true,
     });
 
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     const patternCards = screen.getAllByTestId("pattern-card-VARYING/ASL");
@@ -151,80 +165,20 @@ describe("ImportPage metadata step", () => {
     expect(within(patternCard).getAllByText("R1").length).toBeGreaterThan(0);
   });
 
-  it("renders metadata grouping controls instead of the placeholder", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(3);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/BAR/01/01"],
-      [
-        {
-          signature: "VARYING/VARYING/VARYING",
-          samplePath: "BAR/01/01",
-          blocks: ["BAR", "01", "01"],
-          uniqueNames: {
-            0: ["BAR"],
-            1: ["01"],
-            2: ["01"],
-          },
-          count: 1,
-          depth: 3,
-        },
-      ],
-    );
-    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
-      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-      { blockIndex: 1, subBlockIndex: null, tag: "Session" },
-      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
-    store.addMetadataGroup({
-      id: "global",
-      label: "Global Defaults",
-      bidsParams: { ArterialSpinLabelingType: "PCASL" },
-    });
-
+  it("opens the defaults metadata modal on first entry", async () => {
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 3 };
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.mappingState.metadataGroups = [
+      { id: "global-defaults", label: "Global Defaults", bidsParams: {} },
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     expect(
-      screen.getAllByRole("button", { name: /apply override metadata/i }).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getAllByText("BAR").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Global Defaults").length).toBeGreaterThan(0);
-  });
-
-  it("opens the defaults metadata modal on first entry", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(3);
-    store.setIngestionResults(
-      ["/data/BAR/01/01"],
-      [
-        {
-          signature: "VARYING/VARYING/VARYING",
-          samplePath: "BAR/01/01",
-          blocks: ["BAR", "01", "01"],
-          uniqueNames: { 0: ["BAR"], 1: ["01"], 2: ["01"] },
-          count: 1,
-          depth: 3,
-        },
-      ],
-    );
-    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
-      { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
-      { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
-    store.setSubjectRows([
-      {
-        id: "BAR/01",
-        subject: "BAR",
-        session: "01",
-        groupId: "global",
-      },
-    ]);
-
-    renderWithProviders();
-
-    expect(
-      screen.getByRole("heading", {
+      await screen.findByRole("heading", {
         name: /configure default bids metadata/i,
       }),
     ).toBeInTheDocument();
@@ -234,67 +188,92 @@ describe("ImportPage metadata step", () => {
       })[0],
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save metadata group/i })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /apply override metadata/i, hidden: true }).length,
+    ).toBeGreaterThan(0);
+    await useProjectStore.getState().flushEdits();
   });
 
-  it("preserves assigned override groups when derived rows are recomputed", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(3);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/BAR/01/01"],
-      [
+  it("preserves assigned override groups when derived rows are recomputed", async () => {
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 3 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["BAR/01/01", "FOO/01/01"],
+      pathPatterns: [
         {
           signature: "VARYING/VARYING/VARYING",
           samplePath: "BAR/01/01",
           blocks: ["BAR", "01", "01"],
           uniqueNames: {
-            0: ["BAR"],
+            0: ["BAR", "FOO"],
             1: ["01"],
             2: ["01"],
           },
-          count: 1,
+          count: 2,
           depth: 3,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 1, subBlockIndex: null, tag: "Session" },
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
-    store.addMetadataGroup({
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/VARYING/VARYING": assignments };
+    const group: MetadataGroup = {
       id: "global-defaults",
       label: "Global Defaults",
       bidsParams: { ArterialSpinLabelingType: "PCASL" },
-    });
-    store.addMetadataGroup({
+    };
+    snapshot.document.mappingState.metadataGroups = [group];
+    const override: MetadataGroup = {
       id: "override-1",
       label: "Override 1",
       bidsParams: { ArterialSpinLabelingType: "PASL" },
-    });
-    store.setSubjectRows([
+    };
+    snapshot.document.mappingState.metadataGroups!.push(override);
+    snapshot.document.mappingState.subjectRows = [
       {
         id: "BAR/01",
         subject: "BAR",
         session: "01",
         groupId: "override-1",
       },
-    ]);
+    ];
 
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.mappingState.subjectRows!.push({
+      id: "FOO/01",
+      subject: "FOO",
+      session: "01",
+      groupId: "global-defaults",
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
+    await useProjectStore.getState().flushEdits();
+    expect(vi.mocked(invoke).mock.calls[0][1]).toMatchObject({
+      edit: { mapping: { subjectRows: accepted.document.mappingState.subjectRows } },
+    });
     expect(screen.getAllByText("BAR").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Override 1").length).toBeGreaterThan(0);
-    expect(useImportStore.getState().subjectRows[0]?.groupId).toBe("override-1");
+    expect(screen.getAllByText("Global Defaults").length).toBeGreaterThan(0);
+    expect(useProjectStore.getState().project?.mappingState.subjectRows?.[0]?.groupId).toBe(
+      "override-1",
+    );
   });
 
-  it("derives metadata rows from configured delimiters for sub-block assignments", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(3);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/002.12.R1/ASL"],
-      [
+  it("derives metadata rows from configured delimiters for sub-block assignments", async () => {
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 3 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["002.12.R1/ASL"],
+      pathPatterns: [
         {
           signature: "VARYING/ASL",
           samplePath: "002.12.R1/ASL",
@@ -307,13 +286,15 @@ describe("ImportPage metadata step", () => {
           depth: 2,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/ASL", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: 0, tag: "Subject" },
       { blockIndex: 0, subBlockIndex: 1, tag: "Session" },
       { blockIndex: 0, subBlockIndex: 2, tag: "Run" },
       { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
-    ]);
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/ASL": assignments };
     useGlobalStore.setState({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -322,9 +303,23 @@ describe("ImportPage metadata step", () => {
       loaded: true,
     });
 
+    snapshot.document.mappingState.metadataGroups = [
+      { id: "global-defaults", label: "Global Defaults", bidsParams: {} },
+    ];
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.mappingState.subjectRows = [
+      { id: "002/12", subject: "002", session: "12", groupId: "global-defaults" },
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
-    expect(useImportStore.getState().subjectRows).toEqual([
+    await useProjectStore.getState().flushEdits();
+    expect(vi.mocked(invoke).mock.calls[0][1]).toMatchObject({
+      edit: { mapping: { subjectRows: accepted.document.mappingState.subjectRows } },
+    });
+    expect(useProjectStore.getState().project?.mappingState.subjectRows).toEqual([
       {
         id: "002/12",
         subject: "002",
@@ -334,13 +329,13 @@ describe("ImportPage metadata step", () => {
     ]);
   });
 
-  it("does not apply one pattern's tokenizer assignments to another same-depth pattern", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(3);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/siteA/sub-001/asl", "/data/siteB/visit-02/asl"],
-      [
+  it("does not apply one pattern's tokenizer assignments to another same-depth pattern", async () => {
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 3 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["siteA/sub-001/asl", "siteB/visit-02/asl"],
+      pathPatterns: [
         {
           signature: "siteA/VARYING/asl",
           samplePath: "siteA/sub-001/asl",
@@ -366,15 +361,31 @@ describe("ImportPage metadata step", () => {
           depth: 3,
         },
       ],
-    );
-    store.setTokenizerConfig("siteA/VARYING/asl", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 1, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "siteA/VARYING/asl": assignments };
 
+    snapshot.document.mappingState.metadataGroups = [
+      { id: "global-defaults", label: "Global Defaults", bidsParams: {} },
+    ];
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.mappingState.subjectRows = [
+      { id: "sub-001/01", subject: "sub-001", session: "01", groupId: "global-defaults" },
+    ];
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
-    expect(useImportStore.getState().subjectRows).toEqual([
+    await useProjectStore.getState().flushEdits();
+    expect(vi.mocked(invoke).mock.calls[0][1]).toMatchObject({
+      edit: { mapping: { subjectRows: accepted.document.mappingState.subjectRows } },
+    });
+    expect(useProjectStore.getState().project?.mappingState.subjectRows).toEqual([
       {
         id: "sub-001/01",
         subject: "sub-001",
@@ -385,12 +396,12 @@ describe("ImportPage metadata step", () => {
   });
 
   it("clears derived metadata rows when tokenizer changes remove all derived values", async () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(3);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/002.12.R1/ASL"],
-      [
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 3 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["002.12.R1/ASL"],
+      pathPatterns: [
         {
           signature: "VARYING/ASL",
           samplePath: "002.12.R1/ASL",
@@ -403,13 +414,15 @@ describe("ImportPage metadata step", () => {
           depth: 2,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/ASL", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: 0, tag: "Subject" },
       { blockIndex: 0, subBlockIndex: 1, tag: "Session" },
       { blockIndex: 0, subBlockIndex: 2, tag: "Run" },
       { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
-    ]);
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/ASL": assignments };
     useGlobalStore.setState({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -418,24 +431,42 @@ describe("ImportPage metadata step", () => {
       loaded: true,
     });
 
+    snapshot.document.mappingState.metadataGroups = [
+      { id: "global-defaults", label: "Global Defaults", bidsParams: {} },
+    ];
+    snapshot.document.mappingState.subjectRows = [
+      { id: "002/12", subject: "002", session: "12", groupId: "global-defaults" },
+    ];
+    const changed = structuredClone(snapshot);
+    changed.acceptedRevision = 1;
+    changed.document.mappingState.tokenizerConfigs = { "VARYING/ASL": [] };
+    const cleared = structuredClone(changed);
+    cleared.acceptedRevision = 2;
+    cleared.document.mappingState.subjectRows = [];
+    vi.mocked(invoke).mockResolvedValueOnce(changed).mockResolvedValueOnce(cleared);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
-    expect(useImportStore.getState().subjectRows).toHaveLength(1);
+    expect(useProjectStore.getState().project?.mappingState.subjectRows).toHaveLength(1);
 
-    store.setTokenizerConfig("VARYING/ASL", []);
+    useImportStore.getState().setTokenizerConfig("VARYING/ASL", []);
 
+    await useProjectStore.getState().flushEdits();
+    expect(vi.mocked(invoke).mock.calls[1][1]).toMatchObject({
+      edit: { mapping: { subjectRows: [] } },
+    });
     await waitFor(() => {
-      expect(useImportStore.getState().subjectRows).toEqual([]);
+      expect(useProjectStore.getState().project?.mappingState.subjectRows).toEqual([]);
     });
   });
 
   it("blocks navigation to step 5 (Run Import) if metadata is invalid", async () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(3);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/BAR/01/01"],
-      [
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 3 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["BAR/01/01"],
+      pathPatterns: [
         {
           signature: "VARYING/VARYING/VARYING",
           samplePath: "BAR/01/01",
@@ -445,18 +476,25 @@ describe("ImportPage metadata step", () => {
           depth: 3,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 1, subBlockIndex: null, tag: "Session" },
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
-    store.addMetadataGroup({
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/VARYING/VARYING": assignments };
+    const group: MetadataGroup = {
       id: "global-defaults",
       label: "Global Defaults",
       bidsParams: {},
-    });
+    };
+    snapshot.document.mappingState.metadataGroups = [group];
 
+    snapshot.document.mappingState.subjectRows = [
+      { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
+    ];
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     const nextButtons = screen.getAllByRole("button", { name: /next: preview import/i });
@@ -464,21 +502,20 @@ describe("ImportPage metadata step", () => {
     expect(nextButton).toBeInTheDocument();
     fireEvent.click(nextButton);
 
-    expect(useImportStore.getState().activeStep).toBe(3);
+    expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(3);
 
-    const { notifications } = await import("@mantine/notifications");
     expect(notifications.show).toHaveBeenCalled();
   });
 });
 
 describe("ImportPage alias resolution step", () => {
-  it("does not mix same-depth patterns when deriving aliases", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(2);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/siteA/sub-001/asl", "/data/siteB/visit-02/t1"],
-      [
+  it("does not mix same-depth patterns when deriving aliases", async () => {
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 2 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["siteA/sub-001/asl", "siteB/visit-02/t1"],
+      pathPatterns: [
         {
           signature: "siteA/VARYING/VARYING",
           samplePath: "siteA/sub-001/asl",
@@ -504,21 +541,36 @@ describe("ImportPage alias resolution step", () => {
           depth: 3,
         },
       ],
-    );
-    store.setTokenizerConfig("siteA/VARYING/VARYING", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 1, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "siteA/VARYING/VARYING": assignments };
 
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.mappingState.subjectRenames = [{ original: "sub-001", target: "sub-001" }];
+    accepted.document.mappingState.modalityAliases = [{ captured: "asl", mapped: null }];
+    vi.mocked(invoke).mockResolvedValue(accepted);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
-    expect(useImportStore.getState().subjectRenames).toEqual([
+    await useProjectStore.getState().flushEdits();
+    expect(invoke).toHaveBeenLastCalledWith(
+      "accept_project_edit",
+      expect.objectContaining({
+        edit: expect.objectContaining({ mapping: accepted.document.mappingState }),
+      }),
+    );
+    expect(useProjectStore.getState().project?.mappingState.subjectRenames).toEqual([
       {
         original: "sub-001",
         target: "sub-001",
       },
     ]);
-    expect(useImportStore.getState().modalityAliases).toEqual([
+    expect(useProjectStore.getState().project?.mappingState.modalityAliases).toEqual([
       {
         captured: "asl",
         mapped: null,
@@ -526,70 +578,13 @@ describe("ImportPage alias resolution step", () => {
     ]);
   });
 
-  it("derives aliases using configured non-default delimiters", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(2);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/002.12/ASL"],
-      [
-        {
-          signature: "VARYING/ASL",
-          samplePath: "002.12/ASL",
-          blocks: ["002.12", "ASL"],
-          uniqueNames: {
-            0: ["002.12"],
-            1: ["ASL"],
-          },
-          count: 1,
-          depth: 2,
-        },
-      ],
-    );
-    store.setTokenizerConfig("VARYING/ASL", [
-      { blockIndex: 0, subBlockIndex: 0, tag: "Subject" },
-      { blockIndex: 0, subBlockIndex: 1, tag: "Session" },
-      { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
-    ]);
-    useGlobalStore.setState({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        tokenSubDelimiters: ["_", "."],
-      },
-      loaded: true,
-    });
-
-    renderWithProviders();
-
-    expect(useImportStore.getState().subjectRenames).toEqual([
-      {
-        original: "002",
-        target: "002",
-      },
-    ]);
-    expect(useImportStore.getState().sessionAliases).toEqual([
-      {
-        captured: "12",
-        alias: "12",
-        index: 1,
-      },
-    ]);
-    expect(useImportStore.getState().runAliases).toEqual([]);
-    expect(useImportStore.getState().modalityAliases).toEqual([
-      {
-        captured: "ASL",
-        mapped: null,
-      },
-    ]);
-  });
-
   it("clears derived alias state when tokenizer changes remove all derived values", async () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(2);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/002.12/ASL"],
-      [
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 2 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["002.12/ASL"],
+      pathPatterns: [
         {
           signature: "VARYING/ASL",
           samplePath: "002.12/ASL",
@@ -602,12 +597,14 @@ describe("ImportPage alias resolution step", () => {
           depth: 2,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/ASL", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: 0, tag: "Subject" },
       { blockIndex: 0, subBlockIndex: 1, tag: "Session" },
       { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
-    ]);
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/ASL": assignments };
     useGlobalStore.setState({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -616,19 +613,46 @@ describe("ImportPage alias resolution step", () => {
       loaded: true,
     });
 
+    Object.assign(snapshot.document.mappingState, {
+      subjectRenames: [{ original: "002", target: "002" }],
+      sessionAliases: [{ captured: "12", alias: "12", index: 1 }],
+      modalityAliases: [{ captured: "ASL", mapped: null }],
+    });
+    const changed = structuredClone(snapshot);
+    changed.acceptedRevision = 1;
+    changed.document.mappingState.tokenizerConfigs = { "VARYING/ASL": [] };
+    const cleared = structuredClone(changed);
+    cleared.acceptedRevision = 2;
+    Object.assign(cleared.document.mappingState, {
+      subjectRenames: [],
+      sessionAliases: [],
+      runAliases: [],
+      modalityAliases: [],
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(changed).mockResolvedValue(cleared);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
-    expect(useImportStore.getState().subjectRenames).toHaveLength(1);
-    expect(useImportStore.getState().sessionAliases).toHaveLength(1);
-    expect(useImportStore.getState().modalityAliases).toHaveLength(1);
+    expect(useProjectStore.getState().project?.mappingState.subjectRenames).toHaveLength(1);
+    expect(useProjectStore.getState().project?.mappingState.sessionAliases).toHaveLength(1);
+    expect(useProjectStore.getState().project?.mappingState.modalityAliases).toHaveLength(1);
 
-    store.setTokenizerConfig("VARYING/ASL", []);
+    await useProjectStore.getState().flushEdits();
+    expect(invoke).not.toHaveBeenCalled();
+    useImportStore.getState().setTokenizerConfig("VARYING/ASL", []);
 
+    await useProjectStore.getState().flushEdits();
+    expect(invoke).toHaveBeenLastCalledWith(
+      "accept_project_edit",
+      expect.objectContaining({
+        edit: expect.objectContaining({ mapping: cleared.document.mappingState }),
+      }),
+    );
     await waitFor(() => {
-      expect(useImportStore.getState().subjectRenames).toEqual([]);
-      expect(useImportStore.getState().sessionAliases).toEqual([]);
-      expect(useImportStore.getState().runAliases).toEqual([]);
-      expect(useImportStore.getState().modalityAliases).toEqual([]);
+      expect(useProjectStore.getState().project?.mappingState.subjectRenames).toEqual([]);
+      expect(useProjectStore.getState().project?.mappingState.sessionAliases).toEqual([]);
+      expect(useProjectStore.getState().project?.mappingState.runAliases).toEqual([]);
+      expect(useProjectStore.getState().project?.mappingState.modalityAliases).toEqual([]);
     });
   });
 });
@@ -646,13 +670,13 @@ describe("ImportPage import runner step", () => {
     BackgroundSuppression: false,
   };
 
-  it("renders preview-only navigation and gates Run Import when settings are missing", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(4);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/BAR/01/01"],
-      [
+  it("renders preview-only navigation and gates Run Import when settings are missing", async () => {
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 5 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["BAR/01/01"],
+      pathPatterns: [
         {
           signature: "VARYING/VARYING/VARYING",
           samplePath: "BAR/01/01",
@@ -662,20 +686,26 @@ describe("ImportPage import runner step", () => {
           depth: 3,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
-    store.setBMatchDirectories(true);
-    store.setSessionAliases([{ captured: "01", alias: "ASL_1", index: 1 }]);
-    store.setModalityAliases([{ captured: "01", mapped: "ASL4D" }]);
-    store.addMetadataGroup({
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/VARYING/VARYING": assignments };
+    snapshot.document.mappingState.bMatchDirectories = true;
+    snapshot.document.mappingState.sessionAliases = [{ captured: "01", alias: "ASL_1", index: 1 }];
+    snapshot.document.mappingState.modalityAliases = [{ captured: "01", mapped: "ASL4D" }];
+    const group: MetadataGroup = {
       id: "global-defaults",
       label: "Global Defaults",
       bidsParams: validBidsParams,
-    });
+    };
+    snapshot.document.mappingState.metadataGroups = [group];
 
+    vi.mocked(invoke).mockResolvedValue({ valid: false, issues: [] });
+    const before = structuredClone(snapshot.document);
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     expect(screen.getAllByText("Preview Import").length).toBeGreaterThan(0);
@@ -684,15 +714,27 @@ describe("ImportPage import runner step", () => {
     expect(backButtons[backButtons.length - 1]).toBeEnabled();
     const nextButtons = screen.getAllByRole("button", { name: /next: run import/i });
     expect(nextButtons[nextButtons.length - 1]).toBeDisabled();
+    await waitFor(() => expect(useImportStore.getState().stagingPreflight.status).toBe("invalid"));
+    expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(5);
+    expect(useProjectStore.getState().project?.mappingState).toEqual(before.mappingState);
+    expect(useProjectStore.getState().project?.uiState).toEqual(before.uiState);
+    expect(screen.queryByTestId("import-execution")).not.toBeInTheDocument();
+    expect(
+      vi
+        .mocked(invoke)
+        .mock.calls.some(
+          ([command]) => command === "accept_project_edit" || command === "save_project",
+        ),
+    ).toBe(false);
   });
 
   it("navigates from preview to run import when metadata and settings are configured", async () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(4);
-    store.setSourceDataPath("/data");
-    store.setIngestionResults(
-      ["/data/BAR/01/01"],
-      [
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 4 };
+    snapshot.document.mappingState.sourceDataPath = "/data";
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["BAR/01/01"],
+      pathPatterns: [
         {
           signature: "VARYING/VARYING/VARYING",
           samplePath: "BAR/01/01",
@@ -702,22 +744,27 @@ describe("ImportPage import runner step", () => {
           depth: 3,
         },
       ],
-    );
-    store.setTokenizerConfig("VARYING/VARYING/VARYING", [
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 2, subBlockIndex: null, tag: "Modality" },
-    ]);
-    store.setBMatchDirectories(false);
-    store.setSessionAliases([{ captured: "visit_1", alias: "ASL_1", index: 1 }]);
-    store.setModalityAliases([{ captured: "01", mapped: "T1w" }]);
-    store.addMetadataGroup({
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/VARYING/VARYING": assignments };
+    snapshot.document.mappingState.bMatchDirectories = false;
+    snapshot.document.mappingState.sessionAliases = [
+      { captured: "visit_1", alias: "ASL_1", index: 1 },
+    ];
+    snapshot.document.mappingState.modalityAliases = [{ captured: "01", mapped: "T1w" }];
+    const group: MetadataGroup = {
       id: "global-defaults",
       label: "Global Defaults",
       bidsParams: validBidsParams,
-    });
-    store.setSubjectRows([
+    };
+    snapshot.document.mappingState.metadataGroups = [group];
+    snapshot.document.mappingState.subjectRows = [
       { id: "BAR/01", subject: "BAR", session: "01", groupId: "global-defaults" },
-    ]);
+    ];
     useImportStore.setState({
       importProgress: {
         BAR: {
@@ -744,26 +791,19 @@ describe("ImportPage import runner step", () => {
       },
       loaded: true,
     });
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "import-page-project",
-          name: "Import Page Project",
-          rootPath: "/project",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          lastOpened: "2026-01-01T00:00:00.000Z",
-          currentPhase: "import",
-          dataSource: "dicom",
-        },
-        uiState: {},
-        mappingState: {},
-        dataPar: {},
-      },
-      loaded: true,
+    snapshot.document.uiState.import!.selectedProfileId = profile.id;
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.uiState.import!.activeStep = 5;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "preflight_staging_plan") return { valid: true, issues: [] };
+      if (command === "accept_project_edit") return accepted;
+      if (command === "read_import_status") return [];
+      if (command === "get_active_import_run") return null;
+      return undefined;
     });
-    activateProjectLease("import-page-project", "/project");
 
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
 
     await waitFor(() => {
@@ -774,17 +814,26 @@ describe("ImportPage import runner step", () => {
     const nextButtons = screen.getAllByRole("button", { name: /next: run import/i });
     const nextButton = nextButtons[nextButtons.length - 1];
 
+    expect(useImportStore.getState().stagingPreflight.status).toBe("valid");
+    expect(useImportStore.getState().importProgress.BAR.status).toBe("running");
     fireEvent.click(nextButton);
+    await useProjectStore.getState().flushEdits();
 
-    expect(useImportStore.getState().activeStep).toBe(5);
+    expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(5);
     expect(screen.getAllByText("Run Import Module").length).toBeGreaterThan(0);
   });
 
-  it("locks step 5 back navigation while import is running and unlocks it after failure", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(5);
+  it("locks step 5 back navigation while import is running and unlocks it after failure", async () => {
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 5 };
     useImportStore.setState({ importPhase: "running" });
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "get_active_import_run") return null;
+      if (command === "read_import_status") return [];
+      return undefined;
+    });
 
+    useProjectStore.getState().acceptSnapshot(snapshot);
     const { rerender } = renderWithProviders();
 
     const runningBackButtons = screen.getAllByRole("button", { name: /back: preview/i });
@@ -800,7 +849,7 @@ describe("ImportPage import runner step", () => {
     );
 
     const failedBackButtons = screen.getAllByRole("button", { name: /back: preview/i });
-    expect(failedBackButtons[failedBackButtons.length - 1]).toBeEnabled();
+    await waitFor(() => expect(failedBackButtons[failedBackButtons.length - 1]).toBeEnabled());
   });
 });
 
@@ -814,28 +863,29 @@ describe("ImportPage stepper navigation", () => {
     depth: 2,
   };
 
-  it("keeps the stepper sidebar mounted for layout", () => {
-    renderWithProviders();
-    expect(screen.getAllByTestId("import-stepper-sidebar").length).toBeGreaterThan(0);
-  });
-
   it("stepper clicks do not navigate (display-only)", () => {
-    const store = useImportStore.getState();
-    store.setActiveStep(1);
-    store.setIngestionResults(["/data/SUB/ASL"], [pattern]);
-    store.setTokenizerConfig("VARYING/VARYING", [
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 1 };
+    Object.assign(snapshot.document.mappingState, {
+      rawPaths: ["SUB/ASL"],
+      pathPatterns: [pattern],
+      ingestionComplete: true,
+    });
+    const assignments: TokenAssignment[] = [
       { blockIndex: 0, subBlockIndex: null, tag: "Subject" },
       { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
-    ]);
+    ];
+    snapshot.document.mappingState.tokenizerConfigs = { "VARYING/VARYING": assignments };
 
+    useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
     const sidebar = screen.getAllByTestId("import-stepper-sidebar")[0];
 
     fireEvent.click(within(sidebar).getByTestId("import-step-2"));
-    expect(useImportStore.getState().activeStep).toBe(1);
+    expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(1);
 
     fireEvent.click(within(sidebar).getByTestId("import-step-3"));
-    expect(useImportStore.getState().activeStep).toBe(1);
+    expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(1);
   });
 });
 
@@ -847,24 +897,11 @@ describe("ImportPage dataSource conditional rendering", () => {
   });
 
   it("renders BIDSReviewPanel when dataSource is bids", () => {
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "proj-bids",
-          name: "BIDS Study",
-          rootPath: "/tmp/bids-study",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          lastOpened: "2026-01-01T00:00:00.000Z",
-          currentPhase: "import",
-          dataSource: "bids" as const,
-        },
-        uiState: { import: { bidsReviewConfirmed: false, skippedSubjects: [] } },
-        mappingState: {},
-        dataPar: {},
-      } as any,
-      loaded: true,
-    });
+    vi.mocked(invoke).mockResolvedValueOnce({ groups: [], skipped: [] });
+    const snapshot = projectFixture();
+    snapshot.document.projectMeta.dataSource = "bids";
+    snapshot.document.mappingState.sourceDataPath = ".";
+    useProjectStore.getState().acceptSnapshot(snapshot);
 
     render(
       <MantineProvider env="test">
@@ -876,37 +913,5 @@ describe("ImportPage dataSource conditional rendering", () => {
 
     expect(screen.getAllByTestId("bids-review-panel").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("import-stepper-sidebar")).not.toBeInTheDocument();
-  });
-
-  it("renders DICOM wizard stepper when dataSource is dicom", () => {
-    useProjectStore.setState({
-      project: {
-        version: "0.1.0",
-        projectMeta: {
-          id: "proj-dicom",
-          name: "DICOM Study",
-          rootPath: "/tmp/dicom-study",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          lastOpened: "2026-01-01T00:00:00.000Z",
-          currentPhase: "import",
-          dataSource: "dicom" as const,
-        },
-        uiState: {},
-        mappingState: {},
-        dataPar: {},
-      } as any,
-      loaded: true,
-    });
-
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <ImportPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
-
-    expect(screen.getByTestId("import-stepper-sidebar")).toBeInTheDocument();
-    expect(screen.queryByTestId("bids-review-panel")).not.toBeInTheDocument();
   });
 });

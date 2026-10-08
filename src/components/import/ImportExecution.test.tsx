@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -12,7 +12,8 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefi
 import ImportExecution from "./ImportExecution";
 import { useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { DEFAULT_PROJECT_FILE } from "../../schemas/project";
+import { projectView } from "../../schemas/project";
+import { projectFixture } from "../../test/projectFixtures";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 import { useGlobalStore } from "../../stores/globalStore";
 import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
@@ -20,7 +21,8 @@ import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
 afterEach(() => {
   cleanup();
   useImportStore.getState().resetImport();
-  useProjectStore.setState({ project: null, loaded: false, isDirty: false });
+  useProjectStore.getState().cancelAutosave();
+  useProjectStore.setState(useProjectStore.getInitialState(), true);
   resetProjectLifecycleForTests();
   vi.mocked(invoke).mockReset();
 });
@@ -28,7 +30,10 @@ function renderExecution() {
   return render(
     <MantineProvider env="test">
       <MemoryRouter>
-        <ImportExecution />
+        <Routes>
+          <Route path="/" element={<ImportExecution />} />
+          <Route path="/project/:id/parameters" element={<div data-testid="parameters-route" />} />
+        </Routes>
       </MemoryRouter>
     </MantineProvider>,
   );
@@ -53,7 +58,7 @@ describe("ImportExecution authoritative lifecycle", () => {
       confirmationRequired: true,
     };
     useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project"),
+      project: projectView(projectFixture("project-1", "Project", "/project")),
       loaded: true,
       saveProject: vi.fn().mockResolvedValue(undefined),
     });
@@ -98,7 +103,7 @@ describe("ImportExecution authoritative lifecycle", () => {
       confirmationRequired: true,
     });
     useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-2", "Project 2", "/project-2"),
+      project: projectView(projectFixture("project-2", "Project 2", "/project-2")),
     });
     activateProjectLease("project-2", "/project-2");
     resolveConfirmation({ ...interrupted, confirmationRequired: false, updatedAtMs: 3 });
@@ -235,7 +240,7 @@ describe("ImportExecution authoritative lifecycle", () => {
       subjectOutcomes: [],
     };
     useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project"),
+      project: projectView(projectFixture("project-1", "Project", "/project")),
       loaded: true,
     });
     activateProjectLease("project-1", "/project");
@@ -275,13 +280,25 @@ describe("ImportExecution authoritative lifecycle", () => {
       terminalResult: "completed" as const,
     };
     useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project"),
+      project: projectView(projectFixture("project-1", "Project", "/project")),
       loaded: true,
       saveProject: vi.fn().mockResolvedValue(undefined),
     });
     activateProjectLease("project-1", "/project");
+    const reconciled = {
+      ...projectFixture("project-1", "Project", "/project"),
+      acceptedRevision: 1,
+      persistedRevision: 1,
+    };
+    reconciled.document.uiState.import = {
+      mostRecentConfig: null,
+      completed: true,
+      currentPhase: "completed",
+    };
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "get_active_import_run" || command === "attach_import_run") return completed;
+      if (command === "get_project_snapshot" || command === "reconcile_import_result")
+        return reconciled;
       return undefined;
     });
 
@@ -290,18 +307,23 @@ describe("ImportExecution authoritative lifecycle", () => {
     expect(await screen.findByTestId("import-terminal-summary")).toBeInTheDocument();
     expect(screen.getByTestId("import-terminal-summary")).toHaveTextContent("Committed: 1");
     await vi.waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("acknowledge_import_run", { runId: "replayed-run" }),
+      expect(invoke).toHaveBeenCalledWith("reconcile_import_result", {
+        runId: "replayed-run",
+        generation: 1,
+      }),
     );
     expect(
       vi
         .mocked(invoke)
         .mock.calls.some(([command]) => /relocat|move|clean|post.?process/i.test(command)),
     ).toBe(false);
+    expect(useProjectStore.getState().project?.uiState.import?.completed).toBe(true);
+    expect(useImportStore.getState().terminalRunId).toBeNull();
   });
 
   it("blocks Start and shows actionable discovery failures", async () => {
     useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project"),
+      project: projectView(projectFixture("project-1", "Project", "/project")),
       loaded: true,
     });
     activateProjectLease("project-1", "/project");
@@ -316,7 +338,10 @@ describe("ImportExecution authoritative lifecycle", () => {
   });
 
   it("uses native rerun inventory then reserve-bind-listen-attach-launch with only committed locks preserved", async () => {
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
     const order: string[] = [];
+    let finishSave!: () => void;
+    let failSave!: (error: Error) => void;
     let reserveParams: unknown;
     const preparing = {
       runId: "rerun-1",
@@ -342,7 +367,7 @@ describe("ImportExecution authoritative lifecycle", () => {
       })),
     };
     useProjectStore.setState({
-      project: DEFAULT_PROJECT_FILE("project-1", "Project", "/project"),
+      project: projectView(projectFixture("project-1", "Project", "/project")),
       loaded: true,
     });
     activateProjectLease("project-1", "/project");
@@ -361,15 +386,20 @@ describe("ImportExecution authoritative lifecycle", () => {
       },
       profileValidationState: { "profile-1": { valid: true, errors: [] } },
     });
-    useImportStore.setState({
-      selectedProfileId: "profile-1",
-      subjectRows: ["COMMITTED", "STALE", "INVALID", "INTERRUPTED"].map((subject) => ({
-        id: `${subject}/01`,
-        subject,
-        session: "01",
-        groupId: "global",
-      })),
-    });
+    const configured = projectFixture("project-1", "Project", "/project");
+    configured.document.uiState.import = { mostRecentConfig: null, selectedProfileId: "profile-1" };
+    configured.document.mappingState.subjectRows = [
+      "COMMITTED",
+      "STALE",
+      "INVALID",
+      "INTERRUPTED",
+    ].map((subject) => ({
+      id: `${subject}/01`,
+      subject,
+      session: "01",
+      groupId: "global",
+    }));
+    useProjectStore.setState({ project: projectView(configured) });
     vi.mocked(listen).mockImplementation(async (event) => {
       order.push(`listen:${event}`);
       return () => undefined;
@@ -377,6 +407,14 @@ describe("ImportExecution authoritative lifecycle", () => {
     vi.mocked(invoke).mockImplementation(async (command, params) => {
       if (command === "get_active_import_run") return null;
       if (command === "read_import_status") return [];
+      if (command === "save_project") {
+        order.push("save");
+        await new Promise<void>((resolve, reject) => {
+          finishSave = resolve;
+          failSave = reject;
+        });
+        return configured;
+      }
       if (command === "plan_import_relocation") return inventory;
       if (command === "reserve_import_run") {
         order.push("reserve");
@@ -412,13 +450,27 @@ describe("ImportExecution authoritative lifecycle", () => {
     order.length = 0;
 
     await userEvent.click(screen.getByTestId("start-import-btn"));
+    await vi.waitFor(() => expect(order).toEqual(["save"]));
+    expect(invoke).not.toHaveBeenCalledWith("reserve_import_run", expect.anything());
+    failSave(new Error("Storage unavailable"));
+    await vi.waitFor(() =>
+      expect(useImportStore.getState().importRunError).toBe("Storage unavailable"),
+    );
+    await userEvent.click(screen.getByTestId("start-import-btn"));
+    await vi.waitFor(() => expect(order).toEqual(["save", "save"]));
+    finishSave();
     expect(await screen.findByTestId("confirm-reimport-dialog")).toBeInTheDocument();
     expect(await screen.findByTestId("relocation-inventory-STALE")).toHaveTextContent("1 files");
     await userEvent.click(screen.getByTestId("confirm-reimport-confirm"));
+    await vi.waitFor(() => expect(order).toEqual(["save", "save", "save"]));
+    finishSave();
     await vi.waitFor(() => expect(order).toContain("launch"));
     unsubscribe();
 
     expect(order).toEqual([
+      "save",
+      "save",
+      "save",
       "reserve",
       "bind",
       "listen:import-run-snapshot",
@@ -433,5 +485,40 @@ describe("ImportExecution authoritative lifecycle", () => {
       relocationPlanId: "plan-rerun",
     });
     expect(useImportStore.getState().importPhase).toBe("running");
+  });
+
+  it("waits for durable saving before Parameters navigation and stays on failure", async () => {
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    const configured = projectFixture("project-1", "Project", "/project");
+    useProjectStore.getState().acceptSnapshot(configured);
+    activateProjectLease("project-1", "/project");
+    let finish!: () => void;
+    let fail!: (error: Error) => void;
+    let saves = 0;
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "accept_project_edit") return configured;
+      if (command === "save_project") {
+        saves += 1;
+        await new Promise<void>((resolve, reject) => {
+          finish = resolve;
+          fail = reject;
+        });
+        return configured;
+      }
+      return command === "read_import_status" ? [] : null;
+    });
+    renderExecution();
+    await userEvent.click(screen.getByTestId("import-next-params-btn"));
+    await vi.waitFor(() => expect(saves).toBe(1));
+    expect(screen.queryByTestId("parameters-route")).not.toBeInTheDocument();
+    fail(new Error("Storage unavailable"));
+    await vi.waitFor(() =>
+      expect(useProjectStore.getState().saveError).toBe("Storage unavailable"),
+    );
+    expect(screen.getByTestId("import-next-params-btn")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("import-next-params-btn"));
+    await vi.waitFor(() => expect(saves).toBe(2));
+    finish();
+    expect(await screen.findByTestId("parameters-route")).toBeInTheDocument();
   });
 });

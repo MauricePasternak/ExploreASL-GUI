@@ -8,7 +8,8 @@ import { generateFolderHierarchy, generateTokenOrdering } from "../../lib/tokeni
 import type { PathPattern, TokenAssignment, TokenTag } from "../../schemas/importSchemas";
 import { TOKEN_TAGS } from "../../schemas/importSchemas";
 import { useGlobalStore } from "../../stores/globalStore";
-import { useImportStore } from "../../stores/importStore";
+import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
+import { useProjectStore } from "../../stores/projectStore";
 
 const TAG_COLORS: Record<TokenTag, string> = {
   Subject: "blue",
@@ -36,9 +37,15 @@ const IGNORE_OPTION = { value: "—", label: "Ignore" };
  * and tokenOrdering.
  */
 export default function PathTokenizer() {
-  const pathPatterns = useImportStore((s) => s.pathPatterns);
-  const ingestionComplete = useImportStore((s) => s.ingestionComplete);
-  const tokenizerConfigs = useImportStore((s) => s.tokenizerConfigs);
+  const pathPatterns = useProjectStore(
+    (s) => s.project?.mappingState.pathPatterns ?? EMPTY_IMPORT_SETTINGS.pathPatterns,
+  );
+  const ingestionComplete = useProjectStore(
+    (s) => s.project?.mappingState.ingestionComplete ?? false,
+  );
+  const tokenizerConfigs = useProjectStore(
+    (s) => s.project?.mappingState.tokenizerConfigs ?? EMPTY_IMPORT_SETTINGS.tokenizerConfigs,
+  );
   const setActiveStep = useImportStore((s) => s.setActiveStep);
 
   function handleBack() {
@@ -104,7 +111,9 @@ export default function PathTokenizer() {
 }
 
 function PatternCard({ pattern }: { pattern: PathPattern }) {
-  const tokenizerConfigs = useImportStore((s) => s.tokenizerConfigs);
+  const tokenizerConfigs = useProjectStore(
+    (s) => s.project?.mappingState.tokenizerConfigs ?? EMPTY_IMPORT_SETTINGS.tokenizerConfigs,
+  );
   const tokenSubDelimiters = useGlobalStore((s) => s.settings.tokenSubDelimiters);
   const assignments = tokenizerConfigs[pattern.signature] ?? [];
   const uniqueNames = pattern.uniqueNames as Record<string, string[]>;
