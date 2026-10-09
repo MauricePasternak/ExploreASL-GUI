@@ -85,31 +85,6 @@ export async function reconcileImportRunForActivation(): Promise<ImportRunSnapsh
   return snapshot;
 }
 
-/** Transition-owned reconciliation after native shutdown settles execution.
- * Admission is closed, so this path is awaited directly instead of registering
- * new project work. */
-export async function reconcileImportRunAfterShutdown(): Promise<void> {
-  const lease = captureProjectLease();
-  if (!lease || !isCurrentProjectLease(lease)) return;
-  const raw = await invoke<unknown>("get_active_import_run");
-  if (!isCurrentProjectLease(lease) || raw == null) return;
-  const snapshot = ImportRunSnapshotSchema.parse(raw);
-  if (snapshot.confirmationRequired) return;
-  if (!["completed", "failed", "cancelled", "interrupted"].includes(snapshot.lifecycle)) {
-    throw new Error(`Native import remained ${snapshot.lifecycle} after shutdown.`);
-  }
-  useImportStore.getState().bindImportRunSnapshot(snapshot);
-  const accepted = await projectRequest<ProjectSnapshot>("reconcile_import_result", {
-    runId: snapshot.runId,
-    generation: useProjectStore.getState().project!.activationGeneration,
-  });
-  if (!ownsTerminal(snapshot.runId, lease)) return;
-  useProjectStore.getState().acceptSnapshot(accepted);
-  if (ownsTerminal(snapshot.runId, lease)) {
-    useImportStore.setState({ terminalRunId: null, ownershipGeneration: null });
-  }
-}
-
 export async function reconcileCommittedImportStatus(
   lease: ProjectLease | null = captureProjectLease(),
 ): Promise<void> {

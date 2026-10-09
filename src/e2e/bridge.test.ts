@@ -45,7 +45,12 @@ describe("E2E bridge", () => {
             movedFrom: null,
             setupRecovered: 0,
           };
-        if (command === "activate_project" || command === "save_project") return snapshot;
+        if (
+          command === "activate_project" ||
+          command === "save_project" ||
+          command === "get_project_snapshot"
+        )
+          return snapshot;
         if (command === "shutdown_project_runtime")
           return {
             success: true,

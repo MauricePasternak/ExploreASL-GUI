@@ -28,7 +28,7 @@ const candidate = {
 beforeEach(() => {
   useProjectStore.setState(useProjectStore.getInitialState(), true);
   vi.mocked(invoke).mockImplementation(async (command) => {
-    if (command === "save_project") {
+    if (command === "save_project" || command === "get_project_snapshot") {
       const project = useProjectStore.getState().project!;
       return {
         ...projectFixture(
@@ -102,6 +102,8 @@ describe("project coordinator", () => {
     expect(useImportStore.getState()).toMatchObject({
       importLog: ["A"],
     });
+    expect(isProjectWorkAccepted()).toBe(true);
+    expect(invoke).not.toHaveBeenCalledWith("get_project_snapshot", expect.anything());
   });
 
   it("stops, resets, then hydrates project B", async () => {
@@ -146,6 +148,14 @@ describe("project coordinator", () => {
     });
     expect(useProjectStore.getState().project?.mappingState.sourceDataPath).toBe("./source");
     expect(useImportStore.getState().importLog).toEqual([]);
+    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
+      "save_project",
+      "get_project_snapshot",
+      "inspect_source_path",
+      "get_active_import_run",
+      "read_import_status",
+      "get_active_run",
+    ]);
   });
 
   it("serializes concurrent replacements", async () => {
@@ -200,8 +210,22 @@ describe("project coordinator", () => {
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("c");
   });
 
-  it("retains A and its lease when candidate native activation fails", async () => {
-    const projectA = projectView(projectFixture("a", "A", "/a"));
+  it("retains native-persisted A results and its lease when candidate activation fails", async () => {
+    const before = projectFixture("a", "A", "/a");
+    const settled = structuredClone(before);
+    settled.acceptedRevision = settled.persistedRevision = 1;
+    settled.document.uiState.import = { completed: true, mostRecentConfig: null };
+    settled.document.uiState.processing = { population: { completed: true } };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(before)
+      .mockResolvedValueOnce({
+        success: true,
+        importProcess: { success: true },
+        processingWorkers: { success: true },
+        lockWatcher: { success: true },
+      })
+      .mockResolvedValueOnce(settled);
+    const projectA = projectView(before);
     useProjectStore.setState({ project: projectA, loaded: true });
     activateProjectLease("a", "/a");
 
@@ -215,7 +239,13 @@ describe("project coordinator", () => {
       ),
     ).rejects.toThrow(/native denied/);
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("a");
+    expect(useProjectStore.getState().project).toEqual(projectView(settled));
     expect(isProjectWorkAccepted()).toBe(true);
+    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
+      "save_project",
+      "shutdown_project_runtime",
+      "get_project_snapshot",
+    ]);
   });
 
   it("reports relocation recovery before hydrating the candidate project", async () => {
@@ -295,6 +325,10 @@ describe("project coordinator", () => {
     });
     unsubscribe();
     expect(order).toEqual(["listeners", "native-clear", "reset"]);
+    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
+      "save_project",
+      "get_project_snapshot",
+    ]);
   });
 
   it("retains A and permits retry when native root clearing fails", async () => {

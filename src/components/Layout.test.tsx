@@ -51,7 +51,7 @@ describe("Layout", () => {
     activateProjectLease("project-1", "/tmp/brain-study");
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "save_project") return snapshot;
+      if (command === "save_project" || command === "get_project_snapshot") return snapshot;
       if (command === "accept_project_edit")
         return {
           ...snapshot,

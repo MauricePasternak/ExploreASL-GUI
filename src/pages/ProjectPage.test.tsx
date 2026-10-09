@@ -52,7 +52,8 @@ describe("ProjectPage", () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "accept_project_edit") return parameters;
-      if (command === "save_project") return { ...parameters, persistedRevision: 1 };
+      if (command === "save_project" || command === "get_project_snapshot")
+        return { ...parameters, persistedRevision: 1 };
       if (
         command === "current_project_snapshot" ||
         command === "get_active_import_run" ||

@@ -8,7 +8,6 @@ import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { closeProjectRuntime } from "./projectCoordinator";
 import {
-  reconcileImportRunAfterShutdown,
   reconcileImportRunForActivation,
   reconcileImportTerminal,
 } from "./importTerminalCoordinator";
@@ -110,7 +109,7 @@ describe("import terminal coordinator", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("blocks interrupted confirmation-required snapshots from save and acknowledgement, including shutdown", async () => {
+  it("blocks interrupted confirmation-required snapshots from live and activation reconciliation", async () => {
     const confirmationRequired = {
       ...terminal("interrupted-run", "interrupted"),
       confirmationRequired: true,
@@ -123,10 +122,11 @@ describe("import terminal coordinator", () => {
     );
 
     await reconcileImportTerminal(confirmationRequired.runId);
-    await reconcileImportRunAfterShutdown();
+    await reconcileImportRunForActivation();
 
     expect(saveProject).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("reconcile_import_result", expect.anything());
     expect(useImportStore.getState().terminalRunId).toBe(confirmationRequired.runId);
   });
 
@@ -145,6 +145,10 @@ describe("import terminal coordinator", () => {
           release = resolve;
         });
         order.push("reconcile-end");
+        return projectFixture();
+      }
+      if (command === "get_project_snapshot") {
+        order.push("refresh");
         return projectFixture();
       }
       return null;
@@ -171,7 +175,8 @@ describe("import terminal coordinator", () => {
     await Promise.all([reconciliation, close]);
 
     expect(order.indexOf("reconcile-end")).toBeLessThan(order.indexOf("shutdown"));
-    expect(order.slice(-4)).toEqual(["shutdown", "flush", "listeners", "clear"]);
+    expect(order.slice(-4)).toEqual(["shutdown", "refresh", "listeners", "clear"]);
+    expect(order.filter((step) => step === "flush")).toHaveLength(1);
   });
 
   it("activation replay reconciles, saves, then acknowledges without Step 5", async () => {

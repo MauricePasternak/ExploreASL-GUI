@@ -5,12 +5,7 @@ import {
   registerProjectTask,
   type ProjectLease,
 } from "./projectLifecycle";
-import { getActiveRun } from "./processingEvents";
-import {
-  clearProcessingListeners,
-  isActiveProcessingPhase,
-  useProcessingStore,
-} from "../stores/processingStore";
+import { clearProcessingListeners, useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { projectRequest } from "./projectPersistence";
 import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
@@ -30,10 +25,7 @@ function ownsTerminal(snapshot: ProcessingRunSnapshot, lease: ProjectLease) {
   );
 }
 
-export function reconcileProcessingTerminal(
-  lease = captureProjectLease(),
-  allowClosedAdmission = false,
-): Promise<void> {
+export function reconcileProcessingTerminal(lease = captureProjectLease()): Promise<void> {
   const snapshot = useProcessingStore.getState().snapshot;
   const project = useProjectStore.getState().project;
   if (
@@ -44,7 +36,7 @@ export function reconcileProcessingTerminal(
     snapshot.terminalRevision === null ||
     snapshot.availableAction !== "acknowledge" ||
     !ownsTerminal(snapshot, lease) ||
-    (!allowClosedAdmission && !isProjectWorkAccepted())
+    !isProjectWorkAccepted()
   )
     return Promise.resolve();
   const operation = async () => {
@@ -71,16 +63,5 @@ export function reconcileProcessingTerminal(
       throw error;
     }
   };
-  return allowClosedAdmission ? operation() : registerProjectTask(operation);
-}
-
-export async function reconcileProcessingRunAfterShutdown(): Promise<void> {
-  const lease = captureProjectLease();
-  if (!lease) return;
-  const snapshot = await getActiveRun();
-  if (!isCurrentProjectLease(lease) || !snapshot) return;
-  if (isActiveProcessingPhase(snapshot.lifecycle))
-    throw new Error(`Native processing remained ${snapshot.lifecycle} after shutdown.`);
-  useProcessingStore.getState().bindRunSnapshot(snapshot);
-  await reconcileProcessingTerminal(lease, true);
+  return registerProjectTask(operation);
 }

@@ -3,13 +3,9 @@ import { notifications } from "@mantine/notifications";
 import type { ProjectInspection } from "../generated/project/ProjectInspection";
 import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
 import { activateProject, readProjectSnapshot } from "./projectPersistence";
-import { reconcileProcessingRunAfterShutdown } from "./processingTerminalCoordinator";
 import { clearProcessingListeners, useProcessingStore } from "../stores/processingStore";
 import { clearImportListeners } from "./importEvents";
-import {
-  reconcileImportRunAfterShutdown,
-  reconcileImportRunForActivation,
-} from "./importTerminalCoordinator";
+import { reconcileImportRunForActivation } from "./importTerminalCoordinator";
 import { resetProjectStores } from "../stores/projectStoreHydration";
 import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -39,9 +35,7 @@ export interface TransitionDependencies {
   ) => Promise<ProjectSnapshot>;
   clearActiveProject?: () => Promise<void>;
   reconcileImportRun?: () => Promise<unknown>;
-  reconcileImportAfterShutdown?: () => Promise<void>;
   reconcileProcessingRun?: () => Promise<unknown>;
-  reconcileProcessingAfterShutdown?: () => Promise<void>;
 }
 export const shutdownProjectRuntime = () =>
   invoke<ProjectRuntimeShutdownResult>("shutdown_project_runtime");
@@ -69,11 +63,8 @@ async function settle(dependencies: TransitionDependencies): Promise<void> {
             .map((resource) => resource.error ?? "resource did not stop")
             .join("; ")}`,
         );
-      await (dependencies.reconcileImportAfterShutdown ?? reconcileImportRunAfterShutdown)();
-      await (
-        dependencies.reconcileProcessingAfterShutdown ?? reconcileProcessingRunAfterShutdown
-      )();
-      await useProjectStore.getState().saveProject({ allowClosedAdmission: true });
+      // Native shutdown persists results. Keep A's cache current if replacement/clear fails.
+      await useProjectStore.getState().refreshProject();
     }
   } catch (error) {
     reopenProjectWorkAdmission();
