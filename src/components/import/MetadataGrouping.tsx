@@ -1,11 +1,12 @@
 import { Badge, Button, Card, Checkbox, Group, Stack, Table, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconFileImport, IconPlus } from "@tabler/icons-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import HeaderCard from "../common/HeaderCard";
 
 import { notifications } from "@mantine/notifications";
 
 import { getRelativePath, splitBySubDelimiters } from "../../lib/pathUtils";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 import {
   type BidsAslMetadata,
   type MetadataGroup,
@@ -132,12 +133,18 @@ export default function MetadataGrouping() {
   const addMetadataGroup = useImportStore((state) => state.addMetadataGroup);
   const removeMetadataGroup = useImportStore((state) => state.removeMetadataGroup);
   const updateMetadataGroup = useImportStore((state) => state.updateMetadataGroup);
-  const updateSubjectRowGroup = useImportStore((state) => state.updateSubjectRowGroup);
   const tokenSubDelimiters = useGlobalStore((state) => state.settings.tokenSubDelimiters);
   const hasDerivationContext =
     sourceDataPath.length > 0 && rawPaths.length > 0 && pathPatterns.length > 0;
 
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [modalMode, setModalMode] = useState<"edit" | "override" | null>(() =>
     metadataGroups.length === 0 ? "edit" : null,
   );
@@ -246,9 +253,10 @@ export default function MetadataGrouping() {
     removeMetadataGroup(groupId);
   }
 
-  function handleModalSubmit(values: { label: string; bidsParams: BidsAslMetadata }) {
+  async function handleModalSubmit(values: { label: string; bidsParams: BidsAslMetadata }) {
+    const lease = captureProjectLease();
     if (modalMode === "edit" && editingGroupId) {
-      updateMetadataGroup(editingGroupId, {
+      await updateMetadataGroup(editingGroupId, {
         label: values.label,
         bidsParams: values.bidsParams as MetadataGroup["bidsParams"],
       });
@@ -262,11 +270,12 @@ export default function MetadataGrouping() {
         bidsParams: values.bidsParams as MetadataGroup["bidsParams"],
       };
 
-      addMetadataGroup(overrideGroup);
-      updateSubjectRowGroup(selectedRowIds, groupId);
+      await addMetadataGroup(overrideGroup, selectedRowIds);
+      if (!mounted.current || !isCurrentProjectLease(lease)) return;
       setSelectedRowIds([]);
     }
 
+    if (!mounted.current || !isCurrentProjectLease(lease)) return;
     setModalMode(null);
     setEditingGroupId(null);
   }

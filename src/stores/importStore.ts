@@ -58,20 +58,20 @@ export const acceptedImportSettings = () => importSettings(useProjectStore.getSt
 function editMapping(
   update: Partial<MappingState> | ((mapping: Required<MappingState>) => Partial<MappingState>),
 ) {
-  void useProjectStore
-    .getState()
-    .submitEdit((project) => ({
-      kind: "import",
-      mapping: {
-        ...project.mappingState,
-        ...(typeof update === "function" ? update(importSettings(project)) : update),
-      },
-      preferences: {
-        activeStep: project.uiState.import?.activeStep,
-        selectedProfileId: project.uiState.import?.selectedProfileId,
-      },
-    }))
-    .catch(() => undefined);
+  const operation = useProjectStore.getState().submitEdit((project) => ({
+    kind: "import",
+    mapping: {
+      ...project.mappingState,
+      ...(typeof update === "function" ? update(importSettings(project)) : update),
+    },
+    preferences: {
+      activeStep: project.uiState.import?.activeStep,
+      selectedProfileId: project.uiState.import?.selectedProfileId,
+    },
+  }));
+  // Existing immediate editors remain fire-and-forget; awaited editors receive rejection.
+  void operation.catch(() => undefined);
+  return operation;
 }
 
 // =============================================================================
@@ -193,11 +193,10 @@ export interface ImportState {
   setRunAliases: (aliases: SessionAlias[]) => void;
   setSubjectRenames: (renames: SubjectRename[]) => void;
   updateSubjectRename: (original: string, target: string) => void;
-  addMetadataGroup: (group: MetadataGroup) => void;
+  addMetadataGroup: (group: MetadataGroup, rowIds?: string[]) => Promise<void>;
   removeMetadataGroup: (id: string) => void;
-  updateMetadataGroup: (id: string, updates: Partial<MetadataGroup>) => void;
+  updateMetadataGroup: (id: string, updates: Partial<MetadataGroup>) => Promise<void>;
   setSubjectRows: (rows: SubjectRow[]) => void;
-  updateSubjectRowGroup: (rowIds: string[], groupId: string) => void;
   startImport: (subjects?: string[]) => void;
   addLogLines: (lines: string[]) => void;
   markSubjectRunning: (subject: string, step?: "DCM2NII" | "NII2BIDS") => void;
@@ -606,13 +605,18 @@ export const useImportStore = create<ImportState>((set, get) => ({
     }));
   },
 
-  addMetadataGroup: (group) => {
-    editMapping((state) => {
+  addMetadataGroup: (group, rowIds = []) => {
+    return editMapping((state) => {
       if (state.metadataGroups.some((g) => g.id === group.id)) {
         return {};
       }
       return {
         metadataGroups: [...state.metadataGroups, group],
+        ...(rowIds.length > 0 && {
+          subjectRows: state.subjectRows.map((row) =>
+            rowIds.includes(row.id) ? { ...row, groupId: group.id } : row,
+          ),
+        }),
       };
     });
   },
@@ -627,21 +631,13 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   updateMetadataGroup: (id, updates) => {
-    editMapping((state) => ({
+    return editMapping((state) => ({
       metadataGroups: state.metadataGroups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
     }));
   },
 
   setSubjectRows: (rows) => {
     editMapping({ subjectRows: rows });
-  },
-
-  updateSubjectRowGroup: (rowIds, groupId) => {
-    editMapping((state) => ({
-      subjectRows: state.subjectRows.map((row) =>
-        rowIds.includes(row.id) ? { ...row, groupId } : row,
-      ),
-    }));
   },
 
   startImport: (subjects) => {

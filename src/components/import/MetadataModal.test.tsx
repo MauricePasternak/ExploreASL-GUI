@@ -1,9 +1,14 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import MetadataModal from "./MetadataModal";
+import MetadataGrouping from "./MetadataGrouping";
+import { invoke } from "@tauri-apps/api/core";
+import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
+import { useProjectStore } from "../../stores/projectStore";
+import { projectFixture } from "../../test/projectFixtures";
 import type { MetadataGroupFormValues } from "./metadataModalTypes";
 
 const emptyValues: MetadataGroupFormValues = {
@@ -37,6 +42,9 @@ function queryTestId(id: string): HTMLElement[] {
 
 afterEach(() => {
   cleanup();
+  useProjectStore.getState().cancelAutosave();
+  resetProjectLifecycleForTests();
+  vi.mocked(invoke).mockReset();
 });
 
 function renderModal(
@@ -61,6 +69,147 @@ function renderModal(
 }
 
 describe("MetadataModal", () => {
+  it.each(["edit", "override"] as const)(
+    "%s waits for native acceptance, retains rejected draft and retries",
+    async (mode) => {
+      const before = projectFixture();
+      before.document.mappingState = {
+        metadataGroups: [{ id: "global-defaults", label: "Global", bidsParams: validBidsParams }],
+        subjectRows: [{ id: "FOO/01", subject: "FOO", session: "01", groupId: "global-defaults" }],
+      };
+      useProjectStore.setState(useProjectStore.getInitialState(), true);
+      useProjectStore.getState().acceptSnapshot(before);
+      activateProjectLease("project-1", "/project");
+      let reject!: (error: Error) => void;
+      vi.mocked(invoke).mockImplementationOnce(
+        () =>
+          new Promise((_, fail) => {
+            reject = fail;
+          }),
+      );
+      render(
+        <MantineProvider env="test">
+          <MetadataGrouping />
+        </MantineProvider>,
+      );
+      fireEvent.click(screen.getByTestId("metadata-row-checkbox-FOO-01"));
+      fireEvent.click(
+        screen.getByTestId(
+          mode === "edit" ? "metadata-edit-defaults-btn" : "metadata-apply-override-btn",
+        ),
+      );
+      if (mode === "override") {
+        fireEvent.click(testId("field-background-suppression"));
+        fireEvent.click(testId("field-background-suppression"));
+        for (const [field, name] of [
+          ["arterial-spin-labeling-type", "PCASL"],
+          ["mr-acquisition-type", "3D"],
+          ["manufacturer", "Siemens"],
+          ["m0-type", "Separate"],
+        ]) {
+          fireEvent.click(testId(`field-${field}`));
+          fireEvent.click(screen.getByRole("option", { name }));
+        }
+        for (const [field, value] of [
+          ["asl-context", "control,label"],
+          ["post-labeling-delay", "1.8"],
+          ["labeling-duration", "1.8"],
+          ["magnetic-field-strength", "3"],
+        ]) {
+          fireEvent.change(testId(`field-${field}`), { target: { value } });
+        }
+      }
+      fireEvent.change(testId("modal-group-label-input"), { target: { value: "Entered draft" } });
+      fireEvent.click(testId("modal-save-btn"));
+      await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+      const cancelDisabled = screen.queryByTestId("modal-cancel-btn")?.hasAttribute("disabled");
+      const form = screen.queryByTestId("modal-save-btn")?.closest("form");
+      if (form) fireEvent.submit(form);
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(useProjectStore.getState().project!.mappingState).toEqual(
+        before.document.mappingState,
+      );
+      await act(async () => {
+        reject(new Error("Native rejected metadata"));
+      });
+      expect(cancelDisabled).toBe(true);
+      expect(await screen.findByText("Native rejected metadata")).toBeInTheDocument();
+      expect(testId("modal-group-label-input")).toHaveValue("Entered draft");
+      expect(screen.getByTestId("metadata-row-checkbox-FOO-01")).toBeChecked();
+      expect(invoke).toHaveBeenCalledTimes(1);
+      const submission = vi.mocked(invoke).mock.calls[0][1] as {
+        edit: {
+          mapping: typeof before.document.mappingState;
+        };
+      };
+      const mapping = submission.edit.mapping;
+      const group = mapping.metadataGroups![mode === "edit" ? 0 : 1];
+      expect(group).toEqual({
+        id: mode === "edit" ? "global-defaults" : expect.stringMatching(/^override-/),
+        label: "Entered draft",
+        bidsParams:
+          mode === "edit" ? validBidsParams : { ...validBidsParams, PostLabelingDelay: 1.8 },
+      });
+      expect(mapping.subjectRows![0]).toEqual({
+        ...before.document.mappingState.subjectRows![0],
+        groupId: group.id,
+      });
+      const accepted = structuredClone(before);
+      accepted.acceptedRevision = 1;
+      let resolve!: (value: typeof accepted) => void;
+      vi.mocked(invoke).mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      fireEvent.click(testId("modal-save-btn"));
+      await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+      accepted.document.mappingState = (
+        vi.mocked(invoke).mock.calls[1][1] as typeof submission
+      ).edit.mapping;
+      expect(screen.getByTestId("modal-save-btn")).toBeInTheDocument();
+      await act(async () => {
+        resolve(accepted);
+      });
+      await waitFor(() => expect(screen.queryByTestId("modal-save-btn")).not.toBeInTheDocument());
+      expect(screen.getByTestId("metadata-row-checkbox-FOO-01")).toHaveProperty(
+        "checked",
+        mode === "edit",
+      );
+    },
+  );
+  it("does not dismiss an editor after its project activation expires", async () => {
+    const before = projectFixture();
+    before.document.mappingState.metadataGroups = [
+      { id: "global-defaults", label: "Global", bidsParams: validBidsParams },
+    ];
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useProjectStore.getState().acceptSnapshot(before);
+    activateProjectLease("project-1", "/project");
+    let resolve!: (value: typeof before) => void;
+    vi.mocked(invoke).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const mounted = render(
+      <MantineProvider env="test">
+        <MetadataGrouping />
+      </MantineProvider>,
+    );
+    fireEvent.click(screen.getByTestId("metadata-edit-defaults-btn"));
+    fireEvent.click(testId("modal-save-btn"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    activateProjectLease("project-1", "/project");
+    await act(async () => {
+      resolve(before);
+    });
+    expect(screen.getByTestId("modal-save-btn")).toBeInTheDocument();
+    mounted.unmount();
+  });
+
   it("renders required fields legend and displays asterisks", () => {
     renderModal();
 
