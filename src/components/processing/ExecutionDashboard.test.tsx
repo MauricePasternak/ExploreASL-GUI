@@ -114,13 +114,6 @@ describe("ExecutionDashboard component", () => {
     expect(screen.getByText("ASL")).toBeInTheDocument();
   });
 
-  it("renders subject rows for structural module", () => {
-    renderDashboard();
-    const structSection = screen.getByTestId("structural-section");
-    const rows = within(structSection).getAllByTestId("subject-row");
-    expect(rows).toHaveLength(2);
-  });
-
   it("renders step timeline for complete subject", () => {
     mockSubjectStatuses = [
       {
@@ -286,20 +279,12 @@ describe("ExecutionDashboard component", () => {
     expect(within(headers[0]).getByText("1/2")).toBeInTheDocument();
   });
 
-  it("shows no Done or Running badges when subjectStatuses is empty (stale cleared)", () => {
+  it("shows empty steps without Done or Running badges when statuses are empty", () => {
     mockSubjectStatuses = [];
     renderDashboard();
     expect(screen.queryByText("Done")).not.toBeInTheDocument();
     expect(screen.queryByText("Running")).not.toBeInTheDocument();
-    // Steps should be empty — "No steps recorded"
     expect(screen.getAllByText("No steps recorded").length).toBeGreaterThan(0);
-  });
-
-  it("shows no stale step timeline when statuses were cleared before re-processing", () => {
-    // Simulates: subject completed previously, statuses cleared on startProcessing,
-    // dashboard should show empty steps, not old completed steps
-    mockSubjectStatuses = [];
-    renderDashboard();
     const section = screen.getByTestId("structural-section");
     const rows = within(section).getAllByTestId("subject-row");
     expect(rows).toHaveLength(2);

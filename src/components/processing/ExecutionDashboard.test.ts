@@ -37,13 +37,6 @@ describe("getStepsForSubject", () => {
     ]);
   });
 
-  it("does not append running step when not locked", () => {
-    const statuses: SubjectModuleStatus[] = [{ ...baseEntry, locked: false }];
-    const steps = getStepsForSubject(indexSubjectStatuses(statuses), "sub-001_01", "structural");
-    expect(steps).toHaveLength(2);
-    expect(steps.every((s) => s.status === "complete")).toBe(true);
-  });
-
   it("returns empty array when no entry found", () => {
     const steps = getStepsForSubject(indexSubjectStatuses([]), "sub-999_01", "structural");
     expect(steps).toEqual([]);

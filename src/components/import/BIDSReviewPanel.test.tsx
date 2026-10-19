@@ -530,30 +530,14 @@ describe("BIDSReviewPanel", () => {
       });
     });
 
-    it("renders persisted summary banner", () => {
+    it("renders the persisted read-only summary with skipped subjects and a Re-scan action", () => {
       renderPanel();
       expect(screen.getByTestId("bids-review-readonly-banner")).toBeInTheDocument();
       expect(screen.getByTestId("bids-review-header")).toBeInTheDocument();
-    });
-
-    it("renders persisted group labels as read-only inputs", () => {
-      renderPanel();
       const input = screen.getByTestId("bids-group-label-input-group-1");
       expect(input).toHaveAttribute("readonly");
-    });
-
-    it("does not render Confirm button", () => {
-      renderPanel();
       expect(screen.queryByTestId("bids-review-confirm-btn")).not.toBeInTheDocument();
-    });
-
-    it("renders Re-scan BIDS action", () => {
-      renderPanel();
       expect(screen.getByTestId("bids-review-rescan-btn")).toBeInTheDocument();
-    });
-
-    it("renders persisted skipped subjects", () => {
-      renderPanel();
       expect(screen.getByTestId("bids-review-skipped-warning")).toBeInTheDocument();
       expect(screen.getByText("sub-99_1")).toBeInTheDocument();
     });

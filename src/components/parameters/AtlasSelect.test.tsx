@@ -28,21 +28,6 @@ afterEach(() => {
 });
 
 describe("AtlasSelect", () => {
-  it("renders MultiSelect with atlas options", () => {
-    renderWithMantine(
-      <AtlasSelect
-        atlases={[]}
-        tissueMasking={[]}
-        tissueThreshold={[]}
-        onAtlasesChange={() => {}}
-        onTissueMaskingChange={() => {}}
-        onTissueThresholdChange={() => {}}
-      />,
-    );
-
-    expect(screen.getByTestId("mock-multiselect")).toBeInTheDocument();
-  });
-
   it("shows paired rows with info tooltips for selected atlases", () => {
     renderWithMantine(
       <AtlasSelect

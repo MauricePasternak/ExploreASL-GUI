@@ -24,29 +24,18 @@ beforeEach(() => {
 });
 
 describe("DataParEditor", () => {
-  it("renders the editor with title", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    expect(within(container).getByText("ExploreASL Processing Parameters")).toBeTruthy();
-  });
-
-  it("renders basic accordion sections", () => {
+  it("renders the title, basic sections, and advanced toggle without advanced sections", () => {
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
+    expect(w.getByText("ExploreASL Processing Parameters")).toBeTruthy();
     expect(w.getAllByText("M0 Configuration").length).toBeGreaterThanOrEqual(1);
     expect(w.getAllByText("Quantification").length).toBeGreaterThanOrEqual(1);
     expect(w.getAllByText("General Settings").length).toBeGreaterThanOrEqual(1);
     expect(w.getAllByText("ASL Processing").length).toBeGreaterThanOrEqual(1);
     expect(w.getAllByText("Atlases").length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("does not show Structural section by default", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    expect(within(container).queryByText("Structural")).toBeNull();
-  });
-
-  it("does not show Environment section by default", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    expect(within(container).queryByText("Environment")).toBeNull();
+    expect(w.queryByText("Structural")).toBeNull();
+    expect(w.queryByText("Environment")).toBeNull();
+    expect(w.getAllByText("Show advanced parameter sections").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows Structural and Environment when advanced toggle is on", async () => {
@@ -76,12 +65,5 @@ describe("DataParEditor", () => {
     fireEvent.click(switchBody!);
     await vi.waitFor(() => expect(w.queryByText("Structural")).toBeNull());
     expect(w.queryByText("Environment")).toBeNull();
-  });
-
-  it("renders advanced toggle switch", () => {
-    const { container } = renderWithMantine(<DataParEditor />);
-    expect(
-      within(container).getAllByText("Show advanced parameter sections").length,
-    ).toBeGreaterThanOrEqual(1);
   });
 });

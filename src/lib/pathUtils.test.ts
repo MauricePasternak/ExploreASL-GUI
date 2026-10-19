@@ -223,14 +223,6 @@ describe("discoverPathPatterns", () => {
     expect(pattern.uniqueNames[2]!.length).toBe(BAR_PATHS.length);
   });
 
-  it("correctly identifies fixed segment (DICOM) in FOO paths", () => {
-    const patterns = discoverPathPatterns(FOO_PATHS, ROOT);
-    const pattern = patterns[0];
-
-    // Depth level 2 should be fixed "DICOM"
-    expect(pattern.uniqueNames[2]).toEqual(["DICOM"]);
-  });
-
   it("groups paths by sub-block shape, not by value cardinality", () => {
     // GENFI-style: paths with 3-sub-block vs 2-sub-block session names
     // should be separate patterns when delimiters include "-"

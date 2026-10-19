@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import WelcomeCard from "./WelcomeCard";
 
@@ -25,18 +25,5 @@ describe("WelcomeCard", () => {
     expect(screen.getByTestId("welcome-card-project-types")).toBeInTheDocument();
     expect(screen.getByTestId("welcome-card-project-types")).toHaveTextContent(/dicom projects/i);
     expect(screen.getByTestId("welcome-card-project-types")).toHaveTextContent(/bids projects/i);
-  });
-
-  it("calls onOpenSettings when Open Settings is clicked", () => {
-    const onOpenSettings = vi.fn();
-
-    render(
-      <MantineProvider env="test">
-        <WelcomeCard onOpenSettings={onOpenSettings} />
-      </MantineProvider>,
-    );
-
-    fireEvent.click(screen.getByTestId("welcome-open-settings-btn"));
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 });

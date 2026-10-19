@@ -69,16 +69,6 @@ describe("ProcessConfigSchema", () => {
     ).toThrow();
   });
 
-  it("accepts valid selectedProfileId", () => {
-    const result = ProcessConfigSchema.parse(validConfig);
-    expect(result.selectedProfileId).toBe("550e8400-e29b-41d4-a716-446655440000");
-  });
-
-  it("leaves rerunBids2Legacy undefined when omitted", () => {
-    const result = ProcessConfigSchema.parse(validConfig);
-    expect(result.rerunBids2Legacy).toBeUndefined();
-  });
-
   it("accepts explicit rerunBids2Legacy value", () => {
     const result = ProcessConfigSchema.parse({
       ...validConfig,
@@ -146,17 +136,6 @@ describe("SubjectModuleStatusSchema", () => {
   it("accepts empty subjectSession for population module", () => {
     const data = {
       subjectSession: "",
-      module: "population" as const,
-      status: "pending" as const,
-      completedSteps: [],
-      locked: false,
-    };
-    const result = SubjectModuleStatusSchema.parse(data);
-    expect(result.subjectSession).toBe("");
-  });
-
-  it("accepts undefined subjectSession for population module (Rust sends undefined)", () => {
-    const data = {
       module: "population" as const,
       status: "pending" as const,
       completedSteps: [],

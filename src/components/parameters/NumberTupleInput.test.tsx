@@ -109,20 +109,6 @@ describe("NumberTupleInput", () => {
     expect(onChange).toHaveBeenLastCalledWith([3, 5, 5]);
   });
 
-  it("sets data-testid on each input with axis suffix", () => {
-    renderWithMantine(
-      <NumberTupleInput
-        value={[5, 10, 15]}
-        onChange={() => {}}
-        testId="field-PVCNativeSpaceKernel"
-      />,
-    );
-
-    expect(screen.getAllByTestId("field-PVCNativeSpaceKernel-X").length).toBeGreaterThan(0);
-    expect(screen.getAllByTestId("field-PVCNativeSpaceKernel-Y").length).toBeGreaterThan(0);
-    expect(screen.getAllByTestId("field-PVCNativeSpaceKernel-Z").length).toBeGreaterThan(0);
-  });
-
   it("uses axis index suffix when custom labels are provided", () => {
     renderWithMantine(
       <NumberTupleInput

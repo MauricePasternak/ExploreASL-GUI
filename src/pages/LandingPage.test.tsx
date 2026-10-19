@@ -752,34 +752,6 @@ describe("LandingPage BIDS detection dialogs", () => {
     expect(screen.getByTestId("bids-detection-dialog-continue-btn")).not.toBeDisabled();
   });
 
-  it("shows BIDS detection dialog when a valid BIDS folder is picked", async () => {
-    const createProject = vi.fn();
-    useProjectStore.setState({ createProject });
-    vi.mocked(open).mockResolvedValue("/tmp/bids-dataset");
-
-    // invoke: is_writable → true, check_bids_dataset → BIDS result
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "is_writable") return true;
-      if (cmd === "check_bids_dataset") return BASE_BIDS_RESULT;
-      return true;
-    });
-
-    renderLanding();
-    fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("bids-detection-dialog")).toBeInTheDocument();
-    });
-
-    // Verify dialog content
-    expect(screen.getByText(/ASL subjects:/i)).toBeInTheDocument();
-    expect(screen.getByTestId("bids-detection-dialog-skip-radio")).toBeInTheDocument();
-    expect(screen.getByTestId("bids-detection-dialog-dicom-radio")).toBeInTheDocument();
-    expect(screen.getByTestId("bids-detection-dialog-continue-btn")).toBeInTheDocument();
-    expect(screen.getByTestId("bids-detection-dialog-cancel-btn")).toBeInTheDocument();
-    expect(createProject).not.toHaveBeenCalled();
-  });
-
   it("creates BIDS project when user selects Skip Import and clicks Continue", async () => {
     const createProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({ createProject });
@@ -796,6 +768,13 @@ describe("LandingPage BIDS detection dialogs", () => {
     await waitFor(() => {
       expect(screen.getByTestId("bids-detection-dialog")).toBeInTheDocument();
     });
+
+    expect(screen.getByText(/ASL subjects:/i)).toBeInTheDocument();
+    expect(screen.getByTestId("bids-detection-dialog-skip-radio")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-detection-dialog-dicom-radio")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-detection-dialog-continue-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-detection-dialog-cancel-btn")).toBeInTheDocument();
+    expect(createProject).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
     await waitFor(() =>
@@ -853,37 +832,6 @@ describe("LandingPage BIDS detection dialogs", () => {
         planId: "reviewed-plan",
       });
     });
-  });
-
-  it("shows error dialog when no BIDS subjects found", async () => {
-    const createProject = vi.fn();
-    useProjectStore.setState({ createProject });
-    vi.mocked(open)
-      .mockResolvedValueOnce("/tmp/empty-folder")
-      .mockResolvedValueOnce("/tmp/another-folder");
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "is_writable") return true;
-      if (cmd === "check_bids_dataset") {
-        return {
-          ...BASE_BIDS_RESULT,
-          isBids: false,
-          aslSubjectCount: 0,
-          totalSubjectCount: 0,
-          error: "No BIDS subjects found",
-        };
-      }
-      return true;
-    });
-
-    renderLanding();
-    fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("bids-no-subjects-dialog")).toBeInTheDocument();
-    });
-    expect(screen.getByTestId("bids-no-subjects-choose-btn")).toBeInTheDocument();
-    expect(screen.getByTestId("bids-no-subjects-cancel-btn")).toBeInTheDocument();
-    expect(createProject).not.toHaveBeenCalled();
   });
 
   it("shows error dialog when subjects exist but no ASL data found, and cancel dismisses it", async () => {
@@ -1027,6 +975,10 @@ describe("LandingPage BIDS detection dialogs", () => {
     await waitFor(() => {
       expect(screen.getByTestId("bids-no-subjects-dialog")).toBeInTheDocument();
     });
+
+    expect(screen.getByTestId("bids-no-subjects-choose-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-no-subjects-cancel-btn")).toBeInTheDocument();
+    expect(createProject).not.toHaveBeenCalled();
 
     const skipRadio = screen.getByTestId("bids-detection-dialog-skip-radio");
     const dicomRadio = screen.getByTestId("bids-detection-dialog-dicom-radio");

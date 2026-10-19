@@ -54,18 +54,10 @@ function AtlasesSectionWrapper({
 }
 
 describe("AtlasesSection", () => {
-  it("renders AtlasSelect component with atlas multiselect", () => {
+  it("renders basic fields and shows advanced fields when toggled on", () => {
     renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
-  });
-
-  it("renders Show advanced toggle", () => {
-    renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
-  });
-
-  it("shows advanced fields when toggled on", () => {
-    renderWithMantine(<AtlasesSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/minimal roi volume/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/include existing wmh voxels/i).length).toBeGreaterThan(0);

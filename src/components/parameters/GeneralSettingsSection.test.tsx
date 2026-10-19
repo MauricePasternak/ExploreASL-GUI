@@ -54,24 +54,12 @@ function GeneralSettingsSectionWrapper({
 }
 
 describe("GeneralSettingsSection", () => {
-  it("renders Quality field", () => {
+  it("renders basic fields and shows advanced fields when toggled on", () => {
     renderWithMantine(
       <GeneralSettingsSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
     );
     expect(screen.getAllByText(/processing quality/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders Show advanced toggle", () => {
-    renderWithMantine(
-      <GeneralSettingsSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
-  });
-
-  it("shows advanced fields when toggled on", () => {
-    renderWithMantine(
-      <GeneralSettingsSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/delete temporary/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/skip if no flair/i).length).toBeGreaterThan(0);

@@ -54,45 +54,15 @@ function ASLProcessingSectionWrapper({
 }
 
 describe("ASLProcessingSection", () => {
-  it("renders motionCorrection toggle", () => {
+  it("renders basic fields and shows advanced fields when toggled on", () => {
     renderWithMantine(
       <ASLProcessingSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
     );
     expect(screen.getAllByText(/motion correction/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders bTopUp toggle", () => {
-    renderWithMantine(
-      <ASLProcessingSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     expect(screen.getAllByText(/fsl topup/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders bPVCNativeSpace toggle", () => {
-    renderWithMantine(
-      <ASLProcessingSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     expect(screen.getAllByText(/partial volume correction/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders SaveCBF4D toggle", () => {
-    renderWithMantine(
-      <ASLProcessingSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     expect(screen.getAllByText(/save 4d cbf/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders Show advanced toggle", () => {
-    renderWithMantine(
-      <ASLProcessingSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
-  });
-
-  it("shows advanced fields when toggled on", () => {
-    renderWithMantine(
-      <ASLProcessingSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/spike removal threshold/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/registration contrast/i).length).toBeGreaterThan(0);

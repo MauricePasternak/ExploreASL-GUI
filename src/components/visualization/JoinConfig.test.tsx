@@ -68,11 +68,6 @@ describe("JoinConfig", () => {
     mockInvoke.mockReset();
   });
 
-  it("renders upload button when joinConfig is null", () => {
-    renderComponent();
-    expect(screen.getByTestId("browse-external-btn")).toBeInTheDocument();
-  });
-
   it("auto-inspects external data on mount when joinConfig is present", async () => {
     const mockExtInspection = {
       columns: [

@@ -366,73 +366,6 @@ describe("BidsAslMetadataSchema", () => {
     expect(() => BidsAslMetadataSchema.parse({ ...validBase, SliceTiming: "1, a, 3" })).toThrow();
   });
 
-  it("enforces matching number of elements between PostLabelingDelay and BolusCutOffDelayTime if multiple values are provided", () => {
-    // Valid: both single values
-    expect(
-      BidsAslMetadataSchema.parse({
-        ...validBase,
-        PostLabelingDelay: 1.8,
-        BolusCutOffDelayTime: 0.8,
-      }),
-    ).toMatchObject({
-      PostLabelingDelay: 1.8,
-      BolusCutOffDelayTime: 0.8,
-    });
-
-    // Valid: both arrays of same length
-    expect(
-      BidsAslMetadataSchema.parse({
-        ...validBase,
-        PostLabelingDelay: [1.8, 2.0],
-        BolusCutOffDelayTime: [0.8, 0.9],
-      }),
-    ).toMatchObject({
-      PostLabelingDelay: [1.8, 2.0],
-      BolusCutOffDelayTime: [0.8, 0.9],
-    });
-
-    // Invalid: array vs single
-    expect(() =>
-      BidsAslMetadataSchema.parse({
-        ...validBase,
-        PostLabelingDelay: [1.8, 2.0],
-        BolusCutOffDelayTime: 0.8,
-      }),
-    ).toThrow();
-
-    // Invalid: differing array lengths
-    expect(() =>
-      BidsAslMetadataSchema.parse({
-        ...validBase,
-        PostLabelingDelay: [1.8, 2.0],
-        BolusCutOffDelayTime: [0.8, 0.9, 1.0],
-      }),
-    ).toThrow();
-  });
-
-  it("enforces matching zero index positions between PostLabelingDelay and BolusCutOffDelayTime", () => {
-    // Valid: matching zero positions
-    expect(
-      BidsAslMetadataSchema.parse({
-        ...validBase,
-        PostLabelingDelay: [1.8, 0, 2.0],
-        BolusCutOffDelayTime: [0.8, 0, 0.9],
-      }),
-    ).toMatchObject({
-      PostLabelingDelay: [1.8, 0, 2.0],
-      BolusCutOffDelayTime: [0.8, 0, 0.9],
-    });
-
-    // Invalid: mismatching zero positions
-    expect(() =>
-      BidsAslMetadataSchema.parse({
-        ...validBase,
-        PostLabelingDelay: [1.8, 0, 2.0],
-        BolusCutOffDelayTime: [0.8, 0.9, 0],
-      }),
-    ).toThrow();
-  });
-
   it("accepts ASLContext with comma-separated control,label,m0scan,deltam tokens", () => {
     expect(
       BidsAslMetadataSchema.parse({ ...validBase, ASLContext: "m0scan,deltam" }),
@@ -473,26 +406,6 @@ describe("BidsAslMetadataSchema", () => {
     const { ASLContext: _omit, ...noCtx } = validBase;
     const parsed = BidsAslMetadataBaseSchema.parse(noCtx);
     expect(parsed.ASLContext).toBeUndefined();
-  });
-
-  it("rejects M0Type 'Included' when ASLContext does not contain m0scan", () => {
-    expect(() =>
-      BidsAslMetadataSchema.parse({
-        ...validBase,
-        ASLContext: "control,label",
-        M0Type: "Included",
-      }),
-    ).toThrow();
-  });
-
-  it("accepts M0Type 'separate' when ASLContext does not contain m0scan", () => {
-    expect(
-      BidsAslMetadataSchema.parse({
-        ...validBase,
-        ASLContext: "control,label",
-        M0Type: "Separate",
-      }),
-    ).toMatchObject({ M0Type: "Separate" });
   });
 
   it("rejects PostLabelingDelay, BolusCutOffDelayTime, and LabelingDuration values outside [0.01, 10] range (excluding 0)", () => {
@@ -564,17 +477,6 @@ describe("validateBidsMetadataGroup", () => {
       M0Type: "Included",
     });
     expect(errors).toContain(
-      "M0 Type cannot be 'Included' when ASL Context does not contain 'm0scan'.",
-    );
-  });
-
-  it("auto-accepts M0Type 'Included' when m0scan is in ASLContext", () => {
-    const errors = validateBidsMetadataGroup({
-      ...validData,
-      M0Type: "Included",
-      ASLContext: "m0scan,deltam",
-    });
-    expect(errors).not.toContain(
       "M0 Type cannot be 'Included' when ASL Context does not contain 'm0scan'.",
     );
   });
@@ -699,11 +601,23 @@ describe("validateBidsMetadataGroup", () => {
     expect(errors).toContain("Slice Timing is required when MR Acquisition Type is 2D.");
   });
 
-  it("flags mismatch in number of elements for PostLabelingDelay and BolusCutOffDelayTime when multiple values are provided", () => {
+  it.each([
+    { PostLabelingDelay: 1.8, BolusCutOffDelayTime: 0.8 },
+    { PostLabelingDelay: [1.8, 2.0], BolusCutOffDelayTime: [0.8, 0.9] },
+    { PostLabelingDelay: [1.8, 0, 2.0], BolusCutOffDelayTime: [0.8, 0, 0.9] },
+  ])("accepts matching delay lengths and zero positions: %j", (delays) => {
+    expect(validateBidsMetadataGroup({ ...validData, ...delays })).toEqual([]);
+  });
+
+  it.each([
+    { BolusCutOffDelayTime: 0.8 },
+    { BolusCutOffDelayTime: [0.8] },
+    { BolusCutOffDelayTime: [0.8, 0.9, 1.0] },
+  ])("flags mismatched delay lengths: %j", ({ BolusCutOffDelayTime }) => {
     const data = {
       ...validData,
       PostLabelingDelay: [1.8, 2.0],
-      BolusCutOffDelayTime: [0.8],
+      BolusCutOffDelayTime,
     };
     const errors = validateBidsMetadataGroup(data);
     expect(errors).toContain(

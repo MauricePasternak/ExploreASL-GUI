@@ -31,23 +31,15 @@ afterEach(() => cleanup());
 const emptyState: DataParState = {};
 
 describe("EnvironmentSection", () => {
-  it("renders bAutomaticallyDetectFSL toggle", () => {
-    renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/auto-detect fsl/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders bAutomaticallyDetectVABY toggle", () => {
-    renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/auto-detect vaby/i).length).toBeGreaterThan(0);
-  });
-
   it("does not render AdvancedDivider", () => {
     renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.queryByText(/show advanced/i)).toBeNull();
   });
 
-  it("treats undefined bAutomaticallyDetectFSL as true", () => {
+  it("renders auto-detection fields and treats undefined bAutomaticallyDetectFSL as true", () => {
     renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={() => {}} />);
+    expect(screen.getAllByText(/auto-detect fsl/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/auto-detect vaby/i).length).toBeGreaterThan(0);
     const fslInput = document.querySelector('input[role="switch"]');
     expect(fslInput?.getAttribute("data-checked")).toBe("true");
   });

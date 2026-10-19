@@ -66,19 +66,11 @@ describe("VisualizeStep", () => {
     HTMLCanvasElement.prototype.getContext = originalGetContext;
   });
 
-  it("renders the visualize step container", () => {
+  it("renders the visualize step container with both panels and their panel group", () => {
     renderComponent();
     expect(screen.getByTestId("dataviz-visualize-step")).toBeInTheDocument();
-  });
-
-  it("renders both panels", () => {
-    renderComponent();
     expect(screen.getByTestId("dataviz-chart-panel")).toBeInTheDocument();
     expect(screen.getByTestId("dataviz-viewer-panel")).toBeInTheDocument();
-  });
-
-  it("renders the panel group", () => {
-    renderComponent();
     expect(screen.getByTestId("dataviz-panel-group")).toBeInTheDocument();
   });
 });

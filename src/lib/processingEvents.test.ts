@@ -16,7 +16,11 @@ import {
   setupProcessingListeners,
   stopProcessingPipeline,
 } from "./processingEvents";
-import { processingProfile, processingSnapshot } from "../test/processingFixtures";
+import {
+  processingProfile,
+  processingReplay,
+  processingSnapshot,
+} from "../test/processingFixtures";
 import { projectView } from "../schemas/project";
 import { projectFixture } from "../test/projectFixtures";
 import { useProjectStore } from "../stores/projectStore";
@@ -51,9 +55,12 @@ describe("processing native IPC", () => {
     useProjectStore.setState({ project: projectView(projectFixture()) });
     activateProjectLease("project-1", "/project");
   });
-  it("sends immutable request and admission", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce({ kind: "current", snapshot: processingSnapshot() });
-    await reserveProcessingRun(request, "/project");
+  it("sends immutable request and admission and decodes current or historical reservations", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({ kind: "current", snapshot: processingSnapshot() })
+      .mockResolvedValueOnce({ kind: "historical", replay: processingReplay() });
+    expect((await reserveProcessingRun(request, "/project")).kind).toBe("current");
+    expect((await reserveProcessingRun(request, "/project")).kind).toBe("historical");
     expect(invoke).toHaveBeenCalledWith("reserve_processing_run", {
       request,
       admission: { projectRoot: "/project" },

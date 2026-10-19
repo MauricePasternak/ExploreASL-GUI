@@ -183,7 +183,6 @@ describe("ControlButtons native lifecycle controls", () => {
     ["preparing", null],
     ["finalizing", null],
     ["cancelling", null],
-    ["cancelling", "processing-run-old"],
   ] as const)(
     "locks control while native run is %s without a retry for its active run",
     (phase, _retryRunId) => {

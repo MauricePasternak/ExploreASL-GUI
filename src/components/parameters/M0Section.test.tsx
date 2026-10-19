@@ -54,26 +54,6 @@ function M0SectionWrapper({
 }
 
 describe("M0Section", () => {
-  it("renders M0 source label", () => {
-    renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/m0 source/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders BackgroundSuppressionNumberPulses field", () => {
-    renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/background suppression pulses/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders M0_GMScaleFactor field", () => {
-    renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/grey-matter scale factor/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders bRegisterM02ASL toggle", () => {
-    renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/register m0 to asl/i).length).toBeGreaterThan(0);
-  });
-
   it("shows BackgroundSuppressionPulseTime when condition met", () => {
     renderWithMantine(
       <M0SectionWrapper
@@ -112,13 +92,13 @@ describe("M0Section", () => {
     expect(found).toBe(false);
   });
 
-  it("renders Show advanced toggle", () => {
+  it("renders basic fields and shows advanced fields when toggled on", () => {
     renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
+    expect(screen.getAllByText(/m0 source/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/background suppression pulses/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/grey-matter scale factor/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/register m0 to asl/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
-  });
-
-  it("shows advanced fields when advanced is toggled on", () => {
-    renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={() => {}} />);
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/conventional m0/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/m0 repetition time/i).length).toBeGreaterThan(0);

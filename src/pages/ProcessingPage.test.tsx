@@ -117,65 +117,29 @@ describe("ProcessingPage", () => {
     });
   });
 
-  it("renders the processing page container", () => {
+  it("renders the idle configuration, controls, and viewers in workflow order", () => {
     renderPage();
     expect(screen.getByTestId("processing-page")).toBeInTheDocument();
-  });
-
-  it("renders SubjectSelection with subjects from store", () => {
-    renderPage();
     expect(screen.getByTestId("subject-selection")).toBeInTheDocument();
     expect(screen.getByText("Select Subject/Session Entries")).toBeInTheDocument();
-  });
-
-  it("does not render population status column in SubjectSelection", () => {
-    renderPage();
     const subjectSelection = screen.getByTestId("subject-selection");
     expect(within(subjectSelection).queryByText(/Population/i)).not.toBeInTheDocument();
-  });
 
-  it("renders PipelineConfig with module checkboxes", () => {
-    renderPage();
-    const config = screen.getByTestId("pipeline-config");
-    expect(config).toBeInTheDocument();
+    const pipeline = screen.getByTestId("pipeline-config");
+    expect(pipeline).toBeInTheDocument();
     expect(screen.getByTestId("module-checkbox-structural")).toBeInTheDocument();
     expect(screen.getByTestId("module-checkbox-asl")).toBeInTheDocument();
     expect(screen.queryByTestId("module-checkbox-population")).not.toBeInTheDocument();
-  });
-
-  it("renders PopulationSection after PipelineConfig", () => {
-    renderPage();
-    const pipeline = screen.getByTestId("pipeline-config");
     const population = screen.getByTestId("population-section");
-    // Verify DOM order: pipeline precedes population
     expect(
       pipeline.compareDocumentPosition(population) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-  });
 
-  it("shows validation errors when config has issues", () => {
-    renderPage();
-    expect(screen.getByTestId("pipeline-config")).toBeInTheDocument();
-  });
-
-  it("renders ControlButtons", () => {
-    renderPage();
     expect(screen.getByTestId("control-buttons")).toBeInTheDocument();
-  });
-
-  it("renders profile selector", () => {
-    renderPage();
     expect(screen.getByTestId("profile-selector")).toBeInTheDocument();
-  });
-
-  it("renders worker count input", () => {
-    renderPage();
     expect(screen.getByTestId("worker-count-input")).toBeInTheDocument();
-  });
-
-  it("renders LogViewerModal as part of log column integration", () => {
-    renderPage();
     expect(screen.getAllByTestId("log-viewer-modal")[0]).toBeInTheDocument();
+    expect(screen.getByTestId("report-viewer-modal")).toBeInTheDocument();
   });
 
   it("does not show orphaned subjects warning for population module status", () => {
@@ -213,11 +177,6 @@ describe("ProcessingPage", () => {
       expect(alert).toHaveTextContent(/orphaned lock file entr/i);
       expect(alert).toHaveTextContent("1 orphaned lock file entry");
     });
-  });
-
-  it("renders ReportViewerModal in the layout", () => {
-    renderPage();
-    expect(screen.getByTestId("report-viewer-modal")).toBeInTheDocument();
   });
 
   describe("Start button gated by ProcessingStatusAlert errors", () => {

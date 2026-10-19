@@ -54,24 +54,12 @@ function QuantificationSectionWrapper({
 }
 
 describe("QuantificationSection", () => {
-  it("renders nCompartments field", () => {
+  it("renders basic fields and shows advanced fields when toggled on", () => {
     renderWithMantine(
       <QuantificationSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
     );
     expect(screen.getAllByText(/tissue compartment/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders Show advanced toggle", () => {
-    renderWithMantine(
-      <QuantificationSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
-  });
-
-  it("shows advanced fields when toggled on", () => {
-    renderWithMantine(
-      <QuantificationSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
-    );
     clickSwitch(/show advanced/i);
     expect(screen.getAllByText(/blood-brain partition/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/t1 of arterial blood/i).length).toBeGreaterThan(0);

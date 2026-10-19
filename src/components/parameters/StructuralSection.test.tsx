@@ -31,44 +31,20 @@ afterEach(() => cleanup());
 const emptyState: DataParState = {};
 
 describe("StructuralSection", () => {
-  it("renders bRunLongReg toggle", () => {
-    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/longitudinal registration/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders bRunDARTEL toggle", () => {
-    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/dartel/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders WMHsegmAlg select", () => {
-    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/wmh segmentation/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders bSegmentSPM12 toggle", () => {
-    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/spm12 segmentation/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders bHammersCAT12 toggle", () => {
-    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/hammers atlas/i).length).toBeGreaterThan(0);
-  });
-
-  it("renders bFixResolution toggle", () => {
-    renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
-    expect(screen.getAllByText(/fix resolution/i).length).toBeGreaterThan(0);
-  });
-
   it("does not render AdvancedDivider", () => {
     renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={() => {}} />);
     expect(screen.queryByText(/show advanced/i)).toBeNull();
   });
 
-  it("calls onFieldChange when bRunLongReg toggled", () => {
+  it("renders structural fields and calls onFieldChange when bRunLongReg toggled", () => {
     const onFieldChange = vi.fn();
     renderWithMantine(<StructuralSection dataPar={emptyState} onFieldChange={onFieldChange} />);
+    expect(screen.getAllByText(/longitudinal registration/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/dartel/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/wmh segmentation/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/spm12 segmentation/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/hammers atlas/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/fix resolution/i).length).toBeGreaterThan(0);
     clickSwitch(/longitudinal registration/i);
     expect(onFieldChange).toHaveBeenCalledWith("bRunLongReg", expect.any(Number));
   });

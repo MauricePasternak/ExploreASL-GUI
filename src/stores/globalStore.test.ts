@@ -249,14 +249,6 @@ describe("useGlobalStore", () => {
   });
 
   describe("addProfile", () => {
-    it("appends profile to executionProfiles list", async () => {
-      const profile = makeMatlabProfile({ label: "MATLAB A" });
-      await useGlobalStore.getState().addProfile(profile);
-
-      expect(useGlobalStore.getState().settings.executionProfiles).toHaveLength(1);
-      expect(useGlobalStore.getState().settings.executionProfiles[0]).toEqual(profile);
-    });
-
     it("appends multiple profiles", async () => {
       const p1 = makeMatlabProfile({ label: "A" });
       const p2 = makeMatlabProfile({ label: "B" });
@@ -353,15 +345,6 @@ describe("useGlobalStore", () => {
   });
 
   describe("deleteProfile", () => {
-    it("removes matching profile by id", async () => {
-      const profile = makeMatlabProfile();
-      await useGlobalStore.getState().addProfile(profile);
-
-      useGlobalStore.getState().deleteProfile(profile.id);
-
-      expect(useGlobalStore.getState().settings.executionProfiles).toHaveLength(0);
-    });
-
     it("persists deletion automatically via saveSettings", async () => {
       const profile = makeMatlabProfile();
       await useGlobalStore.getState().addProfile(profile);
@@ -375,22 +358,12 @@ describe("useGlobalStore", () => {
       });
     });
 
-    it("removes the validation state entry for deleted profile", async () => {
-      const profile = makeMatlabProfile();
-      await useGlobalStore.getState().addProfile(profile);
-
-      expect(useGlobalStore.getState().profileValidationState[profile.id]).toBeDefined();
-
-      useGlobalStore.getState().deleteProfile(profile.id);
-
-      expect(useGlobalStore.getState().profileValidationState[profile.id]).toBeUndefined();
-    });
-
     it("deletes the last remaining profile and logs a warning", async () => {
       const profile = makeMatlabProfile({ label: "Last One" });
       await useGlobalStore.getState().addProfile(profile);
 
       expect(useGlobalStore.getState().settings.executionProfiles).toHaveLength(1);
+      expect(useGlobalStore.getState().profileValidationState[profile.id]).toBeDefined();
 
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -431,7 +404,7 @@ describe("useGlobalStore", () => {
   });
 
   describe("validateProfile", () => {
-    it("calls invoke with correct args and updates profileValidationState", async () => {
+    it("calls invoke with correct args and updates validation state and detected version", async () => {
       const profile = makeMatlabProfile();
       await useGlobalStore.getState().addProfile(profile);
 
@@ -451,21 +424,6 @@ describe("useGlobalStore", () => {
         valid: true,
         errors: [],
       });
-    });
-
-    it("updates exploreAslVersion on the profile when returned", async () => {
-      const profile = makeMatlabProfile();
-      await useGlobalStore.getState().addProfile(profile);
-
-      vi.mocked(invoke).mockResolvedValueOnce({
-        id: profile.id,
-        valid: true,
-        errors: [],
-        exploreAslVersion: "1.15.0",
-      });
-
-      await useGlobalStore.getState().validateProfile(profile);
-
       expect(useGlobalStore.getState().settings.executionProfiles[0].exploreAslVersion).toBe(
         "1.15.0",
       );

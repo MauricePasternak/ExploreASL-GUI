@@ -7,13 +7,6 @@ import { ApplyQuantificationGroup } from "./ApplyQuantificationGroup";
 afterEach(cleanup);
 
 describe("ApplyQuantificationGroup", () => {
-  it("renders all 6 checkboxes", () => {
-    renderWithMantine(<ApplyQuantificationGroup value={undefined} onChange={() => {}} />);
-
-    const checkboxes = screen.getAllByRole("checkbox");
-    expect(checkboxes.length).toBeGreaterThanOrEqual(6);
-  });
-
   it("defaults all checkboxes to checked when value is undefined", () => {
     renderWithMantine(<ApplyQuantificationGroup value={undefined} onChange={() => {}} />);
 
@@ -47,13 +40,10 @@ describe("ApplyQuantificationGroup", () => {
 
   it("toggles individual checkbox", () => {
     const onChange = vi.fn();
-    const { container } = renderWithMantine(
-      <ApplyQuantificationGroup value={[1, 1, 1, 1, 1, 1]} onChange={onChange} />,
-    );
+    renderWithMantine(<ApplyQuantificationGroup value={[1, 1, 1, 1, 1, 1]} onChange={onChange} />);
 
-    const labels = container.querySelectorAll(".mantine-Checkbox-label");
-    fireEvent.click(labels[0]);
-    expect(onChange).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Divide perfusion signal by M0" }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith([1, 1, 1, 1, 0, 1]);
   });
 
   it("renders correct labels", () => {

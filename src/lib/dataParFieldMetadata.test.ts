@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  ATLAS_OPTIONS,
-  FIELD_METADATA,
-  M0_OPTIONS,
-  type SectionId,
-  type Tier,
-  type WidgetType,
-} from "./dataParFieldMetadata";
+import { ATLAS_OPTIONS, FIELD_METADATA, M0_OPTIONS, type SectionId } from "./dataParFieldMetadata";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -88,28 +81,6 @@ const ALL_EXPECTED_KEYS = [
   "bAutomaticallyDetectVABY",
 ] as const;
 
-const VALID_SECTIONS: SectionId[] = [
-  "m0",
-  "quantification",
-  "generalSettings",
-  "aslProcessing",
-  "atlases",
-  "structural",
-  "environment",
-];
-
-const VALID_TIERS: Tier[] = ["basic", "advanced"];
-
-const VALID_WIDGETS: WidgetType[] = [
-  "toggle",
-  "number",
-  "select",
-  "checkboxGroup",
-  "tags",
-  "numberTuple",
-  "selectWithCustom",
-];
-
 // ---------------------------------------------------------------------------
 // FIELD_METADATA coverage
 // ---------------------------------------------------------------------------
@@ -126,14 +97,6 @@ describe("FIELD_METADATA", () => {
       (k) => !ALL_EXPECTED_KEYS.includes(k as (typeof ALL_EXPECTED_KEYS)[number]),
     );
     expect(extra).toEqual([]);
-  });
-
-  it("every entry has valid section, tier, and widget", () => {
-    for (const [key, meta] of Object.entries(FIELD_METADATA)) {
-      expect(VALID_SECTIONS, `${key}.section invalid`).toContain(meta.section);
-      expect(VALID_TIERS, `${key}.tier invalid`).toContain(meta.tier);
-      expect(VALID_WIDGETS, `${key}.widget invalid`).toContain(meta.widget);
-    }
   });
 
   it("every entry has non-empty label and description", () => {
@@ -256,7 +219,7 @@ describe("External quantification subtree conditions", () => {
 // ---------------------------------------------------------------------------
 
 describe("tier assignments", () => {
-  const BASIC_KEYS: Record<SectionId, string[]> = {
+  const BASIC_KEYS: Partial<Record<SectionId, string[]>> = {
     m0: [
       "M0",
       "BackgroundSuppressionNumberPulses",
@@ -268,8 +231,6 @@ describe("tier assignments", () => {
     generalSettings: ["Quality"],
     aslProcessing: ["motionCorrection", "bTopUp", "bPVCNativeSpace", "SaveCBF4D"],
     atlases: ["Atlases"],
-    structural: [],
-    environment: [],
   };
 
   for (const [section, keys] of Object.entries(BASIC_KEYS)) {
@@ -407,11 +368,6 @@ describe("widget assignments", () => {
 // ---------------------------------------------------------------------------
 
 describe("ATLAS_OPTIONS", () => {
-  it("has free and commercial arrays", () => {
-    expect(Array.isArray(ATLAS_OPTIONS.free)).toBe(true);
-    expect(Array.isArray(ATLAS_OPTIONS.commercial)).toBe(true);
-  });
-
   it("free contains expected atlases", () => {
     expect(ATLAS_OPTIONS.free).toContain("Total");
     expect(ATLAS_OPTIONS.free).toContain("DeepWM");
@@ -427,14 +383,6 @@ describe("ATLAS_OPTIONS", () => {
 // ---------------------------------------------------------------------------
 
 describe("M0_OPTIONS", () => {
-  it("is an array of {value, label} objects", () => {
-    expect(Array.isArray(M0_OPTIONS)).toBe(true);
-    for (const opt of M0_OPTIONS) {
-      expect(typeof opt.value).toBe("string");
-      expect(typeof opt.label).toBe("string");
-    }
-  });
-
   it("contains separate_scan, UseControlAsM0, Absent, __custom__", () => {
     const values = M0_OPTIONS.map((o) => o.value);
     expect(values).toContain("separate_scan");

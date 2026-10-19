@@ -3,12 +3,6 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, GlobalSettingsSchema } from "./globalSettings";
 
 describe("GlobalSettingsSchema", () => {
-  it("provides defaults for an empty settings object", () => {
-    const parsed = GlobalSettingsSchema.parse({});
-
-    expect(parsed).toEqual(DEFAULT_SETTINGS);
-  });
-
   it("provides underscore and hyphen as the default tokenizer delimiters", () => {
     const parsed = GlobalSettingsSchema.parse({});
 

@@ -116,25 +116,6 @@ describe("LogViewerModal", () => {
     expect(screen.getByTestId("log-run-select")).toBeInTheDocument();
   });
 
-  it("calls onClose via onClose prop", () => {
-    const onClose = vi.fn();
-    render(
-      <MantineProvider env="test">
-        <LogViewerModal
-          opened={true}
-          onClose={onClose}
-          logContent={{ "xASL_module_Structural_sub-001_01.log": "content" }}
-          module="structural"
-          subjectSession="sub-001_01"
-        />
-      </MantineProvider>,
-    );
-    const modal = screen.getByTestId("log-viewer-modal");
-    expect(modal).toBeInTheDocument();
-    const innerModal = modal.closest('[role="dialog"]') ?? modal;
-    expect(innerModal).toBeTruthy();
-  });
-
   it("shows Loader when loading and no content", () => {
     renderModal({ opened: true, loading: true, logContent: null });
     expect(screen.getByTestId("log-loading")).toBeInTheDocument();
