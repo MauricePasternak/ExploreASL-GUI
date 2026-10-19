@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { createServer } from "node:net";
 import test from "node:test";
 import path from "node:path";
@@ -12,6 +14,8 @@ import {
   sanitizeArtifactName,
   resolveTauriDriver,
   shouldSkipBuild,
+  signalDriver,
+  stopDriver,
   waitForTcpPort,
 } from "../wdio.config.helpers";
 
@@ -137,3 +141,36 @@ test("keeps artifact file names below filesystem limits", () => {
   const name = "test ".repeat(100);
   assert.ok(sanitizeArtifactName(name).length <= 120);
 });
+
+test(
+  "stops driver-owned applications even when session startup or the driver has failed",
+  { skip: process.platform === "win32", timeout: 15_000 },
+  async () => {
+    for (const exitEarly of [false, true]) {
+      const application = `process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000);`;
+      const driver = spawn(
+        process.execPath,
+        [
+          "-e",
+          `const { spawn } = require("node:child_process");
+          spawn(process.execPath, ["-e", ${JSON.stringify(application)}], { stdio: ["ignore", "inherit", "inherit"] });
+          ${exitEarly ? "process.exit(1);" : "setInterval(() => {}, 1000);"}`,
+        ],
+        { detached: true, stdio: ["ignore", "pipe", "pipe"] },
+      );
+      const exited = once(driver, "exit");
+      const closed = once(driver, "close", { signal: AbortSignal.timeout(10_000) });
+      try {
+        const [output] = await once(driver.stdout!, "data");
+        assert.equal(output.toString().trim(), "ready");
+        if (exitEarly) await exited;
+        await stopDriver(driver);
+        // The application inherits the pipe; close cannot fire while it is still alive.
+        await closed;
+        assert.notEqual(driver.exitCode ?? driver.signalCode, null);
+      } finally {
+        signalDriver(driver, "SIGKILL");
+      }
+    }
+  },
+);

@@ -9,6 +9,7 @@ repository root. Do not embed machine-specific paths; use the overrides below.
 - Rust/Cargo, Tauri platform dependencies, and `tauri-driver` available on `PATH` or through
   `E2E_TAURI_DRIVER`.
 - Linux: WebKitGTK WebDriver and a display. CI supplies `webkit2gtk-driver` and runs under Xvfb.
+  The harness selects X11 explicitly, including when launched from a Wayland desktop.
 
 Install dependencies:
 
@@ -24,6 +25,9 @@ pnpm test:e2e:unit
 pnpm typecheck:e2e
 pnpm test:e2e
 ```
+
+On headless Linux, use `xvfb-run -a dbus-run-session -- pnpm test:e2e`. A private D-Bus
+session also avoids single-instance collisions with an already-running desktop app.
 
 `pnpm test:e2e` builds a debug, non-bundled native app first. To build once and reuse it:
 
@@ -72,6 +76,9 @@ the typed support helper in `test/support/application.ts`, then add a descriptiv
 Failed tests write sanitized test-title artifacts (`.png`, `.html`, `.json`) to
 `e2e-tests/artifacts/` by default. Override the directory with
 `E2E_ARTIFACT_DIR=<artifact-dir>`.
+WebdriverIO logs and `tauri-driver-<worker-pid>.log` are saved there even when session creation
+fails, before screenshots or page diagnostics are available. Unix teardown stops the driver's
+own process group so failed startup cannot leave its native app running.
 
 - `E2E_APP_PATH=<native-app>` overrides the debug application path.
 - `E2E_TAURI_DRIVER=<driver>` overrides `tauri-driver`.

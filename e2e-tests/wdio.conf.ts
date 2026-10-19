@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -16,6 +16,8 @@ import {
   resolveTauriDriver,
   sanitizeArtifactName,
   shouldSkipBuild,
+  signalDriver,
+  stopDriver,
   waitForTcpPort,
 } from "./wdio.config.helpers";
 
@@ -84,19 +86,7 @@ function closeTauriDriver(): Promise<void> {
   const driver = tauriDriver;
   tauriDriver = undefined;
   stoppingDriver = true;
-  if (!driver || driver.exitCode !== null || driver.signalCode !== null) return Promise.resolve();
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      driver.kill("SIGKILL");
-      resolve();
-    }, 5_000);
-    driver.once("exit", () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-    driver.kill("SIGTERM");
-  });
+  return driver ? stopDriver(driver) : Promise.resolve();
 }
 
 function diagnosticError(error: unknown): Record<string, string> | null {
@@ -154,7 +144,7 @@ for (const signal of Object.keys(signalExitCode) as (keyof typeof signalExitCode
 }
 process.once("exit", () => {
   stoppingDriver = true;
-  tauriDriver?.kill();
+  if (tauriDriver) signalDriver(tauriDriver, "SIGKILL");
 });
 
 export const config: TauriConfig = {
@@ -169,6 +159,7 @@ export const config: TauriConfig = {
     },
   ],
   reporters: ["spec"],
+  outputDir: artifactDirectory,
   framework: "mocha",
   mochaOpts: {
     ui: "bdd",
@@ -185,13 +176,23 @@ export const config: TauriConfig = {
     const driverPath = getTauriDriverPath();
     assertExecutableExists(driverPath, "tauri-driver");
     stoppingDriver = false;
+    mkdirSync(artifactDirectory, { recursive: true });
+    const driverLog = createWriteStream(
+      path.join(artifactDirectory, `tauri-driver-${process.pid}.log`),
+    );
     tauriDriver = spawn(driverPath, [], {
+      // Xvfb does not override an inherited Wayland display.
+      env: process.platform === "linux" ? { ...process.env, GDK_BACKEND: "x11" } : process.env,
+      detached: process.platform !== "win32",
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
     tauriDriver.stdout?.pipe(process.stdout);
     tauriDriver.stderr?.pipe(process.stderr);
+    tauriDriver.stdout?.pipe(driverLog, { end: false });
+    tauriDriver.stderr?.pipe(driverLog, { end: false });
+    tauriDriver.once("close", () => driverLog.end());
     tauriDriver.once("error", (error) => {
       console.error("[e2e] tauri-driver failed:", error);
     });

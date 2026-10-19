@@ -1,3 +1,4 @@
+import type { ChildProcess } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 
@@ -72,6 +73,43 @@ export function sanitizeArtifactName(name: string): string {
       .toLowerCase()
       .slice(0, 120) || "unnamed-test"
   );
+}
+
+// Unix drivers must be spawned detached so their process group belongs to this harness.
+export function signalDriver(driver: ChildProcess, signal: NodeJS.Signals): void {
+  if (!driver.pid) return;
+  if (process.platform === "win32") {
+    driver.kill(signal);
+  } else {
+    try {
+      process.kill(-driver.pid, signal);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    }
+  }
+}
+
+export async function stopDriver(driver: ChildProcess): Promise<void> {
+  if (!driver.pid) return;
+  if (driver.exitCode === null && driver.signalCode === null) {
+    const exited = new Promise<void>((resolve) => driver.once("exit", () => resolve()));
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      signalDriver(driver, "SIGTERM");
+      await Promise.race([
+        exited,
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(resolve, 5_000);
+        }),
+      ]);
+      signalDriver(driver, "SIGKILL");
+      await exited;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } else {
+    signalDriver(driver, "SIGKILL");
+  }
 }
 
 export function waitForTcpPort({
