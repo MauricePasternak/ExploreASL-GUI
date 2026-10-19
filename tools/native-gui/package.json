@@ -1,0 +1,21 @@
+{
+  "name": "exploreasl-native-gui-agent",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.11.0",
+  "scripts": {
+    "start": "tsx server.ts",
+    "test": "tsx --test *.test.ts",
+    "smoke": "tsx smoke.ts",
+    "typecheck": "pnpm --dir ../.. exec tsc --project tools/native-gui/tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "tsx": "4.23.12",
+    "webdriverio": "9.30.1",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.0"
+  }
+}
