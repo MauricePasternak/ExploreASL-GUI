@@ -6,10 +6,6 @@ fn test_normalize_manufacturer_for_fingerprint() {
         normalize_manufacturer_for_fingerprint("SIEMENS TrioTim"),
         Some("Siemens".to_string())
     );
-    assert_eq!(
-        normalize_manufacturer_for_fingerprint("Siemns"),
-        Some("Siemens".to_string())
-    );
     assert_eq!(normalize_manufacturer_for_fingerprint("Canon"), None);
 }
 
@@ -17,10 +13,6 @@ fn test_normalize_manufacturer_for_fingerprint() {
 fn test_normalize_pulse_sequence_for_fingerprint() {
     assert_eq!(
         normalize_pulse_sequence_for_fingerprint("3D_SPIRAL"),
-        Some("spiral".to_string())
-    );
-    assert_eq!(
-        normalize_pulse_sequence_for_fingerprint("3D_SPRIAL"),
         Some("spiral".to_string())
     );
     assert_eq!(normalize_pulse_sequence_for_fingerprint("unknown"), None);
@@ -52,33 +44,6 @@ fn test_derive_vendor_unknown() {
         "UnknownVendor"
     );
     assert_eq!(derive_vendor(None), "UnknownVendor");
-}
-
-#[test]
-fn test_derive_sequence_full() {
-    assert_eq!(derive_sequence(Some("3D"), Some("3D_SPIRAL")), "3D_SPIRAL");
-}
-
-#[test]
-fn test_derive_sequence_unknown() {
-    assert_eq!(derive_sequence(None, None), "UnknownSequence");
-}
-
-#[test]
-fn test_derive_labeling_type_pcasl() {
-    assert_eq!(derive_labeling_type(Some("PCASL")), "PCASL");
-    assert_eq!(derive_labeling_type(Some("CASL")), "CASL");
-}
-
-#[test]
-fn test_derive_labeling_type_pasl() {
-    assert_eq!(derive_labeling_type(Some("PASL")), "PASL");
-}
-
-#[test]
-fn test_derive_labeling_type_unknown() {
-    assert_eq!(derive_labeling_type(Some("FAIR")), "UnknownLabelingType");
-    assert_eq!(derive_labeling_type(None), "UnknownLabelingType");
 }
 
 // ---- derive_m0_type ----

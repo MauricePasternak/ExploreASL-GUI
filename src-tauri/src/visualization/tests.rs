@@ -32,7 +32,7 @@ fn test_list_stats_files_empty_when_no_dir() {
 }
 
 #[test]
-fn test_load_qcbf_data_parses_columns_and_skips_units() {
+fn test_load_qcbf_data_parses_columns_skips_units_and_caches() {
     let tsv = "participant_id\tsession\tGM_vol\nStudyID\t...\tLiter\nsub-X_01\tASL_1\t0.64\n";
     let (_temp, root) = setup_stats_dir(tsv);
     let state = AppState::default();
@@ -69,6 +69,9 @@ fn test_load_qcbf_data_parses_columns_and_skips_units() {
     assert_eq!(gm.source, ColumnSource::Qcbf);
     assert_eq!(gm.original_name, "GM_vol");
     assert!(!result.qcbf_hash.is_empty());
+    let cached = state.active_data.lock().unwrap();
+    assert!(cached.is_some());
+    assert_eq!(cached.as_ref().unwrap().row_count, 1);
 }
 
 #[test]
@@ -88,20 +91,6 @@ fn test_active_data_default_is_none() {
     let state = AppState::default();
     let data = state.active_data.lock().unwrap();
     assert!(data.is_none());
-}
-
-#[test]
-fn test_load_qcbf_data_returns_inspection_and_caches() {
-    let tsv = "participant_id\tsession\tGM_vol\nStudyID\t...\tLiter\nsub-X_01\tASL_1\t0.64\n";
-    let (_temp, root) = setup_stats_dir(tsv);
-    let state = AppState::default();
-    let result = load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
-    assert_eq!(result.row_count, 1);
-    assert!(result.external_hash.is_none());
-    assert!(!result.qcbf_hash.is_empty());
-    let cached = state.active_data.lock().unwrap();
-    assert!(cached.is_some());
-    assert_eq!(cached.as_ref().unwrap().row_count, 1);
 }
 
 #[test]

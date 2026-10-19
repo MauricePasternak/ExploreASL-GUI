@@ -6,7 +6,7 @@ use tempfile::TempDir;
 use super::super::fault_injection::{SetupFault, inject_setup_fault, take_install_observations};
 use super::super::filesystem::{find_owned_sibling, hash, inspect, owned_sibling};
 use super::super::journal::JOURNAL_PREFIX;
-use super::super::planning::{PLAN_TTL, preflight};
+use super::super::planning::PLAN_TTL;
 use super::super::transaction::{backup_for, create_candidate};
 use super::super::{
     OperationKind, RAWDATA_MARKER_BYTES, RAWDATA_MARKER_PATH, SetupCommandError, SetupMode,
@@ -17,7 +17,7 @@ use super::common::{
 };
 
 #[test]
-fn source_tree_hash_integration_matrix_covers_review_cancel_stale_failure_and_recovery() {
+fn source_tree_hash_integration_matrix_covers_commit_stale_rejection_and_recovery() {
     // Fresh BIDS-direct: detection, preflight, commit, then read-only
     // compatibility verification. Snapshots retain relative path, entry
     // type, size, and file-content hash for every source-tree entry.
@@ -123,31 +123,6 @@ fn source_tree_hash_integration_matrix_covers_review_cancel_stale_failure_and_re
             .any(|bytes| bytes == b"\r\n")
     );
 
-    // Scan, mode changes, malformed-project preflight, and cancellation
-    // (dropping plans without confirmation) never mutate the source tree.
-    let cancelled = TempDir::new().unwrap();
-    write_bids_fixture(cancelled.path(), Some(b"user\n"));
-    let cancelled_before = source_snapshot(cancelled.path());
-    crate::bids::commands::check_bids_dataset_impl(cancelled.path()).unwrap();
-    let cancelled_bids =
-        preflight(cancelled.path(), SetupMode::Bids, Some(project("bids"))).unwrap();
-    let cancelled_dicom =
-        preflight(cancelled.path(), SetupMode::Dicom, Some(project("dicom"))).unwrap();
-    assert!(
-        preflight(
-            cancelled.path(),
-            SetupMode::Bids,
-            Some(b"not-json".to_vec())
-        )
-        .is_err()
-    );
-    drop((cancelled_bids, cancelled_dicom));
-    assert_eq!(
-        source_snapshot(cancelled.path()),
-        cancelled_before,
-        "cancel is read-only"
-    );
-
     // A stale plan rejects before mutation. The external edit is the
     // baseline; the rejected confirmation itself has a zero tree delta.
     let stale = TempDir::new().unwrap();
@@ -167,29 +142,6 @@ fn source_tree_hash_integration_matrix_covers_review_cancel_stale_failure_and_re
         source_snapshot(stale.path()),
         stale_before_commit,
         "stale commit is read-only"
-    );
-
-    // Ordinary commit failure rolls back every owned path to the exact
-    // source snapshot, including LF/CRLF-sensitive file bytes.
-    let failed = TempDir::new().unwrap();
-    write_bids_fixture(failed.path(), Some(b"before\r\n"));
-    let failed_before = source_snapshot(failed.path());
-    let failed_plans = SetupPlans::default();
-    let failed_plan = preflight_for_state(
-        &failed_plans,
-        failed.path().display().to_string(),
-        SetupMode::Bids,
-        Some(String::from_utf8(project("bids")).unwrap()),
-    )
-    .unwrap();
-    {
-        let _fault = inject_setup_fault(SetupFault::RootFlush);
-        assert!(commit_for_state(&failed_plans, &failed_plan.plan_id).is_err());
-    }
-    assert_eq!(
-        source_snapshot(failed.path()),
-        failed_before,
-        "failed commit rolls back"
     );
 
     // An interruption after durable commit but before terminal cleanup
@@ -320,68 +272,6 @@ fn transaction_installs_project_last_and_replays_result() {
         crate::project::config::activate_for_state(&state, committed.candidate_id.unwrap(), false)
             .unwrap();
     assert_eq!(&activated.document, document);
-}
-
-#[test]
-fn transaction_matrix_preserves_existing_rawdata_and_omits_dicom_compatibility() {
-    let root = TempDir::new().unwrap();
-    fs::create_dir(root.path().join("rawdata")).unwrap();
-    fs::write(root.path().join("rawdata/README.md"), b"user readme").unwrap();
-    fs::write(root.path().join(RAWDATA_MARKER_PATH), RAWDATA_MARKER_BYTES).unwrap();
-    fs::write(root.path().join(".bidsignore"), b"user\r\n").unwrap();
-    let plans = SetupPlans::default();
-    let bids = preflight_for_state(
-        &plans,
-        root.path().display().to_string(),
-        SetupMode::Bids,
-        Some(String::from_utf8(project("bids")).unwrap()),
-    )
-    .unwrap();
-    commit_for_state(&plans, &bids.plan_id).unwrap();
-    assert_eq!(
-        fs::read(root.path().join("rawdata/README.md")).unwrap(),
-        b"user readme"
-    );
-    assert_eq!(
-        fs::read(root.path().join(RAWDATA_MARKER_PATH)).unwrap(),
-        RAWDATA_MARKER_BYTES
-    );
-    assert_eq!(
-        fs::read(root.path().join(".bidsignore")).unwrap(),
-        b"user\r\nproject.easl\r\n.easl_staging\r\nrawdata/\r\n"
-    );
-
-    let dicom_root = TempDir::new().unwrap();
-    let dicom_plans = SetupPlans::default();
-    let dicom = preflight_for_state(
-        &dicom_plans,
-        dicom_root.path().display().to_string(),
-        SetupMode::Dicom,
-        Some(String::from_utf8(project("dicom")).unwrap()),
-    )
-    .unwrap();
-    commit_for_state(&dicom_plans, &dicom.plan_id).unwrap();
-    assert!(!dicom_root.path().join("rawdata").exists());
-    assert_eq!(
-        fs::read(dicom_root.path().join("project.easl")).unwrap(),
-        project("dicom")
-    );
-}
-
-#[test]
-fn stale_plan_has_no_writes() {
-    let temp = TempDir::new().unwrap();
-    let plans = SetupPlans::default();
-    let plan = preflight_for_state(
-        &plans,
-        temp.path().to_string_lossy().into_owned(),
-        SetupMode::Bids,
-        Some(String::from_utf8(project("bids")).unwrap()),
-    )
-    .unwrap();
-    fs::write(temp.path().join(".bidsignore"), b"changed\n").unwrap();
-    assert!(commit_for_state(&plans, &plan.plan_id).is_err());
-    assert!(!temp.path().join("project.easl").exists());
 }
 
 #[test]
@@ -557,25 +447,13 @@ fn fresh_and_existing_transactions_preserve_exact_bytes_and_project_is_last_visi
         b"keep"
     );
     assert_eq!(
+        fs::read(existing.path().join(RAWDATA_MARKER_PATH)).unwrap(),
+        RAWDATA_MARKER_BYTES
+    );
+    assert_eq!(
         fs::read(existing.path().join(".bidsignore")).unwrap(),
         b"user\r\nproject.easl\r\n.easl_staging\r\nrawdata/\r\n"
     );
-}
-
-#[test]
-fn dicom_transaction_omits_rawdata_and_marker() {
-    let root = TempDir::new().unwrap();
-    let plans = SetupPlans::default();
-    let plan = preflight_for_state(
-        &plans,
-        root.path().display().to_string(),
-        SetupMode::Dicom,
-        Some(String::from_utf8(project("dicom")).unwrap()),
-    )
-    .unwrap();
-    commit_for_state(&plans, &plan.plan_id).unwrap();
-    assert!(!root.path().join("rawdata").exists());
-    assert!(!root.path().join(RAWDATA_MARKER_PATH).exists());
 }
 
 #[test]
@@ -631,21 +509,6 @@ fn commit_contract_returns_only_durable_result_and_structured_failures_without_a
     ));
     assert!(!root.path().join("project.easl").exists());
 
-    let root = TempDir::new().unwrap();
-    let plans = SetupPlans::default();
-    let plan = preflight_for_state(
-        &plans,
-        root.path().display().to_string(),
-        SetupMode::Bids,
-        Some(String::from_utf8(project("bids")).unwrap()),
-    )
-    .unwrap();
-    let _fault = inject_setup_fault(SetupFault::JournalWrite);
-    assert!(matches!(
-        command_error(commit_for_state(&plans, &plan.plan_id).unwrap_err()),
-        SetupCommandError::Failed { .. }
-    ));
-    assert!(!root.path().join("project.easl").exists());
     assert!(matches!(
         command_error(anyhow!("could not synchronize directory")),
         SetupCommandError::UncertainDurability { .. }

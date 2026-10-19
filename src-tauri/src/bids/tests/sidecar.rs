@@ -223,10 +223,8 @@ fn test_extract_fingerprint_all_15_fields_present() {
 // ---- Number canonicalization (D5) ----
 
 #[test]
-fn test_canonicalize_number_int_vs_float() {
-    // 3 (int) and 3.0 (float) should produce same canonical form
+fn test_canonicalize_number_formats_integer_with_three_decimal_places() {
     assert_eq!(canonicalize_number(3.0), "3.000");
-    assert_eq!(canonicalize_number(3.0), canonicalize_number(3.0));
 }
 
 #[test]
