@@ -154,7 +154,7 @@ jobs:
           workspaces: "./src-tauri -> target"
 
       - name: Run Rust tests
-        run: pnpm test:backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p exploreasl_gui
 
   # Standalone process/filesystem runtime needs no Tauri GUI dependencies.
   # Retained platform-specific process and capability tests compile on each desktop OS.
