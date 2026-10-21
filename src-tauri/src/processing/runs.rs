@@ -202,6 +202,12 @@ pub(crate) fn reserve_request_impl(
     }
     let record = super::record::admit(&project_root, request).map_err(|e| e.to_string())?;
     let snapshot = record.snapshot();
+    log::info!(
+        "[PROCESSING] run={} reserved workers={} targets={}",
+        record.run_id,
+        record.request.workers,
+        record.expected_targets.len()
+    );
     processing.current_run = Some(ProcessingRun::from_record(record));
     Ok(super::record::ProcessingReservation::Current { snapshot })
 }

@@ -105,6 +105,14 @@ fn update(
         }
         return Err(error);
     }
+    if previous.lifecycle != next.lifecycle {
+        log::info!(
+            "[PROCESSING] run={run_id} lifecycle={:?}->{:?} revision={}",
+            previous.lifecycle,
+            next.lifecycle,
+            next.revision
+        );
+    }
     run.lifecycle = next.lifecycle;
     run.terminal_result = next.terminal_summary.as_ref().map(|s| s.result);
     run.durable = Some(next);
@@ -155,9 +163,15 @@ fn cancelled(state: &AppState, run_id: &str) -> Result<bool> {
     Ok(record(state, run_id)?.cancellation_requested)
 }
 fn publish<R: Runtime>(app: &AppHandle<R>, snapshot: &ProcessingRunSnapshot) {
-    let _ = app.emit("ProcessingLifecycleSnapshot", snapshot);
+    if let Err(error) = app.emit("ProcessingLifecycleSnapshot", snapshot) {
+        log::warn!(
+            "[PROCESSING] run={} lifecycle snapshot emission failed: {error}; native state retained",
+            snapshot.run_id
+        );
+    }
 }
 fn fail(state: &AppState, run_id: &str, code: &str, error: impl std::fmt::Display) -> Result<()> {
+    log::error!("[PROCESSING] run={run_id} failure={code}: {error}");
     update(state, run_id, |next| {
         if !next.lifecycle.is_terminal() {
             next.error = Some(ProcessingError {
@@ -290,6 +304,7 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
         .collect::<Vec<_>>()
         .join(",");
     let mut scopes = Vec::new();
+    let mut output_drains = Vec::new();
     let worker_result = (|| -> Result<()> {
         for worker in 1..=reserved.request.workers as usize {
             if worker > 1 {
@@ -331,12 +346,20 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
                     ));
                 }
             }
-            worker_command
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null());
+            let drains = crate::execution::output::OutputDrains::new(
+                format!("[PROCESSING] run={run_id} worker={worker}"),
+                |_, _| {},
+            );
+            drains.configure(&mut worker_command);
             match ProcessScope::spawn_with_cancellation(worker_command, cancellation.clone()) {
-                Ok(scope) => scopes.push(scope),
+                Ok(mut scope) => {
+                    drains.attach(&mut scope);
+                    scopes.push(scope);
+                    output_drains.push(drains);
+                    log::info!("[PROCESSING] run={run_id} worker={worker} spawned");
+                }
                 Err(error) => {
+                    log::error!("[PROCESSING] run={run_id} worker={worker} spawn failed: {error}");
                     return Err(error.into());
                 }
             }
@@ -375,18 +398,41 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
         }
         Ok(())
     })();
+    if let Err(error) = &worker_result {
+        log::error!("[PROCESSING] run={run_id} worker supervision failed: {error:#}");
+    }
     // This boundary owns the vector on every worker-phase path. Never let an
     // early polling, persistence, stagger, or spawn error drop a live scope.
-    if worker_result.is_err() || cancellation.is_cancelled() || cancelled(&state, run_id)? {
-        let cleanup = cancel_scopes_until_settled(&mut scopes);
-        if let Err(error) = worker_result {
-            cleanup?;
-            return Err(error);
-        }
-        cleanup?;
+    // Even a failed authority read must settle scopes before joining readers.
+    let cancellation_requested = cancelled(&state, run_id);
+    let cleanup_result = if worker_result.is_err()
+        || cancellation.is_cancelled()
+        || cancellation_requested
+            .as_ref()
+            .map_or(true, |cancelled| *cancelled)
+    {
+        log::info!(
+            "[PROCESSING] run={run_id} settling worker scopes count={}",
+            scopes.len()
+        );
+        cancel_scopes_until_settled(&mut scopes, run_id)
     } else {
-        worker_result?;
+        Ok(())
+    };
+    drop(output_drains);
+    for (index, scope) in scopes.iter_mut().enumerate() {
+        if let Ok(Some(outcome)) = scope.poll_settled() {
+            log::info!(
+                "[PROCESSING] run={run_id} worker={} settled exit={}",
+                index + 1,
+                outcome.exit_status.code().unwrap_or(-1)
+            );
+        }
     }
+    log::info!("[PROCESSING] run={run_id} worker scopes and diagnostic readers settled");
+    cleanup_result?;
+    cancellation_requested?;
+    worker_result?;
     if !cancelled(&state, run_id)? {
         let snapshot = update(&state, run_id, |next| {
             if !next.cancellation_requested {
@@ -401,16 +447,18 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
 /// This owner never returns while a supported scope might still live. A
 /// platform error is retained until reaping has completed, rather than allowing
 /// `ProcessScope` drop to become implicit abandonment.
-fn cancel_scopes_until_settled(scopes: &mut [ProcessScope]) -> Result<()> {
+fn cancel_scopes_until_settled(scopes: &mut [ProcessScope], run_id: &str) -> Result<()> {
     loop {
         match cancel_all(scopes) {
             Ok(()) => return Ok(()),
             Err(error) => {
-                log::error!("Processing scope cleanup retry: {error}");
+                log::error!("[PROCESSING] run={run_id} scope cleanup retry: {error}");
                 let mut settled = true;
                 for scope in &mut *scopes {
                     if let Err(force) = scope.force_shutdown() {
-                        log::error!("Processing scope forced cleanup retry: {force}");
+                        log::error!(
+                            "[PROCESSING] run={run_id} scope forced cleanup retry: {force}"
+                        );
                         settled = false;
                     }
                 }
@@ -461,6 +509,13 @@ fn settle(state: &AppState, run_id: &str) -> Result<ProcessingRunSnapshot> {
         .map_err(|_| anyhow::anyhow!("Processing state lock was poisoned"))?;
     let result = super::recovery::settle(&current.project_root, false)?
         .context("Processing current record disappeared")?;
+    if let Some(error) = &result.error {
+        log::error!(
+            "[PROCESSING] run={run_id} settlement error={}: {}",
+            error.code,
+            error.message
+        );
+    }
     let run = processing
         .current_run
         .as_mut()
@@ -471,11 +526,16 @@ fn settle(state: &AppState, run_id: &str) -> Result<ProcessingRunSnapshot> {
     run.lifecycle = result.lifecycle;
     run.terminal_result = result.terminal_summary.as_ref().map(|s| s.result);
     run.durable = Some(result);
+    log::info!(
+        "[PROCESSING] run={run_id} settlement lifecycle={:?}",
+        run.lifecycle
+    );
     processing.cancellation = None;
     processing.launch_in_progress = false;
     Ok(processing.current_run.as_ref().unwrap().snapshot())
 }
 fn pending_cleanup(state: &AppState, run_id: &str, error: &anyhow::Error) {
+    log::error!("[PROCESSING] run={run_id} cleanup failed: {error:#}");
     if let Err(storage) = update(state, run_id, |next| {
         if next.lifecycle.is_terminal() {
             return Ok(());
@@ -530,7 +590,7 @@ pub fn run_pipeline<R: Runtime>(
                     format!("{error:#}"),
                 )
             {
-                log::error!("Processing launch failed: {error:#}; authority error: {storage:#}");
+                log::error!("[PROCESSING] run={owned_run_id} launch failed: {error:#}; authority error: {storage:#}");
             }
             match settle(&state, &owned_run_id) {
                 Ok(snapshot) => publish(&worker_app, &snapshot),
@@ -560,6 +620,7 @@ pub(crate) fn stop_for_state(
     state: &AppState,
     run_id: &str,
 ) -> Result<ProcessingRunSnapshot, String> {
+    log::info!("[PROCESSING] run={run_id} stop requested");
     reconcile_idle(state, run_id).map_err(|e| e.to_string())?;
     let current = record(state, run_id).map_err(|e| e.to_string())?;
     if current.lifecycle.is_terminal() {

@@ -11,7 +11,8 @@ use super::runs::{
 use super::staging::{StagingEntry, compile_staging_plan, execute_compiled_staging_plan};
 use super::status::copy_lock_files_paths;
 use super::supervisor::{
-    finish_cancelled_preparation, handoff_running_checkpoint_failure, supervise_import_process,
+    ImportOutput, finish_cancelled_preparation, handoff_running_checkpoint_failure,
+    supervise_import_process,
 };
 use super::types::{ImportCommandError, ImportLifecycle};
 use super::validation::{normalize_staging_subject_spelling, validate_import_request_inputs};
@@ -111,7 +112,14 @@ pub(super) fn run_import_pipeline_impl<R: Runtime>(
         (reservation, plan, ownership)
     };
     let generation = reservation.generation;
+    log::info!("[IMPORT] run={run_id} generation={generation} launch admitted");
     let token = CancellationToken::default();
+    let mut output = Some(ImportOutput::new(
+        app.clone(),
+        generation,
+        &run_id,
+        &subject_list,
+    ));
     {
         let mut run = state.import_state.lock_or_bail("Import state")?;
         if run.ownership_generation != generation || run.lifecycle != ImportLifecycle::Preparing {
@@ -171,13 +179,12 @@ pub(super) fn run_import_pipeline_impl<R: Runtime>(
                 ));
             }
         };
-        command
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+        output.as_ref().unwrap().configure(&mut command);
         if token.is_cancelled() {
             bail!("Import preparation cancelled");
         }
         let scope = ProcessScope::spawn_with_cancellation(command, token.clone())?;
+        log::info!("[IMPORT] run={run_id} generation={generation} worker spawned");
         let cancelling = {
             let run = state.import_state.lock_or_bail("Import state")?;
             run.lifecycle == ImportLifecycle::Cancelling
@@ -195,7 +202,7 @@ pub(super) fn run_import_pipeline_impl<R: Runtime>(
                     state,
                     generation,
                     scope,
-                    subject_list.clone(),
+                    output.take().unwrap(),
                     error,
                 )?;
                 return Ok(None);
@@ -207,6 +214,10 @@ pub(super) fn run_import_pipeline_impl<R: Runtime>(
         Ok(Some(scope)) => scope,
         Ok(None) => return Ok(()),
         Err(error) => {
+            log::error!(
+                "[IMPORT] run={run_id} generation={generation} preparation/launch failed: {error:#}"
+            );
+            drop(output.take());
             let mut run = state.import_state.lock_or_bail("Import state")?;
             run.launch_in_progress = false;
             let cancelling = run.lifecycle == ImportLifecycle::Cancelling;
@@ -222,11 +233,20 @@ pub(super) fn run_import_pipeline_impl<R: Runtime>(
         }
     };
     let (start_sender, start_receiver) = mpsc::channel();
-    let supervisor =
-        supervise_import_process(app.clone(), generation, scope, subject_list, start_receiver);
+    let supervisor = supervise_import_process(
+        app.clone(),
+        generation,
+        scope,
+        output.take().unwrap(),
+        start_receiver,
+    );
     if let Err((error, handle)) = set_import_supervisor_handle(state, generation, supervisor) {
         drop(start_sender);
-        let _ = handle.join();
+        if handle.join().is_err() {
+            log::error!(
+                "[IMPORT] run={run_id} generation={generation} rejected supervisor handoff panicked"
+            );
+        }
         return Err(error.into());
     }
     if let Ok(mut run) = state.import_state.lock()
@@ -234,7 +254,11 @@ pub(super) fn run_import_pipeline_impl<R: Runtime>(
     {
         run.launch_in_progress = false;
     }
-    let _ = emit_running_snapshot(&app, state, generation);
+    if let Err(error) = emit_running_snapshot(&app, state, generation) {
+        log::warn!(
+            "[IMPORT] run={run_id} generation={generation} Running snapshot emission failed: {error:#}"
+        );
+    }
     start_sender.send(()).map_err(|_| {
         ImportCommandError::from("Import supervisor stopped before observation".to_string())
     })?;

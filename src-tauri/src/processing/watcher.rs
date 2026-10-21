@@ -75,6 +75,9 @@ pub(crate) fn start<R: tauri::Runtime>(
     }
 
     let watcher_thread = thread::spawn(move || {
+        let mut warnings = crate::tracing::EmissionWarnings::new(format!(
+            "[PROCESSING] run={bound_run_id} watcher"
+        ));
         loop {
             if !matches!(stop_rx.try_recv(), Err(mpsc::TryRecvError::Empty)) {
                 break;
@@ -88,12 +91,18 @@ pub(crate) fn start<R: tauri::Runtime>(
                                     && let Some(lock_event) =
                                         parse_lock_dir_path(&lock_root_clone, path, &bound_run_id)
                                 {
-                                    let _ = app_clone.emit("LockCreated", lock_event);
+                                    warnings.check(
+                                        "LockCreated",
+                                        app_clone.emit("LockCreated", lock_event),
+                                    );
                                 }
                             } else if let Some(status_event) =
                                 parse_lock_path(&lock_root_clone, path, &bound_run_id)
                             {
-                                let _ = app_clone.emit("StatusFileCreated", status_event);
+                                warnings.check(
+                                    "StatusFileCreated",
+                                    app_clone.emit("StatusFileCreated", status_event),
+                                );
                             }
                         }
                     }
@@ -103,7 +112,10 @@ pub(crate) fn start<R: tauri::Runtime>(
                                 && let Some(status_event) =
                                     parse_lock_path(&lock_root_clone, path, &bound_run_id)
                             {
-                                let _ = app_clone.emit("StatusFileCreated", status_event);
+                                warnings.check(
+                                    "StatusFileCreated",
+                                    app_clone.emit("StatusFileCreated", status_event),
+                                );
                             }
                         }
                     }
@@ -114,21 +126,26 @@ pub(crate) fn start<R: tauri::Runtime>(
                                 && let Some(lock_event) =
                                     parse_lock_dir_path(&lock_root_clone, path, &bound_run_id)
                             {
-                                let _ = app_clone.emit(
+                                warnings.check(
                                     "LockRemoved",
-                                    LockRemoved {
-                                        run_id: lock_event.run_id,
-                                        module: lock_event.module,
-                                        subject_session: lock_event.subject_session,
-                                        run: lock_event.run,
-                                    },
+                                    app_clone.emit(
+                                        "LockRemoved",
+                                        LockRemoved {
+                                            run_id: lock_event.run_id,
+                                            module: lock_event.module,
+                                            subject_session: lock_event.subject_session,
+                                            run: lock_event.run,
+                                        },
+                                    ),
                                 );
                             }
                         }
                     }
                     _ => {}
                 },
-                Ok(Err(error)) => log::error!("Watch error: {error}"),
+                Ok(Err(error)) => {
+                    log::error!("[PROCESSING] run={bound_run_id} watcher failed: {error}")
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => match stop_rx.try_recv() {
                     Ok(()) | Err(mpsc::TryRecvError::Disconnected) => break,
                     Err(mpsc::TryRecvError::Empty) => {}

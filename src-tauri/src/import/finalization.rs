@@ -36,7 +36,7 @@ pub(super) fn settle_import_scope_exit<R: Runtime>(
         }
     };
     let terminal = if snapshot.lifecycle == ImportLifecycle::Finalizing {
-        app.emit("import-run-snapshot", snapshot).ok();
+        emit_snapshot(app, &snapshot);
         complete_finalizing_import(&state, generation, exit_code)?
     } else {
         snapshot
@@ -45,8 +45,18 @@ pub(super) fn settle_import_scope_exit<R: Runtime>(
         bail!("Import scope settled without a terminal native lifecycle");
     }
     release_terminal_supervisor_handle(&state, generation);
-    app.emit("import-run-snapshot", terminal).ok();
+    emit_snapshot(app, &terminal);
     Ok(())
+}
+
+fn emit_snapshot<R: Runtime>(app: &AppHandle<R>, snapshot: &ImportRunSnapshot) {
+    if let Err(error) = app.emit("import-run-snapshot", snapshot) {
+        log::warn!(
+            "[IMPORT] run={} generation={} snapshot emission failed: {error}; native state retained",
+            snapshot.run_id,
+            snapshot.ownership_generation
+        );
+    }
 }
 
 fn release_terminal_supervisor_handle(state: &AppState, generation: u64) {
@@ -88,6 +98,10 @@ pub(super) fn record_import_process_exit(
         bail!("Import supervisor is obsolete");
     }
     let prior = run.snapshot();
+    log::info!(
+        "[IMPORT] run={} generation={generation} worker scope settled exit={exit_code}",
+        run.run_id
+    );
     run.exit_evidence = Some(ImportExitEvidence {
         exit_code,
         successful: exit_code == 0,
@@ -378,6 +392,19 @@ fn complete_finalizing_import_after_processing_recovery(
         run.terminal_result = None;
         run.error = prior_error;
         return Err(error);
+    }
+    log::info!(
+        "[IMPORT] run={} generation={generation} settlement lifecycle={:?}",
+        run.run_id,
+        run.lifecycle
+    );
+    if let Some(error) = &run.error {
+        log::error!(
+            "[IMPORT] run={} generation={generation} finalization error={}: {}",
+            run.run_id,
+            error.code,
+            error.message
+        );
     }
     Ok(run.snapshot())
 }

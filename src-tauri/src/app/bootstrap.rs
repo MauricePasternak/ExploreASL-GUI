@@ -25,25 +25,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin({
-            #[allow(unused_mut)]
-            let mut builder = tauri_plugin_log::Builder::default();
-            #[cfg(debug_assertions)]
-            {
-                let log_dir = std::env::temp_dir().join("exploreasl-gui-logs");
-                let _ = std::fs::create_dir_all(&log_dir);
-                builder =
-                    builder
-                        .level(log::LevelFilter::Debug)
-                        .target(tauri_plugin_log::Target::new(
-                            tauri_plugin_log::TargetKind::Folder {
-                                path: log_dir,
-                                file_name: Some("dev.log".into()),
-                            },
-                        ));
-            }
-            builder.build()
-        })
+        .plugin(tauri_plugin_log::Builder::default().skip_logger().build())
         // Defining-module paths also resolve Tauri's generated command macros.
         .invoke_handler(tauri::generate_handler![
             execution::matlab::which_matlab,
@@ -110,6 +92,18 @@ pub fn run() {
             crate::visualization::niivue_protocol::handle_niivue_protocol,
         )
         .setup(|app| {
+            super::logging::init(app.handle());
+            log::info!(
+                "[STARTUP] version={} platform={}-{} build={}",
+                app.package_info().version,
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+                if cfg!(debug_assertions) {
+                    "debug"
+                } else {
+                    "release"
+                }
+            );
             let icon = tauri::image::Image::from_bytes(include_bytes!("../../icons/icon.png"))?;
             if let Some(window) = app.get_webview_window("main") {
                 window.set_icon(icon)?;

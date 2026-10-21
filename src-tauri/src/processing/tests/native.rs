@@ -120,7 +120,9 @@ const READY: &str = "mkdir -p derivatives/ExploreASL/lock/xASL_module_Population
 #[test]
 fn acknowledgement_refuses_live_run_promptly_then_cancel_preserves_committed_output() {
     let (root, app, run_id) = fixture(
-        &format!("{READY}\nprintf started > started\nsleep 30"),
+        &format!(
+            "trap 'head -c 200000 /dev/zero; head -c 200000 /dev/zero >&2; exit 0' TERM\n{READY}\nprintf started > started\nsleep 30"
+        ),
         "dicom",
         1,
     );
@@ -185,7 +187,13 @@ fn terminal(app: &tauri::App<tauri::test::MockRuntime>, run_id: &str) -> Process
 #[test]
 fn native_completion_audits_targets_without_renderer_and_keeps_nonzero_failure() {
     for (script, expected, subject_modules) in [
-        (READY.to_string(), ProcessingLifecycle::Completed, false),
+        (
+            format!(
+                "(head -c 200000 /dev/zero | tr '\\000' '\\377') & (head -c 200000 /dev/zero | tr '\\000' '\\377' >&2) & wait\nprintf '\\nstdout-finished\\n'\nprintf '\\nstderr-finished\\n' >&2\n{READY}"
+            ),
+            ProcessingLifecycle::Completed,
+            false,
+        ),
         ("exit 0".into(), ProcessingLifecycle::Failed, false),
         (
             format!("{READY}\nexit 7"),

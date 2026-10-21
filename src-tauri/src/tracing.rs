@@ -29,7 +29,7 @@ impl<'a> CommandTrace<'a> {
                 self.name,
                 self.start.elapsed(),
                 full.len(),
-                &full[..MAX_LEN]
+                full.chars().take(MAX_LEN).collect::<String>()
             );
         } else {
             log::info!(
@@ -48,6 +48,42 @@ impl<'a> CommandTrace<'a> {
             self.start.elapsed(),
             err
         );
+    }
+}
+
+/// One warning per event producer, plus a final suppressed-failure count.
+/// Keeps renderer loss visible without one warning per scientific output line.
+pub(crate) struct EmissionWarnings {
+    context: String,
+    failures: u64,
+}
+
+impl EmissionWarnings {
+    pub(crate) fn new(context: String) -> Self {
+        Self {
+            context,
+            failures: 0,
+        }
+    }
+
+    pub(crate) fn check(&mut self, event: &str, result: Result<(), impl fmt::Display>) {
+        if let Err(error) = result {
+            self.failures = self.failures.saturating_add(1);
+            if self.failures == 1 {
+                log::warn!(
+                    "{} event={event} emission failed: {error}; further warnings suppressed, native execution continues",
+                    self.context
+                );
+            }
+        }
+    }
+}
+
+impl Drop for EmissionWarnings {
+    fn drop(&mut self) {
+        if self.failures > 0 {
+            log::warn!("{} failed_event_emissions={}", self.context, self.failures);
+        }
     }
 }
 

@@ -7,6 +7,7 @@ pub(crate) mod command;
 pub(crate) mod executables;
 pub(crate) mod launch;
 pub mod matlab;
+pub(crate) mod output;
 pub mod profile;
 
 #[cfg(test)]

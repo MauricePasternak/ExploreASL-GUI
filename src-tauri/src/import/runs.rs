@@ -36,7 +36,14 @@ pub(crate) fn persist(state: &ImportState) -> AnyResult<()> {
             "Import reservation durability uncertain; retained ownership cannot be durably rewritten"
         );
     }
-    write_record(&state.project_root, &record_from_state(state)?)
+    write_record(&state.project_root, &record_from_state(state)?)?;
+    log::info!(
+        "[IMPORT] run={} generation={} checkpoint lifecycle={:?}",
+        state.run_id,
+        state.ownership_generation,
+        state.lifecycle
+    );
+    Ok(())
 }
 
 pub(super) fn active_project_root(state: &AppState) -> AnyResult<PathBuf> {
@@ -256,6 +263,11 @@ pub(super) fn reserve_import_run_for_state(
     }
     relocation_plans.remove(&relocation_plan_id);
     let snapshot = import_state.snapshot();
+    log::info!(
+        "[IMPORT] run={} generation={generation} reserved subjects={}",
+        snapshot.run_id,
+        snapshot.selected_subjects.len()
+    );
     Ok(snapshot)
 }
 

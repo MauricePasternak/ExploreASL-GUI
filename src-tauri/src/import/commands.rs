@@ -103,6 +103,9 @@ pub(super) fn settle_launch_result(
     run_id: &str,
     launch_result: Result<(), ImportCommandError>,
 ) -> Result<ImportRunSnapshot, ImportCommandError> {
+    if let Err(error) = &launch_result {
+        log::error!("[IMPORT] run={run_id} launch failed: {error}");
+    }
     match launch_result {
         Ok(_) => attach_import_run_for_state(state, run_id).map_err(ImportCommandError::from),
         Err(error) => match attach_import_run_for_state(state, run_id) {

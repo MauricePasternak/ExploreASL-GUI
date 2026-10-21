@@ -106,6 +106,31 @@ fn process_exit_checkpoint_exposes_finalizing_before_verification() {
 }
 
 #[test]
+fn supervision_diagnostic_persists_the_full_error_chain() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = tauri::test::mock_builder()
+        .manage(running_state(temp.path()))
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .unwrap();
+    crate::import::supervisor::record_import_supervision_error(
+        app.handle(),
+        4,
+        anyhow::anyhow!("root I/O cause").context("supervision context"),
+    );
+    let message = record::load_record(temp.path())
+        .unwrap()
+        .unwrap()
+        .snapshot
+        .error
+        .unwrap()
+        .message;
+    assert_eq!(
+        message,
+        "Import supervision failed: supervision context: root I/O cause"
+    );
+}
+
+#[test]
 fn write_ahead_persistence_failures_block_each_later_mutation_or_publication() {
     use crate::import::relocation::{
         RelocationOutcome, RelocationSubjectStatus, SubjectRelocationOutcome,
@@ -922,7 +947,7 @@ fn failed_running_checkpoint_reaps_the_already_spawned_import_scope() {
     fs::write(
         &matlab,
         format!(
-            "#!/bin/sh\ntrap \"touch '{}'; sleep 0.2; exit 0\" TERM\ntouch '{}'\nwhile :; do sleep 1; done\n",
+            "#!/bin/sh\ntrap \"touch '{}'; head -c 200000 /dev/zero; head -c 200000 /dev/zero >&2; sleep 0.2; exit 0\" TERM\ntouch '{}'\nwhile :; do sleep 1; done\n",
             stopped.display(),
             started.display()
         ),
