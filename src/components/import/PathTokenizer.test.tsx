@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -52,6 +53,17 @@ describe("PathTokenizer", () => {
       0,
     );
     expect(screen.queryAllByText("BAR").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("tokenizer-sample-path-VARYING/VARYING/VARYING")).toHaveStyle({
+      "--group-align": "flex-start",
+    });
+    expect(screen.getByText("BAR").closest(".mantine-Badge-root")).toHaveAttribute(
+      "data-size",
+      "md",
+    );
+    expect(screen.getByText("05022026").closest(".mantine-Badge-root")).toHaveAttribute(
+      "data-size",
+      "md",
+    );
     expect(screen.queryByText("— None —")).not.toBeInTheDocument();
     expect(screen.queryAllByText("Ignore").length).toBeGreaterThan(0);
     const configTexts = screen.queryAllByText("Generated Configuration");
@@ -63,6 +75,30 @@ describe("PathTokenizer", () => {
 
     const nextBtn = nextButtons[0].closest("button");
     expect(nextBtn).toBeDisabled();
+  });
+
+  it("hides generated configuration until expanded and allows collapsing it", async () => {
+    const user = userEvent.setup();
+    const snapshot = projectFixture();
+    snapshot.document.mappingState.pathPatterns = SAMPLE_PATTERNS;
+    useProjectStore.getState().acceptSnapshot(snapshot);
+    renderWithProviders();
+
+    const toggle = screen.getByText("Show generated configuration");
+    const preview = screen.getByTestId("tokenizer-regex-preview");
+    expect(toggle).toBeVisible();
+    expect(toggle).toHaveStyle({ display: "flex", alignItems: "center" });
+    expect(screen.getByTestId("tokenizer-config-chevron")).toHaveAttribute("aria-hidden", "true");
+    expect(toggle.closest("details")).not.toHaveAttribute("open");
+    expect(preview).not.toBeVisible();
+
+    await user.click(toggle);
+    expect(toggle.closest("details")).toHaveAttribute("open");
+    expect(preview).toBeVisible();
+    expect(screen.getByText("folderHierarchy:")).toBeVisible();
+
+    await user.click(toggle);
+    expect(preview).not.toBeVisible();
   });
 
   it("enables next button when Subject and Modality are assigned", () => {

@@ -2,12 +2,16 @@ import { Card, Select, Stack, Table, Text } from "@mantine/core";
 
 import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { EXPLOREASL_MODALITIES } from "../../schemas/importSchemas";
 import type { ModalityAlias } from "../../schemas/importSchemas";
 
 const MODALITY_OPTIONS = [
   { value: "__ignore__", label: "— Ignore —" },
-  ...EXPLOREASL_MODALITIES.map((m) => ({ value: m, label: m })),
+  { value: "T1w", label: "T1-weighted Acquisition" },
+  { value: "T2w", label: "T2-weighted Acquisition" },
+  { value: "ASL4D", label: "ASL Acquisition" },
+  { value: "M0", label: "M0 Calibration" },
+  { value: "FLAIR", label: "FLAIR Acquisition" },
+  { value: "WMH_SEGM", label: "White Matter Hyperintensity Segmentation" },
 ];
 
 /**
@@ -65,7 +69,8 @@ export default function ModalityMappingTable() {
                   value={alias.mapped ?? "__ignore__"}
                   onChange={(v) => handleChange(alias.captured, v)}
                   size="xs"
-                  w={160}
+                  w={360}
+                  maw="100%"
                   comboboxProps={{ withinPortal: false }}
                   data-testid={`modality-select-${alias.captured.replace(/[^a-z0-9]/gi, "-")}`}
                 />

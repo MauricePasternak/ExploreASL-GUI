@@ -1,5 +1,5 @@
 import { Badge, Button, Card, Code, Group, Select, Stack, Text } from "@mantine/core";
-import { IconArrowLeft, IconArrowRight, IconRoute } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconChevronRight, IconRoute } from "@tabler/icons-react";
 import HeaderCard from "../common/HeaderCard";
 
 import { isTokenizerComplete } from "../../lib/importStepAccess";
@@ -142,7 +142,12 @@ function PatternCard({ pattern }: { pattern: PathPattern }) {
           <Text size="xs" c="dimmed" mb={4}>
             Sample path:
           </Text>
-          <Group gap={4} wrap="wrap">
+          <Group
+            gap={4}
+            wrap="wrap"
+            align="flex-start"
+            data-testid={`tokenizer-sample-path-${pattern.signature}`}
+          >
             {pattern.blocks.map((block, blockIndex) => (
               <BlockAssigner
                 key={`${pattern.signature}-${blockIndex}`}
@@ -156,8 +161,27 @@ function PatternCard({ pattern }: { pattern: PathPattern }) {
           </Group>
         </Card>
 
-        {/* Live regex preview */}
-        <RegexPreview hierarchy={hierarchy} ordering={ordering} />
+        <details data-testid={`tokenizer-config-disclosure-${pattern.signature}`}>
+          <Text
+            component="summary"
+            size="xs"
+            c="dimmed"
+            mb={4}
+            className="tokenizer-config-toggle"
+            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+            data-testid="tokenizer-config-toggle"
+          >
+            <IconChevronRight
+              size={14}
+              aria-hidden="true"
+              className="tokenizer-config-chevron"
+              style={{ flexShrink: 0 }}
+              data-testid="tokenizer-config-chevron"
+            />
+            Show generated configuration
+          </Text>
+          <RegexPreview hierarchy={hierarchy} ordering={ordering} />
+        </details>
       </Stack>
     </Card>
   );
@@ -283,7 +307,7 @@ function BlockAssigner({
                 <Badge
                   variant={subColor ? "filled" : "outline"}
                   color={subColor ?? "gray"}
-                  size="sm"
+                  size="md"
                 >
                   {subBlock}
                 </Badge>

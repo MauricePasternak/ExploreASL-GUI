@@ -1,5 +1,13 @@
 /* Mantine handles styling for the application shell. */
 
+.tokenizer-config-toggle::-webkit-details-marker {
+  display: none;
+}
+
+details[open] > .tokenizer-config-toggle .tokenizer-config-chevron {
+  transform: rotate(90deg);
+}
+
 /* Fix invisible text insertion caret (cursor) and mouse text cursor (I-beam) in WebKit/WebView2 on Windows */
 :root[data-mantine-color-scheme="light"] {
   color-scheme: light;

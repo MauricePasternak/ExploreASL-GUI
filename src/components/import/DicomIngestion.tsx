@@ -180,18 +180,17 @@ export default function DicomIngestion() {
         bMatchDirectories,
       });
       if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
+      const patterns = discoverPathPatterns(paths, "", tokenSubDelimiters);
+      await setIngestionResults(paths, patterns, lease);
+      if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
       if (paths.length === 0) {
         setError(
           "No DICOM (.dcm) files found in the provided directory tree. Check that the folders contain valid DICOM data.",
         );
-        setIngestionResults([], [], lease);
         logAction("dicom_scan_empty", { path: sourceDataPath });
         return;
       }
 
-      const patterns = discoverPathPatterns(paths, "", tokenSubDelimiters);
-
-      setIngestionResults(paths, patterns, lease);
       logAction("dicom_scan_success", {
         path: sourceDataPath,
         pathCount: paths.length,
@@ -200,7 +199,6 @@ export default function DicomIngestion() {
     } catch (err) {
       if (!isCurrentProjectLease(lease)) return;
       setError(`Failed to scan directory: ${err instanceof Error ? err.message : String(err)}`);
-      setIngestionResults([], [], lease);
       logAction("dicom_scan_error", { path: sourceDataPath, error: String(err) });
     } finally {
       if (isCurrentProjectLease(lease)) setScanning(false);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Box, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
+import { Badge, Box, Group, Loader, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import {
   IconCheck,
@@ -7,7 +7,6 @@ import {
   IconBan,
   IconAlertCircle,
   IconAlertTriangle,
-  IconLoader,
   IconSelector,
 } from "@tabler/icons-react";
 
@@ -48,12 +47,7 @@ function StatusIcon({ status, stale }: { status: ImportProgress["status"]; stale
       case "running":
         return (
           <Tooltip label="Running">
-            <IconLoader
-              size={18}
-              color="var(--mantine-color-orange-6)"
-              className="animate-spin"
-              data-testid="status-running"
-            />
+            <Loader size={18} color="orange" aria-label="Running" data-testid="status-running" />
           </Tooltip>
         );
       case "pending":
@@ -287,7 +281,10 @@ export default function ImportSubjectTable({
         accessor: "currentStep",
         title: "Step",
         textAlign: "center" as const,
-        render: (row) => row.currentStep ?? row.errorStep ?? "—",
+        render: (row) =>
+          row.status === "running" || row.status === "failed"
+            ? (row.currentStep ?? row.errorStep ?? "—")
+            : "—",
       },
       {
         accessor: "_importLogInfo",

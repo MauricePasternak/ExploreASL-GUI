@@ -4,6 +4,8 @@ import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { error as logError } from "@tauri-apps/plugin-log";
+import { notifications } from "@mantine/notifications";
 
 import DicomIngestion from "./DicomIngestion";
 import { acceptedImportSettings, useImportStore } from "../../stores/importStore";
@@ -470,7 +472,7 @@ describe("DicomIngestion", () => {
     expect(getScanButton()).not.toBeDisabled();
   });
 
-  it("displays results after successful scan", async () => {
+  it("shows rejected scan results as an error, then accepts and saves a successful retry", async () => {
     seedProject(undefined, { sourceDataPath: "/data/project/sourcedata" });
     const accepted = {
       ...projectFixture("project-1", "Brain Study", "/tmp/brain-study"),
@@ -486,8 +488,13 @@ describe("DicomIngestion", () => {
       pathPatterns: discoverPathPatterns(paths, "", ["_"]),
       ingestionComplete: true,
     };
+    let rejectScan = true;
+    const invalidArgs =
+      'invalid args `edit` for command `accept_project_edit`: invalid type: string "0", expected u32';
     vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "accept_project_edit") return Promise.resolve(accepted);
+      if (cmd === "accept_project_edit")
+        return rejectScan ? Promise.reject(invalidArgs) : Promise.resolve(accepted);
+      if (cmd === "save_project") return Promise.resolve({ ...accepted, persistedRevision: 1 });
       if (cmd === "walk_directory") {
         return Promise.resolve([
           "BAR/05022026_01/sernum-0001_ser-AAHead_Scout",
@@ -501,6 +508,32 @@ describe("DicomIngestion", () => {
 
     await userEvent.click(getScanButton());
 
+    expect(await screen.findByTestId("dicom-scan-error")).toHaveTextContent(
+      "Your project changes could not be applied. They have not been saved.",
+    );
+    expect(screen.getByTestId("dicom-scan-error")).not.toHaveTextContent("expected u32");
+    expect(acceptedImportSettings().rawPaths).toEqual([]);
+    expect(screen.getByTestId("dicom-next-btn")).toBeDisabled();
+    expect(
+      vi.mocked(invoke).mock.calls.filter(([command]) => command === "accept_project_edit"),
+    ).toHaveLength(1);
+
+    await expect(useProjectStore.getState().saveProject()).rejects.toThrow(
+      "Your project changes could not be applied.",
+    );
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Project not saved",
+        message: expect.stringContaining("Your project changes could not be applied."),
+      }),
+    );
+    expect(logError).toHaveBeenCalledExactlyOnceWith(
+      `[PROJECT] accept_project_edit failed: ${invalidArgs}`,
+    );
+
+    rejectScan = false;
+    await userEvent.click(getScanButton());
+
     await waitFor(() => {
       // Use queryAllByText since Mantine may render duplicate elements
       const found = screen.queryAllByText(/Found 2 DICOM location/);
@@ -508,6 +541,12 @@ describe("DicomIngestion", () => {
     });
 
     expect(screen.getAllByText(/Example for this pattern:/).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("dicom-scan-error")).not.toBeInTheDocument();
+    expect(screen.getByTestId("dicom-next-btn")).toBeEnabled();
+    await useProjectStore.getState().saveProject();
+    expect(invoke).toHaveBeenCalledWith("save_project", { generation: 1 });
+    expect(useProjectStore.getState().saveError).toBeNull();
+    expect(useProjectStore.getState().isDirty).toBe(false);
   });
 
   it("shows error when no DICOMs found", async () => {

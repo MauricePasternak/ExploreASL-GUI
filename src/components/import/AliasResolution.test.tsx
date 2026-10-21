@@ -20,6 +20,7 @@ function renderWithProviders() {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   useImportStore.getState().resetImport();
   useProjectStore.getState().cancelAutosave();
   useProjectStore.setState(useProjectStore.getInitialState(), true);
@@ -129,6 +130,36 @@ describe("AliasResolution", () => {
     const pcasl = screen.queryAllByText("pcasl_3d");
     expect(t1.length).toBeGreaterThan(0);
     expect(pcasl.length).toBeGreaterThan(0);
+  });
+
+  it("shows readable modality options while keeping ExploreASL mapping codes", async () => {
+    const user = userEvent.setup();
+    const snapshot = projectFixture();
+    snapshot.document.mappingState.modalityAliases = [{ captured: "pcasl_3d", mapped: "T1w" }];
+    useProjectStore.getState().acceptSnapshot(snapshot);
+    const updateAlias = vi
+      .spyOn(useImportStore.getState(), "updateModalityAlias")
+      .mockImplementation(() => {});
+    renderWithProviders();
+
+    await user.click(screen.getByTestId("alias-tab-modality"));
+    expect(screen.getByTestId("modality-select-pcasl-3d")).toHaveValue("T1-weighted Acquisition");
+    await user.click(screen.getByTestId("modality-select-pcasl-3d"));
+
+    for (const label of [
+      "— Ignore —",
+      "T1-weighted Acquisition",
+      "T2-weighted Acquisition",
+      "ASL Acquisition",
+      "M0 Calibration",
+      "FLAIR Acquisition",
+      "White Matter Hyperintensity Segmentation",
+    ]) {
+      expect(screen.getByRole("option", { name: label })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("option", { name: "ASL Acquisition" }));
+    expect(updateAlias).toHaveBeenCalledWith("pcasl_3d", "ASL4D");
   });
 
   it("shows subject renames when present and tab is clicked", async () => {

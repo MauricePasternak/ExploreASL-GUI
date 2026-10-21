@@ -10,7 +10,8 @@ import { decodePatternSignature } from "../../lib/tokenizerUtils";
 import { useGlobalStore } from "../../stores/globalStore";
 
 const TABLE_HEIGHT = 400;
-const ROW_HEIGHT = 28;
+const ROW_HEIGHT = 34;
+const MIN_VISIBLE_ROWS = 5;
 const TH_STYLE: React.CSSProperties = {
   position: "sticky",
   top: 0,
@@ -68,7 +69,10 @@ export default function StagingMappingTable({
           tokenSubDelimiters,
         );
 
-        const height = Math.min(mapping.entries.length * ROW_HEIGHT, TABLE_HEIGHT);
+        const height = Math.min(
+          (Math.max(mapping.entries.length, MIN_VISIBLE_ROWS) + 1) * ROW_HEIGHT,
+          TABLE_HEIGHT,
+        );
 
         return (
           <Card
@@ -86,7 +90,8 @@ export default function StagingMappingTable({
             </Text>
 
             <TableVirtuoso
-              style={{ height }}
+              style={{ height, minHeight: height }}
+              data-testid={`staging-mapping-viewport-${decodedSignature}`}
               data={mapping.entries}
               components={{
                 Table: (props) => <Table striped highlightOnHover fz="xs" {...props} />,

@@ -173,7 +173,7 @@ export interface ImportState {
     paths: string[],
     patterns: PathPattern[],
     lease?: ProjectLease | null,
-  ) => void;
+  ) => Promise<void>;
   setBMatchDirectories: (value: boolean) => void;
   setTokenAssignment: (
     patternSignature: string,
@@ -514,9 +514,9 @@ export const useImportStore = create<ImportState>((set, get) => ({
     });
   },
 
-  setIngestionResults: (paths, patterns, lease = captureProjectLease()) => {
+  setIngestionResults: async (paths, patterns, lease = captureProjectLease()) => {
     if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
-    editMapping({
+    return editMapping({
       rawPaths: paths,
       pathPatterns: patterns,
       ingestionComplete: paths.length > 0,
@@ -811,7 +811,7 @@ export const useImportStore = create<ImportState>((set, get) => ({
                   ? "cancelled"
                   : snapshot.lifecycle === "interrupted"
                     ? "interrupted"
-                    : snapshot.lifecycle === "running"
+                    : ["running", "finalizing", "cancelling"].includes(snapshot.lifecycle)
                       ? current.status === "completed"
                         ? "pending"
                         : current.status
