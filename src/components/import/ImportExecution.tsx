@@ -210,6 +210,12 @@ export default function ImportExecution() {
       return () => {
         disposed = true;
       };
+    const context = {
+      operation: "setup_discovery_listeners",
+      runId: null as string | null,
+      phase: useImportStore.getState().importPhase,
+      projectGeneration: lease.generation,
+    };
     const discover = async () => {
       try {
         const listeners = await setupImportDiscoveryListeners(lease);
@@ -218,25 +224,35 @@ export default function ImportExecution() {
           listeners.cleanup();
           return;
         }
+        context.operation = "get_active_import_run";
         const run = await getActiveImportRun();
         if (disposed || !lease || !isCurrentProjectLease(lease)) return;
         if (run) {
+          context.runId = run.runId;
+          context.phase = run.lifecycle;
           useImportStore.getState().bindImportRunSnapshot(run);
           listeners.bindRun(run.runId);
+          context.operation = "attach_import_run";
           const attached = await attachImportRun(run.runId);
           if (disposed || !isCurrentProjectLease(lease)) {
             listeners.cleanup();
             return;
           }
           useImportStore.getState().reconcileImportRunSnapshot(attached, lease);
+          console.info("[import] Recovered run attachment", {
+            ...context,
+            phase: attached.lifecycle,
+          });
           if (["completed", "failed", "cancelled", "interrupted"].includes(attached.lifecycle)) {
             void reconcileImportTerminal(attached.runId, lease).catch(() => undefined);
           }
         } else {
+          context.operation = "reconstruct_import_status";
           await reconcileCommittedImportStatus(lease);
         }
         if (!disposed) setDiscovery("ready");
       } catch (error) {
+        console.error("[import] Run discovery failed", context, error);
         if (!disposed) {
           setDiscoveryError(error instanceof Error ? error.message : String(error));
           setDiscovery("error");
@@ -271,10 +287,18 @@ export default function ImportExecution() {
           ? selectedSubjects
           : [...new Set(subjectRows.map((row) => row.subject))]);
       if (subjects.length === 0) return;
+      const context = {
+        operation: "save_project",
+        runId: null as string | null,
+        phase: useImportStore.getState().importPhase,
+        projectGeneration: lease.generation,
+      };
+      console.info("[import] Start requested", { ...context, confirmed: Boolean(confirmed) });
       setStarting(true);
       try {
         await useProjectStore.getState().saveProject();
         if (!isCurrentProjectLease(lease)) return;
+        context.operation = "validate_profile";
         const global = useGlobalStore.getState();
         const acceptedProfileId =
           useProjectStore.getState().project?.uiState.import?.selectedProfileId;
@@ -282,6 +306,7 @@ export default function ImportExecution() {
         if (!profile || !global.profileValidationState[profile.id]?.valid) {
           throw new Error("Select a valid execution profile before running import.");
         }
+        context.operation = "plan_import_relocation";
         const relocation =
           confirmed?.plan ??
           (await invoke<RelocationPlan>("plan_import_relocation", { subjectList: subjects }));
@@ -294,12 +319,14 @@ export default function ImportExecution() {
           !confirmed &&
           (selectedFreshSubject || relocation.subjects.some((subject) => subject.fileCount > 0))
         ) {
+          console.info("[import] Replacement confirmation required", { ...context });
           setPendingConfirmation({ subjects: [...subjects], plan: relocation });
           return;
         }
         const preservedSubjects = Object.values(useImportStore.getState().importProgress)
           .filter((entry) => entry.status === "completed" && !subjects.includes(entry.subject))
           .map((entry) => entry.subject);
+        context.operation = "reserve_import_run";
         const reserved = await reserveImportRun({
           subjectList: subjects,
           relocationPlanId: relocation.planId,
@@ -307,15 +334,23 @@ export default function ImportExecution() {
           subjectsToPreserve: preservedSubjects,
           preserveStaging: useGlobalStore.getState().settings.import.preserveStagingDir,
         });
+        context.runId = reserved.runId;
+        context.phase = reserved.lifecycle;
         if (!isCurrentProjectLease(lease)) return;
+        console.info("[import] Run reserved", { ...context });
         useImportStore.getState().startImport(subjects);
         useImportStore.getState().bindImportRunSnapshot(reserved);
+        context.operation = "setup_import_listeners";
         await bindListeners(reserved.runId);
         if (!isCurrentProjectLease(lease)) return;
+        context.operation = "attach_import_run";
         const attached = await attachImportRun(reserved.runId);
         if (!isCurrentProjectLease(lease)) return;
         useImportStore.getState().reconcileImportRunSnapshot(attached);
+        context.phase = attached.lifecycle;
+        context.operation = "build_import_plan";
         const plan = importPlan(projectRoot);
+        context.operation = "launch_import_run";
         const launched = await launchImportRun({
           runId: reserved.runId,
           stagingEntries: selectImportEntries(plan.entries, subjects),
@@ -331,6 +366,9 @@ export default function ImportExecution() {
           void reconcileImportTerminal(launched.runId, lease).catch(() => undefined);
         }
       } catch (error) {
+        // Persistence owns its diagnostics; native failed snapshots own run failures.
+        if (context.operation !== "save_project")
+          console.error("[import] Start request failed", context, error);
         if (!isCurrentProjectLease(lease)) return;
         useImportStore.setState({
           importRunError: error instanceof Error ? error.message : String(error),
@@ -358,6 +396,16 @@ export default function ImportExecution() {
       try {
         return registerProjectTask(() => startAttempt(confirmed));
       } catch (error) {
+        console.error(
+          "[import] Start admission failed",
+          {
+            operation: "register_start",
+            runId: null,
+            phase: useImportStore.getState().importPhase,
+            projectGeneration: captureProjectLease()?.generation,
+          },
+          error,
+        );
         useImportStore.setState({
           importRunError: error instanceof Error ? error.message : String(error),
         });
@@ -371,6 +419,13 @@ export default function ImportExecution() {
     if (!activeRunId) return;
     const lease = captureProjectLease();
     if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
+    const context = {
+      operation: "cancel_import_run",
+      runId: activeRunId,
+      phase: useImportStore.getState().importPhase,
+      projectGeneration: lease.generation,
+    };
+    console.info("[import] Stop requested", { ...context });
     setStopping(true);
     try {
       await registerProjectTask(async () => {
@@ -378,10 +433,13 @@ export default function ImportExecution() {
         if (!isCurrentProjectLease(lease)) return;
         useImportStore.getState().reconcileImportRunSnapshot(snapshot, lease);
         if (["completed", "failed", "cancelled", "interrupted"].includes(snapshot.lifecycle)) {
+          context.operation = "reconcile_import_result";
           await reconcileImportTerminal(snapshot.runId, lease);
         }
       });
     } catch (error) {
+      if (context.operation !== "reconcile_import_result")
+        console.error("[import] Stop request failed", context, error);
       if (isCurrentProjectLease(lease)) {
         useImportStore.setState({
           importRunError: error instanceof Error ? error.message : String(error),
@@ -399,6 +457,13 @@ export default function ImportExecution() {
     const runId = terminalRunId;
     if (confirmingStoppedRunId === runId && confirmingStoppedGeneration === lease.generation)
       return;
+    const context = {
+      operation: "confirm_import_worker_stopped",
+      runId,
+      phase: useImportStore.getState().importPhase,
+      projectGeneration: lease.generation,
+    };
+    console.info("[import] External-stop confirmation requested", { ...context });
     useImportStore.setState({
       confirmingStoppedRunId: runId,
       confirmingStoppedGeneration: lease.generation,
@@ -410,9 +475,16 @@ export default function ImportExecution() {
         const current = useImportStore.getState();
         if (current.terminalRunId !== runId || !current.confirmationRequired) return;
         useImportStore.getState().reconcileImportRunSnapshot(snapshot, lease);
+        console.info("[import] External-stop confirmation accepted", {
+          ...context,
+          phase: snapshot.lifecycle,
+        });
+        context.operation = "reconcile_import_result";
         await reconcileImportTerminal(snapshot.runId, lease);
       });
     } catch (error) {
+      if (context.operation !== "reconcile_import_result")
+        console.error("[import] External-stop confirmation failed", context, error);
       const current = useImportStore.getState();
       if (
         isCurrentProjectLease(lease) &&

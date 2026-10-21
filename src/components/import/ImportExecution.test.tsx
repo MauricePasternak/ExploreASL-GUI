@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
@@ -17,7 +17,15 @@ import { projectFixture } from "../../test/projectFixtures";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 import { useGlobalStore } from "../../stores/globalStore";
 import { DEFAULT_SETTINGS } from "../../schemas/globalSettings";
+import { processingProfile } from "../../test/processingFixtures";
 
+beforeEach(() => {
+  vi.mocked(listen)
+    .mockReset()
+    .mockResolvedValue(() => undefined);
+  vi.spyOn(console, "info").mockImplementation(() => undefined);
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+});
 afterEach(() => {
   cleanup();
   useImportStore.getState().resetImport();
@@ -25,6 +33,7 @@ afterEach(() => {
   useProjectStore.setState(useProjectStore.getInitialState(), true);
   resetProjectLifecycleForTests();
   vi.mocked(invoke).mockReset();
+  vi.restoreAllMocks();
 });
 function renderExecution() {
   return render(
@@ -40,6 +49,89 @@ function renderExecution() {
 }
 
 describe("ImportExecution authoritative lifecycle", () => {
+  it("updates live subject status and conversion steps without granting parser completion authority", async () => {
+    const callbacks = new Map<string, (event: { payload: unknown }) => void>();
+    vi.mocked(listen).mockImplementation(async (name, callback) => {
+      callbacks.set(name, (event) => callback({ event: name, id: 0, ...event }));
+      return () => callbacks.delete(name);
+    });
+    const running = {
+      runId: "live-run",
+      lifecycle: "running" as const,
+      ownershipGeneration: 1,
+      profileId: "profile-1",
+      selectedSubjects: ["GE001", "Philips001"],
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      subjectOutcomes: [],
+      confirmationRequired: false,
+    };
+    useProjectStore.setState({
+      project: projectView(projectFixture("project-1", "Project", "/project")),
+      loaded: true,
+    });
+    activateProjectLease("project-1", "/project");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "get_active_import_run" || command === "attach_import_run") return running;
+      return [];
+    });
+    renderExecution();
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("import-lifecycle-badge")).toHaveTextContent("Running"),
+    );
+    const row = () => within(screen.getByText("GE001").closest("tr")!);
+    expect(row().getByTestId("status-pending")).toBeInTheDocument();
+    const emit = (payload: Record<string, unknown>) =>
+      act(() => {
+        callbacks.get("import-structured-event")!({
+          payload: { runId: running.runId, ownershipGeneration: 1, subject: "GE001", ...payload },
+        });
+      });
+
+    emit({ type: "subject_start", step: "DCM2NII" });
+    expect(row().getByTestId("status-running")).toBeInTheDocument();
+    expect(row().getByTestId("status-running")).toHaveClass("mantine-Loader-root");
+    expect(row().getByText("DCM2NII")).toBeInTheDocument();
+    expect(
+      within(screen.getByText("Philips001").closest("tr")!).getByTestId("status-pending"),
+    ).toBeInTheDocument();
+    emit({ type: "subject_start", step: "NII2BIDS" });
+    expect(row().getByText("NII2BIDS")).toBeInTheDocument();
+    emit({ type: "subject_complete", duration_secs: 5 });
+    expect(row().queryByTestId("status-completed")).not.toBeInTheDocument();
+    expect(useImportStore.getState().importPhase).toBe("running");
+
+    act(() => {
+      callbacks.get("import-run-snapshot")!({
+        payload: { ...running, lifecycle: "finalizing", updatedAtMs: 3 },
+      });
+    });
+    expect(row().getByTestId("status-running")).toBeInTheDocument();
+    expect(row().getByText("NII2BIDS")).toBeInTheDocument();
+    emit({ type: "subject_start", step: "DCM2NII" });
+    expect(row().getByText("NII2BIDS")).toBeInTheDocument();
+
+    act(() => {
+      useImportStore.getState().reconcileImportRunSnapshot({
+        ...running,
+        lifecycle: "completed",
+        terminalResult: "completed",
+        updatedAtMs: 4,
+        subjectOutcomes: running.selectedSubjects.map((subject) => ({
+          subject,
+          outcome: "committed",
+          committed: true,
+          readyLockVerified: true,
+          rawdataVerified: true,
+        })),
+      });
+    });
+    expect(row().getByTestId("status-completed")).toBeInTheDocument();
+    expect(row().queryByText("NII2BIDS")).not.toBeInTheDocument();
+    emit({ type: "subject_start", step: "DCM2NII" });
+    expect(row().getByTestId("status-completed")).toBeInTheDocument();
+  });
+
   it("confirms the exact interrupted run once, disables while pending, and ignores a stale response", async () => {
     let resolveConfirmation!: (snapshot: Record<string, unknown>) => void;
     const confirmation = new Promise<Record<string, unknown>>((resolve) => {
@@ -327,7 +419,8 @@ describe("ImportExecution authoritative lifecycle", () => {
       loaded: true,
     });
     activateProjectLease("project-1", "/project");
-    vi.mocked(invoke).mockRejectedValue(new Error("native unavailable"));
+    const error = new Error("native unavailable");
+    vi.mocked(invoke).mockRejectedValue(error);
 
     renderExecution();
 
@@ -335,7 +428,124 @@ describe("ImportExecution authoritative lifecycle", () => {
       "native unavailable",
     );
     expect(screen.getByTestId("start-import-btn")).toBeDisabled();
+    expect(console.error).toHaveBeenCalledExactlyOnceWith(
+      "[import] Run discovery failed",
+      {
+        operation: "get_active_import_run",
+        runId: null,
+        phase: "idle",
+        projectGeneration: 1,
+      },
+      error,
+    );
   });
+
+  it.each([
+    "plan_import_relocation",
+    "reserve_import_run",
+    "setup_import_listeners",
+    "attach_import_run",
+    "launch_import_run",
+  ])("logs rejected %s once without request data", async (operation) => {
+    const configured = projectFixture("project-1", "Project", "/project", {
+      mappingState: {
+        subjectRows: [{ id: "ONE/01", subject: "ONE", session: "01", groupId: "global" }],
+      },
+      uiState: { import: { mostRecentConfig: null, selectedProfileId: processingProfile.id } },
+    });
+    useProjectStore.setState({
+      project: projectView(configured),
+      loaded: true,
+      saveProject: vi.fn().mockResolvedValue(undefined),
+    });
+    activateProjectLease("project-1", "/project");
+    useGlobalStore.setState({
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [processingProfile] },
+      profileValidationState: { [processingProfile.id]: { valid: true, errors: [] } },
+    });
+    const run = {
+      runId: "new-run",
+      lifecycle: "preparing",
+      ownershipGeneration: 1,
+      profileId: processingProfile.id,
+      selectedSubjects: ["ONE"],
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      subjectOutcomes: [],
+      confirmationRequired: false,
+    };
+    const error = new Error("IPC unavailable");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === operation) throw error;
+      if (command === "get_active_import_run") return null;
+      if (command === "read_import_status") return [];
+      if (command === "plan_import_relocation")
+        return { planId: "plan", subjects: [], fingerprint: "fingerprint" };
+      return run;
+    });
+    renderExecution();
+    await vi.waitFor(() => expect(screen.getByTestId("start-import-btn")).toBeEnabled());
+    if (operation === "setup_import_listeners") vi.mocked(listen).mockRejectedValueOnce(error);
+    await userEvent.click(screen.getByTestId("start-import-btn"));
+    expect(await screen.findByTestId("import-run-error")).toHaveTextContent(error.message);
+    expect(console.error).toHaveBeenCalledExactlyOnceWith(
+      "[import] Start request failed",
+      {
+        operation,
+        runId: ["plan_import_relocation", "reserve_import_run"].includes(operation)
+          ? null
+          : run.runId,
+        phase: ["plan_import_relocation", "reserve_import_run"].includes(operation)
+          ? "idle"
+          : "preparing",
+        projectGeneration: 1,
+      },
+      error,
+    );
+  });
+
+  it.each(["stop", "confirm"])(
+    "logs rejected import %s once with original error",
+    async (action) => {
+      const run = {
+        runId: "attached-run",
+        lifecycle: action === "stop" ? "running" : "interrupted",
+        ownershipGeneration: 1,
+        profileId: "profile-1",
+        selectedSubjects: ["ONE"],
+        createdAtMs: 1,
+        updatedAtMs: 2,
+        subjectOutcomes: [],
+        ...(action === "confirm"
+          ? { terminalResult: "interrupted", confirmationRequired: true }
+          : {}),
+      };
+      const operation = action === "stop" ? "cancel_import_run" : "confirm_import_worker_stopped";
+      const error = new Error("IPC unavailable");
+      useProjectStore.setState({ project: projectView(projectFixture()), loaded: true });
+      activateProjectLease("project-1", "/project");
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === operation) throw error;
+        return run;
+      });
+      renderExecution();
+      await screen.findByText(action === "stop" ? "Running" : "Interrupted");
+      await userEvent.click(
+        screen.getByTestId(action === "stop" ? "stop-import-btn" : "confirm-import-stopped-btn"),
+      );
+      expect(await screen.findByTestId("import-run-error")).toHaveTextContent(error.message);
+      expect(console.error).toHaveBeenCalledExactlyOnceWith(
+        expect.any(String),
+        {
+          operation,
+          runId: run.runId,
+          phase: run.lifecycle,
+          projectGeneration: 1,
+        },
+        error,
+      );
+    },
+  );
 
   it("uses native rerun inventory then reserve-bind-listen-attach-launch with only committed locks preserved", async () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);

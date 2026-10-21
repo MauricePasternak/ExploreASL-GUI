@@ -68,6 +68,7 @@
     "store:default",
     "log:default",
     "clipboard-manager:default",
+    "clipboard-manager:allow-write-text",
     "updater:default",
     "process:allow-restart"
   ]

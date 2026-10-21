@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
   activateProjectLease,
@@ -47,6 +47,7 @@ const request = {
 };
 
 describe("processing native IPC", () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(async () => {
     vi.clearAllMocks();
     listeners.clear();
@@ -219,5 +220,40 @@ describe("processing native IPC", () => {
       },
     ]);
     await expect(loadLockStatus("/project")).resolves.toMatchObject([{ module: "asl", run: "1" }]);
+  });
+  it("warns once per malformed attached-run channel, never dumps payloads or warns on foreign/stale events", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const run = processingSnapshot();
+    useProcessingStore.getState().bindRunSnapshot(run);
+    const cleanup = await setupProcessingListeners(run.runId);
+    const malformed = { runId: run.runId, secret: "study data" };
+    for (const channel of listeners.keys()) {
+      listeners.get(channel)!({ payload: { ...malformed, runId: "foreign" } });
+    }
+    expect(warn).not.toHaveBeenCalled();
+    for (const channel of listeners.keys()) {
+      listeners.get(channel)!({ payload: malformed });
+      listeners.get(channel)!({ payload: malformed });
+    }
+    expect(warn).toHaveBeenCalledTimes(4);
+    expect(warn).toHaveBeenCalledWith(
+      "[processing] Malformed run event ignored",
+      expect.objectContaining({
+        runId: run.runId,
+        projectGeneration: 1,
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: expect.any(String), path: expect.any(Array) }),
+        ]),
+      }),
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("study data");
+    cleanup();
+    const nextCleanup = await setupProcessingListeners(run.runId);
+    listeners.get("LockCreated")!({ payload: malformed });
+    expect(warn).toHaveBeenCalledTimes(5);
+    activateProjectLease("project-2", "/other");
+    listeners.get("StatusFileCreated")!({ payload: malformed });
+    expect(warn).toHaveBeenCalledTimes(5);
+    nextCleanup();
   });
 });

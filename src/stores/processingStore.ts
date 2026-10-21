@@ -131,18 +131,31 @@ async function attachProcessingListeners(runId: string): Promise<void> {
   if (processingListeners?.generation === lease.generation && processingListeners.runId === runId)
     return;
   const promise = (async () => {
-    const cleanup = await setupProcessingListeners(runId);
-    const state = useProcessingStore.getState();
-    if (
-      !isCurrentProjectLease(lease) ||
-      (state.activeRunId !== runId && state.terminalRunId !== runId)
-    ) {
-      cleanup();
-      return;
+    const context = {
+      operation: "setup_processing_listeners",
+      runId,
+      phase: useProcessingStore.getState().processingPhase,
+      projectGeneration: lease.generation,
+    };
+    let snapshot: ProcessingRunSnapshot;
+    try {
+      const cleanup = await setupProcessingListeners(runId);
+      const state = useProcessingStore.getState();
+      if (
+        !isCurrentProjectLease(lease) ||
+        (state.activeRunId !== runId && state.terminalRunId !== runId)
+      ) {
+        cleanup();
+        return;
+      }
+      clearProcessingListeners();
+      processingListeners = { runId, generation: lease.generation, cleanup };
+      context.operation = "attach_run";
+      snapshot = await attachRun(runId);
+    } catch (error) {
+      console.error("[processing] Listener attachment failed", context, error);
+      throw error;
     }
-    clearProcessingListeners();
-    processingListeners = { runId, generation: lease.generation, cleanup };
-    const snapshot = await attachRun(runId);
     await projectProcessingSnapshot(snapshot, lease);
   })();
   attachment = { generation: lease.generation, runId, promise };
@@ -223,7 +236,20 @@ export const useProcessingStore = create<ProcessingState>()(
         registerProjectTask(async () => {
           const lease = captureProjectLease();
           if (!lease) return;
-          const active = await getActiveRun();
+          const state = useProcessingStore.getState();
+          const context = {
+            operation: "get_active_run",
+            runId: state.activeRunId ?? state.terminalRunId,
+            phase: state.processingPhase,
+            projectGeneration: lease.generation,
+          };
+          let active: ProcessingRunSnapshot | null;
+          try {
+            active = await getActiveRun();
+          } catch (error) {
+            console.error("[processing] Run discovery failed", context, error);
+            throw error;
+          }
           if (!isCurrentProjectLease(lease)) return;
           if (!active) {
             clearProcessingListeners();
@@ -238,6 +264,12 @@ export const useProcessingStore = create<ProcessingState>()(
             return;
           }
           useProcessingStore.getState().bindRunSnapshot(active);
+          console.info("[processing] Recovering run attachment", {
+            operation: "synchronize_processing_run",
+            runId: active.runId,
+            phase: active.lifecycle,
+            projectGeneration: lease.generation,
+          });
           await useProjectStore.getState().refreshProject();
           if (!isCurrentProjectLease(lease)) return;
           await attachProcessingListeners(active.runId);
@@ -249,10 +281,18 @@ export const useProcessingStore = create<ProcessingState>()(
           const lease = captureProjectLease();
           const state = useProcessingStore.getState();
           if (state.activeRunId || state.terminalRunId || state.actionPending) return;
+          const context = {
+            operation: "flush_edits",
+            runId: null as string | null,
+            phase: state.processingPhase,
+            projectGeneration: lease?.generation,
+          };
+          console.info("[processing] Start requested", { ...context });
           set({ actionPending: true });
           try {
             await useProjectStore.getState().flushEdits();
             if (lease && !isCurrentProjectLease(lease)) return;
+            context.operation = "validate_request";
             const config = useProjectStore.getState().project?.uiState.processing?.config;
             if (!config) throw new Error("No config set");
             if (!config.modules.length) throw new Error("No modules selected");
@@ -262,6 +302,9 @@ export const useProcessingStore = create<ProcessingState>()(
             const global = useGlobalStore.getState();
             const profile = global.getProfileById(config.selectedProfileId);
             if (!profile) {
+              console.warn("[processing] Start blocked: execution profile unavailable", {
+                ...context,
+              });
               set({
                 profileError:
                   "Selected profile was deleted or is invalid. Choose a valid profile before running.",
@@ -270,6 +313,7 @@ export const useProcessingStore = create<ProcessingState>()(
             }
             const profileValidation = global.profileValidationState[profile.id];
             if (!profileValidation?.valid) {
+              console.warn("[processing] Start blocked: execution profile invalid", { ...context });
               set({
                 profileError: `Execution profile "${profile.label}" is invalid: ${profileValidation?.errors.join("; ") || "Fix it in Settings before running."}`,
               });
@@ -312,11 +356,16 @@ export const useProcessingStore = create<ProcessingState>()(
               rerunBids2legacy: config.rerunBids2Legacy ?? false,
             });
             set({ profileError: null, processingError: null });
+            context.operation = "save_project";
             await useProjectStore.getState().saveProject();
             if (!isCurrentProjectLease(lease)) return;
+            context.operation = "reserve_processing_run";
             const reservation = await reserveProcessingRun(request, lease.rootPath);
             if (!isCurrentProjectLease(lease) || reservation.kind === "historical") return;
             const snapshot = reservation.snapshot;
+            context.runId = snapshot.runId;
+            context.phase = snapshot.lifecycle;
+            console.info("[processing] Run reserved", { ...context });
             useProcessingStore.getState().bindRunSnapshot(snapshot);
             if (useProcessingStore.getState().snapshot?.runId !== snapshot.runId) return;
             const listening = attachProcessingListeners(snapshot.runId).catch((error) => {
@@ -327,10 +376,19 @@ export const useProcessingStore = create<ProcessingState>()(
                 set({ processingError: `Processing listener attachment failed: ${String(error)}` });
             });
             set({ actionPending: false });
+            context.operation = "run_pipeline";
             const launched = await runProcessingPipeline(snapshot.runId);
+            context.operation = "project_processing_snapshot";
             await projectProcessingSnapshot(launched, lease);
             void listening;
           } catch (error) {
+            // Persistence/projection failures already have projectRequest diagnostics.
+            if (
+              !["flush_edits", "save_project", "project_processing_snapshot"].includes(
+                context.operation,
+              )
+            )
+              console.error("[processing] Start request failed", context, error);
             if (isCurrentProjectLease(lease))
               set({ processingError: error instanceof Error ? error.message : String(error) });
             throw error;
@@ -351,11 +409,25 @@ export const useProcessingStore = create<ProcessingState>()(
             !["stop", "retryCleanup"].includes(state.availableAction)
           )
             return;
+          const context = {
+            operation: "kill_pipeline",
+            runId,
+            phase: state.processingPhase,
+            projectGeneration: lease.generation,
+          };
+          console.info("[processing] Stop requested", {
+            ...context,
+            action: state.availableAction,
+          });
           set({ actionPending: true });
           try {
             if (!isCurrentProjectLease(lease)) return;
-            await projectProcessingSnapshot(await stopProcessingPipeline(runId), lease);
+            const snapshot = await stopProcessingPipeline(runId);
+            context.operation = "project_processing_snapshot";
+            await projectProcessingSnapshot(snapshot, lease);
           } catch (error) {
+            if (context.operation !== "project_processing_snapshot")
+              console.error("[processing] Stop request failed", context, error);
             if (
               isCurrentProjectLease(lease) &&
               useProcessingStore.getState().snapshot?.runId === runId
@@ -382,6 +454,14 @@ export const useProcessingStore = create<ProcessingState>()(
             useProcessingStore.getState().actionPending
           )
             return;
+          const context = {
+            operation: "confirm_processing_workers_stopped",
+            runId: snapshot.runId,
+            revision: snapshot.revision,
+            phase: snapshot.lifecycle,
+            projectGeneration: lease.generation,
+          };
+          console.info("[processing] External-stop confirmation requested", { ...context });
           set({ actionPending: true });
           try {
             const confirmed = await confirmProcessingWorkersStopped(
@@ -395,8 +475,15 @@ export const useProcessingStore = create<ProcessingState>()(
               current.attachmentGeneration !== lease.generation
             )
               return;
+            console.info("[processing] External-stop confirmation accepted", {
+              ...context,
+              phase: confirmed.lifecycle,
+            });
+            context.operation = "project_processing_snapshot";
             await projectProcessingSnapshot(confirmed, lease);
           } catch (error) {
+            if (context.operation !== "project_processing_snapshot")
+              console.error("[processing] External-stop confirmation failed", context, error);
             if (
               isCurrentProjectLease(lease) &&
               useProcessingStore.getState().snapshot?.runId === snapshot.runId

@@ -1,6 +1,7 @@
 /** Exact native processing protocol and presentation-only progress events. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { z } from "zod";
 import {
   LockCreatedPayloadSchema,
   LockRemovedPayloadSchema,
@@ -135,25 +136,47 @@ export async function setupProcessingListeners(runId: string): Promise<() => voi
   if (!runId) throw new Error("Processing listeners require a run ID");
   const lease = captureProjectLease();
   let disposed = false;
+  const warnedChannels = new Set<string>();
   const cleanups: (() => void)[] = [];
   async function subscribe(name: string, callback: (event: { payload: unknown }) => void) {
     const cleanup = await listen<unknown>(name, callback);
     cleanups.push(cleanup);
     return cleanup;
   }
-  const admitted = <T>(
-    schema: { safeParse: (value: unknown) => { success: boolean; data?: T } },
-    value: unknown,
-  ): T | null => {
+  const admitted = <T>(channel: string, schema: z.ZodType<T>, value: unknown): T | null => {
     const parsed = schema.safeParse(value);
-    if (!parsed.success || disposed || !isAttachedRunCurrent(runId, lease)) return null;
+    if (disposed || !isAttachedRunCurrent(runId, lease)) return null;
+    if (!parsed.success) {
+      if (
+        value &&
+        typeof value === "object" &&
+        "runId" in value &&
+        typeof value.runId === "string" &&
+        value.runId.length > 0 &&
+        value.runId !== runId
+      )
+        return null;
+      if (!warnedChannels.has(channel)) {
+        warnedChannels.add(channel);
+        console.warn("[processing] Malformed run event ignored", {
+          operation: "decode_event",
+          channel,
+          runId,
+          phase: useProcessingStore.getState().processingPhase,
+          projectGeneration: lease?.generation,
+          issues: parsed.error.issues.slice(0, 5).map(({ code, path }) => ({ code, path })),
+          issueCount: parsed.error.issues.length,
+        });
+      }
+      return null;
+    }
     const payload = parsed.data! as T & { runId: string };
     return payload.runId === runId ? (payload as T) : null;
   };
 
   try {
     const unlistenStatus = await subscribe("StatusFileCreated", (event) => {
-      const payload = admitted(StatusFileCreatedPayloadSchema, event.payload);
+      const payload = admitted("StatusFileCreated", StatusFileCreatedPayloadSchema, event.payload);
       if (!payload) return;
       const module = mapModuleName(payload.module);
       if (!module) return;
@@ -185,11 +208,12 @@ export async function setupProcessingListeners(runId: string): Promise<() => voi
 
     const updateLock =
       (
+        channel: string,
         schema: typeof LockCreatedPayloadSchema | typeof LockRemovedPayloadSchema,
         locked: boolean,
       ) =>
       (event: { payload: unknown }) => {
-        const payload = admitted(schema, event.payload);
+        const payload = admitted(channel, schema, event.payload);
         if (!payload) return;
         const module = mapModuleName(payload.module);
         if (!module) return;
@@ -212,13 +236,20 @@ export async function setupProcessingListeners(runId: string): Promise<() => voi
           locked,
         });
       };
-    const unlistenLock = await subscribe("LockCreated", updateLock(LockCreatedPayloadSchema, true));
+    const unlistenLock = await subscribe(
+      "LockCreated",
+      updateLock("LockCreated", LockCreatedPayloadSchema, true),
+    );
     const unlistenLockRemoved = await subscribe(
       "LockRemoved",
-      updateLock(LockRemovedPayloadSchema, false),
+      updateLock("LockRemoved", LockRemovedPayloadSchema, false),
     );
     const unlistenLifecycle = await subscribe("ProcessingLifecycleSnapshot", (event) => {
-      const payload = admitted(ProcessingLifecycleSnapshotSchema, event.payload);
+      const payload = admitted(
+        "ProcessingLifecycleSnapshot",
+        ProcessingLifecycleSnapshotSchema,
+        event.payload,
+      );
       if (!payload) return;
       void projectProcessingSnapshot(payload, lease).catch(() => undefined);
     });

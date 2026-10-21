@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { ExecutionProfile } from "../schemas/executionProfile";
 import {
+  IMPORT_STEPS,
   ImportRunSnapshotSchema,
   type ImportRunSnapshot,
   type StagingEntry,
@@ -108,7 +109,7 @@ const StructuredEventSchema = z
     ownershipGeneration: z.number().int().nonnegative(),
     type: z.string(),
     subject: z.string().optional(),
-    step: z.string().optional(),
+    step: z.enum(IMPORT_STEPS).optional(),
     message: z.string().optional(),
   })
   .passthrough();
@@ -130,6 +131,7 @@ async function createImportListeners(
   const setupGeneration = listenerSetupGeneration;
   let boundRunId = initialRunId;
   let cleaned = false;
+  const warnedChannels = new Set<ImportEventChannel>();
   const queued: Array<{ channel: ImportEventChannel; payload: unknown }> = [];
   const isCurrent = (runId: string, generation?: number) =>
     Boolean(
@@ -143,6 +145,45 @@ async function createImportListeners(
     const runId = boundRunId;
     if (!cleaned && runId && isCurrent(runId)) useImportStore.getState().addLogLines(lines);
   });
+  const warnMalformed = (channel: ImportEventChannel, payload: unknown, error: z.ZodError) => {
+    const runId = boundRunId;
+    if (
+      cleaned ||
+      setupGeneration !== listenerSetupGeneration ||
+      !runId ||
+      !isCurrent(runId) ||
+      warnedChannels.has(channel)
+    )
+      return;
+    if (payload && typeof payload === "object") {
+      if (
+        "runId" in payload &&
+        typeof payload.runId === "string" &&
+        payload.runId.length > 0 &&
+        payload.runId !== runId
+      )
+        return;
+      if (
+        "ownershipGeneration" in payload &&
+        typeof payload.ownershipGeneration === "number" &&
+        Number.isInteger(payload.ownershipGeneration) &&
+        payload.ownershipGeneration >= 0 &&
+        !isCurrent(runId, payload.ownershipGeneration)
+      )
+        return;
+    }
+    warnedChannels.add(channel);
+    console.warn("[import] Malformed run event ignored", {
+      operation: "decode_event",
+      channel,
+      runId,
+      phase: useImportStore.getState().importPhase,
+      projectGeneration: lease?.generation,
+      ownershipGeneration: useImportStore.getState().ownershipGeneration,
+      issues: error.issues.slice(0, 5).map(({ code, path }) => ({ code, path })),
+      issueCount: error.issues.length,
+    });
+  };
   const dispatch = (channel: ImportEventChannel, payload: unknown) => {
     const runId = boundRunId;
     if (!runId) {
@@ -151,8 +192,11 @@ async function createImportListeners(
     }
     if (channel === "snapshot") {
       const parsed = SnapshotEventSchema.safeParse({ payload });
+      if (!parsed.success) {
+        warnMalformed(channel, payload, parsed.error);
+        return;
+      }
       if (
-        !parsed.success ||
         !isCurrent(runId, parsed.data.payload.ownershipGeneration) ||
         parsed.data.payload.runId !== runId
       )
@@ -167,26 +211,26 @@ async function createImportListeners(
     }
     if (channel === "raw") {
       const parsed = RawEventSchema.safeParse(payload);
-      if (
-        !parsed.success ||
-        !isCurrent(runId, parsed.data.ownershipGeneration) ||
-        parsed.data.runId !== runId
-      )
+      if (!parsed.success) {
+        warnMalformed(channel, payload, parsed.error);
         return;
+      }
+      if (!isCurrent(runId, parsed.data.ownershipGeneration) || parsed.data.runId !== runId) return;
       logBatcher.push(parsed.data.line);
       return;
     }
     const parsed = StructuredEventSchema.safeParse(payload);
-    if (
-      !parsed.success ||
-      !isCurrent(runId, parsed.data.ownershipGeneration) ||
-      parsed.data.runId !== runId
-    )
+    if (!parsed.success) {
+      warnMalformed(channel, payload, parsed.error);
+      return;
+    }
+    if (!isCurrent(runId, parsed.data.ownershipGeneration) || parsed.data.runId !== runId) return;
+    if (!["preparing", "running", "cancelling"].includes(useImportStore.getState().importPhase))
       return;
     // Completion parser output is diagnostic only. Subject starts/failures
     // decorate provisional rows, then snapshots replace them.
     if (parsed.data.type === "subject_start" && parsed.data.subject) {
-      useImportStore.getState().markSubjectRunning(parsed.data.subject);
+      useImportStore.getState().markSubjectRunning(parsed.data.subject, parsed.data.step);
     }
     if (parsed.data.type === "import_failed" && parsed.data.subject) {
       useImportStore
@@ -230,6 +274,7 @@ async function createImportListeners(
   activeListenerCleanup = cleanup;
   const bindRun = (runId: string) => {
     if (cleaned) return;
+    if (boundRunId !== runId) warnedChannels.clear();
     boundRunId = runId;
     const raced = queued.splice(0);
     for (const event of raced) dispatch(event.channel, event.payload);

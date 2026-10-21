@@ -34,6 +34,7 @@ import {
   getActiveRun,
   loadLockStatus,
   loadSubjects,
+  projectProcessingSnapshot,
   reserveProcessingRun,
   runProcessingPipeline,
   setupProcessingListeners,
@@ -50,6 +51,9 @@ const config = {
 describe("processing store", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     clearProcessingListeners();
     resetProjectLifecycleForTests();
     await useProcessingStore.getState().resetProcessing();
@@ -81,6 +85,16 @@ describe("processing store", () => {
   it("rejects missing config before native reservation", async () => {
     await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow("No config set");
     expect(reserveProcessingRun).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledExactlyOnceWith(
+      "[processing] Start request failed",
+      {
+        operation: "validate_request",
+        runId: null,
+        phase: "idle",
+        projectGeneration: 1,
+      },
+      expect.objectContaining({ message: "No config set" }),
+    );
   });
   it("rejects empty module selection before native reservation", async () => {
     useProjectStore.getState().project!.uiState.processing = { config: { ...config, modules: [] } };
@@ -109,6 +123,7 @@ describe("processing store", () => {
     await useProcessingStore.getState().startProcessing();
     expect(useProcessingStore.getState().profileError).toContain("MATLAB missing");
     expect(reserveProcessingRun).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledTimes(2);
   });
   it("reserves before launch with pure request and attaches listeners", async () => {
     const project = useProjectStore.getState().project!;
@@ -220,6 +235,66 @@ describe("processing store", () => {
     await useProcessingStore.getState().startProcessing();
     expect(runProcessingPipeline).not.toHaveBeenCalled();
   });
+  it.each(["reservation", "launch", "listener setup", "listener attachment"])(
+    "logs %s rejection once with original error and run context",
+    async (stage) => {
+      const error = new Error(`${stage} unavailable`);
+      useProjectStore.getState().project!.uiState.processing = {
+        config: { ...config, subjects: [], modules: ["population"], workers: 1 },
+      };
+      vi.mocked(reserveProcessingRun).mockResolvedValue({
+        kind: "current",
+        snapshot: processingSnapshot(),
+      });
+      vi.mocked(runProcessingPipeline).mockResolvedValue(
+        processingSnapshot({ lifecycle: "running", revision: 2 }),
+      );
+      vi.mocked(setupProcessingListeners).mockResolvedValue(vi.fn());
+      vi.mocked(attachRun).mockResolvedValue(processingSnapshot());
+      const operation = {
+        reservation: "reserve_processing_run",
+        launch: "run_pipeline",
+        "listener setup": "setup_processing_listeners",
+        "listener attachment": "attach_run",
+      }[stage];
+      if (stage === "reservation") vi.mocked(reserveProcessingRun).mockRejectedValueOnce(error);
+      if (stage === "launch") vi.mocked(runProcessingPipeline).mockRejectedValueOnce(error);
+      if (stage === "listener setup")
+        vi.mocked(setupProcessingListeners).mockRejectedValueOnce(error);
+      if (stage === "listener attachment") vi.mocked(attachRun).mockRejectedValueOnce(error);
+
+      const start = useProcessingStore.getState().startProcessing();
+      if (stage.startsWith("listener")) await start;
+      else await expect(start).rejects.toBe(error);
+      await vi.waitFor(() => expect(console.error).toHaveBeenCalledOnce());
+      expect(console.error).toHaveBeenCalledWith(
+        expect.any(String),
+        {
+          operation,
+          runId: stage === "reservation" ? null : processingSnapshot().runId,
+          phase: stage === "reservation" ? "idle" : "preparing",
+          projectGeneration: 1,
+        },
+        error,
+      );
+      if (stage.startsWith("listener")) expect(runProcessingPipeline).toHaveBeenCalledOnce();
+    },
+  );
+  it("logs rejected discovery without changing its error", async () => {
+    const error = new Error("discovery unavailable");
+    vi.mocked(getActiveRun).mockRejectedValueOnce(error);
+    await expect(useProcessingStore.getState().synchronizeProcessingRun()).rejects.toBe(error);
+    expect(console.error).toHaveBeenCalledExactlyOnceWith(
+      "[processing] Run discovery failed",
+      {
+        operation: "get_active_run",
+        runId: null,
+        phase: "idle",
+        projectGeneration: 1,
+      },
+      error,
+    );
+  });
   it("blocks native reservation and launch when Start persistence fails", async () => {
     useProjectStore.getState().project!.uiState.processing = {
       config: { ...config, subjects: [], modules: ["population"], workers: 1 },
@@ -232,6 +307,7 @@ describe("processing store", () => {
       actionPending: false,
       processingError: "Disk full",
     });
+    expect(console.error).not.toHaveBeenCalled();
   });
   it.each([
     ["malformed", "not-a-subject"],
@@ -333,6 +409,47 @@ describe("processing store", () => {
     useProcessingStore.getState().bindRunSnapshot(run);
     await useProcessingStore.getState().killProcessing();
     expect(stopProcessingPipeline).toHaveBeenCalledWith(run.runId);
+  });
+  it.each(["stop", "confirm"])(
+    "logs rejected %s once and preserves original error",
+    async (action) => {
+      const run = processingSnapshot({
+        lifecycle: action === "stop" ? "running" : "interrupted",
+        availableAction: action === "stop" ? "stop" : "confirmStopped",
+        revision: 2,
+      });
+      useProcessingStore.getState().bindRunSnapshot(run);
+      const error = new Error("IPC rejected");
+      vi.mocked(
+        action === "stop" ? stopProcessingPipeline : confirmProcessingWorkersStopped,
+      ).mockRejectedValueOnce(error);
+      await expect(
+        action === "stop"
+          ? useProcessingStore.getState().killProcessing()
+          : useProcessingStore.getState().confirmProcessingStopped(),
+      ).rejects.toBe(error);
+      expect(console.error).toHaveBeenCalledExactlyOnceWith(
+        expect.any(String),
+        expect.objectContaining({
+          operation: action === "stop" ? "kill_pipeline" : "confirm_processing_workers_stopped",
+          runId: run.runId,
+          phase: run.lifecycle,
+          projectGeneration: 1,
+        }),
+        error,
+      );
+      expect(console.info).toHaveBeenCalledOnce();
+    },
+  );
+  it("does not duplicate snapshot reconciliation diagnostics after stop", async () => {
+    useProcessingStore
+      .getState()
+      .bindRunSnapshot(processingSnapshot({ lifecycle: "running", availableAction: "stop" }));
+    vi.mocked(stopProcessingPipeline).mockResolvedValueOnce(processingSnapshot());
+    const error = new Error("already logged by projectRequest");
+    vi.mocked(projectProcessingSnapshot).mockRejectedValueOnce(error);
+    await expect(useProcessingStore.getState().killProcessing()).rejects.toBe(error);
+    expect(console.error).not.toHaveBeenCalled();
   });
   it("makes only one pending confirmation request", async () => {
     let resolveConfirmation!: (snapshot: ReturnType<typeof processingSnapshot>) => void;

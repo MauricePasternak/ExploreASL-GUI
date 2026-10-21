@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -41,6 +41,7 @@ const snapshot = (
 });
 
 describe("import run protocol", () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     invoke.mockReset();
     mocks.listen.mockReset();
@@ -115,6 +116,47 @@ describe("import run protocol", () => {
       payload: { runId: "import-run-1", ownershipGeneration: 1, line: "current" },
     });
     await vi.waitFor(() => expect(useImportStore.getState().importLog).toEqual(["current"]));
+  });
+  it("warns once per malformed current-run channel without payloads or stale-event warnings", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    useImportStore.getState().bindImportRunSnapshot(snapshot("running"));
+    const cleanup = await setupImportListeners("import-run-1");
+    const malformed = {
+      runId: "import-run-1",
+      ownershipGeneration: 1,
+      line: 42,
+      secret: "study data",
+    };
+    for (const channel of ["import-run-snapshot", "import-raw-event", "import-structured-event"]) {
+      const emit = listeners.get(channel)!;
+      emit({ payload: { ...malformed, runId: "foreign" } });
+      emit({ payload: { ...malformed, ownershipGeneration: 2 } });
+      expect(warn).not.toHaveBeenCalled();
+    }
+    for (const channel of ["import-run-snapshot", "import-raw-event", "import-structured-event"]) {
+      listeners.get(channel)!({ payload: malformed });
+      listeners.get(channel)!({ payload: malformed });
+    }
+    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledWith(
+      "[import] Malformed run event ignored",
+      expect.objectContaining({
+        runId: "import-run-1",
+        projectGeneration: 1,
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: expect.any(String), path: expect.any(Array) }),
+        ]),
+      }),
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("study data");
+    const raw = listeners.get("import-raw-event")!;
+    cleanup();
+    raw({ payload: malformed });
+    expect(warn).toHaveBeenCalledTimes(3);
+    const nextCleanup = await setupImportListeners("import-run-1");
+    listeners.get("import-raw-event")!({ payload: malformed });
+    expect(warn).toHaveBeenCalledTimes(4);
+    nextCleanup();
   });
   it("batches raw logs, flushes section dividers immediately, and flushes remaining lines on cleanup", async () => {
     useImportStore.getState().bindImportRunSnapshot(snapshot("running"));

@@ -39,7 +39,8 @@ import {
   IconSettings,
   IconTags,
 } from "@tabler/icons-react";
-import { appDataDir, join, tempDir } from "@tauri-apps/api/path";
+import { appLogDir } from "@tauri-apps/api/path";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -91,30 +92,41 @@ export default function OverviewPage() {
   const fromPath = location.state?.from;
   const isFromProject = fromPath && fromPath !== "/" && fromPath !== "/overview";
   const [bibtexCopied, setBibtexCopied] = useState(false);
-  const [resolvedDevLog, setResolvedDevLog] = useState<string>("");
-  const [resolvedReleaseLogDir, setResolvedReleaseLogDir] = useState<string>("");
+  const [resolvedLogDir, setResolvedLogDir] = useState("");
+  const [logDirCopied, setLogDirCopied] = useState(false);
+  const [logError, setLogError] = useState("");
 
   useEffect(() => {
     let active = true;
-    async function fetchPaths() {
+    async function fetchLogDir() {
       try {
-        const temp = await tempDir();
-        const appData = await appDataDir();
-        const devPath = await join(temp, "exploreasl-gui-logs", "dev.log");
-        const releaseDir = await join(appData, "logs");
+        const directory = await appLogDir();
         if (active) {
-          setResolvedDevLog(devPath);
-          setResolvedReleaseLogDir(releaseDir);
+          setResolvedLogDir(directory);
         }
       } catch (e) {
-        console.warn("Failed to resolve log paths dynamically:", e);
+        console.error("Failed to resolve log directory:", e);
+        if (active) setLogError(`Could not resolve the log directory: ${String(e)}`);
       }
     }
-    void fetchPaths();
+    void fetchLogDir();
     return () => {
       active = false;
     };
   }, []);
+
+  const handleCopyLogDir = async () => {
+    if (!resolvedLogDir) return;
+    setLogDirCopied(false);
+    setLogError("");
+    try {
+      await writeText(resolvedLogDir);
+      setLogDirCopied(true);
+    } catch (e) {
+      console.error("Failed to copy log directory:", e);
+      setLogError(`Could not copy the log directory. Copy the path manually: ${String(e)}`);
+    }
+  };
 
   const bibtexEntry = `@article{mutsaerts2020exploreasl-a04, 
   year     = {2020}, 
@@ -756,6 +768,18 @@ export default function OverviewPage() {
           built-in debugging features are available to help you diagnose the problem or share
           diagnostic info with developers/AI coding assistants.
         </Text>
+        <Alert
+          color="yellow"
+          title="Review before sharing"
+          icon={<IconExclamationMark size={18} />}
+          data-testid="diagnostic-privacy-warning"
+        >
+          <Text size="sm" data-testid="diagnostic-privacy-description">
+            Copied diagnostic state and logs may include sensitive study data, subject identifiers,
+            and local file paths. Review and redact them before sharing with developers, AI
+            assistants, or in public bug reports.
+          </Text>
+        </Alert>
         <Accordion variant="separated" data-testid="troubleshooting-accordion">
           <Accordion.Item value="shortcuts">
             <Accordion.Control
@@ -801,34 +825,45 @@ export default function OverviewPage() {
               </Title>
             </Accordion.Control>
             <Accordion.Panel>
-              <Text size="sm" mb="xs">
-                The application writes detailed execution logs (including command tracing,
-                stdout/stderr from MATLAB, and frontend console outputs) to disk.
+              <Text size="sm" mb="xs" data-testid="log-capture-description">
+                The application writes native import output, MATLAB processing stdout/stderr, and
+                frontend console messages to rotating log files. Release builds capture Info level
+                and above; development builds also capture Debug messages. Files rotate at 5 MiB,
+                retaining up to five archived files plus the active file. Older output is removed;
+                these logs are not a permanent record of every output byte.
               </Text>
               <Text size="sm" component="div">
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
                   <li>
-                    <strong>Development Mode:</strong> Logs are stored in your OS temporary
-                    directory:{" "}
-                    {resolvedDevLog ? (
-                      <code style={{ wordBreak: "break-all" }}>{resolvedDevLog}</code>
-                    ) : (
-                      <code style={{ wordBreak: "break-all" }}>
-                        &lt;OS_TEMP_DIR&gt;/exploreasl-gui-logs/dev.log
-                      </code>
-                    )}
+                    <strong>All builds:</strong> Logs are stored in the standard OS application log
+                    directory for the GUI app.
                   </li>
                   <li>
-                    <strong>Release Mode:</strong> Logs are stored in the standard OS application
-                    data directory for the GUI app:{" "}
-                    {resolvedReleaseLogDir ? (
-                      <code style={{ wordBreak: "break-all" }}>{resolvedReleaseLogDir}</code>
-                    ) : (
-                      <code style={{ wordBreak: "break-all" }}>&lt;APP_DATA_DIR&gt;/logs/</code>
-                    )}
+                    <strong>Native debug builds:</strong> An additional log target writes to your OS
+                    temporary directory, under <code>exploreasl-gui-logs</code>.
                   </li>
                 </ul>
               </Text>
+              <Text size="sm" mt="sm" data-testid="active-log-directory">
+                Application log directory:{" "}
+                <code style={{ wordBreak: "break-all" }}>{resolvedLogDir || "Not resolved"}</code>
+              </Text>
+              <Button
+                mt="xs"
+                variant="light"
+                leftSection={logDirCopied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                disabled={!resolvedLogDir}
+                onClick={handleCopyLogDir}
+                aria-live="polite"
+                data-testid="copy-log-directory-btn"
+              >
+                {logDirCopied ? "Log directory copied" : "Copy log directory"}
+              </Button>
+              {logError && (
+                <Alert color="red" role="alert" mt="xs" data-testid="log-directory-error">
+                  {logError}
+                </Alert>
+              )}
             </Accordion.Panel>
           </Accordion.Item>
 

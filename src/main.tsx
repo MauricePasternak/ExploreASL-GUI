@@ -25,6 +25,48 @@ import { useGlobalStore } from "./stores/globalStore";
 import { useImportStore } from "./stores/importStore";
 import { acceptedDataPar, useDataParStore } from "./stores/dataParStore";
 import { useProjectStore } from "./stores/projectStore";
+import { useProcessingStore } from "./stores/processingStore";
+
+// Select runtime diagnostics explicitly: never copy study data, config, or raw worker output.
+function getRuntimeDiagnostics() {
+  const importing = useImportStore.getState();
+  const processing = useProcessingStore.getState();
+  const snapshot = processing.snapshot;
+  return {
+    import: {
+      activeRunId: importing.activeRunId,
+      terminalRunId: importing.terminalRunId,
+      lifecycle: importing.importPhase,
+      ownershipGeneration: importing.ownershipGeneration,
+      nativeSnapshotUpdatedAtMs: importing.nativeSnapshotUpdatedAtMs,
+      running: importing.importRunning,
+      completed: importing.importCompleted,
+      confirmationRequired: importing.confirmationRequired,
+      confirmingStoppedRunId: importing.confirmingStoppedRunId,
+      confirmingStoppedGeneration: importing.confirmingStoppedGeneration,
+      error: importing.importRunError,
+      profileError: importing.profileError,
+    },
+    processing: {
+      activeRunId: processing.activeRunId,
+      terminalRunId: processing.terminalRunId,
+      lifecycle: processing.processingPhase,
+      attachmentGeneration: processing.attachmentGeneration,
+      revision: snapshot?.revision ?? null,
+      terminalRevision: snapshot?.terminalRevision ?? null,
+      availableAction: processing.availableAction,
+      actionPending: processing.actionPending,
+      error: processing.processingError,
+      profileError: processing.profileError,
+      bidsCompatibilityError: processing.bidsCompatibilityError,
+      nativeError: snapshot?.error ?? null,
+      workerCount: snapshot?.workerCount ?? null,
+      logicalExits:
+        snapshot?.logicalExits.map(({ workerId, exitCode }) => ({ workerId, exitCode })) ?? [],
+      executionCommitted: snapshot?.executionCommitted ?? false,
+    },
+  };
+}
 
 // Initialize debug tooling before React mounts
 initConsoleBridge();
@@ -32,6 +74,7 @@ initDebugKeyboardShortcuts(
   () => useGlobalStore.getState(),
   () => useProjectStore.getState(),
   acceptedDataPar,
+  getRuntimeDiagnostics,
 );
 
 // Expose debug utilities to window for devtools console access
@@ -60,6 +103,7 @@ window.__DEBUG__ = {
       () => useGlobalStore.getState(),
       () => useProjectStore.getState(),
       acceptedDataPar,
+      getRuntimeDiagnostics,
     );
     await copySnapshotToClipboard(snapshot);
 

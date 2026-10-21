@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { error as logError } from "@tauri-apps/plugin-log";
 import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
 import type { ProjectInspection } from "../generated/project/ProjectInspection";
 import type { ProjectEdit } from "../generated/project/ProjectEdit";
@@ -44,23 +45,23 @@ export function projectStorageErrorMessage(error: ProjectStorageError) {
     case "insufficient_space":
       return "Insufficient disk space. Free space on the project volume and try again.";
     case "invalid_serialization":
-      return "Project data failed validation and was not written.";
+      return "Some project settings could not be saved. Review your recent changes and try again. If the problem continues, report it with the application log.";
     case "file_flush":
-      return "Project data could not be flushed safely to disk. The previous file remains recoverable.";
+      return "Your project could not be safely saved to disk. Check the drive connection and available space, then try Save again. The previous saved copy remains recoverable.";
     case "backup":
-      return "The last-known-good project backup could not be preserved.";
+      return "The previous saved copy could not be backed up. Check access and free space in the project folder, then try Save again.";
     case "primary_replacement":
-      return "The primary project file could not be replaced. The previous file or backup remains recoverable.";
+      return "The project file could not be updated. Check that it is not read-only or locked by another program, then try Save again. The previous file or backup remains recoverable.";
     case "durability_uncertain":
-      return "The project was replaced, but durable storage could not be confirmed. Save again before closing.";
+      return "Your project was written, but the application could not confirm it is safely stored. Check the drive connection, then try Save again before closing.";
     case "recovery":
-      return "The project backup is missing, malformed, or unsupported and cannot be recovered.";
+      return "The project backup could not be opened because it is missing or invalid. Choose another project file or restore a working backup.";
     case "temporary_write":
-      return "The temporary project file could not be written. The previous project file was not replaced.";
+      return "The project could not be saved. Check access and free space in the project folder, then try Save again. The previous saved file has not been replaced.";
   }
 }
 
-function storageError(error: unknown): ProjectStorageError {
+function storageError(error: unknown): ProjectStorageError | null {
   if (error instanceof ProjectStorageError) return error;
   if (typeof error === "string") {
     try {
@@ -69,7 +70,7 @@ function storageError(error: unknown): ProjectStorageError {
     } catch {
       // Native errors may be plain text rather than serialized objects.
     }
-    return new ProjectStorageError("temporary_write", error);
+    return null;
   }
   if (typeof error === "object" && error !== null && "category" in error) {
     const { category, message } = error as { category: unknown; message?: unknown };
@@ -80,12 +81,7 @@ function storageError(error: unknown): ProjectStorageError {
       );
     }
   }
-  return new ProjectStorageError(
-    "temporary_write",
-    typeof error === "object" && error !== null && "message" in error
-      ? String(error.message)
-      : String(error),
-  );
+  return null;
 }
 
 export async function projectRequest<T>(
@@ -95,10 +91,32 @@ export async function projectRequest<T>(
   try {
     return await invoke<T>(command, args);
   } catch (error) {
-    if (typeof error === "object" && error !== null && "kind" in error && "message" in error) {
+    const diagnostic =
+      error instanceof Error
+        ? (error.stack ?? error.message)
+        : typeof error === "string"
+          ? error
+          : JSON.stringify(error);
+    // Log the original failure, not project arguments (which can contain study data).
+    void logError(`[PROJECT] ${command} failed: ${diagnostic}`).catch(() => undefined);
+    const storage = storageError(error);
+    if (storage) {
+      throw Object.assign(
+        new ProjectStorageError(storage.category, projectStorageErrorMessage(storage)),
+        { cause: error },
+      );
+    }
+    // Structured native operation/validation errors already describe the required correction.
+    if (typeof error === "object" && error !== null && "message" in error) {
       throw Object.assign(new Error(String(error.message)), { cause: error });
     }
-    throw storageError(error);
+    const message =
+      command === "accept_project_edit"
+        ? "Your project changes could not be applied. They have not been saved. Try the action again. If the problem continues, report it with the application log."
+        : command === "save_project"
+          ? "Your project could not be saved. Try Save again. If the problem continues, report it with the application log."
+          : "The project action could not be completed. Try again. If the problem continues, report it with the application log.";
+    throw Object.assign(new Error(message), { cause: error });
   }
 }
 
