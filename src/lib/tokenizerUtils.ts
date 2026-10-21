@@ -340,14 +340,15 @@ export function assembleSourcestructure(
     tokenSessionAliases.push(regex, alias.alias);
   }
 
-  // Build visit aliases as flat alternating [folderName, folderName] pairs
+  // Visits (BIDS sessions) already use renamed folder names in staging.
+  // Build flat alternating [stagedSession, stagedSession] pairs.
   // Simple 1-to-1 mapping (no regex anchors) for ExploreASL v1.11.0 compat
   const tokenVisitAliases: string[] = [];
   const seenVisits = new Set<string>();
   for (const alias of sessionAliases) {
-    if (seenVisits.has(alias.captured)) continue;
-    seenVisits.add(alias.captured);
-    tokenVisitAliases.push(alias.captured, alias.captured);
+    if (seenVisits.has(alias.alias)) continue;
+    seenVisits.add(alias.alias);
+    tokenVisitAliases.push(alias.alias, alias.alias);
   }
 
   // Build scan (modality) aliases as flat alternating [regex, alias] pairs
@@ -374,13 +375,16 @@ export function assembleSourcestructure(
  * Assemble the final studyPar.json from metadata groups and subject row assignments.
  *
  * Every StudyPars block emits explicit SubjectRegExp and VisitRegExp derived
- * from subjectRows. Subjects within each group are sub-grouped by their
- * session signatures to produce compressed regex blocks.
+ * from subjectRows. Rows already contain final subject names; session aliases
+ * translate captured sessions to staged BIDS sessions (ExploreASL Visits) before
+ * grouping subjects by their session signatures into compressed regex blocks.
  */
 export function assembleStudyPar(
   metadataGroups: MetadataGroup[],
   subjectRows: SubjectRow[],
+  sessionAliases: SessionAlias[] = [],
 ): StudyParJson {
+  const sessionRenames = new Map(sessionAliases.map((alias) => [alias.captured, alias.alias]));
   // Group subjectRows by groupId
   const rowsByGroup = new Map<string, SubjectRow[]>();
   for (const row of subjectRows) {
@@ -401,13 +405,14 @@ export function assembleStudyPar(
     // Build per-subject session lists
     const subjectSessions = new Map<string, string[]>();
     for (const row of rows) {
+      const session = sessionRenames.get(row.session) ?? row.session;
       const existing = subjectSessions.get(row.subject);
       if (existing) {
-        if (!existing.includes(row.session)) {
-          existing.push(row.session);
+        if (!existing.includes(session)) {
+          existing.push(session);
         }
       } else {
-        subjectSessions.set(row.subject, [row.session]);
+        subjectSessions.set(row.subject, [session]);
       }
     }
 

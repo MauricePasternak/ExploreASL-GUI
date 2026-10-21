@@ -160,7 +160,11 @@ function hasValidStep5ProjectPrerequisites(state: Step5State): boolean {
     state.modalityAliases,
     state.bMatchDirectories ?? true,
   );
-  const studyPar = assembleStudyPar(state.metadataGroups ?? [], state.subjectRows ?? []);
+  const studyPar = assembleStudyPar(
+    state.metadataGroups ?? [],
+    state.subjectRows ?? [],
+    state.sessionAliases ?? [],
+  );
 
   return (
     SourcestructureJsonSchema.safeParse(sourcestructure).success &&

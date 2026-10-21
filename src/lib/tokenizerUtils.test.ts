@@ -459,10 +459,10 @@ describe("assembleSourcestructure", () => {
     expect(result.tokenVisitAliases).toEqual([]);
   });
 
-  it("produces tokenVisitAliases as 1-to-1 mapping from session aliases", () => {
+  it("produces tokenVisitAliases from renamed staging sessions, not captured source names", () => {
     const sessionAliases: SessionAlias[] = [
-      { captured: "01", alias: "01", index: 1 },
-      { captured: "02", alias: "02", index: 2 },
+      { captured: "baseline", alias: "01", index: 1 },
+      { captured: "followup1", alias: "02", index: 2 },
       { captured: "11", alias: "11", index: 3 },
     ];
 
@@ -470,11 +470,11 @@ describe("assembleSourcestructure", () => {
     expect(result.tokenVisitAliases).toEqual(["01", "01", "02", "02", "11", "11"]);
   });
 
-  it("deduplicates visit aliases by captured value", () => {
+  it("deduplicates visit aliases by staged session name", () => {
     const sessionAliases: SessionAlias[] = [
-      { captured: "01", alias: "01", index: 1 },
-      { captured: "01", alias: "01", index: 2 },
-      { captured: "02", alias: "02", index: 3 },
+      { captured: "baseline", alias: "01", index: 1 },
+      { captured: "screening", alias: "01", index: 2 },
+      { captured: "followup1", alias: "02", index: 3 },
     ];
 
     const result = assembleSourcestructure(sessionAliases, [], [], true);
@@ -524,7 +524,11 @@ describe("assembleStudyPar", () => {
       {
         id: "global",
         label: "Global Defaults",
-        bidsParams: { ArterialSpinLabelingType: "PCASL", MRAcquisitionType: "3D" },
+        bidsParams: {
+          ArterialSpinLabelingType: "PCASL",
+          MRAcquisitionType: "3D",
+          TotalAcquiredPairs: 30,
+        },
       },
     ];
     const rows: SubjectRow[] = [
@@ -535,6 +539,7 @@ describe("assembleStudyPar", () => {
     const result = assembleStudyPar(groups, rows);
     expect(result.StudyPars).toHaveLength(1);
     expect(result.StudyPars[0].ArterialSpinLabelingType).toBe("PCASL");
+    expect(result.StudyPars[0].TotalAcquiredPairs).toBe(30);
     expect(result.StudyPars[0].SubjectRegExp).toBe("^(SubjA|SubjB)$");
     expect(result.StudyPars[0].VisitRegExp).toBe("^(01)$");
   });
@@ -637,6 +642,27 @@ describe("assembleStudyPar", () => {
     expect(result.StudyPars).toHaveLength(1);
     expect(result.StudyPars[0].SubjectRegExp).toBe("^(A|B)$");
     expect(result.StudyPars[0].VisitRegExp).toBe("^(01|02)$");
+  });
+
+  it("compresses aliased session sets and escapes final visit labels", () => {
+    const groups: MetadataGroup[] = [{ id: "global", label: "Global", bidsParams: {} }];
+    const rows: SubjectRow[] = [
+      { id: "A/baseline", subject: "A", session: "baseline", groupId: "global" },
+      { id: "A/repeat", subject: "A", session: "repeat", groupId: "global" },
+      { id: "B/baseline", subject: "B", session: "baseline", groupId: "global" },
+      { id: "C/01", subject: "C", session: "01", groupId: "global" },
+    ];
+
+    const result = assembleStudyPar(groups, rows, [
+      { captured: "baseline", alias: "visit.1", index: 1 },
+      { captured: "repeat", alias: "visit.1", index: 2 },
+    ]);
+
+    expect(result.StudyPars).toEqual([
+      { SubjectRegExp: "^(A|B)$", VisitRegExp: "^(visit\\.1)$" },
+      { SubjectRegExp: "^(C)$", VisitRegExp: "^(01)$" },
+    ]);
+    expect(rows.map((row) => row.session)).toEqual(["baseline", "repeat", "baseline", "01"]);
   });
 
   it("escapes regex-special characters in subject and session names", () => {

@@ -30,6 +30,20 @@ The system SHALL aggregate the `subjectRows` assignments for every `MetadataGrou
 - **WHEN** only one `MetadataGroup` exists (e.g., Global Defaults) with all subjects assigned to it
 - **THEN** the compiler SHALL emit exactly one `StudyPars` block with explicit `SubjectRegExp` and `VisitRegExp` covering all assigned subjects and their sessions — NOT an empty-regex catch-all.
 
+### Requirement: Match final staging identifiers
+
+The compiler SHALL apply the supplied session aliases to captured `subjectRows` sessions before deduplication, session-set compression, and regex escaping. `VisitRegExp` SHALL target staged BIDS sessions (ExploreASL Visits). Row subjects already contain final subject labels and SHALL NOT have subject renames reapplied. Compilation SHALL preserve persisted row identities and group assignments, unaliased session labels, and explicit metadata values including `false` and `0`. Preview, validation, and execution SHALL compile with the same session aliases.
+
+#### Scenario: Session aliases retain group-specific metadata
+
+- **WHEN** rows for captured sessions `baseline` and `followup1` are assigned to different metadata groups and aliases map them to `01` and `02`
+- **THEN** their generated blocks SHALL match only the corresponding final sessions with `VisitRegExp` values `^(01)$` and `^(02)$`, preserving each group's metadata and leaving the persisted rows unchanged
+
+#### Scenario: Subject target is another captured subject name
+
+- **WHEN** subject renames map `raw` to `SUB1` and `SUB1` to `SUB2`, and metadata rows already contain `SUB1` and `SUB2`
+- **THEN** the generated subject regexes SHALL preserve those final labels without applying the renames a second time
+
 ### Requirement: `assembleStudyPar` Accepts `subjectRows` As Input
 
 The `assembleStudyPar` function SHALL accept both `metadataGroups: MetadataGroup[]` and `subjectRows: SubjectRow[]` as parameters. The function MUST derive all group membership from `subjectRows` and MUST NOT read `subjectRegExp` or `sessionRegExp` from `MetadataGroup` objects.

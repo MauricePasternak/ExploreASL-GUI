@@ -271,7 +271,11 @@ export function buildImportPlan(input: ImportPlanInput): ImportPlan {
     input.modalityAliases,
     input.bMatchDirectories,
   );
-  const studyparJson = assembleStudyPar(input.metadataGroups, input.subjectRows);
+  const studyparJson = assembleStudyPar(
+    input.metadataGroups,
+    input.subjectRows,
+    input.sessionAliases,
+  );
   return {
     mappings,
     entries,
