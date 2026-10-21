@@ -380,6 +380,25 @@ fn validate_destination_confinement(
     Ok(())
 }
 
+fn validate_file_destination(
+    staging_root: &Path,
+    destination_base: &Path,
+    destination: &Path,
+    source: &Path,
+) -> Result<(), (StagingIssueCode, String)> {
+    // Prior runs stage file symlinks. Only an exact source match is expected;
+    // directory links remain forbidden, and execution cleans staging first.
+    let matching_file_link = fs::symlink_metadata(destination)
+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+        && fs::canonicalize(destination).is_ok_and(|target| target == source);
+    let path_to_validate = if matching_file_link {
+        destination.parent().unwrap_or(destination)
+    } else {
+        destination
+    };
+    validate_destination_confinement(staging_root, destination_base, path_to_validate)
+}
+
 pub fn compile_staging_plan(
     active_project_root: Option<PathBuf>,
     entries: &[StagingEntry],
@@ -502,9 +521,12 @@ pub fn compile_staging_plan(
             }
             if let Some(name) = canonical_source.file_name().map(|name| name.to_os_string()) {
                 let destination = destination_dir.join(name);
-                if let Err((code, message)) =
-                    validate_destination_confinement(&staging_root, &destination_base, &destination)
-                {
+                if let Err((code, message)) = validate_file_destination(
+                    &staging_root,
+                    &destination_base,
+                    &destination,
+                    &canonical_source,
+                ) {
                     issues.push(issue(code, StagingField::Destination, Some(index), message));
                     continue;
                 }
@@ -533,10 +555,11 @@ pub fn compile_staging_plan(
             for file in files {
                 if let Some(name) = file.file_name().map(|name| name.to_os_string()) {
                     let destination = destination_dir.join(name);
-                    if let Err((code, message)) = validate_destination_confinement(
+                    if let Err((code, message)) = validate_file_destination(
                         &staging_root,
                         &destination_base,
                         &destination,
+                        &file,
                     ) {
                         issues.push(issue(code, StagingField::Destination, Some(index), message));
                         continue;

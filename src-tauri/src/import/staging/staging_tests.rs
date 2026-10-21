@@ -178,6 +178,74 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn planner_accepts_matching_staged_file_links_for_retry_without_mutation() {
+        for directory_source in [false, true] {
+            let workspace = tempdir().expect("workspace");
+            let project = workspace.path().join("project");
+            let source_dir = workspace.path().join("source");
+            let source = source_dir.join("source.dcm");
+            fs::create_dir_all(&project).unwrap();
+            fs::create_dir_all(&source_dir).unwrap();
+            fs::write(&source, "original DICOM").unwrap();
+            let entries = [entry(if directory_source {
+                &source_dir
+            } else {
+                &source
+            })];
+            let plan = compile_staging_plan(Some(project.clone()), &entries).unwrap();
+            execute_compiled_staging_plan(&plan).unwrap();
+            let destination = &plan.records[0].destination;
+            let original_link = fs::read_link(destination).unwrap();
+            let sentinel = plan.staging_root.join("sentinel.txt");
+            fs::write(&sentinel, "previous run").unwrap();
+
+            let retry = compile_staging_plan(Some(project), &entries)
+                .expect("matching staged file links must not block retry preflight");
+
+            assert_eq!(fs::read_link(destination).unwrap(), original_link);
+            assert_eq!(fs::read_to_string(&sentinel).unwrap(), "previous run");
+            assert_eq!(retry.records.len(), 1);
+            crate::import::output::cleanup_staging_root(&retry.staging_root).unwrap();
+            execute_compiled_staging_plan(&retry).expect("retry recreates staging links");
+            assert_eq!(fs::read_to_string(destination).unwrap(), "original DICOM");
+            assert_eq!(fs::read_to_string(&source).unwrap(), "original DICOM");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn planner_rejects_wrong_and_broken_staged_file_links_without_mutation() {
+        for target_name in ["other.dcm", "missing.dcm", "source"] {
+            let workspace = tempdir().expect("workspace");
+            let project = workspace.path().join("project");
+            let source_dir = workspace.path().join("source");
+            let source = source_dir.join("source.dcm");
+            fs::create_dir_all(&project).unwrap();
+            fs::create_dir_all(&source_dir).unwrap();
+            fs::write(&source, "original DICOM").unwrap();
+            fs::write(workspace.path().join("other.dcm"), "unrelated DICOM").unwrap();
+            let entries = [entry(&source_dir)];
+            let plan = compile_staging_plan(Some(project.clone()), &entries).unwrap();
+            execute_compiled_staging_plan(&plan).unwrap();
+            let destination = &plan.records[0].destination;
+            fs::remove_file(destination).unwrap();
+            let target = workspace.path().join(target_name);
+            std::os::unix::fs::symlink(&target, destination).unwrap();
+
+            let result = compile_staging_plan(Some(project), &entries)
+                .expect_err("wrong, broken, or directory file-link targets must be rejected");
+
+            assert!(result.issues.iter().any(|issue| {
+                issue.code == StagingIssueCode::DestinationSymlink
+                    && issue.field == StagingField::Destination
+            }));
+            assert_eq!(fs::read_link(destination).unwrap(), target);
+            assert_eq!(fs::read_to_string(&source).unwrap(), "original DICOM");
+        }
+    }
+
     #[test]
     fn compiled_plan_uses_canonical_active_root_for_execution_root() {
         let workspace = tempdir().expect("workspace");
