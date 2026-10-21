@@ -41,45 +41,46 @@ pub fn walk_directory(
         .max_depth(max_depth as usize)
         .follow_links(true);
 
-    let result = if b_match_directories {
-        let mut dcm_dirs = std::collections::HashSet::new();
-
-        for entry in walker.into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file()
-                && let Some(ext) = entry.path().extension()
-                && ext.eq_ignore_ascii_case("dcm")
-                && let Some(parent) = entry.path().parent()
-                && let Ok(relative) = parent.strip_prefix(&root)
-            {
-                dcm_dirs.insert(relative.to_string_lossy().to_string());
+    let mut paths = std::collections::BTreeSet::new();
+    let mut skipped = 0_u64;
+    let mut first_error = None;
+    for entry in walker {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                skipped += 1;
+                first_error.get_or_insert_with(|| error.to_string());
+                continue;
             }
+        };
+        if !entry.file_type().is_file()
+            || !entry
+                .path()
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("dcm"))
+        {
+            continue;
         }
-
-        let mut result: Vec<String> = dcm_dirs.into_iter().collect();
-        result.sort();
-        Ok(result)
-    } else {
-        let mut dcm_files = Vec::new();
-
-        for entry in walker.into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file()
-                && let Some(ext) = entry.path().extension()
-                && ext.eq_ignore_ascii_case("dcm")
-                && let Ok(relative) = entry.path().strip_prefix(&root)
-            {
-                dcm_files.push(relative.to_string_lossy().to_string());
-            }
+        let path = if b_match_directories {
+            entry.path().parent().unwrap()
+        } else {
+            entry.path()
+        };
+        if let Ok(relative) = path.strip_prefix(&root) {
+            paths.insert(relative.to_string_lossy().to_string());
         }
-
-        dcm_files.sort();
-        Ok(dcm_files)
-    };
-
-    match &result {
-        Ok(val) => trace.success(&val),
-        Err(err) => trace.error(&err),
     }
-    result
+    if let Some(error) = first_error {
+        log::warn!(
+            "[DICOM] walk_directory skipped_paths={skipped}; partial discovery retained; representative cause: {error}"
+        );
+    }
+    let result: Vec<String> = paths.into_iter().collect();
+    trace.success(&format!(
+        "{} DICOM locations; {skipped} skipped paths",
+        result.len()
+    ));
+    Ok(result)
 }
 
 #[cfg(test)]

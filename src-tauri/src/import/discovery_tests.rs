@@ -28,3 +28,18 @@ fn discovers_dicom_files_and_containing_directories() {
         .is_err()
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn broken_links_do_not_hide_successful_dicom_discovery() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.path().join("subject")).unwrap();
+    std::fs::write(root.path().join("subject/scan.dcm"), b"").unwrap();
+    std::os::unix::fs::symlink(root.path().join("missing"), root.path().join("broken")).unwrap();
+    let path = root.path().to_string_lossy().into_owned();
+    assert_eq!(
+        walk_directory(path.clone(), 3, false).unwrap(),
+        vec!["subject/scan.dcm"]
+    );
+    assert_eq!(walk_directory(path, 3, true).unwrap(), vec!["subject"]);
+}
