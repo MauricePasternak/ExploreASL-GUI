@@ -901,6 +901,15 @@ fn dicom_relinks_preserve_compatible_settings_and_reset_only_source_dependent_se
     mapping.source_data_path = Some(".".into());
     mapping.b_match_directories = Some(false);
     mapping.raw_paths = Some(vec!["sub/scan.dcm".into()]);
+    let pattern = serde_json::json!({
+        "signature": "sub/<TOKEN>",
+        "samplePath": "sub/scan.dcm",
+        "blocks": ["sub", "scan.dcm"],
+        "uniqueNames": {"0": ["sub"], "1": ["scan.dcm"]},
+        "count": 1,
+        "depth": 2
+    });
+    mapping.path_patterns = Some(vec![serde_json::from_value(pattern.clone()).unwrap()]);
     mapping.subject_renames = Some(vec![SubjectRename {
         original: "sub".into(),
         target: "subject".into(),
@@ -908,13 +917,12 @@ fn dicom_relinks_preserve_compatible_settings_and_reset_only_source_dependent_se
     config::edit_for_state(
         &state,
         generation,
-        ProjectEdit::Import {
-            mapping: mapping.clone(),
-            preferences: ImportPreferences {
-                active_step: Some(4),
-                selected_profile_id: Some("profile".into()),
-            },
-        },
+        serde_json::from_value(serde_json::json!({
+            "kind": "import",
+            "mapping": mapping,
+            "preferences": {"activeStep": 4, "selectedProfileId": "profile"}
+        }))
+        .unwrap(),
     )
     .unwrap();
     fs::create_dir(dir.path().join("replacement")).unwrap();
@@ -934,12 +942,14 @@ fn dicom_relinks_preserve_compatible_settings_and_reset_only_source_dependent_se
         let accepted = config::edit_for_state(
             &state,
             generation,
-            ProjectEdit::RelinkDicom {
-                path: source.into(),
-                raw_paths: vec!["new/scan.dcm".into()],
-                patterns: vec![],
-                compatible,
-            },
+            serde_json::from_value(serde_json::json!({
+                "kind": "relinkDicom",
+                "path": source,
+                "rawPaths": ["new/scan.dcm"],
+                "patterns": [pattern],
+                "compatible": compatible
+            }))
+            .unwrap(),
         )
         .unwrap();
         assert_eq!(

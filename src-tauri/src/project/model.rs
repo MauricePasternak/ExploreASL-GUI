@@ -71,11 +71,19 @@ pub struct PathPattern {
     pub signature: String,
     pub sample_path: String,
     pub blocks: Vec<String>,
+    #[serde(deserialize_with = "deserialize_unique_names")]
     pub unique_names: BTreeMap<u32, Vec<String>>,
     #[ts(type = "number")]
     pub count: u64,
     #[ts(type = "number")]
     pub depth: u64,
+}
+
+fn deserialize_unique_names<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<u32, Vec<String>>, D::Error> {
+    // Tagged edits buffer keys as strings; restore JSON's numeric map-key parsing.
+    serde_json::from_value(Value::deserialize(deserializer)?).map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
