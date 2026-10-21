@@ -224,6 +224,7 @@ export default function MetadataGrouping() {
 
   function handleNext() {
     for (const group of metadataGroups) {
+      if (!subjectRows.some((row) => row.groupId === group.id)) continue;
       const errors = validateBidsMetadataGroup(group.bidsParams);
       if (errors.length > 0) {
         notifications.show({

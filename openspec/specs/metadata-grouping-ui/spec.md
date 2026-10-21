@@ -192,3 +192,36 @@ The `refineBidsMetadata` superRefine is preserved (rules reference `"Included"` 
 
 - **WHEN** schema validates `M0Type: "Included"` (ds000240 sidecar value)
 - **THEN** validation passes (matches enum)
+
+### Requirement: Bolus cut-off timings are independent of PLD volumes
+
+Metadata validation SHALL interpret `BolusCutOffDelayTime` as saturation-pulse timings, not per-volume delays. Values SHALL be finite, non-negative, and monotonically increasing; existing seconds-range sanity checks remain applicable. Validation SHALL NOT require matching lengths or zero positions with `PostLabelingDelay`. Field instructions SHALL explain that Q2TIPS uses only the first and last saturation-pulse timings.
+
+#### Scenario: Q2TIPS endpoints with scalar or multi-volume PLD
+
+- **WHEN** otherwise valid PASL metadata specifies `BolusCutOffTechnique: "Q2TIPS"`, `BolusCutOffDelayTime: [0.7, 1.6]`, and either scalar PLD `1.8` or per-volume PLDs `[0, 1.8, 1.8, 2.0]`
+- **THEN** modal saving, group validation, and studyPar validation SHALL accept the independent timing arrays
+
+#### Scenario: Invalid saturation-pulse timings
+
+- **WHEN** bolus cut-off timings contain negative or non-finite values, or decrease between successive pulses
+- **THEN** validation SHALL report an error on `BolusCutOffDelayTime`
+
+### Requirement: Optional total acquired pairs override
+
+The default and override metadata forms SHALL expose `TotalAcquiredPairs` as an optional positive-integer input. Leaving it blank SHALL NOT prevent saving or advancing. Blank values SHALL be omitted from saved metadata and `studyPar.json`. Supplied values SHALL be preserved without deriving or replacing the count from `ASLContext`.
+
+#### Scenario: Pair count left blank or cleared
+
+- **WHEN** the user leaves Total Acquired Control–Label Pairs blank or clears a previously saved count
+- **THEN** otherwise valid metadata SHALL save without a `TotalAcquiredPairs` key
+
+#### Scenario: Explicit pair count
+
+- **WHEN** the user enters `30` for Total Acquired Control–Label Pairs
+- **THEN** the saved metadata and compiled studyPar entry SHALL contain `TotalAcquiredPairs: 30`, and reopening the form SHALL display `30`
+
+#### Scenario: Invalid pair count
+
+- **WHEN** a supplied pair count is zero, negative, fractional, or non-finite
+- **THEN** metadata validation SHALL reject it

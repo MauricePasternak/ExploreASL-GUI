@@ -392,6 +392,23 @@ describe("BidsAslMetadataSchema", () => {
     ).toThrow();
   });
 
+  it.each([undefined, 1, 30])("accepts optional TotalAcquiredPairs: %s", (TotalAcquiredPairs) => {
+    expect(BidsAslMetadataSchema.safeParse({ ...validBase, TotalAcquiredPairs }).success).toBe(
+      true,
+    );
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity, "30"])(
+    "rejects invalid TotalAcquiredPairs: %s",
+    (TotalAcquiredPairs) => {
+      const result = BidsAslMetadataSchema.safeParse({ ...validBase, TotalAcquiredPairs });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].path).toEqual(["TotalAcquiredPairs"]);
+      }
+    },
+  );
+
   it("accepts ASLContext: null on BaseSchema (RI2: legacy sidecars ship null)", () => {
     // BidsAslMetadataBaseSchema (no superRefine) must accept null at the
     // Zod layer so groups are not dropped via `skipped`. The full
@@ -603,38 +620,39 @@ describe("validateBidsMetadataGroup", () => {
 
   it.each([
     { PostLabelingDelay: 1.8, BolusCutOffDelayTime: 0.8 },
-    { PostLabelingDelay: [1.8, 2.0], BolusCutOffDelayTime: [0.8, 0.9] },
-    { PostLabelingDelay: [1.8, 0, 2.0], BolusCutOffDelayTime: [0.8, 0, 0.9] },
-  ])("accepts matching delay lengths and zero positions: %j", (delays) => {
-    expect(validateBidsMetadataGroup({ ...validData, ...delays })).toEqual([]);
+    { PostLabelingDelay: 1.8, BolusCutOffDelayTime: [0.7, 1.6] },
+    { PostLabelingDelay: [1.8], BolusCutOffDelayTime: [0.7, 1.6] },
+    { PostLabelingDelay: [1.8, 2.0], BolusCutOffDelayTime: 0.8 },
+    { PostLabelingDelay: [0, 1.8, 1.8, 2.0], BolusCutOffDelayTime: [0.7, 1.6] },
+    { PostLabelingDelay: 1.8, BolusCutOffDelayTime: [0, 0.8] },
+  ])("accepts bolus pulse timings independently of PLD volumes: %j", (delays) => {
+    expect(
+      validateBidsMetadataGroup({
+        ...validData,
+        ArterialSpinLabelingType: "PASL",
+        BolusCutOffFlag: true,
+        BolusCutOffTechnique: "Q2TIPS",
+        ...delays,
+      }),
+    ).toEqual([]);
   });
 
   it.each([
-    { BolusCutOffDelayTime: 0.8 },
-    { BolusCutOffDelayTime: [0.8] },
-    { BolusCutOffDelayTime: [0.8, 0.9, 1.0] },
-  ])("flags mismatched delay lengths: %j", ({ BolusCutOffDelayTime }) => {
-    const data = {
-      ...validData,
-      PostLabelingDelay: [1.8, 2.0],
-      BolusCutOffDelayTime,
-    };
-    const errors = validateBidsMetadataGroup(data);
-    expect(errors).toContain(
-      "Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements.",
-    );
-  });
-
-  it("flags mismatch in zero positions for PostLabelingDelay and BolusCutOffDelayTime", () => {
-    const data = {
-      ...validData,
-      PostLabelingDelay: [1.8, 0, 2.0],
-      BolusCutOffDelayTime: [0.8, 0.9, 0],
-    };
-    const errors = validateBidsMetadataGroup(data);
-    expect(errors).toContain(
-      "Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions.",
-    );
+    { BolusCutOffDelayTime: -0.1 },
+    { BolusCutOffDelayTime: NaN },
+    { BolusCutOffDelayTime: Infinity },
+    { BolusCutOffDelayTime: -Infinity },
+    { BolusCutOffDelayTime: [0.8, Infinity] },
+    { BolusCutOffDelayTime: [0.8, NaN] },
+    { BolusCutOffDelayTime: [1.6, 0.7] },
+  ])("rejects invalid bolus pulse timings: %j", (delays) => {
+    const result = BidsAslMetadataSchema.safeParse({ ...validData, ...delays });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.every((issue) => issue.path[0] === "BolusCutOffDelayTime")).toBe(
+        true,
+      );
+    }
   });
 
   it("flags values outside [0.01, 10] range (excluding 0) for ASL parameters", () => {

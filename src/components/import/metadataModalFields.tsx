@@ -149,7 +149,7 @@ export function BidsNumberField({
   control,
   name,
   label,
-  decimalScale = 3,
+  decimalScale,
   min,
   hint,
   testId,
@@ -162,8 +162,21 @@ export function BidsNumberField({
         <NumberInput
           label={<BidsFieldLabel label={label} fieldName={name} />}
           description={resolveFieldDescription(hint)}
-          value={typeof field.value === "number" ? field.value : ""}
-          onChange={(value) => field.onChange(typeof value === "number" ? value : undefined)}
+          value={
+            typeof field.value === "number" || typeof field.value === "string" ? field.value : ""
+          }
+          onChange={(value) => {
+            const number = Number(value);
+            field.onChange(value === "" ? undefined : Number.isFinite(number) ? number : value);
+          }}
+          onBlurCapture={(event) => {
+            // NumericFormat clears incomplete drafts on blur; keep them for schema rejection.
+            if (typeof field.value === "string") {
+              event.stopPropagation();
+              field.onBlur();
+            }
+          }}
+          onBlur={field.onBlur}
           decimalScale={decimalScale}
           min={min}
           error={fieldState.error?.message}

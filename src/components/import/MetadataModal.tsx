@@ -265,6 +265,15 @@ export default function MetadataModal({
             </MetadataSectionCard>
 
             <MetadataSectionCard title="Core ASL Parameters" testId="metadata-section-core-asl">
+              <BidsNumberField
+                control={control}
+                name="bidsParams.TotalAcquiredPairs"
+                label="Total Acquired Control–Label Pairs"
+                hint={BIDS_FIELD_HINTS.TotalAcquiredPairs}
+                decimalScale={0}
+                min={1}
+                testId="field-total-acquired-pairs"
+              />
               <BidsSelectField
                 control={control}
                 name="bidsParams.ArterialSpinLabelingType"
@@ -339,7 +348,7 @@ export default function MetadataModal({
                     name="bidsParams.BolusCutOffDelayTime"
                     label="Bolus Cut Off Delay Time"
                     hint={BIDS_FIELD_HINTS.BolusCutOffDelayTime}
-                    description="Comma-separated for multiple values. For multi-PLD schemes, place 0 where M0 and/or dummy ASL volumes are found"
+                    description="Saturation-pulse timings in seconds, in increasing order. For Q2TIPS, enter the first and last pulse timings, comma-separated."
                     testId="field-bolus-cutoff-delay"
                   />
                 </>

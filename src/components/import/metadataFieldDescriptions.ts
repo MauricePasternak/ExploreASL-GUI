@@ -35,7 +35,7 @@ export const BIDS_FIELD_DESCRIPTIONS: Record<keyof BidsAslMetadata, string> = {
   BolusCutOffFlag:
     "Specify true if a pulse/technique was applied to temporally terminate (cut off) the labeled bolus delivery, ensuring a well-defined bolus duration.",
   BolusCutOffDelayTime:
-    "The time (in seconds) from the application of the initial PASL labeling pulse until the application of the bolus cut-off pulse. Can be an array if it varies by volume.",
+    "Time in seconds from the end of labeling to the start of each bolus cut-off saturation pulse. Values must be non-negative and monotonically increasing. For Q2TIPS, provide only the first and last pulse timings; these do not correspond to individual acquired volumes.",
   BolusCutOffTechnique:
     'The name of the specific RF/gradient method used to cut off the bolus (e.g., "QUIPSS", "QUIPSS II", "Q2TIPS").',
 
@@ -48,6 +48,8 @@ export const BIDS_FIELD_DESCRIPTIONS: Record<keyof BidsAslMetadata, string> = {
     "An array of times (in seconds) specifying when each background suppression pulse was applied relative to the start of the labeling preparation.",
   VascularCrushing:
     'Specify true if bipolar "crusher" gradients were used to suppress signal from fast-moving blood within large macrovascular arteries.',
+  TotalAcquiredPairs:
+    "Optional total number of acquired control–label pairs. Each pair consists of one control and one label image. Enter a positive whole number, or leave blank to omit this override.",
   RepetitionTimePreparation:
     "The time interval (in seconds) between successive labeling pulses or preparations.",
   FlipAngle:

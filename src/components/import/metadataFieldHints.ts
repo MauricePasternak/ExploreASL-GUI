@@ -49,6 +49,7 @@ export const BIDS_FIELD_HINTS: Partial<Record<keyof BidsAslMetadata, MetadataFie
   BackgroundSuppressionNumberPulses: "conditionalRecommended",
   BackgroundSuppressionPulseTime: "conditionalRecommended",
   VascularCrushing: "optionalOmitted",
+  TotalAcquiredPairs: "optionalOmitted",
   SliceTiming: "conditionalRecommended",
 };
 

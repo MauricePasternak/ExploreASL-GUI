@@ -445,9 +445,39 @@ describe("MetadataModal", () => {
       },
     });
 
+    expect(testId("field-total-acquired-pairs")).toHaveValue("");
     await user.click(testId("modal-save-btn"));
 
     expect(onSubmit.mock.calls[0][0].bidsParams).toEqual(validBidsParams);
+  });
+
+  it("saves an optional acquired-pairs count", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderModal({
+      initialValues: { label: "Defaults", bidsParams: validBidsParams },
+    });
+
+    await user.type(testId("field-total-acquired-pairs"), "30");
+    await user.click(testId("modal-save-btn"));
+
+    expect(onSubmit.mock.calls[0][0].bidsParams.TotalAcquiredPairs).toBe(30);
+  });
+
+  it("displays a saved acquired-pairs count and omits it when cleared", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderModal({
+      initialValues: {
+        label: "Defaults",
+        bidsParams: { ...validBidsParams, TotalAcquiredPairs: 30 },
+      },
+    });
+
+    expect(testId("field-total-acquired-pairs")).toHaveValue("30");
+    await user.clear(testId("field-total-acquired-pairs"));
+    await user.click(testId("modal-save-btn"));
+
+    expect(onSubmit).toHaveBeenCalled();
+    expect(onSubmit.mock.calls[0][0].bidsParams).not.toHaveProperty("TotalAcquiredPairs");
   });
 
   it("requires a non-empty group label", async () => {
@@ -509,35 +539,39 @@ describe("MetadataModal", () => {
     expect(modalScope().getByText("Invalid number or list of numbers")).toBeInTheDocument();
   });
 
-  it("enforces joint validation of PostLabelingDelay and BolusCutOffDelayTime in the UI", async () => {
-    const user = userEvent.setup();
-    const { onSubmit } = renderModal({
-      initialValues: {
-        label: "Test Group",
-        bidsParams: {
-          ArterialSpinLabelingType: "PASL" as const,
-          PostLabelingDelay: [1.8, 0],
-          MRAcquisitionType: "3D" as const,
-          MagneticFieldStrength: 3,
-          Manufacturer: "Siemens" as const,
-          ASLContext: "control,label",
-          M0Type: "Separate" as const,
-          BolusCutOffFlag: true,
-          BolusCutOffDelayTime: [0.8, 0],
-          BolusCutOffTechnique: "Q2TIPS" as const,
-          BackgroundSuppression: false,
+  it.each([{ PostLabelingDelay: 1.8 }, { PostLabelingDelay: [0, 1.8, 1.8, 2.0] }])(
+    "saves Q2TIPS endpoints independently of PLD %j",
+    async ({ PostLabelingDelay }) => {
+      const user = userEvent.setup();
+      const { onSubmit } = renderModal({
+        initialValues: {
+          label: "Test Group",
+          bidsParams: {
+            ArterialSpinLabelingType: "PASL" as const,
+            PostLabelingDelay,
+            MRAcquisitionType: "3D" as const,
+            MagneticFieldStrength: 3,
+            Manufacturer: "Siemens" as const,
+            ASLContext: "control,label",
+            M0Type: "Separate" as const,
+            BolusCutOffFlag: true,
+            BolusCutOffDelayTime: [0.7, 1.6],
+            BolusCutOffTechnique: "Q2TIPS" as const,
+            BackgroundSuppression: false,
+          },
         },
-      },
-    });
+      });
 
-    // Valid submission with matching array sizes and zero positions
-    await user.click(testId("modal-save-btn"));
+      await user.click(testId("modal-save-btn"));
 
-    expect(onSubmit).toHaveBeenCalled();
-    expect(onSubmit.mock.calls[0][0]).toMatchObject({
-      bidsParams: expect.objectContaining({
-        BolusCutOffFlag: true,
-      }),
-    });
-  });
+      expect(onSubmit).toHaveBeenCalled();
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({
+        bidsParams: expect.objectContaining({
+          BolusCutOffFlag: true,
+          PostLabelingDelay,
+          BolusCutOffDelayTime: [0.7, 1.6],
+        }),
+      });
+    },
+  );
 });

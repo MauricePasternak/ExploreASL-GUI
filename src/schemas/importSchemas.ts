@@ -308,45 +308,22 @@ function refineBidsMetadata(data: BidsAslMetadata, ctx: z.RefinementCtx) {
     }
   }
 
-  const pld = data.PostLabelingDelay;
   const bcd = data.BolusCutOffDelayTime;
 
-  if (pld !== undefined && pld !== null && bcd !== undefined && bcd !== null) {
-    const pldArray = Array.isArray(pld) ? pld : [pld];
+  if (bcd !== undefined && bcd !== null) {
     const bcdArray = Array.isArray(bcd) ? bcd : [bcd];
-
-    if (pldArray.length > 1 || bcdArray.length > 1) {
-      if (pldArray.length !== bcdArray.length) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements",
-          path: ["PostLabelingDelay"],
-        });
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "Post Labeling Delay and Bolus Cut Off Delay Time must have the same number of elements",
-          path: ["BolusCutOffDelayTime"],
-        });
-      } else {
-        for (let i = 0; i < pldArray.length; i++) {
-          if ((pldArray[i] === 0) !== (bcdArray[i] === 0)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message:
-                "Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions",
-              path: ["PostLabelingDelay"],
-            });
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message:
-                "Zeros in Post Labeling Delay and Bolus Cut Off Delay Time must be at the same positions",
-              path: ["BolusCutOffDelayTime"],
-            });
-          }
-        }
-      }
+    if (bcdArray.some((value) => !Number.isFinite(value) || value < 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Bolus Cut Off Delay Time values must be finite, non-negative numbers",
+        path: ["BolusCutOffDelayTime"],
+      });
+    } else if (bcdArray.some((value, index) => index > 0 && value < bcdArray[index - 1])) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Bolus Cut Off Delay Time values must be monotonically increasing",
+        path: ["BolusCutOffDelayTime"],
+      });
     }
   }
 
@@ -465,6 +442,7 @@ export const BidsAslMetadataBaseSchema = z
     BackgroundSuppressionNumberPulses: z.number().optional(),
     BackgroundSuppressionPulseTime: CommaArraySchema.optional(),
     VascularCrushing: z.boolean().optional(),
+    TotalAcquiredPairs: z.number().int().positive().optional(),
 
     RepetitionTimePreparation: z.number().optional(),
     FlipAngle: CommaNumberSchema.optional(),
