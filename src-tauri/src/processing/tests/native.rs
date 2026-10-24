@@ -558,6 +558,68 @@ fn acknowledgement_cleans_committed_archive_and_keeps_terminal_on_cleanup_failur
 
 #[cfg(unix)]
 #[test]
+fn project_close_acknowledges_engine_rewritten_configuration_and_preserves_outputs() {
+    const ENGINE_CONFIGURATION: &str = r#"{"x":{"settings":{"Quality":true,"DELETETEMP":true}}}"#;
+    for ready in [false, true] {
+        let script = format!(
+            "printf '%s' '{ENGINE_CONFIGURATION}' > derivatives/ExploreASL/dataPar.json\nprintf science > derivatives/ExploreASL/result.nii\n{}",
+            if ready { READY } else { "" }
+        );
+        let (root, app, run_id) = fixture(&script, "dicom", 1);
+        let derivative = root.path().join("derivatives/ExploreASL");
+        fs::create_dir_all(&derivative).unwrap();
+        fs::write(derivative.join("dataPar.json"), b"prior").unwrap();
+        crate::processing::run_pipeline(app.handle().clone(), app.state(), run_id.clone()).unwrap();
+        let result = terminal(&app, &run_id);
+        assert_eq!(result.logical_exits[0].exit_code, 0);
+        assert_eq!(
+            result.lifecycle,
+            if ready {
+                ProcessingLifecycle::Completed
+            } else {
+                ProcessingLifecycle::Failed
+            }
+        );
+        if !ready {
+            assert_eq!(result.error.as_ref().unwrap().code, "targetAudit");
+        }
+        let engine_configuration = fs::read(derivative.join("dataPar.json")).unwrap();
+        assert_eq!(engine_configuration, ENGINE_CONFIGURATION.as_bytes());
+        let state = app.state::<AppState>();
+        let shutdown = crate::project::lifecycle::shutdown_project_runtime_impl(&state);
+        assert!(shutdown.success, "{shutdown:?}");
+        assert!(!root.path().join(CURRENT_RECORD).exists());
+        let replay = lookup_run(root.path(), run_id.parse().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(replay.acknowledged);
+        assert_eq!(replay.terminal_revision, result.terminal_revision.unwrap());
+        crate::project::lifecycle::clear_active_project_impl(&state).unwrap();
+        assert!(crate::project::ownership::active(&state).is_err());
+        assert_eq!(
+            fs::read(derivative.join("dataPar.json")).unwrap(),
+            engine_configuration
+        );
+        assert_eq!(fs::read(derivative.join("result.nii")).unwrap(), b"science");
+        let saved = crate::project::validation::parse_document(
+            &fs::read(root.path().join("project.easl")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            saved
+                .ui_state
+                .processing
+                .unwrap()
+                .population
+                .unwrap()
+                .completed,
+            Some(ready)
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn native_participant_reads_preserve_bids_roots_and_skip_dicom_root_inputs() {
     for source in ["bids", "dicom"] {
         let (root, app, run_id) = fixture(READY, source, 1);

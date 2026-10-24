@@ -479,6 +479,15 @@ impl LaunchJournal {
         checkpoint("beforeExecutionCommit")?;
         self.manifest.phase = Phase::ExecutionCommitted;
         self.save()?;
+        // Keep inode witnesses through preparation/rollback, but retire them
+        // before workers can rewrite installed files through these hard links.
+        // Failure after durable commit still forbids rollback and worker launch.
+        let directory = self.directory()?;
+        for entry in &self.manifest.entries {
+            if let (Some(installed), Some(candidate)) = (&entry.installed, &entry.candidate) {
+                installed.remove(&directory, candidate)?;
+            }
+        }
         checkpoint("afterExecutionCommit")?;
         Ok(())
     }

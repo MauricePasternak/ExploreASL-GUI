@@ -76,7 +76,7 @@ fn journal_reopens_every_precommit_mutation_boundary_and_restores_exact_state() 
 }
 #[test]
 fn committed_launch_preserves_outputs_and_requires_cleanup() {
-    for _managed in [false, true] {
+    for replace in [false, true] {
         let (temp, run_id) = setup();
         let mut transaction = LaunchTransaction::plan(
             temp.path(),
@@ -88,10 +88,93 @@ fn committed_launch_preserves_outputs_and_requires_cleanup() {
         .unwrap();
         transaction.prepare(b"new").unwrap();
         transaction.commit().unwrap();
+        let candidate = temp.path().join(format!(
+            "derivatives/ExploreASL_GUI/processing/runs/{run_id}/candidate-0"
+        ));
+        assert!(
+            !candidate.exists(),
+            "install witness must retire before execution"
+        );
+        let data_par = temp.path().join("derivatives/ExploreASL/dataPar.json");
+        if replace {
+            fs::remove_file(&data_par).unwrap();
+        }
+        // ExploreASL rewrites dataPar in place; replacement must also survive.
+        fs::write(&data_par, b"engine configuration").unwrap();
         assert!(transaction.rollback().is_err());
         drop(transaction);
         let mut reopened = LaunchJournal::reopen(temp.path(), &run_id.to_string()).unwrap();
         reopened.cleanup().unwrap();
+        assert_eq!(
+            fs::read(temp.path().join("derivatives/ExploreASL/dataPar.json")).unwrap(),
+            b"engine configuration"
+        );
+        assert_eq!(
+            fs::read(temp.path().join("scientific.nii")).unwrap(),
+            b"science"
+        );
+    }
+}
+
+#[test]
+fn commit_and_cleanup_preserve_foreign_install_witnesses() {
+    for replace in [false, true] {
+        let (temp, run_id) = setup();
+        let mut transaction = LaunchTransaction::plan(
+            temp.path(),
+            &run_id.to_string(),
+            &[false, false, true],
+            "",
+            false,
+        )
+        .unwrap();
+        transaction.prepare(b"new").unwrap();
+        let candidate = temp.path().join(format!(
+            "derivatives/ExploreASL_GUI/processing/runs/{run_id}/candidate-0"
+        ));
+        let bytes = if replace {
+            // Same bytes on a different inode are still a foreign replacement.
+            fs::remove_file(&candidate).unwrap();
+            b"new".as_slice()
+        } else {
+            b"foreign".as_slice()
+        };
+        fs::write(&candidate, bytes).unwrap();
+        assert!(transaction.commit().is_err());
+        assert_eq!(fs::read(&candidate).unwrap(), bytes);
+        let mut reopened = LaunchJournal::reopen(temp.path(), &run_id.to_string()).unwrap();
+        assert_eq!(reopened.phase(), Phase::ExecutionCommitted);
+        assert!(reopened.rollback().is_err());
+        assert!(reopened.cleanup().is_err());
+        assert_eq!(fs::read(&candidate).unwrap(), bytes);
+        assert_eq!(
+            fs::read(temp.path().join("scientific.nii")).unwrap(),
+            b"science"
+        );
+    }
+}
+
+#[test]
+fn interrupted_witness_retirement_reopens_as_committed_cleanup_only() {
+    for fault in ["afterOwnedRemoval", "afterExecutionCommit"] {
+        let (temp, run_id) = setup();
+        let mut transaction = LaunchTransaction::plan(
+            temp.path(),
+            &run_id.to_string(),
+            &[false, false, true],
+            "",
+            false,
+        )
+        .unwrap();
+        transaction.prepare(b"new").unwrap();
+        journal::inject_fault(fault);
+        assert!(transaction.commit().is_err(), "{fault}");
+        drop(transaction);
+        let mut reopened = LaunchJournal::reopen(temp.path(), &run_id.to_string()).unwrap();
+        assert_eq!(reopened.phase(), Phase::ExecutionCommitted);
+        assert!(reopened.rollback().is_err());
+        reopened.cleanup().unwrap();
+        assert_eq!(reopened.phase(), Phase::Cleaned);
         assert_eq!(
             fs::read(temp.path().join("derivatives/ExploreASL/dataPar.json")).unwrap(),
             b"new"
