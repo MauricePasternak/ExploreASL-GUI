@@ -721,6 +721,14 @@ fn bids_confirmation_derives_mapping_and_rejects_unreviewed_replacements() {
                 ..group.clone()
             },
         ],
+        vec![
+            group.clone(),
+            BidsReviewGroup {
+                id: "overlapping".into(),
+                label: "Unique label".into(),
+                ..group.clone()
+            },
+        ],
     ] {
         assert!(
             config::edit_for_state(
