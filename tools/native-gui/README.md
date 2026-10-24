@@ -73,8 +73,50 @@ Open it using its Recent Projects button; normal validation/access checks still 
 For repository datasets, call it with `test/ds000240`, `test/ds007116` or `test/test_GENFI`
 (absolute source paths also work). Copies may be several GB; filesystem reflinks are
 attempted when supported, otherwise normal copies are made. Native choosers still need
-manual help or existing native E2E setup. Settings start empty: configure profiles
-inside this test instance; personal profiles/recent-project settings are not imported.
+manual help or existing native E2E setup. Settings start empty unless a profile template
+is explicitly supplied; personal settings are never imported automatically.
+
+### Vanilla or pre-seeded launch
+
+```ts
+await tools.native_gui.launch(); // Empty settings on first launch; saved sandbox settings on relaunch.
+// Close the window before any subsequent launch.
+await tools.native_gui.close();
+await tools.native_gui.launch({ fresh: true }); // New vanilla workspace, including first-run onboarding.
+await tools.native_gui.close();
+await tools.native_gui.launch({ profile_template: "/path/to/settings.json" }); // New workspace with saved profiles.
+```
+
+`profile_template` accepts an absolute or repository-relative JSON file path. Reuse
+an existing app/sandbox `settings.json`, or create a file containing only:
+
+```json
+{
+  "executionProfiles": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "matlab",
+      "label": "Local MATLAB",
+      "matlabPath": "/path/to/MATLAB/bin/matlab",
+      "exploreAslPath": "/path/to/ExploreASL"
+    }
+  ]
+}
+```
+
+Configure these paths once, then reuse the same template for different agents.
+Both MATLAB and Apptainer profiles use the app's existing profile schema. Templates
+must contain at least one profile; malformed templates fail launch. Only
+`executionProfiles` is copied, never recent projects, other preferences, or cached
+validation. Normal native profile validation still runs; unavailable installations
+remain invalid and project actions stay gated. Installations must be visible inside
+the sandbox (host temporary directories are hidden).
+
+`fresh: true` and any `profile_template` launch create a **new** workspace without
+deleting or changing the previous one. Supplying both starts fresh **with** the
+template. Plain `launch()` after `close()` reuses the latest workspace and its saved
+settings. Profile seeding requires no app rebuild; reconnect the MCP server via
+`/mcps` after controller changes so agents see the updated launch arguments.
 
 Existing repository sample `.easl` files may be schema version 1, while current native
 model requires version 2. Copier deliberately preserves metadata; it does not migrate
@@ -111,5 +153,6 @@ current native/test setup before opening. Original datasets remain untouched.
 
 Smoke check exercises native launch, click, text entry, state update, inspection, image
 capture, waits, navigation, keyboard, two concurrent session-isolated windows, close and
-relaunch with retained sandbox settings.
+relaunch with retained sandbox settings, explicit vanilla reset, and profile-template
+seeding without importing personal recent projects or bypassing native validation.
 No project data or personal settings are touched.

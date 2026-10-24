@@ -1,11 +1,13 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { constants, createWriteStream } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, realpath, stat } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { remote, type Browser } from "webdriverio";
+import { z } from "zod";
+import { ExecutionProfileSchema } from "../../src/schemas/executionProfile";
 import {
   resolveApplicationPath,
   resolveTauriDriver,
@@ -95,6 +97,22 @@ export async function copyProject(sourceRoot: string, workspace: string): Promis
   return path.join(destination, "project.easl");
 }
 
+export async function seedProfiles(source: string, workspace: string): Promise<void> {
+  const template: unknown = JSON.parse(await readFile(path.resolve(projectRoot, source), "utf8"));
+  const profiles = z
+    .object({ executionProfiles: z.array(ExecutionProfileSchema).min(1) })
+    .parse(template);
+  const { identifier } = JSON.parse(
+    await readFile(path.join(projectRoot, "src-tauri", "tauri.conf.json"), "utf8"),
+  ) as { identifier: string };
+  const directory = path.join(workspace, "data", identifier);
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "settings.json"), JSON.stringify(profiles), {
+    mode: 0o600,
+    flag: "wx",
+  });
+}
+
 export class NativeGuiSession {
   workspace?: string;
   private driver?: ChildProcess;
@@ -105,7 +123,13 @@ export class NativeGuiSession {
     return this.connection;
   }
 
-  async launch(): Promise<{ workspace: string; application: string }> {
+  async launch({
+    fresh = false,
+    profile_template,
+  }: {
+    fresh?: boolean;
+    profile_template?: string;
+  } = {}): Promise<{ workspace: string; application: string }> {
     if (this.driver) throw new Error("Window already launched; close it before relaunching.");
     if (process.platform !== "linux")
       throw new Error("Native agent controller currently supports Linux only.");
@@ -131,13 +155,16 @@ export class NativeGuiSession {
     const base = process.env.NATIVE_GUI_TMPDIR ?? path.join(tmpdir(), "opencode");
     await mkdir(base, { recursive: true });
     const workspace =
-      this.workspace ?? (await realpath(await mkdtemp(path.join(base, "native-gui-"))));
-    this.workspace = workspace;
+      this.workspace && !fresh && !profile_template
+        ? this.workspace
+        : await realpath(await mkdtemp(path.join(base, "native-gui-")));
     await Promise.all(
       ["home", "config", "data", "cache", "runtime"].map((name) =>
         mkdir(path.join(workspace, name), { mode: 0o700, recursive: true }),
       ),
     );
+    if (profile_template) await seedProfiles(profile_template, workspace);
+    this.workspace = workspace;
     const [port, nativePort] = await Promise.all([freePort(), freePort()]);
     const log = createWriteStream(path.join(workspace, "driver.log"));
     const driver = spawn(

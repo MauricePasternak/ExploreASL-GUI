@@ -7,7 +7,7 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "./server";
-import { copyProject, NativeGuiSession, sandboxArguments } from "./session";
+import { copyProject, NativeGuiSession, sandboxArguments, seedProfiles } from "./session";
 
 test("MCP advertises native controls, validates inputs and reports missing launch", async () => {
   const { server, shutdown } = createServer();
@@ -16,20 +16,31 @@ test("MCP advertises native controls, validates inputs and reports missing launc
   await server.connect(serverTransport);
   await client.connect(clientTransport);
   try {
-    const tools = (await client.listTools()).tools.map((tool) => tool.name);
-    assert.deepEqual(tools, [
-      "launch",
-      "close",
-      "inspect",
-      "screenshot",
-      "click",
-      "fill",
-      "select",
-      "keys",
-      "wait",
-      "navigate",
-      "copy_project",
-    ]);
+    const tools = (await client.listTools()).tools;
+    assert.deepEqual(
+      tools.map((tool) => tool.name),
+      [
+        "launch",
+        "close",
+        "inspect",
+        "screenshot",
+        "click",
+        "fill",
+        "select",
+        "keys",
+        "wait",
+        "navigate",
+        "copy_project",
+      ],
+    );
+    const launchSchema = tools.find((tool) => tool.name === "launch")!.inputSchema;
+    assert.partialDeepStrictEqual(launchSchema.properties?.fresh, { type: "boolean" });
+    assert.partialDeepStrictEqual(launchSchema.properties?.profile_template, { type: "string" });
+    assert.ok(!launchSchema.required?.length);
+    for (const args of [{ fresh: "yes" }, { profile_template: " " }]) {
+      const invalidLaunch = await client.callTool({ name: "launch", arguments: args });
+      assert.equal(invalidLaunch.isError, true);
+    }
     const missingLaunch = await client.callTool({ name: "inspect", arguments: {} });
     assert.equal(missingLaunch.isError, true);
     assert.match(JSON.stringify(missingLaunch.content), /Launch the native GUI first/);
@@ -49,6 +60,69 @@ test("MCP advertises native controls, validates inputs and reports missing launc
     await shutdown();
     await client.close();
     await server.close();
+  }
+});
+
+test("profile templates import only schema-valid profiles without changing source or existing settings", async () => {
+  const base = path.join(tmpdir(), "opencode");
+  await mkdir(base, { recursive: true });
+  const root = await mkdtemp(path.join(base, "native-gui-profiles-test-"));
+  try {
+    const source = path.join(root, "template.json");
+    const workspace = path.join(root, "workspace");
+    const settings = path.join(
+      workspace,
+      "data",
+      "com.mpasternak.exploreasl-gui-v0",
+      "settings.json",
+    );
+    const matlab = {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      type: "matlab",
+      label: "Saved MATLAB",
+      matlabPath: "/opt/matlab/bin/matlab",
+      exploreAslPath: "/opt/ExploreASL",
+    };
+    const apptainer = {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      type: "apptainer",
+      label: "Saved Apptainer",
+      sifPath: "/opt/exploreasl.sif",
+    };
+    const original = JSON.stringify({
+      executionProfiles: [{ ...matlab, secret: "not imported" }, apptainer],
+      theme: "dark",
+      recentProjects: [{ path: "/personal/project.easl" }],
+      profileValidationState: { [matlab.id]: { valid: true, errors: [] } },
+    });
+    await writeFile(source, original);
+    await seedProfiles(source, workspace);
+    assert.deepEqual(JSON.parse(await readFile(settings, "utf8")), {
+      executionProfiles: [matlab, { ...apptainer, apptainerPath: "apptainer" }],
+    });
+    assert.equal(await readFile(source, "utf8"), original);
+    await assert.rejects(seedProfiles(source, workspace), { code: "EEXIST" });
+
+    for (const invalid of [
+      "not JSON",
+      "null",
+      "{}",
+      JSON.stringify({ executionProfiles: [] }),
+      JSON.stringify({ executionProfiles: [{ ...matlab, type: "docker" }] }),
+      JSON.stringify({ executionProfiles: [{ ...matlab, id: "not-a-uuid" }] }),
+      JSON.stringify({ executionProfiles: [{ ...matlab, matlabPath: "" }] }),
+    ]) {
+      await writeFile(source, invalid);
+      await assert.rejects(seedProfiles(source, path.join(root, "invalid")));
+    }
+    await assert.rejects(seedProfiles(path.join(root, "missing.json"), workspace), {
+      code: "ENOENT",
+    });
+    assert.deepEqual(JSON.parse(await readFile(settings, "utf8")), {
+      executionProfiles: [matlab, { ...apptainer, apptainerPath: "apptainer" }],
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -38,6 +40,7 @@ function resultText(result: CallToolResult) {
 
 try {
   const launched = JSON.parse(resultText(await call("launch")));
+  await call("wait", { selector: '[data-testid="welcome-card"]' });
   await call("click", { selector: '[data-testid="layout-open-settings-btn"]' });
   await call("wait", { selector: '[data-testid="settings-modal"]' });
   await call("fill", { selector: '[data-testid="settings-add-delimiter-input"]', value: ";" });
@@ -75,6 +78,47 @@ try {
   await call("click", { selector: '[data-testid="layout-open-settings-btn"]' });
   await call("wait", { selector: '[data-testid="settings-delimiter-btn-;"]' });
   await call("click", { selector: '[data-testid="settings-save-close-btn"]' });
+  await call("close");
+
+  // Missing executables must stay invalid; seeding must not bypass native validation.
+  const profile = {
+    id: "550e8400-e29b-41d4-a716-446655440000",
+    type: "matlab",
+    label: "Seeded smoke profile",
+    matlabPath: "/nonexistent-native-gui-smoke/matlab",
+    exploreAslPath: "/nonexistent-native-gui-smoke/ExploreASL",
+  };
+  const template = path.join(launched.workspace, "profile-template.json");
+  const original = JSON.stringify({
+    executionProfiles: [profile],
+    recentProjects: [{ path: "/personal/project.easl" }],
+    tokenSubDelimiters: [";"],
+  });
+  await writeFile(template, original);
+  const seeded = JSON.parse(resultText(await call("launch", { profile_template: template })));
+  assert.notEqual(seeded.workspace, launched.workspace);
+  await call("wait", { selector: '[data-testid="welcome-card"]', state: "hidden" });
+  await call("wait", { selector: '[data-testid="landing-invalid-profiles-alert"]' });
+  await call("click", { selector: '[data-testid="layout-open-settings-btn"]' });
+  await call("wait", { selector: `[data-testid="profile-invalid-${profile.id}"]` });
+  await call("wait", { selector: '[data-testid="settings-delimiter-btn-;"]', state: "hidden" });
+  const { identifier } = JSON.parse(
+    await readFile(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+  );
+  const seededSettings = JSON.parse(
+    await readFile(path.join(seeded.workspace, "data", identifier, "settings.json"), "utf8"),
+  );
+  assert.deepEqual(seededSettings.executionProfiles, [profile]);
+  assert.deepEqual(seededSettings.recentProjects, []);
+  assert.equal(await readFile(template, "utf8"), original);
+  await call("close");
+  const seededRelaunch = JSON.parse(resultText(await call("launch")));
+  assert.equal(seededRelaunch.workspace, seeded.workspace);
+  await call("wait", { selector: '[data-testid="landing-invalid-profiles-alert"]' });
+  await call("close");
+  const vanilla = JSON.parse(resultText(await call("launch", { fresh: true })));
+  assert.notEqual(vanilla.workspace, seeded.workspace);
+  await call("wait", { selector: '[data-testid="welcome-card"]' });
   console.log(`Native GUI smoke passed. Artifacts: ${launched.workspace}`);
 } finally {
   await Promise.allSettled([call("close"), call("close", {}, "ses_native_gui_smoke_b")]);

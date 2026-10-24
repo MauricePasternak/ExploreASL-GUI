@@ -27,7 +27,7 @@ export function createServer() {
     { name: "exploreasl-native-gui", version: "0.1.0" },
     {
       instructions:
-        "Controls disposable native Linux Tauri windows, not Chromium. Launch first, inspect for CSS selectors, then act. Each OpenCode session owns a separate window. Real filesystem is read-only; writable paths are returned by launch. Native dialogs are not automated. Close when finished.",
+        "Controls disposable native Linux Tauri windows, not Chromium. Launch first, inspect for CSS selectors, then act. Launch defaults to vanilla settings for new sessions; profile_template seeds only execution profiles into a fresh workspace, and fresh starts an empty workspace. Each OpenCode session owns a separate window. Real filesystem is read-only; writable paths are returned by launch. Native dialogs are not automated. Close when finished.",
     },
   );
   const sessions = new Map<string, { gui: NativeGuiSession; pending: Promise<unknown> }>();
@@ -65,9 +65,25 @@ export function createServer() {
 
   register(
     "launch",
-    "Launch separate native window with isolated settings, private D-Bus and read-only host filesystem. Uses existing E2E_APP_PATH build; never rebuilds the app.",
-    {},
-    async (_, gui) => text(await gui.launch()),
+    "Launch separate native window with isolated settings, private D-Bus and read-only host filesystem. Default relaunch preserves settings; fresh forces vanilla, profile_template starts fresh with saved profiles and normal validation. Close current window before switching. Uses existing E2E_APP_PATH build; never rebuilds the app.",
+    {
+      fresh: z
+        .boolean()
+        .optional()
+        .describe(
+          "Start a new empty workspace instead of reusing saved settings. Previous workspace is retained.",
+        ),
+      profile_template: z
+        .string()
+        .trim()
+        .min(1)
+        .max(4096)
+        .optional()
+        .describe(
+          "JSON file containing executionProfiles (for example saved settings.json); absolute or repository-relative path. Always starts a fresh workspace. Imports no other settings.",
+        ),
+    },
+    async (args, gui) => text(await gui.launch(args)),
   );
 
   register(
