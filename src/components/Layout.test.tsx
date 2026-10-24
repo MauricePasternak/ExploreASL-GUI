@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TestMantineProvider as MantineProvider } from "../test/render";
@@ -94,6 +94,7 @@ describe("Layout", () => {
     });
     useProcessingStore.setState({
       processingPhase: "idle",
+      availableSubjects: [],
     });
     useImportStore.setState({
       importPhase: "idle",
@@ -119,6 +120,80 @@ describe("Layout", () => {
     expect(screen.getByText("Landing content")).toBeInTheDocument();
     expect(screen.getByTestId("page-fade-container")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /import/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the main scroll viewport between the fixed header and footer", () => {
+    renderLayout();
+
+    expect(screen.getByTestId("layout-main")).toHaveStyle({
+      marginTop: "var(--app-shell-header-offset, 0px)",
+      height:
+        "calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px))",
+      minHeight: "0",
+      overflowY: "auto",
+    });
+  });
+
+  it.each([1, 3])(
+    "counts confirmed BIDS participants immediately and after reopening with %i sessions",
+    (sessions) => {
+      const confirmed = projectFixture("project-1", "Brain Study", "/tmp/brain-study");
+      confirmed.document.projectMeta.dataSource = "bids";
+      confirmed.document.mappingState.subjectRows = Array.from({ length: sessions }, (_, i) => ({
+        id: `sub-20139_${i + 1}`,
+        subject: "20139",
+        session: String(i + 1),
+        groupId: "group-1",
+      }));
+      confirmed.document.uiState.import = {
+        bidsReviewConfirmed: true,
+        mostRecentConfig: null,
+        skippedSubjects: [],
+      };
+      const { unmount } = renderLayout();
+
+      act(() => useProjectStore.getState().acceptSnapshot(confirmed));
+      expect(screen.getByTestId("layout-footer")).toHaveTextContent("Subjects: 1");
+      expect(useProcessingStore.getState().availableSubjects).toEqual([]);
+
+      unmount();
+      useImportStore.getState().resetBidsReview();
+      renderLayout();
+      expect(screen.getByTestId("layout-footer")).toHaveTextContent("Subjects: 1");
+
+      act(() => {
+        useProcessingStore.getState().setAvailableSubjects([
+          {
+            subjectSession: "sub-previous_1",
+            subject: "sub-previous",
+            session: "1",
+            hasStructural: true,
+            hasASL: true,
+            aslRuns: [],
+          },
+        ]);
+        const next = projectFixture("next-project", "Empty BIDS", "/tmp/empty");
+        next.document.projectMeta.dataSource = "bids";
+        useProjectStore.setState({
+          project: projectView(next),
+        });
+      });
+      expect(screen.getByTestId("layout-footer")).toHaveTextContent("Subjects: 0");
+    },
+  );
+
+  it("retains distinct processing-subject counts for DICOM projects", () => {
+    useProjectStore.setState({ project: projectView(snapshot) });
+    useProcessingStore.getState().setAvailableSubjects(
+      ["sub-01_1", "sub-01_2", "sub-02_1"].map((subjectSession) => {
+        const [subject, session] = subjectSession.split("_");
+        return { subjectSession, subject, session, hasStructural: true, hasASL: true, aslRuns: [] };
+      }),
+    );
+
+    renderLayout();
+
+    expect(screen.getByTestId("layout-footer")).toHaveTextContent("Subjects: 2");
   });
 
   it("shows project name and phase navigation when a project is loaded", () => {

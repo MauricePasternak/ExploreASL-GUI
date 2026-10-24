@@ -171,10 +171,14 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     };
   }, []);
 
-  const subjectCount = useProcessingStore((s) => {
+  const processingSubjectCount = useProcessingStore((s) => {
     const subjects = new Set(s.availableSubjects.map((info) => info.subject));
     return subjects.size;
   });
+  const subjectCount =
+    project?.projectMeta.dataSource === "bids"
+      ? new Set(project.mappingState.subjectRows?.map((row) => row.subject)).size
+      : processingSubjectCount;
   const navbarCollapsed = project?.uiState.navbarCollapsed ?? true;
 
   async function handlePhaseNavigation(phase: ProjectPhase) {
@@ -430,7 +434,18 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         </AppShell.Footer>
       ) : null}
 
-      <AppShell.Main>
+      <AppShell.Main
+        mt="var(--app-shell-header-offset, 0px)"
+        pt="md"
+        pb="md"
+        style={{
+          height:
+            "calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px))",
+          minHeight: 0,
+          overflowY: "auto",
+        }}
+        data-testid="layout-main"
+      >
         <Modal
           opened={leaveModalOpen}
           onClose={() => setLeaveModalOpen(false)}

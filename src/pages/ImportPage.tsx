@@ -32,8 +32,8 @@ const IMPORT_STEPS = [
 const APP_SHELL_HEADER_HEIGHT = 56;
 const APP_SHELL_FOOTER_HEIGHT = 40;
 
-/** Sticky offset when the window (not just Main) is the scroll container. */
-const IMPORT_STEPPER_STICKY_TOP = `calc(${APP_SHELL_HEADER_HEIGHT}px + var(--mantine-spacing-md))`;
+/** Main scrolls below the fixed header, so only its inner padding is needed. */
+const IMPORT_STEPPER_STICKY_TOP = "var(--mantine-spacing-md)";
 const IMPORT_STEPPER_MAX_HEIGHT = `calc(100vh - ${APP_SHELL_HEADER_HEIGHT}px - ${APP_SHELL_FOOTER_HEIGHT}px - 2 * var(--mantine-spacing-md))`;
 
 /**

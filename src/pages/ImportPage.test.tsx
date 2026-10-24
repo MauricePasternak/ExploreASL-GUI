@@ -880,6 +880,7 @@ describe("ImportPage stepper navigation", () => {
     useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
     const sidebar = screen.getAllByTestId("import-stepper-sidebar")[0];
+    expect(sidebar).toHaveStyle({ position: "sticky", top: "var(--mantine-spacing-md)" });
 
     fireEvent.click(within(sidebar).getByTestId("import-step-2"));
     expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(1);
