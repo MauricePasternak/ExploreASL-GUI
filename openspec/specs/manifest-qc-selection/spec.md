@@ -8,7 +8,7 @@ Define QC verdict selection for manifest subjects and reviewers.
 
 ### Requirement: QcSelection Table Shape
 
-QC Selection SHALL retain Subject/Session columns, read-only Structural/ASL badges, metadata group labels, and Neutral/Pass/Fail controls without Processing log/report or row-selection controls. With multiple reviewers it SHALL render labeled tabs scoped to the active reviewer. With one reviewer it SHALL render the same table without tabs, reading the sole registered reviewer's indexed slice. Missing group assignment SHALL show dim "Ungrouped" and remain included in the manifest's Ungrouped bucket.
+QC Selection SHALL retain Subject/Session columns, read-only Structural/ASL statuses, metadata group labels, and Neutral/Pass/Fail controls without processing row-selection controls. Structural and ASL columns SHALL expose available Logs/Errors and Report badges that open the existing log and report viewers; unavailable artifacts SHALL show No Logs or No Report, and skipped modules SHALL omit those artifact controls. Outdated reports SHALL be labeled View Outdated Report. With multiple reviewers it SHALL render labeled tabs scoped to the active reviewer. With one reviewer it SHALL render the same table without tabs, reading the sole registered reviewer's indexed slice. Missing group assignment SHALL show dim "Ungrouped" and remain included in the manifest's Ungrouped bucket.
 
 #### Scenario: Row shows metadata group label
 
@@ -29,6 +29,16 @@ QC Selection SHALL retain Subject/Session columns, read-only Structural/ASL badg
 
 - **WHEN** multiple reviewers exist
 - **THEN** labeled tabs SHALL expose only the active registered slice
+
+#### Scenario: QC review opens processing evidence
+
+- **WHEN** a Structural or ASL module has an available log or report and the user clicks its View Logs, View Errors, View Report, or View Outdated Report badge
+- **THEN** the corresponding existing viewer SHALL open for that SubjectSession and module without changing reviewer verdicts
+
+#### Scenario: Unavailable or skipped processing evidence
+
+- **WHEN** a non-skipped module lacks logs or reports
+- **THEN** its artifact columns SHALL show No Logs or No Report respectively; a skipped module SHALL show neither artifact control
 
 ### Requirement: Blinded Review Across Tabs
 
@@ -51,17 +61,17 @@ In multi-reviewer mode, a reviewer tab SHALL display only the active reviewer's 
 
 ### Requirement: Per-Reviewer Completion Badge
 
-In multi-reviewer mode, each reviewer tab SHALL display an inline completion badge showing non-Neutral verdicts versus total eligible rows for that reviewer in `"N / Total"` format. No Info rows SHALL be excluded from numerator and denominator. The badge SHALL update live as verdicts are set.
+In multi-reviewer mode, each reviewer tab SHALL display an inline completion badge showing non-Neutral verdicts versus total eligible rows for that reviewer in `"N/Total"` format without spaces. No Info rows SHALL be excluded from numerator and denominator. The badge SHALL update live as verdicts are set.
 
 #### Scenario: Badge reflects partial completion
 
 - **WHEN** reviewer `r1` has verdicts for 30 of 50 eligible SubjectSessions and 5 additional rows are No Info
-- **THEN** the `r1` tab SHALL display `"30 / 50"`
+- **THEN** the `r1` tab SHALL display `"30/50"`
 
 #### Scenario: Badge reflects full completion
 
 - **WHEN** reviewer `r1` has verdicts for all 50 eligible SubjectSessions
-- **THEN** the `r1` tab SHALL display `"50 / 50"`
+- **THEN** the `r1` tab SHALL display `"50/50"`
 
 ### Requirement: Derived No-Info Status
 

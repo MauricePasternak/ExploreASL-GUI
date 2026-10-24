@@ -50,31 +50,31 @@ Each `Tabs.Panel` SHALL render its own `QcSelectionTable` instance, subscribed e
 
 ### Requirement: Per-Reviewer Completion Badges
 
-In multi-reviewer mode, each reviewer tab SHALL display a completion badge showing the count of non-Neutral verdicts versus the total eligible subjectSessions (excluding No Info rows). The badge format SHALL be `"N / Total"` where N is the count of subjectSessions with a verdict (`Pass` or `Fail`) and Total is the count of subjectSessions that are NOT `No Info`.
+In multi-reviewer mode, each reviewer tab SHALL display a completion badge showing the count of non-Neutral verdicts versus the total eligible subjectSessions (excluding No Info rows). The badge format SHALL be `"N/Total"` without spaces, where N is the count of subjectSessions with a verdict (`Pass` or `Fail`) and Total is the count of subjectSessions that are NOT `No Info`.
 
 #### Scenario: Badge shows correct counts
 
 - **WHEN** "Reviewer 1" has set 42 verdicts out of 50 eligible subjectSessions (2 are No Info)
-- **THEN** "Reviewer 1"'s tab badge SHALL display `"42 / 50"`
+- **THEN** "Reviewer 1"'s tab badge SHALL display `"42/50"`
 
 #### Scenario: Badge updates on verdict change
 
 - **WHEN** "Reviewer 1" sets a Neutral subjectSession to Pass
-- **THEN** the badge SHALL increment from `"42 / 50"` to `"43 / 50"` without requiring a page reload
+- **THEN** the badge SHALL increment from `"42/50"` to `"43/50"` without requiring a page reload
 
 #### Scenario: No Info rows excluded from badge total
 
 - **WHEN** a project has 52 subjectSessions, 2 of which are No Info, and "Reviewer 1" has set all 50 eligible verdicts
-- **THEN** "Reviewer 1"'s tab badge SHALL display `"50 / 50"`, not `"50 / 52"`
+- **THEN** "Reviewer 1"'s tab badge SHALL display `"50/50"`, not `"50/52"`
 
 ### Requirement: Multi-Reviewer Next Gate
 
-In multi-reviewer mode, the stepper's "Next" button (proceeding from QC Selection) SHALL be disabled unless ALL reviewers have completed all their verdicts (no Neutral remaining for any reviewer, excluding No Info rows). The gate SHALL evaluate across all reviewers, not just the active reviewer.
+In multi-reviewer mode, the stepper's "Next" button (proceeding from QC Selection) SHALL be disabled unless ALL reviewers have completed all their verdicts (no Neutral remaining for any reviewer, excluding No Info rows). The gate SHALL evaluate across all reviewers, not just the active reviewer. Its disabled tooltip SHALL provide generic Neutral/No Info guidance; individual reviewer completion SHALL remain visible in tab badges rather than a reviewer-specific tooltip.
 
 #### Scenario: Next disabled when one reviewer is incomplete
 
 - **WHEN** "Reviewer 1" has completed all 50 verdicts but "Reviewer 2" has 3 remaining Neutral verdicts
-- **THEN** the "Next" button SHALL be disabled and SHALL display a tooltip listing which reviewers have incomplete verdicts (e.g., "Reviewer 2: 3 verdicts remaining")
+- **THEN** the "Next" button SHALL be disabled with tooltip "Resolve all Neutral verdicts or exclude via No Info before proceeding", and Reviewer 2's tab badge SHALL display `"47/50"`
 
 #### Scenario: Next enabled when all reviewers are complete
 

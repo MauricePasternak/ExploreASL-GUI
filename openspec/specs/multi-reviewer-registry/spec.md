@@ -22,7 +22,7 @@ The reviewer registry SHALL enforce a maximum of 5 reviewers. The `addReviewer` 
 
 ### Requirement: Rename Reviewer Action
 
-`projectStore` SHALL expose `renameReviewer(id: string, label: string)`. The action SHALL locate the registry entry by `id`, replace its label only when `label` is nonempty and at most 100 characters, and mark the project dirty after a successful rename. An unknown `id` SHALL be a no-op and SHALL NOT mark the project dirty. Invalid labels SHALL be rejected without changing the registry or dirty state. Renaming SHALL preserve the reviewer's `id`, `createdAt`, verdict slice, and active selection.
+`projectStore` SHALL expose `renameReviewer(id: string, label: string)`. Native acceptance SHALL locate the registry entry by `id` and replace its label only when `label` is nonempty and at most 100 Unicode characters. A successful changed label SHALL mark the project dirty and schedule shared autosave. An unknown `id` SHALL leave accepted configuration and revisions unchanged and schedule no save; submission MAY temporarily mark the client dirty while pending. A submitted invalid label SHALL be rejected without changing the accepted registry or revisions, but the client SHALL expose `saveError` and remain dirty after rejection. Renaming SHALL preserve the reviewer's `id`, `createdAt`, verdict slice, and active selection.
 
 #### Scenario: Valid label renames reviewer and marks project dirty
 
@@ -32,12 +32,12 @@ The reviewer registry SHALL enforce a maximum of 5 reviewers. The `addReviewer` 
 #### Scenario: Empty or oversized label is rejected
 
 - **WHEN** `renameReviewer` is called with an existing reviewer ID and a label that is empty or longer than 100 characters
-- **THEN** the registry and project dirty state SHALL remain unchanged
+- **THEN** native acceptance SHALL reject the edit and preserve the accepted registry and revisions, while the client SHALL expose `saveError` and `isDirty: true`
 
 #### Scenario: Unknown reviewer ID is a no-op
 
 - **WHEN** `renameReviewer` is called with an ID absent from the registry
-- **THEN** no reviewer SHALL be changed and the project SHALL NOT be marked dirty
+- **THEN** no reviewer or accepted revision SHALL change and no autosave SHALL be scheduled; once submission settles, an otherwise clean project SHALL return to clean state
 
 ### Requirement: Implicit Mode Switching
 

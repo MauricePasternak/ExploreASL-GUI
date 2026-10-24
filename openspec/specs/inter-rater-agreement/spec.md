@@ -184,11 +184,13 @@ The `overall` field SHALL contain statistics computed across ALL subjectSessions
 
 When in multi-reviewer mode, the manifest Preview step SHALL display an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. The section SHALL render:
 
-1. **Overall statistics table** with rows: Number of Reviewers, Overall Initial Agreement Rate (as percentage), Kappa (κ) with 95% CI in bracket notation (e.g., `"0.82 [0.71, 0.90]"`), Number of Subjects (n), Subjects Requiring Resolution (count of disagreements).
-2. **Per-group statistics table** with one row per MetadataGroup, each showing: Group Label, n, Initial Agreement Rate (%), Kappa with CI (or "N/A" if `kappa` is `null`).
+1. **Overall statistics table** with rows: Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Kappa (κ) with 95% CI in bracket notation (e.g., `"κ = 0.82 [0.71, 0.90]"`), Number of Subjects (n), Subjects Requiring Resolution (count of disagreements).
+2. **Per-group statistics table** with one row per MetadataGroup, each showing: Group Label, n, Initial Agreement Rate formatted as `"N% (agreed/total)"`, Kappa with CI (or "N/A" if `kappa` is `null`).
 3. **Kappa guidance** beneath the summary: `Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.` The same guidance SHALL appear in Markdown and HTML exports, but not CSV output.
 
 The section SHALL NOT be rendered in single-reviewer mode.
+
+The separate QC Summary Initial Agreement Rate SHALL remain percentage-only. Markdown/HTML agreement exports SHALL include agreed/total counts for the overall rate but SHALL retain percentage-only per-group rates; CSV SHALL retain numeric agreement ratios.
 
 #### Scenario: Agreement section rendered in multi-reviewer mode
 
@@ -203,12 +205,17 @@ The section SHALL NOT be rendered in single-reviewer mode.
 #### Scenario: Kappa displayed with confidence interval
 
 - **WHEN** the computed Kappa is 0.82 with CI [0.71, 0.90]
-- **THEN** the overall statistics table SHALL display `"0.82 [0.71, 0.90]"` in the Kappa row
+- **THEN** the overall statistics table SHALL display `"κ = 0.82 [0.71, 0.90]"` in the Kappa row
 
 #### Scenario: Per-group N/A for small groups
 
 - **WHEN** a MetadataGroup has insufficient data (`kappa: null`)
 - **THEN** the per-group table row for that group SHALL display `"N/A"` in the Kappa column and still display the initial agreement rate
+
+#### Scenario: Per-group preview rate includes counts without changing exports
+
+- **WHEN** a group's single eligible SubjectSession has unanimous reviewer verdicts
+- **THEN** its Inter-Rater Agreement preview row SHALL show `"100% (1/1)"` and Kappa `"N/A"`, its QC Summary and Markdown/HTML per-group rates SHALL show `"100%"`, and its CSV agreement ratio SHALL be `1`
 
 ### Requirement: Pure TypeScript Implementation
 

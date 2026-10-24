@@ -25,9 +25,9 @@ The system SHALL aggregate the `subjectRows` assignments for every `MetadataGrou
 - **WHEN** a `MetadataGroup` exists but zero `subjectRows` reference its `groupId`
 - **THEN** the compiler SHALL NOT output any `StudyPars` blocks corresponding to that group.
 
-#### Scenario: Single-group project always emits explicit regex
+#### Scenario: Single-group project with a shared session profile emits explicit regex
 
-- **WHEN** only one `MetadataGroup` exists (e.g., Global Defaults) with all subjects assigned to it
+- **WHEN** only one `MetadataGroup` exists (e.g., Global Defaults) with at least one assigned subject and all subjects sharing the same session set
 - **THEN** the compiler SHALL emit exactly one `StudyPars` block with explicit `SubjectRegExp` and `VisitRegExp` covering all assigned subjects and their sessions — NOT an empty-regex catch-all.
 
 ### Requirement: Match final staging identifiers
@@ -53,14 +53,19 @@ The `assembleStudyPar` function SHALL accept both `metadataGroups: MetadataGroup
 - **WHEN** `assembleStudyPar` is called
 - **THEN** it SHALL require `subjectRows` as a second argument and SHALL use `subjectRows` to determine which subjects and sessions belong to each `groupId`.
 
-### Requirement: Mutual Exclusion Without Catch-All Fallback
+### Requirement: Explicit Assignment Targets and Invalid Empty Placeholder
 
-The compilation engine SHALL output explicit target regexes indicating the exact membership of its group derived exclusively from the explicitly modeled `subjectRows`. Pushing empty or absent regex dictionary blocks to act as a fallback catch-all is prohibited.
+The compilation engine SHALL output explicit target regexes for assignment-derived blocks, indicating group membership derived exclusively from `subjectRows`. If no rows belong to any supplied metadata group, `assembleStudyPar` SHALL instead return `{ "StudyPars": [{}] }` as an empty placeholder. `StudyParJsonSchema` SHALL reject this placeholder for missing required metadata; it SHALL NOT constitute a valid catch-all or valid studyPar configuration, and studyPar validation SHALL block entry to execution.
 
 #### Scenario: Outputting a global default group without empty regex fallback
 
-- **WHEN** `assembleStudyPar` processes the global defaults group payload
+- **WHEN** `assembleStudyPar` processes the global defaults group payload with assigned subject rows
 - **THEN** it SHALL extract all the explicitly checked assignment strings from `subjectRows` belonging to it and output constrained parameters with explicit `SubjectRegExp` and `VisitRegExp` values.
+
+#### Scenario: No assigned groups produce an invalid placeholder
+
+- **WHEN** `assembleStudyPar` receives no groups and no rows, or none of the supplied groups has assigned rows
+- **THEN** it SHALL return `{ "StudyPars": [{}] }`, and `StudyParJsonSchema` SHALL reject that output rather than accept it as a valid studyPar configuration
 
 ### Requirement: Group Representation Without Group-Level Regexes
 

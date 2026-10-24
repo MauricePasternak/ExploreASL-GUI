@@ -38,17 +38,29 @@ The Verdict Resolution step SHALL be omitted entirely when reviewers are unanimo
 
 ### Requirement: Manifest Phase Access Gate
 
-`canAccessPhase` SHALL treat the `"manifest"` phase identically to `"visualization"` — access SHALL be granted iff `project.uiState?.processing?.population?.completed === true`. The `manifest` phase SHALL NOT be independently selectable without that flag.
+`canAccessPhase` SHALL determine Manifest access by membership in the native snapshot's `allowedPhases`. Native access SHALL include the project's current phase (including a restored saved phase) and all earlier phases; access to Manifest as a later phase SHALL require `project.uiState?.processing?.population?.completed === true`. A saved current Manifest phase SHALL remain allowed even when Population completion is false.
+
+Separately, while processing is `preparing`, `running`, `finalizing`, or `cancelling`, the Manifest nav button SHALL be disabled and direct Manifest navigation SHALL redirect away, regardless of native phase access or Population completion.
 
 #### Scenario: Manifest nav disabled before Population completion
 
-- **WHEN** the user opens a project whose `uiState.processing.population.completed` is falsy
+- **WHEN** the user opens a project saved before Manifest whose `uiState.processing.population.completed` is falsy
 - **THEN** `canAccessPhase(project, "manifest")` SHALL return `false`, and the `Layout` component SHALL render the Manifest nav button in a disabled state
 
 #### Scenario: Manifest nav enabled after Population completion
 
-- **WHEN** `setPopulationCompleted(true)` is called by `processingStore` after a successful Population run
+- **WHEN** an accepted native snapshot reports Population completion and no import or processing operation is active
 - **THEN** `canAccessPhase(project, "manifest")` SHALL return `true`, and the Manifest nav button SHALL become clickable
+
+#### Scenario: Saved Manifest remains allowed without Population completion
+
+- **WHEN** a project reopens with saved current phase Manifest, Population completion false, and no active processing
+- **THEN** `canAccessPhase(project, "manifest")` SHALL return `true` from native `allowedPhases`
+
+#### Scenario: Active processing blocks an otherwise allowed Manifest
+
+- **WHEN** native `allowedPhases` includes Manifest and processing is preparing, running, finalizing, or cancelling
+- **THEN** the Manifest nav button SHALL be disabled and a direct Manifest route SHALL redirect to Processing when the project's current phase is Manifest or Visualization, otherwise to the current phase
 
 ### Requirement: Manifest Nav Entry And Route
 
@@ -56,27 +68,27 @@ The `PHASE_NAV` array in `src/components/Layout.tsx` SHALL contain a 5th entry w
 
 #### Scenario: Nav button click navigates to manifest phase
 
-- **WHEN** a user with `processing.population.completed === true` clicks the Manifest nav button
+- **WHEN** native phase access permits Manifest, no import or processing operation is active, and the user clicks the Manifest nav button
 - **THEN** the route SHALL transition to `/project/<id>/manifest` and the `ManifestPage` component SHALL mount
 
 #### Scenario: Direct URL entry blocked by gate
 
-- **WHEN** a user manually navigates to `/project/<id>/manifest` on a project where `processing.population.completed` is falsy
-- **THEN** `Layout` SHALL redirect to the highest reachable phase (visualization or earlier) and the `ManifestPage` SHALL NOT mount
+- **WHEN** a user manually navigates to `/project/<id>/manifest` and native `allowedPhases` excludes Manifest
+- **THEN** `ProjectPage` SHALL redirect to the project's current phase, or to Processing if the current phase is Visualization or Manifest
 
-### Requirement: Manifest Phase Help Drawer Content
+### Requirement: Manifest Phase Help Content
 
-The `HELP_DATA` map in `src/components/PageHelpButton.tsx` SHALL contain an entry keyed by the `manifest` phase. The help content SHALL include, at minimum, a title, a goal paragraph describing QC verdict capture and manifest export, and an explicit warning stating that re-running the Population module locks the user out of the Manifest phase until the new run completes. In multi-reviewer mode, the help content SHALL additionally mention reviewer management and the blinded verdict-resolution workflow.
+The `HELP_DATA` map in `src/components/common/PageHelpButton.tsx` SHALL contain a static, reviewer-independent entry keyed by the `manifest` phase. The help modal SHALL include a title, a goal paragraph describing QC verdict capture and Markdown/HTML export, guidance about Neutral verdicts, the four core preview sections (Study Parameters, Software Manifest, QC Summary, Pipeline Summary), and an explicit warning stating that re-running Population locks the phase until the new run completes. Help content SHALL remain the same for single- and multi-reviewer projects rather than adding mode-specific reviewer-management or resolution guidance.
 
-#### Scenario: Help drawer opens with re-run lockout warning
+#### Scenario: Help modal opens with re-run lockout warning
 
 - **WHEN** a user clicks the page help button on the `/project/:id/manifest` route
-- **THEN** the drawer SHALL open and SHALL visibly contain the phrase "re-running" (or a semantically equivalent warning) inside the manifest phase's help text
+- **THEN** the modal SHALL open and SHALL visibly contain the phrase "re-running" (or a semantically equivalent warning) inside the manifest phase's help text
 
-#### Scenario: Help drawer mentions multi-reviewer workflow
+#### Scenario: Help remains reviewer-independent
 
-- **WHEN** the help drawer is opened and the project has multiple reviewers
-- **THEN** the help text SHALL contain guidance about reviewer tabs, blinded review, and verdict resolution
+- **WHEN** the help modal is opened in a project with multiple reviewers
+- **THEN** it SHALL show the same QC Selection, four-core-section preview, Markdown/HTML export, and Population re-run guidance as a single-reviewer project
 
 ### Requirement: Current project phase ordering
 

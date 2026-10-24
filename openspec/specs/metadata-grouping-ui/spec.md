@@ -8,12 +8,12 @@ Define metadata grouping display and assignment behavior during import.
 
 ### Requirement: Dynamic Display of Group Assignments
 
-The `MetadataGrouping` component SHALL dynamically compute the number of subjects and sessions assigned to each group by filtering the current `subjectRows` state array and SHALL display a read-friendly summary string in the "Scope / Target" column.
+The `MetadataGrouping` component SHALL filter the current `subjectRows` state array by group and independently count distinct subject labels and distinct session labels for the "Scope / Target" summary. The session count SHALL NOT count subject-session rows or sum sessions across subjects.
 
 #### Scenario: Displaying calculated assignments
 
-- **WHEN** a metadata group has 2 unique subjects mapping to 3 total sessions assigned to it in `subjectRows`
-- **THEN** the UI list SHALL display "Assigned to 2 subjects (3 sessions)" instead of a regex string.
+- **WHEN** a metadata group has assigned rows `A/01`, `B/01`, and `B/02` in `subjectRows`
+- **THEN** the UI list SHALL display "Assigned to 2 subjects (2 sessions)" instead of a regex string.
 
 ### Requirement: Override Group Creation Without Regex Fields
 

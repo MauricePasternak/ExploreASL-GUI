@@ -12,12 +12,12 @@ The "Select Data" step SHALL provide a "Browse..." button that opens a native fi
 
 #### Scenario: User selects external CSV file
 
-- **WHEN** the user clicks "Browse..." and selects `/home/user/covariates.csv`
+- **WHEN** no external file is configured and the user clicks "Browse..." and selects `/home/user/covariates.csv`
 - **THEN** `joinConfig.externalSource.absolutePath` SHALL be set to `/home/user/covariates.csv` and `inspect_external_data` SHALL be called to populate the column from external data list
 
 #### Scenario: User selects external xlsx file
 
-- **WHEN** the user clicks "Browse..." and selects `/home/user/data.xlsx`
+- **WHEN** no external file is configured and the user clicks "Browse..." and selects `/home/user/data.xlsx`
 - **THEN** `joinConfig.externalSource.absolutePath` SHALL be set to `/home/user/data.xlsx`, `inspect_external_data` SHALL be called, and the first sheet SHALL be used for inspection
 
 #### Scenario: No external file selected
@@ -32,7 +32,7 @@ The "Select Data" step SHALL provide a "Browse..." button that opens a native fi
 
 ### Requirement: External Data Inspection Command
 
-A Rust command `inspect_external_data` SHALL accept `absolutePath: String` and `delimiter: Option<String>` (where `None` or `Some("auto")` triggers auto-detection) and return an `ExternalDataInspection` object containing: `columns` (array of `{ name, inferredType, levels, isIdentifier }`), `rowCount`, `fileHash` (SHA-256 hex string), and `sheetName` (the first sheet name for xlsx, `null` for CSV/TSV). The command SHALL NOT cache data in `AppState` — it is a preview for join configuration. Type inference SHALL classify columns as `"continuous"`, `"ordinal"`, or `"nominal"` using the same logic as qCBF inspection. All column from external datas SHALL have `isIdentifier: false`. For xlsx files, the command SHALL read only the first sheet. For CSV files, if delimiter is set to a specific value (e.g. `","`, `"\t"`, `";"`), the command SHALL use that delimiter; otherwise, the command SHALL auto-detect the delimiter by counting commas, semicolons, and tabs in the first non-empty line and selecting the most frequent. If a join configuration is already active, the external data file SHALL be automatically inspected on component mount/render using `inspect_external_data`, with deduplication based on path, hash, and delimiter to prevent redundant API calls.
+A Rust command `inspect_external_data` SHALL accept `absolutePath: String`, optional `sheetName`, and `delimiter: Option<String>` (where `None` or `Some("auto")` triggers auto-detection) and return an `ExternalDataInspection` object containing: `columns` (array of `{ name, inferredType, levels, isIdentifier }`), `rowCount`, `fileHash` (SHA-256 hex string), and `sheetName` (the inspected sheet name for xlsx, `null` for CSV/TSV). The command SHALL NOT cache data in `AppState` — it is a preview for join configuration. Generic type inference SHALL classify columns as `"continuous"` or `"nominal"` using fixed missing-value rules from `data-vis-contract`, without accepting configured `naTokens`. All external columns SHALL have `isIdentifier: false`. For xlsx files, inspection SHALL read the supplied sheet or the first sheet when omitted; the file-selection UI SHALL omit `sheetName` and inspect the first sheet. For CSV files, an explicit comma, tab, or semicolon delimiter SHALL be used; otherwise, detection SHALL count those characters in the first physical line, without skipping blank lines. Semicolon or tab SHALL be selected only when its count strictly exceeds both others; all other cases SHALL select comma. If a join configuration is already active, the external data file SHALL be automatically inspected on component mount/render using `inspect_external_data`, with deduplication based on path, hash, and delimiter to prevent redundant API calls.
 
 #### Scenario: Inspect CSV file
 
@@ -41,13 +41,18 @@ A Rust command `inspect_external_data` SHALL accept `absolutePath: String` and `
 
 #### Scenario: Inspect xlsx file with multiple sheets
 
-- **WHEN** `inspect_external_data` is called with a path to an xlsx file with sheets `["Metadata", "Data", "Notes"]`
+- **WHEN** `inspect_external_data` is called without `sheetName` for an xlsx file with sheets `["Metadata", "Data", "Notes"]`
 - **THEN** the command SHALL read only the first sheet (`"Metadata"`) and `sheetName` SHALL be `"Metadata"`
 
 #### Scenario: CSV with semicolon delimiter
 
-- **WHEN** `inspect_external_data` is called with a CSV file whose first line contains 5 semicolons and 0 commas
+- **WHEN** `inspect_external_data` uses automatic delimiter detection for a CSV file whose first line contains 5 semicolons, 0 commas, and 0 tabs
 - **THEN** the command SHALL parse using semicolon as the delimiter
+
+#### Scenario: Delimiter detection uses first physical line
+
+- **WHEN** automatic CSV delimiter detection receives an empty first physical line or tied maximum delimiter counts
+- **THEN** its selected delimiter SHALL be comma; detection SHALL NOT inspect a later non-empty line
 
 #### Scenario: External file not found
 
@@ -56,7 +61,7 @@ A Rust command `inspect_external_data` SHALL accept `absolutePath: String` and `
 
 ### Requirement: Join Key Pair Configuration
 
-The join configuration UI SHALL present key-pair rows, each containing a left dropdown (listing qCBF identifier columns: `participant_id`, `subject`, `session`, `run`) and a right dropdown (listing all column from external datas). The user SHALL add key pairs via an "Add key pair" button and remove individual pairs via a remove button per row. Key pairs SHALL be stored cohesively as an array of objects: `keys: Array<{ left: string, right: string }>`. At least one key pair with both left and right columns selected SHALL be required before the join can be executed. `left` SHALL be restricted to identifier columns only — non-identifier column from qCBF datas SHALL NOT appear in the left dropdown. `right` SHALL allow any column from external data.
+The join configuration UI SHALL present key-pair rows, each containing a left dropdown (listing available qCBF identifier columns: `participant_id`, `subject`, `session`, `run`) and a right dropdown (listing all external columns). The user SHALL add key pairs via an "Add key pair" button and remove individual pairs via a remove button per row. Key pairs SHALL be stored cohesively as `keys: Array<{ left: string, right: string }>`. Select Data SHALL execute a join only when the list is non-empty and every pair has both columns selected. Empty or incomplete pairs SHALL NOT themselves disable Next; advancing in those cases SHALL retain the current inspection without executing a join. `left` SHALL be restricted to available identifier columns only, while `right` SHALL allow any external column.
 
 #### Scenario: Single key pair join
 
@@ -68,20 +73,20 @@ The join configuration UI SHALL present key-pair rows, each containing a left dr
 - **WHEN** the user configures two key pairs: `keys` set to `[{ left: "subject", right: "Subject" }, { left: "session", right: "Visit" }]`
 - **THEN** the join SHALL match rows where `subject` equals `Subject` AND `session` equals `Visit`
 
-#### Scenario: Key pair incomplete prevention
+#### Scenario: Incomplete key pair skips join execution
 
-- **WHEN** the user has configured key pairs but at least one pair is incomplete (either `left` or `right` is empty)
-- **THEN** the "Next" button SHALL be disabled with message: "Key pair columns must be selected on both sides"
+- **WHEN** inspection exists, the configured external source is available, and at least one key pair is incomplete
+- **THEN** Next SHALL remain enabled and clicking it SHALL advance to Column Types with the current inspection, without calling `execute_join`
 
 #### Scenario: No key pairs configured
 
-- **WHEN** no key pairs are configured and the user attempts to proceed
-- **THEN** the "Next" button SHALL be disabled with message: "Add at least one key pair to configure the join"
+- **WHEN** inspection exists, the configured external source is available, and no key pairs are configured
+- **THEN** Next SHALL remain enabled and clicking it SHALL advance with the current inspection, without calling `execute_join`
 
 #### Scenario: Non-identifier column excluded from left dropdown
 
 - **WHEN** the left dropdown is rendered
-- **THEN** only `participant_id`, `subject`, `session`, and `run` SHALL be listed — non-identifier columns like `Total_GM_B` SHALL NOT appear
+- **THEN** only available columns among `participant_id`, `subject`, `session`, and `run` SHALL be listed — non-identifier columns like `Total_GM_B` SHALL NOT appear
 
 ### Requirement: Join Execution Command
 
@@ -153,22 +158,22 @@ The join configuration SHALL persist to `uiState.dataVis.joinConfig` in the `.ea
 
 ### Requirement: Graphical Join Diagram
 
-The "Select Data" step SHALL render a side-by-side join diagram when an external file is selected and at least one key pair is configured. The left box SHALL display the qCBF filename, its qCBF columns (filtered to columns originating from qCBF data, using their original column names before any suffixes are applied, and showing their key-pair columns visually aligned to their external counterparts), and a row count. The right box SHALL display the external filename, its columns, and a row count. A "LEFT JOIN" label SHALL appear between the boxes. Key-pair columns SHALL be connected by visual connector lines indicating positional pairing. Non-key columns SHALL be listed without connectors. Hovering a key-pair column SHALL highlight its counterpart. The diagram SHALL use only Mantine components and CSS — no external diagramming library.
+The "Select Data" step SHALL render a side-by-side join diagram when qCBF/external inspections exist and at least one complete key pair is configured. The left box SHALL display the qCBF filename, columns filtered to qCBF source using their original names before suffixing, and the original qCBF row count. The right box SHALL display the external filename, columns, and row count. A central left arrow and "LEFT JOIN" label SHALL appear between the boxes. Configured key names SHALL be statically emphasized in blue on the left and grape on the right; non-key names SHALL be dimmed. The diagram SHALL NOT align individual pairs, draw per-pair connector lines, or add hover-linked highlighting. It SHALL use Mantine components, CSS, and the arrow icon without an external diagramming library.
 
 #### Scenario: Diagram renders with join configured
 
 - **WHEN** the user has selected an external file and configured one key pair
-- **THEN** the diagram SHALL show two boxes side-by-side with the key-pair columns connected by a visual line
+- **THEN** the diagram SHALL show two boxes side-by-side, a central LEFT JOIN arrow, and statically emphasized key-column names
 
 #### Scenario: Diagram shows row counts
 
 - **WHEN** the qCBF file has 2000 rows and the external file has 1800 rows
 - **THEN** the left box SHALL display "2,000 rows" and the right box SHALL display "1,800 rows"
 
-#### Scenario: Hover highlights paired column
+#### Scenario: Key-column emphasis is static
 
-- **WHEN** the user hovers over `participant_id` in the left box (paired with `SubjectSession` in the right box)
-- **THEN** `SubjectSession` in the right box SHALL be highlighted
+- **WHEN** `participant_id` is paired with `SubjectSession`
+- **THEN** both names SHALL be emphasized without requiring hover or drawing a line between them
 
 #### Scenario: No diagram without external file
 
@@ -177,12 +182,12 @@ The "Select Data" step SHALL render a side-by-side join diagram when an external
 
 ### Requirement: Join Sanity Checks
 
-After at least one key pair is configured, sanity checks SHALL run automatically and display results as badges below the join diagram. A Rust command `check_join_sanity` SHALL accept the same arguments as `execute_join` (except `dropRightOn`). The checks SHALL be: (1) Key overlap — count of distinct qCBF value combinations across the configured `left` keys that exist in the external `right` key columns. If zero overlap, the "Next" button SHALL be disabled with message: "No matching values between join columns. Check that keys correspond." (2) Unmatched left rows — count of qCBF rows whose `left` key values have no match in external data. Displayed as an informational warning badge, not blocking. (3) Left key uniqueness — if `left` key value combinations are not unique in qCBF data, display warning: "Left keys are not unique — rows will be duplicated. Consider adding session/run to the join key." (4) Right key uniqueness — if `right` key value combinations are not unique in external data, display warning: "Right keys are not unique — cartesian expansion will occur." Checks SHALL run after key-pair configuration changes, not on a button press.
+When the diagram is available, sanity checks SHALL run automatically on the complete configured key pairs and display badges or alerts below it. A Rust command `check_join_sanity` SHALL accept the same arguments as `execute_join` (except `dropRightOn`). The checks SHALL be: (1) Key overlap — count of distinct qCBF key combinations found in the external keys; zero overlap SHALL show a red alert: "No matching values between join columns. Check that keys correspond." (2) Unmatched left rows — count of qCBF rows without an external match, displayed as an informational warning badge. (3) Left key uniqueness — duplicate qCBF keys SHALL show "Left keys are not unique — rows will be duplicated. Consider adding session/run to the join key." (4) Right key uniqueness — duplicate external keys SHALL show "Right keys are not unique — cartesian expansion will occur." Checks SHALL rerun after configuration changes without a button press. Results SHALL be advisory only and SHALL NOT control Next readiness.
 
-#### Scenario: Zero key overlap blocks progression
+#### Scenario: Zero key overlap warns without blocking progression
 
 - **WHEN** the key overlap check finds zero matching value combinations between `left` and `right` keys
-- **THEN** the "Next" button SHALL be disabled with message: "No matching values between join columns. Check that keys correspond."
+- **THEN** a red alert SHALL show "No matching values between join columns. Check that keys correspond." without disabling Next; with inspection and external availability ready, a complete-key join SHALL still execute
 
 #### Scenario: Unmatched left rows shown as warning
 
@@ -192,21 +197,21 @@ After at least one key pair is configured, sanity checks SHALL run automatically
 #### Scenario: Non-unique left keys warning
 
 - **WHEN** the left keys consist of only `["subject"]` and multiple rows share the same subject (different sessions)
-- **THEN** a warning badge SHALL display: "Left keys are not unique — rows will be duplicated. Consider adding session/run to the join key."
+- **THEN** a warning alert SHALL display: "Left keys are not unique — rows will be duplicated. Consider adding session/run to the join key."
 
 #### Scenario: Non-unique right keys warning
 
 - **WHEN** the right key consists of only `["SubjectID"]` and the external file has duplicate SubjectID values
-- **THEN** a warning badge SHALL display: "Right keys are not unique — cartesian expansion will occur."
+- **THEN** a warning alert SHALL display: "Right keys are not unique — cartesian expansion will occur."
 
 #### Scenario: All checks pass
 
 - **WHEN** key overlap is non-zero, left keys are unique, and right keys are unique
-- **THEN** a success badge SHALL display: "All checks passed" and the "Next" button SHALL be enabled
+- **THEN** a success badge SHALL display "All checks passed", while Next readiness SHALL continue to depend on inspection and external availability
 
 ### Requirement: NA Token Configuration
 
-The "Select Data" step SHALL display a "Missing values" section (visible only when an external file is selected) with a `TagsInput` pre-filled with default tokens: `["", "NaN", "NA", "n/a", "<NA>"]`. The user SHALL add custom tokens (e.g., `-9999`, `null`) and remove default tokens. The configured tokens SHALL be passed to `execute_join` and used for NA detection in the external file only — qCBF missing-value handling SHALL remain unchanged. If all tokens are cleared, a warning SHALL display: "No NA tokens specified — all values treated as present."
+The "Select Data" step SHALL display a "Missing values" section (visible only when an external file is selected) with a `TagsInput` pre-filled with default tokens: `["", "NaN", "NA", "n/a", "<NA>"]`. The user SHALL add custom tokens (e.g., `-9999`, `null`) and remove default tokens. Configured tokens SHALL be passed to `execute_join` and `check_join_sanity` to normalize matching external row values to empty strings; qCBF handling SHALL remain unchanged. Preview and joined column metadata SHALL still use raw external inspection and fixed missing-value rules, not configured tokens. Frontend chart missing checks SHALL likewise use fixed rules on returned rows. If all tokens are cleared, the UI SHALL display "No NA tokens specified — all values treated as present." This warning SHALL NOT alter fixed inference or chart missing-value checks.
 
 #### Scenario: Default NA tokens shown
 
@@ -217,6 +222,11 @@ The "Select Data" step SHALL display a "Missing values" section (visible only wh
 
 - **WHEN** the user adds `-9999` to the NA tokens
 - **THEN** `-9999` SHALL be included in `naTokens` passed to `execute_join`
+
+#### Scenario: Custom string token does not change metadata inference
+
+- **WHEN** an external column contains `[45, 50, "<NA>", 60]` and `naTokens` includes `"<NA>"`
+- **THEN** joined rows SHALL normalize `"<NA>"` to an empty string, but preview and joined metadata SHALL retain nominal inference from the raw column
 
 #### Scenario: All NA tokens cleared
 
@@ -237,20 +247,6 @@ A checkbox labeled "Drop join-key columns from external data (recommended)" SHAL
 - **WHEN** the user unchecks the drop toggle and `rightOn` is `["SubjectID"]`
 - **THEN** the `SubjectID` column SHALL appear in the merged result
 
-### Requirement: Large Dataset Warning
-
-When the merged `rowCount` exceeds 100,000, a warning SHALL display below the join diagram: "Large dataset (N rows). Chart rendering may be slow." This warning SHALL be informational only and SHALL NOT block progression.
-
-#### Scenario: Warning displayed for large dataset
-
-- **WHEN** `execute_join` returns a merged `rowCount` of 150,000
-- **THEN** a warning SHALL display: "Large dataset (150,000 rows). Chart rendering may be slow."
-
-#### Scenario: No warning for small dataset
-
-- **WHEN** `execute_join` returns a merged `rowCount` of 2,000
-- **THEN** no large dataset warning SHALL display
-
 ### Requirement: File Change Invalidation on qCBF Change
 
 When the user changes the qCBF file selection, `joinConfig` SHALL be set to `null`, all contract fields (`columnTypes`, `levelOrderings`, `axisAssignment`, `stage`) SHALL be reset, and `load_qcbf_data` SHALL re-run for the new file. This is a full contract invalidation — no join configuration or column overrides are preserved.
@@ -262,26 +258,31 @@ When the user changes the qCBF file selection, `joinConfig` SHALL be set to `nul
 
 ### Requirement: File Change Invalidation on External File Change
 
-When the user changes the external file (picks a different file via "Browse..."), `joinConfig.externalSource` SHALL be updated to the new file's `{ absolutePath, fileHash, sheetName }` (where `sheetName` is the first sheet name for xlsx, `null` for CSV/TSV), the `keys` list SHALL be reset to an empty list `[]` (forcing the user to re-configure the Join Keys section completely), `naTokens` SHALL be preserved (user preference, schema-independent), `delimiter` SHALL be preserved, and `dropRightOn` SHALL be preserved.
+External replacement SHALL be content-hash based, not path based. When the selected replacement matches the saved hash, its source path SHALL be updated without clearing join keys or dependent setup, following `data-vis-contract`. Different content SHALL require confirmation before adoption. On confirmation, `joinConfig.externalSource` SHALL adopt `{ absolutePath, fileHash, sheetName }`, `keys` SHALL reset to `[]`, and dependent column types, identifiers, level orderings, axes, filters, stage, and transient chart/viewer setup SHALL reset. `naTokens`, `delimiter`, and `dropRightOn` SHALL be preserved. Cancellation SHALL leave saved configuration unchanged. Accepted replacement edits SHALL use shared autosave.
 
-#### Scenario: Changing external file resets keys and preserves preferences
+#### Scenario: Confirming changed external content resets keys and preserves preferences
 
-- **WHEN** the user picks a different external file while `keys` is `[{ left: "subject", right: "Subject" }, { left: "session", right: "Visit" }]` and `naTokens` includes `-9999`
+- **WHEN** the user confirms adoption of a different-hash external file while `keys` is `[{ left: "subject", right: "Subject" }, { left: "session", right: "Visit" }]` and `naTokens` includes `-9999`
 - **THEN** `keys` SHALL become `[]`, `naTokens` SHALL remain including `-9999`
+
+#### Scenario: Different path with matching content preserves setup
+
+- **WHEN** the user chooses a replacement at a different absolute path with the saved content hash
+- **THEN** the source path SHALL update without a reset confirmation or clearing join keys, column types, level orderings, axes, filters, or saved stage
 
 #### Scenario: Changing external file updates sheetName
 
-- **WHEN** the user picks a different external file (e.g., from a CSV to an xlsx with first sheet named "Data")
+- **WHEN** the user confirms a different-hash external file (e.g., from a CSV to an xlsx with first sheet named "Data")
 - **THEN** `joinConfig.externalSource.sheetName` SHALL be updated to `"Data"` — the old file's `sheetName` SHALL NOT persist
 
 ### Requirement: Removing External File Mid-Session
 
-When the user removes the external file selection (deselects or clears it), `joinConfig` SHALL be set to `null`, `load_qcbf_data` SHALL re-run for the current qCBF file, `inspection` SHALL revert to qCBF-only columns, and `columnTypes`, `levelOrderings`, `axisAssignment` SHALL be reset. The stepper SHALL remain on the "selectData" stage — the user is already on this step when they click "Remove", and they may want to pick a different external file or proceed without one. (Note: the grill session Q11 originally specified resetting to "columnTypes", but that was agreed before the Q12 stage rename from "selectFile" to "selectData". In the old "selectFile" model, jumping to "columnTypes" after removal made sense since file selection was trivial. In the broader "selectData" model that includes join config, the user should stay on "selectData" to optionally reconfigure.)
+When the user clicks Remove on Select Data, `joinConfig` SHALL be set to `null` and persisted, external-source availability SHALL become unconfigured, and the local external preview/inspection marker SHALL clear. Removal SHALL NOT call `load_qcbf_data`, replace the current store inspection or backend cache, or reset column types, level orderings, axes, or filters. The stepper SHALL remain on Select Data. A subsequent no-join Next SHALL advance using that current inspection without reloading qCBF-only data.
 
-#### Scenario: Removing external file reverts to qCBF-only
+#### Scenario: Removing external file preserves current loaded data
 
-- **WHEN** the user removes the external file while on Column Types step
-- **THEN** `joinConfig` SHALL be `null`, `inspection` SHALL show qCBF-only columns, and contract fields SHALL be reset
+- **WHEN** the user returns from Column Types to Select Data and removes the external file after a join
+- **THEN** `joinConfig` SHALL be `null`, but current merged inspection, dependent settings, and backend cached rows SHALL remain until a later load replaces them; Next SHALL advance without a reload
 
 ### Requirement: External File mtime Re-Validation
 
@@ -304,26 +305,31 @@ On Tauri window focus, if `joinConfig` is active, the system SHALL stat the exte
 
 ### Requirement: Join Execution on Step Advance
 
-When the user clicks "Next" from the "Select Data" step with `joinConfig` active (external file selected and at least one key pair configured), `execute_join` SHALL be called to produce the merged schema. The returned `DataInspection` SHALL replace `inspection` in the store, `AppState.active_data` SHALL be replaced with the merged result, and the stepper SHALL advance to "Column Types". When `joinConfig` is `null` (no external file selected), the stepper SHALL advance directly to "Column Types" using the qCBF-only `inspection` already populated by `load_qcbf_data` — `execute_join` SHALL NOT be called. The "Next" button SHALL be disabled when: no qCBF file is selected, no key pairs are configured despite `joinConfig` being active, any key pair is incomplete (either `left` or `right` is empty/unselected), or the key overlap sanity check finds zero matches.
+On Select Data, Next SHALL be disabled only when no inspection is loaded or a configured external source is not available. Key completeness and sanity results SHALL NOT disable it. With a current project and qCBF source, clicking Next SHALL call `execute_join` only if `joinConfig` has a non-empty key list and every pair is complete. On success, the returned `DataInspection` SHALL replace store inspection, `AppState.active_data` SHALL contain the merged result, column types SHALL reset to inference, level orderings/axes SHALL clear, and stage SHALL advance to Column Types. Join failure SHALL show an error without advancing. With no join config, empty keys, or any incomplete pair, Next SHALL advance using the current inspection without calling `execute_join` or `load_qcbf_data`; that inspection MAY still contain a previous join after external removal.
 
 #### Scenario: Next with join configured triggers execute_join
 
-- **WHEN** the user has selected a qCBF file, configured an external file with key pairs, and clicks "Next"
+- **WHEN** the user has selected a qCBF file, configured an available external file with a non-empty list of complete key pairs, and clicks "Next"
 - **THEN** `execute_join` SHALL be called, `inspection` SHALL be replaced with the merged `DataInspection`, `active_data` SHALL be replaced with the merged result, and the stepper SHALL advance to "Column Types"
 
 #### Scenario: Next without join advances directly
 
 - **WHEN** the user has selected a qCBF file with no external file (`joinConfig` is `null`) and clicks "Next"
-- **THEN** the stepper SHALL advance to "Column Types" using the existing qCBF-only `inspection` — `execute_join` SHALL NOT be called
+- **THEN** the stepper SHALL advance to "Column Types" using the current `inspection` — neither `execute_join` nor `load_qcbf_data` SHALL be called
 
-#### Scenario: Next disabled when key pairs incomplete
+#### Scenario: Next with incomplete keys advances without joining
 
-- **WHEN** `joinConfig` is active but some key pairs have unselected fields (either `left` or `right` is empty)
-- **THEN** the "Next" button SHALL be disabled
+- **WHEN** inspection exists and the external source is available, but some key pairs have unselected fields
+- **THEN** Next SHALL be enabled and SHALL advance without joining or resetting the current inspection/settings
+
+#### Scenario: External source unavailable blocks Next
+
+- **WHEN** `joinConfig` exists and external-source availability is not `available`
+- **THEN** Next SHALL be disabled regardless of key completeness or sanity results
 
 ### Requirement: Join Config Change Re-Execution
 
-When the user navigates back from "Column Types" to "Select Data", modifies any join configuration parameter (key pairs, `dropRightOn`, `naTokens`, `delimiter`, or external file), then navigates forward again, `execute_join` SHALL re-run with the updated configuration. The previous merged `inspection` and `AppState.active_data` SHALL be replaced wholesale — no partial preservation of column type overrides, level orderings, or axis assignments SHALL occur. This is a schema-level change: the merged column set may differ, making user overrides on potentially-removed columns meaningless.
+Whenever the user advances from Select Data with an available external source and a non-empty list of complete key pairs, `execute_join` SHALL run with the current configuration, whether or not settings changed during back navigation. On success, merged inspection/cache SHALL be replaced wholesale, column types SHALL reset to inference, and level orderings/axes SHALL clear. Configuration edits alone SHALL NOT reload the cache. Empty/incomplete key lists and external removal SHALL instead use the no-join advance behavior above.
 
 #### Scenario: Back-navigation with join key change re-runs execute_join
 
@@ -359,7 +365,7 @@ A Rust command `stat_file` SHALL accept `path: String` and return a `FileStats` 
 The `AppState.active_data: Mutex<Option<ActiveData>>` slot SHALL serve as the single unified data cache for both qCBF-only and join-active flows. The following invariants SHALL hold:
 
 1. **Always populated when needed**: `active_data` SHALL be populated (non-`None`) whenever the "Column Types" or "Visualize" step is active — `read_data_columns` SHALL never encounter an empty cache during these steps.
-2. **Wholesale replacement**: `active_data` SHALL be replaced entirely on any file selection change, join execution, or join config change — no partial updates SHALL occur.
+2. **Wholesale replacement on load**: Successful `load_qcbf_data` and `execute_join` operations SHALL replace `active_data` entirely, not partially update it. Join configuration edits, external preview inspection, matching-hash relinking, and external removal SHALL NOT themselves replace the backend cache.
 3. **One slot per project**: Exactly one `ActiveData` entry SHALL exist per project. The cache SHALL be cleared (`None`) when the active project changes via `set_active_project` or `clear_active_project`.
 4. **No disk I/O on read**: `read_data_columns` SHALL read exclusively from the in-memory cache — it SHALL NOT touch disk.
 5. **Frontend hash validation**: Hash comparison SHALL occur in the frontend after `load_qcbf_data` or `execute_join` returns — Rust SHALL return hashes, the frontend SHALL compare them against persisted values.

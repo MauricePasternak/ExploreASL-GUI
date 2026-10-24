@@ -6,7 +6,7 @@ Define editing and serialization of ExploreASL dataPar configuration.
 
 ### Requirement: DataPar parameter state schema
 
-The system SHALL represent supported flat DataPar settings through the shared current project contract with optional fields named exactly as ExploreASL requires. Known types, numeric flag representations, array sizes, and supported ranges SHALL validate before configuration acceptance. Unknown loose scientific extension keys SHALL survive. UI panels SHALL remain M0, Quantification, General Settings, ASL Processing, Atlases, Structural, and Environment. Form placeholders SHALL not inject processing defaults; ordinary editing SHALL not require a complete execution-ready configuration.
+The system SHALL represent supported flat DataPar settings through the shared current project contract with optional fields named exactly as ExploreASL requires. Known types, numeric flag representations, array sizes, and supported ranges SHALL validate before configuration acceptance. Unknown loose scientific extension keys SHALL survive `.easl` project load, accepted edits, save, and reopen; this persistence guarantee SHALL NOT imply inclusion in nested outbound processing JSON, whose assembly enumerates supported keys only. UI panels SHALL remain M0, Quantification, General Settings, ASL Processing, Atlases, Structural, and Environment. Form placeholders SHALL not inject processing defaults; ordinary editing SHALL not require a complete execution-ready configuration.
 
 #### Scenario: Empty state produces minimal JSON
 
@@ -17,6 +17,12 @@ The system SHALL represent supported flat DataPar settings through the shared cu
 
 - **WHEN** only `bTopUp` is explicitly true
 - **THEN** existing scientific assembly SHALL produce `{ "x": { "modules": { "asl": { "bTopUp": true } } } }`
+
+#### Scenario: Scientific extension survives project persistence only
+
+- **WHEN** a project contains unknown `dataPar.vendor = { "nested": [true, null, 3] }` and the user edits a supported field, saves, and reopens
+- **THEN** `.easl` SHALL retain the unknown extension unchanged
+- **AND** `assembleDataPar` SHALL NOT include that unknown key in the outbound nested processing JSON
 
 ### Requirement: Field metadata constant
 
@@ -41,7 +47,12 @@ FSL help SHALL describe the GUI's initially on display and MATLAB's default auto
 
 ### Requirement: M0 field widget
 
-The `x.Q.M0` field SHALL be rendered as a Mantine `Select` with options: `separate_scan` ("Separate M0 scan"), `UseControlAsM0` ("Use control as M0"), `Absent` ("Absent — skip M0 processing"), and a fourth option `__custom__` ("Custom value"). Selecting `__custom__` SHALL reveal a `NumberInput` for the numeric M0 value. The default SHALL be `Absent`.
+The `x.Q.M0` field SHALL be rendered as a Mantine `Select` with options: `separate_scan` ("Separate M0 scan"), `UseControlAsM0` ("Use control as M0"), `Absent` ("Absent — skip M0 processing"), and a fourth option `__custom__` ("Custom value"). Selecting `__custom__` SHALL reveal a `NumberInput` for the numeric M0 value. A fresh project's unset M0 SHALL display no selection and the placeholder "Select M0 source", not select `Absent`. Display hints and ExploreASL runtime defaults SHALL NOT populate the field.
+
+#### Scenario: Fresh project has no M0 selection
+
+- **WHEN** a fresh project opens with M0 unset
+- **THEN** the dropdown SHALL display "Select M0 source" and processing assembly SHALL omit `x.Q.M0`
 
 #### Scenario: User selects UseControlAsM0
 
@@ -74,7 +85,12 @@ The `x.modules.asl.ApplyQuantification` field SHALL be rendered as 6 labeled che
 
 ### Requirement: Atlas multi-select with paired masking
 
-The `x.S.Atlases` field SHALL use a multi-select grouped into free and non-commercial-only atlases. The GUI initial selection SHALL remain `["Total", "DeepWM"]`. Each atlas SHALL have paired `TissueMasking` and `TissueThreshold` controls with aligned indices. Tissue choices SHALL include GM, WM, CSF, GM+WM and GM+WM+CSF. `TissueThreshold` SHALL be a unitless probability from 0 to 1, with GUI initial value 0.7, not a volume. Only `MinimalROIVolume` SHALL use mL. ROI mask controls SHALL emit the existing four-element 0/1 tuple representation, including all-on and all-off selections.
+The `x.S.Atlases` field SHALL use a multi-select grouped into free and non-commercial-only atlases. A fresh project's unset `Atlases` SHALL display an empty selection, not preselect `["Total", "DeepWM"]`; hints or runtime defaults SHALL NOT populate it. Each selected atlas SHALL have paired `TissueMasking` and `TissueThreshold` controls with aligned indices. Tissue choices SHALL include GM, WM, CSF, GM+WM and GM+WM+CSF. `TissueThreshold` SHALL be a unitless probability from 0 to 1, with GUI initial value 0.7, not a volume. Only `MinimalROIVolume` SHALL use mL. ROI mask controls SHALL emit the existing four-element 0/1 tuple representation, including all-on and all-off selections.
+
+#### Scenario: Fresh project has no selected atlases
+
+- **WHEN** a fresh project opens with `Atlases` unset
+- **THEN** the multi-select SHALL have no selected atlases, paired atlas controls SHALL be absent, and processing assembly SHALL omit `x.S.Atlases`
 
 #### Scenario: User selects Thalamus atlas with GM masking
 
@@ -105,23 +121,33 @@ The initially on PVC display SHALL not force an unset field into saved state. Un
 - **WHEN** Gaussian mode is enabled without an explicit kernel
 - **THEN** the display SHALL show `[10, 10, 4]` in mm without injecting an unset kernel
 
+#### Scenario: Boolean PVC flag is rejected rather than normalized
+
+- **WHEN** a current project document contains `bPVCGaussianMM = true` or `false`
+- **THEN** parsing SHALL reject that field rather than normalize it to numeric 1 or 0
+
 ### Requirement: Basic/advanced toggle
 
-Each accordion section SHALL contain a "Show advanced" sub-divider. Basic-tier fields are visible by default. Toggling "Show advanced" within a section reveals advanced-tier fields. The Structural and Environment sections SHALL NOT appear at all unless a global "Show advanced parameter sections" toggle (persisted in `uiState.showAdvancedParameters`) is enabled. The toggle state SHALL persist across page navigation and app restarts via the `.easl` project file.
+M0, Quantification, General Settings, ASL Processing, and Atlases SHALL each contain a local "Show advanced" sub-divider, with advanced fields initially hidden. Their local visibility flags SHALL remain independent of the global "Show advanced parameter sections" toggle. The global toggle SHALL gate only the Structural and Environment accordion sections; when those panels are opened, their controls SHALL appear directly without a local advanced sub-divider. Global and local flags SHALL persist under `.easl` `uiState.datapar.advancedVisibility`, with the global flag named `showAdvancedSections`, across page navigation and app restarts.
 
 #### Scenario: User enables global advanced toggle
 
 - **WHEN** user clicks "Show advanced parameter sections"
-- **THEN** Structural and Environment accordion panels appear, and each panel's advanced sub-fields become expandable
+- **THEN** Structural and Environment accordion panels SHALL appear, with their controls directly available when each panel is opened
 
 #### Scenario: User disables global advanced toggle
 
 - **WHEN** user disables "Show advanced parameter sections"
-- **THEN** Structural and Environment panels disappear, advanced sub-fields in remaining panels are hidden, but any previously-set advanced field values are preserved
+- **THEN** Structural and Environment panels SHALL disappear while remaining panels retain their local advanced visibility flags and all previously-set field values SHALL be preserved
+
+#### Scenario: Local advanced controls remain independent
+
+- **WHEN** global advanced sections are off and the user enables "Show advanced" in Atlases
+- **THEN** the Atlases advanced controls SHALL appear while Structural and Environment remain hidden
 
 ### Requirement: Ghost placeholder defaults
 
-All processing fields SHALL remain optional. Empty inputs SHALL display a hint from `FIELD_METADATA.defaultHint` without writing its value. Hints SHALL qualify magnetic-field-dependent relaxation constants and other data-dependent choices instead of asserting universal runtime defaults. Clearing an optional field SHALL omit it from outbound JSON.
+All processing fields SHALL remain optional. Empty inputs SHALL display a hint from `FIELD_METADATA.defaultHint` without writing its value. Hints SHALL qualify magnetic-field-dependent relaxation constants and other data-dependent choices instead of asserting universal runtime defaults. Clearing a field to undefined SHALL omit it from outbound JSON; an explicitly stored empty array SHALL remain defined and SHALL be emitted. In particular, clearing the `DataTypes` text input SHALL store `[]`, not undefined, and processing assembly SHALL preserve `x.S.DataTypes = []`.
 
 #### Scenario: User sees default for T1blood
 
@@ -133,9 +159,14 @@ All processing fields SHALL remain optional. Empty inputs SHALL display a hint f
 - **WHEN** user clears the T1blood input
 - **THEN** state SHALL become undefined, the hint SHALL reappear and outbound JSON SHALL omit T1blood
 
+#### Scenario: Clearing DataTypes preserves an explicit empty array
+
+- **WHEN** the user clears the `DataTypes` text input
+- **THEN** accepted state and `.easl` SHALL retain `DataTypes = []` and outbound JSON SHALL contain `x.S.DataTypes = []`
+
 ### Requirement: DataPar assembly function
 
-The system SHALL convert flat optional project settings into nested ExploreASL JSON, preserving explicit numbers, arrays, zero and false while omitting undefined fields and empty sections. The assembly SHALL use these destinations:
+The system SHALL convert supported flat optional project settings into nested ExploreASL JSON, preserving explicit numbers, arrays (including empty arrays), zero and false while omitting undefined fields and empty sections. Unknown scientific extension keys preserved in `.easl` SHALL NOT be copied into outbound JSON. The assembly SHALL use these destinations:
 
 | Destination            | Flat GUI keys                                                                                                                                                                                               |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

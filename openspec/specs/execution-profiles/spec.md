@@ -280,9 +280,9 @@ This covers the case where a user has a project open and then deletes all profil
 
 The Settings modal's "Execution Profiles" section SHALL support the creation and editing of Apptainer profiles:
 
-1. When selecting `Apptainer` as the profile type in the add/edit form, the UI SHALL display inputs for `Label`, `SIF Path` (with file browser option), and `Apptainer Path` (with default placeholder "apptainer").
+1. When selecting `Apptainer` as the profile type in the add/edit form, the UI SHALL display inputs for `Label`, `SIF Path` (with file browser option), and `Apptainer Path` (default value "apptainer", subject to auto-detection).
 2. The `matlabPath` and `exploreAslPath` inputs SHALL be hidden.
-3. The detected ExploreASL version (e.g. "1.11.0") or "not detected" warning SHALL be displayed below the `sifPath` input.
+3. The Apptainer add/edit form SHALL NOT display an inline detected-version or "not detected" message below `sifPath`. Native validation SHALL still detect the version on save; a saved profile's detected ExploreASL version SHALL be displayed in its profile-list row when available.
 4. The list of existing profiles SHALL show the profile label, type badge (e.g., "MATLAB" or "Apptainer"), a summary of key paths, and a validity indicator (green checkmark for valid, red warning icon for invalid with error tooltip).
 5. The "Detect MATLAB" and "Detect Apptainer" buttons SHALL support auto-detecting installations on the system.
 
@@ -290,6 +290,12 @@ The Settings modal's "Execution Profiles" section SHALL support the creation and
 
 - **WHEN** the user selects "Apptainer" from the Type dropdown in the profile creation form
 - **THEN** the MATLAB Path and ExploreASL Path inputs are removed, and SIF Path and Apptainer Path inputs are rendered
+
+#### Scenario: Apptainer version appears in saved profile list
+
+- **WHEN** the user enters a SIF path in the Apptainer form
+- **THEN** no inline ExploreASL version message SHALL appear below that input
+- **AND** after successful save with detected version "1.11.0", the saved profile row SHALL show "ExploreASL v1.11.0"
 
 #### Scenario: Empty profiles list shows add button
 

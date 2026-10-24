@@ -61,17 +61,14 @@ Define the BIDS-direct import review interface and its validation workflow.
 
 ### Requirement: Skipped subjects warning block
 
-`BIDSReviewPanel` SHALL render a warning block listing skipped subjects (from `skippedSubjects`). Each entry shows the subject/session identifier in `sub-XX_<session>` form, plus the skip reason:
+In editable group review and the confirmed summary, `BIDSReviewPanel` SHALL render a warning block when skipped identifiers are present. Each entry SHALL show the subject/session identifier in `sub-XX_<session>` form. The scan supplies string identifiers, not per-entry reasons; the panel SHALL NOT infer a specific missing-file or parsing reason for an entry.
 
-- Missing `*_asl.json` sidecar
-- Missing or unparseable `*_aslcontext.tsv`
-
-Each entry note: "This subject will be excluded from processing. To include it, add the missing file externally and click Retry."
+The block SHALL show shared guidance: "These subjects will be excluded from processing. To include them, add the missing file externally and click Retry." The confirmed summary SHALL instead refer to "Re-scan BIDS". This generic warning does not establish that every skipped identifier is absent from all returned scan groups; the native scan limitations are defined in `bids-sidecar-scanning`.
 
 #### Scenario: Missing sidecar
 
-- **WHEN** a subject has `perf/sub-05_asl.nii.gz` but no `sub-05_asl.json`
-- **THEN** skipped-subjects warning block displays `sub-05_1` with reason "No `*_asl.json` sidecar found"
+- **WHEN** a review containing metadata groups also has `sub-05_1` in its skipped list because that session has an ASL NIfTI but no ASL JSON sidecar
+- **THEN** the skipped-subjects warning block SHALL display `sub-05_1` and shared retry guidance, without a per-entry reason
 
 ### Requirement: Edge states
 
@@ -107,11 +104,13 @@ On `[Confirm]` click, `BIDSReviewPanel` SHALL validate:
 
 If validation fails: inline errors per offending group; confirmation blocked; `bidsReviewConfirmed` stays `false`.
 
-If validation passes: sync to project store (write `metadataGroups`, `subjectRows`, `ingestionComplete = true`, `skippedSubjects` to `mappingState` and `ImportUiState`); set `uiState.import.bidsReviewConfirmed = true`; set `projectMeta.currentPhase = "parameters"`; save `project.easl`; navigate to `/project/:id/parameters`.
+Passing label validation is necessary but not sufficient: native confirmation SHALL reject a subject/session assigned to different group IDs, even when labels are unique. On rejection, the accepted project mapping, confirmation state, and phase SHALL remain unchanged, and the panel SHALL not navigate to Parameters. The panel does not provide a per-run mapping or automatic merge for this conflict.
+
+On successful native confirmation: sync to project store (write `metadataGroups`, `subjectRows`, `ingestionComplete = true`, `skippedSubjects` to `mappingState` and `ImportUiState`); set `uiState.import.bidsReviewConfirmed = true`; set `projectMeta.currentPhase = "parameters"`; save `project.easl`; navigate to `/project/:id/parameters`.
 
 #### Scenario: Confirm with valid unique labels
 
-- **WHEN** user clicks `[Confirm]` with 2 groups labeled `"Philips_PCASL_2D_Absent"` and `"Siemens_3T_PCASL_3D_Included"`
+- **WHEN** user clicks `[Confirm]` with 2 groups labeled `"Philips_PCASL_2D_Absent"` and `"Siemens_3T_PCASL_3D_Included"`, disjoint subject/session memberships, and successful native persistence
 - **THEN** `mappingState.metadataGroups` has 2 entries, `uiState.import.bidsReviewConfirmed = true`, `currentPhase = "parameters"`, navigation goes to Parameters
 
 #### Scenario: Confirm blocked on duplicate

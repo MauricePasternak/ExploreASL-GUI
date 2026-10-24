@@ -16,7 +16,8 @@ The application shell SHALL use a collapsible rail for desktop navigation instea
 #### Scenario: Rail in expanded state
 
 - **WHEN** the rail is expanded
-- **THEN** it displays side-by-side icons and labels, a left-facing chevron `‹` at the top with "Navigation" text, and a home icon pinned to the bottom with a "Return to home" label
+- **THEN** it SHALL display side-by-side icons and labels, a left-facing chevron `‹` toggle at the top without separate "Navigation" text, and a home icon pinned to the bottom with a "Return to home" label
+- **AND** the toggle SHALL expose a "Collapse navigation" tooltip and accessible label; when collapsed, both SHALL read "Expand navigation"
 
 ### Requirement: UI State Persistence
 

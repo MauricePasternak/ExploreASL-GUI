@@ -8,12 +8,12 @@ Define the data contracts and commands for loading, typing, and fetching populat
 
 ### Requirement: Stats File Listing Command
 
-A Rust command `list_stats_files` SHALL accept `projectRoot: String` and return an array of `{ fileName: string, relativePath: string, size: number, modified: string }` for all `.tsv` files in `<project_root>/derivatives/ExploreASL/Population/Stats/`. Non-TSV files (`.png`, `.jpg`, `.nii.gz`) SHALL be excluded. The command SHALL return an empty array if the Stats directory does not exist (not an error).
+A Rust command `list_stats_files` SHALL accept `projectRoot: String` and return an array of `{ fileName: string, relativePath: string, size: number, modified: string }` for `.tsv` files whose names start with `mean_`, `median_`, or `CoV_` in `<project_root>/derivatives/ExploreASL/Population/Stats/`. Matching SHALL be case-sensitive, results SHALL be sorted by filename, and `relativePath` SHALL be the filename relative to the Stats directory. Non-TSV files and other TSV prefixes SHALL be excluded. The command SHALL return an empty array if the Stats directory does not exist (not an error).
 
 #### Scenario: Stats directory with mixed files
 
-- **WHEN** `list_stats_files` is called and the Stats directory contains `.tsv`, `.png`, and `.nii.gz` files
-- **THEN** only `.tsv` files SHALL be returned in the result array
+- **WHEN** `list_stats_files` is called and the Stats directory contains `mean_results.tsv`, `median_results.tsv`, `CoV_results.tsv`, `QC_RMS.tsv`, `.png`, and `.nii.gz` files
+- **THEN** only the three TSV files with supported prefixes SHALL be returned
 
 #### Scenario: Stats directory does not exist
 
@@ -46,13 +46,13 @@ A Rust command `load_qcbf_data` SHALL accept `projectRoot: String` and `relative
 
 #### Scenario: Type inference for continuous columns
 
-- **WHEN** a column's non-missing values all parse as floating-point numbers
+- **WHEN** a column not covered by a qCBF-specific type rule has at least one non-missing value and all its non-missing values parse as floating-point numbers
 - **THEN** the `inferredType` SHALL be `"continuous"` and `levels` SHALL be empty
 
 #### Scenario: Type inference for categorical columns
 
-- **WHEN** a column contains non-numeric string values
-- **THEN** the `inferredType` SHALL be `"nominal"` (or `"ordinal"` if alphanumeric ordering is natural) and `levels` SHALL contain the unique values
+- **WHEN** a column not covered by a qCBF-specific type rule contains non-numeric string values
+- **THEN** the `inferredType` SHALL be `"nominal"` and `levels` SHALL contain unique non-missing values in file encounter order; qCBF `LongitudinalTimePoint` SHALL instead be inferred as `"ordinal"`
 
 ### Requirement: Data Column Read Command
 
@@ -80,17 +80,17 @@ A Rust command `read_data_columns` SHALL accept `projectRoot: String` and `colum
 
 ### Requirement: TSV File Selection
 
-The setup stepper's first step SHALL present a dropdown of available TSV files from `list_stats_files`. Each dropdown entry SHALL show the raw filename as the primary line and a parsed metadata preview as the secondary line (metric, tissue, atlas, PVC). Filename parsing is best-effort — if parsing fails, the entry SHALL show the raw filename only. Selecting a file SHALL trigger `load_qcbf_data` and advance type inference. The step SHALL be labeled "Select Data" (renamed from "Select File").
+The setup stepper's first step SHALL present a dropdown of available TSV files from `list_stats_files`. Each dropdown entry SHALL show the raw filename, followed by a parenthesized metric, tissue, and atlas preview when filename parsing succeeds; unavailable preview fields SHALL display `?`. If parsing fails, the entry SHALL show the raw filename only. Selecting a file SHALL trigger `load_qcbf_data` and populate inferred types without advancing the step. The step SHALL be labeled "Select Data".
 
 #### Scenario: Dropdown shows parsed preview
 
 - **WHEN** the TSV file list includes `mean_qCBF_GM_PV0.7_StandardSpace_Total_n=8_18-Jun-2026_PVC0.tsv`
-- **THEN** the dropdown entry SHALL show the filename as primary text and parsed metadata (metric: mean, tissue: GM, atlas: Total, PVC: 0) as secondary text
+- **THEN** the dropdown entry SHALL show the filename followed by `(mean · GM · Total)`
 
 #### Scenario: Unparseable filename shows raw name only
 
-- **WHEN** the TSV file list includes `QC_RMS.tsv` which does not match the ROI stats naming convention
-- **THEN** the dropdown entry SHALL show `QC_RMS.tsv` as primary text with no parsed secondary text
+- **WHEN** the TSV file list includes `mean_results.tsv`, whose supported prefix permits discovery but whose name has no parseable qCBF metadata
+- **THEN** the dropdown entry SHALL show `mean_results.tsv` with no metadata preview
 
 #### Scenario: File selection triggers data loading
 
@@ -104,17 +104,22 @@ The setup stepper's first step SHALL present a dropdown of available TSV files f
 
 ### Requirement: Column Type System
 
-Each column SHALL have a type of `"continuous"`, `"ordinal"`, `"nominal"`, or `"excluded"`. Auto-inference (from `load_qcbf_data` or `execute_join`) SHALL assign only `"continuous"`, `"ordinal"`, or `"nominal"`. The user SHALL be able to override any column's type via a dropdown in the column typing table. The `"excluded"` type SHALL only be assignable by user action — auto-inference SHALL NEVER assign `"excluded"`. Excluded columns SHALL NOT be available for axis assignment or fetched by `read_data_columns`.
+Each column SHALL have a type of `"continuous"`, `"ordinal"`, `"nominal"`, or `"excluded"`. Auto-inference (from `load_qcbf_data` or `execute_join`) SHALL assign only `"continuous"`, `"ordinal"`, or `"nominal"`. The typing table SHALL omit raw `participant_id`. Dropdowns for columns named `subject`, `session`, or `run` SHALL offer only `"nominal"` and `"ordinal"`. Dropdowns SHALL be disabled for names `GM_vol`, `WM_vol`, `CSF_vol`, `GM_ICVRatio`, `GMWM_ICVRatio`, `MeanMotion`, `SubjectNList`, or names ending in `_L`, `_R`, or `_B`; this restriction SHALL apply by displayed column name, regardless of source. Other displayed columns SHALL offer all four types. The `"excluded"` type SHALL only be assignable by user action — auto-inference SHALL NEVER assign `"excluded"`. Excluded columns SHALL NOT be available for axis assignment; chart column requests SHALL follow those assignments rather than imposing a backend exclusion filter.
 
 #### Scenario: Auto-inferred type displayed
 
 - **WHEN** the column typing table renders after file selection
-- **THEN** each column SHALL display its auto-inferred type in a dropdown, editable by the user
+- **THEN** each displayed column SHALL show its inferred or saved type, subject to the name-based restrictions above
 
 #### Scenario: User overrides continuous to nominal
 
-- **WHEN** the user changes a column's type from `"continuous"` to `"nominal"`
-- **THEN** the column's levels SHALL be discovered and displayed, and the type SHALL be persisted in the contract
+- **WHEN** the user changes an editable column's type from `"continuous"` to `"nominal"`
+- **THEN** the type SHALL be persisted without re-inspection or level discovery; the existing inspection levels SHALL remain unchanged, including an empty levels array
+
+#### Scenario: Restricted type controls
+
+- **WHEN** the typing table contains `participant_id`, `subject`, `GM_vol`, and `Diagnosis`
+- **THEN** `participant_id` SHALL have no row, `subject` SHALL offer nominal/ordinal only, `GM_vol` SHALL have a disabled dropdown, and `Diagnosis` SHALL offer all four types
 
 #### Scenario: User excludes a column
 
@@ -138,7 +143,7 @@ The `participant_id` column SHALL be split into `subject` (nominal, isIdentifier
 #### Scenario: Identifier columns used for image lookup
 
 - **WHEN** the user clicks a chart datapoint
-- **THEN** the `subject`, `session`, and `run` values from the clicked point SHALL be used to construct the qCBF filename
+- **THEN** the raw `participantId` and `run` values from the clicked point SHALL be used to construct the qCBF filename; `run` SHALL represent the TSV `session` column (GUI Run)
 
 #### Scenario: column from external datas not flagged as identifiers
 
@@ -147,12 +152,12 @@ The `participant_id` column SHALL be split into `subject` (nominal, isIdentifier
 
 ### Requirement: Level Ordering
 
-For ordinal columns, levels SHALL default to alphanumeric sort order. For nominal columns, levels SHALL default to "as encountered in file" order. The user SHALL be able to reorder levels for both ordinal and nominal columns via a drag-and-drop or up/down button interface in the level ordering step. Level ordering SHALL control the X-axis tick order in swarmplots only — it SHALL NOT imply statistical relationships or trend lines.
+The Level Ordering step SHALL list non-identifier columns whose saved type is ordinal or nominal. Without a saved ordering, it SHALL display inspection levels in file encounter order for both types. Up/down controls SHALL persist edits in `levelOrderings`. Type changes SHALL NOT discover new levels. Saved ordering SHALL affect the ordering editor only: current swarmplot groups SHALL use encounter order in the filtered chart rows and SHALL NOT read `levelOrderings`. Reordering SHALL NOT imply statistical relationships or trend lines.
 
-#### Scenario: Ordinal defaults to alphanumeric
+#### Scenario: Ordinal defaults to file order
 
 - **WHEN** an ordinal column has levels `["TimePoint_3", "TimePoint_1", "TimePoint_2"]`
-- **THEN** the default ordering SHALL be `["TimePoint_1", "TimePoint_2", "TimePoint_3"]`
+- **THEN** without a saved ordering, the editor SHALL display `["TimePoint_3", "TimePoint_1", "TimePoint_2"]`
 
 #### Scenario: Nominal defaults to file order
 
@@ -162,30 +167,35 @@ For ordinal columns, levels SHALL default to alphanumeric sort order. For nomina
 #### Scenario: User reorders nominal levels
 
 - **WHEN** the user reorders a nominal column's levels from `["Site_2", "Site_1", "Site_3"]` to `["Site_1", "Site_2", "Site_3"]`
-- **THEN** the swarmplot X-axis ticks SHALL appear in the user-specified order
+- **THEN** the editor SHALL display and persist the new order, while swarmplot groups SHALL continue to follow encounter order in filtered chart rows
+
+#### Scenario: Identifiers do not create a Level Ordering step
+
+- **WHEN** only identifier columns have ordinal or nominal types
+- **THEN** the setup stepper SHALL skip Level Ordering, while identifiers SHALL remain available for categorical plotting
 
 #### Scenario: Level ordering has no statistical effect
 
 - **WHEN** the user reorders levels on a categorical X-axis
-- **THEN** no trend line, ANOVA, or statistical inference SHALL be rendered — ordering is visual only
+- **THEN** no trend line, ANOVA, or statistical inference SHALL be rendered as a consequence of the saved ordering
 
 ### Requirement: Column Typing Table Layout
 
-The column typing step SHALL render a scrolling table with one row per column. Each row SHALL display: column name, source badge (qCBF or external, if join active), type dropdown (continuous/ordinal/nominal/excluded), identifier badge (if applicable), and an "edit levels" button for ordinal/nominal columns. Clicking "edit levels" SHALL expand an inline panel showing the discovered levels with reorder controls. The table SHALL show all columns without pagination.
+The column typing step SHALL render a table without pagination, with one row per inspection column except raw `participant_id`. Columns named `subject`, `session`, and `run` SHALL appear first in that order. Each row SHALL show its name, restricted type dropdown, identifier badge when applicable, and source badge when a join is configured. The Info cell SHALL show units when present and the existing level count for non-continuous columns with levels. Level editing SHALL be provided separately in the conditional Level Ordering step, not inline in the table.
 
-#### Scenario: Table shows all columns
+#### Scenario: Table omits raw participant identifier
 
-- **WHEN** the selected data has 14 columns
-- **THEN** the typing table SHALL render 14 rows, all visible via scrolling
+- **WHEN** the selected data has 14 columns including raw `participant_id`
+- **THEN** the typing table SHALL render 13 rows, all accessible through page scrolling
 
-#### Scenario: Inline level editing
+#### Scenario: Separate level editing
 
-- **WHEN** the user clicks "edit levels" on a nominal column
-- **THEN** an inline panel SHALL expand below the row showing the column's levels with up/down reorder buttons
+- **WHEN** a displayed non-identifier nominal column has existing inspection levels
+- **THEN** the typing table SHALL show its level count and the Level Ordering step SHALL provide up/down controls for those levels
 
 #### Scenario: Identifier badge displayed
 
-- **WHEN** a column has `isIdentifier: true`
+- **WHEN** a displayed column has `isIdentifier: true`
 - **THEN** the row SHALL display an "ID" badge next to the column name
 
 #### Scenario: Source badge displayed when join active
@@ -195,7 +205,7 @@ The column typing step SHALL render a scrolling table with one row per column. E
 
 ### Requirement: Contract Persistence
 
-The data contract SHALL persist to `uiState.dataVis` in the `.easl` project file. The persisted shape SHALL include: `qcbfSource` (`{ relativePath, fileHash }` or `null`, singular — replaces former `contractSources` array), `joinConfig` (`{ externalSource, keys, dropRightOn, naTokens, delimiter }` or `null` — where `externalSource` carries `{ absolutePath, fileHash, sheetName }`), `columnTypes` (record of column name to type), `identifiers` (object with `subject`, `session`, `run` column names), `levelOrderings` (record of column name to ordered levels array), `axisAssignment` (object with `x`, `y`, c`olorBy`), `domainFilters` (object with `xMin`, `xMax`, `yMin`, `yMax`), `stage` (one of `"selectData"`, `"columnTypes"`, `"levelOrdering"`, `"visualize"`), and `filtersExpanded` (boolean).
+The data contract SHALL persist to `uiState.dataVis` in the `.easl` project file. The persisted shape SHALL include: `qcbfSource` (`{ relativePath, fileHash }` or `null`, singular — replaces former `contractSources` array), `joinConfig` (`{ externalSource, keys, dropRightOn, naTokens, delimiter }` or `null` — where `externalSource` carries `{ absolutePath, fileHash, sheetName }`), `columnTypes` (record of column name to type), `identifiers` (object with `subject`, `session`, `run` column names), `levelOrderings` (record of column name to ordered levels array), `axisAssignment` (object with `x`, `y`, `colorBy`), `domainFilters` (object with `xMin`, `xMax`, `yMin`, `yMax`), `stage` (one of `"selectData"`, `"columnTypes"`, `"levelOrdering"`, `"visualize"`), and `filtersExpanded` (boolean controlling the Visualization Settings drawer).
 
 #### Scenario: Contract saved after file selection
 
@@ -285,7 +295,7 @@ Joined-data validation SHALL inspect both sources. Missing/unreadable external d
 
 ### Requirement: Missing Data Handling in Type Inference
 
-Type inference SHALL treat empty strings, `NaN`, `NA`, and `n/a` (case-insensitive) as missing values for qCBF data. For external data, the user-configured `naTokens` SHALL be used as missing-value indicators. A column SHALL be classified as `"continuous"` if all non-missing values parse as floating-point numbers. Missing values SHALL NOT force a column to be categorical. The absence of ExploreASL-specific sentinel values (e.g., `-9999`) SHALL be assumed — if sentinels exist, the user can manually retype the column or add them to `naTokens`.
+Generic metadata inference for qCBF and external data SHALL treat empty strings, `NaN`, `NA`, and `n/a` (case-insensitive) as missing. With at least one non-missing value, it SHALL classify a column as `"continuous"` if all such values parse as floating-point numbers, otherwise as `"nominal"`; all-missing columns SHALL be nominal. qCBF-specific type rules SHALL still apply. Configured `naTokens` SHALL normalize external row values to empty strings during join parsing, but SHALL NOT alter external preview or joined metadata inference, which uses the raw external inspection. Frontend chart missing-value checks SHALL use the fixed empty/`NaN`/`NA`/`n/a` rules on returned rows, so normalized empty cells SHALL be excluded from axes or grouped as Unknown for color-by. No additional sentinel detection SHALL be performed.
 
 #### Scenario: Column with some missing values inferred as continuous
 
@@ -297,7 +307,7 @@ Type inference SHALL treat empty strings, `NaN`, `NA`, and `n/a` (case-insensiti
 - **WHEN** a column has values `[-9999, 258.76, 234.11]`
 - **THEN** the inferred type SHALL be `"continuous"` (all values parse as float, including -9999)
 
-#### Scenario: External NA tokens used for column from external datas
+#### Scenario: Custom external NA token normalizes rows but not metadata
 
-- **WHEN** `naTokens` includes `"<NA>"` and an column from external data has values `[45, 50, "<NA>", 60]`
-- **THEN** the inferred type SHALL be `"continuous"` and `"<NA>"` SHALL be treated as missing
+- **WHEN** `naTokens` includes `"<NA>"` and an external column has values `[45, 50, "<NA>", 60]`
+- **THEN** preview and joined metadata SHALL infer `"nominal"`, while the joined row containing `"<NA>"` SHALL store an empty string

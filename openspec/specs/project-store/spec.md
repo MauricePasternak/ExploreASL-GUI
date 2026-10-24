@@ -14,8 +14,8 @@ If no valid profiles exist:
 
 - `createProject` SHALL throw an error / show a notification directing the user to Settings.
 - `loadProject` SHALL throw an error / show a notification directing the user to Settings.
-- The landing page SHALL disable the "New Project" and "Open Project" buttons and recent project links.
-- A prominent message SHALL be shown (see first-run onboarding or project gating requirements in execution-profiles spec).
+- With no configured profiles, the landing page SHALL show first-run onboarding instead of project action buttons and the Recent Projects list.
+- With configured profiles but none valid, the landing page SHALL show an explanatory alert directing the user to Settings and disable "New Project", "Open Project", and recent-project Open actions. Recent-project Remove actions SHALL remain available.
 
 #### Scenario: Create project with valid profile available
 
@@ -32,10 +32,15 @@ If no valid profiles exist:
 - **WHEN** `loadProject` is called and no valid profiles exist
 - **THEN** project loading is blocked and an error message is shown
 
-#### Scenario: Landing page buttons disabled
+#### Scenario: Landing page has no configured profiles
 
-- **WHEN** the landing page renders and no valid profiles exist
-- **THEN** "New Project", "Open Project" buttons and recent project links SHALL be disabled with a tooltip explaining why
+- **WHEN** the landing page renders and no execution profiles are configured
+- **THEN** onboarding with an Open Settings action SHALL appear, and project action buttons and the Recent Projects list SHALL NOT render
+
+#### Scenario: Landing page buttons disabled for invalid configured profiles
+
+- **WHEN** the landing page renders with configured profiles but none valid
+- **THEN** an alert SHALL explain that profiles need fixing in Settings, "New Project", "Open Project", and recent-project Open actions SHALL be disabled, and recent-project Remove actions SHALL remain available
 
 #### Scenario: Landing page buttons enabled
 
@@ -219,7 +224,9 @@ The only supported project schema SHALL declare integer `schemaVersion: 2`, inde
 
 ### Requirement: Current processing selection persistence
 
-Processing selections SHALL persist under `uiState.processing.config`, using `selectedProfileId` rather than copied MATLAB or ExploreASL paths. Import profile selection SHALL persist under `uiState.import.selectedProfileId`. Persisted terminal phase and module completion/provenance SHALL derive from accepted native execution evidence; nonterminal progress SHALL remain runtime state. Changing selections SHALL preserve sibling `structural`, `asl`, and `population` results, including `profileId`, `exploreASLVersion`, `matlabVersion`, `guiVersion`, and `Mtime`. A new project SHALL create processing selections lazily on the first Processing visit. Visualization and review configuration SHALL follow their current capability contracts. Phase order SHALL remain import, parameters, processing, visualization, manifest; Processing access SHALL require successful DICOM import or confirmed BIDS review, and Visualization/Manifest access SHALL require Population completion.
+Processing selections SHALL persist under `uiState.processing.config`, using `selectedProfileId` rather than copied MATLAB or ExploreASL paths. Import profile selection SHALL persist under `uiState.import.selectedProfileId`. Persisted terminal phase and module completion/provenance SHALL derive from accepted native execution evidence; nonterminal progress SHALL remain runtime state. Changing selections SHALL preserve sibling `structural`, `asl`, and `population` results, including `profileId`, `exploreASLVersion`, `matlabVersion`, `guiVersion`, and `Mtime`. A new project SHALL create processing selections lazily on the first Processing visit. Visualization and review configuration SHALL follow their current capability contracts.
+
+Phase order SHALL remain import, parameters, processing, visualization, manifest. Native `allowedPhases` SHALL include every phase at or before the accepted `projectMeta.currentPhase` cursor, plus Import and Parameters unconditionally, Processing when `uiState.import.completed` is true for a DICOM project or `uiState.import.bidsReviewConfirmed` is true for a BIDS project, and Visualization/Manifest when Population is completed. An otherwise valid saved later cursor SHALL NOT be rejected solely because those readiness flags are absent or false, nor SHALL it fabricate completion. Renderer phase eligibility SHALL use this native list; active-work navigation guards and page-local data/workflow readiness SHALL remain separate.
 
 #### Scenario: Config saved on processing start
 
@@ -253,13 +260,18 @@ Processing selections SHALL persist under `uiState.processing.config`, using `se
 
 #### Scenario: Visualization phase gate
 
-- **WHEN** Visualization access is requested
+- **WHEN** Visualization access is requested and the accepted current-phase cursor precedes Visualization
 - **THEN** access SHALL require saved or currently reconciled native Population completion
 
 #### Scenario: Manifest phase gate
 
-- **WHEN** Manifest access is requested
+- **WHEN** Manifest access is requested and the accepted current-phase cursor precedes Manifest
 - **THEN** access SHALL use the same Population completion condition as Visualization
+
+#### Scenario: Saved later cursor permits earlier phases without completion flags
+
+- **WHEN** an otherwise valid project opens with `projectMeta.currentPhase = "manifest"` and import/review and Population completion flags absent or false
+- **THEN** native `allowedPhases` SHALL include all five phases without changing those completion flags, independently of active-work navigation guards
 
 #### Scenario: Phase ordering includes manifest
 

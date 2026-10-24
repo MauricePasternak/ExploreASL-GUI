@@ -8,7 +8,7 @@ Define application-shell layout behavior, including navigation and processing st
 
 ### Requirement: Processing Status Bar in Layout
 
-The Layout component SHALL conditionally render a processing status indicator in the app shell. The indicator SHALL be visible when `processingPhase` is not `idle` and SHALL display the current phase and progress summary. It SHALL not render when processing has not been started for the current project.
+The Layout component SHALL mount the processing status bar in the active project's footer. The bar SHALL render no content when `processingPhase` is `idle` and SHALL render its group for every other phase, including terminal phases. When statuses are present, it SHALL display per-module completed/total counts in Structural, ASL, Population order, followed by any other modules. Each count SHALL use distinct subject-sessions within that module; a subject-session SHALL count complete when at least one of its statuses is `complete`, including across multiple ASL runs. With no statuses, the non-idle group SHALL contain no progress text. The bar SHALL NOT display a lifecycle label or apply a running-specific accent. Lifecycle authority SHALL remain with the processing store's native run projection, not be inferred from these counts.
 
 #### Scenario: No processing status when idle
 
@@ -17,8 +17,13 @@ The Layout component SHALL conditionally render a processing status indicator in
 
 #### Scenario: Processing status visible during run
 
-- **WHEN** `processingPhase` is `running`
-- **THEN** the indicator SHALL be visible in the Layout with a processing-themed accent color
+- **WHEN** `processingPhase` is `running` and Structural statuses contain one completed and one pending subject-session
+- **THEN** the footer SHALL display `Structural 1/2` without a lifecycle label or running-specific accent
+
+#### Scenario: Non-idle processing has no statuses
+
+- **WHEN** `processingPhase` is not `idle` and no subject statuses exist
+- **THEN** the status-bar group SHALL render without progress text
 
 ### Requirement: DataPar Page Warning Banner
 
@@ -31,14 +36,16 @@ The data parameters route (`/project/:id/parameters`) SHALL display a warning ba
 
 ### Requirement: Visualization Navbar Entry
 
-The navbar SHALL include a "Visualization" entry in `PHASE_NAV` with `IconChartScatter` as its icon. The entry SHALL appear after the "Processing" entry. The entry SHALL be enabled when `canAccessPhase(project, "visualization")` returns true. When disabled, the entry SHALL be greyed out and non-clickable. When the navbar is collapsed, the entry SHALL display the `IconChartScatter` icon with an accessible aria-label of "Visualization". When expanded, the entry SHALL display both the icon and the "Visualization" label.
+The navbar SHALL include a "Visualization" entry in `PHASE_NAV` with `IconChartScatter` as its icon. The entry SHALL appear after the "Processing" entry. The entry SHALL be enabled when `canAccessPhase(project, "visualization")` returns true and active-work navigation guards permit access. When disabled, the entry SHALL be greyed out and non-clickable. When the navbar is collapsed, the entry SHALL display the `IconChartScatter` icon with an accessible aria-label of "Visualization". When expanded, the entry SHALL display both the icon and the "Visualization" label.
 
-#### Scenario: Navbar entry enabled after Population completion
+Active import SHALL disable all phase entries except Import; active processing SHALL disable Visualization and Manifest. Active phases SHALL include `preparing`, `running`, `finalizing`, and `cancelling`; `importRunning` SHALL also count as active import. These guards SHALL remain separate from native `allowedPhases` eligibility.
 
-- **WHEN** `canAccessPhase(project, "visualization")` returns `true`
+#### Scenario: Navbar entry enabled by native phase eligibility
+
+- **WHEN** `canAccessPhase(project, "visualization")` returns `true` and no active-work navigation guard blocks it
 - **THEN** the "Visualization" navbar entry SHALL be enabled and clickable
 
-#### Scenario: Navbar entry disabled before Population completion
+#### Scenario: Navbar entry disabled by native phase eligibility
 
 - **WHEN** `canAccessPhase(project, "visualization")` returns `false`
 - **THEN** the "Visualization" navbar entry SHALL be disabled (greyed out, non-clickable)
@@ -60,14 +67,14 @@ The navbar SHALL include a "Visualization" entry in `PHASE_NAV` with `IconChartS
 
 ### Requirement: Manifest Navbar Entry
 
-The navbar SHALL include a "Manifest" entry in `PHASE_NAV` appended after the "Visualization" entry. The entry SHALL use a Tabler icon appropriate to the document/QC-report concept (e.g. `IconClipboardCheck` or `IconFileReport`). The entry SHALL be enabled when `canAccessPhase(project, "manifest")` returns `true`. When disabled, the entry SHALL be greyed out and non-clickable. When the navbar is collapsed, the entry SHALL display the icon with an accessible `aria-label` of "Manifest". When expanded, the entry SHALL display both the icon and the "Manifest" label.
+The navbar SHALL include a "Manifest" entry in `PHASE_NAV` appended after the "Visualization" entry. The entry SHALL use a Tabler icon appropriate to the document/QC-report concept (e.g. `IconClipboardCheck` or `IconFileReport`). The entry SHALL be enabled when `canAccessPhase(project, "manifest")` returns `true` and active-work navigation guards permit access. When disabled, the entry SHALL be greyed out and non-clickable. When the navbar is collapsed, the entry SHALL display the icon with an accessible `aria-label` of "Manifest". When expanded, the entry SHALL display both the icon and the "Manifest" label.
 
-#### Scenario: Navbar entry enabled after Population completion
+#### Scenario: Navbar entry enabled by native phase eligibility
 
-- **WHEN** `canAccessPhase(project, "manifest")` returns `true`
+- **WHEN** `canAccessPhase(project, "manifest")` returns `true` and no active-work navigation guard blocks it
 - **THEN** the "Manifest" navbar entry SHALL be enabled and clickable
 
-#### Scenario: Navbar entry disabled before Population completion
+#### Scenario: Navbar entry disabled by native phase eligibility
 
 - **WHEN** `canAccessPhase(project, "manifest")` returns `false`
 - **THEN** the "Manifest" navbar entry SHALL be disabled (greyed out, non-clickable)
@@ -86,6 +93,11 @@ The navbar SHALL include a "Manifest" entry in `PHASE_NAV` appended after the "V
 
 - **WHEN** the navbar phases are rendered
 - **THEN** the "Manifest" entry SHALL appear immediately after the "Visualization" entry
+
+#### Scenario: Active processing blocks result phases independently of saved cursor
+
+- **WHEN** processing is `preparing`, `running`, `finalizing`, or `cancelling`, even if native phase eligibility permits Visualization or Manifest
+- **THEN** both entries SHALL be disabled and result-phase route requests SHALL redirect to the current phase, or to Processing when the current phase is Visualization or Manifest
 
 ### Requirement: Safe project and application close
 

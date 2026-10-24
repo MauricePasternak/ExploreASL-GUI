@@ -8,7 +8,7 @@ Define backend execution and monitoring of ExploreASL processing.
 
 ### Requirement: Module Log File Cleanup
 
-During preparation, `run_pipeline` SHALL quarantine existing selected ExploreASL module log files under the durable pre-execution journal from `<project_root>/derivatives/ExploreASL/log/` for each enabled module matching the subject regexp filter. Log files follow the naming pattern `{module_name}_sub-{Subject}_{Session}[_...].log`. The subject*session SHALL be extracted from the filename using the pattern `sub-[^*]+\_\d+`and tested against`subject_regexp`. The Population module SHALL have its log file quarantined regardless of subject regexp match (no per-subject granularity). Non-log files (`.json`, `.csv`) in the log directory SHALL NOT be affected. If the log directory does not exist, the cleanup SHALL succeed silently.
+During preparation, `run_pipeline` SHALL quarantine existing selected ExploreASL module log files under the durable pre-execution journal from `<project_root>/derivatives/ExploreASL/log/` for each enabled module matching the subject regexp filter. Log files follow the naming pattern `{module_name}_sub-{Subject}_{Session}[_...].log`. The subject/session SHALL be extracted from the filename using the pattern `sub-[^_]+_[^_.]+` and tested against `subject_regexp`. The Population module SHALL have its log file quarantined regardless of subject regexp match (no per-subject granularity). Non-log files (`.json`, `.csv`) in the log directory SHALL NOT be affected. If the log directory does not exist, the cleanup SHALL succeed silently.
 
 #### Scenario: Structural log deleted for matching subject
 
@@ -63,16 +63,18 @@ The `list_subjects(project_root: String, data_source: Option<String>)` command S
 
 The function maps `Vec<BidsSubject>` to `Vec<SubjectInfo>` preserving the existing frontend contract:
 
-| Old `SubjectInfo` field | Mapping from `BidsSubject`/`BidsSession`                                                             |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- |
-| `subject_session`       | `format!("sub-{}_{}", subject_label, session_label)`                                                 |
-| `subject`               | `subject_label`                                                                                      |
-| `session`               | `session_label`                                                                                      |
-| `has_structural`        | `has_anat`                                                                                           |
-| `has_asl`               | `has_perf`                                                                                           |
-| `asl_runs`              | parsed from `asl_files` (run_label resolved, sorted ascending, default `"1"` when run entity absent) |
+| Old `SubjectInfo` field | Mapping from `BidsSubject`/`BidsSession`                                                                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subject_session`       | `format!("sub-{}_{}", subject_label, session_label)`                                                                                                                                            |
+| `subject`               | `subject_label`                                                                                                                                                                                 |
+| `session`               | `session_label`                                                                                                                                                                                 |
+| `has_structural`        | nonempty `anat_files`                                                                                                                                                                           |
+| `has_asl`               | nonempty `asl_files`                                                                                                                                                                            |
+| `asl_runs`              | parsed from `asl_files` (numeric run IDs normalized, sorted ascending, deduplicated; absent run defaults to `"1"`); also defaults to `["1"]` when `has_perf` is true but no ASL files are found |
 
 Cross-sectional handling: missing `ses-*` directories default to session `"1"` per D2.
+
+Availability SHALL reflect filename-based discovery of ASL NIfTI entries (`_asl.nii` or `_asl.nii.gz`) and anatomical NIfTI entries (T1w, T2w or FLAIR), including subject-level anatomical fallback. Directory existence alone SHALL NOT establish module availability, and these flags SHALL NOT constitute scientific validation of image contents.
 
 The command SHALL remain registered for Tauri IPC.
 
@@ -91,6 +93,11 @@ The command SHALL remain registered for Tauri IPC.
 - **WHEN** `list_subjects` runs on a BIDS-direct project with subjects at root and empty `rawdata/`
 - **THEN** returns subjects from project root, not empty list
 
+#### Scenario: Empty perf directory does not establish ASL availability
+
+- **WHEN** a discovered SubjectSession has a `perf/` directory but no discovered ASL NIfTI entries
+- **THEN** `has_asl` SHALL be false even though `asl_runs` SHALL default to `["1"]`
+
 ### Requirement: Module Name Mapping
 
 The `b_process` vector SHALL map to ExploreASL lock directory names: index 0 → `xASL_module_Structural`, index 1 → `xASL_module_ASL`, index 2 → `xASL_module_Population`. This mapping SHALL be used by `run_pipeline` for status file deletion, log file cleanup, and by `read_lock_status` for directory traversal.
@@ -98,7 +105,7 @@ The `b_process` vector SHALL map to ExploreASL lock directory names: index 0 →
 #### Scenario: Delete status files for structural module only
 
 - **WHEN** `run_pipeline` launches a reservation selecting only Structural, corresponding to `b_process = [true, false, false]`
-- **THEN** only `.status` files under `xASL_module_Structural/*/xASL_module_Structural/` SHALL be deleted
+- **THEN** individual `.status` quarantine targets SHALL be limited to matching subjects under `xASL_module_Structural/*/xASL_module_Structural/`; project-wide stale `locked` directory quarantine SHALL remain independent of that module filter
 
 ### Requirement: Module Ordering Handled by ExploreASL
 
@@ -191,6 +198,23 @@ The Tauri commands `launch_import_run` and `run_pipeline` SHALL support executio
 
 Native reservation SHALL validate the active project and an immutable request containing selected work, execution profile, configuration, and participant-generation inputs. It SHALL assign a UUID, persist the request and expected target inventory, and reject empty effective work before destructive mutation. Repeating a request identity with identical canonical content SHALL return the same reservation identity; reuse with different content SHALL reject. Current-root admission metadata SHALL be validated separately and SHALL NOT become persistent request identity. Project-internal path fields SHALL compare portably; external execution/source paths SHALL remain request content. Launch SHALL use only the exact reserved request, not replacement renderer arguments.
 
+For Structural and ASL, native reservation SHALL interpret an empty `selectedSubjectSessions` list as all discovered SubjectSessions, not as empty work. A nonempty list SHALL restrict inventory to those entries and SHALL reject entries absent from native discovery. Expected targets SHALL omit unavailable modules per SubjectSession; Population SHALL contribute one dataset-level target independently of subject selection. This native contract SHALL remain distinct from the renderer's empty-selection and missing-ASL hard blocks. Preparation SHALL rederive the effective targets and reject changed target inventory rather than silently alter the reserved set.
+
+#### Scenario: Native empty selection includes all discovered eligible work
+
+- **WHEN** `reserve_processing_run` receives an otherwise valid Structural or ASL request with an empty selected-subject list and eligible native inventory
+- **THEN** it SHALL reserve targets for all discovered SubjectSessions eligible for the selected modules, while preserving the empty list in the immutable request
+
+#### Scenario: No effective native targets
+
+- **WHEN** selected subject modules have no eligible targets and Population is not selected
+- **THEN** native reservation SHALL reject before destructive preparation, including when the selected-subject list is empty
+
+#### Scenario: Effective inventory changes after reservation
+
+- **WHEN** preparation derives a target set different from the persisted expected targets
+- **THEN** it SHALL fail before artifact installation and require a new reservation
+
 #### Scenario: Lost reservation response
 
 - **WHEN** the caller retries the same request after losing its response
@@ -209,7 +233,7 @@ Native reservation SHALL validate the active project and an immutable request co
 
 ### Requirement: Native processing preparation
 
-Native processing SHALL verify BIDS compatibility before mutation and own participant merging, configuration installation, environment capture, historical selected-artifact quarantine, and watcher startup. Participant generation SHALL preserve existing root-authored site values, extra columns, ASL run normalization, and correction rules. Root `participants.tsv` and `participants.json` SHALL be read-only inputs, excluded from journal mutation, backup, quarantine and restore targets. Only derivative participant files SHALL be installed. BIDS root TSV site values SHALL take precedence over group fallback, including when correction is disabled; DICOM SHALL preserve its existing no-root-read behavior. BIDS compatibility verification SHALL require existing valid setup and offer separate explicit repair preflight on conflict, never processing-time repair. BIDS configuration SHALL use the current root in `x.opts.subjectFolder`; DICOM SHALL omit that field. Native version capture SHALL preserve `unknown` fallback when a failed probe has settled, overlap independent preparation, and settle before scientific launch. A timed-out or otherwise unsettled probe SHALL fail preparation and settle its in-process process scope before terminal publication; it SHALL NOT permit scientific launch with unresolved probe ownership. Renderer subscriptions SHALL NOT be a prerequisite for safe launch or completion.
+Native processing SHALL verify BIDS compatibility before mutation and own participant merging, configuration installation, environment capture, historical selected-status/log quarantine, project-wide stale-lock quarantine, and watcher startup. Participant generation SHALL preserve existing root-authored site values, extra columns, ASL run normalization, and correction rules. Root `participants.tsv` and `participants.json` SHALL be read-only inputs, excluded from journal mutation, backup, quarantine and restore targets. Only derivative participant files SHALL be installed. BIDS root TSV site values SHALL take precedence over group fallback, including when correction is disabled; DICOM SHALL preserve its existing no-root-read behavior. BIDS compatibility verification SHALL require existing valid setup and offer separate explicit repair preflight on conflict, never processing-time repair. BIDS configuration SHALL use the current root in `x.opts.subjectFolder`; DICOM SHALL omit that field. Native version capture SHALL preserve `unknown` fallback when a failed probe has settled, overlap independent preparation, and settle before scientific launch. A timed-out or otherwise unsettled probe SHALL fail preparation and settle its in-process process scope before terminal publication; it SHALL NOT permit scientific launch with unresolved probe ownership. Renderer subscriptions SHALL NOT be a prerequisite for safe launch or completion.
 
 #### Scenario: BIDS verification fails
 
@@ -228,7 +252,18 @@ Native processing SHALL verify BIDS compatibility before mutation and own partic
 
 ### Requirement: Durable processing execution boundary
 
-Processing SHALL persist validated destination-to-backup mappings before destructive mutation and persist execution commit before a worker can execute. Before execution commit, recovery SHALL restore the exact prior GUI-owned artifact state after current in-process settlement or explicit interrupted-run confirmation. After execution commit, failure or cancellation SHALL stop owned process scopes and preserve current ExploreASL artifacts without restoring historical statuses or configuration. Scientific outputs SHALL never be deleted or restored by launch recovery. Malformed records and unmapped legacy quarantine SHALL block affected launch without inferred destination mapping. Native preparation SHALL retain selected module/subject status and log scope, optional BIDS2Legacy rerun behavior, absence of selected stale locks before launch, unchanged non-log files, and unchanged scientific module ordering. Native launch SHALL validate profile and worker selection and invoke MATLAB/Apptainer with existing profile arguments, worker numbering and staggering; live process identity SHALL remain private to in-process supervision.
+Processing SHALL persist validated destination-to-backup mappings before destructive mutation and persist execution commit before a worker can execute. Before execution commit, recovery SHALL restore the exact prior GUI-owned artifact state after current in-process settlement or explicit interrupted-run confirmation. After execution commit, failure or cancellation SHALL stop owned process scopes and preserve current ExploreASL artifacts without restoring historical statuses or configuration. Scientific outputs SHALL never be deleted or restored by launch recovery. Malformed records and unmapped legacy quarantine SHALL block affected launch without inferred destination mapping. Native preparation SHALL retain selected module/subject scope for individual historical `.status` files and module logs, optional BIDS2Legacy rerun behavior, unchanged non-log files in the log directory, and unchanged scientific module ordering. Stale `locked` directories SHALL be collected across the entire project's ExploreASL lock root before module/subject filters; safe allowlisted destinations SHALL be quarantined through the same validated journal mappings and pre/post-commit recovery policy. Unsupported destinations and `locked` entries that are symbolic links or not directories SHALL reject preparation. Native launch SHALL validate the profile and require a positive `u32` worker count; it SHALL NOT impose a CPU-core maximum or Population-only single-worker rule. Those worker limits SHALL remain renderer preflight rules. Native launch SHALL invoke MATLAB/Apptainer using the reserved worker count, existing profile arguments, worker numbering and staggering; live process identity SHALL remain private to in-process supervision.
+
+#### Scenario: Structural launch quarantines an unselected ASL stale lock
+
+- **WHEN** Structural alone is selected for `sub-001_01` and an ASL `locked` directory remains for `sub-002_01`
+- **THEN** preparation SHALL quarantine that stale directory as well as selected Structural statuses, without selecting the unrelated ASL statuses or logs outside that directory
+- **AND** a pre-commit failure SHALL restore the quarantined directory through its durable mapping after settlement
+
+#### Scenario: Native worker count differs from renderer limits
+
+- **WHEN** an otherwise valid native request specifies a positive worker count above detected cores or more than one worker for Population
+- **THEN** native worker validation SHALL NOT reject on those grounds, and launch SHALL use the reserved count without a native CPU or Population clamp
 
 #### Scenario: Crash during preparation rename
 

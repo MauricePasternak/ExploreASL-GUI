@@ -8,41 +8,51 @@ Orchestrate the user interface and store sync for the population analysis visual
 
 ### Requirement: Visualization Project Phase
 
-The project phase system SHALL include `visualization` as the fourth phase after `processing`, followed by `manifest`. The route `/project/:id/visualization` SHALL render the Visualization page. The `PROJECT_PHASES` array SHALL be `["import", "parameters", "processing", "visualization", "manifest"]`. The project's `currentPhase` SHALL update to `"visualization"` when the user navigates to the route, following the same pattern as other phases.
+The project phase system SHALL include `visualization` as the fourth phase after `processing`, followed by `manifest`. The route `/project/:id/visualization` SHALL render the Visualization page when access guards permit it. The `PROJECT_PHASES` array SHALL be `["import", "parameters", "processing", "visualization", "manifest"]`. The project's `currentPhase` SHALL update to `"visualization"` on accepted navigation to the route, following the same pattern as other phases.
 
 #### Scenario: Route renders visualization page
 
-- **WHEN** the user navigates to `/project/:id/visualization` and `canAccessPhase` returns true
+- **WHEN** the user navigates to `/project/:id/visualization`, `canAccessPhase` returns true, and processing is not active
 - **THEN** the Visualization page SHALL render with the setup stepper
 
 #### Scenario: Current phase updates on navigation
 
-- **WHEN** the user navigates to `/project/:id/visualization` and the project's `currentPhase` is not `"visualization"`
+- **WHEN** the user is allowed to navigate to `/project/:id/visualization` and the project's `currentPhase` is not `"visualization"`
 - **THEN** `setPhase("visualization")` SHALL be called and the project SHALL be saved
 
 #### Scenario: Invalid phase redirects to current phase
 
 - **WHEN** the user navigates to `/project/:id/visualization` but `canAccessPhase` returns false
-- **THEN** the user SHALL be redirected to `/project/:id/{currentPhase}`
+- **THEN** the route guard SHALL redirect to the saved current phase, except that a saved visualization/manifest phase SHALL fall back to processing
 
 ### Requirement: Visualization Phase Gate
 
-Access to the visualization phase SHALL be gated by `uiState.processing.population?.completed === true`. The `canAccessPhase` function SHALL return true for `"visualization"` only when this flag is set. The flag is a static persisted value — it SHALL NOT re-verify the filesystem on every route change.
+The native project snapshot SHALL supply `allowedPhases`, and frontend `canAccessPhase` SHALL check membership in that list. Native access SHALL allow the saved/current phase and all earlier phases; visualization SHALL also be allowed as a later phase when `uiState.processing.population?.completed === true`. Thus a saved current phase of visualization or manifest SHALL permit visualization even without Population completion. This gate SHALL use accepted project configuration, not rescan Population output on each route change. Separately, the route guard SHALL block visualization while processing is preparing, running, finalizing, or cancelling, even if `allowedPhases` includes it.
 
 #### Scenario: Access granted after Population completion
 
-- **WHEN** `uiState.processing.population.completed` is `true` and the user navigates to visualization
+- **WHEN** `uiState.processing.population.completed` is `true`, processing is not active, and the user navigates to visualization
 - **THEN** `canAccessPhase` SHALL return true and the page SHALL render
 
-#### Scenario: Access denied without Population completion
+#### Scenario: Later-phase access denied without Population completion
 
-- **WHEN** `uiState.processing.population.completed` is `undefined` or `false`
+- **WHEN** the saved current phase precedes visualization and `uiState.processing.population.completed` is `undefined` or `false`
 - **THEN** `canAccessPhase` SHALL return false for `"visualization"` and the user SHALL be redirected to the current phase
 
 #### Scenario: Access denied when Population flag missing
 
-- **WHEN** `uiState.processing.population` is entirely absent from the project file
+- **WHEN** the saved current phase precedes visualization and `uiState.processing.population` is entirely absent from the project file
 - **THEN** `canAccessPhase` SHALL return false for `"visualization"`
+
+#### Scenario: Saved later phase permits returning to visualization
+
+- **WHEN** the saved current phase is visualization or manifest, Population completion is absent or false, and processing is not active
+- **THEN** native `allowedPhases` SHALL include visualization and `canAccessPhase` SHALL return true
+
+#### Scenario: Active processing blocks visualization route
+
+- **WHEN** `allowedPhases` includes visualization but processing is preparing, running, finalizing, or cancelling
+- **THEN** the route guard SHALL redirect away from visualization, using processing when the saved current phase is visualization or manifest
 
 ### Requirement: Population Completion Flag
 
@@ -75,21 +85,21 @@ Population completion SHALL derive only from accepted native run evidence under 
 
 ### Requirement: Stats Directory Runtime Scan
 
-The Visualization page SHALL perform a filesystem scan of the Stats directory on mount and on Tauri window focus event. The scan SHALL check for the existence of `<root>/derivatives/ExploreASL/Population/Stats/` and enumerate `.tsv` files within it. Three degradation states SHALL be handled: directory missing, directory present but empty, and partial TSV deletion.
+The Visualization page SHALL call `list_stats_files` on mount and window focus to discover eligible `.tsv` files in `<root>/derivatives/ExploreASL/Population/Stats/`, restricted to `mean_`, `median_`, and `CoV_` prefixes as defined in `data-vis-contract`. Missing directories and directories with no eligible files SHALL both produce an empty list and the same yellow alert. A command failure SHALL instead show "Population Stats not found. Population may have been modified externally." The alert-only view SHALL NOT include a Processing navigation button.
 
 #### Scenario: Stats directory missing
 
 - **WHEN** the Visualization page mounts and `Population/Stats/` does not exist
-- **THEN** the page SHALL show an empty state: "Population Stats not found. Population may have been modified externally." with a button to return to the Processing page
+- **THEN** the page SHALL show the yellow alert "No statistics files found in Population/Stats." without a Processing navigation button
 
 #### Scenario: Stats directory empty
 
-- **WHEN** the Visualization page mounts and `Population/Stats/` exists but contains no `.tsv` files
-- **THEN** the page SHALL show an empty state: "No statistics files found in Population/Stats."
+- **WHEN** the Visualization page mounts and `Population/Stats/` exists but contains no eligible `.tsv` files, including a directory containing only `QC_RMS.tsv`
+- **THEN** the page SHALL show the same yellow alert: "No statistics files found in Population/Stats."
 
 #### Scenario: Stats directory with TSVs
 
-- **WHEN** the Visualization page mounts and `Population/Stats/` contains one or more `.tsv` files
+- **WHEN** the Visualization page mounts and `Population/Stats/` contains one or more eligible `.tsv` files
 - **THEN** the page SHALL proceed to the setup stepper with the file list available for selection
 
 #### Scenario: Window focus triggers rescan
@@ -99,16 +109,16 @@ The Visualization page SHALL perform a filesystem scan of the Stats directory on
 
 ### Requirement: Visualization Navbar Entry
 
-The navbar SHALL include a "Visualization" entry with `IconChartScatter` icon. The entry SHALL be enabled when `canAccessPhase(project, "visualization")` returns true. The entry SHALL be disabled (greyed out, non-clickable) when the phase gate returns false.
+The navbar SHALL include a "Visualization" entry with `IconChartScatter` icon. The entry SHALL be enabled when `canAccessPhase(project, "visualization")` returns true and neither import nor processing navigation guards are active. It SHALL be disabled when phase access is denied, import is active, or processing is preparing, running, finalizing, or cancelling.
 
 #### Scenario: Navbar entry enabled after Population completion
 
-- **WHEN** `uiState.processing.population.completed` is `true`
+- **WHEN** `uiState.processing.population.completed` is `true` and import/processing navigation guards are inactive
 - **THEN** the "Visualization" navbar entry SHALL be enabled and clickable
 
 #### Scenario: Navbar entry disabled before Population completion
 
-- **WHEN** `uiState.processing.population.completed` is `undefined` or `false`
+- **WHEN** the saved current phase precedes visualization and `uiState.processing.population.completed` is `undefined` or `false`
 - **THEN** the "Visualization" navbar entry SHALL be disabled and non-clickable
 
 #### Scenario: Collapsed navbar shows icon only
@@ -118,16 +128,16 @@ The navbar SHALL include a "Visualization" entry with `IconChartScatter` icon. T
 
 ### Requirement: Setup Stepper Orchestration
 
-The Visualization page SHALL render a Mantine Stepper with fine-grained conditional steps: "Select Data" (renamed from "Select File"), "Column Types", "Level Ordering" (conditional), and "Visualize". The "Level Ordering" step SHALL be skipped when no ordinal or nominal columns exist. The stepper state SHALL persist in `uiState.dataVis.stage` using the value `"selectData"` (renamed from `"selectFile"`). On re-entry with a valid contract, the stepper SHALL resume at the persisted stage. The mount-time validation SHALL branch on `joinConfig` presence: if `joinConfig` is `null`, `load_qcbf_data` SHALL be called; if `joinConfig` is active, `execute_join` SHALL be called. Both commands populate `AppState.active_data`.
+The Visualization page SHALL render a Mantine Stepper with fine-grained conditional steps: "Select Data", "Column Types", "Level Ordering" (conditional), and "Visualize". The Level Ordering step SHALL appear only when at least one non-identifier inspection column has a saved type of ordinal or nominal; categorical identifiers alone SHALL NOT create the step. Stepper state SHALL persist in `uiState.dataVis.stage` using `"selectData"` for the first step. On re-entry with a valid contract, the stepper SHALL resume at the persisted stage. Mount-time validation with a saved qCBF source SHALL branch on `joinConfig` presence: if null, it SHALL call `load_qcbf_data`; if active, it SHALL attempt `execute_join`, with unavailable/changed external-source fallback and saved-state preservation as defined in `data-vis-contract`. Both successful data-loading commands SHALL populate `AppState.active_data`.
 
 #### Scenario: Full stepper with categorical columns
 
-- **WHEN** the selected data contains ordinal or nominal columns
+- **WHEN** the selected data contains at least one non-identifier column whose saved type is ordinal or nominal
 - **THEN** the stepper SHALL show 4 steps: Select Data, Column Types, Level Ordering, Visualize
 
 #### Scenario: Stepper skips Level Ordering when no categorical columns
 
-- **WHEN** all columns in the selected data are continuous
+- **WHEN** all non-identifier columns are continuous or excluded, even if identifier columns remain categorical
 - **THEN** the stepper SHALL show 3 steps: Select Data, Column Types, Visualize (Level Ordering skipped)
 
 #### Scenario: Resume at persisted stage on re-entry
@@ -137,13 +147,13 @@ The Visualization page SHALL render a Mantine Stepper with fine-grained conditio
 
 #### Scenario: Resume at setup when contract invalidated
 
-- **WHEN** the user returns to the Visualization page but the contract hash does not match
+- **WHEN** the user returns to the Visualization page but the qCBF content hash does not match
 - **THEN** the stepper SHALL reset to step 1 ("Select Data") with a banner: "Data file has changed. Please reconfigure."
 
-#### Scenario: Next button disabled when no file selected
+#### Scenario: Select Data readiness uses inspection and external availability
 
-- **WHEN** the stepper is at "Select Data" and no TSV file has been selected
-- **THEN** the "Next" button SHALL be disabled
+- **WHEN** the stepper is at Select Data
+- **THEN** Next SHALL be disabled if inspection is absent or a configured external source is not available; empty/incomplete key pairs and zero overlap SHALL NOT independently disable it
 
 #### Scenario: Next button disabled when all columns excluded
 

@@ -8,23 +8,35 @@ Define the processing route, dashboard, and access behavior.
 
 ### Requirement: Processing Route and Gating
 
-The processing route SHALL be `/project/:id/processing`. Access SHALL use the data-source-specific `canAccessPhase` gate: `project.uiState.import.completed === true` for DICOM projects or `project.uiState.import.bidsReviewConfirmed === true` for BIDS-direct projects. If the user navigates to this route before satisfying the applicable import gate, they SHALL be redirected to the import route.
+The processing route SHALL be `/project/:id/processing`. Access SHALL use `canAccessPhase`, which checks native `allowedPhases`. Native access SHALL include Processing when the saved `projectMeta.currentPhase` is Processing or a later phase, OR when import readiness holds: `project.uiState.import.completed === true` for DICOM projects or `project.uiState.import.bidsReviewConfirmed === true` for BIDS-direct projects. Denied access SHALL redirect to the saved current phase (Import or Parameters), not unconditionally to Import. Route access SHALL NOT itself authorize execution.
 
 #### Scenario: Access before import completion
 
-- **WHEN** the user navigates to `/project/:id/processing` before import is complete
+- **WHEN** the user navigates to `/project/:id/processing` with saved current phase Import and without applicable import readiness
 - **THEN** the app SHALL redirect to `/project/:id/import`
+
+#### Scenario: Denied Processing access preserves Parameters route
+
+- **WHEN** the saved current phase is Parameters and applicable import readiness is false
+- **THEN** navigation to Processing SHALL redirect to `/project/:id/parameters`
+
+#### Scenario: Saved later phase retains Processing access
+
+- **WHEN** the saved current phase is Processing, Visualization or Manifest, even without the applicable import readiness flag
+- **THEN** `allowedPhases` SHALL include Processing and route access SHALL remain available
 
 ### Requirement: Subject Selection DataTable
 
 The processing page SHALL display a Mantine DataTable with checkboxes for subject/session selection. Columns SHALL include: checkbox, subject, session, Structural status icon, Structural Logs/Errors, ASL status icon, ASL Logs/Errors. Above the table, filter chips SHALL allow filtering by status: All, Pending, Incomplete, Complete. "Select all" and "Deselect all" buttons SHALL be provided.
 
-The two new columns SHALL render as follows:
+The Structural and ASL Logs/Errors columns SHALL use module display status, not log `hasError`, to render as follows:
 
-- **Has log, no error**: teal `Badge` with text "View Logs", clickable to open LogViewerModal
-- **Has log, has error**: red `Badge` with text "View Errors", clickable to open LogViewerModal
-- **No log file, module not skipped**: grey text "No Logs"
 - **Module skipped**: empty cell (no content)
+- **Module incomplete, with or without a log file**: red `Badge` with text "View Errors", clickable to open LogViewerModal
+- **Module pending, complete or outdated, with a log file**: teal `Badge` with text "View Logs", clickable to open LogViewerModal, even when a log reports `hasError: true`
+- **Module pending, complete or outdated, without a log file**: grey text "No Logs"
+
+Within the subject log modal, per-file error markers SHALL use `hasError || moduleIncomplete`; this SHALL NOT change the table badge rule.
 
 #### Scenario: Status icons reflect lock file state
 
@@ -33,7 +45,7 @@ The two new columns SHALL render as follows:
 
 #### Scenario: ASL module unavailable for subject
 
-- **WHEN** a SubjectSession's `rawdata/sub-X/ses-Y/` lacks a `perf/` subdirectory
+- **WHEN** a discovered SubjectSession has `hasASL: false`, including an empty or absent `perf/` directory
 - **THEN** the ASL status column SHALL show a "skipped" icon and the ASL Logs/Errors column SHALL show an empty cell
 
 #### Scenario: Filter by incomplete
@@ -41,20 +53,25 @@ The two new columns SHALL render as follows:
 - **WHEN** the user clicks the "Incomplete" filter chip
 - **THEN** the table SHALL show only SubjectSessions where at least one module has status "incomplete"
 
-#### Scenario: Subject with errored ASL log
+#### Scenario: Incomplete ASL module without detected log errors
 
-- **WHEN** `list_module_logs` returns `has_error: true` for an ASL log file belonging to subject "sub-001" session "01"
+- **WHEN** ASL display status is incomplete for subject "sub-001" session "01", even if its log reports `hasError: false`
 - **THEN** the ASL Logs/Errors column for that row SHALL display a red Badge labeled "View Errors"
 
-#### Scenario: Subject with completed Structural log
+#### Scenario: Completed Structural module with detected log errors
 
-- **WHEN** `list_module_logs` returns a Structural log file with `has_error: false` for subject "sub-001" session "01"
+- **WHEN** Structural display status is complete and a log file exists for subject "sub-001" session "01", even if it reports `hasError: true`
 - **THEN** the Structural Logs/Errors column for that row SHALL display a teal Badge labeled "View Logs"
 
-#### Scenario: Subject with no log file yet
+#### Scenario: Non-incomplete module without a log file
 
-- **WHEN** `list_module_logs` returns no entries for subject "sub-001" session "01" for the Structural module
+- **WHEN** Structural display status is pending, complete or outdated and `list_module_logs` returns no entries for subject "sub-001" session "01" for that module
 - **THEN** the Structural Logs/Errors column for that row SHALL display grey text "No Logs"
+
+#### Scenario: Incomplete module without a log file
+
+- **WHEN** Structural or ASL display status is incomplete and no corresponding log file exists
+- **THEN** its Logs/Errors column SHALL still display a clickable red "View Errors" badge
 
 #### Scenario: Skipped module shows nothing
 
@@ -68,7 +85,12 @@ The two new columns SHALL render as follows:
 
 ### Requirement: Pipeline Configuration Panel
 
-The pipeline configuration panel SHALL include: Profile selector dropdown (populated from global settings `executionProfiles`), module checkboxes (Structural, ASL — at least one required unless Population is selected), and worker count number input with default `Math.min(ceil(availableMemory / 4GB), cpuCores, 4)` and hard cap at `cpuCores`.
+The pipeline configuration panel SHALL include: Profile selector dropdown (populated from global settings `executionProfiles`), module checkboxes (Structural, ASL — at least one required unless Population is selected), and worker count number input. For positive reported available memory, the default SHALL be `Math.min(Math.floor(availableMemoryMb / (1024 * 4)), cpuCores, 4)` without a minimum-one clamp. Unavailable or nonpositive memory SHALL use the fallback default of 4. The input SHALL have minimum 1 and maximum `cpuCores || 4`; renderer preflight SHALL reject counts exceeding known available cores.
+
+#### Scenario: Available memory below 4 GB
+
+- **WHEN** positive available memory is below 4096 MB
+- **THEN** the calculated default SHALL be zero, not rounded up to one; initialization of a missing configuration SHALL remain deferred while that default is zero
 
 #### Scenario: Population module not shown
 
@@ -80,30 +102,34 @@ The pipeline configuration panel SHALL include: Profile selector dropdown (popul
 - **WHEN** global settings has no valid execution profiles
 - **THEN** the profile selector dropdown SHALL show an error state and the Start button SHALL be disabled
 
-#### Scenario: Worker count not forced by Population
+#### Scenario: Worker input has no Population-specific lock
 
 - **WHEN** Population is selected in the Population Analysis section
-- **THEN** the worker count input in PipelineConfig SHALL NOT be affected (Population's worker=1 constraint is handled elsewhere)
+- **THEN** PipelineConfig SHALL NOT add a Population-specific disabled state or maximum to the worker input; accepted project configuration edits SHALL normalize workers to 1, and renderer preflight SHALL hard-block any Population configuration whose worker count is not 1
 
 ### Requirement: Pre-flight Validation
 
-Before transitioning from `idle` to `preparing`, the store SHALL validate the following. Rules are categorized as hard blocks (prevent Start), soft warnings (allow Start with caution), or informational (auto-applied).
+Before Start, renderer preflight SHALL determine readiness using the following hard blocks, soft warnings and informational display rules. The store SHALL separately validate request/profile inputs before reservation; these renderer readiness rules SHALL NOT be described as native admission guarantees.
 
 **Hard blocks (cannot proceed):**
 
 1. At least one SubjectSession selected (relaxed when the only selected module is Population — group-level module)
 2. At least one module selected
 3. Selected profile is valid (resolved from `executionProfiles`, checked in `profileValidationState`)
-4. Worker count > 0 and ≤ available cores
+4. Worker count > 0 and ≤ available cores when the core count is known
 5. If Population selected, worker count must be 1
+6. If ASL is selected, no selected discovered SubjectSession has `hasASL: false`; one such entry SHALL block the entire run, including selected Structural work
 
 **Soft warnings (can proceed):**
 
-- `derivatives/ExploreASL/dataPar.json` target directory doesn't exist yet (ExploreASL uses defaults if missing)
+- Configured worker count exceeds the number of explicitly selected SubjectSessions; the immutable renderer request SHALL cap workers to that selection count when it is nonzero
+- Non-Population lock entries have no matching discovered SubjectSession, as defined by Rawdata Sanity Check
 
-**Informational (auto-applied, not blocking):**
+Missing `derivatives/ExploreASL/dataPar.json` SHALL NOT by itself produce a renderer warning or imply ExploreASL default-parameter behavior; native preparation SHALL install the reserved configuration.
 
-- Modules marked "skipped" per SubjectSession based on BIDS data availability (`perf/` for ASL, `anat/` for Structural)
+**Informational display:**
+
+- The table SHALL mark modules "skipped" from discovered `hasASL`/`hasStructural` flags, not directory existence alone. Native expected targets SHALL omit unavailable per-subject modules, but the skipped ASL display SHALL NOT bypass the renderer's whole-run missing-ASL hard block.
 
 #### Scenario: Missing valid profile
 
@@ -118,23 +144,28 @@ Before transitioning from `idle` to `preparing`, the store SHALL validate the fo
 #### Scenario: Population-only run with no subjects selected
 
 - **WHEN** modules is exactly `["population"]` AND no subjects are checked
-- **THEN** the Start button SHALL remain enabled (Population is group-level and does not require per-subject selection)
+- **THEN** empty subject selection SHALL NOT block Start, provided all other readiness and native ownership gates permit it (Population is group-level)
 
-#### Scenario: Soft warning about dataPar.json
+#### Scenario: Selected ASL-unavailable session blocks the whole run
+
+- **WHEN** ASL is selected and any explicitly selected discovered SubjectSession has `hasASL: false`, including when Structural is also selected
+- **THEN** renderer preflight SHALL disable Start and identify the sessions lacking ASL data, despite their skipped table display
+
+#### Scenario: Missing dataPar.json alone does not warn
 
 - **WHEN** `derivatives/ExploreASL/dataPar.json` doesn't exist
-- **THEN** a soft warning SHALL be shown: "dataPar.json not found. ExploreASL will use defaults." The Start button SHALL remain enabled
+- **THEN** renderer preflight SHALL NOT show a missing-dataPar warning or block Start solely for that absence
 
 ### Requirement: Execution Dashboard
 
-The execution dashboard SHALL display module-grouped collapsible sections for Structural, ASL, and Population. Each section SHALL show module-level progress. Structural and ASL sections SHALL show one row per selected SubjectSession with a step timeline; Population SHALL show one study-level row. The dashboard SHALL render only information admitted for the attached native `runId`.
+The execution dashboard SHALL display module-grouped collapsible sections for Structural, ASL, and Population. Each section SHALL show module-level progress. Structural and ASL sections SHALL show one row per selected eligible SubjectSession with a step timeline; Population SHALL show one study-level row. Rows SHALL display the subject/session identifier, timeline icons with step-name tooltips, and applicable Running/Done status badges, without standalone current-step or elapsed-time text fields. The dashboard SHALL render only information admitted for the attached native `runId`.
 
 The active dashboard SHALL remain visible during `preparing`, `running`, `finalizing`, and `cancelling`. It SHALL be hidden after `completed`, `failed`, `cancelled`, or `interrupted`, while the terminal result remains available through existing status/error UI. Controls and labels SHALL reflect the attached native lifecycle rather than a frontend-inferred worker count.
 
 #### Scenario: Structural module section expanded
 
 - **WHEN** the user expands Structural during an attached active run
-- **THEN** one row per selected SubjectSession SHALL show subject, session, step progress, current step, and elapsed time for that run only
+- **THEN** one row per selected eligible SubjectSession SHALL show its subject/session identifier, step timeline and applicable Running/Done badge for that run only, without separate current-step or elapsed-time fields
 
 #### Scenario: ASL module with multiple runs
 
@@ -153,7 +184,18 @@ The active dashboard SHALL remain visible during `preparing`, `running`, `finali
 
 ### Requirement: Start and Kill Controls
 
-Start SHALL be available only when native admission is free, including completed terminal save/acknowledgement, interruption confirmation, and cleanup. A terminal snapshot alone SHALL NOT unlock replacement execution. Start SHALL build a pure request and bind the current reservation response; historical replay SHALL NOT become the attached run. Preparing, Running, Finalizing, Cancelling, `confirmStopped`, and `retryCleanup` SHALL lock duplicate Start and configuration changes. Stop, confirmation, and cleanup retry SHALL invoke only the attached run's exact native action. Stale responses SHALL NOT alter another run. No separate Pause or Restart control SHALL be added.
+Start SHALL be available only when native admission is free, including completed terminal save/acknowledgement, interruption confirmation, and cleanup. A terminal snapshot alone SHALL NOT unlock replacement execution. Start SHALL build a pure request and bind the current reservation response; historical replay SHALL NOT become the attached run. Preparing, Running, Finalizing, Cancelling, `confirmStopped`, and `retryCleanup` SHALL block duplicate Start. Configuration visibility SHALL follow lifecycle: Preparing, Running, Finalizing and Cancelling SHALL hide the configuration form; Idle and terminal phases, including Interrupted, SHALL expose editable selections subject to ordinary field restrictions. Recovery action alone SHALL NOT impose an additional configuration lock. Edits SHALL NOT replace the immutable reserved request or authorize execution. Stop, confirmation, and cleanup retry SHALL invoke only the attached run's exact native action. Stale responses SHALL NOT alter another run. No separate Pause or Restart control SHALL be added.
+
+#### Scenario: Interrupted configuration remains editable
+
+- **WHEN** an Interrupted run exposes `confirmStopped`
+- **THEN** subject, profile, module and worker configuration SHALL remain viewable and editable under ordinary field restrictions, while Start and terminal acknowledgement remain blocked pending exact native confirmation
+- **AND** edits SHALL NOT change the interrupted run's immutable request or recovery policy
+
+#### Scenario: Cleanup retry retains lifecycle-based form visibility
+
+- **WHEN** an active native lifecycle exposes `retryCleanup`
+- **THEN** Start SHALL remain blocked and configuration SHALL remain hidden by the active phase, not by a separate action-specific disabled state
 
 #### Scenario: Terminal snapshot awaits acknowledgement
 
@@ -192,21 +234,26 @@ Start SHALL be available only when native admission is free, including completed
 
 ### Requirement: Rawdata Sanity Check
 
-On page load, if `rawdata/` is empty or subjects exist in lock files but not in rawdata, the dashboard SHALL display warnings for orphaned entries.
+After subject and historical lock discovery, renderer preflight SHALL include a warning for distinct non-Population lock SubjectSessions absent from `availableSubjects`. The status alert SHALL display warnings when a selection exists and no hard-block errors take priority. Comparison SHALL use the data-source-specific inventory (DICOM `rawdata/`, BIDS-direct project root). Empty or absent `rawdata/` alone SHALL NOT produce a dedicated warning without orphaned entries.
 
 #### Scenario: Orphaned lock entries
 
-- **WHEN** `read_lock_status` returns SubjectSessions not found in `rawdata/`
-- **THEN** the dashboard SHALL show a warning: "Subject data missing for sub-X_01. Re-run import or clean up."
+- **WHEN** `read_lock_status` returns non-Population SubjectSessions absent from discovered subjects
+- **THEN** preflight warnings SHALL report the distinct orphan count and up to five SubjectSession identifiers, with a remaining-count suffix when needed
+
+#### Scenario: Empty rawdata without orphaned locks
+
+- **WHEN** `rawdata/` is empty and no non-Population lock entries lack a matching discovered SubjectSession
+- **THEN** no dedicated empty-rawdata or orphan warning SHALL appear; ordinary selection validation SHALL still apply
 
 ### Requirement: Re-run Flow
 
-Clicking Start with subjects/modules selected (including completed ones) SHALL automatically delete `.status` files for the selected modules on the selected subjects before spawning workers. Subject output directories SHALL NOT be deleted — ExploreASL overwrites as needed.
+Starting selected work (including confirmed reprocessing of completed subjects) SHALL invoke native journaled quarantine of selected module/subject `.status` files and logs before spawning workers. Stale `locked` directories SHALL use the backend's project-wide scope, not the status/log selection filter. Pre/post-commit recovery SHALL follow Durable processing execution boundary. Subject scientific-output directories SHALL NOT be deleted by launch preparation or recovery — ExploreASL overwrites as needed.
 
 #### Scenario: Re-running completed subject
 
-- **WHEN** the user selects a subject with `999_ready.status` for Structural and clicks Start with Structural checked
-- **THEN** the Structural `.status` files for that subject SHALL be deleted, workers SHALL be spawned, and the subject SHALL be reprocessed from the beginning of the Structural module
+- **WHEN** the user selects a subject with `999_ready.status` for Structural and confirms reprocessing with Structural checked
+- **THEN** native preparation SHALL quarantine that subject's Structural `.status` files before worker launch, allowing reprocessing from the beginning of the Structural module without deleting scientific outputs
 
 ### Requirement: Subject Row Extensibility
 

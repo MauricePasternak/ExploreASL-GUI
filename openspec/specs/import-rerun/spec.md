@@ -10,7 +10,7 @@ On entering import step 5, the system SHALL compare the current import configura
 
 **Structural staleness**: If any of the following fields differ between current config and snapshot, ALL subjects SHALL be marked stale: logical `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`.
 
-**Metadata staleness**: If only `metadataGroups` or `subjectRows` differ, the system SHALL identify which metadata groups changed and mark only subjects assigned to those groups as stale. A metadata group is considered changed if its `bidsParams` object differs from the snapshot. Subject row changes (group assignment changes) SHALL also mark affected subjects stale.
+**Metadata staleness**: If structural configuration is unchanged, the system SHALL collect changed group IDs: newly added or removed metadata groups, groups whose serialized `bidsParams` differ from the snapshot, and the current target `groupId` of each current subject row whose `id` is new or whose group assignment differs from the snapshot. Each current subject SHALL be marked stale only when its first row in the current `subjectRows` array belongs to that changed-group set. Later rows for the same subject SHALL NOT independently determine its staleness; the comparison SHALL NOT be treated as exhaustive subject-session change detection.
 
 **No staleness**: If the normalized snapshot matches the current configuration exactly, no subjects SHALL be marked stale. A compatible relink SHALL update current and snapshot source locations together and SHALL NOT make subjects stale solely because the path changed. A confirmed incompatible relink SHALL make affected subjects stale through its source-dependent configuration reset.
 
@@ -19,15 +19,20 @@ On entering import step 5, the system SHALL compare the current import configura
 - **WHEN** the user changes a tokenizer assignment after import completion and navigates to step 5
 - **THEN** all subjects SHALL be marked stale regardless of their metadata group assignment
 
-#### Scenario: Metadata change stales only affected subjects
+#### Scenario: Metadata change uses each subject's first current row
 
 - **WHEN** the user changes `PostLabelingDelay` in metadata group "Group A" after import completion and navigates to step 5
-- **THEN** only subjects assigned to "Group A" SHALL be marked stale and subjects in other groups SHALL remain fresh
+- **THEN** only subjects whose first current row belongs to "Group A" SHALL be marked stale and subjects whose first current row belongs to an unchanged group SHALL remain fresh
 
 #### Scenario: Subject moved between groups
 
-- **WHEN** the user reassigns a subject from "Group A" to "Group B" after import completion and navigates to step 5
-- **THEN** the moved subject SHALL be marked stale even if both groups' parameters are unchanged
+- **WHEN** the user reassigns a subject's first current row from "Group A" to "Group B" after import completion and navigates to step 5, with both groups' parameters unchanged
+- **THEN** the moved subject and unchanged subjects whose first current row belongs to "Group B" SHALL be marked stale
+
+#### Scenario: Changed group appears only in a later row
+
+- **WHEN** a subject's first current row belongs to unchanged "Group A", a later row belongs to "Group B", and only "Group B" parameters change
+- **THEN** that subject SHALL remain fresh under the first-row metadata comparison
 
 #### Scenario: Project root changes only
 
@@ -102,15 +107,15 @@ When no active or replayable native run supplies progress, the system SHALL reco
 
 The import step 5 execution view SHALL replace the current `ImportProgressTable` and `ImportSummary` with a combined view:
 
-1. **Filter bar** with segmented control: All (N) | Pending (N) | Completed (N) | Failed (N) | Stale (N). Each option shows count of matching subjects.
+1. **Filter bar** with segmented control: All (N) | Pending (N) | Completed (N) | Failed (N) | Stale (N). Each option shows count of matching subjects. Stale rows SHALL belong to Stale regardless of status; otherwise completed rows SHALL belong to Completed, failed/cancelled/interrupted rows to Failed, and pending/running rows to Pending. All SHALL include every row.
 
 2. **Subject selection table** with columns: Subject | Status | Step | Import Logs/Errors. Rows have checkboxes for subject selection. All subjects are pre-selected on first import. On re-visit after completion, stale subjects are pre-selected and fresh completed subjects are deselected.
 
-3. **Status column** displays icons: green check (completed), orange spinning loader (running), gray dash (pending), red exclamation mark (failed), gray ban (cancelled). Stale subjects show an amber warning triangle overlay on the status icon.
+3. **Status column** SHALL display icons: green check (completed), orange spinning loader (running), gray dash (pending), red exclamation mark (failed), gray ban (cancelled), yellow warning triangle (interrupted). Stale subjects show an amber warning triangle overlay on the status icon.
 
-4. **Step column** shows "DCM2NII" or "NII2BIDS" for running/failed subjects. Shows "—" for pending/completed/cancelled subjects.
+4. **Step column** SHALL show `currentStep`, falling back to `errorStep` when present, for running/failed subjects; it SHALL show "—" when neither is available or for other statuses. A failure diagnostic SHALL NOT imply that its step was stored.
 
-5. **Import Logs/Errors column** shows clickable badge: "View Errors" (red outline) if error logs exist, "View Logs" (teal outline) if only non-error logs exist, "No Logs" (dimmed text) if no logs. Clicking opens `LogViewerModal` (reusing Processing module's modal) with import module logs for that subject.
+5. **Import Logs/Errors column** SHALL show a clickable "View Errors" badge (red outline) when logs exist and the subject's progress status is `failed`, or "View Logs" (teal outline) when logs exist for any other status. The badge label SHALL NOT depend on `LogFileInfo.hasError`. With no logs, it SHALL show "No Logs" (dimmed text) regardless of status. Clicking opens `LogViewerModal` (reusing Processing module's modal) with import module logs for that subject.
 
 #### Scenario: First visit before import
 
@@ -125,7 +130,7 @@ The import step 5 execution view SHALL replace the current `ImportProgressTable`
 #### Scenario: Re-visit with stale subjects
 
 - **WHEN** the user changed a metadata group parameter and navigates to step 5
-- **THEN** subjects in the changed group show "completed" status with amber stale overlay, those subjects are pre-selected in checkboxes
+- **THEN** verified completed subjects whose first current row belongs to the changed group show "completed" status with amber stale overlay, and those subjects are pre-selected in checkboxes
 
 #### Scenario: Re-visit with structural changes
 
@@ -139,8 +144,18 @@ The import step 5 execution view SHALL replace the current `ImportProgressTable`
 
 #### Scenario: Clicking View Errors opens modal
 
-- **WHEN** the user clicks "View Errors" on a subject row
-- **THEN** the LogViewerModal opens showing import log files with error highlighting, module "import"
+- **WHEN** the user clicks "View Errors" on a failed subject row with logs, even if no log has `hasError = true`
+- **THEN** the LogViewerModal SHALL open for module "import" with those log entries flagged as errors; line highlighting SHALL follow log content
+
+#### Scenario: Non-failed subject has an error-marked log
+
+- **WHEN** a non-failed subject has import logs with `hasError = true`
+- **THEN** its row SHALL show "View Logs", not "View Errors"
+
+#### Scenario: Failed subject has no logs
+
+- **WHEN** a failed subject has no import log files
+- **THEN** its row SHALL show "No Logs", not "View Errors"
 
 ### Requirement: Selective re-run with confirmation
 
@@ -148,9 +163,9 @@ The system SHALL provide "Start Import" and "Stop" controls on step 5. When the 
 
 1. If no subjects are selected, the button SHALL be disabled.
 2. The system SHALL resolve one immutable selected-subject snapshot and request a native read-only replacement inventory for that exact snapshot before staging mutation or process spawn.
-3. If the inventory contains any existing selected-subject rawdata that relocation would replace, or selected subjects include any fresh completed subject, a confirmation dialog SHALL appear with title "Replace existing imported data?", an expandable subject-grouped inventory of affected project-relative rawdata paths, sessions, file counts, and byte totals, explanatory text that the complete selected subject will replace older sessions and files, and actions "Cancel" (default) and "Replace and import". Derived import locks, import logs, and BIDS2Legacy locks SHALL NOT trigger replacement confirmation or affect the confirmed rawdata fingerprint.
-4. If the inventory is empty and all selected subjects are stale, pending, or failed, import SHALL start without a replacement confirmation.
-5. Cancellation SHALL preserve selection and SHALL NOT bind a relocation plan, mutate staging, or spawn ExploreASL.
+3. If any selected-subject inventory has `fileCount > 0`, or selected subjects include any fresh completed subject, a confirmation dialog SHALL appear with title "Replace existing imported data?", an expandable subject-grouped inventory of affected project-relative rawdata paths, sessions, file counts, and byte totals, explanatory text that the complete selected subject will replace older sessions and files, and actions "Cancel" (default) and "Replace and import". The inventory and fingerprint SHALL include existing rawdata directories, but directories SHALL NOT count as files or alone trigger confirmation. Derived import locks, import logs, and BIDS2Legacy locks SHALL NOT trigger replacement confirmation or affect the confirmed rawdata fingerprint.
+4. If every selected-subject inventory has `fileCount = 0` and no selected subject is fresh completed, import SHALL start without a replacement confirmation, even when the inventory contains directories.
+5. Cancelling replacement confirmation SHALL preserve selection and SHALL NOT start import, bind a relocation plan, mutate imported output or staging, or spawn ExploreASL. Pending configuration edits MAY already have been flushed and saved before the prompt; cancellation SHALL NOT undo that save.
 6. Confirmation SHALL bind the native relocation-plan identity and fingerprint to the same selected-subject snapshot used for staging, progress tracking, parser ownership, retry preservation, and execution.
 7. Before spawning MATLAB, lock files for selected subjects SHALL be deleted. Lock files for unselected fresh subjects SHALL be preserved via retry lock preservation.
 8. The staging tree SHALL be rebuilt from current configuration with source entries only for selected subjects. Unselected subjects SHALL NOT be staged or processed, regardless of status or preservable locks.
@@ -160,14 +175,19 @@ The system SHALL provide "Start Import" and "Stop" controls on step 5. When the 
 - **WHEN** selected pending subjects have no subject rawdata that relocation would replace
 - **THEN** import SHALL start without replacement confirmation using the immutable selected-subject snapshot and empty relocation inventory
 
-#### Scenario: Existing pending or stale subject has output
+#### Scenario: Existing pending or stale subject has rawdata files
 
-- **WHEN** a selected pending, stale, or failed subject has existing subject rawdata that relocation would replace
+- **WHEN** a selected pending, stale, or failed subject has at least one existing subject rawdata file that relocation would replace
 - **THEN** the replacement confirmation SHALL appear regardless of displayed completion status
+
+#### Scenario: Only rawdata directories exist for selected subjects
+
+- **WHEN** every selected-subject inventory contains only directories or no entries, and no selected subject is fresh completed
+- **THEN** import SHALL start without replacement confirmation, retaining any inventoried directories in the native plan and fingerprint
 
 #### Scenario: Re-import with only stale subjects
 
-- **WHEN** the user selects only stale subjects and native inventory finds no existing subject rawdata that relocation would replace
+- **WHEN** the user selects only stale subjects and native inventory finds no existing subject rawdata files that relocation would replace
 - **THEN** import SHALL start without replacement confirmation, stage only those stale subjects, delete their import locks, and preserve authorized locks for unselected fresh subjects
 
 #### Scenario: Only derived artifacts exist for selected pending subject
@@ -187,13 +207,13 @@ The system SHALL provide "Start Import" and "Stop" controls on step 5. When the 
 
 #### Scenario: Existing subject contains older sessions
 
-- **WHEN** native inventory finds selected-subject sessions or files that the whole-subject replacement can remove
+- **WHEN** replacement confirmation is required and native inventory finds selected-subject sessions or files that the whole-subject replacement can remove
 - **THEN** the dialog SHALL identify those project-relative paths and SHALL explain that confirmation replaces the complete subject rather than merging old content
 
 #### Scenario: Confirmation cancelled
 
 - **WHEN** the user clicks "Cancel" on the replacement confirmation
-- **THEN** import SHALL NOT start, subject selection SHALL remain unchanged, and project and staging files SHALL remain unchanged
+- **THEN** the dialog SHALL close, subject selection SHALL remain unchanged, and no import, relocation-plan binding, imported-output replacement, staging mutation, or ExploreASL spawn SHALL occur; configuration edits already saved before the prompt SHALL remain saved
 
 #### Scenario: Confirmation accepted
 
@@ -336,7 +356,7 @@ Selective retry defaults and retry-lock preservation SHALL use reconciled native
 
 #### Scenario: Completed subject becomes stale
 
-- **WHEN** a verified committed subject's relevant configuration changes
+- **WHEN** a verified committed subject has a structural configuration change or satisfies the first-row metadata staleness rule
 - **THEN** it SHALL remain completed with a stale overlay and SHALL be preselected under existing selective re-run behavior
 
 #### Scenario: Interrupted run leaves staging locks

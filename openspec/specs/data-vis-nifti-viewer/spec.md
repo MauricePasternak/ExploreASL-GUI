@@ -49,19 +49,24 @@ The AppState SHALL maintain a `Mutex<Option<PathBuf>>` storing the active projec
 - **WHEN** a `niivue://` request is made but the registry is `None`
 - **THEN** the protocol SHALL return a 404 response
 
-### Requirement: NiiVue Tri-Planar Rendering
+### Requirement: NiiVue Rendering Preferences
 
-The viewer panel SHALL use a single NiiVue instance with tri-planar grid rendering (axial, sagittal, coronal) on one canvas. The NiiVue instance SHALL be created on component mount (after WebGL2 availability check) and destroyed on component unmount. Volume swaps (loading a new qCBF on point click) SHALL replace the current volume in-place without destroying the instance. The colormap SHALL be grayscale. The crosshair SHALL initialize at the center of volume.
+The viewer panel SHALL use a single NiiVue instance on one canvas, created after the mount-time WebGL2 availability check and cleaned up on component unmount. Layout SHALL follow persisted `nvSliceType`: `multiplanar` (default), `axial`, `coronal`, `sagittal`, or `render`. Multiplanar mode SHALL configure a grid with axial, sagittal, coronal, and 3D rendering. Colormap SHALL follow persisted `nvColormap`, defaulting to `gray`. Settings changes SHALL update the existing instance. Volume swaps SHALL remove the old volume before awaiting `loadVolumes` for the replacement, without destroying the instance. The crosshair SHALL initialize at the center of volume.
 
 #### Scenario: Tri-planar grid renders on load
 
-- **WHEN** a qCBF volume is loaded into NiiVue
-- **THEN** the canvas SHALL display three orthogonal views (axial, sagittal, coronal) in a grid layout with linked crosshair navigation
+- **WHEN** a qCBF volume is loaded with `nvSliceType` set to `multiplanar`
+- **THEN** the canvas SHALL use the multiplanar grid layout with orthogonal slices and 3D rendering
 
-#### Scenario: Grayscale colormap
+#### Scenario: Configured colormap
 
-- **WHEN** a qCBF volume is rendered
-- **THEN** the NiiVue colormap SHALL be grayscale
+- **WHEN** a qCBF volume is rendered with `nvColormap` set to `viridis`
+- **THEN** NiiVue SHALL apply `viridis`; without a saved preference, it SHALL use `gray`
+
+#### Scenario: Single-plane preference
+
+- **WHEN** the user sets `nvSliceType` to `axial` in Visualization Settings
+- **THEN** the preference SHALL persist and the existing NiiVue instance SHALL switch to axial layout
 
 #### Scenario: Crosshair starts at volume center
 
@@ -71,7 +76,7 @@ The viewer panel SHALL use a single NiiVue instance with tri-planar grid renderi
 #### Scenario: Volume swap preserves instance
 
 - **WHEN** a new qCBF volume is loaded after clicking a different datapoint
-- **THEN** the NiiVue instance SHALL NOT be destroyed and recreated; `loadVolume` SHALL replace the current volume in-place
+- **THEN** the NiiVue instance SHALL NOT be destroyed and recreated; its existing volume SHALL be removed before `loadVolumes` loads the replacement
 
 #### Scenario: Instance destroyed on unmount
 
@@ -80,32 +85,32 @@ The viewer panel SHALL use a single NiiVue instance with tri-planar grid renderi
 
 ### Requirement: Viewer Panel States
 
-The viewer panel SHALL always be visible (not toggled on first click). Before any point is clicked, the panel SHALL show a placeholder: "Click a datapoint to load its qCBF image." with an empty canvas. When a point is clicked, the panel SHALL show a loading overlay while the image loads. The previous image SHALL remain visible until the new image loads. If the image fails to load, the panel SHALL show an error message and the previous image SHALL remain visible.
+The viewer panel SHALL always be visible (not toggled on first click). With WebGL2 available and no selected point, it SHALL show header/image skeletons and "Click on a datapoint to load in its respective qCBF image." while hiding the canvas. When a point is clicked, the panel SHALL show a loading overlay while the image loads. The current volume SHALL be removed before the replacement load begins. If loading rejects, the panel SHALL show an error overlay with "Failed to load image for {participantId}_{run}." and SHALL NOT restore the removed volume. Missing files and other image load failures SHALL use this same frontend message rather than distinct missing/unreadable messages.
 
 #### Scenario: Placeholder before first click
 
 - **WHEN** the Visualize step is entered and no point has been clicked
-- **THEN** the viewer panel SHALL show "Click a datapoint to load its qCBF image." with an empty canvas
+- **THEN** with WebGL2 available, the viewer panel SHALL show skeleton placeholders and "Click on a datapoint to load in its respective qCBF image." with the canvas hidden
 
 #### Scenario: Loading overlay on image fetch
 
 - **WHEN** a point is clicked and the qCBF image is being fetched
 - **THEN** a loading indicator SHALL be displayed over the viewer panel
 
-#### Scenario: Previous image persists during loading
+#### Scenario: Previous volume removed during replacement
 
 - **WHEN** a point is clicked while a previous image is displayed
-- **THEN** the previous image SHALL remain visible until the new image finishes loading
+- **THEN** the previous volume SHALL be removed from NiiVue before awaiting the replacement load; successful replacement SHALL NOT be required before removal
 
 #### Scenario: Image loaded successfully
 
 - **WHEN** the qCBF image finishes loading
-- **THEN** the loading overlay SHALL be dismissed and the tri-planar view SHALL display the new image
+- **THEN** the loading overlay SHALL be dismissed and the configured layout/colormap SHALL be applied to the new image
 
 #### Scenario: Image file exists but fails to load
 
-- **WHEN** the qCBF file exists but is corrupt or unreadable by NiiVue
-- **THEN** the viewer panel SHALL show "Failed to load image for {participant*id}*{session}." and the loading overlay SHALL be dismissed and the previous image (if any) SHALL remain visible
+- **WHEN** a qCBF load rejects because the file is corrupt or unreadable by NiiVue
+- **THEN** the loading overlay SHALL be replaced by "Failed to load image for {participantId}_{run}." without restoring the previous volume
 
 ### Requirement: WebGL2 Error Handling
 
@@ -128,7 +133,7 @@ On NiiVue component mount, the viewer SHALL check WebGL2 context availability. I
 
 ### Requirement: qCBF Image Path Resolution
 
-The qCBF filename SHALL be constructed as `qCBF_{participant_id}_{run}.nii` using the raw `participant_id` and `run` (TSV `session` column value) from the clicked datapoint. No Subject/Session splitting is needed — the `participant_id` is used verbatim. The protocol SHALL try `.nii` first, then fall back to `.nii.gz`. If neither exists, the viewer panel SHALL show: "qCBF image not found for {participant*id}*{run}."
+The qCBF filename SHALL be constructed as `qCBF_{participant_id}_{run}.nii` using the raw `participant_id` and `run` (TSV `session` column value) from the clicked datapoint. No Subject/Session splitting is needed — the `participant_id` is used verbatim. The protocol SHALL try `.nii` first, then fall back to `.nii.gz`. If neither resolves, the protocol SHALL return 404. The frontend SHALL use the generic "Failed to load image for {participantId}_{run}." when the image load rejects; it SHALL NOT distinguish missing files from unreadable images in that message.
 
 #### Scenario: NIfTI file found
 
@@ -143,31 +148,31 @@ The qCBF filename SHALL be constructed as `qCBF_{participant_id}_{run}.nii` usin
 #### Scenario: Both formats missing
 
 - **WHEN** neither `.nii` nor `.nii.gz` exists for the clicked point
-- **THEN** the viewer panel SHALL show "qCBF image not found for sub-001Philips_01_ASL_1." and the previous image (if any) SHALL remain visible
+- **THEN** the protocol SHALL return 404 and a rejected viewer load SHALL show "Failed to load image for sub-001Philips_01_ASL_1." without restoring the previous volume
 
 #### Scenario: Image file exists but fails to load
 
-- **WHEN** the qCBF file exists but is corrupt or unreadable by NiiVue
-- **THEN** the viewer panel SHALL show "Failed to load image for {participant*id}*{run}." and the loading overlay SHALL be dismissed and the previous image (if any) SHALL remain visible
+- **WHEN** the qCBF file exists but its image load rejects
+- **THEN** the viewer panel SHALL show "Failed to load image for {participantId}_{run}." and dismiss the loading overlay without restoring the previous volume
 
-### Requirement: NiiVue Theme Integration
+### Requirement: NiiVue Background Preference
 
-The NiiVue canvas background SHALL be black in dark mode and white in light mode, matching the active Mantine color scheme. The background color SHALL update when the theme changes.
+NiiVue's rendered background SHALL follow persisted `nvBackColor` (`black`, `gray`, or `white`), defaulting to black, independently of the Mantine color scheme. The canvas element's CSS background SHALL remain black. The viewer header and loading/error overlays SHALL adapt to Mantine's color scheme without changing the saved NiiVue background preference.
 
-#### Scenario: Dark mode background
+#### Scenario: Default background
 
-- **WHEN** the Mantine color scheme is "dark"
-- **THEN** the NiiVue canvas background SHALL be black
+- **WHEN** no NiiVue background preference is saved
+- **THEN** NiiVue SHALL use a black background in either Mantine color scheme
 
-#### Scenario: Light mode background
+#### Scenario: White background preference
 
-- **WHEN** the Mantine color scheme is "light"
-- **THEN** the NiiVue canvas background SHALL be white
+- **WHEN** the user selects the white background in Visualization Settings
+- **THEN** `nvBackColor` SHALL persist as `white` and NiiVue SHALL use a white rendered background while the canvas CSS background remains black
 
-#### Scenario: Background updates on theme switch
+#### Scenario: Theme switch preserves viewer preference
 
 - **WHEN** the user switches the theme from dark to light while the viewer is open
-- **THEN** the NiiVue canvas background SHALL update to white
+- **THEN** the rendered background SHALL continue to follow `nvBackColor`, and the canvas CSS background SHALL remain black
 
 ### Requirement: Single Volume Rendering
 

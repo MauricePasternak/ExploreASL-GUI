@@ -157,9 +157,13 @@ The sidecar's `M0Type` values other than `"Estimate"` (including `"Integrated"` 
 - **WHEN** a subject's `aslcontext.tsv` contains only `control` and `label` entries, no `*_m0scan.nii.gz` file, sidecar has `M0Type: "Absent"`
 - **THEN** derived `M0Type = "Absent"`
 
-### Requirement: Missing or unparseable sidecars and aslcontext.tsv skip session
+### Requirement: Sidecar count, JSON, and context checks report skipped sessions
 
-If `*_aslcontext.tsv` is missing or unparseable alongside a sidecar, or if **any** ASL file in a session lacks its companion `*_asl.json` sidecar or contains an unparseable sidecar file, the entire subject/session SHALL be added to `skippedSubjects[]` (and excluded from all fingerprint groups). The scan continues (non-fatal). The schema's `ASLContext` field stays `.optional()` because file-presence enforcement lives at the Rust scan layer.
+For sessions containing ASL NIfTIs, the native scan SHALL report the subject/session in `skipped[]` and exclude it from all fingerprint groups when fewer `*_asl.json` sidecars than ASL NIfTIs are found, any discovered sidecar cannot be read/parsed as JSON, or any sidecar lacks a corresponding `*_aslcontext.tsv` path. These checks do not establish filename-by-filename NIfTI/JSON pairing. The scan continues (non-fatal); the frontend exposes `skipped` as `skippedSubjects`.
+
+A context file that cannot be read as UTF-8 SHALL also cause a skipped entry without aborting the scan. Limitation: a context read failure encountered after earlier sidecars from that session have contributed group memberships does not remove those memberships; later sidecars from that session are omitted. A skipped identifier therefore does not always imply absence from every returned group.
+
+Native context extraction SHALL discard the first line, trim the remaining rows, ignore blanks, and comma-join their trimmed first TSV columns. It does not validate the header, allowed volume-type tokens, or nonempty context. Readable malformed content is not itself a native skip condition. The frontend separately validates returned group metadata; an empty or unsupported `ASLContext` retained in a group can fail the review scan rather than produce a per-session skipped entry.
 
 `bids::sidecar::find_asl_context_for(sidecar_path: &Path) -> Option<PathBuf>` resolves `sub-XX_asl.json` → `sub-XX_aslcontext.tsv` (same directory, replace `_asl` with `_aslcontext`, `.json` with `.tsv`).
 
@@ -170,12 +174,27 @@ If `*_aslcontext.tsv` is missing or unparseable alongside a sidecar, or if **any
 
 #### Scenario: Partially missing sidecar file in multi-run session
 
-- **WHEN** `scan_bids_sidecars` processes subject sub-06 whose `perf/` has two runs: `sub-06_run-1_asl.nii.gz` + `sub-06_run-1_asl.json` and `sub-06_run-2_asl.nii.gz` (lacking `sub-06_run-2_asl.json`)
+- **WHEN** `scan_bids_sidecars` processes subject sub-06 whose `perf/` has two ASL NIfTI runs but only `sub-06_run-1_asl.json` as an ASL JSON sidecar
 - **THEN** the subject/session `"sub-06_<session>"` is added to `skippedSubjects[]` and excluded from any metadata groups; the scan continues
+
+#### Scenario: Equal sidecar counts do not establish exact pairing
+
+- **WHEN** a session has two ASL NIfTIs and two parseable ASL JSON sidecars with existing readable context files, but one JSON filename does not match either NIfTI
+- **THEN** the native scan SHALL not skip the session solely for that filename mismatch and SHALL group the discovered sidecars by fingerprint
+
+#### Scenario: Readable malformed context is not a native skip
+
+- **WHEN** an otherwise valid single-run session has context bytes `not_a_header\nunexpected\n`
+- **THEN** the native scan SHALL return its group with `ASLContext = "unexpected"` and no skipped entry for that session; frontend metadata validation SHALL report a scan error
+
+#### Scenario: Later unreadable context leaves earlier membership
+
+- **WHEN** one run contributes a group membership before another run's existing context path in the same session fails to read
+- **THEN** the native scan SHALL report the session in `skipped[]`; the earlier membership remains and subsequent sidecars for that session are omitted
 
 ### Requirement: scan_bids_sidecars command returns typed SidecarGroup
 
-`scan_bids_sidecars(root_path: String) -> Result<BidsSidecarScan, String>` SHALL call `parse_bids_structure` + `find_asl_sidecars` + `parse_sidecar` + `find_asl_context_for` + `parse_asl_context` + `inject_asl_context` + `extract_fingerprint` + `compute_group_hash` + `group_by_fingerprint` + `derive_vendor` + `derive_sequence` + `derive_labeling_type` + label auto-suggestion.
+`scan_bids_sidecars(root_path: String) -> Result<BidsSidecarScan, String>` SHALL discover subjects and sidecars, perform the session/context checks above, and group parsed sidecar metadata by fingerprint with derived vendor, sequence, labeling type, and suggested labels.
 
 `SidecarGroup` SHALL have typed fields (not raw `serde_json::Value`):
 
@@ -194,10 +213,10 @@ If `*_aslcontext.tsv` is missing or unparseable alongside a sidecar, or if **any
 - **WHEN** `scan_bids_sidecars` processes `sub-01/perf/sub-01_run-1_asl.json` and `sub-01/perf/sub-01_run-2_asl.json` with identical fingerprint parameters
 - **THEN** both runs group together; `GroupSubject` for `sub-01` has one entry with `session_labels = ["1"]`
 
-#### Scenario: Multi-run same session in different groups warns at review
+#### Scenario: Multi-run same session in different groups cannot be confirmed together
 
 - **WHEN** two ASL runs in the same session have different fingerprint hashes (different acquisition parameters)
-- **THEN** the subject/session appears in two groups; `BIDSReviewPanel` shows both group memberships (v1: user resolves by confirming both groups; subject gets two `SubjectRow` entries with different `groupId`)
+- **THEN** the native scan SHALL return the subject/session in both groups and `BIDSReviewPanel` SHALL show both memberships; confirming both groups SHALL be rejected because one subject/session cannot map to different group IDs, even with unique labels
 
 `skipped` entries use the session convention (`sub-XX_<session>`).
 

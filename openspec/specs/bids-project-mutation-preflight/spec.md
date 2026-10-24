@@ -8,7 +8,14 @@ Define read-only planning, explicit consent, and recoverable transactional appli
 
 ### Requirement: BIDS mutation preflight is read-only
 
+The landing setup dialog SHALL require a mutation plan for either data source when detection reports `is_bids = true`, `total_subject_count > 0`, `has_dataset_description = true`, or non-null `dataset_desc_error`. Ordinary DICOM creation with none of these indicators SHALL use the normal single-project-file creation path after explicit dialog confirmation, without mutation preflight or a plan identity. Activation, Recent Projects registration, and navigation SHALL still wait for successful project creation. The plan and transaction requirements below apply whenever reviewed setup is used; BIDS-direct creation SHALL NOT use the direct-create exception.
+
 Scanning a candidate root, building/displaying a new mutation plan, changing import mode, and cancelling that plan SHALL not create, modify, rename, or remove source-tree entries. A previously confirmed unfinished setup transaction SHALL be diagnosed separately on root selection and recovered under its validated journal before new preflight begins. That recovery SHALL be disclosed and SHALL not authorize new setup mutations. A clean selected root SHALL remain byte-preserving throughout selection and preflight. Inspection errors SHALL report actionable failure without setup/cleanup writes.
+
+#### Scenario: Ordinary non-BIDS DICOM creation needs no setup plan
+
+- **WHEN** none of the detection indicators requiring reviewed setup are present and the user confirms DICOM import
+- **THEN** the GUI SHALL create the project without preflight or a setup-plan identity, and SHALL activate, register, and navigate only after successful creation
 
 #### Scenario: Scan and review preserve source tree
 
@@ -93,7 +100,7 @@ When entries are missing, existing bytes SHALL be preserved exactly. The append 
 
 ### Requirement: Confirmation commits only the reviewed plan
 
-Mutation SHALL require an explicit confirmation carrying the current opaque plan identity. Immediately before mutation, the system SHALL revalidate the canonical root and every planned path against the preflight observations. A missing, expired, mismatched, or stale plan SHALL be rejected before any write and SHALL require a new preflight and review. Repeated confirmation of a committed plan SHALL return its committed outcome without applying the mutations twice.
+Applying a setup plan SHALL require an explicit confirmation carrying the current opaque plan identity. Immediately before mutation, the system SHALL revalidate the canonical root and every planned path against the preflight observations. A missing, expired, mismatched, or stale plan SHALL be rejected before any write and SHALL require a new preflight and review. Repeated confirmation of a committed plan SHALL return its committed outcome without applying the mutations twice.
 
 #### Scenario: Source changes after review
 
@@ -143,7 +150,7 @@ Ordinary failure SHALL restore prior bytes and remove only transaction-owned add
 
 ### Requirement: Commit outcome gates application state
 
-Project activation, import-store hydration, navigation, Recent Projects updates, and success logging SHALL occur only after the native transaction returns a complete committed outcome for the current plan. Failure, rollback, stale-plan rejection, or unresolved recovery SHALL leave no new active project or recent-project record.
+For reviewed setup, project activation, import-store hydration, navigation, Recent Projects updates, and success logging SHALL occur only after the native transaction returns a complete committed outcome for the current plan. Failure, rollback, stale-plan rejection, or unresolved recovery SHALL leave no new active project or recent-project record.
 
 #### Scenario: Commit succeeds
 

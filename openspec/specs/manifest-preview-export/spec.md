@@ -50,35 +50,24 @@ The manifest preview SHALL render a "Study Parameters" section. For each `Metada
 
 - N Subjects (count of SubjectSessions assigned to the group)
 - N Total Runs (Σ `aslRuns.length` across group members)
-- Arterial Spin Labeling Type (from `bidsParams.ArterialSpinLabelingType`)
-- Post Labeling Delay (`bidsParams.Initial_PLD` or equivalent)
-- Labeling Duration (CASL/PCASL only; omitted for PASL)
-- Bolus Cut Off Flag (PASL only)
-- Bolus Cut Off Delay Time (PASL only; omitted if `BolusCutOffFlag` is false)
-- M0 Type (`bidsParams.M0Type`)
-- Background Suppression (`bidsParams.BackgroundSuppression`)
-- MR Acquisition Type (`bidsParams.MRAcquisitionType`)
-- Magnetic Field Strength (`bidsParams.MagneticFieldStrength`)
-- Repetition Time (`bidsParams.RepetitionTime`)
-- Echo Time (`bidsParams.EchoTime`)
-- Flip Angle (`bidsParams.FlipAngle`)
+- The group's stored `bidsParams` entries, using raw sidecar keys rather than humanized parameter names
 
-Conditional rows (Labeling Duration for PASL, Bolus Cut Off Delay Time when `BolusCutOffFlag` is false) SHALL be omitted from the rendered output rather than shown as blanks.
+Null or undefined values and keys `id` and `label` SHALL be omitted. `LabelingDuration` SHALL be omitted for PASL, and `BolusCutOffDelayTime` SHALL be omitted when `BolusCutOffFlag` is false or absent. Other scalar values SHALL render as stored text without added unit normalization. `ASLContext` SHALL use its display summary. Arrays SHALL render all stringified entries in brackets without a suffix when at most five distinct stringified values exist. Otherwise, they SHALL render the first five original entries in order, stringified, followed by `, … (+N more unique values)` inside the brackets, where N is the total number of distinct stringified values minus five.
 
 #### Scenario: PCASL group shows Labeling Duration
 
 - **WHEN** a metadata group has `ArterialSpinLabelingType: "PCASL"` and `LabelingDuration: 1800`
-- **THEN** the rendered Section 1 table for that group SHALL include a "Labeling Duration" row with value `"1800 ms"` (or equivalent unit-normalized string)
+- **THEN** the rendered Section 1 table for that group SHALL include a `"LabelingDuration"` row with value `"1800"`, without adding units
 
 #### Scenario: PASL group omits Labeling Duration
 
 - **WHEN** a metadata group has `ArterialSpinLabelingType: "PASL"`
-- **THEN** the rendered Section 1 table for that group SHALL NOT include a "Labeling Duration" row
+- **THEN** the rendered Section 1 table for that group SHALL NOT include a `"LabelingDuration"` row
 
 #### Scenario: Ungrouped subjects bucket
 
 - **WHEN** SubjectSessions exist with no assigned `MetadataGroup`
-- **THEN** Section 1 SHALL render an additional "Ungrouped" subheading with the same row schema, computed across all ungrouped SubjectSessions
+- **THEN** Section 1 SHALL render an additional "Ungrouped" subheading with N Subjects and N Total Runs computed across ungrouped SubjectSessions, without parameter rows
 
 ### Requirement: Manifest Section 2 Software Manifest
 
@@ -88,9 +77,11 @@ The preview SHALL render a "Software Manifest" section containing two sub-sectio
 
 A 3-row table with columns `Software` / `Version`, listing:
 
-- ExploreASL Version (from `uiState.processing.population.lastRun.exploreASLVersion`, or `"unknown"` if absent)
-- ExploreASL GUI Version (from `uiState.processing.population.lastRun.guiVersion`, or `"unknown"` if absent)
+- ExploreASL Version (the nonempty `uiState.processing.population.lastRun.exploreASLVersion`, otherwise the active execution profile's `exploreAslVersion`, otherwise `"unknown"`)
+- ExploreASL GUI Version (from `uiState.processing.population.lastRun.guiVersion`, otherwise build-time `VITE_APP_VERSION`, otherwise `"unknown"`)
 - MATLAB Version (from `uiState.processing.population.lastRun.matlabVersion`, or `"unknown"` if absent)
+
+For this display fallback, the active execution profile SHALL be the configured `selectedProfileId` when that profile exists, otherwise the first profile whose validation state is valid. Recorded run versions, including a recorded `"unknown"`, SHALL take precedence over settings/build fallbacks. Preview fallback SHALL NOT replace recorded Population provenance.
 
 #### Sub-section: ExploreASL Data Parameter Configuration
 
@@ -112,8 +103,23 @@ A spec-level reservation SHALL note that human-readable label translation of `da
 
 #### Scenario: Unknown version placeholder
 
-- **WHEN** `uiState.processing.population.lastRun.exploreASLVersion` is `undefined` at preview time
+- **WHEN** neither a recorded ExploreASL version nor a version from the selected or fallback profile is available at preview time
 - **THEN** Section 2 SHALL render the ExploreASL Version row with value `"unknown"`
+
+#### Scenario: Missing run versions use display fallbacks
+
+- **WHEN** run version fields are absent, the selected execution profile records ExploreASL `"1.12.0"`, and `VITE_APP_VERSION` is `"0.1.2"`
+- **THEN** Section 2 and Pipeline Summary SHALL display ExploreASL `"1.12.0"`, GUI `"0.1.2"`, and MATLAB `"unknown"`
+
+#### Scenario: Missing selected profile uses first valid profile
+
+- **WHEN** no recorded ExploreASL version exists and `selectedProfileId` matches no profile
+- **THEN** the ExploreASL display version SHALL come from the first valid execution profile, or SHALL be `"unknown"` if that profile has no version or no valid profile exists
+
+#### Scenario: Recorded versions remain preferred provenance
+
+- **WHEN** recorded Population versions differ from current execution-profile or GUI build versions
+- **THEN** Section 2 and Pipeline Summary SHALL use the recorded versions without rewriting them
 
 ### Requirement: Manifest Section 3 Qc Summary
 
@@ -128,7 +134,7 @@ The preview SHALL render a "QC Summary" section. For each `MetadataGroup`, the s
 
 Rows with final verdict Fail SHALL be excluded from all QC metric aggregations but SHALL count toward the Total denominator. No Info rows SHALL be excluded from numerator and denominator. Pass / Total SHALL therefore render `"<passCount> / <passCount + failCount>"`.
 
-When a group has fewer than 2 SubjectSessions in the aggregation (e.g. only one Pass row after exclusion), the SD component SHALL be rendered as the literal `"N/A"` (sample SD undefined for n < 2), with the mean component rendered normally.
+Numeric means and SDs SHALL render with two decimal places. When a group has fewer than 2 available Pass metric values, the SD component SHALL be rendered as the literal `"N/A"` (sample SD undefined for n < 2), with an available mean rendered to two decimal places. When no metric value is available, the cell SHALL render `"N/A"`.
 
 In multi-reviewer mode, each per-group QC Summary table SHALL include an Initial Agreement Rate column showing the percentage of eligible SubjectSessions where all reviewers' statuses were unanimous before resolution, formatted as `"N%"`. This column SHALL be omitted in single-reviewer mode.
 
@@ -140,12 +146,12 @@ In multi-reviewer mode, each per-group QC Summary table SHALL include an Initial
 #### Scenario: Fail rows excluded from coverage mean and SD
 
 - **WHEN** a metadata group has 3 SubjectSessions: 2 final Pass (coverage 95%, 90%) and 1 final Fail (coverage 50%)
-- **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"92.5 (3.54)"` (mean and sample standard deviation of 95 and 90, Fail excluded)
+- **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"92.50 (3.54)"` (mean and sample standard deviation of 95 and 90, Fail excluded)
 
 #### Scenario: SD renders N/A for single-subject group
 
 - **WHEN** a metadata group has 1 SubjectSession with final verdict Pass and coverage 88%
-- **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"88.0 (N/A)"`
+- **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"88.00 (N/A)"`
 
 #### Scenario: Motion aggregation uses worst run per subject
 
@@ -164,7 +170,7 @@ In multi-reviewer mode, each per-group QC Summary table SHALL include an Initial
 
 ### Requirement: Inter-Rater Agreement Section
 
-In multi-reviewer mode, preview SHALL render an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. Its overall table SHALL show Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Cohen's Kappa for exactly two reviewers or Fleiss' Kappa for more reviewers with unclamped 95% confidence interval formatted as `"κ = 0.82 [0.71, 0.90]"`, Number of Subjects, and Subjects Requiring Resolution. A per-group table SHALL show group label, n, Initial Agreement Rate, and Kappa with CI or `"N/A"` when undefined.
+In multi-reviewer mode, preview SHALL render an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. Its overall table SHALL show Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Cohen's Kappa for exactly two reviewers or Fleiss' Kappa for more reviewers with unclamped 95% confidence interval formatted as `"κ = 0.82 [0.71, 0.90]"`, Number of Subjects, and Subjects Requiring Resolution. A per-group table SHALL show group label, n, Initial Agreement Rate formatted as `"N% (agreed/total)"`, and Kappa with CI or `"N/A"` when undefined. The QC Summary's Initial Agreement Rate SHALL remain percentage-only.
 
 Below the tables, the section SHALL display: `Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.` The entire section SHALL be omitted in single-reviewer mode.
 
@@ -178,6 +184,11 @@ Below the tables, the section SHALL display: `Initial agreement is unadjusted. K
 - **WHEN** the project has at most one reviewer
 - **THEN** no Inter-Rater Agreement panel SHALL render
 
+#### Scenario: Per-group preview agreement includes counts
+
+- **WHEN** a group's only eligible SubjectSession has unanimous reviewer verdicts
+- **THEN** its Inter-Rater Agreement table row SHALL show `"100% (1/1)"`, while its QC Summary Initial Agreement Rate SHALL show `"100%"`
+
 #### Scenario: Kappa method depends on reviewer count
 
 - **WHEN** exactly two reviewers exist
@@ -185,19 +196,17 @@ Below the tables, the section SHALL display: `Initial agreement is unadjusted. K
 
 ### Requirement: Manifest Section 4 Pipeline Summary Paragraph
 
-The preview SHALL render a "Pipeline Summary" section containing a single paragraph. The paragraph text SHALL be a static template (stored as a TS template literal in code) drawn from `notes/Manifest_Pipeline_Summary.md` with the following substitutions applied at render time:
+The preview SHALL render a "Pipeline Summary" section with an opening paragraph generated from an inline static template. The paragraph SHALL state that data were processed with ExploreASL running in MATLAB through the ExploreASL GUI, followed by the number of subjects and groups covered by the manifest. It SHALL substitute:
 
-- ExploreASL version → `uiState.processing.population.lastRun.exploreASLVersion ?? "unknown"`
-- MATLAB version → `uiState.processing.population.lastRun.matlabVersion ?? "unknown"`
-- GUI version → `uiState.processing.population.lastRun.guiVersion ?? "unknown"`
+- ExploreASL, MATLAB, and GUI versions → the same resolved display versions as Software Manifest, including its recorded-run preference, profile/build fallbacks, and `"unknown"` placeholders
 - Subject count → total SubjectSessions included in the manifest (excluding No Info)
-- Study-level counts as needed by the paragraph
+- Group count → metadata group count plus an Ungrouped bucket when present
 
 Clauses SHALL NOT be toggled based on `dataPar.json` flags in v0 — the paragraph structure is static. A spec-level reservation SHALL note that clause-toggling based on `dataPar.json` is a future expansion point.
 
 #### Scenario: Unknown versions substituted in paragraph
 
-- **WHEN** Population `lastRun` version fields are undefined and the user previews the manifest
+- **WHEN** Population `lastRun` version fields and applicable profile/build version fallbacks are unavailable and the user previews the manifest
 - **THEN** Section 4 SHALL contain the substring `"unknown"` in the positions where ExploreASL, MATLAB, and GUI versions would otherwise appear
 
 #### Scenario: Paragraph is static for v0
@@ -239,6 +248,8 @@ Both buttons SHALL be disabled when no reviewer has any stored verdict entry. In
 
 In the exported formats, the "ExploreASL Data Parameter Configuration" sub-section SHALL be rendered as a fenced JSON code block (` ```json ``` ` in Markdown; `<pre><code>…</code></pre>` in HTML), using the same sanitisation rules (subjectRegexp canonical shorthand, ForceInclusionList omitted) as the preview. The HTML wrapper SHALL include `pre` / `pre code` CSS rules for legible monospace rendering.
 
+In Markdown and HTML, overall Initial Agreement Rate SHALL include percentage and agreed/total counts, while per-group Initial Agreement Rate SHALL remain percentage-only, unlike the preview's Inter-Rater Agreement per-group table. QC Summary rates SHALL remain percentage-only in preview and exports.
+
 A spec-level reservation SHALL note that a "Export PDF" button is a future expansion point, not part of v0.
 
 #### Scenario: Markdown export writes file
@@ -265,6 +276,11 @@ A spec-level reservation SHALL note that a "Export PDF" button is a future expan
 
 - **WHEN** a multi-reviewer project exports Markdown or HTML
 - **THEN** output SHALL include Inter-Rater Agreement data and Kappa guidance between QC Summary and Pipeline Summary
+
+#### Scenario: Exported per-group agreement remains percentage-only
+
+- **WHEN** a multi-reviewer project exports Markdown or HTML for a group with one unanimous eligible SubjectSession
+- **THEN** its exported per-group agreement rate SHALL be `"100%"`, while the preview's Inter-Rater Agreement table SHALL display `"100% (1/1)"`
 
 #### Scenario: Single-reviewer exports omit agreement section
 
@@ -308,7 +324,7 @@ Existing behavior for other `bidsParams` fields (conditional skipping of `Labeli
 #### Scenario: Manifest §1 hides absent ASLContext
 
 - **WHEN** `ManifestPreview` renders §1 for a group whose `bidsParams.ASLContext` is undefined (no aslcontext.tsv-based context, e.g., a DICOM-import project where `studyPar.json` omitted ASLContext)
-- **THEN** the `ASLContext` row is omitted (existing behavior — `val == null` check at `ManifestPreview.tsx:89`)
+- **THEN** the `ASLContext` row SHALL be omitted by the null-or-undefined value check
 
 #### Scenario: Manifest §1 renders raw sidecar fields unmodified
 

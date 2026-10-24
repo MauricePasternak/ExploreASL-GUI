@@ -41,17 +41,22 @@ The runtime-only native preflight state SHALL carry a plan fingerprint, monotoni
 
 ### Requirement: ImportProgress state shape
 
-The `ImportProgress` type in the import store SHALL be extended to include: `errorStep?: "DCM2NII" | "NII2BIDS"` (which step failed), `warnings?: string[]` (collected warning messages from stdout), `duration?: number` (processing duration in seconds), and `stale?: boolean` (whether the config has changed since this subject was imported). The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`, `"interrupted"`.
+The `ImportProgress` type in the import store SHALL support optional `currentStep` and `errorStep` values of `"DCM2NII" | "NII2BIDS"`, `error?: string`, `warnings?: string[]`, `duration?: number` (seconds), and `stale?: boolean`. The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`, `"interrupted"`. Schema support SHALL NOT imply runtime population: current parser handling SHALL set `currentStep` from subject-start events and provisional `error` text from failure events, but SHALL NOT copy the failure event's step into `errorStep` or populate per-subject `warnings` or `duration`. Native snapshot reconciliation SHALL supply authoritative status and available error detail, not those optional diagnostic fields.
 
 #### Scenario: Subject fails at NII2BIDS step
 
 - **WHEN** a matching native snapshot reports subject BADDIE failed verification after an NII2BIDS diagnostic failure
 - **THEN** `importProgress["BADDIE"].status` SHALL become `"failed"` with the available failure detail; the diagnostic event alone SHALL NOT classify the terminal outcome
 
-#### Scenario: Subject succeeds with warnings
+#### Scenario: Subject succeeds without collected warning or duration fields
 
-- **WHEN** native finalization reports subject GOOD committed with available stdout warnings and duration diagnostics
-- **THEN** `importProgress["GOOD"].status` is `"completed"`, `warnings` array contains parsed warning messages, `duration` contains the seconds value
+- **WHEN** stdout contains warnings, the native parser emits subject-completion duration, and a matching native snapshot later reports subject GOOD committed, with no preexisting warning or duration fields
+- **THEN** `importProgress["GOOD"].status` SHALL become `"completed"`, but `warnings` and `duration` SHALL remain absent because the current progress path does not collect them
+
+#### Scenario: Failure diagnostic does not record a failure step
+
+- **WHEN** a running subject has `currentStep = "DCM2NII"`, no `errorStep`, and a matching `import_failed` event reports step `"NII2BIDS"`
+- **THEN** the store SHALL record the diagnostic message without changing status, SHALL retain `currentStep = "DCM2NII"`, and SHALL leave `errorStep` absent; terminal status SHALL remain native-snapshot-owned
 
 #### Scenario: Subject cancelled by user
 
@@ -60,7 +65,7 @@ The `ImportProgress` type in the import store SHALL be extended to include: `err
 
 #### Scenario: Stale subject on re-visit
 
-- **WHEN** the user navigates to step 5 after changing a metadata group parameter and `read_import_status` returns a completed subject whose group has changed
+- **WHEN** the user navigates to step 5 after changing a metadata group parameter and `read_import_status` returns a completed subject whose first current subject row belongs to that changed group
 - **THEN** `importProgress["sub-001"].stale` is set to `true`
 
 #### Scenario: Fresh subject on re-visit
@@ -110,7 +115,7 @@ When import failure output is parsed, native diagnostics SHALL match the descrip
 
 ### Requirement: ImportProgress table population
 
-The progress table SHALL be populated from authoritative artifact reconstruction when no unacknowledged run is attached and from the matching native run snapshot while one exists. Subject-start, conversion-status, warning, and parser-failure events MAY enrich provisional running details for the attached run. Subject-completion and global-completion parser events SHALL NOT set authoritative `completed` status. A subject SHALL display completed only after native verification reports it eligible and committed, or after project artifact reconstruction verifies its committed completion evidence.
+The progress table SHALL be populated from authoritative artifact reconstruction when no unacknowledged run is attached and from the matching native run snapshot while one exists. Only subject-start and parser-failure structured events SHALL enrich provisional row details for the attached run; conversion-status, subject-completion (including duration), and global-completion events SHALL NOT populate subject progress, and stdout warnings SHALL NOT be collected into per-subject warnings. Parser events SHALL NOT set authoritative `completed` status. A subject SHALL display completed only after native verification reports it eligible and committed, or after project artifact reconstruction verifies its committed completion evidence.
 
 #### Scenario: Table shows all subjects during preparation
 

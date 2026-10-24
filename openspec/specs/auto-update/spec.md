@@ -52,12 +52,12 @@ On confirmation the application SHALL stop processing through `killProcessing`, 
 
 ### Requirement: Download, install, and relaunch feedback
 
-The application SHALL maintain one persistent progress notification from updater Started, Progress, and Finished events. Download/install failures SHALL show a red ten-second error and SHALL NOT relaunch. After successful installation, Linux and macOS SHALL relaunch through the process plugin. Windows SHALL not explicitly relaunch because its installer exits/restarts the app.
+The application SHALL maintain one persistent progress notification from updater Started, Progress, and Finished events. Finished SHALL change the message to "Installing update…", and installation SHALL use that message with `autoClose: false`. Download/install failures SHALL remove the progress notification, show a red ten-second error, and SHALL NOT relaunch. After successful installation, Linux and macOS SHALL relaunch through the process plugin. Windows SHALL hand off installation to the updater without an explicit frontend relaunch or progress-notification completion step; notification lifetime SHALL remain subject to the application/installer process lifecycle.
 
 #### Scenario: Installation succeeds on Windows
 
-- **WHEN** updater installation finishes successfully on Windows
-- **THEN** the persistent progress notification completes and the application does not explicitly relaunch
+- **WHEN** the Windows updater installation call returns successfully
+- **THEN** the frontend SHALL return without explicitly relaunching or completing/hiding the progress notification, whose last message SHALL be "Installing update…"
 
 ### Requirement: Signed release artifacts
 

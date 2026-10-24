@@ -87,7 +87,7 @@ The processing store SHALL project native `preparing`, `running`, `finalizing`, 
 
 ### Requirement: Process Configuration
 
-The store SHALL hold a `ProcessConfig` object containing: `subjects` (array of selected SubjectSession strings), `modules` (array of `structural`, `asl`, `population` — at least one required), `selectedProfileId` (string), `workers` (integer, 1–available cores), and `subjectRegexp` (string generated from subject selection). If Population is selected, `workers` SHALL be forced to 1. The frontend SHALL translate `modules` string array to `bProcess` boolean vector (`[true, false, false]` → Structural only, `[true, true, false]` → Structural+ASL, etc.) when building the immutable reservation request.
+The store SHALL edit the accepted project `ProcessConfig` containing `subjects` (array of selected SubjectSession strings), `modules` (array of `structural`, `asl`, `population`), `selectedProfileId` (string), `workers` (positive integer), and optional `rerunBids2Legacy` (boolean). Start SHALL require at least one module. Available-core limits SHALL be renderer preflight rules, not configuration-schema or native-request CPU bounds. Accepted configuration edits selecting Population SHALL normalize `workers` to 1. `subjectRegexp` SHALL NOT be a `ProcessConfig` field. The immutable renderer request SHALL carry `selectedModules` and `selectedSubjectSessions`; native preparation/launch SHALL derive the `bProcess` vector, `x.dataset.subjectRegexp` and nonempty-selection `x.dataset.ForceInclusionList`. Native canonicalization SHALL remove renderer-supplied `x.opts` and `x.dataset` from durable request content before regenerating those sections from native project/request authority.
 
 The `ProcessConfigSchema` SHALL be:
 
@@ -97,6 +97,7 @@ z.object({
   modules: z.array(z.enum(PROCESSING_MODULES)),
   selectedProfileId: z.string(),
   workers: z.number().int().min(1),
+  rerunBids2Legacy: z.boolean().optional(),
 })
 ```
 
@@ -106,13 +107,13 @@ Before reservation, `startProcessing` SHALL:
 
 1. Resolve the profile via `globalStore.getProfileById(selectedProfileId)`. If not found, show an inline error ("Selected profile was deleted or is invalid") and block execution. Do NOT transition to `failed` pipeline state — this is a config error, not a pipeline failure.
 2. Check `globalStore.profileValidationState[selectedProfileId]`. If not valid, show an inline error with the validation errors and block execution. Do NOT transition to `failed`.
-3. Build pure request inputs with the resolved profile and selected work; native preparation SHALL own environment capture and its failure policy.
+3. Build pure request inputs with the resolved profile and selected work, capping requested workers to the explicit selected-subject count when nonzero; native preparation SHALL own derived configuration, environment capture and its failure policy.
 4. Only if local checks pass, reserve the immutable native request and launch its exact returned run identity; native SHALL revalidate admitted inputs.
 
 #### Scenario: Population module forces single worker
 
 - **WHEN** the user selects the Population module
-- **THEN** the worker count SHALL be forced to 1 and the UI SHALL display a warning that Population cannot be parallelized
+- **THEN** accepted project configuration SHALL normalize the worker count to 1; renderer preflight SHALL report a hard block if a Population configuration instead has any other worker count, without implying a native-request single-worker constraint
 
 #### Scenario: Population auto-deselects Structural and ASL
 
@@ -154,24 +155,31 @@ Before reservation, `startProcessing` SHALL:
 - **WHEN** `startProcessing` is called but `profileValidationState[selectedProfileId].valid` is `false`
 - **THEN** the store SHALL show an inline error with the validation errors and SHALL NOT reserve or launch native work. The store SHALL NOT transition to `failed` pipeline state.
 
-#### Scenario: SubjectRegexp generation for all subjects
+#### Scenario: Native SubjectRegexp generation for an empty selection
 
-- **WHEN** all subjects are selected
-- **THEN** `subjectRegexp` SHALL be `^sub-.*$`
+- **WHEN** an admitted native request has an empty `selectedSubjectSessions` list
+- **THEN** native configuration SHALL set `x.dataset.subjectRegexp` to `^sub-.*$` and omit `ForceInclusionList`, using all eligible discovered subject-module targets under the backend contract
+- **AND** renderer Start SHALL still hard-block that empty selection for Structural or ASL
 
-#### Scenario: SubjectRegexp generation for subset
+#### Scenario: Native SubjectRegexp generation for an explicit selection
 
-- **WHEN** a subset of subjects is selected
-- **THEN** `subjectRegexp` SHALL be an alternation regex e.g. `^(sub-X_Y|sub-Z_W)$`
+- **WHEN** the immutable request contains one or more selected SubjectSessions, including when every discovered entry was explicitly selected
+- **THEN** native configuration SHALL set `x.dataset.subjectRegexp` to an anchored noncapturing alternation of regex-escaped selected identifiers and `ForceInclusionList` to that exact list, without storing a regexp in `ProcessConfig`
+
+#### Scenario: Configuration edited while Interrupted awaits confirmation
+
+- **WHEN** the user edits accepted processing selections while an attached Interrupted run requires `confirmStopped`
+- **THEN** configuration edits SHALL remain available without replacing that run's immutable selected work or derived launch configuration
+- **AND** Start and exact terminal persistence SHALL remain blocked by the native confirmation/acknowledgement contract
 
 ### Requirement: Subject List Discovery
 
-The store SHALL provide `availableSubjects` populated by calling `list_subjects` with the project's data source. Discovery SHALL scan `rawdata/sub-X/` for DICOM projects and root-level `sub-X/` for BIDS-direct projects, using the BIDS session conventions defined in `processing-backend`. Each entry SHALL include the SubjectSession string (`sub-X_Y`), the subject label, session label, and module availability flags (`hasStructural`, `hasASL`).
+The store SHALL provide `availableSubjects` populated by calling `list_subjects` with the project's data source. Discovery SHALL scan `rawdata/sub-X/` for DICOM projects and root-level `sub-X/` for BIDS-direct projects, using the BIDS session conventions defined in `processing-backend`. Each entry SHALL include the SubjectSession string (`sub-X_Y`), the subject label, session label, and module availability flags (`hasStructural`, `hasASL`) derived from nonempty discovered anatomical/ASL file lists, not directory presence alone. An empty `perf/` directory MAY yield default `aslRuns: ["1"]` while `hasASL` remains false; that run fallback SHALL NOT create an ASL expected target or bypass renderer missing-ASL validation.
 
 #### Scenario: No rawdata directory
 
 - **WHEN** a DICOM project's `rawdata/` does not exist or is empty
-- **THEN** `availableSubjects` SHALL be empty and the UI SHALL show an error state
+- **THEN** `availableSubjects` SHALL be empty; no dedicated missing/empty-rawdata error or warning SHALL be required, while ordinary selection validation and orphaned-lock warnings SHALL still apply
 
 #### Scenario: BIDS-direct subjects do not depend on rawdata content
 
@@ -180,8 +188,8 @@ The store SHALL provide `availableSubjects` populated by calling `list_subjects`
 
 #### Scenario: Session detection from BIDS
 
-- **WHEN** `rawdata/sub-001Philips/ses-01/` exists with an `anat/` subdirectory
-- **THEN** the subject list SHALL include `{ subjectSession: "sub-001Philips_01", hasStructural: true, hasASl: false }`
+- **WHEN** `rawdata/sub-001Philips/ses-01/anat/` contains a discovered T1w NIfTI entry and no ASL NIfTI entries are discovered for that session
+- **THEN** the subject list SHALL include `{ subjectSession: "sub-001Philips_01", hasStructural: true, hasASL: false }`
 
 ### Requirement: Per-Subject Progress Tracking
 

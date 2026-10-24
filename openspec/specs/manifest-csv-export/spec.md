@@ -129,11 +129,17 @@ In single-reviewer mode, the agreement statistics section SHALL NOT be included.
 
 ### Requirement: CSV Value Escaping
 
-All string values written to the CSV SHALL be properly escaped for RFC 4180 compliance:
+All string values written to the CSV SHALL normalize line endings to `\n`, apply spreadsheet formula protection, and then use RFC 4180 field escaping:
 
-1. Values containing commas, double quotes, or newlines SHALL be enclosed in double quotes.
-2. Double quote characters within values SHALL be escaped by doubling them (`"" `).
-3. Values not containing special characters SHALL be written without enclosing quotes.
+1. Strings starting with `=`, `+`, `-`, or `@` SHALL be prefixed with a TAB character (`\t`) before quoting or escaping.
+2. Values containing commas, double quotes, or newlines SHALL be enclosed in double quotes.
+3. Double quote characters within values SHALL be escaped by doubling them (`""`).
+4. Values not containing special characters SHALL be written without enclosing quotes, retaining any formula-protection TAB prefix.
+
+#### Scenario: Formula-like strings receive TAB protection before quoting
+
+- **WHEN** a string field starts with `=`, `+`, `-`, or `@`
+- **THEN** its exported value SHALL start with a TAB before normal field escaping; `=SUM(A1:A2)` SHALL become `\t=SUM(A1:A2)`, and `=SUM(1,1)` SHALL become `"\t=SUM(1,1)"`, where `\t` denotes an actual TAB
 
 #### Scenario: Notes containing commas are quoted
 

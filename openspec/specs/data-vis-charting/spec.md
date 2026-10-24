@@ -107,7 +107,7 @@ Both scatterplot and swarmplot SHALL use nivo's canvas variants (`ScatterPlotCan
 
 ### Requirement: Hover Tooltips
 
-Hovering over a datapoint SHALL display a tooltip containing: Subject, Session, Run, X-axis value, Y-axis value. If color-by is active, the color-by column name and value SHALL also be displayed. The tooltip SHALL use monospace font for identifier values.
+Hovering over a datapoint SHALL display a tooltip containing fields labeled Subject, Session, Run, X, and Y. If color-by is active, its value SHALL also be displayed under the label "Hue". Identifier values SHALL use the tooltip's inherited font, without a dedicated monospace style.
 
 #### Scenario: Tooltip shows identifiers and values
 
@@ -117,31 +117,31 @@ Hovering over a datapoint SHALL display a tooltip containing: Subject, Session, 
 #### Scenario: Tooltip includes color-by value
 
 - **WHEN** color-by is set to "Site" and the user hovers over a point with Site="1"
-- **THEN** the tooltip SHALL include "Site: 1" in addition to the standard fields
+- **THEN** the tooltip SHALL include "Hue: 1" in addition to the standard fields
 
-### Requirement: Point Click and Highlight
+### Requirement: Point Click Selection
 
-Clicking a datapoint SHALL highlight the clicked point with a border/halo and dim all other points slightly. The highlight SHALL persist until a different point is clicked. The clicked point's identifier values (participant_id, session) SHALL be passed to the NiiVue viewer for image loading. If the image fails to load, the highlight SHALL remain on the clicked point.
+Clicking a datapoint SHALL store its composite ID in transient `selectedPointId`. The NiiVue viewer SHALL resolve that ID in chart data and use the point's raw `participantId` and `run` (TSV `session`, GUI Run) for image loading. Chart rendering SHALL NOT apply a selected-point halo, border, or dimming based on this ID. Image loading failure SHALL NOT clear the selected ID.
 
-#### Scenario: Click highlights point
+#### Scenario: Click stores selection without chart styling
 
 - **WHEN** the user clicks a datapoint
-- **THEN** the clicked point SHALL display a visible border/halo and all other points SHALL be rendered at reduced opacity
+- **THEN** `selectedPointId` SHALL become the clicked point's ID without changing chart styling based on selection
 
 #### Scenario: Click passes identifiers to viewer
 
-- **WHEN** the user clicks a datapoint with participant_id="sub-001Philips_01" and session="ASL_1"
-- **THEN** the viewer SHALL receive these identifiers to construct the qCBF file request
+- **WHEN** the user clicks a datapoint with participantId="sub-001Philips_01" and run="ASL_1"
+- **THEN** the viewer SHALL resolve the selected point and use those values to construct the qCBF file request
 
-#### Scenario: Highlight persists on image failure
+#### Scenario: Selection persists on image failure
 
 - **WHEN** the user clicks a datapoint and the qCBF image fails to load
-- **THEN** the point highlight SHALL remain visible on the chart
+- **THEN** `selectedPointId` SHALL remain the clicked point's ID
 
-#### Scenario: Clicking new point clears previous highlight
+#### Scenario: Clicking new point replaces selection
 
-- **WHEN** a point is highlighted and the user clicks a different point
-- **THEN** the previous point's highlight SHALL be removed and the new point SHALL be highlighted
+- **WHEN** a point is selected and the user clicks a different point
+- **THEN** `selectedPointId` SHALL be replaced with the new point's ID
 
 ### Requirement: Selected Point Clearing on Axis Change
 
@@ -149,17 +149,17 @@ When any axis assignment changes (X, Y, or color-by), the selected point SHALL b
 
 #### Scenario: X-axis change clears selection
 
-- **WHEN** a point is selected (highlighted) and the user changes the X-axis dropdown
-- **THEN** the point highlight SHALL be removed and the viewer panel SHALL return to idle state
+- **WHEN** a point is selected and the user changes the X-axis dropdown
+- **THEN** `selectedPointId` SHALL be cleared and the viewer panel SHALL return to idle state
 
 #### Scenario: Color-by change clears selection
 
 - **WHEN** a point is selected and the user changes the color-by dropdown
-- **THEN** the point highlight SHALL be removed and the viewer panel SHALL return to idle state
+- **THEN** `selectedPointId` SHALL be cleared and the viewer panel SHALL return to idle state
 
 ### Requirement: Color-By Grouping
 
-When color-by is set to a categorical column, points SHALL be colored by the column's values using the Okabe-Ito 8-color colorblind-safe palette. If color-by is "None", all points SHALL use a single default color. For swarmplots, color-by SHALL create grouped swarms within each X-axis category.
+When color-by is set to a categorical column, points SHALL be colored by the column's values using the Okabe-Ito 8-color colorblind-safe palette, assigned in encounter order among filtered chart rows and cycled for additional values. If color-by is "None", all points SHALL use a single default color. Swarmplots SHALL group points by X-axis category and color individual nodes within each group, without separate color-by subgroups. X-axis groups SHALL follow encounter order in filtered chart rows, not persisted `levelOrderings`. Neither chart SHALL configure a color-by legend.
 
 #### Scenario: Single color when no color-by
 
@@ -174,39 +174,44 @@ When color-by is set to a categorical column, points SHALL be colored by the col
 #### Scenario: Grouped swarm with color-by
 
 - **WHEN** a swarmplot is rendered with color-by set to "Site" and X-axis is "Subject"
-- **THEN** within each subject group, points SHALL be colored by their Site value
+- **THEN** within each subject group, points SHALL be colored by their Site value without creating separate Site swarms
+
+#### Scenario: Saved level order does not reorder chart groups
+
+- **WHEN** X is assigned to Site, saved `levelOrderings` specifies `["Site_1", "Site_2"]`, and filtered chart rows first encounter `Site_2`, then `Site_1`
+- **THEN** swarmplot X-axis groups SHALL remain `["Site_2", "Site_1"]`
 
 ### Requirement: Missing Data Exclusion in Charts
 
-Rows where either the X or Y column value is missing SHALL be excluded from chart data. The chart SHALL display a counter: "N points plotted (M rows excluded due to missing data)." Rows with missing color-by values SHALL be grouped under "Unknown" and rendered in gray. Rows with missing non-axis values SHALL NOT be excluded.
+Rows where either the X or Y column value is missing SHALL be excluded from chart data. With supported axes assigned and at least one plottable point remaining after domain filtering, the chart SHALL display "N points plotted" with an additional "(M rows excluded due to missing data)" count when exclusions exist, and a separate count when domain filters hide points. When supported assigned axes yield no remaining points, the chart SHALL instead show "No plottable data. Selected columns have no valid values." without a point, exclusion, or domain-filter counter. Rows with missing color-by values SHALL be grouped under "Unknown" and receive the next palette color like other categorical values, not a reserved gray color. Rows with missing non-axis values SHALL NOT be excluded.
 
 #### Scenario: Rows excluded for missing axis values
 
-- **WHEN** a 1000-row dataset has 50 rows with missing Y values
+- **WHEN** supported axes are assigned, a 1000-row dataset has 50 rows with missing Y values and 950 otherwise plottable rows, and no domain filters hide points
 - **THEN** 950 points SHALL be plotted and the counter SHALL read "950 points plotted (50 rows excluded due to missing data)"
 
 #### Scenario: Missing color-by shows as Unknown
 
 - **WHEN** color-by is set to "Site" and 10 rows have missing Site values
-- **THEN** those 10 points SHALL be colored gray and labeled "Unknown" in the legend
+- **THEN** those 10 points SHALL have color-by value "Unknown", receive its encounter-order palette color, and show "Hue: Unknown" in their tooltips; no color-by legend SHALL be configured
 
 #### Scenario: All rows excluded
 
-- **WHEN** all rows have missing values in either X or Y column
-- **THEN** the chart area SHALL show "No plottable data. Selected columns have no valid values."
+- **WHEN** supported axes are assigned and all rows have missing values in either X or Y column
+- **THEN** the chart area SHALL show "No plottable data. Selected columns have no valid values." without a point or exclusion counter
 
 ### Requirement: Domain Filter Inputs
 
-A collapsible "Filters" panel SHALL appear above the chart, toggled by a "Filters" button. When expanded, it SHALL show four inputs: X min, X max, Y min, Y max. Each input SHALL display the actual data range min/max as placeholder values. Empty inputs SHALL mean no filter (show all). Entered values SHALL filter the visible data range. The panel's expanded state SHALL persist in `uiState.dataVis.filtersExpanded`.
+A "Settings" button beside the axis controls SHALL toggle a right-side drawer titled "Visualization Settings". Its "Axes Range Filters" section SHALL contain four inputs: X min, X max, Y min, Y max. Placeholders SHALL show numeric chart-data min/max values, or an em dash when unavailable. Empty inputs SHALL mean no filter for that bound. Entered values SHALL filter chart rows; an X bound SHALL retain only numeric X values satisfying that bound. Drawer open state SHALL persist in `uiState.dataVis.filtersExpanded`, alongside separate persisted domain filter values.
 
-#### Scenario: Filters panel collapsed by default
+#### Scenario: Settings drawer closed by default
 
 - **WHEN** the Visualize step is entered for the first time
-- **THEN** the Filters panel SHALL be collapsed (hidden)
+- **THEN** the Visualization Settings drawer SHALL be closed
 
 #### Scenario: Placeholder values show data range
 
-- **WHEN** the Filters panel is expanded and the X-axis data ranges from 0.63 to 0.68
+- **WHEN** the Settings drawer is open and numeric X-axis chart data ranges from 0.63 to 0.68
 - **THEN** the X min input placeholder SHALL show "0.63" and the X max input placeholder SHALL show "0.68"
 
 #### Scenario: Filter narrows visible data
@@ -219,10 +224,10 @@ A collapsible "Filters" panel SHALL appear above the chart, toggled by a "Filter
 - **WHEN** all four filter inputs are empty
 - **THEN** all non-missing data points SHALL be rendered
 
-#### Scenario: Filter panel state persists
+#### Scenario: Settings drawer state persists
 
-- **WHEN** the user expands the Filters panel, navigates away, and returns
-- **THEN** the Filters panel SHALL be expanded (state restored from `uiState.dataVis.filtersExpanded`)
+- **WHEN** the user opens the Settings drawer, navigates away, and returns
+- **THEN** the drawer SHALL be open (state restored from `uiState.dataVis.filtersExpanded`)
 
 ### Requirement: Nivo Theme Integration
 
@@ -231,12 +236,12 @@ Chart colors SHALL adapt to the active Mantine color scheme (light/dark). A shar
 #### Scenario: Dark mode theme
 
 - **WHEN** the Mantine color scheme is "dark"
-- **THEN** axis text SHALL use a light color, grid lines SHALL use a low-opacity light color, and legend text SHALL be light
+- **THEN** axis text SHALL use a light color, grid lines SHALL use a low-opacity light color, and the theme's legend text color SHALL be light without configuring a color-by legend
 
 #### Scenario: Light mode theme
 
 - **WHEN** the Mantine color scheme is "light"
-- **THEN** axis text SHALL use a dark color, grid lines SHALL use a low-opacity dark color, and legend text SHALL be dark
+- **THEN** axis text SHALL use a dark color, grid lines SHALL use a low-opacity dark color, and the theme's legend text color SHALL be dark without configuring a color-by legend
 
 #### Scenario: Point colors unaffected by theme
 

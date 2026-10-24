@@ -188,7 +188,9 @@ Activation SHALL inspect native import-run metadata after import-relocation reco
 
 ### Requirement: Single-instance project activation
 
-The application SHALL establish single-instance ownership before other plugins initialize. Native project activation SHALL create one confined active-project capability before recovery and hydration, then reconcile processing and import records before publishing the project as active. Existing project-transition shutdown and stale-generation isolation SHALL remain enforced. A second matching application launch SHALL focus or restore the existing main window and exit before activation or mutation.
+The application SHALL establish single-instance ownership before other plugins initialize. Native project activation SHALL obtain a confined candidate-root capability before recovery, complete required native recovery and eligible processing/import result reconciliation, and only then publish the active root and accepted configuration. Existing project-transition shutdown and stale-generation isolation SHALL remain enforced. A second matching application launch SHALL focus or restore the existing main window and exit before activation or mutation.
+
+After native activation returns, the renderer SHALL reset transient stores, accept the native snapshot, and activate its project work lease before inspecting source availability and synchronizing import then processing attachments. Attachment failure SHALL close renderer work admission and reject the transition without discarding the already accepted snapshot.
 
 The product SHALL support one application process and one active project per user session. Concurrent access from another login, host, shared mount, differently identified build, or unsupported package sandbox SHALL remain outside the contract; no cross-process project file lease SHALL be claimed.
 
@@ -201,6 +203,16 @@ The product SHALL support one application process and one active project per use
 
 - **WHEN** project B activation starts while project A owns import, processing, watcher, save, or asynchronous presentation work
 - **THEN** project B SHALL NOT hydrate until project A's supported in-process resources settle or shutdown rejects
+
+#### Scenario: Renderer attaches after native recovery and publication
+
+- **WHEN** native recovery and eligible result reconciliation succeed and activation returns B's accepted snapshot
+- **THEN** the renderer SHALL accept that snapshot and activate B's work lease before source inspection and import/processing attachment synchronization
+
+#### Scenario: Renderer attachment fails after snapshot acceptance
+
+- **WHEN** source inspection or import/processing attachment synchronization fails after B's native snapshot is accepted
+- **THEN** the transition SHALL reject and renderer work admission SHALL close while B's accepted snapshot remains available
 
 ### Requirement: Interrupted execution before activation
 

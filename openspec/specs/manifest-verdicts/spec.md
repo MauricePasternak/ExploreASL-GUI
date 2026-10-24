@@ -8,12 +8,12 @@ Define manifest verdict persistence and state management.
 
 ### Requirement: Population Re-run Locks Manifest Phase
 
-An accepted native Population execution-commit snapshot SHALL clear Population completion under the existing `processing-store` contract. The shared `canAccessPhase` dependency SHALL cascade to Manifest; no separate manifest lockout state SHALL be added. A rejected start or pre-commit preparation failure SHALL preserve prior access. No reviewer verdict SHALL be deleted; all verdict slices persist and become stale only according to prior-module mtimes.
+An accepted native Population execution-commit snapshot SHALL clear Population completion under the existing `processing-store` contract. Native `allowedPhases`, consumed by `canAccessPhase`, SHALL retain the project's current phase (including a restored saved phase) and earlier phases while requiring Population completion for later Manifest access. Independently, active processing (`preparing`, `running`, `finalizing`, or `cancelling`) SHALL disable Manifest navigation and redirect direct Manifest routes under the `manifest-phase` contract; no separate manifest lockout state SHALL be added. A rejected start or pre-commit preparation failure SHALL preserve prior prerequisite access once processing is inactive. No reviewer verdict SHALL be deleted; all verdict slices persist and become stale only according to prior-module mtimes.
 
-#### Scenario: Re-running Population hides Manifest nav
+#### Scenario: Re-running Population disables Manifest nav
 
 - **WHEN** a user with stored multi-reviewer verdicts re-runs Population and an accepted native snapshot reports execution commit
-- **THEN** `processing.population.completed` SHALL become `false`, `canAccessPhase(project, "manifest")` SHALL return `false`, and the Manifest nav button SHALL be disabled
+- **THEN** `processing.population.completed` SHALL become `false` and active processing SHALL disable the Manifest nav button even if the saved current phase keeps Manifest in native `allowedPhases`
 
 #### Scenario: Verdicts remain on disk during re-run
 

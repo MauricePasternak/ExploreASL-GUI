@@ -95,7 +95,7 @@ The table SHALL prioritize width according to column content. Subject SHALL use 
 Each row in the Resolution DataTable SHALL provide three quick-access action buttons:
 
 1. **View Images/Reports** — SHALL open the existing `ReportViewerModal` for the subjectSession, allowing the resolver to review QC images (CBF maps, structural overlays, etc.).
-2. **View QC Metrics** — SHALL open a popover displaying the subjectSession's QC metric values: coverage percentage, Spatial Coefficient of Variation, motion (max across runs in mm RMS), and motion exclusion percentage.
+2. **QC Metrics** — SHALL use the accessible label `"View QC metrics for <subjectSession>"` and open a popover displaying the subjectSession's QC metric values: coverage percentage, Spatial Coefficient of Variation, motion (max across runs in mm RMS), and motion exclusion percentage.
 3. **View Logs** — SHALL open the existing `LogViewerModal` for the subjectSession, allowing the resolver to inspect processing logs.
 
 #### Scenario: View Images/Reports button opens ReportViewerModal
@@ -103,10 +103,10 @@ Each row in the Resolution DataTable SHALL provide three quick-access action but
 - **WHEN** the user clicks the "View Images/Reports" button on a disagreement row for `"sub-01_01"`
 - **THEN** the `ReportViewerModal` SHALL open with the QC reports for `"sub-01_01"` pre-loaded
 
-#### Scenario: View QC Metrics popover displays values
+#### Scenario: QC Metrics popover displays values
 
-- **WHEN** the user clicks the "View QC Metrics" button on a disagreement row for `"sub-01_01"` whose QC outputs report coverage 78.2%, SpatialCoV 0.42, motion 1.3 mm, motion exclusion 5%
-- **THEN** a popover SHALL display a table with rows: Coverage: 78.2%, SpatialCoV: 0.42, Motion: 1.3 mm, Motion Exclusion: 5%
+- **WHEN** the user clicks the visible "QC Metrics" button with accessible label "View QC metrics for sub-01_01" on a disagreement row whose QC outputs report coverage 78.2%, SpatialCoV 0.42, motion 1.3 mm, motion exclusion 5%
+- **THEN** a popover SHALL display a table with rows: Coverage: 78.2%, SpatialCoV: 0.42, Max Motion: 1.3 mm RMS, Motion Exclusion: 5%
 
 #### Scenario: View Logs button opens LogViewerModal
 
@@ -139,17 +139,17 @@ Current manifest configuration SHALL store resolutions in `resolvedVerdicts`, a 
 
 ### Requirement: Resolution Gate For Preview
 
-The stepper's "Next" button on the Verdict Resolution step (proceeding to Preview & Export) SHALL be disabled whenever any disagreement subjectSession lacks a corresponding entry in `resolvedVerdicts`. The gate SHALL be re-evaluated on every resolution change.
+The stepper's "Next" button on the Verdict Resolution step (proceeding to Preview & Export) SHALL be disabled whenever any disagreement subjectSession lacks a corresponding entry in `resolvedVerdicts`. The gate SHALL be re-evaluated on every resolution change. The button tooltip SHALL read "Resolve every current reviewer disagreement before previewing the manifest". A separate status above the table SHALL show the number of disagreements remaining, or "All disagreements resolved" when none remain.
 
 #### Scenario: Next disabled with unresolved disagreements
 
 - **WHEN** 7 disagreements exist and only 5 have entries in `resolvedVerdicts`
-- **THEN** the "Next" button SHALL be disabled and SHALL display a tooltip "2 disagreements remaining"
+- **THEN** the "Next" button SHALL be disabled with tooltip "Resolve every current reviewer disagreement before previewing the manifest", and the status above the table SHALL read "2 disagreements remaining"
 
 #### Scenario: Next enabled when all disagreements resolved
 
 - **WHEN** all 7 disagreements have corresponding entries in `resolvedVerdicts`
-- **THEN** the "Next" button SHALL be enabled
+- **THEN** the "Next" button SHALL be enabled and the status above the table SHALL read "All disagreements resolved"
 
 #### Scenario: Changing a verdict in QC Selection re-evaluates gate
 
