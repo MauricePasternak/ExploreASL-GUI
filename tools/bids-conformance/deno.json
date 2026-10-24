@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "@bids/validator/validate": "jsr:@bids/validator@3.0.2/validate",
+    "@bids/validator/files/deno": "jsr:@bids/validator@3.0.2/files/deno",
+    "@bids/schema": "jsr:@bids/schema@1.2.7"
+  },
+  "lock": "deno.lock",
+  "nodeModulesDir": "none",
+  "tasks": {
+    "check": "deno run --frozen --cached-only --deny-net --deny-write --deny-run --no-prompt --allow-read --allow-env check.ts"
+  }
+}
