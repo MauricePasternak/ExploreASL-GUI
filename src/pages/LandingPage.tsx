@@ -942,15 +942,11 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
             {bidsDialog.kind === "no-asl" && (
               <Alert color="blue" icon={<IconAlertTriangle size={16} />}>
                 The selected folder contains BIDS subjects but none have valid ASL data. Ensure at
-                least one subject has a{" "}
+                least one subject has ASL images in{" "}
                 <Text span ff="monospace" size="xs">
                   perf/
                 </Text>{" "}
-                directory with{" "}
-                <Text span ff="monospace" size="xs">
-                  *_asl.json
-                </Text>{" "}
-                sidecars.
+                and applicable ASL JSON metadata.
               </Alert>
             )}
 

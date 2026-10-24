@@ -1,7 +1,7 @@
 use crate::bids::path::{is_subject_dir, resolve_sessions};
 use anyhow::{Context, Result as AnyResult};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,7 +20,6 @@ pub struct BidsSession {
     pub has_perf: bool,
     pub has_anat: bool,
     pub asl_files: Vec<AslFile>,
-    pub asl_sidecars: Vec<String>,
     pub has_m0: bool,
     pub anat_files: Vec<String>,
 }
@@ -86,10 +85,10 @@ pub fn parse_bids_structure(bids_root: &Path) -> AnyResult<Vec<BidsSubject>> {
             }
             let has_anat = !anat_files.is_empty();
 
-            let (asl_files, asl_sidecars, has_m0, _) = if has_perf {
+            let (asl_files, has_m0, _) = if has_perf {
                 scan_perf_dir(&perf_path)
             } else {
-                (Vec::new(), Vec::new(), false, Vec::new())
+                (Vec::new(), false, Vec::new())
             };
 
             sessions.push(BidsSession {
@@ -103,7 +102,6 @@ pub fn parse_bids_structure(bids_root: &Path) -> AnyResult<Vec<BidsSubject>> {
                 has_perf,
                 has_anat,
                 asl_files,
-                asl_sidecars,
                 has_m0,
                 anat_files,
             });
@@ -170,11 +168,6 @@ fn is_asl_nifti(name: &str) -> bool {
     name.ends_with("_asl.nii") || name.ends_with("_asl.nii.gz")
 }
 
-/// Check if filename is an ASL sidecar JSON.
-fn is_asl_json(name: &str) -> bool {
-    name.ends_with("_asl.json")
-}
-
 /// Check if filename is an M0 scan file.
 fn is_m0_file(name: &str) -> bool {
     name.ends_with("_m0scan.nii")
@@ -220,10 +213,9 @@ fn scan_anat_dir(anat_path: &Path) -> Vec<String> {
     anat_files
 }
 
-/// Scan a `perf/` directory for ASL files, sidecars, M0, and structural files.
-fn scan_perf_dir(perf_path: &Path) -> (Vec<AslFile>, Vec<String>, bool, Vec<String>) {
+/// Scan a `perf/` directory for ASL images, M0, and structural files.
+fn scan_perf_dir(perf_path: &Path) -> (Vec<AslFile>, bool, Vec<String>) {
     let mut asl_files = Vec::new();
-    let mut asl_sidecars = Vec::new();
     let mut has_m0 = false;
     let mut anat_files = Vec::new();
 
@@ -238,8 +230,6 @@ fn scan_perf_dir(perf_path: &Path) -> (Vec<AslFile>, Vec<String>, bool, Vec<Stri
                     run_label: extract_run_label(&name),
                     acquisition_label: extract_acquisition_label(&name),
                 });
-            } else if is_asl_json(&name) {
-                asl_sidecars.push(path_str);
             } else if is_m0_file(&name) {
                 has_m0 = true;
             } else if is_anat_file(&name) {
@@ -248,20 +238,7 @@ fn scan_perf_dir(perf_path: &Path) -> (Vec<AslFile>, Vec<String>, bool, Vec<Stri
         }
     }
 
-    (asl_files, asl_sidecars, has_m0, anat_files)
-}
-
-/// Resolve the JSON sidecar path for an ASL NIfTI file.
-pub fn asl_json_path_for(nii_path: &Path) -> PathBuf {
-    if let Some(path_str) = nii_path.to_str() {
-        if let Some(base) = path_str.strip_suffix(".nii.gz") {
-            return PathBuf::from(format!("{}.json", base));
-        }
-        if let Some(base) = path_str.strip_suffix(".nii") {
-            return PathBuf::from(format!("{}.json", base));
-        }
-    }
-    nii_path.with_extension("json")
+    (asl_files, has_m0, anat_files)
 }
 
 #[cfg(test)]

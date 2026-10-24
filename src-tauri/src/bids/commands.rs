@@ -1,6 +1,6 @@
 use crate::bids::group::{BidsSidecarScan, group_by_fingerprint};
-use crate::bids::scan::{asl_json_path_for, parse_bids_structure};
-use crate::bids::sidecar::find_asl_sidecars;
+use crate::bids::scan::parse_bids_structure;
+use crate::bids::sidecar::discover_metadata;
 use crate::error::IntoCommandResult;
 use crate::project::setup::{self, SetupCommandError, SetupCommitResult, SetupMode, SetupPlan};
 use crate::tracing::CommandTrace;
@@ -141,15 +141,14 @@ pub(crate) fn check_bids_dataset_impl(root: &Path) -> AnyResult<BidsCheckResult>
             for asl_file in &session.asl_files {
                 session_has_asl_files = true;
                 let nii_path = Path::new(&asl_file.path);
-                let json_path = asl_json_path_for(nii_path);
+                let metadata = discover_metadata(root, nii_path)?;
 
-                if !json_path.exists() {
+                if metadata.json_paths.is_empty() {
                     session_has_missing_sidecars = true;
                     continue;
                 }
 
-                let ctx_path = crate::bids::sidecar::find_asl_context_for(&json_path);
-                if ctx_path.is_none() {
+                if metadata.context_path.is_none() {
                     missing_aslcontext_count += 1;
                 }
             }
@@ -233,12 +232,7 @@ fn scan_bids_sidecars_impl(root: &Path) -> AnyResult<BidsSidecarScan> {
         subjects.len(),
         subjects.iter().map(|s| s.sessions.len()).sum::<usize>()
     );
-    let sidecar_paths = find_asl_sidecars(root);
-    log::debug!(
-        "scan_bids_sidecars: found {} sidecar paths",
-        sidecar_paths.len()
-    );
-    Ok(group_by_fingerprint(&sidecar_paths, &subjects))
+    Ok(group_by_fingerprint(root, &subjects))
 }
 
 #[tauri::command]

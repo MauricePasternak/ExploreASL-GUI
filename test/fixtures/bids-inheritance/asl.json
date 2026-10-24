@@ -1,0 +1,13 @@
+{
+  "Manufacturer": "Siemens",
+  "MagneticFieldStrength": 3,
+  "MRAcquisitionType": "3D",
+  "ArterialSpinLabelingType": "PCASL",
+  "PostLabelingDelay": 1.8,
+  "LabelingDuration": 1.8,
+  "EchoTime": 0.014,
+  "RepetitionTimePreparation": 4.5,
+  "BackgroundSuppression": false,
+  "M0Type": "Absent",
+  "TotalAcquiredPairs": 2
+}

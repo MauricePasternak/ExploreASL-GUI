@@ -168,12 +168,3 @@ fn test_extract_acquisition_label() {
     );
     assert_eq!(extract_acquisition_label("sub-01_asl.nii.gz"), None);
 }
-
-#[test]
-fn test_asl_json_path_for_nii_gz() {
-    let path = PathBuf::from("/data/sub-01_asl.nii.gz");
-    assert_eq!(
-        asl_json_path_for(&path),
-        PathBuf::from("/data/sub-01_asl.json")
-    );
-}

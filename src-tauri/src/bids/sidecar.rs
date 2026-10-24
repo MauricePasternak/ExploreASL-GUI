@@ -1,19 +1,10 @@
-//! BIDS ASL sidecar discovery, parsing, and fingerprinting.
-//!
-//! # Performance
-//!
-//! Typical studies <500ms; 500-subject ~3-5s; 1000+ deferred.
-//!
-//! Sidecar discovery walks `sub-*/` directories only (cross-sectional
-//! `sub-*/perf/` and longitudinal `sub-*/ses-*/perf/`) and is synchronous
-//! for v1 — progress reporting for 1000+ subject datasets is out of scope.
+//! Image-owned BIDS metadata inheritance, parsing, and fingerprinting.
 
 use anyhow::{Context, Result as AnyResult};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::bids::path::{is_session_dir, is_subject_dir};
 use crate::bids::vendor::{
     normalize_manufacturer_for_fingerprint, normalize_pulse_sequence_for_fingerprint,
 };
@@ -37,72 +28,127 @@ pub const FINGERPRINT_FIELDS: &[&str] = &[
     "EchoTime",
 ];
 
-/// Find all `*_asl.json` sidecar files under `bids_root`, walking `sub-*/` only.
-///
-/// Per D12: iterates top-level `sub-*/` directories, walks `perf/` (cross-sectional)
-/// and `ses-*/perf/` (longitudinal).
-pub fn find_asl_sidecars(bids_root: &Path) -> Vec<PathBuf> {
-    let mut result = Vec::new();
-
-    let entries = match std::fs::read_dir(bids_root) {
-        Ok(e) => e,
-        Err(_) => return result,
-    };
-
-    for entry in entries.flatten() {
-        if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().to_string();
-        if !is_subject_dir(&name) {
-            continue;
-        }
-
-        let subject_dir = entry.path();
-
-        // Cross-sectional: check perf/ directly
-        let perf_dir = subject_dir.join("perf");
-        if perf_dir.is_dir() {
-            collect_asl_jsons(&perf_dir, &mut result);
-        }
-
-        // Longitudinal: check ses-*/perf/
-        if let Ok(ses_entries) = std::fs::read_dir(&subject_dir) {
-            for ses_entry in ses_entries.flatten() {
-                if !ses_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                    continue;
-                }
-                let ses_name = ses_entry.file_name().to_string_lossy().to_string();
-                if !is_session_dir(&ses_name) {
-                    continue;
-                }
-                let ses_perf = ses_entry.path().join("perf");
-                if ses_perf.is_dir() {
-                    collect_asl_jsons(&ses_perf, &mut result);
-                }
-            }
+/// Parse complete extensions before suffix and exact, nonduplicated entity pairs.
+fn filename_identity<'a>(
+    name: &'a str,
+    extension: &str,
+) -> Option<(&'a str, HashMap<&'a str, &'a str>)> {
+    let stem = name.strip_suffix(extension)?;
+    let mut tokens = stem.rsplit('_');
+    let suffix = tokens.next()?;
+    if suffix.is_empty() || suffix.contains('-') {
+        return None;
+    }
+    let mut entities = HashMap::new();
+    for token in tokens {
+        let (key, value) = token.split_once('-')?;
+        if key.is_empty()
+            || value.is_empty()
+            || value.contains('-')
+            || entities.insert(key, value).is_some()
+        {
+            return None;
         }
     }
-
-    log::debug!(
-        "find_asl_sidecars: found {} sidecar(s) under {}",
-        result.len(),
-        bids_root.display()
-    );
-
-    result
+    Some((suffix, entities))
 }
 
-/// Collect `*_asl.json` files from a directory.
-fn collect_asl_jsons(dir: &Path, result: &mut Vec<PathBuf>) {
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.ends_with("_asl.json") {
-                result.push(entry.path());
+pub struct ApplicableMetadata {
+    /// Ordered from selected root to image directory.
+    pub json_paths: Vec<PathBuf>,
+    pub context_path: Option<PathBuf>,
+}
+
+/// Discover associations without reading JSON or TSV contents.
+pub fn discover_metadata(root: &Path, image: &Path) -> AnyResult<ApplicableMetadata> {
+    let directory = image
+        .parent()
+        .context("ASL image has no parent directory")?;
+    anyhow::ensure!(
+        directory.starts_with(root),
+        "ASL image {} is outside selected root {}",
+        image.display(),
+        root.display()
+    );
+    let name = image
+        .file_name()
+        .and_then(|n| n.to_str())
+        .context("Invalid ASL image filename")?;
+    let (suffix, entities) = filename_identity(name, ".nii.gz")
+        .or_else(|| filename_identity(name, ".nii"))
+        .with_context(|| format!("Invalid ASL image identity {}", image.display()))?;
+    anyhow::ensure!(suffix == "asl", "Not an ASL image: {}", image.display());
+    let mut result = ApplicableMetadata {
+        json_paths: Vec::new(),
+        context_path: None,
+    };
+    for ancestor in directory.ancestors() {
+        let mut json = Vec::new();
+        let mut context = Vec::new();
+        for entry in std::fs::read_dir(ancestor).with_context(|| {
+            format!(
+                "Cannot inspect {} for image {}",
+                ancestor.display(),
+                image.display()
+            )
+        })? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            for (extension, expected_suffix, candidates) in [
+                (".json", "asl", &mut json),
+                (".tsv", "aslcontext", &mut context),
+            ] {
+                if let Some((candidate_suffix, candidate_entities)) =
+                    filename_identity(name, extension)
+                    && candidate_suffix == expected_suffix
+                    && candidate_entities
+                        .iter()
+                        .all(|(key, value)| entities.get(key) == Some(value))
+                {
+                    candidates.push(entry.path());
+                }
             }
         }
+        for candidates in [&json, &context] {
+            anyhow::ensure!(
+                candidates.len() <= 1,
+                "Ambiguous metadata for image {}: {}",
+                image.display(),
+                candidates
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        result.json_paths.extend(json);
+        if result.context_path.is_none() {
+            result.context_path = context.pop();
+        }
+        if ancestor == root {
+            break;
+        }
     }
+    result.json_paths.reverse();
+    Ok(result)
+}
+
+/// Merge whole top-level values, retaining all keys independently of projection.
+pub fn load_effective_json(sources: &ApplicableMetadata) -> AnyResult<Value> {
+    anyhow::ensure!(
+        !sources.json_paths.is_empty(),
+        "Missing applicable ASL JSON metadata"
+    );
+    let mut effective = serde_json::Map::new();
+    for path in &sources.json_paths {
+        let parsed = parse_sidecar(path)?;
+        let object = parsed
+            .as_object()
+            .with_context(|| format!("ASL JSON must be an object: {}", path.display()))?;
+        effective.extend(object.clone());
+    }
+    Ok(Value::Object(effective))
 }
 
 /// Parse a JSON sidecar file.
@@ -115,24 +161,6 @@ pub fn parse_sidecar(path: &Path) -> AnyResult<Value> {
         })
         .with_context(|| format!("Failed to parse sidecar JSON {}", path.display()))?;
     Ok(parsed)
-}
-
-/// Find the `*_aslcontext.tsv` file corresponding to a sidecar path.
-///
-/// Replaces `_asl` with `_aslcontext` and `.json` with `.tsv`.
-pub fn find_asl_context_for(sidecar_path: &Path) -> Option<PathBuf> {
-    let file_name = sidecar_path.file_name()?.to_str()?;
-    let parent = sidecar_path.parent()?;
-
-    // Replace _asl.json with _aslcontext.tsv
-    let ctx_name = file_name.replace("_asl.json", "_aslcontext.tsv");
-    let ctx_path = parent.join(&ctx_name);
-
-    if ctx_path.exists() {
-        Some(ctx_path)
-    } else {
-        None
-    }
 }
 
 /// Parse an ASL context TSV file.
@@ -161,18 +189,6 @@ pub fn parse_asl_context(path: &Path) -> AnyResult<String> {
     }
 
     Ok(volume_types.join(","))
-}
-
-/// Inject `ASLContext` key into sidecar params by finding and parsing the companion TSV.
-pub fn inject_asl_context(
-    sidecar_path: &Path,
-    params: &mut serde_json::Map<String, Value>,
-) -> AnyResult<()> {
-    let ctx_path = find_asl_context_for(sidecar_path)
-        .with_context(|| format!("Missing aslcontext.tsv for {}", sidecar_path.display()))?;
-    let context_str = parse_asl_context(&ctx_path)?;
-    params.insert("ASLContext".to_string(), Value::String(context_str));
-    Ok(())
 }
 
 /// Extract fingerprint fields from a sidecar JSON.

@@ -859,6 +859,9 @@ describe("LandingPage BIDS detection dialogs", () => {
       expect(screen.getByTestId("bids-no-asl-dialog")).toBeInTheDocument();
     });
     expect(screen.getByTestId("bids-no-asl-choose-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-no-asl-dialog")).toHaveTextContent(
+      "Ensure at least one subject has ASL images in perf/ and applicable ASL JSON metadata.",
+    );
 
     // Click cancel button
     fireEvent.click(screen.getByTestId("bids-no-asl-cancel-btn"));

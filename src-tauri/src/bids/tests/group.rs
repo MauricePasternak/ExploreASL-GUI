@@ -90,56 +90,8 @@ fn test_group_by_fingerprint_single_group() {
     fs::write(perf2.join("sub-02_asl.nii.gz"), b"fake").unwrap();
     fs::write(perf2.join("sub-02_aslcontext.tsv"), context_tsv).unwrap();
 
-    let sidecar_paths = vec![perf1.join("sub-01_asl.json"), perf2.join("sub-02_asl.json")];
-
-    let subjects = vec![
-        BidsSubject {
-            subject_label: "sub-01".to_string(),
-            subject_dir: root.join("sub-01").to_string_lossy().to_string(),
-            sessions: vec![BidsSession {
-                session_label: "1".to_string(),
-                session_dir: None,
-                has_explicit_session: false,
-                has_perf: true,
-                has_anat: false,
-                asl_files: vec![crate::bids::scan::AslFile {
-                    path: perf1
-                        .join("sub-01_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: None,
-                    acquisition_label: None,
-                }],
-                asl_sidecars: vec![perf1.join("sub-01_asl.json").to_string_lossy().to_string()],
-                has_m0: false,
-                anat_files: vec![],
-            }],
-        },
-        BidsSubject {
-            subject_label: "sub-02".to_string(),
-            subject_dir: root.join("sub-02").to_string_lossy().to_string(),
-            sessions: vec![BidsSession {
-                session_label: "1".to_string(),
-                session_dir: None,
-                has_explicit_session: false,
-                has_perf: true,
-                has_anat: false,
-                asl_files: vec![crate::bids::scan::AslFile {
-                    path: perf2
-                        .join("sub-02_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: None,
-                    acquisition_label: None,
-                }],
-                asl_sidecars: vec![perf2.join("sub-02_asl.json").to_string_lossy().to_string()],
-                has_m0: false,
-                anat_files: vec![],
-            }],
-        },
-    ];
-
-    let result = group_by_fingerprint(&sidecar_paths, &subjects);
+    let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
+    let result = group_by_fingerprint(root, &subjects);
     assert_eq!(result.groups.len(), 1);
     assert_eq!(result.groups[0].subjects.len(), 2);
     assert!(result.skipped.is_empty());
@@ -173,56 +125,8 @@ fn test_group_by_fingerprint_multi_group() {
     )
     .unwrap();
 
-    let sidecar_paths = vec![perf1.join("sub-01_asl.json"), perf2.join("sub-02_asl.json")];
-
-    let subjects = vec![
-        BidsSubject {
-            subject_label: "sub-01".to_string(),
-            subject_dir: root.join("sub-01").to_string_lossy().to_string(),
-            sessions: vec![BidsSession {
-                session_label: "1".to_string(),
-                session_dir: None,
-                has_explicit_session: false,
-                has_perf: true,
-                has_anat: false,
-                asl_files: vec![crate::bids::scan::AslFile {
-                    path: perf1
-                        .join("sub-01_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: None,
-                    acquisition_label: None,
-                }],
-                asl_sidecars: vec![perf1.join("sub-01_asl.json").to_string_lossy().to_string()],
-                has_m0: false,
-                anat_files: vec![],
-            }],
-        },
-        BidsSubject {
-            subject_label: "sub-02".to_string(),
-            subject_dir: root.join("sub-02").to_string_lossy().to_string(),
-            sessions: vec![BidsSession {
-                session_label: "1".to_string(),
-                session_dir: None,
-                has_explicit_session: false,
-                has_perf: true,
-                has_anat: false,
-                asl_files: vec![crate::bids::scan::AslFile {
-                    path: perf2
-                        .join("sub-02_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: None,
-                    acquisition_label: None,
-                }],
-                asl_sidecars: vec![perf2.join("sub-02_asl.json").to_string_lossy().to_string()],
-                has_m0: false,
-                anat_files: vec![],
-            }],
-        },
-    ];
-
-    let result = group_by_fingerprint(&sidecar_paths, &subjects);
+    let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
+    let result = group_by_fingerprint(root, &subjects);
     assert_eq!(result.groups.len(), 2);
     assert!(result.skipped.is_empty());
 }
@@ -245,57 +149,17 @@ fn test_group_by_fingerprint_skipped_missing_sidecar() {
     .unwrap();
     // sub-02: has ASL NIfTI but NO sidecar JSON
     fs::write(perf2.join("sub-02_asl.nii.gz"), b"fake").unwrap();
+    let orphan = root.join("sub-03/perf");
+    fs::create_dir_all(&orphan).unwrap();
+    fs::write(orphan.join("sub-03_asl.json"), "{}").unwrap();
+    fs::write(
+        orphan.join("sub-03_aslcontext.tsv"),
+        "volume_type\ncontrol\n",
+    )
+    .unwrap();
 
-    let sidecar_paths = vec![perf1.join("sub-01_asl.json")];
-
-    let subjects = vec![
-        BidsSubject {
-            subject_label: "sub-01".to_string(),
-            subject_dir: root.join("sub-01").to_string_lossy().to_string(),
-            sessions: vec![BidsSession {
-                session_label: "1".to_string(),
-                session_dir: None,
-                has_explicit_session: false,
-                has_perf: true,
-                has_anat: false,
-                asl_files: vec![crate::bids::scan::AslFile {
-                    path: perf1
-                        .join("sub-01_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: None,
-                    acquisition_label: None,
-                }],
-                asl_sidecars: vec![perf1.join("sub-01_asl.json").to_string_lossy().to_string()],
-                has_m0: false,
-                anat_files: vec![],
-            }],
-        },
-        BidsSubject {
-            subject_label: "sub-02".to_string(),
-            subject_dir: root.join("sub-02").to_string_lossy().to_string(),
-            sessions: vec![BidsSession {
-                session_label: "1".to_string(),
-                session_dir: None,
-                has_explicit_session: false,
-                has_perf: true,
-                has_anat: false,
-                asl_files: vec![crate::bids::scan::AslFile {
-                    path: perf2
-                        .join("sub-02_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: None,
-                    acquisition_label: None,
-                }],
-                asl_sidecars: vec![],
-                has_m0: false,
-                anat_files: vec![],
-            }],
-        },
-    ];
-
-    let result = group_by_fingerprint(&sidecar_paths, &subjects);
+    let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
+    let result = group_by_fingerprint(root, &subjects);
     assert_eq!(result.groups.len(), 1);
     assert_eq!(result.groups[0].subjects.len(), 1);
     assert_eq!(result.skipped.len(), 1);
@@ -322,48 +186,16 @@ fn test_group_by_fingerprint_skipped_partial_missing_sidecar() {
     .unwrap();
     // run-2 has NIfTI but NO sidecar
     fs::write(perf1.join("sub-01_run-2_asl.nii.gz"), b"fake").unwrap();
+    // Equal JSON/image counts cannot substitute for an actual association.
+    fs::write(perf1.join("sub-01_run-3_asl.json"), "{}").unwrap();
+    fs::write(
+        perf1.join("sub-01_run-2_aslcontext.tsv"),
+        "volume_type\ncontrol\n",
+    )
+    .unwrap();
 
-    let sidecar_paths = vec![perf1.join("sub-01_run-1_asl.json")];
-
-    let subjects = vec![BidsSubject {
-        subject_label: "sub-01".to_string(),
-        subject_dir: root.join("sub-01").to_string_lossy().to_string(),
-        sessions: vec![BidsSession {
-            session_label: "1".to_string(),
-            session_dir: None,
-            has_explicit_session: false,
-            has_perf: true,
-            has_anat: false,
-            asl_files: vec![
-                crate::bids::scan::AslFile {
-                    path: perf1
-                        .join("sub-01_run-1_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: Some("1".to_string()),
-                    acquisition_label: None,
-                },
-                crate::bids::scan::AslFile {
-                    path: perf1
-                        .join("sub-01_run-2_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: Some("2".to_string()),
-                    acquisition_label: None,
-                },
-            ],
-            asl_sidecars: vec![
-                perf1
-                    .join("sub-01_run-1_asl.json")
-                    .to_string_lossy()
-                    .to_string(),
-            ],
-            has_m0: false,
-            anat_files: vec![],
-        }],
-    }];
-
-    let result = group_by_fingerprint(&sidecar_paths, &subjects);
+    let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
+    let result = group_by_fingerprint(root, &subjects);
     assert_eq!(result.groups.len(), 0);
     assert_eq!(result.skipped.len(), 1);
     assert_eq!(result.skipped[0], "sub-01_1");
@@ -417,59 +249,8 @@ fn test_group_by_fingerprint_derived_m0type_governs_over_raw_sidecar_label() {
     fs::write(perf_b.join("sub-02_m0scan.nii.gz"), b"fake").unwrap();
     fs::write(perf_b.join("sub-02_aslcontext.tsv"), context_tsv).unwrap();
 
-    let sidecar_paths = vec![
-        perf_a.join("sub-01_asl.json"),
-        perf_b.join("sub-02_asl.json"),
-    ];
-
-    let subjects = vec![
-        BidsSubject {
-            subject_label: "sub-01".to_string(),
-            subject_dir: root.join("sub-01").to_string_lossy().to_string(),
-            sessions: vec![BidsSession {
-                session_label: "1".to_string(),
-                session_dir: None,
-                has_explicit_session: false,
-                has_perf: true,
-                has_anat: false,
-                asl_files: vec![crate::bids::scan::AslFile {
-                    path: perf_a
-                        .join("sub-01_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: None,
-                    acquisition_label: None,
-                }],
-                asl_sidecars: vec![perf_a.join("sub-01_asl.json").to_string_lossy().to_string()],
-                has_m0: true,
-                anat_files: vec![],
-            }],
-        },
-        BidsSubject {
-            subject_label: "sub-02".to_string(),
-            subject_dir: root.join("sub-02").to_string_lossy().to_string(),
-            sessions: vec![BidsSession {
-                session_label: "1".to_string(),
-                session_dir: None,
-                has_explicit_session: false,
-                has_perf: true,
-                has_anat: false,
-                asl_files: vec![crate::bids::scan::AslFile {
-                    path: perf_b
-                        .join("sub-02_asl.nii.gz")
-                        .to_string_lossy()
-                        .to_string(),
-                    run_label: None,
-                    acquisition_label: None,
-                }],
-                asl_sidecars: vec![perf_b.join("sub-02_asl.json").to_string_lossy().to_string()],
-                has_m0: true,
-                anat_files: vec![],
-            }],
-        },
-    ];
-
-    let result = group_by_fingerprint(&sidecar_paths, &subjects);
+    let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
+    let result = group_by_fingerprint(root, &subjects);
     // Both subjects have identical other-14 fingerprint fields and both
     // derive M0Type=Separate (m0scan file present). MUST group together
     // despite raw sidecar M0Type differing ("Included" vs "Absent").
@@ -491,6 +272,51 @@ fn test_group_by_fingerprint_derived_m0type_governs_over_raw_sidecar_label() {
 }
 
 // ---- apply_label_collisions ----
+
+#[test]
+fn multi_run_membership_and_late_context_contracts() {
+    for (mode, group_count, skipped, context) in [
+        ("same", 1, false, "control,label"),
+        ("different", 2, false, "control,label"),
+        ("malformed", 1, false, "unexpected"),
+        ("unreadable", 1, true, "control,label"),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let perf = root.join("sub-01/perf");
+        fs::create_dir_all(&perf).unwrap();
+        fs::write(root.join("asl.json"), r#"{"EchoTime":0.01}"#).unwrap();
+        for run in ["01", "02", "03"] {
+            fs::write(perf.join(format!("sub-01_run-{run}_asl.nii")), b"fake").unwrap();
+            let bytes: &[u8] = if mode == "unreadable" && run == "02" {
+                &[0xff]
+            } else if mode == "malformed" {
+                b"not_a_header\n unexpected\textra\n\n"
+            } else {
+                b"volume_type\n control\textra\n\n label \n"
+            };
+            fs::write(perf.join(format!("sub-01_run-{run}_aslcontext.tsv")), bytes).unwrap();
+        }
+        if mode == "different" || mode == "unreadable" {
+            fs::write(perf.join("sub-01_run-03_asl.json"), r#"{"EchoTime":0.02}"#).unwrap();
+        }
+        let mut subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
+        subjects[0].sessions[0]
+            .asl_files
+            .sort_by(|a, b| a.path.cmp(&b.path));
+        let scan = group_by_fingerprint(root, &subjects);
+        assert_eq!(scan.groups.len(), group_count, "{mode}");
+        assert_eq!(!scan.skipped.is_empty(), skipped, "{mode}");
+        if skipped {
+            assert_eq!(scan.skipped, ["sub-01_1"]);
+        }
+        for group in &scan.groups {
+            assert_eq!(group.subjects.len(), 1);
+            assert_eq!(group.subjects[0].session_labels, ["1"]);
+            assert_eq!(group.bids_params.asl_context.as_deref(), Some(context));
+        }
+    }
+}
 
 #[test]
 fn test_apply_label_collisions_three_groups_same_label() {

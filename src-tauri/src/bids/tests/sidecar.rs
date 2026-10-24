@@ -28,10 +28,10 @@ fn test_parse_sidecar_invalid_json() {
     assert!(parse_sidecar(&json_path).is_err());
 }
 
-// ---- find_asl_context_for ----
+// ---- adjacent applicability ----
 
 #[test]
-fn test_find_asl_context_for_basic() {
+fn test_adjacent_context_basic() {
     let tmp = TempDir::new().unwrap();
     let perf = tmp.path().join("sub-01").join("perf");
     fs::create_dir_all(&perf).unwrap();
@@ -40,12 +40,15 @@ fn test_find_asl_context_for_basic() {
     fs::write(&sidecar_path, b"{}").unwrap();
     fs::write(perf.join("sub-01_aslcontext.tsv"), b"volume_type\n").unwrap();
 
-    let ctx = find_asl_context_for(&sidecar_path).unwrap();
+    let image = perf.join("sub-01_asl.nii.gz");
+    let sources = discover_metadata(tmp.path(), &image).unwrap();
+    assert_eq!(sources.json_paths, vec![sidecar_path]);
+    let ctx = sources.context_path.unwrap();
     assert_eq!(ctx, perf.join("sub-01_aslcontext.tsv"));
 }
 
 #[test]
-fn test_find_asl_context_for_with_ses() {
+fn test_adjacent_context_with_ses() {
     let tmp = TempDir::new().unwrap();
     let perf = tmp.path().join("sub-01").join("ses-01").join("perf");
     fs::create_dir_all(&perf).unwrap();
@@ -54,7 +57,11 @@ fn test_find_asl_context_for_with_ses() {
     fs::write(&sidecar_path, b"{}").unwrap();
     fs::write(perf.join("sub-01_ses-01_aslcontext.tsv"), b"volume_type\n").unwrap();
 
-    let ctx = find_asl_context_for(&sidecar_path).unwrap();
+    let image = perf.join("sub-01_ses-01_asl.nii");
+    let ctx = discover_metadata(tmp.path(), &image)
+        .unwrap()
+        .context_path
+        .unwrap();
     assert_eq!(ctx, perf.join("sub-01_ses-01_aslcontext.tsv"));
 }
 
@@ -84,43 +91,96 @@ fn test_parse_asl_context_empty() {
     assert_eq!(result, "");
 }
 
-// ---- inject_asl_context ----
-
-#[test]
-fn test_inject_asl_context_success() {
-    let tmp = TempDir::new().unwrap();
-    let perf = tmp.path().join("sub-01").join("perf");
-    fs::create_dir_all(&perf).unwrap();
-
-    let sidecar_path = perf.join("sub-01_asl.json");
-    fs::write(&sidecar_path, r#"{"EchoTime": 0.01}"#).unwrap();
-    fs::write(
-        perf.join("sub-01_aslcontext.tsv"),
-        "volume_type\nm0scan\ncontrol\nlabel\n",
-    )
-    .unwrap();
-
-    let mut params: serde_json::Map<String, Value> =
-        serde_json::from_str(r#"{"EchoTime": 0.01}"#).unwrap();
-    inject_asl_context(&sidecar_path, &mut params).unwrap();
-
-    assert_eq!(params["ASLContext"], "m0scan,control,label");
-}
-
-#[test]
-fn test_inject_asl_context_missing_tsv() {
-    let tmp = TempDir::new().unwrap();
-    let sidecar_path = tmp.path().join("sub-01_asl.json");
-    fs::write(&sidecar_path, r#"{"EchoTime": 0.01}"#).unwrap();
-
-    let mut params: serde_json::Map<String, Value> =
-        serde_json::from_str(r#"{"EchoTime": 0.01}"#).unwrap();
-    let result = inject_asl_context(&sidecar_path, &mut params);
-
-    assert!(result.is_err());
-}
-
 // ---- extract_fingerprint ----
+
+#[test]
+fn applicability_matches_exact_generic_entities() {
+    for (candidate, applies) in [
+        ("echo-2_acq-fast_asl.json", true),
+        ("acq-slow_asl.json", false),
+        ("acq-Fast_asl.json", false),
+        ("run-1_asl.json", false),
+        ("acq-fast_broken_asl.json", false),
+        ("acq-fast_acq-fast_asl.json", false),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(candidate), "{}").unwrap();
+        let image = tmp.path().join("sub-01_echo-2_acq-fast_run-01_asl.nii");
+        let sources = discover_metadata(tmp.path(), &image).unwrap();
+        assert_eq!(!sources.json_paths.is_empty(), applies, "{candidate}");
+    }
+}
+
+#[test]
+fn applicability_stays_inside_image_ancestors_and_selected_root() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path().join("dataset");
+    let perf = root.join("sub-01/perf");
+    fs::create_dir_all(&perf).unwrap();
+    for directory in [
+        tmp.path().to_path_buf(),
+        root.join("sub-02"),
+        root.join("derivatives"),
+    ] {
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join("asl.json"), "{}").unwrap();
+        fs::write(directory.join("aslcontext.tsv"), "volume_type\ncontrol\n").unwrap();
+    }
+    fs::write(perf.join("sub-01_m0scan.json"), "{}").unwrap();
+    fs::write(perf.join("sub-01_asl.json.bak"), "{}").unwrap();
+    let sources = discover_metadata(&root, &perf.join("sub-01_asl.nii.gz")).unwrap();
+    assert!(sources.json_paths.is_empty());
+    assert!(sources.context_path.is_none());
+}
+
+#[test]
+fn effective_json_replaces_whole_values_without_fingerprint_normalization() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    let perf = root.join("sub-01/ses-01/perf");
+    fs::create_dir_all(&perf).unwrap();
+    for (path, json) in [
+        (
+            "asl.json",
+            r#"{"Manufacturer":"Siemens","PostLabelingDelay":1,"array":[1,2],"object":{"old":1},"flag":true,"zero":7,"empty":[1],"nil":1}"#,
+        ),
+        (
+            "sub-01/asl.json",
+            r#"{"PostLabelingDelay":2,"unknown":"retained"}"#,
+        ),
+        (
+            "sub-01/ses-01/asl.json",
+            r#"{"PostLabelingDelay":3,"EchoTime":0.014}"#,
+        ),
+        (
+            "sub-01/ses-01/perf/sub-01_ses-01_asl.json",
+            r#"{"PostLabelingDelay":4,"array":[2,1],"object":{"new":2},"flag":false,"zero":0,"empty":[],"nil":null}"#,
+        ),
+    ] {
+        fs::write(root.join(path), json).unwrap();
+    }
+    let sources = discover_metadata(root, &perf.join("sub-01_ses-01_asl.nii.gz")).unwrap();
+    let effective = load_effective_json(&sources).unwrap();
+    assert_eq!(
+        effective,
+        serde_json::json!({
+            "Manufacturer":"Siemens", "PostLabelingDelay":4, "EchoTime":0.014,
+            "unknown":"retained", "array":[2,1], "object":{"new":2},
+            "flag":false, "zero":0, "empty":[], "nil":null
+        })
+    );
+}
+
+#[test]
+fn effective_json_reports_unreadable_source() {
+    let tmp = TempDir::new().unwrap();
+    let source = tmp.path().join("asl.json");
+    fs::write(&source, "{}").unwrap();
+    let sources = discover_metadata(tmp.path(), &tmp.path().join("sub-01_asl.nii")).unwrap();
+    fs::remove_file(&source).unwrap();
+    let error = load_effective_json(&sources).unwrap_err().to_string();
+    assert!(error.contains(source.to_str().unwrap()));
+}
 
 #[test]
 fn test_extract_fingerprint_normalizes_manufacturer() {
@@ -270,51 +330,6 @@ fn test_canonicalize_array_empty() {
     let arr: Vec<Value> = vec![];
     let canon = canonicalize_array(&arr);
     assert!(canon.is_empty());
-}
-
-// ---- find_asl_sidecars integration ----
-
-#[test]
-fn test_find_asl_sidecars_cross_sectional() {
-    let tmp = TempDir::new().unwrap();
-    let perf = tmp.path().join("sub-01").join("perf");
-    fs::create_dir_all(&perf).unwrap();
-    fs::write(perf.join("sub-01_asl.json"), b"{}").unwrap();
-    fs::write(perf.join("sub-01_asl.nii.gz"), b"fake").unwrap();
-
-    let sidecars = find_asl_sidecars(tmp.path());
-    assert_eq!(sidecars.len(), 1);
-    assert!(sidecars[0].to_string_lossy().contains("sub-01_asl.json"));
-}
-
-#[test]
-fn test_find_asl_sidecars_excludes_derivatives() {
-    let tmp = TempDir::new().unwrap();
-
-    // Valid: sub-01/perf/sub-01_asl.json
-    let perf = tmp.path().join("sub-01").join("perf");
-    fs::create_dir_all(&perf).unwrap();
-    fs::write(perf.join("sub-01_asl.json"), b"{}").unwrap();
-
-    // Invalid: derivatives/ExploreASL/sub-01_asl.json
-    let deriv = tmp.path().join("derivatives").join("ExploreASL");
-    fs::create_dir_all(&deriv).unwrap();
-    fs::write(deriv.join("sub-01_asl.json"), b"{}").unwrap();
-
-    let sidecars = find_asl_sidecars(tmp.path());
-    assert_eq!(sidecars.len(), 1);
-    assert!(!sidecars[0].to_string_lossy().contains("derivatives"));
-}
-
-#[test]
-fn test_find_asl_sidecars_longitudinal() {
-    let tmp = TempDir::new().unwrap();
-    let ses_perf = tmp.path().join("sub-01").join("ses-01").join("perf");
-    fs::create_dir_all(&ses_perf).unwrap();
-    fs::write(ses_perf.join("sub-01_ses-01_asl.json"), b"{}").unwrap();
-
-    let sidecars = find_asl_sidecars(tmp.path());
-    assert_eq!(sidecars.len(), 1);
 }
 
 #[test]

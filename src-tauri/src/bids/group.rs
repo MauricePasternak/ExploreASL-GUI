@@ -2,12 +2,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use crate::bids::scan::{BidsSession, BidsSubject};
+use crate::bids::scan::BidsSubject;
 use crate::bids::schema::BidsAslMetadata;
 use crate::bids::sidecar::{
-    canonicalize_number, extract_fingerprint, find_asl_context_for, parse_sidecar,
+    canonicalize_number, discover_metadata, extract_fingerprint, load_effective_json,
+    parse_asl_context,
 };
 use crate::bids::vendor::{
     derive_labeling_type, derive_m0_type, derive_sequence, derive_vendor,
@@ -91,24 +92,6 @@ pub fn compute_group_hash(fingerprint: &HashMap<String, Value>) -> String {
     }
 
     format!("{:x}", hasher.finalize())
-}
-
-/// Find the BidsSubject that owns a given sidecar path.
-fn find_subject_for_sidecar<'a>(
-    sidecar_path: &Path,
-    subjects: &'a [BidsSubject],
-) -> Option<(&'a BidsSubject, &'a BidsSession)> {
-    let sidecar_str = sidecar_path.to_string_lossy();
-    for subject in subjects {
-        for session in &subject.sessions {
-            for sc in &session.asl_sidecars {
-                if sc == sidecar_str.as_ref() {
-                    return Some((subject, session));
-                }
-            }
-        }
-    }
-    None
 }
 
 /// Derive BidsAslMetadata from a parsed sidecar JSON + derived M0Type + ASLContext.
@@ -200,12 +183,8 @@ fn derive_bids_metadata(
 
 /// Group subjects by fingerprint hash.
 ///
-/// Iterates sidecars, parses, injects ASL context, extracts fingerprint, hashes, groups.
-/// Skipped = subjects with perf but missing sidecar or missing/unparseable aslcontext.tsv.
-pub fn group_by_fingerprint(
-    sidecar_paths: &[PathBuf],
-    subjects: &[BidsSubject],
-) -> BidsSidecarScan {
+/// Preflight image-owned JSON/associations per session; read context late while grouping.
+pub fn group_by_fingerprint(root: &Path, subjects: &[BidsSubject]) -> BidsSidecarScan {
     // Map: hash → (SidecarGroup-under-construction, first sidecar JSON)
     use std::collections::BTreeMap;
 
@@ -225,9 +204,6 @@ pub fn group_by_fingerprint(
 
     let mut groups_map: BTreeMap<String, GroupAccum> = BTreeMap::new();
     let mut skipped = Vec::new();
-    let mut invalid_sessions = std::collections::HashSet::new();
-
-    // Pre-scan sessions for missing or unparseable sidecars, or missing aslcontext (Gap C Fix)
     for subject in subjects {
         for session in &subject.sessions {
             if !session.has_perf {
@@ -238,155 +214,85 @@ pub fn group_by_fingerprint(
             }
 
             let key = format!("{}_{}", subject.subject_label, session.session_label);
-            let mut is_invalid = session.asl_sidecars.len() < session.asl_files.len();
-
-            if !is_invalid {
-                for sc in &session.asl_sidecars {
-                    let sc_path = Path::new(sc);
-                    if find_asl_context_for(sc_path).is_none() {
-                        is_invalid = true;
-                        break;
-                    }
-                    if parse_sidecar(sc_path).is_err() {
-                        is_invalid = true;
-                        break;
-                    }
-                }
-            }
-
-            if is_invalid {
-                skipped.push(key.clone());
-                invalid_sessions.insert(key);
-            }
-        }
-    }
-
-    // Track which subjects have been processed
-    let mut processed_subject_sessions: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
-
-    for sidecar_path in sidecar_paths {
-        let Some((subject, session)) = find_subject_for_sidecar(sidecar_path, subjects) else {
-            // Sidecar not in any subject's asl_sidecars — skip
-            continue;
-        };
-
-        let subject_session_key = format!("{}_{}", subject.subject_label, session.session_label);
-        if invalid_sessions.contains(&subject_session_key) {
-            continue;
-        }
-        processed_subject_sessions.insert(subject_session_key.clone());
-
-        // Parse sidecar
-        let sidecar = match parse_sidecar(sidecar_path) {
-            Ok(s) => s,
-            Err(_) => {
-                // Should already be handled by pre-scan, but keeping as safeguard
-                if invalid_sessions.insert(subject_session_key.clone()) {
-                    skipped.push(subject_session_key);
-                }
-                continue;
-            }
-        };
-
-        // Find and parse ASL context
-        let ctx_path = find_asl_context_for(sidecar_path);
-        let asl_context = match ctx_path {
-            Some(ref p) => match std::fs::read_to_string(p) {
-                Ok(content) => {
-                    // Parse volume types from TSV
-                    let mut types = Vec::new();
-                    for (i, line) in content.lines().enumerate() {
-                        if i == 0 {
-                            continue;
-                        }
-                        let line = line.trim();
-                        if line.is_empty() {
-                            continue;
-                        }
-                        types.push(line.split('\t').next().unwrap_or(line).trim().to_string());
-                    }
-                    Some(types.join(","))
-                }
-                Err(_) => {
-                    if invalid_sessions.insert(subject_session_key.clone()) {
-                        skipped.push(subject_session_key);
-                    }
+            let acquisitions: anyhow::Result<Vec<_>> = session
+                .asl_files
+                .iter()
+                .map(|image| {
+                    let path = Path::new(&image.path);
+                    let resolved = (|| -> anyhow::Result<_> {
+                        let sources = discover_metadata(root, path)?;
+                        let context = sources
+                            .context_path
+                            .as_ref()
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "Missing applicable ASL context for {}",
+                                    path.display()
+                                )
+                            })?
+                            .clone();
+                        let json = load_effective_json(&sources)?;
+                        Ok((path, json, context))
+                    })();
+                    resolved.map_err(|error| anyhow::anyhow!("Image {}: {error:#}", path.display()))
+                })
+                .collect();
+            let acquisitions = match acquisitions {
+                Ok(acquisitions) => acquisitions,
+                Err(error) => {
+                    log::warn!("Skipping {key}: {error:#}");
+                    skipped.push(key);
                     continue;
                 }
-            },
-            None => {
-                // Missing aslcontext.tsv — skip this subject/session
-                if invalid_sessions.insert(subject_session_key.clone()) {
-                    skipped.push(subject_session_key);
-                }
-                continue;
+            };
+            for (image_path, sidecar, context_path) in acquisitions {
+                let asl_context = match parse_asl_context(&context_path) {
+                    Ok(context) => Some(context),
+                    Err(error) => {
+                        log::warn!("Skipping {key}, image {}: {error:#}", image_path.display());
+                        skipped.push(key.clone());
+                        break;
+                    }
+                };
+
+                // Derive M0Type per-subject BEFORE fingerprinting (D8 spec rule):
+                // sidecar's M0Type is NOT trusted for fingerprinting except Estimate.
+                // The derived value governs the group hash so subjects with the same
+                // scanner/sequence (but different raw sidecar M0Type labels caused by
+                // converter inconsistency) still group together.
+                let sidecar_m0type = sidecar.get("M0Type").and_then(|v| v.as_str());
+                let perf_path = image_path.parent().expect("discovered image has a parent");
+                let derived_m0 = derive_m0_type(perf_path, asl_context.as_deref(), sidecar_m0type);
+
+                // Extract fingerprint, then override M0Type entry with the derived
+                // value so the hash reflects the DERIVED M0Type, not the raw sidecar
+                // string.
+                let mut fp = extract_fingerprint(&sidecar);
+                fp.insert("M0Type".to_string(), Value::String(derived_m0.clone()));
+                let hash = compute_group_hash(&fp);
+
+                // Add to group
+                let group = groups_map
+                    .entry(hash.clone())
+                    .or_insert_with(|| GroupAccum {
+                        fingerprint_hash: hash,
+                        subjects: Vec::new(),
+                        first_context: asl_context.clone(),
+                        first_sidecar: Some(sidecar.clone()),
+                        first_m0_type: Some(derived_m0.clone()),
+                    });
+
+                group.subjects.push(GroupSubject {
+                    subject_label: subject.subject_label.clone(),
+                    session_labels: vec![session.session_label.clone()],
+                });
             }
-        };
-
-        // Inject ASLContext into sidecar params
-        let mut params = sidecar.as_object().cloned().unwrap_or_default();
-        if let Some(ref ctx) = asl_context {
-            params.insert("ASLContext".to_string(), Value::String(ctx.clone()));
         }
-
-        // Derive M0Type per-subject BEFORE fingerprinting (D8 spec rule):
-        // sidecar's M0Type is NOT trusted for fingerprinting except Estimate.
-        // The derived value governs the group hash so subjects with the same
-        // scanner/sequence (but different raw sidecar M0Type labels caused by
-        // converter inconsistency) still group together.
-        let sidecar_m0type = sidecar.get("M0Type").and_then(|v| v.as_str());
-        let perf_path = sidecar_path.parent().unwrap_or(Path::new("."));
-        let derived_m0 = derive_m0_type(perf_path, asl_context.as_deref(), sidecar_m0type);
-
-        // Extract fingerprint, then override M0Type entry with the derived
-        // value so the hash reflects the DERIVED M0Type, not the raw sidecar
-        // string.
-        let mut fp = extract_fingerprint(&sidecar);
-        fp.insert("M0Type".to_string(), Value::String(derived_m0.clone()));
-        let hash = compute_group_hash(&fp);
-
-        // Add to group
-        let group = groups_map
-            .entry(hash.clone())
-            .or_insert_with(|| GroupAccum {
-                fingerprint_hash: hash,
-                subjects: Vec::new(),
-                first_context: asl_context.clone(),
-                first_sidecar: Some(sidecar.clone()),
-                first_m0_type: Some(derived_m0.clone()),
-            });
-
-        group.subjects.push(GroupSubject {
-            subject_label: subject.subject_label.clone(),
-            session_labels: vec![session.session_label.clone()],
-        });
     }
 
     // Merge duplicate GroupSubject entries by subject_label
     for accum in groups_map.values_mut() {
         merge_group_subjects(&mut accum.subjects);
-    }
-
-    // Now check for subjects with perf but no sidecar in sidecar_paths
-    for subject in subjects {
-        for session in &subject.sessions {
-            if !session.has_perf {
-                continue;
-            }
-            let key = format!("{}_{}", subject.subject_label, session.session_label);
-            if invalid_sessions.contains(&key) {
-                continue;
-            }
-            if !processed_subject_sessions.contains(&key) && session.asl_files.is_empty() {
-                // Subject has perf dir but no ASL files — not skipped, just no data
-                continue;
-            }
-            if !processed_subject_sessions.contains(&key) && !session.asl_files.is_empty() {
-                // Subject has ASL files but no sidecar in sidecar_paths
-                skipped.push(key);
-            }
-        }
     }
 
     // Build final groups
@@ -462,10 +368,9 @@ pub fn group_by_fingerprint(
     apply_label_collisions(&mut groups);
 
     log::info!(
-        "group_by_fingerprint: {} groups, {} skipped, {} sidecars processed",
+        "group_by_fingerprint: {} groups, {} skipped",
         groups.len(),
-        skipped.len(),
-        sidecar_paths.len()
+        skipped.len()
     );
 
     BidsSidecarScan { groups, skipped }
