@@ -129,28 +129,24 @@ describe("native accepted parameter flow", () => {
       advancedVisibility: { ...DEFAULT_ADVANCED_VISIBILITY, showAdvancedQuantification: true },
     };
     useProjectStore.getState().acceptSnapshot(before);
-    vi.mocked(invoke).mockRejectedValueOnce({
-      category: "invalid_serialization",
-      message: "dataPar.Lambda must be a number",
-    });
+    // Tauri rejects malformed typed arguments before the native command runs.
+    vi.mocked(invoke).mockRejectedValueOnce(
+      'invalid args `edit` for command `accept_project_edit`: invalid type: string "-", expected f64',
+    );
+    const editError =
+      "Your project changes could not be applied. They have not been saved. Try the action again. If the problem continues, report it with the application log.";
     const { container } = renderWithMantine(<DataParEditor />);
     const w = within(container);
     fireEvent.click(w.getByRole("button", { name: "Quantification" }));
     fireEvent.change(w.getByTestId("field-Lambda"), { target: { value: "-" } });
     await vi.waitFor(() =>
-      expect(w.getByTestId("datapar-draft-error")).toHaveTextContent(
-        "dataPar.Lambda must be a number",
-      ),
+      expect(w.getByTestId("datapar-draft-error")).toHaveTextContent(editError),
     );
     expect(useDataParStore.getState().drafts).toEqual({ Lambda: "-" });
-    expect(w.getByTestId("datapar-draft-error")).toHaveTextContent(
-      "dataPar.Lambda must be a number",
-    );
+    expect(w.getByTestId("datapar-draft-error")).toHaveTextContent(editError);
     expect(acceptedDataPar()).toEqual({});
     expect(w.getByTestId("field-Lambda")).toHaveValue("-");
-    await expect(useProjectStore.getState().saveProject()).rejects.toThrow(
-      "dataPar.Lambda must be a number",
-    );
+    await expect(useProjectStore.getState().saveProject()).rejects.toThrow(editError);
     expect(invoke).toHaveBeenCalledTimes(1);
     const corrected = { ...projectFixture(), acceptedRevision: 1 };
     corrected.document.dataPar = { Lambda: 0.9 };
@@ -160,6 +156,11 @@ describe("native accepted parameter flow", () => {
       .mockResolvedValueOnce({ ...corrected, persistedRevision: 1 });
     fireEvent.change(w.getByTestId("field-Lambda"), { target: { value: "0.9" } });
     await useProjectStore.getState().saveProject();
+    expect(invoke).toHaveBeenLastCalledWith("save_project", {
+      generation: before.activationGeneration,
+    });
+    expect(acceptedDataPar()).toEqual({ Lambda: 0.9 });
+    expect(useProjectStore.getState().isDirty).toBe(false);
     expect(useDataParStore.getState().drafts).toEqual({});
     expect(w.queryByTestId("datapar-draft-error")).toBeNull();
     expect(w.getByTestId("field-Lambda")).toHaveValue("0.9");
