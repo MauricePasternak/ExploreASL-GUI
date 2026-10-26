@@ -6,11 +6,10 @@ import type {
   ServerRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { copyProject, inspectDom, NativeGuiSession } from "./session";
+import { copyProject, inspectDom, NativeGuiSession, SizeSchema } from "./session";
+import { errorText, pngDimensions, saveArtifact } from "./diagnostics";
 
 type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 const selector = z
@@ -56,7 +55,26 @@ export function createServer() {
         // Serialize only this window; separate agents remain independent.
         const result = session.pending
           .catch(() => {})
-          .then(() => run(args as z.output<z.ZodObject<S>>, session.gui));
+          .then(async () => {
+            try {
+              return await run(args as z.output<z.ZodObject<S>>, session.gui);
+            } catch (error) {
+              // Never re-enter tool dispatch or let evidence replace the original failure.
+              const evidence =
+                error instanceof Error && "evidence" in error
+                  ? error.evidence
+                  : await session.gui.failureEvidence().catch((captureError: unknown) => ({
+                      unavailable: errorText(captureError),
+                    }));
+              return {
+                ...text({
+                  error: String(error instanceof Error ? error.message : error),
+                  evidence,
+                }),
+                isError: true,
+              };
+            }
+          });
         session.pending = result;
         return result;
       },
@@ -88,8 +106,28 @@ export function createServer() {
         .describe(
           "JSON file containing executionProfiles (for example saved settings.json); absolute or repository-relative path. Always starts a fresh workspace. Imports no other settings.",
         ),
+      window_size: SizeSchema.optional().describe(
+        "Requested native window width/height, 1–4096 each. Not an exact CSS viewport; docked devtools and OS constraints may shrink it.",
+      ),
+      screen_size: SizeSchema.optional().describe(
+        "Virtual framebuffer pixels, 1–4096 each; default 1920x1080. Select capacity at launch (e.g. 3840x2160 or 2160x3840). Virtual mode only.",
+      ),
     },
     async (args, gui) => text(await gui.launch(args)),
+  );
+
+  register(
+    "resize",
+    "Resize native window via WebDriver; return observed window/CSS viewport/screen/DPR. Cannot exceed launch-time virtual screen capacity; close/relaunch explicitly for more. Does not resize desktop or emulate devices.",
+    { ...SizeSchema.shape },
+    async (args, gui) => text(await gui.resize(args)),
+  );
+
+  register(
+    "diagnostics",
+    "Read session workspace/driver status, live route/metrics when reachable, and bounded tails (16 KiB/100 lines each) of fixed own driver/native logs. Works before launch and after close/failure; no arbitrary path input.",
+    {},
+    async (_, gui) => text(await gui.diagnostics()),
   );
 
   register(
@@ -104,12 +142,35 @@ export function createServer() {
 
   register(
     "inspect",
-    "Inspect visible DOM, text, input values, labels and actionable CSS selectors. Password values redacted. Offscreen elements report inViewport=false.",
+    "Read-only DOM inspection: text/labels/values (passwords redacted), unique selectors, CSS bounds, focus/scroll and visibility/center hit-test overlap. Offscreen differs from hidden/covered; sampled hit testing does not guarantee clickability. Optional bounded computed styles/hidden elements. Never scrolls or focuses.",
     {
       selector: z.string().min(1).max(4096).default("body"),
       limit: z.number().int().min(1).max(500).default(150),
+      styles: z
+        .array(
+          z
+            .string()
+            .min(1)
+            .max(80)
+            .regex(/^-{0,2}[a-z][a-z0-9-]*$/i),
+        )
+        .max(12)
+        .default([])
+        .describe(
+          "At most 12 computed CSS property names; each returned value capped at 500 characters.",
+        ),
+      include_hidden: z.boolean().default(false),
     },
-    async (args, gui) => text(await gui.browser.execute(inspectDom, args.selector, args.limit)),
+    async (args, gui) =>
+      text(
+        await gui.browser.execute(
+          inspectDom,
+          args.selector,
+          args.limit,
+          args.styles,
+          args.include_hidden,
+        ),
+      ),
   );
 
   register(
@@ -118,14 +179,21 @@ export function createServer() {
     {},
     async (_, gui) => {
       const image = await gui.browser.takeScreenshot();
-      const directory = path.join(gui.workspace!, "screenshots");
-      await mkdir(directory, { recursive: true });
-      const filename = path.join(directory, `${Date.now()}.png`);
-      await writeFile(filename, Buffer.from(image, "base64"));
+      const filename = await saveArtifact(
+        gui.workspace!,
+        `screenshots/${Date.now()}-${crypto.randomUUID()}.png`,
+        Buffer.from(image, "base64"),
+      );
+      const metrics = await gui
+        .metrics()
+        .catch((error: unknown) => ({ unavailable: errorText(error) }));
       return {
         content: [
           { type: "image", data: image, mimeType: "image/png" },
-          { type: "text", text: filename },
+          {
+            type: "text",
+            text: JSON.stringify({ path: filename, image: pngDimensions(image), metrics }),
+          },
         ],
       };
     },

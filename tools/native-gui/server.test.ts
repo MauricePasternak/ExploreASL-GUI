@@ -1,13 +1,24 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, open, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createServer as createHttpServer } from "node:http";
 import path from "node:path";
 import test from "node:test";
+import vm from "node:vm";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "./server";
-import { copyProject, NativeGuiSession, sandboxArguments, seedProfiles } from "./session";
+import {
+  copyProject,
+  inspectDom,
+  NativeGuiSession,
+  sandboxArguments,
+  seedProfiles,
+  SizeSchema,
+  viewportMetrics,
+} from "./session";
+import { LOG_BYTES, LOG_LINES, pngDimensions, saveArtifact, tailLog } from "./diagnostics";
 
 test("MCP advertises native controls, validates inputs and reports missing launch", async () => {
   const { server, shutdown } = createServer();
@@ -21,6 +32,8 @@ test("MCP advertises native controls, validates inputs and reports missing launc
       tools.map((tool) => tool.name),
       [
         "launch",
+        "resize",
+        "diagnostics",
         "close",
         "inspect",
         "screenshot",
@@ -41,13 +54,29 @@ test("MCP advertises native controls, validates inputs and reports missing launc
       enum: ["virtual", "desktop"],
     });
     assert.ok(!launchSchema.required?.length);
-    for (const args of [{ fresh: "yes" }, { profile_template: " " }, { display: "wayland" }]) {
+    for (const args of [
+      { fresh: "yes" },
+      { profile_template: " " },
+      { display: "wayland" },
+      { window_size: { width: 0, height: 800 } },
+      { screen_size: { width: 3840, height: 4097 } },
+    ]) {
       const invalidLaunch = await client.callTool({ name: "launch", arguments: args });
       assert.equal(invalidLaunch.isError, true);
     }
     const missingLaunch = await client.callTool({ name: "inspect", arguments: {} });
     assert.equal(missingLaunch.isError, true);
     assert.match(JSON.stringify(missingLaunch.content), /Launch the native GUI first/);
+    const empty = await client.callTool({ name: "diagnostics", arguments: {} });
+    assert.match(JSON.stringify(empty.content), /No connected native browser/);
+    for (const args of [
+      { styles: Array(13).fill("color") },
+      { styles: ["color;display"] },
+      { include_hidden: "yes" },
+      { limit: 501 },
+    ]) {
+      assert.equal((await client.callTool({ name: "inspect", arguments: args })).isError, true);
+    }
     const invalid = await client.callTool({
       name: "wait",
       arguments: { selector: "body", timeout_ms: -1 },
@@ -65,6 +94,339 @@ test("MCP advertises native controls, validates inputs and reports missing launc
     await client.close();
     await server.close();
   }
+});
+
+test("size bounds and capacity checks reject before native input; metrics distinguish CSS/image units", async () => {
+  for (const width of [0, -1, 1.5, 4097, Infinity])
+    assert.equal(SizeSchema.safeParse({ width, height: 900 }).success, false);
+  assert.deepEqual(SizeSchema.parse({ width: 2160, height: 3840 }), { width: 2160, height: 3840 });
+  const gui = new NativeGuiSession();
+  await assert.rejects(
+    gui.launch({ display: "desktop", screen_size: { width: 100, height: 100 } }),
+    /virtual-only/,
+  );
+  await assert.rejects(
+    gui.launch({ window_size: { width: 800, height: 1200 } }),
+    /exceeds screen_size/,
+  );
+  let resized = false;
+  Object.defineProperty(gui, "browser", {
+    value: {
+      setWindowSize: async () => {
+        resized = true;
+      },
+    },
+  });
+  Object.defineProperty(gui, "screenSize", { value: { width: 1920, height: 1080 } });
+  await assert.rejects(gui.resize({ width: 2000, height: 1000 }), /Explicitly close\/relaunch/);
+  assert.equal(resized, false);
+  const metrics = vm.runInNewContext(`(${viewportMetrics.toString()})()`, {
+    location: { href: "tauri://localhost/#/overview", hash: "#/overview" },
+    innerWidth: 800,
+    innerHeight: 600,
+    devicePixelRatio: 2,
+    screen: { width: 1920, height: 1080, availWidth: 1920, availHeight: 1080 },
+    window: { visualViewport: null },
+  });
+  assert.equal(metrics.viewport.width, 800);
+  assert.equal(metrics.viewport.units, "CSS pixels");
+  assert.equal(metrics.device_pixel_ratio, 2);
+  assert.equal(metrics.screen.width, 1920);
+});
+
+test("inspection stays read-only, bounded, unique and password-redacted; distinguishes hidden/offscreen/covered", () => {
+  class Element {
+    tagName = "BUTTON";
+    parentElement = null;
+    id = "";
+    labels = [];
+    disabled = false;
+    checked = false;
+    type = "text";
+    value: string | number = "value";
+    innerText = "button";
+    visibility = "visible";
+    opacity = "1";
+    scrollLeft = 2;
+    scrollTop = 3;
+    scrollWidth = 900;
+    scrollHeight = 1200;
+    clientWidth = 100;
+    clientHeight = 40;
+    constructor(
+      readonly name: string,
+      readonly x = 10,
+      readonly layout = true,
+    ) {}
+    getAttribute(key: string) {
+      return key === "data-testid" ? this.name : null;
+    }
+    getClientRects() {
+      return this.layout ? [this.getBoundingClientRect()] : [];
+    }
+    getBoundingClientRect() {
+      return {
+        x: this.x,
+        y: 20,
+        left: this.x,
+        top: 20,
+        right: this.x + 100,
+        bottom: 60,
+        width: this.layout ? 100 : 0,
+        height: this.layout ? 40 : 0,
+      };
+    }
+    contains(node: Element) {
+      return node === this;
+    }
+    querySelectorAll() {
+      return controls;
+    }
+  }
+  const root = new Element("root");
+  const password = new Element("password");
+  password.type = "password";
+  password.value = "never reveal this";
+  const hidden = new Element("hidden", 10, false);
+  const offscreen = new Element("offscreen", 1000);
+  const covered = new Element("covered", 300);
+  const listItem = new Element("processing-status-item");
+  listItem.tagName = "LI";
+  listItem.value = 0; // HTMLLIElement.value is numeric, unlike an input's value.
+  const controls = [password, hidden, offscreen, covered, listItem];
+  let roots = [root];
+  const document = {
+    querySelectorAll: (selector: string) =>
+      selector === "body"
+        ? roots
+        : [root, ...controls].filter(
+            (node) => selector === `[data-testid=${JSON.stringify(node.name)}]`,
+          ),
+    activeElement: password,
+    elementFromPoint: (x: number) => (x > 300 ? root : password),
+  };
+  const context = {
+    document,
+    HTMLElement: Element,
+    window: { location: { href: "tauri://localhost" } },
+    getComputedStyle: (node: Element) => ({
+      visibility: node.visibility,
+      opacity: node.opacity,
+      getPropertyValue: () => "red".repeat(200),
+    }),
+    innerWidth: 800,
+    innerHeight: 600,
+    scrollX: 0,
+    scrollY: 10,
+  };
+  const inspect = (includeHidden: boolean, limit = 20) =>
+    vm.runInNewContext(
+      `(${inspectDom.toString()})("body", ${limit}, ["color"], ${includeHidden})`,
+      context,
+    ) as ReturnType<typeof inspectDom>;
+  const result = inspect(true);
+  assert.equal(result.total, 6);
+  assert.ok(!JSON.stringify(result).includes(password.value));
+  assert.equal(result.elements[1].value, "[redacted]");
+  assert.equal(result.elements[1].focused, true);
+  assert.equal(result.elements[1].center_hit.status, "uncovered");
+  assert.equal(result.elements[2].center_hit.status, "hidden");
+  assert.equal(result.elements[3].center_hit.status, "outside-viewport");
+  assert.equal(result.elements[3].visible, true);
+  assert.equal(result.elements[4].center_hit.status, "covered");
+  assert.equal(result.elements[4].inViewport, true);
+  assert.equal(result.elements[4].bounds.width, 100);
+  assert.equal(result.elements[4].styles!.color.length, 500);
+  assert.equal(result.elements[4].scroll.top, 3);
+  assert.equal(result.elements[5].value, 0);
+  assert.equal(inspect(false).total, 5);
+  assert.equal(inspect(true, 2).elements.length, 2);
+  roots = [root, root];
+  assert.throws(() => inspect(true), /matched 2 elements/);
+});
+
+test("log tails bound reads at source, reject path/symlink escapes and retain diagnostics after close", async () => {
+  const base = path.join(tmpdir(), "opencode");
+  await mkdir(base, { recursive: true });
+  const root = await mkdtemp(path.join(base, "native-gui-diagnostics-test-"));
+  const workspace = path.join(root, "workspace");
+  await mkdir(workspace);
+  try {
+    const filename = path.join(workspace, "driver.log");
+    const file = await open(filename, "w");
+    await file.truncate(512 * 1024 * 1024); // Sparse file: tail must not allocate/read whole log.
+    await file.write(
+      Array.from({ length: 150 }, (_, i) => `record-${i}\n`).join(""),
+      512 * 1024 * 1024 - 1540,
+    );
+    await file.close();
+    const tail = await tailLog(workspace, "driver.log");
+    assert.ok(typeof tail.text === "string" && typeof tail.read_bytes === "number");
+    assert.ok(tail.read_bytes <= LOG_BYTES);
+    assert.ok(tail.text.split("\n").length <= LOG_LINES);
+    assert.equal(tail.truncated, true);
+    assert.match(tail.text, /record-149/);
+    for (const record of ["x".repeat(LOG_BYTES * 2), "€".repeat(LOG_BYTES)]) {
+      for (const ending of ["", "\n"]) {
+        await writeFile(path.join(workspace, "long.log"), `${record}last-error${ending}`);
+        const long = await tailLog(workspace, "long.log");
+        assert.equal(long.read_bytes, LOG_BYTES);
+        assert.equal(long.truncated, true);
+        assert.ok(long.text?.endsWith("last-error"));
+        assert.ok(!long.text?.includes("\ufffd"), "Tail starts with a split UTF-8 codepoint.");
+      }
+    }
+    assert.ok("unavailable" in (await tailLog(workspace, "missing.log")));
+    await writeFile(path.join(root, "secret"), "not allowed");
+    await symlink(path.join(root, "secret"), path.join(workspace, "link.log"));
+    await symlink(root, path.join(workspace, "linked"));
+    for (const relative of ["../secret", "link.log", "linked/secret"]) {
+      const result = await tailLog(workspace, relative);
+      assert.ok("unavailable" in result);
+      assert.ok(!JSON.stringify(result).includes("not allowed"));
+    }
+    await symlink(root, path.join(workspace, "failures"));
+    await assert.rejects(saveArtifact(workspace, "failures/test.json", "not allowed"), /Symlinked/);
+    const gui = new NativeGuiSession();
+    gui.workspace = workspace;
+    await gui.close();
+    const diagnostics = await gui.diagnostics();
+    assert.equal(diagnostics.driver.process_running, false);
+    assert.equal(diagnostics.live.reachable, false);
+    assert.equal(diagnostics.logs.length, 3);
+    assert.ok(diagnostics.logs.some((log) => log.text?.includes("record-149")));
+    const evidence = await gui.failureEvidence();
+    assert.equal(evidence.artifacts.length, 0);
+    assert.match(evidence.errors.join(" "), /Symlinked/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("unresponsive cached browser is not live; diagnostics and failure probes have deadlines", async () => {
+  const http = createHttpServer(() => {
+    /* Intentionally never answer protocol requests. */
+  });
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  const gui = new NativeGuiSession();
+  Object.defineProperties(gui, {
+    connection: { value: { sessionId: "dead" }, writable: true },
+    port: { value: (http.address() as { port: number }).port },
+  });
+  const base = path.join(tmpdir(), "opencode");
+  await mkdir(base, { recursive: true });
+  gui.workspace = await mkdtemp(path.join(base, "native-gui-dead-test-"));
+  try {
+    const start = Date.now();
+    const evidence = await gui.failureEvidence();
+    assert.equal(evidence.diagnostics.live.reachable, false);
+    assert.equal(evidence.diagnostics.driver.process_running, false);
+    assert.equal(evidence.errors.length, 2);
+    assert.equal(evidence.artifacts.length, 1); // Offline diagnostics still saved.
+    assert.ok(Date.now() - start < 5000, "Evidence inherited an unbounded browser timeout.");
+  } finally {
+    await gui.stopDriver();
+    http.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      http.close((error) => (error ? reject(error) : resolve())),
+    );
+    await rm(gui.workspace, { recursive: true, force: true });
+  }
+});
+
+test("tool failure keeps original error if evidence fails; session queues and evidence stay separate", async (context) => {
+  const captured: NativeGuiSession[] = [];
+  context.mock.method(
+    NativeGuiSession.prototype,
+    "failureEvidence",
+    async function (this: NativeGuiSession) {
+      captured.push(this);
+      throw new Error("capture failed");
+    },
+  );
+  const { server, shutdown } = createServer();
+  const client = new Client({ name: "failure-test", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(b);
+  await client.connect(a);
+  try {
+    for (const session of ["a", "b", "a"]) {
+      const result = await client.callTool({
+        name: "click",
+        arguments: { selector: "body" },
+        _meta: { "ai.opencode/sessionID": session },
+      });
+      assert.equal(result.isError, true);
+      const value = JSON.parse((result.content as { text: string }[])[0].text);
+      assert.equal(value.error, "Launch the native GUI first.");
+      assert.equal(value.evidence.unavailable, "capture failed");
+    }
+    assert.notEqual(captured[0], captured[1]);
+    assert.equal(captured[0], captured[2]);
+  } finally {
+    await shutdown();
+    await client.close();
+    await server.close();
+  }
+});
+
+test("launch errors reuse evidence captured before driver cleanup", async (context) => {
+  const evidence = { artifacts: ["startup.png", "startup.dom.json"], errors: [] };
+  const original = Object.assign(new Error("startup failed"), { evidence });
+  context.mock.method(NativeGuiSession.prototype, "launch", async () => {
+    throw original;
+  });
+  const recapture = context.mock.method(NativeGuiSession.prototype, "failureEvidence", async () => {
+    throw new Error("Driver already stopped; do not recapture.");
+  });
+  const { server, shutdown } = createServer();
+  const client = new Client({ name: "startup-failure-test", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(b);
+  await client.connect(a);
+  try {
+    const result = await client.callTool({ name: "launch", arguments: {} });
+    assert.equal(result.isError, true);
+    assert.deepEqual(JSON.parse((result.content as { text: string }[])[0].text), {
+      error: original.message,
+      evidence,
+    });
+    assert.equal(recapture.mock.callCount(), 0);
+    assert.notEqual((await client.callTool({ name: "close", arguments: {} })).isError, true);
+  } finally {
+    await shutdown();
+    await client.close();
+    await server.close();
+  }
+});
+
+test("PNG metadata validates signature and reports image pixels", () => {
+  const png = Buffer.alloc(24);
+  Buffer.from("89504e470d0a1a0a", "hex").copy(png);
+  png.write("IHDR", 12);
+  png.writeUInt32BE(3840, 16);
+  png.writeUInt32BE(2160, 20);
+  assert.deepEqual(pngDimensions(png.toString("base64")), {
+    width: 3840,
+    height: 2160,
+    units: "image pixels",
+  });
+  assert.throws(() => pngDimensions("not a PNG"), /not a PNG/);
+});
+
+test("normal close refuses failed project shutdown without deleting browser session", async (context) => {
+  const gui = new NativeGuiSession();
+  const browser = {
+    execute: async () => {
+      throw new Error("project shutdown refused");
+    },
+    deleteSession: context.mock.fn(),
+  };
+  Object.defineProperty(gui, "connection", { value: browser });
+  const stop = context.mock.method(gui, "stopDriver");
+  await assert.rejects(gui.close(), /project shutdown refused/);
+  assert.equal(browser.deleteSession.mock.callCount(), 0);
+  assert.equal(stop.mock.callCount(), 0);
 });
 
 test(
