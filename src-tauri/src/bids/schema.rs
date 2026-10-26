@@ -3,7 +3,7 @@ use serde_json::Value;
 
 /// BidsAslMetadata mirrors the TS BidsAslMetadataBaseSchema.
 /// All fields optional, PascalCase per BIDS convention.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "PascalCase", default)]
 pub struct BidsAslMetadata {
     #[serde(
@@ -19,8 +19,10 @@ pub struct BidsAslMetadata {
         rename = "MagneticFieldStrength",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub magnetic_field_strength: Option<f64>,
     #[serde(rename = "EchoTime", skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub echo_time: Option<f64>,
     #[serde(rename = "LabelingDuration", skip_serializing_if = "Option::is_none")]
     pub labeling_duration: Option<Value>,
@@ -32,26 +34,31 @@ pub struct BidsAslMetadata {
         rename = "LabelingPulseAverageGradient",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub labeling_pulse_average_gradient: Option<f64>,
     #[serde(
         rename = "LabelingPulseMaximumGradient",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub labeling_pulse_maximum_gradient: Option<f64>,
     #[serde(
         rename = "LabelingPulseAverageB1",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub labeling_pulse_average_b1: Option<f64>,
     #[serde(
         rename = "LabelingPulseDuration",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub labeling_pulse_duration: Option<f64>,
     #[serde(
         rename = "LabelingPulseInterval",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub labeling_pulse_interval: Option<f64>,
     #[serde(rename = "BolusCutOffFlag", skip_serializing_if = "Option::is_none")]
     pub bolus_cut_off_flag: Option<bool>,
@@ -74,6 +81,7 @@ pub struct BidsAslMetadata {
         rename = "BackgroundSuppressionNumberPulses",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub background_suppression_number_pulses: Option<f64>,
     #[serde(
         rename = "BackgroundSuppressionPulseTime",
@@ -86,6 +94,7 @@ pub struct BidsAslMetadata {
         rename = "RepetitionTimePreparation",
         skip_serializing_if = "Option::is_none"
     )]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub repetition_time_preparation: Option<f64>,
     #[serde(rename = "FlipAngle", skip_serializing_if = "Option::is_none")]
     pub flip_angle: Option<Value>,
@@ -98,6 +107,7 @@ pub struct BidsAslMetadata {
     #[serde(rename = "M0Type", skip_serializing_if = "Option::is_none")]
     pub m0_type: Option<String>,
     #[serde(rename = "M0_GMScaleFactor", skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub m0_gm_scale_factor: Option<f64>,
     #[serde(rename = "ASLContext", skip_serializing_if = "Option::is_none")]
     pub asl_context: Option<String>,

@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import { notifications } from "@mantine/notifications";
+import { showErrorNotification } from "../lib/errorNotifications";
 import { Store } from "@tauri-apps/plugin-store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import type { MatlabProfile } from "../schemas/executionProfile";
-import { useGlobalStore } from "./globalStore";
+import { useGlobalStore, type ProfileValidationResult } from "./globalStore";
+
+vi.mock("../lib/errorNotifications", () => ({ showErrorNotification: vi.fn() }));
 
 // Helper to create a valid matlab profile
 function makeMatlabProfile(overrides: Partial<MatlabProfile> = {}): MatlabProfile {
@@ -21,6 +23,7 @@ function makeMatlabProfile(overrides: Partial<MatlabProfile> = {}): MatlabProfil
 
 describe("useGlobalStore", () => {
   beforeEach(async () => {
+    vi.mocked(showErrorNotification).mockClear();
     useGlobalStore.setState({
       settings: DEFAULT_SETTINGS,
       loaded: false,
@@ -260,16 +263,23 @@ describe("useGlobalStore", () => {
       expect(useGlobalStore.getState().settings.executionProfiles[1]).toEqual(p2);
     });
 
-    it("sets placeholder validation entry when backend returns null", async () => {
+    it("keeps placeholder validation entry while backend validation is pending", async () => {
       const profile = makeMatlabProfile();
-      await useGlobalStore.getState().addProfile(profile);
+      let resolve!: (result: ProfileValidationResult) => void;
+      vi.mocked(invoke).mockReturnValueOnce(
+        new Promise<ProfileValidationResult>((done) => {
+          resolve = done;
+        }),
+      );
+      const adding = useGlobalStore.getState().addProfile(profile);
 
-      // Default invoke mock returns null → validateProfile early-returns.
-      // Placeholder set by addProfile persists the invariant.
       expect(useGlobalStore.getState().profileValidationState[profile.id]).toEqual({
         valid: false,
         errors: [],
       });
+      resolve({ id: profile.id, valid: true, errors: [] });
+      await adding;
+      expect(useGlobalStore.getState().profileValidationState[profile.id].valid).toBe(true);
     });
 
     it("sets validation entry from backend result when invoke returns data", async () => {
@@ -642,6 +652,34 @@ describe("useGlobalStore", () => {
   });
 
   describe("loadSettings", () => {
+    it("preserves loaded settings when startup validation fails, including on a later save", async () => {
+      const profile = makeMatlabProfile({ label: "Saved profile" });
+      const recentProjects = [{ path: "/saved/project.easl", projectId: "saved-project" }];
+      const store = await Store.load("settings.json");
+      await store.set("executionProfiles", [profile]);
+      await store.set("recentProjects", recentProjects);
+      await store.set("theme", "dark");
+      const error = new Error("private validation diagnostic");
+      vi.mocked(invoke).mockRejectedValueOnce(error);
+
+      await useGlobalStore.getState().loadSettings();
+      await useGlobalStore.getState().saveSettings();
+
+      expect(useGlobalStore.getState()).toMatchObject({
+        loaded: true,
+        settings: { theme: "dark", executionProfiles: [profile], recentProjects },
+      });
+      await expect(store.get("executionProfiles")).resolves.toEqual([profile]);
+      await expect(store.get("recentProjects")).resolves.toEqual(recentProjects);
+      expect(showErrorNotification).toHaveBeenCalledExactlyOnceWith({
+        id: "startup-profile-validation",
+        title: "Profile validation failed",
+        message:
+          "Execution profiles could not be checked. Review them in Settings before starting work.",
+        error,
+      });
+    });
+
     it("sets loaded: true only after validation completes", async () => {
       vi.mocked(invoke).mockResolvedValueOnce([]);
 
@@ -658,7 +696,7 @@ describe("useGlobalStore", () => {
       });
     });
 
-    it("shows a notification for each invalid profile after startup validation", async () => {
+    it("shows a concise startup notification with the profile's explanation in details", async () => {
       const profile = makeMatlabProfile({ label: "Broken MATLAB" });
       const store = await Store.load("settings.json");
       await store.set("executionProfiles", [profile]);
@@ -670,14 +708,47 @@ describe("useGlobalStore", () => {
 
       await useGlobalStore.getState().loadSettings();
 
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
-          color: "red",
-          message: expect.stringMatching(
-            /Profile 'Broken MATLAB' is invalid: MATLAB not found\. Fix it in Settings\./,
-          ),
+          id: "startup-invalid-execution-profiles",
+          message: 'Profile "Broken MATLAB" needs attention. Review it in Settings.',
+          details: "Broken MATLAB\n• MATLAB not found",
         }),
       );
+    });
+
+    it("groups multiple invalid profiles into one notification without including valid profiles", async () => {
+      const first = makeMatlabProfile({ label: "First MATLAB" });
+      const second = makeMatlabProfile({ label: "Second MATLAB" });
+      const valid = makeMatlabProfile({ label: "Working MATLAB" });
+      const store = await Store.load("settings.json");
+      await store.set("executionProfiles", [first, second, valid]);
+      vi.mocked(invoke).mockResolvedValueOnce([
+        { id: first.id, valid: false, errors: ["Select the MATLAB executable in Settings."] },
+        { id: second.id, valid: false, errors: ["Select the ExploreASL folder in Settings."] },
+        { id: valid.id, valid: true, errors: [] },
+      ]);
+
+      await useGlobalStore.getState().loadSettings();
+
+      expect(showErrorNotification).toHaveBeenCalledExactlyOnceWith({
+        id: "startup-invalid-execution-profiles",
+        title: "Invalid execution profiles",
+        message: "2 execution profiles need attention. Review them in Settings.",
+        details:
+          "First MATLAB\n• Select the MATLAB executable in Settings.\n\nSecond MATLAB\n• Select the ExploreASL folder in Settings.",
+      });
+    });
+
+    it("omits details when a single invalid profile has no explanation", async () => {
+      const profile = makeMatlabProfile();
+      const store = await Store.load("settings.json");
+      await store.set("executionProfiles", [profile]);
+      vi.mocked(invoke).mockResolvedValueOnce([{ id: profile.id, valid: false, errors: [] }]);
+
+      await useGlobalStore.getState().loadSettings();
+
+      expect(showErrorNotification).toHaveBeenCalledWith(expect.objectContaining({ details: "" }));
     });
 
     it("persists exploreAslVersion when startup re-detection changes it", async () => {
@@ -698,6 +769,47 @@ describe("useGlobalStore", () => {
       await expect(store.get("executionProfiles")).resolves.toEqual([
         expect.objectContaining({ id: profile.id, exploreAslVersion: "1.15.0" }),
       ]);
+    });
+
+    it("reports version persistence separately without discarding validation results", async () => {
+      const valid = makeMatlabProfile({ label: "Valid", exploreAslVersion: "1.14.0" });
+      const invalid = makeMatlabProfile({ label: "Invalid" });
+      const store = await Store.load("settings.json");
+      await store.set("executionProfiles", [valid, invalid]);
+      const error = new Error("private settings-write diagnostic");
+      vi.mocked(store.save).mockRejectedValueOnce(error);
+      vi.mocked(Store.load).mockResolvedValueOnce(store).mockResolvedValueOnce(store);
+      vi.mocked(invoke).mockResolvedValueOnce([
+        { id: valid.id, valid: true, errors: [], exploreAslVersion: "1.15.0" },
+        { id: invalid.id, valid: false, errors: ["Select the MATLAB executable in Settings."] },
+      ]);
+
+      await useGlobalStore.getState().loadSettings();
+
+      expect(useGlobalStore.getState().loaded).toBe(true);
+      expect(useGlobalStore.getState().hasValidProfile()).toBe(true);
+      expect(useGlobalStore.getState().settings.executionProfiles[0].exploreAslVersion).toBe(
+        "1.15.0",
+      );
+      expect(showErrorNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "execution-profile-version-save",
+          message: "Detected execution-profile versions could not be saved.",
+          details: expect.stringContaining("Validation completed"),
+          error,
+        }),
+      );
+      expect(showErrorNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "startup-invalid-execution-profiles",
+          message: 'Profile "Invalid" needs attention. Review it in Settings.',
+        }),
+      );
+      expect(showErrorNotification).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "startup-profile-validation",
+        }),
+      );
     });
   });
 

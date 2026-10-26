@@ -103,7 +103,7 @@ fn apptainer_discovery_and_profile_timeout_settle_supported_scopes() {
                 validation
                     .errors
                     .iter()
-                    .any(|error| error.contains("timed out"))
+                    .any(|error| error.contains("Apptainer could not run the selected container"))
             );
         } else {
             let results = tauri::async_runtime::block_on(which_apptainer(Some(vec![

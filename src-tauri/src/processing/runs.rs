@@ -3,6 +3,7 @@ use super::types::{
     ProcessingTerminalResult,
 };
 use crate::app::state::AppState;
+use crate::error::{CommandError, IntoCommandResult};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 use tauri::State;
@@ -212,19 +213,21 @@ pub(crate) fn reserve_request_impl(
     Ok(super::record::ProcessingReservation::Current { snapshot })
 }
 #[tauri::command]
+#[specta::specta]
 pub fn reserve_processing_run(
     state: State<'_, AppState>,
     request: super::record::ProcessingRequest,
     admission: super::record::ProcessingAdmission,
-) -> Result<super::record::ProcessingReservation, String> {
-    reserve_request_impl(&state, request, admission)
+) -> Result<super::record::ProcessingReservation, CommandError> {
+    reserve_request_impl(&state, request, admission).into_command_result()
 }
 #[tauri::command]
+#[specta::specta]
 pub fn acknowledge_processing_run(
     state: State<'_, AppState>,
     run_id: uuid::Uuid,
     terminal_revision: u64,
-) -> Result<super::record::HistoricalReplayEnvelope, String> {
+) -> Result<super::record::HistoricalReplayEnvelope, CommandError> {
     super::pipeline::reap_finished_supervisor(&state)?;
     let _transition = lock_project_transition(&state)?;
     let root = active_project_root(&state)?;
@@ -292,12 +295,13 @@ pub(crate) fn confirm_processing_workers_stopped_impl(
     Ok(processing.current_run.as_ref().unwrap().snapshot())
 }
 #[tauri::command]
+#[specta::specta]
 pub fn confirm_processing_workers_stopped(
     state: State<'_, AppState>,
     run_id: uuid::Uuid,
     revision: u64,
-) -> Result<ProcessingRunSnapshot, String> {
-    confirm_processing_workers_stopped_impl(&state, run_id, revision)
+) -> Result<ProcessingRunSnapshot, CommandError> {
+    confirm_processing_workers_stopped_impl(&state, run_id, revision).into_command_result()
 }
 
 pub(crate) fn acknowledge_locked(
@@ -356,8 +360,11 @@ pub(crate) fn get_active_run_impl(
 }
 
 #[tauri::command]
-pub fn get_active_run(state: State<'_, AppState>) -> Result<Option<ProcessingRunSnapshot>, String> {
-    get_active_run_impl(&state)
+#[specta::specta]
+pub fn get_active_run(
+    state: State<'_, AppState>,
+) -> Result<Option<ProcessingRunSnapshot>, CommandError> {
+    get_active_run_impl(&state).into_command_result()
 }
 
 pub(crate) fn attach_run_impl(
@@ -371,11 +378,12 @@ pub(crate) fn attach_run_impl(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn attach_run(
     state: State<'_, AppState>,
     run_id: String,
-) -> Result<ProcessingRunSnapshot, String> {
-    attach_run_impl(&state, &run_id)
+) -> Result<ProcessingRunSnapshot, CommandError> {
+    attach_run_impl(&state, &run_id).into_command_result()
 }
 
 pub(crate) fn selected_modules_to_b_process(

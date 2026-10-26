@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { error as logError } from "@tauri-apps/plugin-log";
-import { notifications } from "@mantine/notifications";
+import { showErrorNotification } from "./errorNotifications";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { projectView } from "../schemas/project";
 import { useProjectStore } from "../stores/projectStore";
@@ -11,6 +11,9 @@ import {
   resetProjectLifecycleForTests,
 } from "./projectLifecycle";
 import { projectRequest } from "./projectPersistence";
+import { commands } from "./ipc";
+
+vi.mock("./errorNotifications", () => ({ showErrorNotification: vi.fn() }));
 
 beforeEach(() => {
   resetProjectLifecycleForTests();
@@ -19,6 +22,7 @@ beforeEach(() => {
   activateProjectLease("project-1", "/project");
   vi.mocked(invoke).mockReset();
   vi.mocked(logError).mockClear();
+  vi.mocked(showErrorNotification).mockClear();
 });
 afterEach(() => {
   useProjectStore.getState().cancelAutosave();
@@ -84,6 +88,7 @@ describe("native project client", () => {
       .mockRejectedValueOnce({
         category: "durability_uncertain",
         message: "Directory flush failed",
+        details: "Directory flush failed",
       })
       .mockResolvedValueOnce({ ...projectFixture(), acceptedRevision: 1, persistedRevision: 1 });
     await expect(useProjectStore.getState().saveProject()).rejects.toMatchObject({
@@ -94,14 +99,20 @@ describe("native project client", () => {
       saveError:
         "Your project was written, but the application could not confirm it is safely stored. Check the drive connection, then try Save again before closing.",
     });
-    expect(notifications.show).toHaveBeenCalledWith(
+    expect(showErrorNotification).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: "project-save:project-1",
         title: "Project not saved",
-        message: useProjectStore.getState().saveError,
+        message: "Project changes could not be saved.",
+        details: useProjectStore.getState().saveError,
+        error: expect.objectContaining({
+          category: "durability_uncertain",
+          details: "Directory flush failed",
+        }),
       }),
     );
     expect(logError).toHaveBeenCalledExactlyOnceWith(
-      '[PROJECT] save_project failed: {"category":"durability_uncertain","message":"Directory flush failed"}',
+      '[PROJECT] save_project failed: {"category":"durability_uncertain","message":"Directory flush failed","details":"Directory flush failed"}',
     );
     await useProjectStore.getState().saveProject();
     expect(useProjectStore.getState()).toMatchObject({ isDirty: false, saveError: null });
@@ -138,6 +149,32 @@ describe("native project client", () => {
       saving: true,
       saveError: "New activation error",
     });
+  });
+
+  it("uses one project-save notification with safe guidance for repeated framework failures", async () => {
+    const diagnostic = new Error("raw native command diagnostic\nstderr: study state");
+    vi.mocked(invoke).mockRejectedValue(diagnostic);
+
+    await expect(useProjectStore.getState().saveProject()).rejects.toMatchObject({
+      cause: diagnostic,
+    });
+    await expect(useProjectStore.getState().saveProject()).rejects.toMatchObject({
+      cause: diagnostic,
+    });
+
+    expect(vi.mocked(showErrorNotification).mock.calls.map(([notice]) => notice.id)).toEqual([
+      "project-save:project-1",
+      "project-save:project-1",
+    ]);
+    expect(showErrorNotification).toHaveBeenLastCalledWith({
+      id: "project-save:project-1",
+      title: "Project not saved",
+      message: "Project changes could not be saved.",
+      details:
+        "Correct any invalid fields, then try Save again. Keep the project open until saving succeeds.",
+      error: expect.objectContaining({ cause: diagnostic }),
+    });
+    expect(useProjectStore.getState().isDirty).toBe(true);
   });
 
   it.each([
@@ -186,15 +223,24 @@ describe("native project client", () => {
     const invalidArgs =
       'invalid args `edit` for command `accept_project_edit`: invalid type: string "0", expected u32';
     vi.mocked(invoke)
-      .mockRejectedValueOnce({ category: "insufficient_space", message: "Disk full" })
+      .mockRejectedValueOnce({
+        category: "insufficient_space",
+        message: "Disk full",
+        details: "Disk full",
+      })
       .mockRejectedValueOnce({ category: "unknown" })
       .mockRejectedValueOnce(invalidArgs);
-    await expect(projectRequest("save_project")).rejects.toMatchObject({
+    await expect(
+      projectRequest("save_project", () => commands.saveProject(1)),
+    ).rejects.toMatchObject({
       category: "insufficient_space",
       message: "Insufficient disk space. Free space on the project volume and try again.",
-      cause: { category: "insufficient_space", message: "Disk full" },
+      details: "Disk full",
+      cause: { category: "insufficient_space", message: "Disk full", details: "Disk full" },
     });
-    await expect(projectRequest("save_project")).rejects.toMatchObject({
+    await expect(
+      projectRequest("save_project", () => commands.saveProject(1)),
+    ).rejects.toMatchObject({
       message:
         "Your project could not be saved. Try Save again. If the problem continues, report it with the application log.",
       cause: { category: "unknown" },
@@ -202,7 +248,9 @@ describe("native project client", () => {
     // Logging failure must not mask the project error or expose its arguments.
     vi.mocked(logError).mockRejectedValueOnce(new Error("Logger unavailable"));
     await expect(
-      projectRequest("accept_project_edit", { edit: { studyData: "private" } }),
+      projectRequest("accept_project_edit", () =>
+        commands.acceptProjectEdit(1, { kind: "phase", phase: "parameters" }),
+      ),
     ).rejects.toMatchObject({
       message:
         "Your project changes could not be applied. They have not been saved. Try the action again. If the problem continues, report it with the application log.",
@@ -211,7 +259,7 @@ describe("native project client", () => {
     expect(logError).toHaveBeenCalledTimes(3);
     expect(logError).toHaveBeenNthCalledWith(
       1,
-      '[PROJECT] save_project failed: {"category":"insufficient_space","message":"Disk full"}',
+      '[PROJECT] save_project failed: {"category":"insufficient_space","message":"Disk full","details":"Disk full"}',
     );
     expect(logError).toHaveBeenNthCalledWith(
       2,

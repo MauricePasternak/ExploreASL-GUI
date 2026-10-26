@@ -102,6 +102,7 @@ describe("JoinConfig", () => {
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith("inspect_external_data", {
         absolutePath: "/tmp/external.csv",
+        sheetName: null,
         delimiter: ",",
       });
     });

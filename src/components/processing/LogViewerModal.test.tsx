@@ -3,19 +3,7 @@ import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LogContent } from "../../lib/logViewer";
-
-vi.mock("../../lib/logViewer", () => ({
-  fetchLogContent: vi.fn(),
-  fetchModuleLogs: vi.fn(),
-  LogFileInfoSchema: {
-    parse: (v: unknown) => v,
-  },
-  LogContentSchema: {
-    parse: (v: unknown) => v,
-  },
-}));
-
-const { default: LogViewerModal } = await import("./LogViewerModal");
+import LogViewerModal from "./LogViewerModal";
 
 function renderModal(props: {
   opened: boolean;

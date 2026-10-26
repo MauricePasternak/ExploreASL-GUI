@@ -1,5 +1,5 @@
 /** Exact native processing protocol and presentation-only progress events. */
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "./ipc";
 import { listen } from "@tauri-apps/api/event";
 import type { z } from "zod";
 import {
@@ -7,7 +7,6 @@ import {
   LockRemovedPayloadSchema,
   ProcessingLifecycleSnapshotSchema,
   ProcessingRunSnapshotSchema,
-  ProcessingRequestSchema,
   ProcessingReservationSchema,
   StatusFileCreatedPayloadSchema,
   PROCESSING_MODULES,
@@ -45,28 +44,25 @@ function mapModuleName(rustName: string): (typeof PROCESSING_MODULES)[number] | 
 
 export async function reserveProcessingRun(request: ProcessingRequest, projectRoot: string) {
   return ProcessingReservationSchema.parse(
-    await invoke("reserve_processing_run", {
-      request: ProcessingRequestSchema.parse(request),
-      admission: { projectRoot },
-    }),
+    await unwrap(commands.reserveProcessingRun(request, { projectRoot })),
   );
 }
 export async function getActiveRun(): Promise<ProcessingRunSnapshot | null> {
-  const raw = await invoke<unknown>("get_active_run");
+  const raw = await unwrap(commands.getActiveRun());
   return raw == null ? null : ProcessingRunSnapshotSchema.parse(raw);
 }
 export async function attachRun(runId: string) {
-  return ProcessingRunSnapshotSchema.parse(await invoke("attach_run", { runId }));
+  return ProcessingRunSnapshotSchema.parse(await unwrap(commands.attachRun(runId)));
 }
 export async function runProcessingPipeline(runId: string) {
-  return ProcessingRunSnapshotSchema.parse(await invoke("run_pipeline", { runId }));
+  return ProcessingRunSnapshotSchema.parse(await unwrap(commands.runPipeline(runId)));
 }
 export async function stopProcessingPipeline(runId: string) {
-  return ProcessingRunSnapshotSchema.parse(await invoke("kill_pipeline", { runId }));
+  return ProcessingRunSnapshotSchema.parse(await unwrap(commands.killPipeline(runId)));
 }
 export async function confirmProcessingWorkersStopped(runId: string, revision: number) {
   const snapshot = ProcessingRunSnapshotSchema.parse(
-    await invoke("confirm_processing_workers_stopped", { runId, revision }),
+    await unwrap(commands.confirmProcessingWorkersStopped(runId, revision)),
   );
   if (snapshot.runId !== runId || snapshot.revision <= revision) {
     throw new Error("Processing confirmation returned a stale snapshot");
@@ -77,14 +73,14 @@ export async function loadSubjects(
   projectRoot: string,
   dataSource?: "dicom" | "bids",
 ): Promise<SubjectInfo[]> {
-  return invoke<SubjectInfo[]>("list_subjects", { projectRoot, dataSource: dataSource ?? null });
+  return unwrap(commands.listSubjects(projectRoot, dataSource ?? null));
 }
 
 export async function loadLockStatus(projectRoot: string): Promise<SubjectModuleStatus[]> {
-  const raw = await invoke<SubjectModuleStatus[]>("read_lock_status", { projectRoot });
+  const raw = await unwrap(commands.readLockStatus(projectRoot));
   return raw
     .map((entry) => {
-      const module = mapModuleName(entry.module as string);
+      const module = mapModuleName(entry.module);
       if (!module) return null;
       return {
         ...entry,

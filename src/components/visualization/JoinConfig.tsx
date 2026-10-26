@@ -11,7 +11,8 @@ import {
   Text,
 } from "@mantine/core";
 import { IconAlertTriangle, IconUpload } from "@tabler/icons-react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../../lib/ipc";
+import type { ExternalDataInspection_Serialize as ExternalInspection } from "../../generated/bindings";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 
@@ -24,13 +25,6 @@ import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLif
 
 const DEFAULT_NA_TOKENS = ["", "NaN", "NA", "n/a", "<NA>"];
 const IDENTIFIER_COLUMNS = ["participant_id", "subject", "session", "run"];
-
-interface ExternalInspection {
-  columns: Array<{ name: string; inferredType: string; levels: string[]; isIdentifier: boolean }>;
-  rowCount: number;
-  fileHash: string;
-  sheetName: string | null;
-}
 
 export default function JoinConfig() {
   const joinConfig = useProjectStore((s) => visualizationSettings(s.project).joinConfig);
@@ -83,10 +77,9 @@ export default function JoinConfig() {
           "with delimiter:",
           currentDelimiter,
         );
-        const result = await invoke<ExternalInspection>("inspect_external_data", {
-          absolutePath: currentPath,
-          delimiter: currentDelimiter,
-        });
+        const result = await unwrap(
+          commands.inspectExternalData(currentPath, null, currentDelimiter),
+        );
         if (active && (!lease || isCurrentProjectLease(lease))) {
           console.log("[JoinConfig] External file inspection success:", result);
           setExtInspection(result);
@@ -158,14 +151,10 @@ export default function JoinConfig() {
     setError(null);
     try {
       console.log("[JoinConfig] Inspecting selected file:", selected);
-      const result = await invoke<ExternalInspection>("inspect_external_data", {
-        absolutePath: selected,
-        delimiter: joinConfig?.delimiter ?? "auto",
-      });
+      const result = await unwrap(
+        commands.inspectExternalData(selected, null, joinConfig?.delimiter ?? "auto"),
+      );
       if (lease && !isCurrentProjectLease(lease)) return;
-      if (!result || typeof result.fileHash !== "string") {
-        throw new Error("External data inspection returned an invalid result.");
-      }
       console.log("[JoinConfig] Selected file inspection success:", result);
       setExtInspection(result);
       lastInspectedRef.current = {
@@ -264,10 +253,9 @@ export default function JoinConfig() {
     const newDelimiter = value ?? "auto";
     setJoinConfig((current) => current && { ...current, delimiter: newDelimiter });
     try {
-      const result = await invoke<ExternalInspection>("inspect_external_data", {
-        absolutePath: joinConfig.externalSource.absolutePath,
-        delimiter: newDelimiter,
-      });
+      const result = await unwrap(
+        commands.inspectExternalData(joinConfig.externalSource.absolutePath, null, newDelimiter),
+      );
       if (lease && !isCurrentProjectLease(lease)) return;
       setExtInspection(result);
       lastInspectedRef.current = {

@@ -45,6 +45,7 @@ pub(crate) fn resolve_apptainer_executable_with_path(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn which_apptainer(custom_paths: Option<Vec<String>>) -> Vec<serde_json::Value> {
     let path_var = env::var_os("PATH").unwrap_or_default();
     let paths = discover_apptainer_paths(custom_paths.as_deref(), &path_var.to_string_lossy());

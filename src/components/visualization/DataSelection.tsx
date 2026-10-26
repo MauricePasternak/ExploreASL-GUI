@@ -1,9 +1,9 @@
 import { Alert, Select, Stack, Text } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../../lib/ipc";
 import { useState } from "react";
 
-import { useVisualizationStore, DataInspection } from "../../stores/visualizationStore";
+import { useVisualizationStore } from "../../stores/visualizationStore";
 import { visualizationSettings } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { parseStatsFileName } from "../../lib/tsvUtils";
@@ -45,10 +45,9 @@ export default function DataSelection() {
     }
 
     try {
-      const result = await invoke<DataInspection>("load_qcbf_data", {
-        projectRoot: project.projectMeta.rootPath,
-        relativePath,
-      });
+      const result = await unwrap(
+        commands.loadQcbfData(project.projectMeta.rootPath, relativePath),
+      );
       if (lease && !isCurrentProjectLease(lease)) return;
 
       setInspection(result);

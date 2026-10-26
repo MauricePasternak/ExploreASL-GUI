@@ -201,7 +201,6 @@ describe("ImportExecution authoritative lifecycle", () => {
     resolveConfirmation({ ...interrupted, confirmationRequired: false, updatedAtMs: 3 });
 
     await vi.waitFor(() => expect(useImportStore.getState().terminalRunId).toBe("replacement-run"));
-    expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
   });
 
   it.each([

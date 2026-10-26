@@ -1,10 +1,6 @@
 //! Tauri wiring, startup recovery, and application exit coordination.
 use super::{single_instance, state::AppState};
-use crate::{
-    bids, execution, import, manifest, processing,
-    project::{config, lifecycle, source_paths},
-    qc, system, visualization,
-};
+use crate::{import, processing, project::lifecycle};
 use tauri::Manager;
 #[cfg(debug_assertions)]
 use tauri::{LogicalSize, Size};
@@ -26,67 +22,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_log::Builder::default().skip_logger().build())
-        // Defining-module paths also resolve Tauri's generated command macros.
-        .invoke_handler(tauri::generate_handler![
-            execution::matlab::which_matlab,
-            execution::apptainer::which_apptainer,
-            execution::profile::validate_execution_profile,
-            execution::profile::validate_all_execution_profiles,
-            source_paths::is_writable,
-            import::discovery::walk_directory,
-            system::get_cpu_cores,
-            system::get_available_memory_mb,
-            source_paths::inspect_source_path,
-            config::inspect_project,
-            config::activate_project,
-            config::copy_project_candidate,
-            config::create_project,
-            config::accept_project_edit,
-            config::get_project_snapshot,
-            config::current_project_snapshot,
-            config::save_project,
-            config::reconcile_import_result,
-            config::reconcile_processing_result,
-            import::commands::preflight_staging_plan,
-            import::commands::plan_import_relocation,
-            import::commands::reserve_import_run,
-            import::commands::get_active_import_run,
-            import::commands::attach_import_run,
-            import::commands::launch_import_run,
-            import::commands::cancel_import_run,
-            import::commands::confirm_import_worker_stopped,
-            import::commands::read_import_status,
-            processing::subjects::list_subjects,
-            processing::locks::read_lock_status,
-            processing::runs::reserve_processing_run,
-            processing::runs::confirm_processing_workers_stopped,
-            processing::runs::get_active_run,
-            processing::runs::attach_run,
-            processing::pipeline::run_pipeline,
-            processing::pipeline::kill_pipeline,
-            processing::pipeline::detect_exploreasl_version,
-            processing::logs::list_module_logs,
-            processing::logs::read_module_logs,
-            manifest::read_prior_modules_mtimes,
-            processing::reports::list_subject_reports,
-            processing::reports::read_report_image,
-            visualization::stats::list_stats_files,
-            visualization::stats::load_qcbf_data,
-            visualization::data::read_data_columns,
-            visualization::external::inspect_external_data,
-            visualization::join::execute_join,
-            lifecycle::clear_active_project,
-            visualization::join::check_join_sanity,
-            visualization::external::stat_file,
-            qc::get_subject_session_qc,
-            qc::get_all_subjects_qc,
-            bids::commands::check_bids_dataset,
-            bids::commands::scan_bids_sidecars,
-            bids::commands::preflight_bids_project_mutations,
-            bids::commands::preflight_bids_setup_repair,
-            bids::commands::commit_bids_project_mutations,
-            lifecycle::shutdown_project_runtime,
-        ])
+        .invoke_handler(crate::bindings::command_registry().invoke_handler())
         .register_uri_scheme_protocol(
             "niivue",
             crate::visualization::niivue_protocol::handle_niivue_protocol,

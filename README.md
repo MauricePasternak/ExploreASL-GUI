@@ -344,6 +344,39 @@ pnpm tauri dev
 > [!TIP]
 > Most frontend work can be done at `http://localhost:1420` with `pnpm dev`. Tauri APIs (filesystem, dialogs, subprocess) are mocked during browser development — start `pnpm tauri dev` only when you need to test native functionality.
 
+### Typed native commands
+
+Rust command definitions are the source of truth for application IPC. Tauri Specta
+generates `src/generated/bindings.ts`; frontend code uses `commands` from
+`src/lib/ipc.ts`, not raw `invoke` or a handwritten command map. Official Tauri
+plugin functions and event subscriptions remain unchanged.
+
+Use generated `_Serialize` types for received data and display caches, and
+`_Deserialize` types for request payloads when their Serde shapes differ. Bare
+type aliases can include both shapes. Integer fields retain existing JSON-number
+encoding and JavaScript's existing precision limits; no new numeric wrappers or
+range checks are added.
+
+After changing a command or its exposed Rust types:
+
+```bash
+pnpm bindings:generate
+pnpm typecheck
+```
+
+`pnpm bindings:check` rejects stale generated files without rewriting them.
+Generation is explicit; starting the application or running backend tests does
+not update source files. Tauri Specta and Specta use pinned prerelease versions;
+update them together and regenerate bindings when upgrading.
+
+Fallible commands return a discriminated result: `{ status: "ok", data }` or
+`{ status: "error", error }`. Application errors contain `message` and `details`
+strings, retaining domain fields such as storage categories and validation issues.
+Use the typed error result for recovery decisions. Framework failures and malformed
+rejections throw JavaScript errors instead of masquerading as application errors.
+Generated types do not replace runtime validation of external files, form input,
+or execution identities.
+
 ### Project Structure
 
 ```

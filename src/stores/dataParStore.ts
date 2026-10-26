@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { DataParState } from "../schemas/dataParSchema";
-import type { AdvancedVisibility } from "../generated/project/AdvancedVisibility";
+import type { AdvancedVisibility_Serialize as AdvancedVisibility } from "../generated/bindings";
 import { useProjectStore } from "./projectStore";
 import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 

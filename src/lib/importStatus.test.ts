@@ -5,7 +5,7 @@ import type { ImportSubjectStatus } from "./importStatus";
 import { readImportStatus } from "./importStatus";
 
 describe("readImportStatus", () => {
-  it("invokes active-project-owned read_import_status and returns parsed statuses", async () => {
+  it("invokes active-project-owned read_import_status and returns native statuses", async () => {
     const mockStatuses: ImportSubjectStatus[] = [
       { subject: "sub-01", status: "completed" },
       { subject: "sub-02", status: "failed" },

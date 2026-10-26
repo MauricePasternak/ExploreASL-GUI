@@ -40,6 +40,8 @@ import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useVisualizationStore } from "../stores/visualizationStore";
 import { logAction } from "../lib/debug";
+import { showErrorNotification } from "../lib/errorNotifications";
+import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import ProcessingStatusBar from "./processing/ProcessingStatusBar";
 
 const PHASE_NAV = [
@@ -56,6 +58,19 @@ export interface LayoutOutletContext {
 
 interface LayoutProps {
   onOpenSettings: () => void;
+}
+
+function showCloseError(projectId: string, title: string, error: unknown) {
+  showErrorNotification({
+    id: `project-close:${projectId}`,
+    title,
+    message: "The project could not be safely saved or closed.",
+    details:
+      error instanceof ProjectStorageError
+        ? projectStorageErrorMessage(error)
+        : "Keep the project open. Finish active work, correct any invalid fields, and try Save before leaving again.",
+    error,
+  });
 }
 
 export default function Layout({ onOpenSettings }: LayoutProps) {
@@ -146,15 +161,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
             await useProjectStore.getState().closeProject();
             await appWindow.destroy();
           } catch (error) {
-            notifications.show({
-              color: "red",
-              title: "Could not close project",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Project work could not be stopped. Retry after stopping active work.",
-              autoClose: 10000,
-            });
+            showCloseError(currentProject.projectMeta.id, "Could not close project", error);
           }
         });
       } catch (err) {
@@ -210,15 +217,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         navigate("/");
       }
     } catch (error) {
-      notifications.show({
-        color: "red",
-        title: "Could not leave project",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Project work could not be stopped. Retry after stopping active work.",
-        autoClose: 10000,
-      });
+      showCloseError(project?.projectMeta.id ?? "none", "Could not leave project", error);
     }
   }
 
@@ -249,15 +248,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       closeMobileNav();
       navigate("/");
     } catch (error) {
-      notifications.show({
-        color: "red",
-        title: "Could not leave project",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Project work could not be stopped. Retry after stopping active work.",
-        autoClose: 10000,
-      });
+      showCloseError(currentProject.projectMeta.id, "Could not leave project", error);
     }
   }
 

@@ -8,7 +8,8 @@ import {
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../../lib/ipc";
+import type { RelocationPlan } from "../../generated/bindings";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { Virtuoso } from "react-virtuoso";
 
@@ -58,19 +59,6 @@ const PHASE_META: Record<ImportPhase, { label: string; color: string }> = {
   interrupted: { label: "Interrupted", color: "yellow" },
 };
 const ACTIVE: ImportPhase[] = ["preparing", "running", "finalizing", "cancelling"];
-
-interface RelocationPlan {
-  planId: string;
-  subjects: Array<{
-    subject: string;
-    entries: Array<{ path: string; kind: "file" | "directory"; bytes: number }>;
-    fileCount: number;
-    byteTotal: number;
-    sessions: string[];
-    fingerprint: string;
-  }>;
-  fingerprint: string;
-}
 
 function importPlan(projectRoot: string) {
   const store = acceptedImportSettings();
@@ -308,8 +296,7 @@ export default function ImportExecution() {
         }
         context.operation = "plan_import_relocation";
         const relocation =
-          confirmed?.plan ??
-          (await invoke<RelocationPlan>("plan_import_relocation", { subjectList: subjects }));
+          confirmed?.plan ?? (await unwrap(commands.planImportRelocation(subjects)));
         if (!isCurrentProjectLease(lease)) return;
         const selectedFreshSubject = subjects.some((subject) => {
           const entry = useImportStore.getState().importProgress[subject];

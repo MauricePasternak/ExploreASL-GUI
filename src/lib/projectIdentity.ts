@@ -1,4 +1,4 @@
-import type { ProjectInspection } from "../generated/project/ProjectInspection";
+import type { ProjectInspection_Serialize as ProjectInspection } from "../generated/bindings";
 
 export type DuplicateProjectChoice = "moved" | "copied" | "cancel";
 

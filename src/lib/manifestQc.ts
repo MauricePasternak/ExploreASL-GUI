@@ -1,11 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "./ipc";
+import type { SubjectQcOutputs_Serialize } from "../generated/bindings";
 
-export interface SubjectQcOutputs {
-  coverage: number | null;
-  spatialCov: number | null;
-  motion: number[];
-  motionExclusionPct: number | null;
-}
+/** Nonfinite native motion values serialize as null, not valid motion samples. */
+export type SubjectQcOutputs = Omit<SubjectQcOutputs_Serialize, "motion"> & { motion: number[] };
 
 /**
  * Optimizes filesystem access by calling the Tauri backend's batch fetching command.
@@ -18,11 +15,18 @@ export async function readAllSubjectQcOutputs(
     return null;
   }
   try {
-    const raw = await invoke<Record<string, SubjectQcOutputs>>("get_all_subjects_qc", {
-      projectRoot,
-      subjectSessions,
-    });
-    return raw;
+    const raw = await unwrap(commands.getAllSubjectsQc(projectRoot, subjectSessions));
+    return Object.fromEntries(
+      Object.entries(raw).map(([subject, qc]) => [
+        subject,
+        {
+          ...qc,
+          motion: qc.motion.filter(
+            (value): value is number => value !== null && Number.isFinite(value),
+          ),
+        },
+      ]),
+    );
   } catch (err) {
     console.warn("[manifestQc] failed to get batch QC from Tauri backend", err);
     return null;

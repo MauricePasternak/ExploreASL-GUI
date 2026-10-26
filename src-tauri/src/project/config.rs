@@ -277,6 +277,7 @@ fn save_active(active: &mut ActiveProjectConfig) -> Result<()> {
         let bytes = serialize(&active.document).map_err(|error| persistence::AtomicWriteError {
             category: persistence::WriteErrorCategory::InvalidSerialization,
             message: error.to_string(),
+            details: format!("{error:#}"),
         })?;
         persistence::write_current_owned(&active.ownership, &bytes, active.recovered_from_backup)?;
         active.persisted_revision = active.accepted_revision;
@@ -664,27 +665,31 @@ pub(crate) fn reconcile_settled_for_state(state: &AppState) -> Result<()> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn reconcile_import_result(
     app: tauri::AppHandle,
     generation: u64,
     run_id: String,
 ) -> Result<ProjectSnapshot, ConfigCommandError> {
-    blocking(app, move |state| {
+    blocking(app, "The import result could not be saved.", move |state| {
         reconcile_import_for_state(state, generation, run_id)
     })
     .await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn reconcile_processing_result(
     app: tauri::AppHandle,
     generation: u64,
     run_id: uuid::Uuid,
     terminal_revision: u64,
 ) -> Result<ProjectSnapshot, ConfigCommandError> {
-    blocking(app, move |state| {
-        reconcile_processing_for_state(state, generation, run_id, terminal_revision)
-    })
+    blocking(
+        app,
+        "The processing result could not be saved.",
+        move |state| reconcile_processing_for_state(state, generation, run_id, terminal_revision),
+    )
     .await
 }
 
@@ -996,6 +1001,7 @@ fn read_backup(root: &Path) -> Result<ProjectDocument> {
             persistence::AtomicWriteError {
                 category: persistence::WriteErrorCategory::Recovery,
                 message: format!("Project recovery failed: {error:#}"),
+                details: format!("Project recovery failed: {error:#}"),
             }
             .into()
         })
@@ -1338,18 +1344,25 @@ pub(crate) fn retain_committed(
     Ok(())
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, specta::Type)]
 #[serde(untagged)]
 pub(crate) enum ConfigCommandError {
     Storage(persistence::AtomicWriteError),
     Parse(validation::ProjectParseError),
-    Operation { message: String },
+    Operation { message: String, details: String },
 }
 
 impl From<anyhow::Error> for ConfigCommandError {
     fn from(error: anyhow::Error) -> Self {
+        Self::from_error(error, "The project operation could not be completed.")
+    }
+}
+
+impl ConfigCommandError {
+    fn from_error(error: anyhow::Error, summary: &str) -> Self {
+        let operation = crate::error::CommandError::from_error(&error, summary);
         if let Some(error) = error.downcast_ref::<persistence::AtomicWriteError>() {
-            return Self::Storage(error.clone());
+            return Self::storage(error.category);
         }
         if let Some(error) = error.downcast_ref::<validation::ProjectParseError>() {
             return Self::Parse(error.clone());
@@ -1359,44 +1372,94 @@ impl From<anyhow::Error> for ConfigCommandError {
                 .downcast_ref::<std::io::Error>()
                 .is_some_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied)
         }) {
-            return Self::Storage(persistence::AtomicWriteError {
-                category: persistence::WriteErrorCategory::PermissionDenied,
-                message: format!("{error:#}"),
-            });
+            return Self::storage(persistence::WriteErrorCategory::PermissionDenied);
         }
         Self::Operation {
-            message: format!("{error:#}"),
+            message: operation.message,
+            details: operation.details,
         }
+    }
+
+    fn storage(category: persistence::WriteErrorCategory) -> Self {
+        use persistence::WriteErrorCategory;
+        let (message, details) = match category {
+            WriteErrorCategory::InvalidSerialization => (
+                "Project settings could not be saved.",
+                "The settings are not valid. Review them before saving again.",
+            ),
+            WriteErrorCategory::PermissionDenied => (
+                "Project files could not be accessed.",
+                "Check file and folder permissions, then try again.",
+            ),
+            WriteErrorCategory::InsufficientSpace => (
+                "There is not enough disk space to save the project.",
+                "Free some space, then save again.",
+            ),
+            WriteErrorCategory::TemporaryWrite => (
+                "The project file could not be written.",
+                "Check that the project folder is available and writable, then save again.",
+            ),
+            WriteErrorCategory::FileFlush => (
+                "The project file could not be saved reliably.",
+                "Check that the storage device is available, then save again.",
+            ),
+            WriteErrorCategory::Backup => (
+                "The project backup could not be prepared.",
+                "Check that the project folder is available and writable, then save again.",
+            ),
+            WriteErrorCategory::PrimaryReplacement => (
+                "The project file could not be replaced.",
+                "Check that the project folder is available and writable, then save again.",
+            ),
+            WriteErrorCategory::DurabilityUncertain => (
+                "The project may not be saved reliably.",
+                "The file was replaced, but storage could not confirm the save. Keep the project open and save again.",
+            ),
+            WriteErrorCategory::Recovery => (
+                "The project could not be recovered.",
+                "Keep the project and backup files unchanged. Restore a known-good backup before trying again.",
+            ),
+        };
+        Self::Storage(persistence::AtomicWriteError {
+            category,
+            message: message.into(),
+            details: details.into(),
+        })
     }
 }
 
 async fn blocking<T: Send + 'static>(
     app: tauri::AppHandle,
+    summary: &'static str,
     operation: impl FnOnce(&AppState) -> Result<T> + Send + 'static,
 ) -> Result<T, ConfigCommandError> {
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move || {
-        operation(&app.state::<AppState>()).map_err(ConfigCommandError::from)
+        operation(&app.state::<AppState>())
+            .map_err(|error| ConfigCommandError::from_error(error, summary))
     })
     .await
-    .map_err(|error| ConfigCommandError::Operation {
-        message: error.to_string(),
-    })?
+    .map_err(|error| ConfigCommandError::from_error(error.into(), summary))?
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn get_project_snapshot(
     app: tauri::AppHandle,
     generation: u64,
 ) -> Result<ProjectSnapshot, ConfigCommandError> {
-    blocking(app, move |state| snapshot_for_state(state, generation)).await
+    blocking(app, "Project settings could not be read.", move |state| {
+        snapshot_for_state(state, generation)
+    })
+    .await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn current_project_snapshot(
     app: tauri::AppHandle,
 ) -> Result<Option<ProjectSnapshot>, ConfigCommandError> {
-    blocking(app, |state| {
+    blocking(app, "Project settings could not be read.", |state| {
         let _transition = state
             .project_transition
             .lock()
@@ -1423,44 +1486,58 @@ pub(crate) async fn current_project_snapshot(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn accept_project_edit(
     app: tauri::AppHandle,
     generation: u64,
     edit: ProjectEdit,
 ) -> Result<ProjectSnapshot, ConfigCommandError> {
-    blocking(app, move |state| edit_for_state(state, generation, edit)).await
+    blocking(app, "Project changes could not be applied.", move |state| {
+        edit_for_state(state, generation, edit)
+    })
+    .await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn save_project(
     app: tauri::AppHandle,
     generation: u64,
 ) -> Result<ProjectSnapshot, ConfigCommandError> {
-    blocking(app, move |state| save_for_state(state, generation)).await
+    blocking(app, "The project could not be saved.", move |state| {
+        save_for_state(state, generation)
+    })
+    .await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn inspect_project(
     app: tauri::AppHandle,
     path: String,
     recents: Vec<RecentProjectIdentity>,
 ) -> Result<ProjectInspection, ConfigCommandError> {
-    blocking(app, move |state| inspect_for_state(state, path, recents)).await
+    blocking(app, "The project could not be opened.", move |state| {
+        inspect_for_state(state, path, recents)
+    })
+    .await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn activate_project(
     app: tauri::AppHandle,
     candidate_id: String,
     confirm_backup: bool,
 ) -> Result<ProjectSnapshot, ConfigCommandError> {
-    blocking(app, move |state| {
+    blocking(app, "The project could not be opened.", move |state| {
         activate_for_state(state, candidate_id, confirm_backup)
     })
     .await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn create_project(
     app: tauri::AppHandle,
     root: String,
@@ -1468,19 +1545,20 @@ pub(crate) async fn create_project(
     source: DataSource,
     profile_id: String,
 ) -> Result<ProjectInspection, ConfigCommandError> {
-    blocking(app, move |state| {
+    blocking(app, "The project could not be created.", move |state| {
         create_for_state(state, root, name, source, profile_id)
     })
     .await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub(crate) async fn copy_project_candidate(
     app: tauri::AppHandle,
     candidate_id: String,
     confirm_backup: bool,
 ) -> Result<ProjectInspection, ConfigCommandError> {
-    blocking(app, move |state| {
+    blocking(app, "The project could not be copied.", move |state| {
         copy_candidate_for_state(state, candidate_id, confirm_backup)
     })
     .await

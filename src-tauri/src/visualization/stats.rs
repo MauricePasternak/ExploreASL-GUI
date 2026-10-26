@@ -13,13 +13,14 @@ use tauri::State;
 use super::data::{
     ActiveData, ColumnMetadata, ColumnSource, DataInspection, infer_type, is_missing_value,
 };
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsFileInfo {
     pub file_name: String,
     pub relative_path: String,
+    #[specta(type = specta_typescript::Number)]
     pub size: u64,
     pub modified: String,
 }
@@ -61,7 +62,8 @@ pub fn list_stats_files_impl(project_root: PathBuf) -> AnyResult<Vec<StatsFileIn
 }
 
 #[tauri::command]
-pub async fn list_stats_files(project_root: String) -> Result<Vec<StatsFileInfo>, String> {
+#[specta::specta]
+pub async fn list_stats_files(project_root: String) -> Result<Vec<StatsFileInfo>, CommandError> {
     list_stats_files_impl(PathBuf::from(project_root)).into_command_result()
 }
 
@@ -339,10 +341,11 @@ pub fn load_qcbf_data_impl(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn load_qcbf_data(
     project_root: String,
     relative_path: String,
     state: State<'_, crate::app::state::AppState>,
-) -> Result<DataInspection, String> {
+) -> Result<DataInspection, CommandError> {
     load_qcbf_data_impl(PathBuf::from(project_root), relative_path, &state).into_command_result()
 }

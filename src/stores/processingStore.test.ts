@@ -309,6 +309,15 @@ describe("processing store", () => {
     });
     expect(console.error).not.toHaveBeenCalled();
   });
+  it("rejects an invalid processing request before saving", async () => {
+    useProjectStore.getState().project!.uiState.processing = {
+      config: { ...config, subjects: [], modules: ["population"], workers: 0 },
+    };
+
+    await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow();
+    expect(useProjectStore.getState().saveProject).not.toHaveBeenCalled();
+    expect(reserveProcessingRun).not.toHaveBeenCalled();
+  });
   it.each([
     ["malformed", "not-a-subject"],
     ["missing", "sub-missing_01"],

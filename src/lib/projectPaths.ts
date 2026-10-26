@@ -1,15 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
-
-export type PathOwnership = "internal" | "external" | "missing";
-
-export interface SourcePathInspection {
-  absolutePath: string;
-  exists: boolean;
-  readable: boolean;
-  isDirectory: boolean;
-  ownership: PathOwnership;
-  projectRelativePath: string | null;
-}
+import { commands, unwrap } from "./ipc";
+import type { SourcePathInspection_Serialize as SourcePathInspection } from "../generated/bindings";
+export type {
+  SourcePathInspection_Serialize as SourcePathInspection,
+  PathOwnership,
+} from "../generated/bindings";
 
 const WINDOWS_DRIVE_ABSOLUTE = /^[A-Za-z]:[\\/]/;
 const WINDOWS_UNC_ABSOLUTE = /^(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+/;
@@ -80,5 +74,5 @@ export async function inspectSourcePath(
   projectRoot: string,
   sourcePath: string,
 ): Promise<SourcePathInspection> {
-  return invoke<SourcePathInspection>("inspect_source_path", { projectRoot, sourcePath });
+  return unwrap(commands.inspectSourcePath(projectRoot, sourcePath));
 }

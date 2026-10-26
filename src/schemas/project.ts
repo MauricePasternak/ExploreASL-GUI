@@ -1,12 +1,16 @@
-import type { ProjectDocument } from "../generated/project/ProjectDocument";
-import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
+import type {
+  ProjectDocument_Serialize as ProjectDocument,
+  ProjectSnapshot_Serialize as ProjectSnapshot,
+} from "../generated/bindings";
 
-export type { ProjectPhase } from "../generated/project/ProjectPhase";
-export type { Reviewer } from "../generated/project/Reviewer";
-export type { Verdict as ManifestVerdict } from "../generated/project/Verdict";
-export type { FailReason as ManifestFailReason } from "../generated/project/FailReason";
-export type { ManifestConfig as ManifestUiState } from "../generated/project/ManifestConfig";
-export type { ImportUiState } from "../generated/project/ImportUiState";
+export type {
+  ProjectPhase,
+  Reviewer,
+  Verdict_Serialize as ManifestVerdict,
+  FailReason as ManifestFailReason,
+  ManifestConfig_Serialize as ManifestUiState,
+  ImportUiState_Serialize as ImportUiState,
+} from "../generated/bindings";
 
 export const PROJECT_FILE_NAME = "project.easl";
 export const PROJECT_PHASES = [

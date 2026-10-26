@@ -283,12 +283,15 @@ fn reservation_parent_sync_failure_retains_uncertain_ownership_and_recovers_inte
     let launch_error = crate::import::commands::settle_launch_result(
         &state,
         &run_id,
-        Err(crate::import::types::ImportCommandError::Operational {
-            message: "launch stayed blocked".to_string(),
-        }),
+        Err("launch stayed blocked".to_string().into()),
     )
     .unwrap_err();
-    assert_eq!(launch_error.to_string(), "launch stayed blocked");
+    assert_eq!(launch_error.to_string(), "Import could not be started.");
+    assert!(
+        !serde_json::to_string(&launch_error)
+            .unwrap()
+            .contains("launch stayed blocked")
+    );
     assert_eq!(
         state.import_state.lock().unwrap().lifecycle,
         ImportLifecycle::Preparing

@@ -1,7 +1,7 @@
 import { Alert, Badge, Group, Select, Stack, Text } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { useMemo } from "react";
 
+import { showErrorNotification } from "../../lib/errorNotifications";
 import type { ExecutionProfile } from "../../schemas/executionProfile";
 import { useGlobalStore } from "../../stores/globalStore";
 
@@ -65,13 +65,24 @@ export default function ProfileSelector({
     const profile = getProfileById(nextId);
     if (!profile) return;
 
-    await validateProfile(profile);
+    try {
+      await validateProfile(profile);
+    } catch (error) {
+      showErrorNotification({
+        id: `validate-execution-profile-${profile.id}`,
+        title: "Profile validation failed",
+        message: `Profile "${profile.label}" could not be checked. Try validating it again in Settings.`,
+        error,
+      });
+      return;
+    }
     const validation = useGlobalStore.getState().profileValidationState[nextId];
     if (validation && !validation.valid) {
-      notifications.show({
-        color: "orange",
+      showErrorNotification({
+        id: `validate-execution-profile-${profile.id}`,
         title: "Execution profile is invalid",
-        message: `Profile "${profile.label}" failed validation: ${validation.errors.join("; ")}`,
+        message: `Profile "${profile.label}" needs attention. Review it in Settings.`,
+        details: validation.errors.join("\n\n"),
       });
     }
   }

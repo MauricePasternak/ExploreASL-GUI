@@ -24,14 +24,33 @@ fn every_structured_command_error_category_has_a_stable_wire_kind() {
         (anyhow!("unexpected"), "failed"),
     ];
     for (error, kind) in cases {
-        let value = serde_json::to_value(command_error(error)).unwrap();
+        let value =
+            serde_json::to_value(command_error(error.context("private setup context"))).unwrap();
         assert_eq!(value["kind"], kind);
+        assert!(!value.to_string().contains("private"));
+        if kind == "failed" {
+            assert_eq!(value["details"], "");
+        } else {
+            assert_ne!(value["details"], value["message"]);
+            assert!(!value["details"].as_str().unwrap().is_empty());
+        }
         assert!(
             value["message"]
                 .as_str()
                 .is_some_and(|message| !message.is_empty())
         );
     }
+}
+
+#[test]
+fn setup_worker_failures_stay_failed_without_classifying_diagnostic_text() {
+    let value = serde_json::to_value(SetupCommandError::failed(anyhow!(
+        "private worker panic: stale conflict durability"
+    )))
+    .unwrap();
+    assert_eq!(value["kind"], "failed");
+    assert_eq!(value["message"], "Project setup could not be completed.");
+    assert_eq!(value["details"], "");
 }
 
 #[test]
@@ -52,4 +71,28 @@ fn command_errors_report_completed_rollback() {
         SetupCommandError::Rollback { .. }
     ));
     drop(_guard);
+}
+
+#[test]
+fn completed_rollback_takes_precedence_over_the_original_failure() {
+    for cause in [
+        "could not synchronize directory",
+        "marker already exists",
+        "Setup plan expired",
+    ] {
+        let error = command_error(anyhow!("Setup changes rolled back after failure: {cause}"));
+        let value = serde_json::to_value(error).unwrap();
+        assert_eq!(value["kind"], "rollback");
+        assert!(value["details"].as_str().unwrap().contains("restored"));
+    }
+}
+
+#[test]
+fn failed_rollback_keeps_recovery_guidance_even_when_the_original_error_was_a_conflict() {
+    let error = command_error(anyhow!(
+        "Setup failed (marker already exists); recovery required (could not synchronize changes rolled back earlier)"
+    ));
+    let value = serde_json::to_value(error).unwrap();
+    assert_eq!(value["kind"], "recovery_required");
+    assert!(value["details"].as_str().unwrap().contains("unchanged"));
 }

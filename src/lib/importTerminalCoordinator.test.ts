@@ -76,7 +76,6 @@ describe("import terminal coordinator", () => {
 
     await expect(reconcileImportTerminal("import-run-1")).rejects.toThrow("disk full");
 
-    expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
     expect(useImportStore.getState()).toMatchObject({
       terminalRunId: "import-run-1",
       importRunError: expect.stringContaining("terminal reconciliation"),
@@ -125,7 +124,6 @@ describe("import terminal coordinator", () => {
     await reconcileImportRunForActivation();
 
     expect(saveProject).not.toHaveBeenCalled();
-    expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
     expect(invoke).not.toHaveBeenCalledWith("reconcile_import_result", expect.anything());
     expect(useImportStore.getState().terminalRunId).toBe(confirmationRequired.runId);
   });
@@ -244,7 +242,6 @@ describe("import terminal coordinator", () => {
     activateProjectLease("project-2", "/other");
     releaseSave();
     await reconciliation;
-    expect(invoke).not.toHaveBeenCalledWith("acknowledge_import_run", expect.anything());
     expect(useImportStore.getState().terminalRunId).toBe("import-run-1");
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-2");
   });

@@ -121,14 +121,24 @@ vi.mock("@tauri-apps/api/core", () => ({
           subjects: [],
           fingerprint: "test",
         });
+      case "validate_execution_profile":
+        return Promise.resolve({
+          id: (_args as { executionProfile: { id: string } }).executionProfile.id,
+          valid: false,
+          errors: [],
+        });
       case "validate_all_execution_profiles":
       case "read_import_status":
       case "list_subject_reports":
+      case "list_module_logs":
+      case "get_subject_session_qc":
       case "read_report_image":
       case "read_lock_status":
       case "list_subjects":
       case "list_stats_files":
         return Promise.resolve([]);
+      case "read_module_logs":
+        return Promise.resolve({});
       case "scan_bids_sidecars":
         return Promise.resolve({ groups: [], skipped: [] });
       case "check_bids_dataset":

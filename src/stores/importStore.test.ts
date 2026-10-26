@@ -13,6 +13,7 @@ import { acceptedImportSettings, useImportStore } from "./importStore";
 import { useProjectStore } from "./projectStore";
 import { projectFixture } from "../test/projectFixtures";
 import { invoke } from "@tauri-apps/api/core";
+import type { SidecarGroup_Serialize } from "../generated/bindings";
 
 const MATLAB_PROFILE: ExecutionProfile = {
   id: "profile-1",
@@ -657,7 +658,7 @@ describe("importStore reconstructProgressFromLockFiles", () => {
 // BIDS Review Slice
 // ---------------------------------------------------------------------------
 describe("importStore BIDS review slice", () => {
-  const SAMPLE_DERIVED_GROUP: import("../schemas/importSchemas").DerivedMetadataGroup = {
+  const SAMPLE_DERIVED_GROUP = {
     id: "group-1",
     label: "Siemens_3T_PCASL_3D_Included",
     vendor: "Siemens",
@@ -678,7 +679,9 @@ describe("importStore BIDS review slice", () => {
       { subjectLabel: "sub-01", sessionLabels: ["1"] },
       { subjectLabel: "sub-02", sessionLabels: ["1"] },
     ],
-  };
+  } satisfies import("../schemas/importSchemas").DerivedMetadataGroup;
+  const { id: fingerprintHash, ...group } = SAMPLE_DERIVED_GROUP;
+  const SAMPLE_SIDECAR_GROUP = { ...group, fingerprintHash } satisfies SidecarGroup_Serialize;
 
   it("starts with initial BIDS review state", () => {
     const state = useImportStore.getState();
@@ -693,7 +696,7 @@ describe("importStore BIDS review slice", () => {
   it("startBidsScan populates detectedGroups and skippedSubjects on success", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     vi.mocked(invoke).mockResolvedValueOnce({
-      groups: [SAMPLE_DERIVED_GROUP],
+      groups: [SAMPLE_SIDECAR_GROUP],
       skipped: ["sub-UNK_1"],
     });
 
@@ -730,7 +733,7 @@ describe("importStore BIDS review slice", () => {
 
     // Retry succeeds
     vi.mocked(invoke).mockResolvedValueOnce({
-      groups: [SAMPLE_DERIVED_GROUP],
+      groups: [SAMPLE_SIDECAR_GROUP],
       skipped: [],
     });
     await useImportStore.getState().retryBidsScan("/tmp/retry-root");
@@ -779,7 +782,7 @@ describe("importStore BIDS review slice", () => {
   it("resetBidsReview clears the slice to initial values", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     vi.mocked(invoke).mockResolvedValueOnce({
-      groups: [SAMPLE_DERIVED_GROUP],
+      groups: [SAMPLE_SIDECAR_GROUP],
       skipped: ["sub-UNK_1"],
     });
 
@@ -798,7 +801,7 @@ describe("importStore BIDS review slice", () => {
   it("backToLanding resets BIDS review state", async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     vi.mocked(invoke).mockResolvedValueOnce({
-      groups: [SAMPLE_DERIVED_GROUP],
+      groups: [SAMPLE_SIDECAR_GROUP],
       skipped: [],
     });
 
@@ -814,18 +817,22 @@ describe("importStore BIDS review slice", () => {
     });
   });
 
-  it("startBidsScan rejects malformed skipped entries (non-string) and surfaces scanError", async () => {
-    const { invoke } = await import("@tauri-apps/api/core");
+  it("startBidsScan rejects unsupported scientific metadata from a native-shaped response", async () => {
     vi.mocked(invoke).mockResolvedValueOnce({
-      groups: [],
-      skipped: ["sub-01_1", 42],
-    } as any);
+      groups: [
+        {
+          ...SAMPLE_SIDECAR_GROUP,
+          bidsParams: { ...SAMPLE_SIDECAR_GROUP.bidsParams, ASLContext: "unexpected" },
+        },
+      ],
+      skipped: [],
+    });
 
-    await useImportStore.getState().startBidsScan("/tmp/bad-skipped");
+    await useImportStore.getState().startBidsScan("/tmp/bad-metadata");
 
     const state = useImportStore.getState();
     expect(state.bidsReview.scanComplete).toBe(false);
-    expect(state.bidsReview.scanError).toMatch(/string/i);
+    expect(state.bidsReview.scanError).toContain('Field "ASLContext"');
     expect(state.bidsReview.detectedGroups).toEqual([]);
   });
 

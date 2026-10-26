@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "./ipc";
 import { z } from "zod";
 
 import type { StagingEntry } from "../schemas/importSchemas";
@@ -24,9 +24,7 @@ export type StagingPreflightResponse = { valid: boolean; issues: StagingValidati
 export async function preflightStagingPlan(
   stagingEntries: StagingEntry[],
 ): Promise<StagingPreflightResponse> {
-  const response = await invoke<unknown>("preflight_staging_plan", {
-    stagingEntries,
-  });
+  const response = await unwrap(commands.preflightStagingPlan(stagingEntries));
   return StagingPreflightResponseSchema.parse(response);
 }
 

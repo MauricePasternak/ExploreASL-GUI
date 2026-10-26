@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { create } from "zustand";
 
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../lib/ipc";
 
 import { formatBidsScanValidationError } from "../lib/bids/errorFormatter";
 import { logAction } from "../lib/debug";
@@ -17,7 +17,7 @@ import { portableKey, type StagingValidationIssue } from "../lib/stagingValidati
 import { useGlobalStore } from "./globalStore";
 import { useProjectStore } from "./projectStore";
 import type { ProjectFile } from "../schemas/project";
-import type { MappingState } from "../generated/project/MappingState";
+import type { MappingState_Serialize as MappingState } from "../generated/bindings";
 
 import type {
   DerivedMetadataGroup,
@@ -311,23 +311,18 @@ async function scanBidsSidecars(rootPath: string) {
   > = [];
 
   try {
-    const result = (await invoke("scan_bids_sidecars", { rootPath })) as {
-      groups: Array<Record<string, unknown> & { fingerprintHash?: string; id?: string }>;
-      skipped: string[];
-    };
+    const result = await unwrap(commands.scanBidsSidecars(rootPath));
 
     // Map fingerprintHash to id to match schema expectations.
-    groupsWithId = (result.groups ?? []).map((g) => ({
+    groupsWithId = result.groups.map((g) => ({
       ...g,
-      id: g.id ?? g.fingerprintHash,
+      id: g.fingerprintHash,
     }));
 
     const detectedGroups = DerivedMetadataGroupSchema.array().parse(groupsWithId);
-    const skippedSubjects = z.array(z.string()).parse(result.skipped ?? []);
-
     return {
       detectedGroups,
-      skippedSubjects,
+      skippedSubjects: result.skipped,
     };
   } catch (err) {
     let message = err instanceof Error ? err.message : String(err);

@@ -8,6 +8,7 @@ use crate::tracing::CommandTrace;
 mod manifest_tests;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn read_prior_modules_mtimes(
     project_root: String,
     subject_sessions: Vec<String>,

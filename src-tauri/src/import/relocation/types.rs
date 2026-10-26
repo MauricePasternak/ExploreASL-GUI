@@ -45,33 +45,36 @@ impl OwnedPathRole {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelocationEntry {
     pub path: String,
     pub kind: RelocationEntryKind,
+    #[specta(type = specta_typescript::Number)]
     pub bytes: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum RelocationEntryKind {
     File,
     Directory,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SubjectInventory {
     pub subject: String,
     pub entries: Vec<RelocationEntry>,
+    #[specta(type = specta_typescript::Number)]
     pub file_count: u64,
+    #[specta(type = specta_typescript::Number)]
     pub byte_total: u64,
     pub sessions: Vec<String>,
     pub fingerprint: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelocationPlan {
     pub plan_id: String,
@@ -85,7 +88,7 @@ pub struct RelocationPlan {
     pub bound_generation: Option<u64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SubjectRelocationOutcome {
     pub subject: String,
@@ -94,7 +97,7 @@ pub struct SubjectRelocationOutcome {
     pub message: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum RelocationSubjectStatus {
     Committed,
@@ -102,16 +105,17 @@ pub enum RelocationSubjectStatus {
     RecoveryRequired,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelocationOutcome {
     pub plan_id: String,
+    #[specta(type = specta_typescript::Number)]
     pub generation: u64,
     pub subjects: Vec<SubjectRelocationOutcome>,
     pub staging_cleanup_complete: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RelocationRecoverySummary {
     pub preserved_subjects: Vec<String>,

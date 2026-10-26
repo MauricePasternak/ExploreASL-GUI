@@ -6,7 +6,7 @@ use std::thread;
 /// State owned by native code.  This deliberately has more states than the
 /// renderer: a child exiting is not completion; verification and relocation
 /// still own project output while the run is `Finalizing`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportLifecycle {
     Idle,
@@ -48,7 +48,7 @@ impl ImportLifecycle {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImportStructuredError {
     pub code: String,
@@ -59,7 +59,7 @@ pub struct ImportStructuredError {
     pub staging_issues: Option<Vec<StagingValidationIssue>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportSubjectOutcomeKind {
     Verified,
@@ -69,7 +69,7 @@ pub enum ImportSubjectOutcomeKind {
     Interrupted,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImportSubjectOutcome {
     pub subject: String,
@@ -81,14 +81,14 @@ pub struct ImportSubjectOutcome {
     pub error: Option<ImportStructuredError>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImportExitEvidence {
     pub exit_code: i32,
     pub successful: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportTerminalResult {
     Completed,
@@ -99,15 +99,18 @@ pub enum ImportTerminalResult {
 
 /// Public, path-free contract.  Do not add a PID, process handle, staging
 /// path, or project root here: snapshots are IPC/replay data.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImportRunSnapshot {
     pub run_id: String,
     pub lifecycle: ImportLifecycle,
+    #[specta(type = specta_typescript::Number)]
     pub ownership_generation: u64,
     pub profile_id: String,
     pub selected_subjects: Vec<String>,
+    #[specta(type = specta_typescript::Number)]
     pub created_at_ms: u128,
+    #[specta(type = specta_typescript::Number)]
     pub updated_at_ms: u128,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit_evidence: Option<ImportExitEvidence>,
@@ -257,44 +260,61 @@ impl ImportState {
     }
 }
 
-#[derive(Debug, serde::Serialize, thiserror::Error)]
+#[derive(Debug, serde::Serialize, specta::Type, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ImportCommandError {
-    #[error("Import staging preflight failed")]
-    Preflight { issues: Vec<StagingValidationIssue> },
     #[error("{message}")]
-    Operational { message: String },
+    Preflight {
+        message: String,
+        details: String,
+        issues: Vec<StagingValidationIssue>,
+    },
+    #[error("{message}")]
+    Operational { message: String, details: String },
+}
+
+impl ImportCommandError {
+    pub(super) fn preflight(issues: Vec<StagingValidationIssue>) -> Self {
+        Self::Preflight {
+            message: "Import staging preflight failed".into(),
+            details: "Review the staging issues and correct them before starting import again."
+                .into(),
+            issues,
+        }
+    }
 }
 
 impl From<String> for ImportCommandError {
-    fn from(message: String) -> Self {
-        Self::Operational { message }
+    fn from(error: String) -> Self {
+        anyhow::Error::msg(error).into()
     }
 }
 
 impl From<anyhow::Error> for ImportCommandError {
     fn from(error: anyhow::Error) -> Self {
+        let error = crate::error::CommandError::from_error(&error, "Import could not be started.");
         Self::Operational {
-            message: format!("{error:#}"),
+            message: error.message,
+            details: error.details,
         }
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportSubjectStatus {
     pub subject: String,
     pub status: ImportSubjectStatusKind,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportSubjectStatusKind {
     Completed,
     Failed,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportRawEventPayload {
     pub line: String,
@@ -302,7 +322,7 @@ pub struct ImportRawEventPayload {
     pub ownership_generation: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportStructuredEventPayload {
     #[serde(flatten)]

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { resolveProjectIdentity } from "./projectIdentity";
-import type { ProjectInspection } from "../generated/project/ProjectInspection";
+import type { ProjectInspection_Serialize as ProjectInspection } from "../generated/bindings";
 
 const candidate: ProjectInspection = {
   candidateId: "candidate",

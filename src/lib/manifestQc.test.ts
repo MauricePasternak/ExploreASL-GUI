@@ -47,6 +47,22 @@ describe("readAllSubjectQcOutputs", () => {
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
+
+  it("excludes null/nonfinite motion samples without inventing zero motion", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockResolvedValue({
+      valid: {
+        coverage: null,
+        spatialCov: null,
+        motion: [null, 0.2, Number.NaN],
+        motionExclusionPct: null,
+      },
+      missing: { coverage: null, spatialCov: null, motion: [null], motionExclusionPct: null },
+    });
+    const result = await readAllSubjectQcOutputs("/project", ["valid", "missing"]);
+    expect(result?.valid.motion).toEqual([0.2]);
+    expect(aggregateMotionBySubject(result?.missing.motion ?? [])).toBeNull();
+  });
 });
 
 describe("aggregateMotionBySubject", () => {

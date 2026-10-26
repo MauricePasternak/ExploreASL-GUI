@@ -1,12 +1,12 @@
 //! Activate/close projects and coordinate shutdown and ordered feature recovery.
 use crate::app::state::AppState;
-use crate::error::IntoCommandResult;
+use crate::error::CommandError;
 use crate::import::ImportLifecycle;
 use anyhow::{Context, Result as AnyResult};
 use serde::Serialize;
 use tauri::State;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceShutdown {
     pub success: bool,
@@ -30,7 +30,7 @@ impl ResourceShutdown {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectRuntimeShutdown {
     pub success: bool,
@@ -66,7 +66,7 @@ pub fn set_active_project_impl(
     root_path: String,
     state: &crate::app::state::AppState,
 ) -> Result<crate::import::relocation::RelocationRecoverySummary, String> {
-    set_active_project_inner(root_path, state).into_command_result()
+    set_active_project_inner(root_path, state).map_err(|error| format!("{error:#}"))
 }
 
 #[cfg(test)]
@@ -142,7 +142,7 @@ pub(crate) fn set_active_project_with_config_locked(
 }
 
 pub fn clear_active_project_impl(state: &crate::app::state::AppState) -> Result<(), String> {
-    clear_active_project_inner(state).into_command_result()
+    clear_active_project_inner(state).map_err(|error| format!("{error:#}"))
 }
 
 fn clear_active_project_inner(state: &crate::app::state::AppState) -> AnyResult<()> {
@@ -206,7 +206,10 @@ fn lock_state<'a, T>(
 }
 
 #[tauri::command]
-pub fn clear_active_project(state: State<'_, crate::app::state::AppState>) -> Result<(), String> {
+#[specta::specta]
+pub fn clear_active_project(
+    state: State<'_, crate::app::state::AppState>,
+) -> Result<(), CommandError> {
     let _trace = crate::tracing::CommandTrace::new("clear_active_project");
     log::info!("clear_active_project");
     clear_active_project_impl(&state)?;
@@ -388,6 +391,7 @@ where
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn shutdown_project_runtime(state: State<'_, AppState>) -> ProjectRuntimeShutdown {
     shutdown_project_runtime_impl(&state)
 }

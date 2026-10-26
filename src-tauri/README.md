@@ -1,11 +1,13 @@
 # Backend map
 
-Start at `src/lib.rs`. Tauri plugin setup, command registration, startup,
-and app exit live in `src/app/bootstrap.rs`.
+Start at `src/lib.rs`. Tauri plugin setup, startup, and app exit live in
+`src/app/bootstrap.rs`. Native command registration and TypeScript export share
+one Tauri Specta command collection.
 
 | Module                      | Owns                                                                                                                              |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `app/`                      | Desktop startup, shared native state, single-instance activation                                                                  |
+| `bindings.rs`               | Shared native command collection and TypeScript contract export                                                                   |
 | `project/`                  | Activation, close, ownership checks, typed schema-2 configuration, accepted edits and revision-ordered `project.easl` persistence |
 | `project/setup/`            | Reviewed DICOM/BIDS project creation and BIDS compatibility repair, with selected-root journal recovery                           |
 | `execution/`                | MATLAB/Apptainer discovery, profiles, executable checks, host commands, launch checks and cache warmup                            |
@@ -30,8 +32,11 @@ mechanisms live in `crates/execution-runtime/`.
 
 - Project activation and recovery ordering: `project/lifecycle.rs`.
 - Configuration ownership and native result persistence before exact-run acknowledgement:
-  `project/config.rs`; Serde models and generated TypeScript types:
-  `project/model.rs`, `project/bindings.rs`, `examples/export_project_types.rs`.
+  `project/config.rs`; Serde configuration models: `project/model.rs`.
+- Structured command errors: `error.rs`; domain errors retain their categories,
+  kinds, and validation issues alongside `message` and `details`.
+- Generated frontend contracts: `../src/generated/bindings.ts`, refreshed explicitly
+  with `pnpm bindings:generate`. There is no separate handwritten command map.
 - Project-local candidates and backups: `project/persistence.rs`. The renderer has one
   two-second autosave scheduler and a common pending-edit/save flush; workers never write
   `project.easl`. Current opening does not rewrite configuration merely to open it.

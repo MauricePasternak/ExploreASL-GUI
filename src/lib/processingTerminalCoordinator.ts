@@ -8,7 +8,7 @@ import {
 import { clearProcessingListeners, useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { projectRequest } from "./projectPersistence";
-import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
+import { commands } from "./ipc";
 import type { ProcessingRunSnapshot } from "../schemas/processingSchemas";
 
 function ownsTerminal(snapshot: ProcessingRunSnapshot, lease: ProjectLease) {
@@ -39,14 +39,17 @@ export function reconcileProcessingTerminal(lease = captureProjectLease()): Prom
     !isProjectWorkAccepted()
   )
     return Promise.resolve();
+  const terminalRevision = snapshot.terminalRevision;
   const operation = async () => {
     try {
       if (!ownsTerminal(snapshot, lease)) return;
-      const accepted = await projectRequest<ProjectSnapshot>("reconcile_processing_result", {
-        generation: project.activationGeneration,
-        runId: snapshot.runId,
-        terminalRevision: snapshot.terminalRevision,
-      });
+      const accepted = await projectRequest("reconcile_processing_result", () =>
+        commands.reconcileProcessingResult(
+          project.activationGeneration,
+          snapshot.runId,
+          terminalRevision,
+        ),
+      );
       if (!ownsTerminal(snapshot, lease)) return;
       useProjectStore.getState().acceptSnapshot(accepted);
       clearProcessingListeners(snapshot.runId);

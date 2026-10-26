@@ -1,4 +1,4 @@
-import { notifications } from "@mantine/notifications";
+import * as errorNotifications from "../../lib/errorNotifications";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assembleStudyPar } from "../../lib/tokenizerUtils";
@@ -46,7 +46,9 @@ function renderGroups(metadataGroups: MetadataGroup[], assignedGroupIds: string[
   const setActiveStep = vi
     .spyOn(useImportStore.getState(), "setActiveStep")
     .mockImplementation(() => {});
-  const showNotification = vi.spyOn(notifications, "show").mockReturnValue("validation-error");
+  const showNotification = vi
+    .spyOn(errorNotifications, "showErrorNotification")
+    .mockReturnValue("validation-error");
   render(
     <TestMantineProvider>
       <MetadataGrouping />
@@ -101,8 +103,10 @@ describe("MetadataGrouping validation", () => {
       expect(setActiveStep).not.toHaveBeenCalled();
       expect(showNotification).toHaveBeenCalledWith(
         expect.objectContaining({
+          id: `metadata-validation:project-1:${assignedGroupId}`,
           title: `Validation Error in Group "${assignedGroupId === "global-defaults" ? "Global Defaults" : "Override"}"`,
-          message: expect.stringContaining("Arterial Spin Labeling Type is required."),
+          message: "Assigned metadata needs correction before import.",
+          details: expect.stringContaining("Arterial Spin Labeling Type is required."),
         }),
       );
     },
@@ -126,8 +130,10 @@ describe("MetadataGrouping validation", () => {
     expect(setActiveStep).not.toHaveBeenCalled();
     expect(showNotification).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: "metadata-validation:project-1:override",
         title: 'Validation Error in Group "Override"',
-        message: expect.stringContaining("Labeling Duration is required for PCASL."),
+        message: "Assigned metadata needs correction before import.",
+        details: expect.stringContaining("Labeling Duration is required for PCASL."),
       }),
     );
   });

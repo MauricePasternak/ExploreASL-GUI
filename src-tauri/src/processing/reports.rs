@@ -1,13 +1,14 @@
 use super::identifiers::normalize_asl_run_id_opt;
 use super::types::ReportFileInfo;
-use crate::error::IntoCommandResult;
+use crate::error::CommandError;
 use crate::tracing::CommandTrace;
 use anyhow::{Context, Result as AnyResult, bail};
 use std::fs;
 use std::path::PathBuf;
 
 #[tauri::command]
-pub fn list_subject_reports(project_root: String) -> Result<Vec<ReportFileInfo>, String> {
+#[specta::specta]
+pub fn list_subject_reports(project_root: String) -> Result<Vec<ReportFileInfo>, CommandError> {
     let trace = CommandTrace::new("list_subject_reports");
     trace.arg("project_root", &project_root);
 
@@ -97,15 +98,16 @@ pub fn list_subject_reports(project_root: String) -> Result<Vec<ReportFileInfo>,
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn read_report_image(
     project_root: String,
     subject_session: String,
     module: String,
     run: Option<String>,
     view_type: String, // "axial" | "coronal"
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, CommandError> {
     read_report_image_impl(project_root, subject_session, module, run, view_type)
-        .into_command_result()
+        .map_err(|error| CommandError::from_error(&error, "The report image could not be opened."))
 }
 
 fn read_report_image_impl(
@@ -182,7 +184,11 @@ fn read_report_image_impl(
     }
 
     if !img_path.exists() {
-        bail!("Report image not found: {}", file_name);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Report image not found: {file_name}"),
+        )
+        .into());
     }
 
     let bytes = fs::read(&img_path).context("Failed to read image file")?;

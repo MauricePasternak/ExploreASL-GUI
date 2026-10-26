@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../lib/ipc";
+import type { BidsCheckResult_Serialize as BidsCheckResult } from "../generated/bindings";
 import { notifications } from "@mantine/notifications";
 import { Button, Divider, Group, Image, Modal, Radio, Stack, Text, Alert } from "@mantine/core";
 import { IconAlertTriangle, IconFolderOpen, IconPlus } from "@tabler/icons-react";
@@ -16,27 +17,11 @@ import RecentProjectsList from "../components/landing/RecentProjectsList";
 import WelcomeCard from "../components/landing/WelcomeCard";
 import type { LayoutOutletContext } from "../components/Layout";
 import { logAction } from "../lib/debug";
+import { showErrorNotification } from "../lib/errorNotifications";
 import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import appLogo from "../../src-tauri/icons/easl_gui_logo.png";
 import { resolveProjectIdentity, type DuplicateProjectChoice } from "../lib/projectIdentity";
-import type { SetupPlan } from "../lib/bids/setup";
-
-/** Shape returned by the Rust `check_bids_dataset` command. */
-interface BidsCheckResult {
-  setupRecovered?: number;
-  isBids: boolean;
-  hasDatasetDescription: boolean;
-  datasetDescError: string | null;
-  bidsVersion: string | null;
-  aslSubjectCount: number;
-  aslSessionCount: number;
-  totalSubjectCount: number;
-  missingSidecars: string[];
-  missingAslcontextCount: number;
-  hasPerfDirectory: boolean;
-  isCrossSectional: boolean;
-  error: string | null;
-}
+import { SetupCommandErrorSchema, type SetupPlan } from "../lib/bids/setup";
 
 type BidsDialogState =
   | null
@@ -53,6 +38,15 @@ interface IdentityPrompt {
   oldPath: string;
   newPath: string;
   resolve: (choice: DuplicateProjectChoice) => void;
+}
+
+function projectErrorDetails(
+  error: unknown,
+  fallback = "Check that you selected project.easl from a supported version. Choose another project file or restore a working backup.",
+) {
+  if (error instanceof ProjectStorageError) return projectStorageErrorMessage(error);
+  const setup = SetupCommandErrorSchema.safeParse(error);
+  return setup.success ? setup.data.details : fallback;
 }
 
 export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: LandingPageProps = {}) {
@@ -91,22 +85,6 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const [identityPrompt, setIdentityPrompt] = useState<IdentityPrompt | null>(null);
   const recoveryPath = recovery?.easlPath ?? null;
 
-  function showError(title: string, message: string) {
-    notifications.show({
-      color: "red",
-      title,
-      message,
-      autoClose: 10000,
-    });
-  }
-
-  function storageErrorMessage(error: unknown) {
-    if (error instanceof ProjectStorageError) {
-      return projectStorageErrorMessage(error);
-    }
-    return "Failed to open project. The file may be corrupted or from a newer version.";
-  }
-
   async function proceedWithProject(
     selected: string,
     projectName: string,
@@ -141,9 +119,13 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       })
       .catch((error: unknown) => {
         if (requestVersion.current === request) {
+          console.error("[PROJECT] Setup inspection failed", error);
           setSetupPlan(null);
           setSetupPlanError(
-            error instanceof Error ? error.message : "Could not inspect project setup.",
+            projectErrorDetails(
+              error,
+              "Project setup could not be inspected. Check directory access and free disk space, then select the directory again to retry.",
+            ),
           );
         }
       })
@@ -195,6 +177,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   async function handleNewProject() {
     setLoading(true);
     logAction("landing_new_project_start");
+    let selectedDirectory: string | undefined;
 
     try {
       let defaultPath: string | undefined;
@@ -224,23 +207,24 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         logAction("landing_new_project_cancelled");
         return;
       }
+      selectedDirectory = selected;
 
       const projectName = selected.split(/[/\\]/).filter(Boolean).pop() ?? "Untitled";
       const projectPath = `${selected}/${PROJECT_FILE_NAME}`;
-      const writable = (await invoke("is_writable", { path: selected })) as boolean;
+      const writable = await commands.isWritable(selected);
       if (!writable) {
-        showError(
-          "Directory not writable",
-          `Cannot create project in ${selected}. Check permissions.`,
-        );
+        showErrorNotification({
+          id: `project-create:${selected}`,
+          title: "Directory not writable",
+          message: "The selected directory does not allow project creation.",
+          details: "Check directory permissions or choose another project directory.",
+        });
         logAction("landing_new_project_error", { reason: "not_writable", path: selected });
         return;
       }
 
       // Selection settles prior setup before inspection or new plan review.
-      const bidsResult = (await invoke("check_bids_dataset", {
-        rootPath: selected,
-      })) as BidsCheckResult;
+      const bidsResult = await unwrap(commands.checkBidsDataset(selected));
       if (bidsResult.setupRecovered) {
         notifications.show({
           title: "Prior setup recovered",
@@ -250,7 +234,12 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         });
       }
       if (await exists(projectPath)) {
-        showError("Project exists", `An ExploreASL GUI project already exists in ${selected}.`);
+        showErrorNotification({
+          id: `project-create:${selected}`,
+          title: "Project exists",
+          message: "An ExploreASL GUI project already exists in the selected directory.",
+          details: "Use Open Project to open it, or choose another directory for a new project.",
+        });
         logAction("landing_new_project_error", { reason: "exists", path: selected });
         return;
       }
@@ -315,12 +304,16 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         setBidsDialog({ kind: "no-subjects", result: bidsResult });
       }
     } catch (error) {
-      showError(
-        "Failed to create project",
-        error instanceof ProjectStorageError
-          ? storageErrorMessage(error)
-          : "ExploreASL GUI could not initialize the project files in the selected directory.",
-      );
+      showErrorNotification({
+        id: `project-create:${selectedDirectory ?? "selection"}`,
+        title: "Failed to create project",
+        message: "Project files could not be initialized in the selected directory.",
+        details: projectErrorDetails(
+          error,
+          "Check directory access and free disk space, then try again.",
+        ),
+        error,
+      });
       logAction("landing_new_project_error", { reason: "exception" });
     } finally {
       setLoading(false);
@@ -440,12 +433,16 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       setPendingFolder(null);
       setSetupPlan(null);
     } catch (error) {
-      showError(
-        "Failed to create project",
-        error instanceof ProjectStorageError
-          ? storageErrorMessage(error)
-          : "ExploreASL GUI could not initialize the project files in the selected directory.",
-      );
+      showErrorNotification({
+        id: `project-create:${path}`,
+        title: "Failed to create project",
+        message: "Project files could not be initialized in the selected directory.",
+        details: projectErrorDetails(
+          error,
+          "Check directory access and free disk space. Cancel setup and select the directory again to review a fresh plan before retrying.",
+        ),
+        error,
+      });
     } finally {
       setLoading(false);
     }
@@ -503,7 +500,13 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       try {
         if (!(await openProjectWithIdentity(selected))) return;
       } catch (error) {
-        showError("Invalid project file", storageErrorMessage(error));
+        showErrorNotification({
+          id: `project-open:${selected}`,
+          title: "Invalid project file",
+          message: "The selected project could not be opened.",
+          details: projectErrorDetails(error),
+          error,
+        });
         logAction("landing_open_project_error", { path: selected, reason: "invalid_file" });
         return;
       }
@@ -531,7 +534,13 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`);
       }
     } catch (error) {
-      showError("Invalid project file", storageErrorMessage(error));
+      showErrorNotification({
+        id: `project-open:${path}`,
+        title: "Invalid project file",
+        message: "The selected project could not be opened.",
+        details: projectErrorDetails(error),
+        error,
+      });
       logAction("landing_open_recent_error", { path });
     } finally {
       setLoading(false);
@@ -548,7 +557,13 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       if (project)
         navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`);
     } catch (error) {
-      showError("Recovery failed", storageErrorMessage(error));
+      showErrorNotification({
+        id: `project-recovery:${recoveryPath}`,
+        title: "Recovery failed",
+        message: "The project backup could not be opened.",
+        details: projectErrorDetails(error),
+        error,
+      });
     } finally {
       setLoading(false);
     }

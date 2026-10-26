@@ -1,7 +1,12 @@
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "./ipc";
+import type {
+  ProjectRuntimeShutdown_Serialize as ProjectRuntimeShutdownResult,
+  ProjectInspection_Serialize as ProjectInspection,
+  ProjectSnapshot_Serialize as ProjectSnapshot,
+} from "../generated/bindings";
+export type { ProjectRuntimeShutdown_Serialize as ProjectRuntimeShutdownResult } from "../generated/bindings";
 import { notifications } from "@mantine/notifications";
-import type { ProjectInspection } from "../generated/project/ProjectInspection";
-import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
+import { error as logError } from "@tauri-apps/plugin-log";
 import { activateProject, readProjectSnapshot } from "./projectPersistence";
 import { clearProcessingListeners, useProcessingStore } from "../stores/processingStore";
 import { clearImportListeners } from "./importEvents";
@@ -19,12 +24,6 @@ import {
   runProjectTransition,
 } from "./projectLifecycle";
 
-export interface ProjectRuntimeShutdownResult {
-  success: boolean;
-  importProcess: { success: boolean; error?: string };
-  processingWorkers: { success: boolean; error?: string };
-  lockWatcher: { success: boolean; error?: string };
-}
 export interface TransitionDependencies {
   shutdownRuntime?: () => Promise<ProjectRuntimeShutdownResult>;
   cleanupListeners?: () => void;
@@ -37,8 +36,7 @@ export interface TransitionDependencies {
   reconcileImportRun?: () => Promise<unknown>;
   reconcileProcessingRun?: () => Promise<unknown>;
 }
-export const shutdownProjectRuntime = () =>
-  invoke<ProjectRuntimeShutdownResult>("shutdown_project_runtime");
+export const shutdownProjectRuntime = () => commands.shutdownProjectRuntime();
 
 function cleanupListeners() {
   clearImportListeners();
@@ -104,6 +102,11 @@ export function transitionProjectRuntime(
         recovery.restoredSubjects.length ||
         recovery.cleanupErrors.length)
     ) {
+      if (recovery.cleanupErrors.length) {
+        void logError(
+          `[PROJECT] Import relocation cleanup failed: ${recovery.cleanupErrors.join("; ")}`,
+        ).catch(() => undefined);
+      }
       notifications.show({
         title: "Import relocation recovery completed",
         color: recovery.cleanupErrors.length ? "orange" : "blue",
@@ -114,7 +117,9 @@ export function transitionProjectRuntime(
           recovery.restoredSubjects.length
             ? `Restored: ${recovery.restoredSubjects.join(", ")}`
             : "",
-          ...recovery.cleanupErrors,
+          recovery.cleanupErrors.length
+            ? "Some import cleanup remains pending. Check project directory access and free space, then reopen the project to retry. Consult the application log if this continues"
+            : "",
         ]
           .filter(Boolean)
           .join(". "),
@@ -142,7 +147,7 @@ export function closeProjectRuntime(dependencies: TransitionDependencies = {}): 
   return runProjectTransition(async () => {
     await settle(dependencies);
     try {
-      await (dependencies.clearActiveProject ?? (() => invoke("clear_active_project")))();
+      await (dependencies.clearActiveProject ?? (() => unwrap(commands.clearActiveProject())))();
     } catch (error) {
       reopenProjectWorkAdmission();
       throw error;

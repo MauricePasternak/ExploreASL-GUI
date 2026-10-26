@@ -140,7 +140,14 @@ fn test_list_subject_reports_and_read_report_image() {
         "axial".to_string(),
     );
     assert!(err.is_err());
-    assert!(err.unwrap_err().contains("Report image not found"));
+    let missing = err.unwrap_err();
+    assert_eq!(missing.message, "The report image could not be opened.");
+    assert!(
+        missing
+            .details
+            .contains("required file or folder could not be found")
+    );
+    assert!(!missing.details.contains("sub-nonexistent"));
 
     let err_view = read_report_image(
         root.to_string_lossy().to_string(),
@@ -150,7 +157,12 @@ fn test_list_subject_reports_and_read_report_image() {
         "sagittal".to_string(),
     );
     assert!(err_view.is_err());
-    assert!(err_view.unwrap_err().contains("Unknown view type"));
+    let unknown_view = err_view.unwrap_err();
+    assert_eq!(
+        unknown_view.message,
+        "The report image could not be opened."
+    );
+    assert!(unknown_view.details.is_empty());
 
     let _ = fs::remove_dir_all(root);
 }

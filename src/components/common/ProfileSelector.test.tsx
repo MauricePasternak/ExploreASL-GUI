@@ -1,5 +1,5 @@
 import { TestMantineProvider as MantineProvider } from "../../test/render";
-import { notifications } from "@mantine/notifications";
+import { showErrorNotification } from "../../lib/errorNotifications";
 import { invoke } from "@tauri-apps/api/core";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -11,6 +11,8 @@ import type { ApptainerProfile } from "../../schemas/executionProfile";
 import { useGlobalStore } from "../../stores/globalStore";
 import { makeMatlabProfile } from "../../test/profileFixtures";
 import ProfileSelector from "./ProfileSelector";
+
+vi.mock("../../lib/errorNotifications", () => ({ showErrorNotification: vi.fn() }));
 
 function renderSelector(props: {
   value: string;
@@ -169,14 +171,44 @@ describe("ProfileSelector", () => {
         "validate_execution_profile",
         expect.objectContaining({ executionProfile: expect.objectContaining({ id: p2.id }) }),
       );
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
-          color: "orange",
+          id: `validate-execution-profile-${p2.id}`,
           title: expect.stringMatching(/invalid/i),
+          message: 'Profile "Invalid" needs attention. Review it in Settings.',
+          details: "MATLAB not found",
         }),
       );
       expect(screen.getByTestId("profile-selector-invalid-warning")).toBeInTheDocument();
     });
+  });
+
+  it("reports failed validation invocations without displaying the raw framework error", async () => {
+    const p1 = makeMatlabProfile({ id: "11111111-1111-4111-8111-111111111111", label: "First" });
+    const p2 = makeMatlabProfile({ id: "22222222-2222-4222-8222-222222222222", label: "Second" });
+    useGlobalStore.setState({
+      settings: { ...DEFAULT_SETTINGS, executionProfiles: [p1, p2] },
+      profileValidationState: {
+        [p1.id]: { valid: true, errors: [] },
+        [p2.id]: { valid: true, errors: [] },
+      },
+    });
+    const error = new Error("internal transport diagnostic");
+    vi.mocked(invoke).mockRejectedValueOnce(error);
+    renderSelector({ value: p1.id, onChange: vi.fn() });
+
+    await userEvent.click(screen.getByRole("combobox", { name: /execution profile/i }));
+    await userEvent.click(await screen.findByTestId(`profile-selector-option-${p2.id}`));
+
+    await waitFor(() => {
+      expect(showErrorNotification).toHaveBeenCalledWith({
+        id: `validate-execution-profile-${p2.id}`,
+        title: "Profile validation failed",
+        message: 'Profile "Second" could not be checked. Try validating it again in Settings.',
+        error,
+      });
+    });
+    expect(screen.queryByText("internal transport diagnostic")).not.toBeInTheDocument();
   });
 
   it("exposes invalid state for parent gating via data attribute", () => {

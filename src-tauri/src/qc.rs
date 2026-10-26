@@ -4,10 +4,10 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 use crate::tracing::CommandTrace;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct QcMeasure {
     pub key: String,
@@ -120,12 +120,13 @@ pub fn extract_qc_measures(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_subject_session_qc(
     project_root: String,
     subject_session: String,
     module: String,
     run: Option<String>,
-) -> Result<Vec<QcMeasure>, String> {
+) -> Result<Vec<QcMeasure>, CommandError> {
     let trace = CommandTrace::new("get_subject_session_qc");
     trace.arg("project_root", &project_root);
     trace.arg("subject_session", &subject_session);
@@ -146,7 +147,7 @@ pub fn get_subject_session_qc(
             format!("No QC collection file found in {}", session_dir.display())
         };
         trace.error(&err);
-        return Err(err);
+        return Err(err.into());
     };
 
     let result = extract_qc_measures(&file_path, &module, run.as_deref());
@@ -157,7 +158,7 @@ pub fn get_subject_session_qc(
     result.into_command_result()
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectQcOutputs {
     pub coverage: Option<f64>,
@@ -284,10 +285,11 @@ pub fn extract_subject_qc_outputs(file_path: &Path) -> AnyResult<SubjectQcOutput
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_all_subjects_qc(
     project_root: String,
     subject_sessions: Vec<String>,
-) -> Result<std::collections::HashMap<String, SubjectQcOutputs>, String> {
+) -> Result<std::collections::HashMap<String, SubjectQcOutputs>, CommandError> {
     let trace = CommandTrace::new("get_all_subjects_qc");
     trace.arg("project_root", &project_root);
     trace.arg("subject_sessions_count", subject_sessions.len().to_string());

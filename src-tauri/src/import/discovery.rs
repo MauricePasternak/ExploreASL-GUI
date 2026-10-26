@@ -1,5 +1,5 @@
 //! DICOM source discovery before staging.
-use crate::tracing::CommandTrace;
+use crate::{error::CommandError, tracing::CommandTrace};
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -13,11 +13,12 @@ use walkdir::WalkDir;
 ///
 /// All paths are returned relative to `root`.
 #[tauri::command]
+#[specta::specta]
 pub fn walk_directory(
     root: String,
     max_depth: u32,
     b_match_directories: bool,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, CommandError> {
     let trace = CommandTrace::new("walk_directory");
     trace.arg("root", &root);
     trace.arg("max_depth", max_depth);
@@ -28,13 +29,13 @@ pub fn walk_directory(
     if !root_path.exists() {
         let err = format!("Directory does not exist: {}", root);
         trace.error(&err);
-        return Err(err);
+        return Err(err.into());
     }
 
     if !root_path.is_dir() {
         let err = format!("Path is not a directory: {}", root);
         trace.error(&err);
-        return Err(err);
+        return Err(err.into());
     }
 
     let walker = WalkDir::new(&root)

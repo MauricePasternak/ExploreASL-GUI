@@ -11,7 +11,7 @@ use crate::app::state::AppState;
 pub const STAGING_DIRECTORY: &str = ".easl_staging";
 pub const MODALITIES: [&str; 6] = ["T1w", "T2w", "ASL4D", "M0", "FLAIR", "WMH_SEGM"];
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct StagingEntry {
     pub subject: String,
@@ -26,7 +26,7 @@ pub struct StagingEntry {
     pub source_path: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, specta::Type)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum StagingIssueCode {
     EmptyComponent,
@@ -51,7 +51,7 @@ pub enum StagingIssueCode {
     DestinationOutsideStaging,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum StagingField {
     Subject,
@@ -63,21 +63,23 @@ pub enum StagingField {
     Destination,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StagingValidationIssue {
     pub code: StagingIssueCode,
     pub field: StagingField,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub entry_index: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub conflicting_entry_index: Option<usize>,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct StagingPreflightResult {
     pub valid: bool,

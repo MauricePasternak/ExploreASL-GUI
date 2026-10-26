@@ -2,6 +2,7 @@
 use crate::tracing::CommandTrace;
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_cpu_cores() -> usize {
     let trace = CommandTrace::new("get_cpu_cores");
     let cores = num_cpus::get_physical();
@@ -10,6 +11,7 @@ pub fn get_cpu_cores() -> usize {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_available_memory_mb() -> u64 {
     let trace = CommandTrace::new("get_available_memory_mb");
     let mb = available_memory_mb_impl();

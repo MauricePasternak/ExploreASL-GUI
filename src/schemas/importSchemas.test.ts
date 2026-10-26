@@ -9,9 +9,6 @@ import {
   ImportProgressSchema,
   ImportRunSnapshotSchema,
   MetadataGroupSchema,
-  ModalityAliasSchema,
-  PathPatternSchema,
-  SessionAliasSchema,
   SourcestructureJsonSchema,
   StagingModalitySchema,
   StagingSubjectSchema,
@@ -19,7 +16,6 @@ import {
   StagingEntrySchema,
   StudyParEntrySchema,
   StudyParJsonSchema,
-  TokenAssignmentSchema,
   validateBidsMetadataGroup,
 } from "./importSchemas";
 
@@ -30,51 +26,6 @@ const stagingVectors = JSON.parse(
   subjects: Array<{ value: string; valid: boolean }>;
   modalities: Array<{ value: string; valid: boolean }>;
 };
-
-// ---------------------------------------------------------------------------
-// PathPatternSchema
-// ---------------------------------------------------------------------------
-describe("PathPatternSchema", () => {
-  it("accepts valid path pattern", () => {
-    const data = {
-      signature: "SUBJECT/FIXED/VARYING",
-      samplePath: "BAR/05022026_01/sernum-0001_ser-AAHead_Scout",
-      blocks: ["BAR", "05022026_01", "sernum-0001_ser-AAHead_Scout"],
-      uniqueNames: {
-        "0": ["BAR", "FOO"],
-        "1": ["05022026_01"],
-        "2": ["sernum-0001_ser-AAHead_Scout", "sernum-0002_ser-AAHead_Scout_MPR_sag"],
-      },
-      count: 34,
-      depth: 3,
-    };
-    expect(PathPatternSchema.parse(data)).toMatchObject(data);
-  });
-
-  it("rejects count < 1", () => {
-    const data = {
-      signature: "A",
-      samplePath: "a",
-      blocks: ["a"],
-      uniqueNames: {},
-      count: 0,
-      depth: 1,
-    };
-    expect(() => PathPatternSchema.parse(data)).toThrow();
-  });
-
-  it("rejects depth < 1", () => {
-    const data = {
-      signature: "A",
-      samplePath: "a",
-      blocks: ["a"],
-      uniqueNames: {},
-      count: 1,
-      depth: 0,
-    };
-    expect(() => PathPatternSchema.parse(data)).toThrow();
-  });
-});
 
 describe("ImportRunSnapshotSchema", () => {
   const snapshot = {
@@ -184,72 +135,6 @@ describe("ImportRunSnapshotSchema", () => {
         subjectOutcomes: [{ ...snapshot.subjectOutcomes[0], committed: true }],
       }).success,
     ).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// TokenAssignmentSchema
-// ---------------------------------------------------------------------------
-describe("TokenAssignmentSchema", () => {
-  it("accepts valid assignment with null subBlockIndex", () => {
-    const data = { blockIndex: 0, subBlockIndex: null, tag: "Subject" };
-    expect(TokenAssignmentSchema.parse(data)).toMatchObject(data);
-  });
-
-  it("accepts valid assignment with numeric subBlockIndex", () => {
-    const data = { blockIndex: 2, subBlockIndex: 1, tag: "Modality" };
-    expect(TokenAssignmentSchema.parse(data)).toMatchObject(data);
-  });
-
-  it("defaults subBlockIndex to null when omitted", () => {
-    const data = { blockIndex: 0, tag: "Subject" };
-    const result = TokenAssignmentSchema.parse(data);
-    expect(result.subBlockIndex).toBeNull();
-  });
-
-  it("rejects invalid tag", () => {
-    const data = { blockIndex: 0, subBlockIndex: null, tag: "InvalidTag" };
-    expect(() => TokenAssignmentSchema.parse(data)).toThrow();
-  });
-
-  it("rejects negative blockIndex", () => {
-    const data = { blockIndex: -1, subBlockIndex: null, tag: "Subject" };
-    expect(() => TokenAssignmentSchema.parse(data)).toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ModalityAliasSchema
-// ---------------------------------------------------------------------------
-describe("ModalityAliasSchema", () => {
-  it("accepts valid modality alias", () => {
-    const data = { captured: "t1_mpr_tra_iso", mapped: "T1w" };
-    expect(ModalityAliasSchema.parse(data)).toEqual(data);
-  });
-
-  it("accepts null mapped (Ignore)", () => {
-    const data = { captured: "PhoenixZIPReport", mapped: null };
-    expect(ModalityAliasSchema.parse(data)).toEqual(data);
-  });
-
-  it("rejects invalid modality name", () => {
-    const data = { captured: "something", mapped: "InvalidModality" };
-    expect(() => ModalityAliasSchema.parse(data)).toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// SessionAliasSchema
-// ---------------------------------------------------------------------------
-describe("SessionAliasSchema", () => {
-  it("accepts valid session alias", () => {
-    const data = { captured: "05022026_01", alias: "ASL_1", index: 1 };
-    expect(SessionAliasSchema.parse(data)).toEqual(data);
-  });
-
-  it("rejects index < 1", () => {
-    const data = { captured: "a", alias: "ASL_0", index: 0 };
-    expect(() => SessionAliasSchema.parse(data)).toThrow();
   });
 });
 

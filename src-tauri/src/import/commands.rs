@@ -12,29 +12,32 @@ use super::types::{
     ImportCommandError, ImportRunSnapshot, ImportStructuredError, ImportSubjectStatus,
 };
 use crate::app::state::AppState;
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 use crate::execution::profile::ExecutionProfile;
 use serde_json::Value;
 use tauri::{AppHandle, Runtime, State};
 
 #[tauri::command]
+#[specta::specta]
 pub fn preflight_staging_plan(
     state: State<'_, AppState>,
     staging_entries: Vec<StagingEntry>,
-) -> Result<StagingPreflightResult, String> {
+) -> Result<StagingPreflightResult, CommandError> {
     Ok(preflight_staging_plan_for_state(&state, &staging_entries))
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn plan_import_relocation(
     state: State<'_, AppState>,
     subject_list: Vec<String>,
-) -> Result<RelocationPlan, String> {
+) -> Result<RelocationPlan, CommandError> {
     plan_import_relocation_for_state(&state, &subject_list).into_command_result()
 }
 
 /// Admission only.  This persists Preparing before any staging filesystem work.
 #[tauri::command]
+#[specta::specta]
 pub fn reserve_import_run(
     state: State<'_, AppState>,
     subject_list: Vec<String>,
@@ -42,7 +45,7 @@ pub fn reserve_import_run(
     profile_id: String,
     subjects_to_preserve: Option<Vec<String>>,
     preserve_staging: bool,
-) -> Result<ImportRunSnapshot, String> {
+) -> Result<ImportRunSnapshot, CommandError> {
     reserve_import_run_for_state(
         &state,
         subject_list,
@@ -51,26 +54,29 @@ pub fn reserve_import_run(
         subjects_to_preserve.unwrap_or_default(),
         preserve_staging,
     )
-    .into_command_result()
+    .map_err(|error| CommandError::from_error(&error, "Import could not be prepared."))
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_active_import_run(
     state: State<'_, AppState>,
-) -> Result<Option<ImportRunSnapshot>, String> {
+) -> Result<Option<ImportRunSnapshot>, CommandError> {
     get_active_import_run_for_state(&state).into_command_result()
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn attach_import_run(
     state: State<'_, AppState>,
     run_id: String,
-) -> Result<ImportRunSnapshot, String> {
+) -> Result<ImportRunSnapshot, CommandError> {
     attach_import_run_for_state(&state, &run_id).into_command_result()
 }
 
 /// Launch is exact-run scoped.  It returns a snapshot, never a PID.
 #[tauri::command]
+#[specta::specta]
 #[allow(clippy::too_many_arguments)]
 pub fn launch_import_run<R: Runtime>(
     app: AppHandle<R>,
@@ -124,7 +130,7 @@ pub(super) fn settle_launch_result(
                     message: format!("{error}"),
                     subject: None,
                     staging_issues: match &error {
-                        ImportCommandError::Preflight { issues } => Some(issues.clone()),
+                        ImportCommandError::Preflight { issues, .. } => Some(issues.clone()),
                         ImportCommandError::Operational { .. } => None,
                     },
                 },
@@ -138,27 +144,36 @@ pub(super) fn settle_launch_result(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cancel_import_run(
     state: State<'_, AppState>,
     run_id: String,
-) -> Result<ImportRunSnapshot, String> {
-    stop_import_run_for_state(&state, &run_id)
+) -> Result<ImportRunSnapshot, CommandError> {
+    stop_import_run_for_state(&state, &run_id).into_command_result()
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn confirm_import_worker_stopped(
     state: State<'_, AppState>,
     run_id: String,
-) -> Result<ImportRunSnapshot, String> {
+) -> Result<ImportRunSnapshot, CommandError> {
     confirm_import_worker_stopped_for_state(&state, &run_id).into_command_result()
 }
 
 #[tauri::command]
-pub fn acknowledge_import_run(state: State<'_, AppState>, run_id: String) -> Result<(), String> {
+#[specta::specta]
+pub fn acknowledge_import_run(
+    state: State<'_, AppState>,
+    run_id: String,
+) -> Result<(), CommandError> {
     acknowledge_import_run_for_state(&state, &run_id).into_command_result()
 }
 
 #[tauri::command]
-pub fn read_import_status(state: State<'_, AppState>) -> Result<Vec<ImportSubjectStatus>, String> {
+#[specta::specta]
+pub fn read_import_status(
+    state: State<'_, AppState>,
+) -> Result<Vec<ImportSubjectStatus>, CommandError> {
     super::status::read_import_status_for_state(&state).into_command_result()
 }

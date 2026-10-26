@@ -11,6 +11,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { claimStartupUpdateCheck } from "../lib/updateStartup";
 import { cancelImportRun } from "../lib/importEvents";
 import { reconcileImportTerminal } from "../lib/importTerminalCoordinator";
+import { showErrorNotification } from "../lib/errorNotifications";
 
 const UPDATE_AVAILABLE_NOTIFICATION_ID = "application-update-available";
 const UPDATE_PROGRESS_NOTIFICATION_ID = "application-update-progress";
@@ -24,21 +25,6 @@ interface UpdateManagerProps {
 
 function checkEnabled(enabled: boolean | undefined) {
   return enabled ?? (import.meta.env.PROD && import.meta.env.VITE_E2E !== "1");
-}
-
-function updateErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
-}
-
-function showUpdateError(title: string, message: string) {
-  notifications.show({
-    id: UPDATE_ERROR_NOTIFICATION_ID,
-    color: "red",
-    title,
-    message,
-    autoClose: 10_000,
-    position: "bottom-right",
-  });
 }
 
 function activeWork() {
@@ -119,10 +105,12 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
       const { processing, importing } = activeWork();
       if (useProjectStore.getState().isDirty || processing || importing) {
         notifications.hide(UPDATE_PROGRESS_NOTIFICATION_ID);
-        showUpdateError(
-          "Update not installed",
-          "Project changes or active work started while the update downloaded. Finish or save that work, then restart ExploreASL GUI to check again.",
-        );
+        showErrorNotification({
+          id: UPDATE_ERROR_NOTIFICATION_ID,
+          title: "Update not installed",
+          message: "Project changes or active work started while the update downloaded.",
+          details: "Finish or save that work, then restart ExploreASL GUI to check again.",
+        });
         updateIntentRef.current = "idle";
         installationStartedRef.current = false;
         return;
@@ -139,10 +127,14 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
       await availableUpdate.install();
     } catch (error) {
       notifications.hide(UPDATE_PROGRESS_NOTIFICATION_ID);
-      showUpdateError(
-        "Update failed",
-        `Version ${availableUpdate.version} could not be downloaded or installed: ${updateErrorMessage(error, "unknown error")}`,
-      );
+      showErrorNotification({
+        id: UPDATE_ERROR_NOTIFICATION_ID,
+        title: "Update failed",
+        message: `Version ${availableUpdate.version} could not be downloaded or installed.`,
+        details:
+          "Check your connection and free disk space, then restart ExploreASL GUI to check for the update again.",
+        error,
+      });
       updateIntentRef.current = "idle";
       installationStartedRef.current = false;
       return;
@@ -156,10 +148,13 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
       await relaunch();
     } catch (error) {
       notifications.hide(UPDATE_PROGRESS_NOTIFICATION_ID);
-      showUpdateError(
-        "Update installed",
-        `Version ${availableUpdate.version} is installed. Restart ExploreASL GUI to finish: ${updateErrorMessage(error, "restart failed")}`,
-      );
+      showErrorNotification({
+        id: UPDATE_ERROR_NOTIFICATION_ID,
+        title: "Update installed",
+        message: `Version ${availableUpdate.version} is installed, but automatic restart failed.`,
+        details: "Restart ExploreASL GUI manually to finish the update.",
+        error,
+      });
     }
   }, []);
 
@@ -217,10 +212,14 @@ export default function UpdateManager({ enabled }: UpdateManagerProps) {
         );
       }
     } catch (error) {
-      showUpdateError(
-        "Update not started",
-        `Could not safely prepare the application for update: ${updateErrorMessage(error, "unknown error")}`,
-      );
+      showErrorNotification({
+        id: UPDATE_ERROR_NOTIFICATION_ID,
+        title: "Update not started",
+        message: "The application could not safely prepare for the update.",
+        details:
+          "Wait for import finalization to finish, stop any active work, and save project changes before retrying.",
+        error,
+      });
       updateIntentRef.current = "idle";
       preparationStartedRef.current = false;
       setPreparingUpdate(false);

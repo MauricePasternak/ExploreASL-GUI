@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum WriteErrorCategory {
     InvalidSerialization,
@@ -22,14 +22,15 @@ pub enum WriteErrorCategory {
     Recovery,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error, specta::Type)]
 #[error("{message}")]
 pub struct AtomicWriteError {
     pub category: WriteErrorCategory,
     pub message: String,
+    pub details: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct AtomicWriteOutcome {
     pub backup_created: bool,
     pub directory_sync_supported: bool,
@@ -473,6 +474,7 @@ fn error(category: WriteErrorCategory, message: &str) -> AtomicWriteError {
     AtomicWriteError {
         category,
         message: message.to_owned(),
+        details: message.to_owned(),
     }
 }
 

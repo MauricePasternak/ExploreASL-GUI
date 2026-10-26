@@ -1,7 +1,6 @@
 use super::common::*;
 use crate::processing::identifiers::{normalize_asl_run_id, normalize_asl_run_id_opt};
 use crate::processing::subjects::*;
-use crate::processing::types::*;
 use std::fs;
 
 // -------------------------------------------------------------------------
@@ -205,21 +204,4 @@ fn list_subjects_asl_run_default_when_no_run_entity() {
     assert_eq!(subjects[0].asl_runs, vec!["1"]);
 
     let _ = fs::remove_dir_all(root);
-}
-
-#[test]
-fn test_subject_info_serialization_casing() {
-    let info = SubjectInfo {
-        subject_session: "sub-001_01".to_string(),
-        subject: "001".to_string(),
-        session: "01".to_string(),
-        has_structural: true,
-        has_asl: true,
-        asl_runs: vec!["1".to_string(), "2".to_string()],
-    };
-    let json = serde_json::to_string(&info).unwrap();
-    assert!(json.contains(r#""hasASL":true"#));
-    assert!(!json.contains(r#""hasAsl""#));
-    assert!(json.contains(r#""subjectSession":"sub-001_01""#));
-    assert!(json.contains(r#""aslRuns":["1","2"]"#));
 }

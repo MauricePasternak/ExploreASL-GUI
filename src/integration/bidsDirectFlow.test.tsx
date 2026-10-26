@@ -10,7 +10,7 @@ import { useImportStore } from "../stores/importStore";
 import { projectFixture } from "../test/projectFixtures";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 import type { DerivedMetadataGroup, MetadataGroup } from "../schemas/importSchemas";
-import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
+import type { ProjectSnapshot_Serialize as ProjectSnapshot } from "../generated/bindings";
 
 const mockNavigate = vi.fn();
 vi.mock("react-router", async (importOriginal) => {
@@ -142,10 +142,11 @@ describe("BIDS-direct revisit import after confirmation", () => {
       groupId: "g1",
     });
     accepted.document.uiState.import!.skippedSubjects = ["sub-NEW_1"];
+    const { id: fingerprintHash, ...group } = mockGroupWithNewSubject;
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "scan_bids_sidecars") {
         return Promise.resolve({
-          groups: [mockGroupWithNewSubject],
+          groups: [{ ...group, fingerprintHash }],
           skipped: ["sub-NEW_1"],
         });
       }

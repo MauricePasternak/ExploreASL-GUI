@@ -1,5 +1,7 @@
-import { notifications } from "@mantine/notifications";
-import { invoke } from "@tauri-apps/api/core";
+import { showErrorNotification } from "../lib/errorNotifications";
+import { commands, unwrap } from "../lib/ipc";
+import type { ProfileValidationResult_Serialize as ProfileValidationResult } from "../generated/bindings";
+export type { ProfileValidationResult_Serialize as ProfileValidationResult } from "../generated/bindings";
 import { Store } from "@tauri-apps/plugin-store";
 import { create } from "zustand";
 
@@ -10,13 +12,6 @@ import {
   type GlobalSettings,
   RecentProjectsSchema,
 } from "../schemas/globalSettings";
-
-export interface ProfileValidationResult {
-  id: string;
-  valid: boolean;
-  errors: string[];
-  exploreAslVersion?: string;
-}
 
 interface GlobalState {
   settings: GlobalSettings;
@@ -60,6 +55,21 @@ function normalizeTokenSubDelimiters(delimiters: string[]) {
     .filter((delimiter, index, array) => array.indexOf(delimiter) === index);
 
   return normalized.length > 0 ? normalized : DEFAULT_SETTINGS.tokenSubDelimiters;
+}
+
+async function saveDetectedProfileVersions(saveSettings: () => Promise<void>) {
+  try {
+    await saveSettings();
+  } catch (error) {
+    showErrorNotification({
+      id: "execution-profile-version-save",
+      title: "Profile versions not saved",
+      message: "Detected execution-profile versions could not be saved.",
+      details:
+        "Validation completed. Detected versions remain available for this session. Check access to application settings, then save a profile in Settings to retry.",
+      error,
+    });
+  }
 }
 
 export const useGlobalStore = create<GlobalState>((set, get) => ({
@@ -111,20 +121,47 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
       set({ settings: merged });
 
       // Validate all profiles before marking loaded
-      await get().validateAllProfiles();
+      try {
+        await get().validateAllProfiles();
+      } catch (error) {
+        showErrorNotification({
+          id: "startup-profile-validation",
+          title: "Profile validation failed",
+          message:
+            "Execution profiles could not be checked. Review them in Settings before starting work.",
+          error,
+        });
+        // Settings were loaded successfully; a validation failure must not replace
+        // profiles or recent projects with defaults that a later save would persist.
+        set({ loaded: true });
+        return;
+      }
 
       const { settings, profileValidationState } = get();
-      for (const profile of settings.executionProfiles) {
-        const validation = profileValidationState[profile.id];
-        if (validation && !validation.valid) {
-          const errorSummary = validation.errors.join("; ") || "Unknown error";
-          notifications.show({
-            color: "red",
-            title: "Invalid execution profile",
-            message: `Profile '${profile.label}' is invalid: ${errorSummary}. Fix it in Settings.`,
-            autoClose: 10000,
-          });
-        }
+      const invalidProfiles = settings.executionProfiles.filter(
+        (profile) => profileValidationState[profile.id]?.valid === false,
+      );
+      if (invalidProfiles.length > 0) {
+        showErrorNotification({
+          id: "startup-invalid-execution-profiles",
+          title:
+            invalidProfiles.length === 1
+              ? "Invalid execution profile"
+              : "Invalid execution profiles",
+          message:
+            invalidProfiles.length === 1
+              ? `Profile "${invalidProfiles[0].label}" needs attention. Review it in Settings.`
+              : `${invalidProfiles.length} execution profiles need attention. Review them in Settings.`,
+          details: invalidProfiles
+            .map((profile) => {
+              const explanations = profileValidationState[profile.id].errors;
+              if (invalidProfiles.length === 1 && explanations.length === 0) return "";
+              return [profile.label, ...explanations.map((explanation) => `• ${explanation}`)].join(
+                "\n",
+              );
+            })
+            .join("\n\n"),
+        });
       }
 
       set({ loaded: true });
@@ -211,13 +248,7 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
   },
 
   validateProfile: async (profile, validationResult) => {
-    const result =
-      validationResult ??
-      ((await invoke("validate_execution_profile", {
-        executionProfile: profile,
-      })) as ProfileValidationResult | null);
-
-    if (!result) return;
+    const result = validationResult ?? (await unwrap(commands.validateExecutionProfile(profile)));
 
     let versionChanged = false;
 
@@ -256,18 +287,14 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     });
 
     if (versionChanged) {
-      await get().saveSettings();
+      await saveDetectedProfileVersions(get().saveSettings);
     }
   },
 
   validateAllProfiles: async () => {
     const profiles = get().settings.executionProfiles;
 
-    const results = (await invoke("validate_all_execution_profiles", {
-      executionProfiles: profiles,
-    })) as ProfileValidationResult[] | null;
-
-    if (!results) return;
+    const results = await unwrap(commands.validateAllExecutionProfiles(profiles));
 
     // Index results by id, keeping only those that correspond to a known profile.
     const resultsById = new Map<string, ProfileValidationResult>();
@@ -321,7 +348,7 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     });
 
     if (versionChanged) {
-      await get().saveSettings();
+      await saveDetectedProfileVersions(get().saveSettings);
     }
   },
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "./ipc";
 
 export const LogFileInfoSchema = z.object({
   filename: z.string(),
@@ -13,10 +13,8 @@ export const LogFileInfoSchema = z.object({
   hasError: z.boolean(),
 });
 
-export const LogContentSchema = z.record(z.string(), z.string());
-
 export type LogFileInfo = z.infer<typeof LogFileInfoSchema>;
-export type LogContent = z.infer<typeof LogContentSchema>;
+export type LogContent = Record<string, string>;
 
 /** ExploreASL import log filenames use a `sub-` prefix; GUI subject rows do not. */
 export function importLogSubjectKey(subject: string): string {
@@ -28,10 +26,7 @@ export function importLogSubjectFromSession(subjectSession: string): string {
 }
 
 export async function fetchModuleLogs(projectRoot: string): Promise<LogFileInfo[]> {
-  const raw = await invoke<unknown[]>("list_module_logs", { projectRoot });
-  if (!Array.isArray(raw)) {
-    return [];
-  }
+  const raw = await unwrap(commands.listModuleLogs(projectRoot));
   return raw.map((item) => LogFileInfoSchema.parse(item));
 }
 
@@ -40,10 +35,5 @@ export async function fetchLogContent(
   subjectSession: string,
   module: "structural" | "asl" | "import" | "population",
 ): Promise<LogContent> {
-  const raw = await invoke<Record<string, string>>("read_module_logs", {
-    projectRoot,
-    subjectSession,
-    module,
-  });
-  return LogContentSchema.parse(raw);
+  return unwrap(commands.readModuleLogs(projectRoot, subjectSession, module));
 }

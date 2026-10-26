@@ -5,9 +5,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSummary {
     pub schema_version: String,
@@ -17,18 +16,20 @@ pub struct ProjectSummary {
     pub content_hash: String,
 }
 
-#[derive(Debug, Clone, Serialize, thiserror::Error, TS)]
+#[derive(Debug, Clone, Serialize, thiserror::Error, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProjectParseError {
     #[error("Project configuration is malformed: {message}")]
-    Malformed { message: String },
+    Malformed { message: String, details: String },
     #[error("Project schema is not supported: {message}")]
-    Unsupported { message: String },
+    Unsupported { message: String, details: String },
 }
 
 fn malformed(message: impl Into<String>) -> ProjectParseError {
+    let message = message.into();
     ProjectParseError::Malformed {
-        message: message.into(),
+        details: message.clone(),
+        message,
     }
 }
 
@@ -43,11 +44,14 @@ pub fn parse_document(bytes: &[u8]) -> Result<ProjectDocument, ProjectParseError
         Some(serde_json::Value::Number(version)) if version.is_i64() || version.is_u64() => {
             return Err(ProjectParseError::Unsupported {
                 message: format!("Schema version {version}; create a project with this build"),
+                details: format!("Schema version {version}; create a project with this build"),
             });
         }
         None if object.contains_key("version") => {
             return Err(ProjectParseError::Unsupported {
                 message: "Legacy application-version envelope; create a project with this build"
+                    .into(),
+                details: "Legacy application-version envelope; create a project with this build"
                     .into(),
             });
         }

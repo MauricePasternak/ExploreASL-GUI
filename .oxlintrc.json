@@ -51,6 +51,18 @@
         "no-nonoctal-decimal-escape": "error",
         "no-obj-calls": "off",
         "no-prototype-builtins": "error",
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@tauri-apps/api/core",
+                "importNames": ["invoke"],
+                "message": "Use generated commands from src/lib/ipc instead of untyped invoke."
+              }
+            ]
+          }
+        ],
         "no-redeclare": "off",
         "no-regex-spaces": "error",
         "no-self-assign": "error",
@@ -118,6 +130,14 @@
       "files": ["**/*.test.{ts,tsx}", "**/test/**", "**/e2e-tests/**"],
       "rules": {
         "react/rules-of-hooks": "off",
+        "no-restricted-imports": "off",
+        "typescript/no-explicit-any": "off"
+      }
+    },
+    {
+      "files": ["src/generated/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": "off",
         "typescript/no-explicit-any": "off"
       }
     }

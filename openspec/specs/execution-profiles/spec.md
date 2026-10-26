@@ -153,11 +153,13 @@ Profile validation SHALL occur at four points in the application lifecycle. The 
 **Validation triggers:**
 
 1. **On profile save** (blocking, <500ms): The frontend SHALL call `invoke("validate_execution_profile", { executionProfile })` before persisting. This is a fast operation — checks `matlabPath` is an executable file, `exploreAslPath` contains `ExploreASL.m`, and reads `exploreAslVersion` from VERSION file. No MATLAB process spawn. If `valid: false`, the save is blocked and errors are shown inline. If `valid: true`, the profile is persisted and `profileValidationState[id].valid` is set to `true`.
-2. **On app startup** (blocking): After `loadSettings()`, the frontend SHALL call `invoke("validate_all_execution_profiles", { executionProfiles })` for all profiles. Results populate `profileValidationState`. Any profile whose returned `explore_asl_version` differs from the stored value SHALL be updated and persisted. A notification SHALL be shown listing invalid profiles.
+2. **On app startup** (blocking): After `loadSettings()`, the frontend SHALL call `invoke("validate_all_execution_profiles", { executionProfiles })` for all profiles. Results populate `profileValidationState`. Any profile whose returned `explore_asl_version` differs from the stored value SHALL be updated and persisted. One persistent error notification SHALL summarize invalid profiles, with human-facing explanations grouped by profile in its details modal rather than concatenated into the notification body.
 3. **On profile switch** (non-blocking): When the user selects a different profile in a ProfileSelector dropdown, the frontend SHALL call `invoke("validate_execution_profile", { executionProfile })`. If invalid, a warning is shown and the Start button is disabled.
 4. **During preparation phase** (blocking): `launch_import_run` and `run_pipeline` SHALL validate the admitted profile natively before any destructive operations. If validation fails, the admitted run SHALL return an authoritative failure and no destructive operations SHALL occur. Launch-time probes SHALL use cancellable native process scopes; UI-facing validation and launch validation SHALL enforce the same profile validity rules.
 
 Each profile save SHALL perform one native validation. Profile persistence, detected version, and `profileValidationState` refresh SHALL reuse that save's result without a second validation invocation. Startup, profile-switch, and native preparation validation SHALL remain independent triggers.
+
+UI-facing validation `errors` SHALL contain human-readable explanations and next steps, not raw process output or full error chains. The original failures SHALL be logged through the existing native logger before conversion. Unknown external tool failures SHALL receive honest operation-specific guidance rather than inferred causes from arbitrary stderr. Existing inline validation and execution gating SHALL remain in place. Profile-switch failure notifications SHALL use the shared persistent error presenter with profile-specific identity.
 
 #### Scenario: Valid profile on save
 
@@ -182,12 +184,22 @@ Each profile save SHALL perform one native validation. Profile persistence, dete
 #### Scenario: Startup validation finds invalid profile
 
 - **WHEN** the app starts and profile "R2024b" has `matlabPath` pointing to an uninstalled MATLAB
-- **THEN** `profileValidationState["<id>"].valid` is `false`, `errors` contains "MATLAB executable not found", a notification is shown: "Profile 'R2024b' is invalid: MATLAB executable not found"
+- **THEN** `profileValidationState["<id>"].valid` is `false`, `errors` contains human-readable MATLAB configuration guidance, and one persistent notification states that profile "R2024b" needs attention in Settings, with its explanation available through "See details"
+
+#### Scenario: Startup validation finds multiple invalid profiles
+
+- **WHEN** startup validation finds more than one invalid profile
+- **THEN** one notification SHALL summarize the invalid-profile count and its details SHALL list each invalid profile with its own explanations, excluding valid profiles
 
 #### Scenario: Startup validation all profiles valid
 
 - **WHEN** the app starts and all profiles have valid paths
 - **THEN** all `profileValidationState` entries have `valid: true`, no notification is shown
+
+#### Scenario: Startup validation command fails
+
+- **WHEN** settings load successfully but execution-profile validation fails
+- **THEN** the loaded settings SHALL remain intact, startup SHALL finish with a human-facing error notification, and later settings saves SHALL NOT replace the loaded profiles or recent projects with defaults
 
 #### Scenario: Startup re-detects version change
 

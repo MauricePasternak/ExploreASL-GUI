@@ -354,7 +354,10 @@ describe("BIDSReviewPanel", () => {
     let release!: () => void;
     let reject!: (error: Error) => void;
     vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "scan_bids_sidecars") return { groups: [MOCK_GROUP], skipped: [] };
+      if (command === "scan_bids_sidecars") {
+        const { id: fingerprintHash, ...group } = MOCK_GROUP;
+        return { groups: [{ ...group, fingerprintHash }], skipped: [] };
+      }
       if (command === "accept_project_edit") {
         await new Promise<void>((resolve, fail) => {
           release = resolve;

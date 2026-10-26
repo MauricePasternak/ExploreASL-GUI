@@ -23,6 +23,7 @@ import {
   setupImportListeners,
 } from "./importEvents";
 import { useImportStore } from "../stores/importStore";
+import { processingProfile } from "../test/processingFixtures";
 import { activateProjectLease, resetProjectLifecycleForTests } from "./projectLifecycle";
 
 const snapshot = (
@@ -72,6 +73,23 @@ describe("import run protocol", () => {
   it("rejects malformed snapshot wire data", async () => {
     invoke.mockResolvedValue({ ...snapshot(), pid: 4 });
     await expect(attachImportRun("import-run-1")).rejects.toThrow();
+  });
+  it("rejects non-JSON import documents before invoking native launch", async () => {
+    const params = {
+      runId: "import-run-1",
+      stagingEntries: [],
+      sourcestructureJson: {},
+      studyparJson: {},
+      executionProfile: processingProfile,
+      subjectList: ["ONE"],
+      relocationPlanId: "plan",
+    };
+    for (const field of ["sourcestructureJson", "studyparJson"] as const) {
+      await expect(
+        launchImportRun({ ...params, [field]: { invalid: undefined } }),
+      ).rejects.toThrow();
+    }
+    expect(invoke).not.toHaveBeenCalled();
   });
   it("confirms only the exact interrupted import run", async () => {
     invoke.mockResolvedValue({

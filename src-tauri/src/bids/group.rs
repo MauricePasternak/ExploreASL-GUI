@@ -15,14 +15,14 @@ use crate::bids::vendor::{
     normalize_pulse_sequence_for_fingerprint, suggest_label,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupSubject {
     pub subject_label: String,
     pub session_labels: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SidecarGroup {
     pub fingerprint_hash: String,
@@ -34,7 +34,7 @@ pub struct SidecarGroup {
     pub subjects: Vec<GroupSubject>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct BidsSidecarScan {
     pub groups: Vec<SidecarGroup>,

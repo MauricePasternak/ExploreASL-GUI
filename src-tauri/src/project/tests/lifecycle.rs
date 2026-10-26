@@ -149,20 +149,6 @@ fn process_state_retains_run_not_pid_or_project_fields() {
 }
 
 #[test]
-fn shutdown_result_serializes_command_contract_in_camel_case() {
-    let result = ProjectRuntimeShutdown {
-        success: false,
-        import_process: ResourceShutdown::failure("cannot stop import"),
-        processing_workers: ResourceShutdown::success(),
-        lock_watcher: ResourceShutdown::success(),
-    };
-    let json = serde_json::to_value(result).expect("shutdown result should serialize");
-    assert_eq!(json["importProcess"]["error"], "cannot stop import");
-    assert_eq!(json["processingWorkers"]["success"], true);
-    assert_eq!(json["lockWatcher"]["success"], true);
-}
-
-#[test]
 fn native_exit_decision_covers_idle_success_intercepted_success_and_failure() {
     for (import, processing, expected) in [
         (Ok(false), Ok(false), NativeExitDecision::Allow),

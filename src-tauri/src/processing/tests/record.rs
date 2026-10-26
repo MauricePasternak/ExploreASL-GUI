@@ -191,7 +191,9 @@ fn activation_marks_absent_processing_owner_interrupted_and_blocks_admission() {
             false,
         )
         .unwrap_err();
-        assert!(error.contains("Processing runtime"), "{error}");
+        assert!(crate::project::ownership::ensure_processing_released(&state).is_err());
+        assert_eq!(error.message, "Import could not be prepared.");
+        assert!(error.details.is_empty());
     }
 }
 
@@ -1055,7 +1057,9 @@ fn durable_processing_terminal_survives_shutdown_and_blocks_setup_import_until_e
         false,
     )
     .unwrap_err();
-    assert!(error.contains("Processing runtime"), "{error}");
+    assert!(crate::project::ownership::ensure_processing_released(&state).is_err());
+    assert_eq!(error.message, "Import could not be prepared.");
+    assert!(error.details.is_empty());
     assert!(
         crate::processing::acknowledge_processing_run(
             app.state(),
@@ -1068,6 +1072,7 @@ fn durable_processing_terminal_survives_shutdown_and_blocks_setup_import_until_e
     crate::processing::acknowledge_processing_run(app.state(), terminal.run_id, terminal.revision)
         .unwrap();
     assert!(crate::project::ownership::for_setup(&state, temp.path()).is_ok());
+    assert!(crate::project::ownership::ensure_processing_released(&state).is_ok());
     // Once processing releases authority, import reaches its own plan validation.
     let error = crate::import::reserve_import_run(
         app.state(),
@@ -1078,7 +1083,8 @@ fn durable_processing_terminal_survives_shutdown_and_blocks_setup_import_until_e
         false,
     )
     .unwrap_err();
-    assert!(!error.contains("Processing runtime"), "{error}");
+    assert_eq!(error.message, "Import could not be prepared.");
+    assert!(error.details.is_empty());
 }
 
 #[test]

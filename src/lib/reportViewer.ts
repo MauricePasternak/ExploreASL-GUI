@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { invoke } from "@tauri-apps/api/core";
+import type { QcMeasure } from "../generated/bindings";
+import { commands, unwrap } from "./ipc";
+
+export type { QcMeasure } from "../generated/bindings";
 
 export const ReportFileInfoSchema = z.object({
   module: z.enum(["structural", "asl", "m0"]),
@@ -14,10 +17,7 @@ export const ReportFileInfoSchema = z.object({
 export type ReportFileInfo = z.infer<typeof ReportFileInfoSchema>;
 
 export async function fetchSubjectReports(projectRoot: string): Promise<ReportFileInfo[]> {
-  const raw = await invoke<unknown[]>("list_subject_reports", { projectRoot });
-  if (!Array.isArray(raw)) {
-    return [];
-  }
+  const raw = await unwrap(commands.listSubjectReports(projectRoot));
   return raw.map((item) => ReportFileInfoSchema.parse(item));
 }
 
@@ -28,22 +28,11 @@ export async function fetchReportImage(
   run: string | undefined,
   viewType: "axial" | "coronal",
 ): Promise<Uint8Array> {
-  const bytes = await invoke<number[]>("read_report_image", {
-    projectRoot,
-    subjectSession,
-    module,
-    run: run ?? null,
-    viewType,
-  });
+  const bytes = await unwrap(
+    commands.readReportImage(projectRoot, subjectSession, module, run ?? null, viewType),
+  );
   return new Uint8Array(bytes);
 }
-
-export const QcMeasureSchema = z.object({
-  key: z.string(),
-  value: z.string(),
-});
-
-export type QcMeasure = z.infer<typeof QcMeasureSchema>;
 
 export async function fetchSubjectQC(
   projectRoot: string,
@@ -51,14 +40,5 @@ export async function fetchSubjectQC(
   module: "structural" | "asl",
   run: string | undefined,
 ): Promise<QcMeasure[]> {
-  const raw = await invoke<unknown[]>("get_subject_session_qc", {
-    projectRoot,
-    subjectSession,
-    module,
-    run: run ?? null,
-  });
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  return raw.map((item) => QcMeasureSchema.parse(item));
+  return unwrap(commands.getSubjectSessionQc(projectRoot, subjectSession, module, run ?? null));
 }

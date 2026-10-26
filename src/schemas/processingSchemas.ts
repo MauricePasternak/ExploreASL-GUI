@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SubjectModuleStatus_Serialize } from "../generated/bindings";
 import { ExecutionProfileSchema } from "./executionProfile";
 
 // ---------------------------------------------------------------------------
@@ -22,26 +23,6 @@ export const SUBJECT_MODULE_STATUSES = ["pending", "incomplete", "complete", "ou
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
-
-export const ProcessConfigSchema = z.object({
-  subjects: z.array(z.string()),
-  modules: z.array(z.enum(PROCESSING_MODULES)),
-  selectedProfileId: z.string(),
-  workers: z.number().int().min(1),
-  rerunBids2Legacy: z.boolean().optional(),
-});
-
-export const SubjectModuleStatusSchema = z.object({
-  subjectSession: z.string().optional().default(""),
-  module: z.enum(PROCESSING_MODULES),
-  run: z.string().optional(),
-  status: z.enum(SUBJECT_MODULE_STATUSES),
-  completedSteps: z.array(z.string()),
-  locked: z.boolean(),
-  bids2legacyExists: z.boolean().optional(),
-});
-
-export const ProcessingPhaseSchema = z.enum(PROCESSING_PHASES);
 
 /** Native lifecycle. `idle` exists only in renderer runtime state. */
 export const ProcessingLifecycleSchema = z.enum([
@@ -77,7 +58,7 @@ export const ProcessingRequestSchema = z
     selectedModules: z.array(z.enum(PROCESSING_MODULES)).min(1),
     selectedSubjectSessions: z.array(z.string()),
     executionProfile: ExecutionProfileSchema,
-    dataPar: z.record(z.string(), z.unknown()),
+    dataPar: z.record(z.string(), z.json()),
     participants: z
       .object({
         correction: z.boolean(),
@@ -189,34 +170,27 @@ export const StatusFileCreatedPayloadSchema = RunCorrelatedEventBaseSchema.exten
 }).strict();
 export const LockCreatedPayloadSchema = RunCorrelatedEventBaseSchema.strict();
 export const LockRemovedPayloadSchema = RunCorrelatedEventBaseSchema.strict();
-export const SubjectInfoSchema = z.object({
-  subjectSession: z.string(),
-  subject: z.string(),
-  session: z.string(),
-  hasStructural: z.boolean(),
-  hasASL: z.boolean(),
-  aslRuns: z.array(z.string()).optional().default([]),
-});
-
-export const LockFileEventSchema = z.discriminatedUnion("type", [
-  StatusFileCreatedPayloadSchema.extend({
-    type: z.literal("StatusFileCreated"),
-  }),
-  LockCreatedPayloadSchema.extend({
-    type: z.literal("LockCreated"),
-  }),
-  LockRemovedPayloadSchema.extend({
-    type: z.literal("LockRemoved"),
-  }),
-]);
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type ProcessConfig = z.infer<typeof ProcessConfigSchema>;
-export type SubjectModuleStatus = z.infer<typeof SubjectModuleStatusSchema>;
-export type ProcessingPhase = z.infer<typeof ProcessingPhaseSchema>;
+export type {
+  ProcessingConfig_Serialize as ProcessConfig,
+  SubjectInfo,
+} from "../generated/bindings";
+
+/** Renderer-normalized lock status, not the raw native response. */
+export type SubjectModuleStatus = Omit<
+  SubjectModuleStatus_Serialize,
+  "module" | "run" | "status" | "bids2legacyExists"
+> & {
+  module: (typeof PROCESSING_MODULES)[number];
+  run?: string;
+  status: (typeof SUBJECT_MODULE_STATUSES)[number];
+  bids2legacyExists?: boolean;
+};
+export type ProcessingPhase = (typeof PROCESSING_PHASES)[number];
 export type ProcessingLifecycle = z.infer<typeof ProcessingLifecycleSchema>;
 export type ProcessingTerminalResult = z.infer<typeof ProcessingTerminalResultSchema>;
 export type ProcessingRequest = z.infer<typeof ProcessingRequestSchema>;
@@ -227,25 +201,3 @@ export type ProcessingLifecycleSnapshot = z.infer<typeof ProcessingLifecycleSnap
 export type StatusFileCreatedPayload = z.infer<typeof StatusFileCreatedPayloadSchema>;
 export type LockCreatedPayload = z.infer<typeof LockCreatedPayloadSchema>;
 export type LockRemovedPayload = z.infer<typeof LockRemovedPayloadSchema>;
-export type SubjectInfo = z.infer<typeof SubjectInfoSchema>;
-export type LockFileEvent = z.infer<typeof LockFileEventSchema>;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const MODULE_INDEX_MAP: Record<(typeof PROCESSING_MODULES)[number], number> = {
-  structural: 0,
-  asl: 1,
-  population: 2,
-};
-
-export function modulesToBProcess(modules: string[]): boolean[] {
-  const result: boolean[] = Array(PROCESSING_MODULES.length).fill(false);
-  for (const mod of modules) {
-    if (mod in MODULE_INDEX_MAP) {
-      result[MODULE_INDEX_MAP[mod as keyof typeof MODULE_INDEX_MAP]] = true;
-    }
-  }
-  return result;
-}

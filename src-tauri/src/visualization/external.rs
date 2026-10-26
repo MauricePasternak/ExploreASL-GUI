@@ -8,9 +8,9 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use super::data::{infer_type, is_missing_value};
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalColumnMetadata {
     pub name: String,
@@ -19,10 +19,11 @@ pub struct ExternalColumnMetadata {
     pub is_identifier: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDataInspection {
     pub columns: Vec<ExternalColumnMetadata>,
+    #[specta(type = specta_typescript::Number)]
     pub row_count: usize,
     pub file_hash: String,
     pub sheet_name: Option<String>,
@@ -200,11 +201,12 @@ fn parse_external_xlsx(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn inspect_external_data(
     absolute_path: String,
     sheet_name: Option<String>,
     delimiter: Option<String>,
-) -> Result<ExternalDataInspection, String> {
+) -> Result<ExternalDataInspection, CommandError> {
     inspect_external_data_impl(absolute_path, sheet_name, delimiter).into_command_result()
 }
 
@@ -291,15 +293,17 @@ pub(super) fn parse_external_xlsx_rows(
     Ok(rows)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FileStats {
     pub mtime: String,
+    #[specta(type = specta_typescript::Number)]
     pub size: u64,
 }
 
 #[tauri::command]
-pub async fn stat_file(path: String) -> Result<FileStats, String> {
+#[specta::specta]
+pub async fn stat_file(path: String) -> Result<FileStats, CommandError> {
     (|| -> AnyResult<FileStats> {
         let meta = std::fs::metadata(&path)?;
         let mtime = meta

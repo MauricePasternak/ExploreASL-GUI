@@ -1,7 +1,8 @@
 import { Alert, Badge, Stack } from "@mantine/core";
 import { IconCheck, IconAlertTriangle } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../../lib/ipc";
+import type { SanityCheckResult as SanityResult } from "../../generated/bindings";
 
 import { useProjectStore } from "../../stores/projectStore";
 import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
@@ -14,13 +15,6 @@ interface SanityChecksProps {
   sheetName: string | null;
   delimiter: string;
   qcbfRowCount: number;
-}
-
-interface SanityResult {
-  overlapCount: number;
-  unmatchedLeftCount: number;
-  leftKeysUnique: boolean;
-  rightKeysUnique: boolean;
 }
 
 export default function SanityChecks({
@@ -50,15 +44,17 @@ export default function SanityChecks({
     async function runChecks() {
       if (!project) return;
       try {
-        const res = await invoke<SanityResult>("check_join_sanity", {
-          projectRoot: project.projectMeta.rootPath,
-          qcbfRelativePath,
-          externalAbsolutePath,
-          keys,
-          naTokens,
-          sheetName,
-          delimiter: delimiter === "auto" ? null : delimiter,
-        });
+        const res = await unwrap(
+          commands.checkJoinSanity(
+            project.projectMeta.rootPath,
+            qcbfRelativePath,
+            externalAbsolutePath,
+            keys,
+            naTokens,
+            sheetName,
+            delimiter === "auto" ? null : delimiter,
+          ),
+        );
         if (!cancelled && (!lease || isCurrentProjectLease(lease))) {
           setResult(res);
           setError(null);

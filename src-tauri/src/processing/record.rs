@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ProcessingRequest {
     pub request_id: Uuid,
@@ -29,32 +29,32 @@ pub struct ProcessingRequest {
 }
 /// Transient IPC admission context. This path is validated against native
 /// active-project ownership, then excluded from durable request content.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ProcessingAdmission {
     pub project_root: PathBuf,
 }
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ParticipantInputs {
     pub correction: bool,
     pub subject_rows: Vec<ParticipantRow>,
     pub metadata_groups: Vec<ParticipantGroup>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ParticipantRow {
     pub subject: String,
     pub session: String,
     pub group_id: Option<String>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ParticipantGroup {
     pub id: String,
     pub label: String,
 }
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum AvailableAction {
     None,
@@ -63,19 +63,19 @@ pub enum AvailableAction {
     Acknowledge,
     ConfirmStopped,
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ProcessingError {
     pub code: String,
     pub message: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct LogicalWorkerExit {
     pub worker_id: String,
     pub exit_code: i32,
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ExpectedTarget {
     pub module: String,
@@ -109,7 +109,7 @@ impl ExpectedTarget {
         Ok(format!("derivatives/ExploreASL/{path}"))
     }
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ProcessingTerminalSummary {
     pub result: ProcessingTerminalResult,
@@ -466,7 +466,7 @@ const HISTORY_RUNS: &str = "derivatives/ExploreASL_GUI/processing/history/runs";
 // Version 2 replaces unbounded raw project IDs in compact authority.
 const COMPACT_VERSION: u32 = 2;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct HistoricalSummary {
     result: ProcessingTerminalResult,
@@ -480,13 +480,14 @@ pub struct HistoricalSummary {
     error_message: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct HistoricalReplayEnvelope {
     pub version: u32,
     pub project_id_digest: String,
     pub request_id: Uuid,
     pub run_id: Uuid,
+    #[specta(type = specta_typescript::Number)]
     pub terminal_revision: u64,
     pub request_digest: String,
     pub outcome: ProcessingTerminalResult,
@@ -495,7 +496,7 @@ pub struct HistoricalReplayEnvelope {
     pub historical_replay: bool,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ProcessingReservation {
     Current { snapshot: ProcessingRunSnapshot },

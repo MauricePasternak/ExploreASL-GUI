@@ -6,6 +6,7 @@ use super::{
     runs::{attach_run_impl, lock_project_transition, matching_run_for_active_project},
     types::{ProcessingLifecycle, ProcessingRunSnapshot},
 };
+use crate::error::{CommandError, IntoCommandResult};
 use crate::process::{CancellationToken, ProcessScope, cancel_all};
 use crate::{
     app::state::AppState,
@@ -554,17 +555,18 @@ fn pending_cleanup(state: &AppState, run_id: &str, error: &anyhow::Error) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_pipeline<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
     run_id: String,
-) -> Result<ProcessingRunSnapshot, String> {
+) -> Result<ProcessingRunSnapshot, CommandError> {
     let _transition = lock_project_transition(&state)?;
     crate::project::ownership::ensure_not_shutting_down(&state)?;
     reconcile_idle(&state, &run_id).map_err(|e| e.to_string())?;
     let previous = record(&state, &run_id).map_err(|e| e.to_string())?;
     if previous.launch_started || previous.lifecycle != ProcessingLifecycle::Preparing {
-        return attach_run_impl(&state, &run_id);
+        return attach_run_impl(&state, &run_id).into_command_result();
     }
     let snapshot = update(&state, &run_id, |next| {
         next.launch_started = true;
@@ -611,7 +613,9 @@ pub fn run_pipeline<R: Runtime>(
             processing.launch_in_progress = false;
             drop(processing);
             fail(&state, &run_id, "supervisorStart", &error).map_err(|e| e.to_string())?;
-            settle(&state, &run_id).map_err(|e| e.to_string())
+            settle(&state, &run_id)
+                .map_err(|e| e.to_string())
+                .into_command_result()
         }
     }
 }
@@ -719,11 +723,12 @@ pub(crate) fn reap_supervisor(state: &AppState) -> Result<(), String> {
     }
 }
 #[tauri::command]
+#[specta::specta]
 pub fn kill_pipeline<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
     run_id: String,
-) -> Result<ProcessingRunSnapshot, String> {
+) -> Result<ProcessingRunSnapshot, CommandError> {
     // Publish durable cancellation before blocking on the native supervisor.
     reconcile_idle(&state, &run_id).map_err(|e| e.to_string())?;
     let current = record(&state, &run_id).map_err(|e| e.to_string())?;
@@ -766,6 +771,7 @@ pub fn stop_running_processing_for_exit(app: &AppHandle) -> Result<bool, String>
     }
 }
 #[tauri::command]
+#[specta::specta]
 pub fn detect_exploreasl_version(explore_asl_path: String) -> Option<String> {
     get_exploreasl_version(&PathBuf::from(explore_asl_path.trim()))
 }

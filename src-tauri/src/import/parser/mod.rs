@@ -104,7 +104,7 @@ pub fn module_terminated_re() -> &'static Regex {
 // Event types
 // =============================================================================
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ImportStructuredEvent {
     SubjectStart {
@@ -113,6 +113,7 @@ pub enum ImportStructuredEvent {
     },
     SubjectComplete {
         subject: String,
+        #[specta(type = specta_typescript::Number)]
         duration_secs: u64,
     },
     ImportFailed {

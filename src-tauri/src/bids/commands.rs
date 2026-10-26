@@ -1,7 +1,7 @@
 use crate::bids::group::{BidsSidecarScan, group_by_fingerprint};
 use crate::bids::scan::parse_bids_structure;
 use crate::bids::sidecar::discover_metadata;
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 use crate::project::setup::{self, SetupCommandError, SetupCommitResult, SetupMode, SetupPlan};
 use crate::tracing::CommandTrace;
 use anyhow::Result as AnyResult;
@@ -30,9 +30,10 @@ fn verify_active_repair_root(
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct BidsCheckResult {
+    #[specta(type = specta_typescript::Number)]
     pub setup_recovered: usize,
     pub is_bids: bool,
     pub has_dataset_description: bool,
@@ -49,10 +50,11 @@ pub struct BidsCheckResult {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn check_bids_dataset(
     state: tauri::State<'_, crate::app::state::AppState>,
     root_path: String,
-) -> Result<BidsCheckResult, String> {
+) -> Result<BidsCheckResult, CommandError> {
     let trace = CommandTrace::new("check_bids_dataset");
     trace.arg("root_path", &root_path);
 
@@ -215,7 +217,8 @@ pub(crate) fn check_bids_dataset_impl(root: &Path) -> AnyResult<BidsCheckResult>
 // --- scan_bids_sidecars command ---
 
 #[tauri::command]
-pub fn scan_bids_sidecars(root_path: String) -> Result<BidsSidecarScan, String> {
+#[specta::specta]
+pub fn scan_bids_sidecars(root_path: String) -> Result<BidsSidecarScan, CommandError> {
     let trace = CommandTrace::new("scan_bids_sidecars");
     trace.arg("root_path", &root_path);
 
@@ -236,6 +239,7 @@ fn scan_bids_sidecars_impl(root: &Path) -> AnyResult<BidsSidecarScan> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn preflight_bids_project_mutations(
     app: tauri::AppHandle,
     root_path: String,
@@ -255,22 +259,18 @@ pub async fn preflight_bids_project_mutations(
         .map_err(setup::command_error)
     })
     .await
-    .map_err(|error| SetupCommandError::Failed {
-        message: error.to_string(),
-    })?
+    .map_err(|error| SetupCommandError::failed(error.into()))?
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn preflight_bids_setup_repair(
     state: tauri::State<'_, crate::app::state::AppState>,
     root_path: String,
 ) -> Result<SetupPlan, SetupCommandError> {
-    let _transition = state
-        .project_transition
-        .lock()
-        .map_err(|_| SetupCommandError::Failed {
-            message: "Project transition lock was poisoned".into(),
-        })?;
+    let _transition = state.project_transition.lock().map_err(|_| {
+        SetupCommandError::failed(anyhow::anyhow!("Project transition lock was poisoned"))
+    })?;
     verify_active_repair_root(&state, Path::new(&root_path)).map_err(setup::command_error)?;
     let ownership = crate::project::ownership::for_setup(&state, Path::new(&root_path))
         .map_err(anyhow::Error::msg)
@@ -289,6 +289,7 @@ pub fn preflight_bids_setup_repair(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn commit_bids_project_mutations(
     app: tauri::AppHandle,
     plan_id: String,
@@ -296,13 +297,9 @@ pub async fn commit_bids_project_mutations(
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<crate::app::state::AppState>();
-        let _transition =
-            state
-                .project_transition
-                .lock()
-                .map_err(|_| SetupCommandError::Failed {
-                    message: "Project transition lock was poisoned".into(),
-                })?;
+        let _transition = state.project_transition.lock().map_err(|_| {
+            SetupCommandError::failed(anyhow::anyhow!("Project transition lock was poisoned"))
+        })?;
         let mut result =
             setup::commit_for_app_state(&state, &plan_id).map_err(setup::command_error)?;
         crate::project::config::retain_committed(&state, &mut result)
@@ -310,9 +307,7 @@ pub async fn commit_bids_project_mutations(
         Ok(result)
     })
     .await
-    .map_err(|error| SetupCommandError::Failed {
-        message: error.to_string(),
-    })?
+    .map_err(|error| SetupCommandError::failed(error.into()))?
 }
 
 #[cfg(test)]

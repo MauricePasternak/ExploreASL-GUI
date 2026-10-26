@@ -1,14 +1,15 @@
 //! ExploreASL processing log discovery, filename parsing and error detection.
 use super::identifiers::normalize_asl_run_id;
 use super::types::LogFileInfo;
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 use crate::tracing::CommandTrace;
 use anyhow::{Context, Result as AnyResult, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 #[tauri::command]
-pub fn list_module_logs(project_root: String) -> Result<Vec<LogFileInfo>, String> {
+#[specta::specta]
+pub fn list_module_logs(project_root: String) -> Result<Vec<LogFileInfo>, CommandError> {
     list_module_logs_impl(project_root).into_command_result()
 }
 
@@ -200,11 +201,12 @@ pub(crate) fn parse_module_log_file(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn read_module_logs(
     project_root: String,
     subject_session: String,
     module: String,
-) -> Result<std::collections::HashMap<String, String>, String> {
+) -> Result<std::collections::HashMap<String, String>, CommandError> {
     read_module_logs_impl(project_root, subject_session, module).into_command_result()
 }
 

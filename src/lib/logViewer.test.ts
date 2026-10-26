@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  LogContentSchema,
-  LogFileInfoSchema,
-  importLogSubjectFromSession,
-  importLogSubjectKey,
-} from "./logViewer";
+import { LogFileInfoSchema, importLogSubjectFromSession, importLogSubjectKey } from "./logViewer";
 
 describe("LogFileInfoSchema", () => {
   it("parses a structural log entry", () => {
@@ -56,16 +51,6 @@ describe("LogFileInfoSchema", () => {
       hasError: false,
     };
     expect(() => LogFileInfoSchema.parse(input)).toThrow();
-  });
-});
-
-describe("LogContentSchema", () => {
-  it("parses log content map", () => {
-    const input = {
-      "xASL_module_Structural_sub-001_01.log": "Some log content",
-    };
-    const result = LogContentSchema.parse(input);
-    expect(result["xASL_module_Structural_sub-001_01.log"]).toBe("Some log content");
   });
 });
 

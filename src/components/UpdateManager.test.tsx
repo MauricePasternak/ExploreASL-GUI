@@ -13,7 +13,10 @@ import { useImportStore } from "../stores/importStore";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 import { __resetStartupUpdateCheckForTests } from "../lib/updateStartup";
+import { showErrorNotification } from "../lib/errorNotifications";
 import UpdateManager from "./UpdateManager";
+
+vi.mock("../lib/errorNotifications", () => ({ showErrorNotification: vi.fn() }));
 
 type NotificationCall = Parameters<typeof notifications.show>[0];
 
@@ -251,16 +254,40 @@ describe("UpdateManager", () => {
     await openAvailableUpdate();
 
     await waitFor(() =>
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
           id: "application-update-error",
-          color: "red",
-          autoClose: 10_000,
-          position: "bottom-right",
+          title: "Update failed",
+          message: "Version 0.2.0 could not be downloaded or installed.",
+          details: expect.stringContaining("Check your connection"),
+          error: expect.objectContaining({ message: "network lost" }),
         }),
       ),
     );
     expect(relaunch).not.toHaveBeenCalled();
+  });
+
+  it("offers manual restart without exposing the relaunch failure", async () => {
+    const available = update();
+    const restartError = new Error("raw process plugin diagnostic");
+    vi.mocked(check).mockResolvedValue(available as never);
+    vi.mocked(relaunch).mockRejectedValueOnce(restartError);
+    renderManager();
+
+    await waitFor(() => availableNotification());
+    await openAvailableUpdate();
+
+    await waitFor(() =>
+      expect(showErrorNotification).toHaveBeenCalledWith({
+        id: "application-update-error",
+        title: "Update installed",
+        message: "Version 0.2.0 is installed, but automatic restart failed.",
+        details: "Restart ExploreASL GUI manually to finish the update.",
+        error: restartError,
+      }),
+    );
+    expect(available.install).toHaveBeenCalledOnce();
+    expect(notifications.hide).toHaveBeenCalledWith("application-update-progress");
   });
 
   it("keeps the StrictMode-mounted manager live for guarded updates", async () => {
@@ -293,10 +320,44 @@ describe("UpdateManager", () => {
     await userEvent.setup().click(await screen.findByTestId("update-confirmation-confirm"));
 
     await waitFor(() => expect(saveProject).toHaveBeenCalledOnce());
+    expect(showErrorNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "application-update-error",
+        title: "Update not started",
+        message: "The application could not safely prepare for the update.",
+        details: expect.stringContaining("save project changes"),
+        error: expect.objectContaining({ message: "disk full" }),
+      }),
+    );
     expect(available.download).not.toHaveBeenCalled();
     expect(available.install).not.toHaveBeenCalled();
     expect(relaunch).not.toHaveBeenCalled();
   });
+
+  it.each(["finalizing", "cancelling"] as const)(
+    "requires import %s to finish before updating",
+    async (importPhase) => {
+      const available = update();
+      vi.mocked(check).mockResolvedValue(available as never);
+      useImportStore.setState({ importPhase, importRunning: true, activeRunId: "import-run-1" });
+      renderManager();
+
+      await waitFor(() => availableNotification());
+      await openAvailableUpdate();
+      await userEvent.setup().click(await screen.findByTestId("update-confirmation-confirm"));
+
+      expect(showErrorNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "application-update-error",
+          title: "Update not started",
+          details: expect.stringContaining("Wait for import finalization to finish"),
+        }),
+      );
+      expect(invoke).not.toHaveBeenCalledWith("cancel_import_run", expect.anything());
+      expect(available.download).not.toHaveBeenCalled();
+      expect(available.install).not.toHaveBeenCalled();
+    },
+  );
 
   it("does not install when project work changes during download", async () => {
     const available = update();

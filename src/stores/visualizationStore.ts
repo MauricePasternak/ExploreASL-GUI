@@ -1,15 +1,20 @@
 import { create } from "zustand";
-import type { VisualizationConfig } from "../generated/project/VisualizationConfig";
+import type {
+  DataInspection_Serialize as DataInspection,
+  StatsFileInfo,
+  VisualizationConfig_Serialize as VisualizationConfig,
+  QcbfSource,
+  ExternalSource_Serialize as ExternalSource,
+  JoinConfig_Serialize as JoinConfig,
+  Identifiers,
+  AxisAssignment_Serialize as AxisAssignment,
+  DomainFilters_Serialize as DomainFilters,
+} from "../generated/bindings";
+export type { DataInspection_Serialize as DataInspection } from "../generated/bindings";
 import type { ProjectFile } from "../schemas/project";
 import { useProjectStore } from "./projectStore";
 import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 
-import type { QcbfSource } from "../generated/project/QcbfSource";
-import type { ExternalSource } from "../generated/project/ExternalSource";
-import type { JoinConfig } from "../generated/project/JoinConfig";
-import type { Identifiers } from "../generated/project/Identifiers";
-import type { AxisAssignment } from "../generated/project/AxisAssignment";
-import type { DomainFilters } from "../generated/project/DomainFilters";
 export type { ExternalSource, JoinConfig };
 
 export type StepperStage = "selectData" | "columnTypes" | "levelOrdering" | "visualize";
@@ -34,25 +39,9 @@ interface ViewerState {
   errorMessage?: string;
 }
 
-export interface DataInspection {
-  columns: Array<{
-    name: string;
-    originalName: string;
-    source: "qcbf" | "external";
-    units: string;
-    inferredType: string;
-    levels: string[];
-    isIdentifier: boolean;
-  }>;
-  rowCount: number;
-  qcbfRowCount: number;
-  qcbfHash: string;
-  externalHash: string | null;
-}
-
 // Ephemeral fields (not persisted)
 interface EphemeralState {
-  availableFiles: Array<{ fileName: string; relativePath: string; size: number; modified: string }>;
+  availableFiles: StatsFileInfo[];
   inspection: DataInspection | null;
   chartData: ChartPoint[];
   selectedPointId: string | null;

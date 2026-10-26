@@ -1,11 +1,11 @@
 #[test]
 fn public_import_command_surface_has_only_run_scoped_authority() {
-    let source = include_str!("../../app/bootstrap.rs");
+    let source = include_str!("../../bindings.rs");
     let handler = source
-        .split(".invoke_handler")
+        .split("collect_commands![")
         .nth(1)
-        .and_then(|value| value.split(".register_uri_scheme_protocol").next())
-        .expect("Tauri command handler");
+        .and_then(|value| value.split("])").next())
+        .expect("shared Tauri/Specta command collection");
     for command in [
         "reserve_import_run",
         "get_active_import_run",

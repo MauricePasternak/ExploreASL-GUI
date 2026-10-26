@@ -5,14 +5,15 @@ use super::completion::{
 use super::identifiers::normalize_asl_run_id;
 use super::logs::find_asl_runs_from_logs;
 use super::types::{LockCreated, ParsedLockComponents, StatusFileCreated, SubjectModuleStatus};
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 use crate::tracing::CommandTrace;
 use anyhow::{Context, Result as AnyResult};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[tauri::command]
-pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>, String> {
+#[specta::specta]
+pub fn read_lock_status(project_root: String) -> Result<Vec<SubjectModuleStatus>, CommandError> {
     read_lock_status_impl(project_root).into_command_result()
 }
 

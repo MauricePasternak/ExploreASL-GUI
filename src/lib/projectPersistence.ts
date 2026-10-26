@@ -1,22 +1,15 @@
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "./ipc";
 import { error as logError } from "@tauri-apps/plugin-log";
-import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
-import type { ProjectInspection } from "../generated/project/ProjectInspection";
-import type { ProjectEdit } from "../generated/project/ProjectEdit";
+import type {
+  ProjectInspection_Serialize as ProjectInspection,
+  ProjectEdit_Deserialize as ProjectEdit,
+  WriteErrorCategory,
+} from "../generated/bindings";
 import type { RecentProject } from "../schemas/globalSettings";
 
-export type ProjectStorageErrorCategory =
-  | "invalid_serialization"
-  | "permission_denied"
-  | "insufficient_space"
-  | "temporary_write"
-  | "file_flush"
-  | "backup"
-  | "primary_replacement"
-  | "durability_uncertain"
-  | "recovery";
+export type ProjectStorageErrorCategory = WriteErrorCategory;
 
-const PROJECT_STORAGE_ERROR_CATEGORIES: ReadonlySet<string> = new Set([
+const PROJECT_STORAGE_ERROR_CATEGORIES: ReadonlySet<string> = new Set<WriteErrorCategory>([
   "invalid_serialization",
   "permission_denied",
   "insufficient_space",
@@ -63,15 +56,6 @@ export function projectStorageErrorMessage(error: ProjectStorageError) {
 
 function storageError(error: unknown): ProjectStorageError | null {
   if (error instanceof ProjectStorageError) return error;
-  if (typeof error === "string") {
-    try {
-      const parsed: unknown = JSON.parse(error);
-      if (typeof parsed === "object" && parsed !== null) return storageError(parsed);
-    } catch {
-      // Native errors may be plain text rather than serialized objects.
-    }
-    return null;
-  }
   if (typeof error === "object" && error !== null && "category" in error) {
     const { category, message } = error as { category: unknown; message?: unknown };
     if (typeof category === "string" && PROJECT_STORAGE_ERROR_CATEGORIES.has(category)) {
@@ -84,13 +68,17 @@ function storageError(error: unknown): ProjectStorageError | null {
   return null;
 }
 
-export async function projectRequest<T>(
+/** Command name is diagnostics only; generated operation owns its argument/result types. */
+export async function projectRequest<T, E extends { message: string; details: string }>(
   command: string,
-  args?: Record<string, unknown>,
+  operation: () => Promise<{ status: "ok"; data: T } | { status: "error"; error: E }>,
 ): Promise<T> {
   try {
-    return await invoke<T>(command, args);
-  } catch (error) {
+    const result = await operation();
+    if (result.status === "error") throw result.error;
+    return result.data;
+  } catch (failure) {
+    const error = failure instanceof Error && "cause" in failure ? failure.cause : failure;
     const diagnostic =
       error instanceof Error
         ? (error.stack ?? error.message)
@@ -103,12 +91,13 @@ export async function projectRequest<T>(
     if (storage) {
       throw Object.assign(
         new ProjectStorageError(storage.category, projectStorageErrorMessage(storage)),
-        { cause: error },
+        typeof error === "object" && error !== null ? error : {},
+        { message: projectStorageErrorMessage(storage), cause: error },
       );
     }
     // Structured native operation/validation errors already describe the required correction.
     if (typeof error === "object" && error !== null && "message" in error) {
-      throw Object.assign(new Error(String(error.message)), { cause: error });
+      throw Object.assign(new Error(String(error.message)), error, { cause: error });
     }
     const message =
       command === "accept_project_edit"
@@ -121,10 +110,12 @@ export async function projectRequest<T>(
 }
 
 export const inspectProject = (path: string, recents: RecentProject[] = []) =>
-  projectRequest<ProjectInspection>("inspect_project", {
-    path,
-    recents: recents.map(({ path, projectId }) => ({ path, projectId: projectId ?? null })),
-  });
+  projectRequest("inspect_project", () =>
+    commands.inspectProject(
+      path,
+      recents.map(({ path, projectId }) => ({ path, projectId: projectId ?? null })),
+    ),
+  );
 export const activateProject = async (
   candidate: ProjectInspection,
   confirmBackup: boolean,
@@ -132,25 +123,26 @@ export const activateProject = async (
 ) => {
   const candidateId = copied
     ? (
-        await projectRequest<ProjectInspection>("copy_project_candidate", {
-          candidateId: candidate.candidateId,
-          confirmBackup,
-        })
+        await projectRequest("copy_project_candidate", () =>
+          commands.copyProjectCandidate(candidate.candidateId, confirmBackup),
+        )
       ).candidateId
     : candidate.candidateId;
-  return projectRequest<ProjectSnapshot>("activate_project", { candidateId, confirmBackup });
+  return projectRequest("activate_project", () =>
+    commands.activateProject(candidateId, confirmBackup),
+  );
 };
 export const createNativeProject = (
   root: string,
   name: string,
   source: "dicom" | "bids",
   profileId: string,
-) => projectRequest<ProjectInspection>("create_project", { root, name, source, profileId });
+) => projectRequest("create_project", () => commands.createProject(root, name, source, profileId));
 export const currentProjectSnapshot = () =>
-  projectRequest<ProjectSnapshot | null>("current_project_snapshot");
+  projectRequest("current_project_snapshot", () => commands.currentProjectSnapshot());
 export const readProjectSnapshot = (generation: number) =>
-  projectRequest<ProjectSnapshot>("get_project_snapshot", { generation });
+  projectRequest("get_project_snapshot", () => commands.getProjectSnapshot(generation));
 export const acceptProjectEdit = (generation: number, edit: ProjectEdit) =>
-  projectRequest<ProjectSnapshot>("accept_project_edit", { generation, edit });
+  projectRequest("accept_project_edit", () => commands.acceptProjectEdit(generation, edit));
 export const saveNativeProject = (generation: number) =>
-  projectRequest<ProjectSnapshot>("save_project", { generation });
+  projectRequest("save_project", () => commands.saveProject(generation));

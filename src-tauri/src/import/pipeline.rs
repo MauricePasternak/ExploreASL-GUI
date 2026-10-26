@@ -99,7 +99,7 @@ pub(super) fn run_import_pipeline_impl<R: Runtime>(
         }
         let ownership = ownership::active(state).map_err(ImportCommandError::from)?;
         let plan = compile_staging_plan(Some(ownership.root().to_path_buf()), &entries)
-            .map_err(|r| ImportCommandError::Preflight { issues: r.issues })?;
+            .map_err(|r| ImportCommandError::preflight(r.issues))?;
         let reservation = admit_reserved_import_launch(
             state,
             &run_id,

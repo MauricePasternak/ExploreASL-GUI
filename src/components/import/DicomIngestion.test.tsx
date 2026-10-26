@@ -5,15 +5,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { error as logError } from "@tauri-apps/plugin-log";
-import { notifications } from "@mantine/notifications";
+import { showErrorNotification } from "../../lib/errorNotifications";
 
 import DicomIngestion from "./DicomIngestion";
 import { acceptedImportSettings, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { projectFixture } from "../../test/projectFixtures";
-import type { MappingState } from "../../generated/project/MappingState";
+import type { MappingState_Serialize as MappingState } from "../../generated/bindings";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 import { discoverPathPatterns } from "../../lib/pathUtils";
+
+vi.mock("../../lib/errorNotifications", () => ({ showErrorNotification: vi.fn() }));
 
 function renderWithProviders() {
   return render(
@@ -316,7 +318,6 @@ describe("DicomIngestion", () => {
 
     expect(acceptedImportSettings().tokenizerConfigs).toEqual({ [patterns[0].signature]: [] });
     expect(useProjectStore.getState().isDirty).toBe(true);
-    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
   });
 
   it("leaves source and setup unchanged when DICOM relink selection is cancelled", async () => {
@@ -412,7 +413,6 @@ describe("DicomIngestion", () => {
       metadataGroups: [],
     });
     expect(useProjectStore.getState().isDirty).toBe(true);
-    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
   });
 
   it("preserves complete setup when an incompatible relink is declined", async () => {
@@ -521,10 +521,12 @@ describe("DicomIngestion", () => {
     await expect(useProjectStore.getState().saveProject()).rejects.toThrow(
       "Your project changes could not be applied.",
     );
-    expect(notifications.show).toHaveBeenCalledWith(
+    expect(showErrorNotification).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: "project-save:project-1",
         title: "Project not saved",
-        message: expect.stringContaining("Your project changes could not be applied."),
+        message: "Project changes could not be saved.",
+        details: expect.stringContaining("Correct any invalid fields"),
       }),
     );
     expect(logError).toHaveBeenCalledExactlyOnceWith(

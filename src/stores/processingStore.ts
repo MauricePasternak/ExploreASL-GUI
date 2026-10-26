@@ -9,7 +9,7 @@ import {
   type SubjectModuleStatus,
 } from "../schemas/processingSchemas";
 import { useProjectStore } from "./projectStore";
-import type { ProcessingConfig as ProcessConfig } from "../generated/project/ProcessingConfig";
+import type { ProcessingConfig_Serialize as ProcessConfig } from "../generated/bindings";
 import { useGlobalStore } from "./globalStore";
 import { acceptedDataPar } from "./dataParStore";
 import { aslRunsEqual, normalizeAslRunId } from "../lib/aslRun";

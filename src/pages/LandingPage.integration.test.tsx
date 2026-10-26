@@ -210,7 +210,9 @@ describe("Landing BIDS pre-confirmation source-tree integration", () => {
     fireEvent.click(screen.getByTestId("landing-new-project-btn"));
     await screen.findByTestId("bids-detection-dialog");
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
-    await screen.findByTestId("bids-setup-plan-error");
+    const setupError = await screen.findByTestId("bids-setup-plan-error");
+    expect(setupError).toHaveTextContent("Project setup could not be inspected.");
+    expect(setupError).not.toHaveTextContent("marker is a symbolic link");
     expect(await snapshotTree(root)).toEqual(before);
     expect(vi.mocked(invoke)).not.toHaveBeenCalledWith(
       "commit_bids_project_mutations",

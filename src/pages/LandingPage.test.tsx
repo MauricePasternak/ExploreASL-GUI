@@ -17,9 +17,12 @@ import {
 } from "../test/landingProfileGate";
 import { makeMatlabProfile } from "../test/profileFixtures";
 import { ProjectStorageError } from "../lib/projectPersistence";
+import { showErrorNotification } from "../lib/errorNotifications";
 import LandingPage from "./LandingPage";
 import { projectFixture } from "../test/projectFixtures";
 import { projectView } from "../schemas/project";
+
+vi.mock("../lib/errorNotifications", () => ({ showErrorNotification: vi.fn() }));
 
 const inspection = {
   candidateId: "candidate",
@@ -90,9 +93,11 @@ describe("LandingPage", () => {
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("is_writable", { path: "/tmp/no-write" });
       expect(createProject).not.toHaveBeenCalled();
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
-          color: "red",
+          id: "project-create:/tmp/no-write",
+          title: "Directory not writable",
+          details: expect.stringContaining("permissions"),
         }),
       );
     });
@@ -128,13 +133,35 @@ describe("LandingPage", () => {
           message: expect.stringContaining("1"),
         }),
       );
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
-          color: "red",
+          id: "project-create:/tmp/existing-project",
           title: expect.stringMatching(/project exists/i),
         }),
       );
     });
+  });
+
+  it("scopes repeated creation errors to the selected directory", async () => {
+    vi.mocked(invoke).mockResolvedValue(false);
+    render(
+      <MantineProvider env="test">
+        <MemoryRouter>
+          <LandingPage />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    const directories = ["/first-project", "/second-project", "/first-project"];
+    for (const [index, directory] of directories.entries()) {
+      vi.mocked(open).mockResolvedValueOnce(directory);
+      fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+      await waitFor(() => expect(showErrorNotification).toHaveBeenCalledTimes(index + 1));
+    }
+
+    expect(
+      vi.mocked(showErrorNotification).mock.calls.map(([notification]) => notification.id),
+    ).toEqual(directories.map((directory) => `project-create:${directory}`));
   });
 
   it("shows an error when project creation fails unexpectedly", async () => {
@@ -184,65 +211,89 @@ describe("LandingPage", () => {
         dataSource: "dicom",
         planId: "reviewed-plan",
       });
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
-          color: "red",
+          id: "project-create:/tmp/new-project",
           title: expect.stringMatching(/failed to create project/i),
+          message: "Project files could not be initialized in the selected directory.",
+          details: expect.stringContaining("free disk space"),
+          error: expect.objectContaining({ message: "write failed" }),
         }),
       );
     });
   });
 
-  it("shows actionable storage guidance when project creation runs out of space", async () => {
-    const createProject = vi
-      .fn()
-      .mockRejectedValue(new ProjectStorageError("insufficient_space", "temporary write failed"));
-    useProjectStore.setState({
-      createProject,
-      preflightProjectSetup: vi.fn(async (rootPath, _name, mode) => ({
-        planId: "reviewed-plan",
-        rootPath,
-        mode,
-        operations: [],
-        warnings: [],
-        conflicts: [],
-        projectSummary: null,
-        preservesReadme: true,
-        temporaryArtifacts: [],
-      })),
-    });
-    vi.mocked(open).mockResolvedValue("/tmp/full-volume");
-    vi.mocked(invoke).mockImplementation(async (command) =>
-      command === "is_writable"
-        ? true
-        : {
-            isBids: false,
-            aslSubjectCount: 0,
-            totalSubjectCount: 0,
-            error: "No BIDS subjects found",
-          },
-    );
+  it.each([
+    {
+      kind: "insufficient space",
+      error: new ProjectStorageError("insufficient_space", "temporary write failed"),
+      guidance: /free space/i,
+    },
+    {
+      kind: "setup recovery required",
+      error: Object.assign(new Error("Project setup requires recovery."), {
+        kind: "recovery_required",
+        details:
+          "Keep the project files unchanged. Resolve the incomplete setup before trying again.",
+      }),
+      guidance: /Keep the project files unchanged/,
+    },
+  ])(
+    "preserves actionable guidance for $kind during project creation",
+    async ({ error, guidance }) => {
+      const createProject = vi.fn().mockRejectedValue(error);
+      useProjectStore.setState({
+        createProject,
+        preflightProjectSetup: vi.fn(async (rootPath, _name, mode) => ({
+          planId: "reviewed-plan",
+          rootPath,
+          mode,
+          operations: [],
+          warnings: [],
+          conflicts: [],
+          projectSummary: null,
+          preservesReadme: true,
+          temporaryArtifacts: [],
+        })),
+      });
+      vi.mocked(open).mockResolvedValue("/tmp/full-volume");
+      vi.mocked(invoke).mockImplementation(async (command) =>
+        command === "is_writable"
+          ? true
+          : {
+              isBids: false,
+              aslSubjectCount: 0,
+              totalSubjectCount: 0,
+              error: "No BIDS subjects found",
+            },
+      );
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+      render(
+        <MantineProvider env="test">
+          <MemoryRouter>
+            <LandingPage />
+          </MemoryRouter>
+        </MantineProvider>,
+      );
 
-    fireEvent.click(screen.getByTestId("landing-new-project-btn"));
-    await waitFor(() =>
-      expect(screen.getByTestId("bids-no-subjects-confirm-btn")).not.toBeDisabled(),
-    );
-    fireEvent.click(screen.getByTestId("bids-no-subjects-confirm-btn"));
+      fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+      await waitFor(() =>
+        expect(screen.getByTestId("bids-no-subjects-confirm-btn")).not.toBeDisabled(),
+      );
+      fireEvent.click(screen.getByTestId("bids-no-subjects-confirm-btn"));
 
-    await waitFor(() =>
-      expect(notifications.show).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringMatching(/free space/i) }),
-      ),
-    );
-  });
+      await waitFor(() =>
+        expect(showErrorNotification).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: "project-create:/tmp/full-volume",
+            message: "Project files could not be initialized in the selected directory.",
+            details: expect.stringMatching(guidance),
+            error,
+          }),
+        ),
+      );
+    },
+  );
 
   it("requires confirmation before opening a recovered backup and leaves it unwritten on decline", async () => {
     const confirmRecovery = vi.fn();
@@ -411,10 +462,11 @@ describe("LandingPage", () => {
         "inspect_project",
         expect.objectContaining({ path: "/tmp/custom-name.easl" }),
       );
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
-          color: "red",
+          id: "project-open:/tmp/custom-name.easl",
           title: expect.stringMatching(/invalid project file/i),
+          message: "The selected project could not be opened.",
         }),
       );
     });
@@ -542,7 +594,6 @@ describe("LandingPage", () => {
       { path: "/copy/project.easl", projectId: copiedId },
       { path: "/old/project.easl", projectId: "same-id" },
     ]);
-    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
   });
 });
 

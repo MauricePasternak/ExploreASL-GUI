@@ -9,6 +9,7 @@ use crate::process::{CancellationToken, run_probe};
 use crate::tracing::CommandTrace;
 
 #[tauri::command]
+#[specta::specta]
 pub async fn which_matlab(custom_paths: Option<Vec<String>>) -> Vec<serde_json::Value> {
     let trace = CommandTrace::new("which_matlab");
     let mut seen = HashSet::new();

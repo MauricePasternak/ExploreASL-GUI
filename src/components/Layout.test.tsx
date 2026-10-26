@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TestMantineProvider as MantineProvider } from "../test/render";
-import { notifications } from "@mantine/notifications";
+import { showErrorNotification } from "../lib/errorNotifications";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
@@ -18,6 +18,8 @@ import ProjectPage from "../pages/ProjectPage";
 import Layout from "./Layout";
 import { projectFixture } from "../test/projectFixtures";
 import { projectView } from "../schemas/project";
+
+vi.mock("../lib/errorNotifications", () => ({ showErrorNotification: vi.fn() }));
 
 const snapshot = projectFixture("project-1", "Brain Study", "/tmp/brain-study");
 
@@ -439,11 +441,12 @@ describe("Layout", () => {
 
     await waitFor(() => {
       expect(closeProject).toHaveBeenCalled();
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
-          color: "red",
+          id: "project-close:project-1",
           title: "Could not leave project",
-          message: expect.stringMatching(/free space/i),
+          details: expect.stringMatching(/free space/i),
+          error: expect.objectContaining({ category: "insufficient_space" }),
         }),
       );
       expect(screen.getAllByTestId("layout-nav-import").length).toBeGreaterThan(0);
@@ -788,10 +791,13 @@ describe("Layout", () => {
     fireEvent.click(getLastButton(/return to home/i));
 
     await waitFor(() => {
-      expect(notifications.show).toHaveBeenCalledWith(
+      expect(showErrorNotification).toHaveBeenCalledWith(
         expect.objectContaining({
+          id: "project-close:project-1",
           title: "Could not leave project",
-          message: "cannot stop watcher",
+          message: "The project could not be safely saved or closed.",
+          details: expect.stringContaining("Keep the project open"),
+          error: expect.objectContaining({ message: "cannot stop watcher" }),
         }),
       );
     });
@@ -831,10 +837,13 @@ describe("Layout", () => {
     expect(preventDefault).toHaveBeenCalled();
     expect(getCurrentWindow().destroy).not.toHaveBeenCalled();
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-1");
-    expect(notifications.show).toHaveBeenCalledWith(
+    expect(showErrorNotification).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: "project-close:project-1",
         title: "Could not close project",
-        message: "cannot stop worker",
+        message: "The project could not be safely saved or closed.",
+        details: expect.stringContaining("Keep the project open"),
+        error: expect.objectContaining({ message: "cannot stop worker" }),
       }),
     );
   });

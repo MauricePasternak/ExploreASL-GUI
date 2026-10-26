@@ -5,16 +5,16 @@ use serde::Serialize;
 use std::collections::HashMap;
 use tauri::State;
 
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ColumnSource {
     Qcbf,
     External,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ColumnMetadata {
     pub name: String,
@@ -38,11 +38,13 @@ pub struct ActiveData {
     pub qcbf_rows: Vec<HashMap<String, String>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct DataInspection {
     pub columns: Vec<ColumnMetadata>,
+    #[specta(type = specta_typescript::Number)]
     pub row_count: usize,
+    #[specta(type = specta_typescript::Number)]
     pub qcbf_row_count: usize,
     pub qcbf_hash: String,
     pub external_hash: Option<String>,
@@ -118,10 +120,11 @@ pub fn read_data_columns_impl(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn read_data_columns(
     _project_root: String,
     column_names: Vec<String>,
     state: State<'_, crate::app::state::AppState>,
-) -> Result<Vec<HashMap<String, String>>, String> {
+) -> Result<Vec<HashMap<String, String>>, CommandError> {
     read_data_columns_impl(column_names, &state).into_command_result()
 }

@@ -11,7 +11,7 @@ use super::external::{
     detect_delimiter, inspect_external_data_impl, parse_external_rows, parse_external_xlsx_rows,
 };
 use super::stats::load_qcbf_data_impl;
-use crate::error::IntoCommandResult;
+use crate::error::{CommandError, IntoCommandResult};
 
 fn normalize_key_val(val: &str) -> String {
     let trimmed = val.trim();
@@ -23,7 +23,7 @@ fn normalize_key_val(val: &str) -> String {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 pub struct JoinKeyPair {
     pub left: String,
     pub right: String,
@@ -244,10 +244,12 @@ pub fn execute_join_impl(
     })
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SanityCheckResult {
+    #[specta(type = specta_typescript::Number)]
     pub overlap_count: usize,
+    #[specta(type = specta_typescript::Number)]
     pub unmatched_left_count: usize,
     pub left_keys_unique: bool,
     pub right_keys_unique: bool,
@@ -351,6 +353,7 @@ pub fn check_join_sanity_impl(
 }
 
 #[tauri::command]
+#[specta::specta]
 #[allow(clippy::too_many_arguments)]
 pub async fn check_join_sanity(
     project_root: String,
@@ -361,7 +364,7 @@ pub async fn check_join_sanity(
     sheet_name: Option<String>,
     delimiter: Option<String>,
     state: State<'_, crate::app::state::AppState>,
-) -> Result<SanityCheckResult, String> {
+) -> Result<SanityCheckResult, CommandError> {
     check_join_sanity_impl(
         PathBuf::from(project_root),
         qcbf_relative_path,
@@ -376,6 +379,7 @@ pub async fn check_join_sanity(
 }
 
 #[tauri::command]
+#[specta::specta]
 #[allow(clippy::too_many_arguments)]
 pub async fn execute_join(
     project_root: String,
@@ -387,7 +391,7 @@ pub async fn execute_join(
     sheet_name: Option<String>,
     delimiter: Option<String>,
     state: State<'_, crate::app::state::AppState>,
-) -> Result<DataInspection, String> {
+) -> Result<DataInspection, CommandError> {
     execute_join_impl(
         PathBuf::from(project_root),
         qcbf_relative_path,

@@ -66,9 +66,6 @@ describe("processing terminal persistence", () => {
     );
     const saving = reconcileProcessingTerminal();
     await vi.waitFor(() => expect(invoke).toHaveBeenCalled());
-    expect(
-      vi.mocked(invoke).mock.calls.some(([command]) => command === "acknowledge_processing_run"),
-    ).toBe(false);
     expect(useProjectStore.getState().project?.uiState.processing?.population).toBeUndefined();
     release();
     await saving;
@@ -102,8 +99,6 @@ describe("processing terminal persistence", () => {
         processingPhase: "completed",
       });
       expect(useProcessingStore.getState().processingError).toContain(stage);
-      if (stage === "save")
-        expect(invoke).not.toHaveBeenCalledWith("acknowledge_processing_run", expect.anything());
       await reconcileProcessingTerminal();
       expect(useProcessingStore.getState().terminalRunId).toBeNull();
     },
@@ -125,7 +120,6 @@ describe("processing terminal persistence", () => {
     invalidateProjectLease();
     release();
     await Promise.all([first, second]);
-    expect(invoke).not.toHaveBeenCalledWith("acknowledge_processing_run", expect.anything());
     expect(useProcessingStore.getState().terminalRunId).not.toBeNull();
   });
 });

@@ -1,1 +1,1 @@
-export type { DataPar as DataParState } from "../generated/project/DataPar";
+export type { DataPar_Serialize as DataParState } from "../generated/bindings";

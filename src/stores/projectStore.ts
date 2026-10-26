@@ -1,9 +1,11 @@
 import { create } from "zustand";
-import { notifications } from "@mantine/notifications";
-import type { ProjectEdit } from "../generated/project/ProjectEdit";
-import type { ProjectInspection } from "../generated/project/ProjectInspection";
-import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
-import type { BidsReviewGroup } from "../generated/project/BidsReviewGroup";
+import { showErrorNotification } from "../lib/errorNotifications";
+import type {
+  ProjectEdit_Deserialize as ProjectEdit,
+  ProjectInspection_Serialize as ProjectInspection,
+  ProjectSnapshot_Serialize as ProjectSnapshot,
+  BidsReviewGroup_Serialize as BidsReviewGroup,
+} from "../generated/bindings";
 import type {
   ProjectFile,
   ProjectPhase,
@@ -18,6 +20,8 @@ import {
   inspectProject,
   readProjectSnapshot,
   saveNativeProject,
+  ProjectStorageError,
+  projectStorageErrorMessage,
 } from "../lib/projectPersistence";
 import {
   commitBidsProjectMutations,
@@ -251,9 +255,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set({ saveError: null });
       }
     } catch (error) {
-      if (isCurrentProjectLease(lease)) {
+      if (lease && isCurrentProjectLease(lease)) {
         set({ saveError: failure(error), isDirty: true });
-        notifications.show({ color: "red", title: "Project not saved", message: failure(error) });
+        showErrorNotification({
+          id: `project-save:${lease.projectId}`,
+          title: "Project not saved",
+          message: "Project changes could not be saved.",
+          details:
+            error instanceof ProjectStorageError
+              ? projectStorageErrorMessage(error)
+              : "Correct any invalid fields, then try Save again. Keep the project open until saving succeeds.",
+          error,
+        });
       }
       throw error;
     } finally {

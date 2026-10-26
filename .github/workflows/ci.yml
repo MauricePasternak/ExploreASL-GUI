@@ -66,6 +66,18 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # Type checking verifies bindings against the native command registry.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

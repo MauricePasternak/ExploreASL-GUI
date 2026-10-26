@@ -1,5 +1,5 @@
 /** Persist native terminal import authority before exact-run acknowledgement. */
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "./ipc";
 import {
   captureProjectLease,
   isCurrentProjectLease,
@@ -13,7 +13,6 @@ import { ImportRunSnapshotSchema, type ImportRunSnapshot } from "../schemas/impo
 import { computeStaleness } from "./importStaleness";
 import { readImportStatus } from "./importStatus";
 import { projectRequest } from "./projectPersistence";
-import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
 
 function ownsTerminal(runId: string, lease: ProjectLease): boolean {
   const project = useProjectStore.getState().project;
@@ -43,10 +42,12 @@ export function reconcileImportTerminal(
   const operation = async () => {
     try {
       if (!ownsTerminal(runId, lease)) return;
-      const accepted = await projectRequest<ProjectSnapshot>("reconcile_import_result", {
-        runId,
-        generation: useProjectStore.getState().project!.activationGeneration,
-      });
+      const accepted = await projectRequest("reconcile_import_result", () =>
+        commands.reconcileImportResult(
+          useProjectStore.getState().project!.activationGeneration,
+          runId,
+        ),
+      );
       if (ownsTerminal(runId, lease)) {
         useProjectStore.getState().acceptSnapshot(accepted);
         useImportStore.setState({ terminalRunId: null, ownershipGeneration: null });
@@ -68,7 +69,7 @@ export function reconcileImportTerminal(
 export async function reconcileImportRunForActivation(): Promise<ImportRunSnapshot | null> {
   const lease = captureProjectLease();
   if (!lease || !isCurrentProjectLease(lease)) return null;
-  const raw = await invoke<unknown>("get_active_import_run");
+  const raw = await unwrap(commands.getActiveImportRun());
   if (!isCurrentProjectLease(lease)) return null;
   if (raw == null) {
     await reconcileCommittedImportStatus(lease);

@@ -87,6 +87,8 @@ fn validate_rejects_missing_matlab_executable() {
     assert!(!validation.valid);
     assert_eq!(validation.errors.len(), 1);
     assert!(validation.errors[0].contains("MATLAB executable not found"));
+    assert!(validation.errors[0].contains(missing_matlab.to_str().unwrap()));
+    assert!(validation.errors[0].contains("Select the MATLAB executable file"));
     assert!(validation.matlab_path.is_none());
     assert_eq!(validation.explore_asl_path, Some(exploreasl.clone()));
 
@@ -106,6 +108,8 @@ fn validate_rejects_missing_exploreasl_main_file() {
     assert!(!validation.valid);
     assert_eq!(validation.errors.len(), 1);
     assert!(validation.errors[0].contains("ExploreASL.m not found"));
+    assert!(validation.errors[0].contains(exploreasl.to_str().unwrap()));
+    assert!(validation.errors[0].contains("Select the ExploreASL folder"));
     assert_eq!(
         validation.matlab_path,
         Some(matlab.to_string_lossy().to_string())
@@ -140,6 +144,54 @@ fn validate_accepts_apptainer_profile_and_detects_container_version() {
     let _ = fs::remove_file(sif);
 }
 
+#[cfg(unix)]
+#[test]
+fn validation_results_explain_probe_failures_without_raw_diagnostics() {
+    let root = tempfile::tempdir().unwrap();
+    let apptainer = root.path().join("apptainer");
+    let sif = root.path().join("image.sif");
+    fs::write(&sif, "fake SIF").unwrap();
+
+    for container_probe in [false, true] {
+        write_executable(
+            &apptainer,
+            &format!(
+                "#!/bin/sh\nif [ {container_probe} = true ] && [ \"$1\" = --version ]; then echo 'apptainer version 1'; exit 0; fi\nprintf '\\033[31mraw-diagnostic: setuid helper unavailable\\033[0m\\n' >&2\nexit 7\n"
+            ),
+        );
+        let profile = make_apptainer_profile(&sif.to_string_lossy(), &apptainer.to_string_lossy());
+        let single = validate_execution_profile(profile.clone()).unwrap();
+        let batch = validate_all_execution_profiles(vec![profile]).unwrap();
+
+        for result in [single, batch.into_iter().next().unwrap()] {
+            assert!(!result.valid);
+            assert_eq!(result.errors.len(), 1);
+            assert!(result.explore_asl_version.is_none());
+            let message = &result.errors[0];
+            assert!(message.contains(if container_probe {
+                "Apptainer could not run the selected container"
+            } else {
+                "Apptainer could not run its executable check"
+            }));
+            assert!(message.contains("Check"));
+            assert!(message.contains("then validate again"));
+            for diagnostic in [
+                "raw-diagnostic",
+                "setuid",
+                "\u{1b}",
+                "status",
+                "--version",
+                "Caused by",
+            ] {
+                assert!(
+                    !message.contains(diagnostic),
+                    "leaked diagnostic: {message}"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn validate_rejects_missing_apptainer_sif_image() {
     let missing_sif = unique_temp_path("missing-image").with_extension("sif");
@@ -155,6 +207,32 @@ fn validate_rejects_missing_apptainer_sif_image() {
             .any(|error| error.contains("SIF image not found"))
     );
     assert!(validation.sif_path.is_none());
+}
+
+#[test]
+fn validate_distinguishes_missing_and_not_file_sif_paths() {
+    let root = tempfile::tempdir().unwrap();
+    let missing_sif = root.path().join("missing.sif");
+    let missing_apptainer = root.path().join("missing-apptainer");
+
+    for (sif, explanation) in [
+        (missing_sif.as_path(), "SIF image not found at this path"),
+        (root.path(), "SIF image path is not a file"),
+    ] {
+        let profile =
+            make_apptainer_profile(&sif.to_string_lossy(), &missing_apptainer.to_string_lossy());
+        let result = validate_execution_profile(profile).unwrap();
+
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 2);
+        assert!(result.explore_asl_version.is_none());
+        assert!(result.errors[0].contains(explanation));
+        assert!(result.errors[0].contains(sif.to_str().unwrap()));
+        assert!(result.errors[0].contains("Select an"));
+        assert!(result.errors[1].contains("Apptainer executable"));
+        assert!(result.errors[1].contains(missing_apptainer.to_str().unwrap()));
+        assert!(result.errors[1].contains("Select an installed Apptainer or Singularity"));
+    }
 }
 
 #[test]

@@ -12,7 +12,7 @@ import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLif
 import { transformToChartData, translateColumnName } from "../../lib/tsvUtils";
 import { OKABE_ITO } from "../../lib/okabeIto";
 import { buildNivoTheme } from "../../lib/nivoTheme";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../../lib/ipc";
 
 interface NivoNode {
   data?: ChartPoint;
@@ -121,10 +121,7 @@ export default function ChartPanel() {
       if (colorByCol && !columnsToFetch.includes(colorByCol)) columnsToFetch.push(colorByCol);
       try {
         console.log("[ChartPanel] loading columns:", columnsToFetch);
-        const rows = await invoke<Record<string, string>[]>("read_data_columns", {
-          projectRoot,
-          columnNames: columnsToFetch,
-        });
+        const rows = await unwrap(commands.readDataColumns(projectRoot, columnsToFetch));
         if (!active || (lease && !isCurrentProjectLease(lease))) return;
         const { points, excluded } = transformToChartData(
           rows,

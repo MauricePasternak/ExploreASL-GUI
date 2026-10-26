@@ -6,7 +6,7 @@ import type { ReviewerMode } from "../schemas/manifestSchemas";
 import { useProjectStore } from "./projectStore";
 import { useProcessingStore } from "./processingStore";
 import { exists, readTextFile } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "../lib/ipc";
 import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
 
 type FlatManifestVerdicts = Record<string, ManifestVerdict>;
@@ -231,10 +231,7 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
     }
 
     try {
-      const mtimes = await invoke<Record<string, number | null>>("read_prior_modules_mtimes", {
-        projectRoot,
-        subjectSessions,
-      });
+      const mtimes = await commands.readPriorModulesMtimes(projectRoot, subjectSessions);
       if (!isCurrentProject()) return;
       set({ priorModulesMtimes: mtimes });
       get().computeStaleVerdicts();

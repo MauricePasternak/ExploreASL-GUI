@@ -1,10 +1,23 @@
 import { z } from "zod";
+import type {
+  PathPattern_Serialize as PathPattern,
+  TokenAssignment_Serialize as TokenAssignment,
+} from "../generated/bindings";
 import {
   parseCommaSeparatedNumbers,
   parseNumberOrArray,
 } from "../components/import/metadataFormUtils";
 import { normalizePulseSequenceType, normalizeManufacturer } from "../lib/bids/normalize";
 import { componentValidationMessage } from "../lib/stagingValidation";
+
+export type {
+  PathPattern_Serialize as PathPattern,
+  TokenAssignment_Serialize as TokenAssignment,
+  TokenTag,
+  ModalityAlias_Serialize as ModalityAlias,
+  SessionAlias,
+  SubjectRename,
+} from "../generated/bindings";
 
 const preprocessCommaNumber = (val: unknown) => {
   if (typeof val === "string") {
@@ -62,55 +75,11 @@ const CommaArraySchema = z.preprocess(
 );
 
 // =============================================================================
-// Step 1: DICOM Ingestion — Path Patterns
-// =============================================================================
-
-/**
- * A discovered structural pattern in the DICOM directory tree.
- * Multiple paths share the same "signature" (structural shape).
- */
-export const PathPatternSchema = z.object({
-  /** Human-readable signature, e.g. "SUBJECT/FIXED_DICOM/VARYING/VARYING" */
-  signature: z.string(),
-  /** One representative full relative path for display */
-  samplePath: z.string(),
-  /** Path split by "/" — the folder-level blocks */
-  blocks: z.array(z.string()),
-  /** block index => unique values found at that depth across all matching paths */
-  uniqueNames: z.record(z.number(), z.array(z.string())),
-  /** How many paths match this pattern */
-  count: z.number().int().min(1),
-  /** The total folder depth of this pattern */
-  depth: z.number().int().min(1),
-});
-
-export type PathPattern = z.infer<typeof PathPatternSchema>;
-
-// =============================================================================
 // Step 2: Visual Path Tokenizer
 // =============================================================================
 
 /** Semantic tag for a path block */
 export const TOKEN_TAGS = ["Subject", "Session", "Run", "Modality", "Ignore"] as const;
-const TokenTagSchema = z.enum(TOKEN_TAGS);
-export type TokenTag = z.infer<typeof TokenTagSchema>;
-
-/**
- * Assignment of a semantic tag to a specific block within a pattern.
- * blockIndex refers to the folder depth level (0-based).
- * When a folder level has sub-blocks (split by _ or -), subBlockIndex
- * identifies which sub-block within that level.
- */
-export const TokenAssignmentSchema = z.object({
-  /** Which folder depth level (0-based) */
-  blockIndex: z.number().int().min(0),
-  /** Which sub-block within the folder level (0-based). null = entire level is one token */
-  subBlockIndex: z.number().int().min(0).nullable().default(null),
-  /** The semantic tag */
-  tag: TokenTagSchema,
-});
-
-export type TokenAssignment = z.infer<typeof TokenAssignmentSchema>;
 
 // =============================================================================
 // Step 3: Alias Resolution
@@ -132,28 +101,6 @@ export const StagingSubjectSchema = PortableStagingComponentSchema.refine(
 );
 
 export const StagingModalitySchema = z.enum(EXPLOREASL_MODALITIES);
-
-export const ModalityAliasSchema = z.object({
-  /** Raw captured modality string from folder names */
-  captured: z.string(),
-  /** Mapped ExploreASL modality, or null for "Ignore" */
-  mapped: z.enum(EXPLOREASL_MODALITIES).nullable(),
-});
-
-export type ModalityAlias = z.infer<typeof ModalityAliasSchema>;
-
-export const SessionAliasSchema = z.object({
-  /** Raw captured session/run string */
-  captured: z.string(),
-  /** Generated alias, e.g. "ASL_1" */
-  alias: z.string(),
-  /** Chronological order (1-based) */
-  index: z.number().int().min(1),
-});
-
-export type SessionAlias = z.infer<typeof SessionAliasSchema>;
-
-export type { SubjectRename } from "../generated/project/SubjectRename";
 
 // =============================================================================
 // Step 4: BIDS ASL Metadata (studyPar.json)
@@ -714,7 +661,7 @@ export const MetadataGroupSchema = z.object({
   bidsParams: BidsAslMetadataBaseSchema,
 });
 
-export type { MetadataGroup } from "../generated/project/MetadataGroup";
+export type { MetadataGroup_Serialize as MetadataGroup } from "../generated/bindings";
 
 export const DerivedMetadataGroupSchema = MetadataGroupSchema.extend({
   vendor: z.string(),
@@ -730,9 +677,7 @@ export const DerivedMetadataGroupSchema = MetadataGroupSchema.extend({
 
 export type DerivedMetadataGroup = z.infer<typeof DerivedMetadataGroupSchema>;
 
-export type { SubjectRow } from "../generated/project/SubjectRow";
-
-export type { ImportSnapshot } from "../generated/project/ImportSnapshot";
+export type { SubjectRow, ImportSnapshot_Serialize as ImportSnapshot } from "../generated/bindings";
 
 // =============================================================================
 // Staging Entry (for symlink tree creation)

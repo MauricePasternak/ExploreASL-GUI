@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { notifications } from "@mantine/notifications";
+import { error as logError } from "@tauri-apps/plugin-log";
 
 import { projectView } from "../schemas/project";
 import { projectFixture } from "../test/projectFixtures";
@@ -248,36 +249,47 @@ describe("project coordinator", () => {
     ]);
   });
 
-  it("reports relocation recovery before hydrating the candidate project", async () => {
-    const order: string[] = [];
-    await transitionProjectRuntime(
-      candidate,
-      {},
-      {
-        activateCandidate: async () => {
-          order.push("native");
-          return {
-            ...projectFixture("b", "B", "/b"),
-            recovery: {
-              preservedSubjects: ["A"],
-              restoredSubjects: ["B"],
-              cleanedSubjects: ["A", "B"],
-              cleanupErrors: [],
-            },
-          };
+  it.each([{ cleanupErrors: [] }, { cleanupErrors: ["native cleanup diagnostic"] }])(
+    "reports relocation recovery without exposing diagnostics: %j",
+    async ({ cleanupErrors }) => {
+      const order: string[] = [];
+      await transitionProjectRuntime(
+        candidate,
+        {},
+        {
+          activateCandidate: async () => {
+            order.push("native");
+            return {
+              ...projectFixture("b", "B", "/b"),
+              recovery: {
+                preservedSubjects: ["A"],
+                restoredSubjects: ["B"],
+                cleanedSubjects: ["A", "B"],
+                cleanupErrors,
+              },
+            };
+          },
         },
-      },
-    );
+      );
 
-    expect(order).toEqual(["native"]);
-    expect(vi.mocked(notifications.show)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Import relocation recovery completed",
-        message: "Preserved: A. Restored: B",
-      }),
-    );
-    expect(useProjectStore.getState().project?.projectMeta.id).toBe("b");
-  });
+      expect(order).toEqual(["native"]);
+      expect(vi.mocked(notifications.show)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Import relocation recovery completed",
+          color: cleanupErrors.length ? "orange" : "blue",
+          message: cleanupErrors.length
+            ? "Preserved: A. Restored: B. Some import cleanup remains pending. Check project directory access and free space, then reopen the project to retry. Consult the application log if this continues"
+            : "Preserved: A. Restored: B",
+        }),
+      );
+      if (cleanupErrors.length) {
+        expect(logError).toHaveBeenCalledWith(
+          "[PROJECT] Import relocation cleanup failed: native cleanup diagnostic",
+        );
+      }
+      expect(useProjectStore.getState().project?.projectMeta.id).toBe("b");
+    },
+  );
 
   it("hydrates only after native recovery then reconciles import authority", async () => {
     const order: string[] = [];

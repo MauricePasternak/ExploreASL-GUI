@@ -4,12 +4,13 @@ use super::apptainer::{
     detect_apptainer_version, resolve_apptainer_executable, validate_apptainer_executable,
 };
 use super::executables::validate_matlab_executable;
+use crate::error::CommandError;
 use anyhow::{Result as AnyResult, bail};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ExecutionProfile {
     #[serde(rename = "matlab")]
@@ -48,7 +49,7 @@ fn default_apptainer_path() -> String {
     "apptainer".to_string()
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileValidationResult {
     pub id: String,
@@ -137,12 +138,24 @@ fn validate_matlab_profile(matlab_path: &str, explore_asl_path: &str) -> Interna
 
     match validate_matlab_executable(matlab_path) {
         Ok(path) => validated_matlab_path = Some(path),
-        Err(error) => errors.push(format!("{error:#}")),
+        Err(error) => {
+            log::error!("[PROFILE] MATLAB executable validation failed: {error:#}");
+            errors.push(format!(
+                "MATLAB executable not found or unavailable: {}. Select the MATLAB executable file and check its execute permissions.",
+                matlab_path.trim()
+            ));
+        }
     }
 
     match validate_exploreasl_path(explore_asl_path) {
         Ok(path) => validated_explore_asl_path = Some(path),
-        Err(error) => errors.push(format!("{error:#}")),
+        Err(error) => {
+            log::error!("[PROFILE] ExploreASL folder validation failed: {error:#}");
+            errors.push(format!(
+                "ExploreASL.m not found at this path: {}. Select the ExploreASL folder containing ExploreASL.m.",
+                explore_asl_path.trim()
+            ));
+        }
     }
 
     let explore_asl_version = validated_explore_asl_path
@@ -164,18 +177,27 @@ fn validate_apptainer_profile(sif_path: &str, apptainer_path: &str) -> InternalV
     let mut errors = Vec::new();
     let sif_value = sif_path.trim();
     let validated_sif_path = if sif_value.is_empty() {
-        errors.push("SIF path must not be empty".to_string());
+        log::error!("[PROFILE] SIF path must not be empty");
+        errors.push("No SIF image selected. Select an ExploreASL SIF file.".to_string());
         None
     } else {
         let sif = PathBuf::from(sif_value);
         if !sif.exists() {
+            log::error!(
+                "[PROFILE] SIF image not found at this path: {}",
+                sif.display()
+            );
             errors.push(format!(
-                "SIF image not found at this path: {}",
+                "SIF image not found at this path: {}. Select an existing ExploreASL SIF file.",
                 sif.display()
             ));
             None
         } else if !sif.is_file() {
-            errors.push(format!("SIF image path is not a file: {}", sif.display()));
+            log::error!("[PROFILE] SIF image path is not a file: {}", sif.display());
+            errors.push(format!(
+                "SIF image path is not a file: {}. Select an ExploreASL SIF file, not a folder.",
+                sif.display()
+            ));
             None
         } else {
             Some(sif)
@@ -186,12 +208,20 @@ fn validate_apptainer_profile(sif_path: &str, apptainer_path: &str) -> InternalV
         Ok(path) => match validate_apptainer_executable(&path) {
             Ok(()) => Some(path),
             Err(error) => {
-                errors.push(format!("{error:#}"));
+                log::error!("[PROFILE] Apptainer executable validation failed: {error:#}");
+                errors.push(
+                    "Apptainer could not run its executable check. Check the Apptainer or Singularity installation and execute permissions, then validate again."
+                        .to_string(),
+                );
                 None
             }
         },
         Err(error) => {
-            errors.push(format!("{error:#}"));
+            log::error!("[PROFILE] Apptainer executable resolution failed: {error:#}");
+            errors.push(format!(
+                "Apptainer executable not found or unavailable: {}. Select an installed Apptainer or Singularity executable and check its execute permissions.",
+                apptainer_path.trim()
+            ));
             None
         }
     };
@@ -200,7 +230,11 @@ fn validate_apptainer_profile(sif_path: &str, apptainer_path: &str) -> InternalV
         (Some(apptainer), Some(sif)) => match detect_apptainer_version(apptainer, sif) {
             Ok(version) => Some(version),
             Err(error) => {
-                errors.push(format!("{error:#}"));
+                log::error!("[PROFILE] Apptainer container validation failed: {error:#}");
+                errors.push(
+                    "Apptainer could not run the selected container. Check that the SIF image is an ExploreASL container and that Apptainer can run it on this computer, then validate again."
+                        .to_string(),
+                );
                 None
             }
         },
@@ -219,17 +253,19 @@ fn validate_apptainer_profile(sif_path: &str, apptainer_path: &str) -> InternalV
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn validate_execution_profile(
     execution_profile: ExecutionProfile,
-) -> Result<ProfileValidationResult, String> {
+) -> Result<ProfileValidationResult, CommandError> {
     let validation = execution_profile.validate();
     Ok(execution_profile.to_validation_result(validation))
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn validate_all_execution_profiles(
     execution_profiles: Vec<ExecutionProfile>,
-) -> Result<Vec<ProfileValidationResult>, String> {
+) -> Result<Vec<ProfileValidationResult>, CommandError> {
     Ok(execution_profiles
         .iter()
         .map(|profile| {

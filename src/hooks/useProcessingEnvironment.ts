@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "../lib/ipc";
 
 const GB_PER_WORKER = 4;
 const MAX_DEFAULT_WORKERS = 4;
@@ -32,8 +32,8 @@ function fetchEnvironment(): Promise<CachedEnv> {
   if (envPromise) return envPromise;
   envPromise = (async () => {
     const [cores, memMb] = await Promise.all([
-      invoke<number>("get_cpu_cores").catch(() => DEFAULT_CORES),
-      invoke<number>("get_available_memory_mb").catch(() => 0),
+      commands.getCpuCores().catch(() => DEFAULT_CORES),
+      commands.getAvailableMemoryMb().catch(() => 0),
     ]);
     return { cores, memMb };
   })();

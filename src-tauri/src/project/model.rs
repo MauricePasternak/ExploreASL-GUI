@@ -1,11 +1,12 @@
 //! Current persisted configuration and its generated client contract.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use specta::Type;
 use std::collections::BTreeMap;
-use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(try_from = "u8", into = "u8")]
+#[specta(type = super::bindings::SchemaVersionWire)]
 pub struct SchemaVersion;
 
 impl TryFrom<u8> for SchemaVersion {
@@ -26,10 +27,9 @@ impl From<SchemaVersion> for u8 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectDocument {
-    #[ts(type = "2")]
     pub schema_version: SchemaVersion,
     pub project_meta: ProjectMeta,
     pub mapping_state: MappingState,
@@ -37,7 +37,7 @@ pub struct ProjectDocument {
     pub ui_state: UiState,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectMeta {
     pub id: String,
@@ -48,7 +48,7 @@ pub struct ProjectMeta {
     pub data_source: DataSource,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectPhase {
     Import,
@@ -58,24 +58,25 @@ pub enum ProjectPhase {
     Manifest,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum DataSource {
     Dicom,
     Bids,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PathPattern {
     pub signature: String,
     pub sample_path: String,
     pub blocks: Vec<String>,
     #[serde(deserialize_with = "deserialize_unique_names")]
+    #[specta(type = BTreeMap<u32, Vec<String>>)]
     pub unique_names: BTreeMap<u32, Vec<String>>,
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub count: u64,
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub depth: u64,
 }
 
@@ -86,17 +87,17 @@ fn deserialize_unique_names<'de, D: serde::Deserializer<'de>>(
     serde_json::from_value(Value::deserialize(deserializer)?).map_err(serde::de::Error::custom)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TokenAssignment {
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub block_index: u64,
-    #[ts(type = "number | null")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub sub_block_index: Option<u64>,
     pub tag: TokenTag,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum TokenTag {
     Subject,
     Session,
@@ -105,7 +106,7 @@ pub enum TokenTag {
     Ignore,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum Modality {
     T1w,
     T2w,
@@ -116,30 +117,30 @@ pub enum Modality {
     WmhSegm,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct ModalityAlias {
     pub captured: String,
     pub mapped: Option<Modality>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct SessionAlias {
     pub captured: String,
     pub alias: String,
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub index: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct SubjectRename {
     pub original: String,
     pub target: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SubjectRow {
     pub id: String,
@@ -148,7 +149,7 @@ pub struct SubjectRow {
     pub group_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MetadataGroup {
     pub id: String,
@@ -156,21 +157,21 @@ pub struct MetadataGroup {
     pub bids_params: BidsMetadata,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(untagged)]
 pub enum NumberOrArray {
-    Number(f64),
-    Array(Vec<f64>),
+    Number(#[specta(type = specta_typescript::Number)] f64),
+    Array(#[specta(type = Vec<specta_typescript::Number>)] Vec<f64>),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(untagged)]
 pub enum M0Value {
     Mode(M0Mode),
-    Number(f64),
+    Number(#[specta(type = specta_typescript::Number)] f64),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum M0Mode {
     #[serde(rename = "separate_scan")]
     SeparateScan,
@@ -178,9 +179,8 @@ pub enum M0Mode {
     Absent,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct MappingState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_data_path: Option<String>,
@@ -208,7 +208,7 @@ pub struct MappingState {
     pub subject_rows: Option<Vec<SubjectRow>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImportSnapshot {
     pub source_data_path: String,
@@ -222,13 +222,12 @@ pub struct ImportSnapshot {
     pub metadata_groups: Vec<MetadataGroup>,
     pub subject_rows: Vec<SubjectRow>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub selected_profile_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(try_from = "u8", into = "u8")]
-#[ts(type = "0 | 1")]
+#[specta(type = super::bindings::NumericFlagWire)]
 pub struct NumericFlag(u8);
 
 impl TryFrom<u8> for NumericFlag {
@@ -250,16 +249,17 @@ impl From<NumericFlag> for u8 {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
-#[ts(optional_fields)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Type)]
 pub struct DataPar {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub M0: Option<M0Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub BackgroundSuppressionNumberPulses: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub BackgroundSuppressionPulseTime: Option<NumberOrArray>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub M0_GMScaleFactor: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bRegisterM02ASL: Option<NumericFlag>,
@@ -268,28 +268,38 @@ pub struct DataPar {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub RepetitionTimePreparationM0: Option<NumberOrArray>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub nCompartments: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub Lambda: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub T2art: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub T1blood: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub T1GM: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub T1WM: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub T2GM: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub T2WM: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub T2tissueMultiTE: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bUseExternalQuantification: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ExternalQuantificationType: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<[specta_typescript::Number; 3]>)]
     pub ExternalQuantificationSmoothGaussianMM: Option<[f64; 3]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bMaskingExternal: Option<bool>,
@@ -304,6 +314,7 @@ pub struct DataPar {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub DispBASIL: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub ATTSDBASIL: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bCleanUpExternal: Option<bool>,
@@ -328,34 +339,44 @@ pub struct DataPar {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bPVCGaussianMM: Option<NumericFlag>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<[specta_typescript::Number; 3]>)]
     pub PVCNativeSpaceKernel: Option<[f64; 3]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub SaveCBF4D: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub SpikeRemovalThreshold: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub SpikeRemovalAbsoluteThreshold: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub bRegistrationContrast: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub bAffineRegistration: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub bDCTRegistration: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bUseMNIasDummyStructural: Option<NumericFlag>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub bHct2BloodT1: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<[specta_typescript::Number; 6]>)]
     pub ApplyQuantification: Option<[f64; 6]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub Atlases: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub TissueMasking: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<Vec<specta_typescript::Number>>)]
     pub TissueThreshold: Option<Vec<f64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bMasking: Option<[NumericFlag; 4]>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub MinimalROIVolume: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bWMH: Option<bool>,
@@ -385,14 +406,14 @@ pub struct DataPar {
     pub extensions: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum AslType {
     CASL,
     PCASL,
     PASL,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum AcquisitionType {
     #[serde(rename = "2D")]
     TwoD,
@@ -400,14 +421,14 @@ pub enum AcquisitionType {
     ThreeD,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum PcaslType {
     Balanced,
     Unbalanced,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum CaslType {
     #[serde(rename = "single-coil")]
     SingleCoil,
@@ -415,14 +436,14 @@ pub enum CaslType {
     DoubleCoil,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum BolusCutOffTechnique {
     Q2TIPS,
     QUIPSS,
     QUIPSSII,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum M0Type {
     Separate,
     Included,
@@ -431,8 +452,7 @@ pub enum M0Type {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
-#[ts(optional_fields)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Type)]
 pub struct BidsMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ArterialSpinLabelingType: Option<AslType>,
@@ -441,8 +461,10 @@ pub struct BidsMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub MRAcquisitionType: Option<AcquisitionType>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub MagneticFieldStrength: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub EchoTime: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub LabelingDuration: Option<NumberOrArray>,
@@ -451,14 +473,19 @@ pub struct BidsMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub CASLType: Option<CaslType>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub LabelingPulseAverageGradient: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub LabelingPulseMaximumGradient: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub LabelingPulseAverageB1: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub LabelingPulseDuration: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub LabelingPulseInterval: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub BolusCutOffFlag: Option<bool>,
@@ -469,16 +496,20 @@ pub struct BidsMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub BackgroundSuppression: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub BackgroundSuppressionNumberPulses: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<Vec<specta_typescript::Number>>)]
     pub BackgroundSuppressionPulseTime: Option<Vec<f64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub VascularCrushing: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub RepetitionTimePreparation: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub FlipAngle: Option<NumberOrArray>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<Vec<specta_typescript::Number>>)]
     pub SliceTiming: Option<Vec<f64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub PulseSequenceType: Option<String>,
@@ -487,6 +518,7 @@ pub struct BidsMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub M0Type: Option<M0Type>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub M0_GMScaleFactor: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ASLContext: Option<String>,
@@ -495,30 +527,30 @@ pub struct BidsMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub LabelingType: Option<AslType>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<Vec<specta_typescript::Number>>)]
     pub DummyScanPositionInASL4D: Option<Vec<f64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<Vec<specta_typescript::Number>>)]
     pub RepetitionTimePreparationM0: Option<Vec<f64>>,
     #[serde(flatten)]
     pub extensions: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct ImportPreferences {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number", optional)]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub active_step: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_profile_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct ImportUiState {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number", optional)]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub active_step: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed: Option<bool>,
@@ -530,11 +562,10 @@ pub struct ImportUiState {
     pub selected_profile_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_phase: Option<ExecutionPhase>,
-    #[ts(optional = false)]
     pub most_recent_config: Option<ImportSnapshot>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ExecutionPhase {
     Idle,
@@ -548,7 +579,7 @@ pub enum ExecutionPhase {
     Interrupted,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ProcessingModule {
     Structural,
@@ -556,22 +587,20 @@ pub enum ProcessingModule {
     Population,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProcessingConfig {
     pub subjects: Vec<String>,
     pub modules: Vec<ProcessingModule>,
     pub selected_profile_id: String,
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub workers: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub rerun_bids2_legacy: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct LastRun {
     pub profile_id: String,
     #[serde(rename = "exploreASLVersion", skip_serializing_if = "Option::is_none")]
@@ -581,13 +610,12 @@ pub struct LastRun {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gui_version: Option<String>,
     #[serde(rename = "Mtime")]
-    #[ts(type = "number | null", optional = false)]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub mtime: Option<i64>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct ModuleResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed: Option<bool>,
@@ -595,9 +623,8 @@ pub struct ModuleResult {
     pub last_run: Option<LastRun>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct ProcessingUiState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<ProcessingConfig>,
@@ -611,7 +638,7 @@ pub struct ProcessingUiState {
     pub population: Option<ModuleResult>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AdvancedVisibility {
     #[serde(default)]
@@ -629,22 +656,21 @@ pub struct AdvancedVisibility {
     pub show_advanced_atlases: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct DataParUiState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub advanced_visibility: Option<AdvancedVisibility>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct QcbfSource {
     pub relative_path: String,
     pub file_hash: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExternalSource {
     pub absolute_path: String,
@@ -652,14 +678,14 @@ pub struct ExternalSource {
     pub sheet_name: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct JoinKey {
     pub left: String,
     pub right: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct JoinConfig {
     pub external_source: ExternalSource,
@@ -669,7 +695,7 @@ pub struct JoinConfig {
     pub delimiter: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct Identifiers {
     pub subject: String,
@@ -677,7 +703,7 @@ pub struct Identifiers {
     pub run: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AxisAssignment {
     pub x: Option<String>,
@@ -685,26 +711,26 @@ pub struct AxisAssignment {
     pub color_by: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DomainFilters {
+    #[specta(type = Option<specta_typescript::Number>)]
     pub x_min: Option<f64>,
+    #[specta(type = Option<specta_typescript::Number>)]
     pub x_max: Option<f64>,
+    #[specta(type = Option<specta_typescript::Number>)]
     pub y_min: Option<f64>,
+    #[specta(type = Option<specta_typescript::Number>)]
     pub y_max: Option<f64>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct VisualizationConfig {
-    #[ts(optional = false)]
     pub qcbf_source: Option<QcbfSource>,
-    #[ts(optional = false)]
     pub join_config: Option<JoinConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub column_types: Option<BTreeMap<String, String>>,
-    #[ts(optional = false)]
     pub identifiers: Option<Identifiers>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level_orderings: Option<BTreeMap<String, Vec<String>>>,
@@ -715,14 +741,18 @@ pub struct VisualizationConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stage: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub split_ratio: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filters_expanded: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub point_size: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub swarm_spacing: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub chart_opacity: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_grid_x: Option<bool>,
@@ -743,28 +773,34 @@ pub struct VisualizationConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nv_back_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub x_tick_size: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub x_tick_padding: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub x_tick_rotation: Option<f64>,
-    #[ts(optional = false)]
     pub x_legend_override: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub x_legend_offset: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub y_tick_size: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub y_tick_padding: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub y_tick_rotation: Option<f64>,
-    #[ts(optional = false)]
     pub y_legend_override: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<specta_typescript::Number>)]
     pub y_legend_offset: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Reviewer {
     pub id: String,
@@ -772,14 +808,14 @@ pub struct Reviewer {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum VerdictStatus {
     Pass,
     Fail,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum FailReason {
     Motion,
@@ -790,20 +826,19 @@ pub enum FailReason {
     Other,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct Verdict {
     pub status: VerdictStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<FailReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub set_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ManifestConfig {
     pub reviewers: Vec<Reviewer>,
@@ -814,9 +849,8 @@ pub struct ManifestConfig {
     pub resolved_verdicts: BTreeMap<String, Verdict>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[ts(optional_fields)]
 pub struct UiState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub import: Option<ImportUiState>,
@@ -833,7 +867,7 @@ pub struct UiState {
 
 /// Only user-owned settings/actions are admitted here. Execution results,
 /// successful baselines, source kind and schema version are not user edits.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ProjectEdit {
     Import {
@@ -896,7 +930,7 @@ pub enum ProjectEdit {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BidsReviewGroup {
     pub id: String,
@@ -908,39 +942,38 @@ pub struct BidsReviewGroup {
     pub bids_params: BidsMetadata,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BidsReviewSubject {
     pub subject_label: String,
     pub session_labels: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectSnapshot {
     pub document: ProjectDocument,
     pub root_path: String,
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub activation_generation: u64,
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub accepted_revision: u64,
-    #[ts(type = "number")]
+    #[specta(type = specta_typescript::Number)]
     pub persisted_revision: u64,
     pub recovered_from_backup: bool,
     pub allowed_phases: Vec<ProjectPhase>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub recovery: Option<crate::import::relocation::RelocationRecoverySummary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RecentProjectIdentity {
     pub path: String,
     pub project_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectInspection {
     pub candidate_id: String,
@@ -950,5 +983,6 @@ pub struct ProjectInspection {
     pub recovered_from_backup: bool,
     pub duplicate_path: Option<String>,
     pub moved_from: Option<String>,
+    #[specta(type = specta_typescript::Number)]
     pub setup_recovered: usize,
 }

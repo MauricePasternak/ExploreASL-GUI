@@ -6,7 +6,7 @@ import {
   IconDatabase,
   IconFolderSearch,
 } from "@tabler/icons-react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../../lib/ipc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
@@ -131,11 +131,7 @@ export default function DicomIngestion() {
         logicalPath,
         "dicom",
       );
-      const paths = await invoke<string[]>("walk_directory", {
-        root: resolvedSource,
-        maxDepth: 20,
-        bMatchDirectories,
-      });
+      const paths = await unwrap(commands.walkDirectory(resolvedSource, 20, bMatchDirectories));
       if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
       if (paths.length === 0) throw new Error("Replacement contains no DICOM locations.");
       const patterns = discoverPathPatterns(paths, "", tokenSubDelimiters);
@@ -174,11 +170,7 @@ export default function DicomIngestion() {
         sourceDataPath,
         "dicom",
       );
-      const paths = await invoke<string[]>("walk_directory", {
-        root: resolvedSource,
-        maxDepth: 20,
-        bMatchDirectories,
-      });
+      const paths = await unwrap(commands.walkDirectory(resolvedSource, 20, bMatchDirectories));
       if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
       const patterns = discoverPathPatterns(paths, "", tokenSubDelimiters);
       await setIngestionResults(paths, patterns, lease);

@@ -3,7 +3,7 @@ import { IconArrowLeft, IconArrowRight, IconFileImport, IconPlus } from "@tabler
 import { useEffect, useMemo, useRef, useState } from "react";
 import HeaderCard from "../common/HeaderCard";
 
-import { notifications } from "@mantine/notifications";
+import { showErrorNotification } from "../../lib/errorNotifications";
 
 import { getRelativePath, splitBySubDelimiters } from "../../lib/pathUtils";
 import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
@@ -17,7 +17,7 @@ import {
 import { useGlobalStore } from "../../stores/globalStore";
 import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
 import { useProjectStore } from "../../stores/projectStore";
-import type { PathPattern } from "../../generated/project/PathPattern";
+import type { PathPattern_Serialize as PathPattern } from "../../generated/bindings";
 import MetadataModal from "./MetadataModal";
 
 const DEFAULT_GROUP_ID = "global-defaults";
@@ -227,11 +227,11 @@ export default function MetadataGrouping() {
       if (!subjectRows.some((row) => row.groupId === group.id)) continue;
       const errors = validateBidsMetadataGroup(group.bidsParams);
       if (errors.length > 0) {
-        notifications.show({
-          color: "red",
+        showErrorNotification({
+          id: `metadata-validation:${useProjectStore.getState().project?.projectMeta.id}:${group.id}`,
           title: `Validation Error in Group "${group.label}"`,
-          message: errors.join(" "),
-          autoClose: 10000,
+          message: "Assigned metadata needs correction before import.",
+          details: errors.join(" "),
         });
         return;
       }

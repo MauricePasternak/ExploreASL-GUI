@@ -4,9 +4,13 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use crate::{error::IntoCommandResult, tracing::CommandTrace};
+use crate::{
+    error::{CommandError, IntoCommandResult},
+    tracing::CommandTrace,
+};
 
 #[tauri::command]
+#[specta::specta]
 pub fn is_writable(path: &str) -> bool {
     let trace = CommandTrace::new("is_writable");
     trace.arg("path", path);
@@ -17,7 +21,7 @@ pub fn is_writable(path: &str) -> bool {
     result
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum PathOwnership {
     Internal,
@@ -25,7 +29,7 @@ pub enum PathOwnership {
     Missing,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SourcePathInspection {
     pub absolute_path: PathBuf,
@@ -125,10 +129,11 @@ pub fn inspect_source_path_impl(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn inspect_source_path(
     project_root: String,
     source_path: String,
-) -> Result<SourcePathInspection, String> {
+) -> Result<SourcePathInspection, CommandError> {
     let trace = CommandTrace::new("inspect_source_path");
     trace.arg("project_root", &project_root);
     trace.arg("source_path", &source_path);

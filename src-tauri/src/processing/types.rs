@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ProcessingLifecycle {
     Preparing,
@@ -58,7 +58,7 @@ pub fn validate_processing_transition(
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ProcessingTerminalResult {
     Completed,
@@ -78,7 +78,7 @@ impl ProcessingTerminalResult {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ProcessingVersions {
     pub explore_asl: String,
@@ -86,7 +86,7 @@ pub struct ProcessingVersions {
     pub gui: String,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProcessingRunSnapshot {
     pub run_id: String,
@@ -94,11 +94,13 @@ pub struct ProcessingRunSnapshot {
     pub project_root: String,
     pub selected_modules: Vec<String>,
     pub selected_subject_sessions: Vec<String>,
+    #[specta(type = specta_typescript::Number)]
     pub start_time: u64,
     #[serde(skip_serializing)]
     pub watcher_owned: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_result: Option<ProcessingTerminalResult>,
+    #[specta(type = specta_typescript::Number)]
     pub revision: u64,
     pub request_id: Option<String>,
     pub expected_targets: Vec<super::record::ExpectedTarget>,
@@ -107,10 +109,12 @@ pub struct ProcessingRunSnapshot {
     pub error: Option<super::record::ProcessingError>,
     pub available_action: super::record::AvailableAction,
     pub terminal_summary: Option<super::record::ProcessingTerminalSummary>,
+    #[specta(type = Option<specta_typescript::Number>)]
     pub terminal_revision: Option<u64>,
     pub execution_committed: bool,
     pub population_execution_committed: bool,
     pub versions: Option<Box<ProcessingVersions>>,
+    #[specta(type = Option<specta_typescript::Number>)]
     pub population_ready_mtime_ms: Option<u64>,
 }
 
@@ -234,7 +238,7 @@ pub struct ProcessState {
     pub watcher_run_id: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectInfo {
     pub subject_session: String,
@@ -246,7 +250,7 @@ pub struct SubjectInfo {
     pub asl_runs: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectModuleStatus {
     pub subject_session: String,
@@ -259,7 +263,7 @@ pub struct SubjectModuleStatus {
     pub bids2legacy_exists: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogFileInfo {
     pub filename: String,
@@ -303,7 +307,7 @@ pub struct LockRemoved {
     pub run: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ReportFileInfo {
     pub module: String, // "structural" | "asl" | "m0"

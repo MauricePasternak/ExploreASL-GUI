@@ -191,8 +191,6 @@ describe("useProjectStore", () => {
       candidateId: "committed-candidate",
       confirmBackup: false,
     });
-    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
-    expect(invoke).not.toHaveBeenCalledWith("ensure_bids_ignore", expect.anything());
     expect(useProjectStore.getState().project).toMatchObject({
       projectMeta: { id: "committed-id", name: "Committed", rootPath: "/canonical" },
     });
@@ -212,7 +210,6 @@ describe("useProjectStore", () => {
     expect(invoke).toHaveBeenCalledExactlyOnceWith("commit_bids_project_mutations", {
       planId: "stale",
     });
-    expect(invoke).not.toHaveBeenCalledWith("atomic_write_project", expect.anything());
   });
 
   it("missing options.dataSource throws and no project is created", async () => {

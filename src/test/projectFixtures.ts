@@ -1,4 +1,4 @@
-import type { ProjectSnapshot } from "../generated/project/ProjectSnapshot";
+import type { ProjectSnapshot_Serialize as ProjectSnapshot } from "../generated/bindings";
 
 /** Static IPC replies only. No native edits, validation or persistence emulation. */
 export function projectFixture(

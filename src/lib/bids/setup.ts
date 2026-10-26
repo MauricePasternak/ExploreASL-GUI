@@ -1,45 +1,15 @@
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../ipc";
 import { z } from "zod";
-import type { ProjectDocument } from "../../generated/project/ProjectDocument";
-
-export const SetupModeSchema = z.enum(["bids", "dicom", "repair"]);
-export type SetupMode = z.infer<typeof SetupModeSchema>;
-
-export const SetupPlanSchema = z.object({
-  planId: z.string().min(1),
-  rootPath: z.string().min(1),
-  mode: SetupModeSchema,
-  operations: z.array(
-    z.object({
-      path: z.string(),
-      operation: z.enum(["create", "update", "no_op"]),
-      textPreview: z.string().nullable().optional(),
-    }),
-  ),
-  warnings: z.array(z.string()),
-  conflicts: z.array(z.string()),
-  projectSummary: z
-    .object({
-      schemaVersion: z.string(),
-      name: z.string(),
-      projectId: z.string(),
-      dataSource: z.string(),
-      contentHash: z.string(),
-    })
-    .nullable()
-    .optional(),
-  preservesReadme: z.boolean(),
-  temporaryArtifacts: z.array(z.string()),
-});
-export type SetupPlan = z.infer<typeof SetupPlanSchema>;
-
-export type SetupCommitResult = {
-  outcome: "committed";
-  projectPath: string | null;
-  projectDocument: ProjectDocument | null;
-  candidateId: string | null;
-  directorySyncSupported: boolean;
-};
+import type {
+  SetupCommitResult_Serialize as SetupCommitResult,
+  SetupMode,
+  SetupPlan_Serialize as SetupPlan,
+} from "../../generated/bindings";
+export type {
+  SetupCommitResult_Serialize as SetupCommitResult,
+  SetupMode,
+  SetupPlan_Serialize as SetupPlan,
+} from "../../generated/bindings";
 
 export const SetupCommandErrorSchema = z.object({
   kind: z.enum([
@@ -51,6 +21,7 @@ export const SetupCommandErrorSchema = z.object({
     "failed",
   ]),
   message: z.string().min(1),
+  details: z.string(),
 });
 export type SetupCommandError = z.infer<typeof SetupCommandErrorSchema>;
 
@@ -60,15 +31,13 @@ export async function preflightBidsProjectMutations(
   name: string,
   profileId: string,
 ): Promise<SetupPlan> {
-  return SetupPlanSchema.parse(
-    await invoke("preflight_bids_project_mutations", { rootPath, mode, name, profileId }),
-  );
+  return unwrap(commands.preflightBidsProjectMutations(rootPath, mode, name, profileId));
 }
 
 export async function preflightBidsSetupRepair(rootPath: string): Promise<SetupPlan> {
-  return SetupPlanSchema.parse(await invoke("preflight_bids_setup_repair", { rootPath }));
+  return unwrap(commands.preflightBidsSetupRepair(rootPath));
 }
 
 export async function commitBidsProjectMutations(planId: string): Promise<SetupCommitResult> {
-  return invoke<SetupCommitResult>("commit_bids_project_mutations", { planId });
+  return unwrap(commands.commitBidsProjectMutations(planId));
 }

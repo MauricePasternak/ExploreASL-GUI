@@ -205,11 +205,58 @@ mod tests {
         assert_eq!(entry.source_path, "/dicom/sub-001/asl");
 
         assert_eq!(
-            serde_json::to_value(ImportCommandError::Preflight { issues: vec![] }).unwrap(),
-            serde_json::json!({ "kind": "preflight", "issues": [] })
+            serde_json::to_value(ImportCommandError::preflight(vec![])).unwrap(),
+            serde_json::json!({
+                "kind": "preflight",
+                "message": "Import staging preflight failed",
+                "details": "Review the staging issues and correct them before starting import again.",
+                "issues": []
+            })
         );
         assert!(validate_subject_components(&["../escape".to_string()]).is_err());
         assert!(validate_subject_components(&["A/B".to_string()]).is_err());
         validate_subject_components(&["sub-001".to_string()]).unwrap();
+    }
+
+    #[test]
+    fn import_command_errors_preserve_issues_without_exposing_diagnostics() {
+        let issue = serde_json::json!({
+            "code": "PORTABLE_COLLISION",
+            "field": "destination",
+            "entryIndex": 1,
+            "conflictingEntryIndex": 0,
+            "message": "Destination collides",
+            "suggestion": "Choose distinct destinations"
+        });
+        let error =
+            ImportCommandError::preflight(vec![serde_json::from_value(issue.clone()).unwrap()]);
+        let value = serde_json::to_value(error).unwrap();
+        assert_eq!(value["kind"], "preflight");
+        assert_eq!(value["message"], "Import staging preflight failed");
+        assert_eq!(
+            value["details"],
+            "Review the staging issues and correct them before starting import again."
+        );
+        assert_eq!(value["issues"], serde_json::json!([issue]));
+
+        let error = ImportCommandError::from(anyhow::anyhow!("private source").context("launch"));
+        assert_eq!(error.to_string(), "Import could not be started.");
+        assert_eq!(
+            serde_json::to_value(error).unwrap(),
+            serde_json::json!({
+                "kind": "operational",
+                "message": "Import could not be started.",
+                "details": ""
+            })
+        );
+        let string_error = ImportCommandError::from("private native diagnostic".to_string());
+        assert_eq!(
+            serde_json::to_value(string_error).unwrap(),
+            serde_json::json!({
+                "kind": "operational",
+                "message": "Import could not be started.",
+                "details": ""
+            })
+        );
     }
 }

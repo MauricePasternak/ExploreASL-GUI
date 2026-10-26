@@ -22,26 +22,21 @@ import {
   IconSearch,
   IconTrash,
 } from "@tabler/icons-react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../../lib/ipc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
+import { z } from "zod";
 
 import type { ExecutionProfile } from "../../schemas/executionProfile";
-import { useGlobalStore, type ProfileValidationResult } from "../../stores/globalStore";
+import { useGlobalStore } from "../../stores/globalStore";
 
-interface MatlabDetectionResult {
-  id: string;
-  label: string;
-  path: string;
-  version: string;
-}
-
-interface ApptainerDetectionResult {
-  id: string;
-  label: string;
-  path: string;
-  version?: string | null;
-}
+const DetectionResultSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  path: z.string(),
+  version: z.string().nullable().optional(),
+});
+type DetectionResult = z.infer<typeof DetectionResultSchema>;
 
 interface ProfileDraft {
   label: string;
@@ -64,7 +59,7 @@ const EMPTY_DRAFT: ProfileDraft = {
 async function fetchExploreAslVersion(exploreAslPath: string): Promise<string | null> {
   if (exploreAslPath.trim().length === 0) return null;
   try {
-    return await invoke<string | null>("detect_exploreasl_version", { exploreAslPath });
+    return await commands.detectExploreaslVersion(exploreAslPath);
   } catch {
     return null;
   }
@@ -88,9 +83,9 @@ export default function ProfileManager() {
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [detectingMatlab, setDetectingMatlab] = useState(false);
-  const [detectedMatlab, setDetectedMatlab] = useState<MatlabDetectionResult[]>([]);
+  const [detectedMatlab, setDetectedMatlab] = useState<DetectionResult[]>([]);
   const [detectingApptainer, setDetectingApptainer] = useState(false);
-  const [detectedApptainer, setDetectedApptainer] = useState<ApptainerDetectionResult[]>([]);
+  const [detectedApptainer, setDetectedApptainer] = useState<DetectionResult[]>([]);
   const [detectedVersion, setDetectedVersion] = useState<string | null>(null);
   const [detectingVersion, setDetectingVersion] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -178,7 +173,7 @@ export default function ProfileManager() {
   async function handleDetectMatlab() {
     setDetectingMatlab(true);
     try {
-      const found = await invoke<MatlabDetectionResult[]>("which_matlab");
+      const found = DetectionResultSchema.array().parse(await commands.whichMatlab(null));
       if (found.length === 0) {
         notifications.show({
           color: "yellow",
@@ -246,9 +241,8 @@ export default function ProfileManager() {
   async function handleDetectApptainer(customPaths?: string[], applyFirst = false) {
     setDetectingApptainer(true);
     try {
-      const found = await invoke<ApptainerDetectionResult[]>(
-        "which_apptainer",
-        customPaths ? { customPaths } : undefined,
+      const found = DetectionResultSchema.array().parse(
+        await commands.whichApptainer(customPaths ?? null),
       );
       setDetectedApptainer(found);
       if (applyFirst && found.length > 0) {
@@ -310,9 +304,7 @@ export default function ProfileManager() {
     setSaveErrors([]);
 
     try {
-      const result = (await invoke("validate_execution_profile", {
-        executionProfile: profile,
-      })) as ProfileValidationResult;
+      const result = await unwrap(commands.validateExecutionProfile(profile));
 
       if (!result.valid) {
         setSaveErrors(result.errors);

@@ -1,13 +1,15 @@
 use super::identifiers::normalize_asl_run_id_opt;
 use super::types::SubjectInfo;
+use crate::error::CommandError;
 use crate::tracing::CommandTrace;
 use std::path::PathBuf;
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_subjects(
     project_root: String,
     data_source: Option<String>,
-) -> Result<Vec<SubjectInfo>, String> {
+) -> Result<Vec<SubjectInfo>, CommandError> {
     let trace = CommandTrace::new("list_subjects");
     trace.arg("project_root", &project_root);
     if let Some(ref ds) = data_source {

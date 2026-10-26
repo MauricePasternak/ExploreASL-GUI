@@ -1,5 +1,5 @@
 /** Native import-run protocol clients and run-scoped diagnostic listeners. */
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "./ipc";
 import { listen } from "@tauri-apps/api/event";
 import { z } from "zod";
 
@@ -59,16 +59,26 @@ export async function reserveImportRun(params: {
   subjectsToPreserve?: string[];
   preserveStaging: boolean;
 }): Promise<ImportRunSnapshot> {
-  return parseSnapshot(await invoke("reserve_import_run", params));
+  return parseSnapshot(
+    await unwrap(
+      commands.reserveImportRun(
+        params.subjectList,
+        params.relocationPlanId,
+        params.profileId,
+        params.subjectsToPreserve ?? null,
+        params.preserveStaging,
+      ),
+    ),
+  );
 }
 
 export async function getActiveImportRun(): Promise<ImportRunSnapshot | null> {
-  const response = await invoke<unknown>("get_active_import_run");
+  const response = await unwrap(commands.getActiveImportRun());
   return response == null ? null : parseSnapshot(response);
 }
 
 export async function attachImportRun(runId: string): Promise<ImportRunSnapshot> {
-  return parseSnapshot(await invoke("attach_import_run", { runId }));
+  return parseSnapshot(await unwrap(commands.attachImportRun(runId)));
 }
 
 export async function launchImportRun(params: {
@@ -80,15 +90,27 @@ export async function launchImportRun(params: {
   subjectList: string[];
   relocationPlanId: string;
 }): Promise<ImportRunSnapshot> {
-  return parseSnapshot(await invoke("launch_import_run", params));
+  return parseSnapshot(
+    await unwrap(
+      commands.launchImportRun(
+        params.runId,
+        params.stagingEntries,
+        z.json().parse(params.sourcestructureJson),
+        z.json().parse(params.studyparJson),
+        params.executionProfile,
+        params.subjectList,
+        params.relocationPlanId,
+      ),
+    ),
+  );
 }
 
 export async function cancelImportRun(runId: string): Promise<ImportRunSnapshot> {
-  return parseSnapshot(await invoke("cancel_import_run", { runId }));
+  return parseSnapshot(await unwrap(commands.cancelImportRun(runId)));
 }
 
 export async function confirmImportWorkerStopped(runId: string): Promise<ImportRunSnapshot> {
-  const snapshot = parseSnapshot(await invoke("confirm_import_worker_stopped", { runId }));
+  const snapshot = parseSnapshot(await unwrap(commands.confirmImportWorkerStopped(runId)));
   if (snapshot.runId !== runId || snapshot.confirmationRequired) {
     throw new Error("Import confirmation did not settle the exact interrupted run");
   }

@@ -9,7 +9,8 @@ import {
   useMantineColorScheme,
 } from "@mantine/core";
 import { IconAlertCircle, IconChartDots } from "@tabler/icons-react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, unwrap } from "../lib/ipc";
+import type { FileStats } from "../generated/bindings";
 import { useEffect, useState } from "react";
 import HeaderCard from "../components/common/HeaderCard";
 
@@ -18,14 +19,9 @@ import DataSelection from "../components/visualization/DataSelection";
 import LevelOrdering from "../components/visualization/LevelOrdering";
 import VisualizeStep from "../components/visualization/VisualizeStep";
 import { useProjectStore } from "../stores/projectStore";
-import { DataInspection, useVisualizationStore } from "../stores/visualizationStore";
+import { useVisualizationStore } from "../stores/visualizationStore";
 import { visualizationSettings, acceptedVisualizationSettings } from "../stores/visualizationStore";
 import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
-
-interface FileStats {
-  mtime: string;
-  size: number;
-}
 
 export default function VisualizationPage() {
   const { colorScheme } = useMantineColorScheme();
@@ -60,9 +56,7 @@ export default function VisualizationPage() {
     async function scanStats() {
       if (!projectRoot) return;
       try {
-        const files = await invoke<
-          Array<{ fileName: string; relativePath: string; size: number; modified: string }>
-        >("list_stats_files", { projectRoot });
+        const files = await unwrap(commands.listStatsFiles(projectRoot));
         if (!isCurrent()) return;
         setAvailableFiles(files);
         if (files.length === 0) {
@@ -86,10 +80,9 @@ export default function VisualizationPage() {
       if (!joinConfig || !qcbfSource || !currentProject) return;
 
       const loadQcbfOnly = async () => {
-        const result = await invoke<DataInspection>("load_qcbf_data", {
-          projectRoot: currentProject.projectMeta.rootPath,
-          relativePath: qcbfSource.relativePath,
-        });
+        const result = await unwrap(
+          commands.loadQcbfData(currentProject.projectMeta.rootPath, qcbfSource.relativePath),
+        );
         if (!isCurrent()) return null;
         if (result.qcbfHash !== qcbfSource.fileHash) {
           useVisualizationStore.getState().invalidateContract();
@@ -103,9 +96,7 @@ export default function VisualizationPage() {
       // Step 1: Stat external file mtime (cheap, no full read)
       let stats: FileStats;
       try {
-        stats = await invoke<FileStats>("stat_file", {
-          path: joinConfig.externalSource.absolutePath,
-        });
+        stats = await unwrap(commands.statFile(joinConfig.externalSource.absolutePath));
         if (!isCurrent()) return;
       } catch {
         if (!isCurrent()) return;
@@ -132,16 +123,18 @@ export default function VisualizationPage() {
 
       // Step 3: mtime changed — re-run execute_join to get fresh hash
       try {
-        const result = await invoke<DataInspection>("execute_join", {
-          projectRoot: currentProject.projectMeta.rootPath,
-          qcbfRelativePath: qcbfSource.relativePath,
-          externalAbsolutePath: joinConfig.externalSource.absolutePath,
-          keys: joinConfig.keys,
-          dropRightOn: joinConfig.dropRightOn,
-          naTokens: joinConfig.naTokens,
-          sheetName: joinConfig.externalSource.sheetName,
-          delimiter: joinConfig.delimiter === "auto" ? null : joinConfig.delimiter,
-        });
+        const result = await unwrap(
+          commands.executeJoin(
+            currentProject.projectMeta.rootPath,
+            qcbfSource.relativePath,
+            joinConfig.externalSource.absolutePath,
+            joinConfig.keys,
+            joinConfig.dropRightOn,
+            joinConfig.naTokens,
+            joinConfig.externalSource.sheetName,
+            joinConfig.delimiter === "auto" ? null : joinConfig.delimiter,
+          ),
+        );
         if (!isCurrent()) return;
 
         // Step 4: Compare external hash
@@ -194,30 +187,18 @@ export default function VisualizationPage() {
       if (joinConfig) {
         // Join-active path: call execute_join
         try {
-          const result = await invoke<{
-            columns: Array<{
-              name: string;
-              originalName: string;
-              source: "qcbf" | "external";
-              units: string;
-              inferredType: string;
-              levels: string[];
-              isIdentifier: boolean;
-            }>;
-            rowCount: number;
-            qcbfRowCount: number;
-            qcbfHash: string;
-            externalHash: string | null;
-          }>("execute_join", {
-            projectRoot: currentProject.projectMeta.rootPath,
-            qcbfRelativePath: qcbfSource.relativePath,
-            externalAbsolutePath: joinConfig.externalSource.absolutePath,
-            keys: joinConfig.keys,
-            dropRightOn: joinConfig.dropRightOn,
-            naTokens: joinConfig.naTokens,
-            sheetName: joinConfig.externalSource.sheetName,
-            delimiter: joinConfig.delimiter,
-          });
+          const result = await unwrap(
+            commands.executeJoin(
+              currentProject.projectMeta.rootPath,
+              qcbfSource.relativePath,
+              joinConfig.externalSource.absolutePath,
+              joinConfig.keys,
+              joinConfig.dropRightOn,
+              joinConfig.naTokens,
+              joinConfig.externalSource.sheetName,
+              joinConfig.delimiter,
+            ),
+          );
           if (!isCurrent()) return;
           if (result.qcbfHash !== qcbfSource.fileHash) {
             useVisualizationStore.getState().invalidateContract();
@@ -231,10 +212,9 @@ export default function VisualizationPage() {
               message:
                 "External data content changed. Relink and confirm before resetting dependent visualization setup.",
             });
-            const qcbfOnly = await invoke<DataInspection>("load_qcbf_data", {
-              projectRoot: currentProject.projectMeta.rootPath,
-              relativePath: qcbfSource.relativePath,
-            });
+            const qcbfOnly = await unwrap(
+              commands.loadQcbfData(currentProject.projectMeta.rootPath, qcbfSource.relativePath),
+            );
             if (!isCurrent()) return;
             useVisualizationStore.getState().setInspection(qcbfOnly);
             return;
@@ -248,10 +228,9 @@ export default function VisualizationPage() {
         } catch {
           if (!isCurrent()) return;
           try {
-            const qcbfOnly = await invoke<DataInspection>("load_qcbf_data", {
-              projectRoot: currentProject.projectMeta.rootPath,
-              relativePath: qcbfSource.relativePath,
-            });
+            const qcbfOnly = await unwrap(
+              commands.loadQcbfData(currentProject.projectMeta.rootPath, qcbfSource.relativePath),
+            );
             if (!isCurrent()) return;
             if (qcbfOnly.qcbfHash !== qcbfSource.fileHash) {
               useVisualizationStore.getState().invalidateContract();
@@ -275,24 +254,9 @@ export default function VisualizationPage() {
       } else {
         // qCBF-only path: call load_qcbf_data
         try {
-          const result = await invoke<{
-            columns: Array<{
-              name: string;
-              originalName: string;
-              source: "qcbf" | "external";
-              units: string;
-              inferredType: string;
-              levels: string[];
-              isIdentifier: boolean;
-            }>;
-            rowCount: number;
-            qcbfRowCount: number;
-            qcbfHash: string;
-            externalHash: string | null;
-          }>("load_qcbf_data", {
-            projectRoot: currentProject.projectMeta.rootPath,
-            relativePath: qcbfSource.relativePath,
-          });
+          const result = await unwrap(
+            commands.loadQcbfData(currentProject.projectMeta.rootPath, qcbfSource.relativePath),
+          );
           if (!isCurrent()) return;
           if (result.qcbfHash !== qcbfSource.fileHash) {
             useVisualizationStore.getState().invalidateContract();
@@ -324,30 +288,18 @@ export default function VisualizationPage() {
     ) {
       // Join active: call execute_join to produce merged schema
       try {
-        const result = await invoke<{
-          columns: Array<{
-            name: string;
-            originalName: string;
-            source: "qcbf" | "external";
-            units: string;
-            inferredType: string;
-            levels: string[];
-            isIdentifier: boolean;
-          }>;
-          rowCount: number;
-          qcbfRowCount: number;
-          qcbfHash: string;
-          externalHash: string | null;
-        }>("execute_join", {
-          projectRoot: project.projectMeta.rootPath,
-          qcbfRelativePath: qcbfSource.relativePath,
-          externalAbsolutePath: joinConfig.externalSource.absolutePath,
-          keys: joinConfig.keys,
-          dropRightOn: joinConfig.dropRightOn,
-          naTokens: joinConfig.naTokens,
-          sheetName: joinConfig.externalSource.sheetName,
-          delimiter: joinConfig.delimiter === "auto" ? null : joinConfig.delimiter,
-        });
+        const result = await unwrap(
+          commands.executeJoin(
+            project.projectMeta.rootPath,
+            qcbfSource.relativePath,
+            joinConfig.externalSource.absolutePath,
+            joinConfig.keys,
+            joinConfig.dropRightOn,
+            joinConfig.naTokens,
+            joinConfig.externalSource.sheetName,
+            joinConfig.delimiter === "auto" ? null : joinConfig.delimiter,
+          ),
+        );
         if (lease && !isCurrentProjectLease(lease)) return;
         useVisualizationStore.getState().setInspection(result);
         // Reset column types, level orderings, axis assignment (schema changed)
