@@ -4,16 +4,22 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { NativeGuiSession } from "./session";
 
 const client = new Client({ name: "native-gui-smoke", version: "1" });
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: ["--import", "tsx", "server.ts"],
-  env: Object.fromEntries(
-    Object.entries(process.env).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
+  env: {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
     ),
-  ),
+    // Default launches must ignore stale desktop-session credentials.
+    DISPLAY: ":65534",
+    XAUTHORITY: "/nonexistent-native-gui-smoke/Xauthority",
+  },
   stderr: "inherit",
 });
 await client.connect(transport);
@@ -119,6 +125,31 @@ try {
   const vanilla = JSON.parse(resultText(await call("launch", { fresh: true })));
   assert.notEqual(vanilla.workspace, seeded.workspace);
   await call("wait", { selector: '[data-testid="welcome-card"]' });
+  await call("close");
+
+  // Disabling Xvfb's server-side GLX must not disable the app's WebGL rendering.
+  const rendering = new NativeGuiSession();
+  try {
+    await rendering.launch();
+    const pixels = await rendering.browser.execute(() =>
+      ["webgl", "webgl2"].map((kind) => {
+        const gl = document.createElement("canvas").getContext(kind) as
+          WebGLRenderingContext | WebGL2RenderingContext | null;
+        if (!gl) return null;
+        gl.clearColor(1, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        const pixel = new Uint8Array(4);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        return Array.from(pixel);
+      }),
+    );
+    assert.deepEqual(pixels, [
+      [255, 0, 0, 255],
+      [255, 0, 0, 255],
+    ]);
+  } finally {
+    await rendering.close();
+  }
   console.log(`Native GUI smoke passed. Artifacts: ${launched.workspace}`);
 } finally {
   await Promise.allSettled([call("close"), call("close", {}, "ses_native_gui_smoke_b")]);

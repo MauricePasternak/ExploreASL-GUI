@@ -36,7 +36,8 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-export function sandboxArguments(workspace: string): string[] {
+export function sandboxArguments(workspace: string, xauthority?: string): string[] {
+  const sandboxAuthority = path.join(workspace, "runtime", "Xauthority");
   return [
     "--die-with-parent",
     "--unshare-pid",
@@ -75,6 +76,9 @@ export function sandboxArguments(workspace: string): string[] {
     "--setenv",
     "GDK_BACKEND",
     "x11",
+    ...(xauthority
+      ? ["--ro-bind", xauthority, sandboxAuthority, "--setenv", "XAUTHORITY", sandboxAuthority]
+      : []),
   ];
 }
 
@@ -126,15 +130,35 @@ export class NativeGuiSession {
   async launch({
     fresh = false,
     profile_template,
+    display = "virtual",
   }: {
     fresh?: boolean;
     profile_template?: string;
+    display?: "virtual" | "desktop";
   } = {}): Promise<{ workspace: string; application: string }> {
     if (this.driver) throw new Error("Window already launched; close it before relaunching.");
     if (process.platform !== "linux")
       throw new Error("Native agent controller currently supports Linux only.");
-    if (!process.env.DISPLAY)
-      throw new Error("DISPLAY missing. Run OpenCode under Xvfb for headless interaction.");
+    if (display === "desktop" && !process.env.DISPLAY)
+      throw new Error(
+        "Desktop mode requires DISPLAY. Omit display to use a private virtual display.",
+      );
+    const xauthority =
+      display === "desktop"
+        ? await realpath(process.env.XAUTHORITY || path.join(homedir(), ".Xauthority")).catch(
+            (cause: unknown) => {
+              throw new Error(
+                "Desktop Xauthority unavailable. Launch from the current graphical session, or use the default virtual display.",
+                { cause },
+              );
+            },
+          )
+        : undefined;
+    const xvfb = display === "virtual" ? executable("xvfb-run") : undefined;
+    if (xvfb) {
+      executable("Xvfb");
+      executable("xauth");
+    }
     const bwrap = executable("bwrap");
     const dbus = executable("dbus-run-session");
     const driverPath = resolveTauriDriver({
@@ -166,14 +190,28 @@ export class NativeGuiSession {
     if (profile_template) await seedProfiles(profile_template, workspace);
     this.workspace = workspace;
     const [port, nativePort] = await Promise.all([freePort(), freePort()]);
-    const log = createWriteStream(path.join(workspace, "driver.log"));
+    const logPath = path.join(workspace, "driver.log");
+    const log = createWriteStream(logPath, { flags: "a" });
     const driver = spawn(
       bwrap,
       [
-        ...sandboxArguments(workspace),
+        ...sandboxArguments(workspace, xauthority),
         "--",
         dbus,
         "--",
+        // Start inside the sandbox so its private temporary mount cannot hide the auth file.
+        ...(xvfb
+          ? [
+              xvfb,
+              "-a",
+              "-e",
+              logPath,
+              "-s",
+              // Server GLX probes inaccessible host GPUs; WebKit still provides WebGL through EGL.
+              "-screen 0 1920x1080x24 -nolisten tcp -extension GLX",
+              "--",
+            ]
+          : []),
         driverPath,
         "--port",
         String(port),

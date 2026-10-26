@@ -36,8 +36,12 @@ test("MCP advertises native controls, validates inputs and reports missing launc
     const launchSchema = tools.find((tool) => tool.name === "launch")!.inputSchema;
     assert.partialDeepStrictEqual(launchSchema.properties?.fresh, { type: "boolean" });
     assert.partialDeepStrictEqual(launchSchema.properties?.profile_template, { type: "string" });
+    assert.partialDeepStrictEqual(launchSchema.properties?.display, {
+      type: "string",
+      enum: ["virtual", "desktop"],
+    });
     assert.ok(!launchSchema.required?.length);
-    for (const args of [{ fresh: "yes" }, { profile_template: " " }]) {
+    for (const args of [{ fresh: "yes" }, { profile_template: " " }, { display: "wayland" }]) {
       const invalidLaunch = await client.callTool({ name: "launch", arguments: args });
       assert.equal(invalidLaunch.isError, true);
     }
@@ -62,6 +66,29 @@ test("MCP advertises native controls, validates inputs and reports missing launc
     await server.close();
   }
 });
+
+test(
+  "desktop mode rejects missing or stale graphical credentials before starting processes",
+  { skip: process.platform !== "linux" },
+  async () => {
+    const previousDisplay = process.env.DISPLAY;
+    const previousAuthority = process.env.XAUTHORITY;
+    const gui = new NativeGuiSession();
+    delete process.env.DISPLAY;
+    try {
+      await assert.rejects(gui.launch({ display: "desktop" }), /Desktop mode requires DISPLAY/);
+      process.env.DISPLAY = ":65534";
+      process.env.XAUTHORITY = "/nonexistent-native-gui-test/Xauthority";
+      await assert.rejects(gui.launch({ display: "desktop" }), /Desktop Xauthority unavailable/);
+    } finally {
+      if (previousDisplay === undefined) delete process.env.DISPLAY;
+      else process.env.DISPLAY = previousDisplay;
+      if (previousAuthority === undefined) delete process.env.XAUTHORITY;
+      else process.env.XAUTHORITY = previousAuthority;
+      await gui.stopDriver();
+    }
+  },
+);
 
 test("profile templates import only schema-valid profiles without changing source or existing settings", async () => {
   const base = path.join(tmpdir(), "opencode");
@@ -180,7 +207,7 @@ test("project copies preserve originals and symlinks; reject recursive workspace
 });
 
 test(
-  "Linux sandbox permits disposable writes but rejects original and symlink-target writes",
+  "Linux sandbox confines writes and exposes desktop authority read-only across private temporary mounts",
   { skip: process.platform !== "linux" },
   async () => {
     const root = await mkdtemp(path.join(tmpdir(), "native-gui-sandbox-test-"));
@@ -188,13 +215,16 @@ test(
       const source = path.join(root, "source");
       const workspace = path.join(root, "workspace");
       await Promise.all([mkdir(source), mkdir(workspace)]);
+      await mkdir(path.join(workspace, "runtime"));
+      const authority = path.join(root, "Xauthority");
+      await writeFile(authority, "desktop-cookie", { mode: 0o600 });
       const original = path.join(source, "original.txt");
       await writeFile(original, "unchanged");
       await symlink(original, path.join(workspace, "external-link"));
       const result = spawnSync(
         "bwrap",
         [
-          ...sandboxArguments(workspace),
+          ...sandboxArguments(workspace, authority),
           "--ro-bind",
           source,
           source,
@@ -202,17 +232,20 @@ test(
           process.execPath,
           "--input-type=module",
           "-e",
-          `import assert from 'node:assert/strict'; import {writeFileSync} from 'node:fs';
+          `import assert from 'node:assert/strict'; import {readFileSync, writeFileSync} from 'node:fs';
+       assert.ok(readFileSync(process.env.XAUTHORITY, 'utf8') === 'desktop-cookie');
+       assert.throws(() => writeFileSync(process.env.XAUTHORITY, 'bad'), {code: 'EROFS'});
        for (const file of process.argv.slice(1, 3)) assert.throws(() => writeFileSync(file, 'bad'), {code: 'EROFS'});
        writeFileSync(process.argv[3], 'allowed');`,
           original,
           path.join(workspace, "external-link"),
           path.join(workspace, "output.txt"),
         ],
-        { encoding: "utf8", timeout: 10_000 },
+        { encoding: "utf8", timeout: 10_000, env: { ...process.env, XAUTHORITY: authority } },
       );
       assert.equal(result.status, 0, result.error?.message ?? result.stderr);
       assert.equal(await readFile(original, "utf8"), "unchanged");
+      assert.equal(await readFile(authority, "utf8"), "desktop-cookie");
       assert.equal(await readFile(path.join(workspace, "output.txt"), "utf8"), "allowed");
     } finally {
       await rm(root, { recursive: true, force: true });

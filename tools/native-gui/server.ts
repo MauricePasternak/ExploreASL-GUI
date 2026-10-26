@@ -27,7 +27,7 @@ export function createServer() {
     { name: "exploreasl-native-gui", version: "0.1.0" },
     {
       instructions:
-        "Controls disposable native Linux Tauri windows, not Chromium. Launch first, inspect for CSS selectors, then act. Launch defaults to vanilla settings for new sessions; profile_template seeds only execution profiles into a fresh workspace, and fresh starts an empty workspace. Each OpenCode session owns a separate window. Real filesystem is read-only; writable paths are returned by launch. Native dialogs are not automated. Close when finished.",
+        "Controls disposable native Linux Tauri windows, not Chromium. Launch first, inspect for CSS selectors, then act. Windows use private virtual displays by default; display: desktop explicitly uses the inherited graphical session. Launch defaults to vanilla settings for new sessions; profile_template seeds only execution profiles into a fresh workspace, and fresh starts an empty workspace. Each OpenCode session owns a separate window. Real filesystem is read-only; writable paths are returned by launch. Native dialogs are not automated. Close when finished.",
     },
   );
   const sessions = new Map<string, { gui: NativeGuiSession; pending: Promise<unknown> }>();
@@ -65,8 +65,14 @@ export function createServer() {
 
   register(
     "launch",
-    "Launch separate native window with isolated settings, private D-Bus and read-only host filesystem. Default relaunch preserves settings; fresh forces vanilla, profile_template starts fresh with saved profiles and normal validation. Close current window before switching. Uses existing E2E_APP_PATH build; never rebuilds the app.",
+    "Launch separate native window with isolated settings, private D-Bus, authenticated virtual display and read-only host filesystem. display: desktop opts into the inherited desktop instead. Default relaunch preserves settings; fresh forces vanilla, profile_template starts fresh with saved profiles and normal validation. Close current window before switching. Uses existing E2E_APP_PATH build; never rebuilds the app.",
     {
+      display: z
+        .enum(["virtual", "desktop"])
+        .optional()
+        .describe(
+          "Defaults to a private virtual display (no desktop login needed). Use desktop only for a visible window with current DISPLAY and XAUTHORITY.",
+        ),
       fresh: z
         .boolean()
         .optional()

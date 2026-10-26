@@ -8,7 +8,12 @@ from concurrent feature work.
 ## Setup
 
 Requirements: Node/pnpm, `tauri-driver`, `WebKitWebDriver`, `bwrap`, `dbus-run-session`,
-and an X11 display (`DISPLAY`). For headless work, start OpenCode under Xvfb.
+`xvfb-run`, `Xvfb`, and `xauth` (Debian/Ubuntu: `sudo apt install xvfb xauth`).
+Launches use their own authenticated 1920×1080 virtual display by default; no desktop
+login, `DISPLAY`, or `XAUTHORITY` configuration is needed. These are real native
+Tauri/WebKit windows, viewed through `inspect` and `screenshot`, not browser substitutes.
+Server-side GLX is disabled to avoid probing host GPU drivers from the private device
+namespace; WebKit's EGL-based WebGL rendering remains available.
 
 ```sh
 pnpm --dir tools/native-gui install --frozen-lockfile
@@ -52,9 +57,20 @@ inspect discovered signatures before calling, for example `tools.native_gui.laun
 MCP command uses `node --import tsx`, not package-manager script banners, to keep stdout
 protocol-only.
 
+Do not hardcode `DISPLAY` or GNOME's temporary `.mutter-Xwaylandauth.*` filenames in
+MCP configuration. Remove old overrides; virtual mode ignores inherited desktop values.
+
+For a window visible on your desktop, explicitly call `launch({ display: "desktop" })`.
+This mode needs the current graphical session's `DISPLAY` and `XAUTHORITY` (or host
+`~/.Xauthority` if unset). The authority file is exposed read-only inside the sandbox,
+including when its host path is under a hidden temporary directory. A long-running
+OpenCode service can retain stale session variables; opening a new terminal client
+does not refresh that service's environment. Use virtual mode for unattended checks.
+Neither mode changes desktop access permissions or disables X authentication.
+
 ## Agent workflow
 
-1. `launch`: returns isolated workspace and application path.
+1. `launch`: starts a private virtual display/window; returns isolated workspace and application path.
 2. `inspect`: visible text, labels, values, disabled/checked state, CSS selectors.
 3. `click`, `fill`, `select`, `keys`, `wait`: real WebDriver input and bounded waits.
 4. `screenshot`: PNG image plus saved artifact path.
@@ -137,7 +153,9 @@ current native/test setup before opening. Original datasets remain untouched.
   app's existing Tauri permission scopes; direct writes are rejected. Symlinks in copied
   projects remain symlinks; external targets stay read-only.
   Host temporary directory is hidden by a private mount, so builds/data located there
-  are not visible. X11 is used; Wayland-only desktops need XWayland or Xvfb.
+  are not visible. Xvfb and its authority file start inside this sandbox; the existing
+  PID namespace disposes the virtual display with the window. Desktop mode uses X11
+  and needs a running X server, such as XWayland on a Wayland desktop.
 - Screenshots cover webview, not OS chooser/decorations. Inspection is DOM-based, not full
   OS accessibility tree. No native-dialog automation. DOM selector fallback uses structure
   when unique test ID/id is unavailable; inspect again after substantial DOM changes.
@@ -155,4 +173,7 @@ Smoke check exercises native launch, click, text entry, state update, inspection
 capture, waits, navigation, keyboard, two concurrent session-isolated windows, close and
 relaunch with retained sandbox settings, explicit vanilla reset, and profile-template
 seeding without importing personal recent projects or bypassing native validation.
+It deliberately supplies invalid desktop display/authority values to verify that the
+default virtual displays are independent of desktop-session credentials.
+It also checks that WebGL 1 and 2 render pixels with server-side GLX disabled.
 No project data or personal settings are touched.
