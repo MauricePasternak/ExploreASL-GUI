@@ -13,6 +13,7 @@ import "./App.css";
 import { createAppRouter } from "./app/router";
 import { renderBootstrapError } from "./app/bootstrapError";
 import { theme } from "./app/theme";
+import ErrorDetailsModal from "./components/common/ErrorDetailsModal";
 import type { E2EBridgeControl } from "./e2e/bridge";
 import {
   captureSnapshot,
@@ -133,6 +134,7 @@ function renderApp() {
     <React.StrictMode>
       <MantineProvider theme={theme} defaultColorScheme="light">
         <Notifications />
+        <ErrorDetailsModal />
         <RouterProvider router={router} />
       </MantineProvider>
     </React.StrictMode>,
