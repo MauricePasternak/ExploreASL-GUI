@@ -7,7 +7,7 @@ from concurrent feature work.
 
 ## Setup
 
-Requirements: Node/pnpm, `tauri-driver`, `WebKitWebDriver`, `bwrap`, `dbus-run-session`,
+Requirements: Node 24.12.0/pnpm, `tauri-driver`, `WebKitWebDriver`, `bwrap`, `dbus-run-session`,
 `xvfb-run`, `Xvfb`, and `xauth` (Debian/Ubuntu: `sudo apt install xvfb xauth`).
 Launches use their own authenticated 1920×1080 virtual display by default; no desktop
 login, `DISPLAY`, or `XAUTHORITY` configuration is needed. These are real native
@@ -55,7 +55,8 @@ Local OpenCode configuration: `.opencode/opencode.jsonc`, MCP server `native_gui
 Reload/reconnect through `/mcps` if tools do not appear. Native tools use Code Mode;
 inspect discovered signatures before calling, for example `tools.native_gui.launch()`.
 MCP command uses `node --import tsx`, not package-manager script banners, to keep stdout
-protocol-only.
+protocol-only. Set `command[0]` to the absolute Node 24.12.0 executable path so a
+long-running OpenCode service cannot pick an older system Node from `PATH`.
 
 Do not hardcode `DISPLAY` or GNOME's temporary `.mutter-Xwaylandauth.*` filenames in
 MCP configuration. Remove old overrides; virtual mode ignores inherited desktop values.
@@ -72,7 +73,7 @@ Neither mode changes desktop access permissions or disables X authentication.
 
 1. `launch`: starts a private virtual display/window; returns isolated workspace and application path.
 2. `inspect`: visible text, labels, values, disabled/checked state, CSS selectors.
-3. `click`, `fill`, `select`, `keys`, `wait`: real WebDriver input and bounded waits.
+3. `click`, `fill`, `select`, `keys`, `hover`, `scroll`, `drag`, `wait`: real WebDriver input and bounded waits.
 4. `screenshot`: PNG image plus saved artifact path.
 5. `close`: normal project shutdown, then window/driver disposal.
 
@@ -152,9 +153,56 @@ redaction is not general secret scrubbing. Keep disposable artifacts private.
 Prefer unique `[data-testid="..."]` selectors from inspection. CSS only; no arbitrary
 JavaScript evaluation or XPath input. `select` handles native HTML selects; Mantine
 comboboxes require clicking trigger, inspecting options, then clicking desired option.
+Actions wait up to 15 seconds for an absent target to appear, then wait for it to be
+displayed. Ambiguous selectors still fail; input actions are never replayed by the
+controller. Use `wait` for application-specific completion after input.
 `wait` text uses DOM `textContent`, matching native E2E tests; WebKit can return empty
 `getText()` for rendered buttons. `navigate` accepts logical routes such as `/overview`,
 not full URLs or hash-prefixed paths, and does not bypass project-access checks.
+
+### Manual paths and pointer input
+
+Current app builds expose **Enter path…** alternatives beside native project, DICOM,
+external-data, and manifest-export choosers. Click the path button, fill its `-input`,
+and click `-confirm`; `-cancel` dismisses without selecting anything. Base test IDs:
+
+- `landing-new-project-path`, `landing-open-project-path`
+- `dicom-source-path`, `dicom-relink-path`
+- `external-data-path`
+- `export-markdown-path`, `export-html-path`, `export-csv-path`
+
+Paths must be absolute; file extensions must match the selected operation. Existing
+profile, project, source, and import validation still applies. Exporting to an existing
+file displays an overwrite warning and requires a second **Replace file** confirmation.
+Filesystem/write failures remain visible; sandbox host-write restrictions are unchanged.
+Profile settings already have editable path fields. Older binaries need rebuilding to
+expose these UI alternatives; the controller does not inject them or automate OS dialogs.
+
+```ts
+await tools.native_gui.hover({ selector: '[data-testid="some-help-control"]' });
+await tools.native_gui.click({
+  selector: '[data-testid="niivue-canvas"]',
+  point: { x: 120, y: 80 },
+});
+await tools.native_gui.drag({
+  selector: '[data-testid="niivue-canvas"]',
+  from: { x: 120, y: 80 },
+  to: { x: 180, y: 140 },
+});
+await tools.native_gui.scroll({ selector: '[data-testid="niivue-canvas"]', delta_y: 120 });
+```
+
+Points are integer **CSS-pixel offsets from the target's top-left**, measured after
+automatic centering for click/hover/drag. They are not PNG pixel coordinates. Coordinate
+actions reject out-of-element, out-of-viewport, and covered endpoints. Drag stays within
+one element; only the left button is supported, duration defaults to 500 ms (0–5000).
+Native WebKit testing found incorrect non-primary mouse-up events, so right/middle
+drags are deliberately not exposed. Held buttons are
+released on failure without retrying input. Hover defaults to the visible center.
+Wheel input defaults to the visible center and deliberately does **not** recenter the
+target first, preserving nested/page scroll positions. Deltas are CSS pixels, bounded
+to ±10000; positive `delta_y` scrolls down. Canvas handlers may interpret wheels as
+zoom/slice controls instead. Hover/drag results label resolved viewport coordinates.
 
 `copy_project` copies a directory containing `project.easl` into writable workspace,
 preserves dataset directory name, and adds the copy to isolated **Recent Projects**.
@@ -162,7 +210,7 @@ Open it using its Recent Projects button; normal validation/access checks still 
 For repository datasets, call it with `test/ds000240`, `test/ds007116` or `test/test_GENFI`
 (absolute source paths also work). Copies may be several GB; filesystem reflinks are
 attempted when supported, otherwise normal copies are made. Native choosers still need
-manual help or existing native E2E setup. Settings start empty unless a profile template
+manual help; use the app's path-entry alternatives for unattended workflows. Settings start empty unless a profile template
 is explicitly supplied; personal settings are never imported automatically.
 
 ### Vanilla or pre-seeded launch
@@ -253,4 +301,6 @@ It also checks that WebGL 1 and 2 render pixels with server-side GLX disabled.
 Sizing smoke covers portrait and 4K native-window requests, reports actual CSS/PNG
 dimensions, validates inspection styles/geometry, native console-log capture, failure
 evidence, and offline diagnostics after close.
+Pointer smoke checks trusted canvas hover/click/drag/wheel events, nested scrolling,
+and a delayed control clicked exactly once.
 No project data or personal settings are touched.

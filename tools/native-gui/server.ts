@@ -6,9 +6,10 @@ import type {
   ServerRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { copyProject, inspectDom, NativeGuiSession, SizeSchema } from "./session";
+import { copyProject, inspectDom, NativeGuiSession, PointSchema, SizeSchema } from "./session";
 import { errorText, pngDimensions, saveArtifact } from "./diagnostics";
 
 type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -17,6 +18,9 @@ const selector = z
   .min(1)
   .max(4096)
   .describe('Unique CSS selector, preferably [data-testid="..."].');
+const point = PointSchema.describe(
+  "CSS-pixel offset from target element's top-left, after scrolling. Not screenshot pixels.",
+);
 const text = (value: unknown): CallToolResult => ({
   content: [{ type: "text", text: JSON.stringify(value) }],
 });
@@ -26,7 +30,7 @@ export function createServer() {
     { name: "exploreasl-native-gui", version: "0.1.0" },
     {
       instructions:
-        "Controls disposable native Linux Tauri windows, not Chromium. Launch first, inspect for CSS selectors, then act. Windows use private virtual displays by default; display: desktop explicitly uses the inherited graphical session. Launch defaults to vanilla settings for new sessions; profile_template seeds only execution profiles into a fresh workspace, and fresh starts an empty workspace. Each OpenCode session owns a separate window. Real filesystem is read-only; writable paths are returned by launch. Native dialogs are not automated. Close when finished.",
+        "Controls disposable native Linux Tauri windows, not Chromium. Launch first, inspect for CSS selectors, then act. Windows use private virtual displays by default; display: desktop explicitly uses the inherited graphical session. Launch defaults to vanilla settings for new sessions; profile_template seeds only execution profiles into a fresh workspace, and fresh starts an empty workspace. Each OpenCode session owns a separate window. Real filesystem is read-only; writable paths are returned by launch. Native dialogs are not automated; use the app's Enter path alternatives. Pointer offsets use CSS pixels, not screenshot pixels. Close when finished.",
     },
   );
   const sessions = new Map<string, { gui: NativeGuiSession; pending: Promise<unknown> }>();
@@ -181,7 +185,7 @@ export function createServer() {
       const image = await gui.browser.takeScreenshot();
       const filename = await saveArtifact(
         gui.workspace!,
-        `screenshots/${Date.now()}-${crypto.randomUUID()}.png`,
+        `screenshots/${Date.now()}-${randomUUID()}.png`,
         Buffer.from(image, "base64"),
       );
       const metrics = await gui
@@ -201,11 +205,51 @@ export function createServer() {
 
   register(
     "click",
-    "Click unique visible element. Scrolls into view and uses real WebDriver input.",
-    { selector },
+    "Click unique visible element, waiting for async appearance. Optional point targets a CSS-pixel offset from its top-left. Scrolls into view; real WebDriver input, no action retries.",
+    { selector, point: point.optional() },
     async (args, gui) => {
-      await (await gui.element(args.selector)).click();
+      await gui.click(args.selector, args.point);
       return text({ clicked: args.selector });
+    },
+  );
+
+  register(
+    "hover",
+    "Move real mouse pointer over unique visible element, optionally at a CSS-pixel offset from top-left. Scrolls target into view; does not click or focus.",
+    { selector, point: point.optional() },
+    async (args, gui) => {
+      const target = await gui.hover(args.selector, args.point);
+      return text({ hovered: args.selector, viewport_point: target });
+    },
+  );
+
+  register(
+    "scroll",
+    "Send real mouse-wheel input at target's visible center or optional top-left CSS-pixel offset. Does not recenter target first; works with nested scroll regions and canvas wheel handlers. Positive delta_y scrolls down.",
+    {
+      selector,
+      point: point.optional(),
+      delta_x: z.number().int().min(-10_000).max(10_000).default(0),
+      delta_y: z.number().int().min(-10_000).max(10_000).default(0),
+    },
+    async (args, gui) => {
+      await gui.scroll(args.selector, args.delta_x, args.delta_y, args.point);
+      return text({ scrolled: args.selector, delta_x: args.delta_x, delta_y: args.delta_y });
+    },
+  );
+
+  register(
+    "drag",
+    "Left-button drag within a unique visible element using real mouse input. from/to are CSS-pixel offsets from target top-left, not screenshot pixels. Scrolls into view; endpoints must be uncovered and inside viewport. Buttons released even on failure. Non-primary buttons are unsupported by this native driver.",
+    {
+      selector,
+      from: point,
+      to: point,
+      duration_ms: z.number().int().min(0).max(5000).default(500),
+    },
+    async (args, gui) => {
+      const points = await gui.drag(args.selector, args.from, args.to, args.duration_ms);
+      return text({ dragged: args.selector, viewport_points: points });
     },
   );
 

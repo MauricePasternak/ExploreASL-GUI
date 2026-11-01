@@ -109,7 +109,7 @@ try {
   })) as CallToolResult;
   assert.equal(failed.isError, true);
   const failure = JSON.parse(resultText(failed));
-  assert.match(failure.error, /matched 0 elements/);
+  assert.match(failure.error, /Timed out waiting.*element does not exist/);
   assert.equal(failure.evidence.errors.length, 0);
   assert.equal(failure.evidence.artifacts.length, 3);
   for (const artifact of failure.evidence.artifacts) {
@@ -284,6 +284,82 @@ try {
     );
     console.log("Native console logs:", nativeLogs.map((log) => log.path).join(", "));
     console.log("WebGL 1/2 pixels:", JSON.stringify(pixels));
+
+    // Browser-side fixture only: exercise trusted native pointer/wheel events on a canvas
+    // and an actual nested scrolling region, without changing application state.
+    await rendering.browser.execute(() => {
+      const canvas = document.createElement("canvas");
+      canvas.dataset.testid = "pointer-smoke";
+      canvas.style.cssText =
+        "position:fixed;left:20px;top:20px;width:200px;height:150px;z-index:2147483647;background:white";
+      for (const kind of [
+        "pointerenter",
+        "pointermove",
+        "pointerdown",
+        "pointerup",
+        "click",
+        "wheel",
+      ]) {
+        canvas.addEventListener(kind, (event) => {
+          const pointer = event as PointerEvent;
+          canvas.dataset[kind] = JSON.stringify({
+            trusted: event.isTrusted,
+            x: pointer.offsetX,
+            y: pointer.offsetY,
+            button: pointer.button,
+            delta: (event as WheelEvent).deltaY,
+          });
+        });
+      }
+      canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+      document.body.append(canvas);
+      const region = document.createElement("div");
+      region.dataset.testid = "scroll-smoke";
+      region.style.cssText =
+        "position:fixed;left:250px;top:20px;width:150px;height:100px;overflow:auto;z-index:2147483647;background:white";
+      const content = document.createElement("div");
+      content.style.height = "2000px";
+      region.append(content);
+      document.body.append(region);
+      setTimeout(() => {
+        const button = document.createElement("button");
+        button.dataset.testid = "delayed-smoke";
+        button.style.cssText = "position:fixed;left:420px;top:20px;z-index:2147483647";
+        button.textContent = "Delayed action";
+        button.onclick = () => {
+          button.dataset.clicks = String(Number(button.dataset.clicks ?? 0) + 1);
+        };
+        document.body.append(button);
+      }, 300);
+    });
+    await rendering.click('[data-testid="delayed-smoke"]');
+    assert.equal(
+      await rendering.browser.$('[data-testid="delayed-smoke"]').getAttribute("data-clicks"),
+      "1",
+    );
+    const canvas = '[data-testid="pointer-smoke"]';
+    await rendering.hover(canvas, { x: 10, y: 10 });
+    await rendering.click(canvas, { x: 30, y: 40 });
+    const clicked = await rendering.browser.$(canvas).getAttribute("data-click");
+    assert.deepEqual(JSON.parse(clicked!), { trusted: true, x: 30, y: 40, button: 0 });
+    await rendering.drag(canvas, { x: 20, y: 30 }, { x: 80, y: 90 }, 200);
+    await rendering.scroll(canvas, 0, 120, { x: 10, y: 10 });
+    const events = await rendering.browser.execute(() => ({
+      ...document.querySelector<HTMLElement>('[data-testid="pointer-smoke"]')!.dataset,
+    }));
+    assert.equal(JSON.parse(events.pointerenter!).trusted, true);
+    assert.deepEqual(JSON.parse(events.pointerup!), { trusted: true, x: 80, y: 90, button: 0 });
+    assert.equal(JSON.parse(events.wheel!).delta, 120);
+    await rendering.scroll('[data-testid="scroll-smoke"]', 0, 250);
+    await rendering.browser.waitUntil(
+      async () =>
+        Number(await rendering.browser.$('[data-testid="scroll-smoke"]').getProperty("scrollTop")) >
+        0,
+      { timeout: 3000 },
+    );
+    console.log(
+      "Trusted canvas pointer/wheel, nested scroll, and delayed single-click checks passed.",
+    );
   } finally {
     try {
       await rendering.close();

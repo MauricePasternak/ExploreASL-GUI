@@ -20,7 +20,7 @@ import {
 } from "./session";
 import { LOG_BYTES, LOG_LINES, pngDimensions, saveArtifact, tailLog } from "./diagnostics";
 
-test("MCP advertises native controls, validates inputs and reports missing launch", async () => {
+test("MCP advertises native controls, validates inputs and reports missing launch", async (context) => {
   const { server, shutdown } = createServer();
   const client = new Client({ name: "native-gui-test", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -38,6 +38,9 @@ test("MCP advertises native controls, validates inputs and reports missing launc
         "inspect",
         "screenshot",
         "click",
+        "hover",
+        "scroll",
+        "drag",
         "fill",
         "select",
         "keys",
@@ -87,6 +90,22 @@ test("MCP advertises native controls, validates inputs and reports missing launc
       arguments: { route: "https://example.com" },
     });
     assert.equal(invalidRoute.isError, true);
+    const handlers = (["click", "hover", "scroll", "drag"] as const).map((name) =>
+      context.mock.method(NativeGuiSession.prototype, name, async () => {
+        throw new Error("Action handler reached before validation");
+      }),
+    );
+    for (const [name, args] of [
+      ["click", { point: { x: -1, y: 0 } }],
+      ["hover", { point: { x: 0, y: 4096 } }],
+      ["scroll", { delta_y: 10001 }],
+      ["drag", { from: { x: 0, y: 0 }, to: { x: -1, y: 1 } }],
+    ] as const) {
+      const result = await client.callTool({ name, arguments: { selector: "body", ...args } });
+      assert.equal(result.isError, true);
+      assert.match(JSON.stringify(result.content), /Input validation error/);
+    }
+    for (const handler of handlers) assert.equal(handler.mock.calls.length, 0);
     const closed = await client.callTool({ name: "close", arguments: {} });
     assert.notEqual(closed.isError, true); // A failed call must not poison this session's queue.
   } finally {
@@ -515,7 +534,7 @@ test("profile templates import only schema-valid profiles without changing sourc
   }
 });
 
-test("element helper rejects ambiguous selectors and centers controls before interaction", async () => {
+test("element helper waits for async existence, rejects ambiguity and optionally centers controls", async () => {
   const gui = new NativeGuiSession();
   let count = 1;
   const calls: unknown[] = [];
@@ -531,12 +550,91 @@ test("element helper rejects ambiguous selectors and centers controls before int
     value: {
       execute: async () => count,
       $: () => element,
+      waitUntil: async (condition: () => Promise<boolean>) => {
+        calls.push("wait");
+        assert.equal(await condition(), false);
+        count = 1;
+        assert.equal(await condition(), true);
+      },
     },
   });
   assert.equal(await gui.element("#target"), element);
   assert.deepEqual(calls, ["visible", { block: "center", inline: "center" }]);
   count = 2;
   await assert.rejects(gui.element("button"), /matched 2 elements/);
+  count = 0;
+  calls.length = 0;
+  assert.equal(await gui.element("#later", false), element);
+  assert.deepEqual(calls, ["wait", "visible"]);
+});
+
+test("pointer offsets use CSS geometry, reject covered/outside points, and wheel targeting does not recenter", async (context) => {
+  const gui = new NativeGuiSession();
+  const resolved = context.mock.method(gui, "element", async () => ({}) as never);
+  let covered = false;
+  const element = {
+    getBoundingClientRect: () => ({
+      left: 100,
+      top: 50,
+      right: 300,
+      bottom: 150,
+      width: 200,
+      height: 100,
+    }),
+    contains: (hit: unknown) => hit === element,
+  };
+  Object.defineProperty(gui, "browser", {
+    value: {
+      execute: async (fn: (...args: never[]) => unknown, ...args: unknown[]) =>
+        vm.runInNewContext(`(${fn.toString()})(...args)`, {
+          args,
+          innerWidth: 800,
+          innerHeight: 600,
+          document: {
+            querySelectorAll: () => [element],
+            elementFromPoint: () => (covered ? {} : element),
+          },
+        }),
+    },
+  });
+  assert.equal(
+    JSON.stringify(await gui.pointerPoints("#canvas", [{ x: 30, y: 40 }])),
+    '[{"x":130,"y":90}]',
+  );
+  assert.equal(
+    JSON.stringify(await gui.pointerPoints("#canvas", [undefined], false)),
+    '[{"x":200,"y":100}]',
+  );
+  assert.deepEqual(resolved.mock.calls[1].arguments, ["#canvas", false]);
+  await assert.rejects(gui.pointerPoints("#canvas", [{ x: 200, y: 1 }]), /outside the target/);
+  covered = true;
+  await assert.rejects(gui.pointerPoints("#canvas", [{ x: 1, y: 1 }]), /covered/);
+});
+
+test("failed pointer input releases held buttons without replacing its error or repeating input", async () => {
+  const gui = new NativeGuiSession();
+  let releases = 0;
+  let inputs = 0;
+  const error = new Error("native action failed");
+  Object.defineProperty(gui, "browser", {
+    value: {
+      releaseActions: async () => {
+        releases++;
+        throw new Error("release also failed");
+      },
+    },
+  });
+  await assert.rejects(
+    gui.performInput({
+      perform: async () => {
+        inputs++;
+        throw error;
+      },
+    }),
+    (actual) => actual === error,
+  );
+  assert.equal(inputs, 1);
+  assert.equal(releases, 1);
 });
 
 test("project copies preserve originals and symlinks; reject recursive workspace copies", async () => {

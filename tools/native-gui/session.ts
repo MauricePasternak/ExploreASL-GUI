@@ -1,6 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { constants, createWriteStream } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { cp, mkdir, mkdtemp, open, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -21,6 +22,11 @@ export const SizeSchema = z.object({
   height: z.number().int().min(1).max(4096),
 });
 type Size = z.infer<typeof SizeSchema>;
+export const PointSchema = z.object({
+  x: z.number().int().min(0).max(4095),
+  y: z.number().int().min(0).max(4095),
+});
+type Point = z.infer<typeof PointSchema>;
 
 // Passed directly to WebDriver; measurements are CSS pixels, not PNG/image pixels.
 export function viewportMetrics() {
@@ -133,9 +139,11 @@ export async function copyProject(sourceRoot: string, workspace: string): Promis
 
 export async function seedProfiles(source: string, workspace: string): Promise<void> {
   const template: unknown = JSON.parse(await readFile(path.resolve(projectRoot, source), "utf8"));
-  const profiles = z
-    .object({ executionProfiles: z.array(ExecutionProfileSchema).min(1) })
-    .parse(template);
+  const profiles = {
+    executionProfiles: ExecutionProfileSchema.array()
+      .min(1)
+      .parse(z.object({ executionProfiles: z.unknown() }).parse(template).executionProfiles),
+  };
   const { identifier } = JSON.parse(
     await readFile(path.join(projectRoot, "src-tauri", "tauri.conf.json"), "utf8"),
   ) as { identifier: string };
@@ -247,45 +255,54 @@ export class NativeGuiSession {
     const [port, nativePort] = await Promise.all([freePort(), freePort()]);
     this.port = port;
     const logPath = path.join(workspace, "driver.log");
-    const log = createWriteStream(logPath, { flags: "a" });
-    const driver = spawn(
-      bwrap,
-      [
-        ...sandboxArguments(workspace, xauthority),
-        "--",
-        dbus,
-        "--",
-        // Start inside the sandbox so its private temporary mount cannot hide the auth file.
-        ...(xvfb
-          ? [
-              xvfb,
-              "-a",
-              "-e",
-              logPath,
-              "-s",
-              // Server GLX probes inaccessible host GPUs; WebKit still provides WebGL through EGL.
-              `-screen 0 ${capacity.width}x${capacity.height}x24 -nolisten tcp -extension GLX`,
-              "--",
-            ]
-          : []),
-        driverPath,
-        "--port",
-        String(port),
-        "--native-port",
-        String(nativePort),
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] },
+    const log = await open(
+      logPath,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW,
+      0o600,
     );
-    this.driver = driver;
-    driver.once("exit", (code, signal) => {
-      this.lastDriverExit = { code, signal };
-    });
-    driver.stdout!.pipe(log, { end: false });
-    driver.stderr!.pipe(log, { end: false });
-    driver.once("close", () => log.end());
     try {
+      const driver = spawn(
+        bwrap,
+        [
+          ...sandboxArguments(workspace, xauthority),
+          "--",
+          dbus,
+          "--",
+          // Start inside the sandbox so its private temporary mount cannot hide the auth file.
+          ...(xvfb
+            ? [
+                xvfb,
+                "-a",
+                "-e",
+                logPath,
+                "-s",
+                // Server GLX probes inaccessible host GPUs; WebKit still provides WebGL through EGL.
+                `-screen 0 ${capacity.width}x${capacity.height}x24 -nolisten tcp -extension GLX`,
+                "--",
+              ]
+            : []),
+          driverPath,
+          "--port",
+          String(port),
+          "--native-port",
+          String(nativePort),
+        ],
+        { stdio: ["ignore", log.fd, log.fd] },
+      );
+      this.driver = driver;
+      driver.once("exit", (code, signal) => {
+        this.lastDriverExit = { code, signal };
+        if (this.driver === driver) {
+          this.driver = undefined;
+          this.connection = undefined;
+        }
+      });
       await Promise.race([
-        waitForTcpPort({ host: "127.0.0.1", port, timeoutMs: 15_000 }),
+        Promise.all(
+          [port, nativePort].map((port) =>
+            waitForTcpPort({ host: "127.0.0.1", port, timeoutMs: 15_000 }),
+          ),
+        ),
         new Promise<never>((_, reject) => {
           driver.once("error", reject);
           driver.once("exit", (code) => reject(new Error(`Native driver exited (${code}).`)));
@@ -320,6 +337,8 @@ export class NativeGuiSession {
       }));
       await this.stopDriver();
       throw Object.assign(error instanceof Error ? error : new Error(String(error)), { evidence });
+    } finally {
+      await log.close();
     }
   }
 
@@ -420,7 +439,7 @@ export class NativeGuiSession {
     const artifacts: string[] = [];
     const errors: string[] = [];
     if (!this.workspace) return { diagnostics, artifacts, errors };
-    const prefix = `failures/${Date.now()}-${crypto.randomUUID()}`;
+    const prefix = `failures/${Date.now()}-${randomUUID()}`;
     if (this.connection) {
       await Promise.all([
         (async () => {
@@ -465,17 +484,26 @@ export class NativeGuiSession {
 
   async close(): Promise<void> {
     if (this.connection) {
-      // Keep the window alive if ordinary project shutdown fails.
-      await this.browser.execute(async () => {
-        const debug = (
-          window as unknown as {
-            __DEBUG__?: { stores: { projectStore: { closeProject(): Promise<void> } } };
-          }
-        ).__DEBUG__;
-        if (!debug) throw new Error("App debug API unavailable; close the window manually.");
-        await debug.stores.projectStore.closeProject();
-      });
-      await this.browser.deleteSession();
+      try {
+        // Keep the window alive if ordinary project shutdown fails.
+        await this.browser.execute(async () => {
+          const debug = (
+            window as unknown as {
+              __DEBUG__?: { stores: { projectStore: { closeProject(): Promise<void> } } };
+            }
+          ).__DEBUG__;
+          if (!debug) throw new Error("App debug API unavailable; close the window manually.");
+          await debug.stores.projectStore.closeProject();
+        });
+        await this.browser.deleteSession();
+      } catch (error) {
+        // WDIO maps the protocol error code to name; messages can contain arbitrary app errors.
+        if (
+          !(error instanceof Error) ||
+          (error.name !== "invalid session id" && error.name !== "no such window")
+        )
+          throw error;
+      }
     }
     await this.stopDriver();
   }
@@ -495,18 +523,122 @@ export class NativeGuiSession {
     });
   }
 
-  async element(selector: string) {
+  async element(selector: string, scroll = true) {
     // Validate CSS before WDIO interprets selector strategies; reject script/XPath selectors.
-    const count = await this.browser.execute(
+    let count = await this.browser.execute(
       (css) => document.querySelectorAll(css).length,
       selector,
     );
+    if (count === 0) {
+      await this.browser.waitUntil(
+        async () => {
+          count = await this.browser.execute(
+            (css) => document.querySelectorAll(css).length,
+            selector,
+          );
+          return count > 0;
+        },
+        {
+          timeout: 15_000,
+          timeoutMsg: `Timed out waiting for ${selector}: element does not exist`,
+        },
+      );
+    }
     if (count !== 1)
       throw new Error(`Selector matched ${count} elements; use a unique CSS selector.`);
     const element = this.browser.$(selector);
     await element.waitForDisplayed({ timeout: 15_000 });
-    await element.scrollIntoView({ block: "center", inline: "center" });
+    if (scroll) await element.scrollIntoView({ block: "center", inline: "center" });
     return element;
+  }
+
+  async pointerPoints(selector: string, points: (Point | undefined)[], scroll = true) {
+    await this.element(selector, scroll);
+    return this.browser.execute(
+      (css, offsets) => {
+        const elements = document.querySelectorAll(css);
+        if (elements.length !== 1)
+          throw new Error("Pointer target must match exactly one element.");
+        const element = elements[0];
+        const rect = element.getBoundingClientRect();
+        return offsets.map((point) => {
+          if (point && (point.x >= rect.width || point.y >= rect.height))
+            throw new Error("Pointer point lies outside the target element.");
+          const x = Math.floor(
+            point
+              ? rect.left + point.x
+              : (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2,
+          );
+          const y = Math.floor(
+            point
+              ? rect.top + point.y
+              : (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2,
+          );
+          if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight)
+            throw new Error(
+              "Pointer point lies outside the viewport; scroll the target into view.",
+            );
+          const hit = document.elementFromPoint(x, y);
+          if (!hit || !element.contains(hit))
+            throw new Error("Pointer point is covered by another element.");
+          return { x, y };
+        });
+      },
+      selector,
+      points.map((point) => point ?? null),
+    );
+  }
+
+  async performInput(action: { perform(): Promise<void> }) {
+    try {
+      await action.perform();
+    } catch (error) {
+      // A partially accepted drag must not leave a mouse button held down.
+      await this.browser.releaseActions().catch(() => {});
+      throw error;
+    }
+  }
+
+  async click(selector: string, point?: Point) {
+    if (!point) {
+      await (await this.element(selector)).click();
+      return;
+    }
+    const [target] = await this.pointerPoints(selector, [point]);
+    await this.performInput(
+      this.browser
+        .action("pointer")
+        .move({ ...target, origin: "viewport" })
+        .down()
+        .up(),
+    );
+  }
+
+  async hover(selector: string, point?: Point) {
+    const [target] = await this.pointerPoints(selector, [point]);
+    await this.performInput(this.browser.action("pointer").move({ ...target, origin: "viewport" }));
+    return target;
+  }
+
+  async scroll(selector: string, deltaX: number, deltaY: number, point?: Point) {
+    if (deltaX === 0 && deltaY === 0) throw new Error("Provide a nonzero scroll delta.");
+    const [target] = await this.pointerPoints(selector, [point], false);
+    await this.performInput(
+      this.browser.action("wheel").scroll({ ...target, deltaX, deltaY, duration: 200 }),
+    );
+  }
+
+  async drag(selector: string, from: Point, to: Point, duration: number) {
+    const [start, end] = await this.pointerPoints(selector, [from, to]);
+    await this.performInput(
+      this.browser
+        .action("pointer")
+        .move({ ...start, origin: "viewport" })
+        .down()
+        .move({ ...end, origin: "viewport", duration })
+        .up(),
+    );
+    return { from: start, to: end };
   }
 
   async navigate(route: string): Promise<void> {
