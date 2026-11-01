@@ -235,7 +235,7 @@ fn scan_bids_sidecars_impl(root: &Path) -> AnyResult<BidsSidecarScan> {
         subjects.len(),
         subjects.iter().map(|s| s.sessions.len()).sum::<usize>()
     );
-    Ok(group_by_fingerprint(root, &subjects))
+    group_by_fingerprint(root, &subjects)
 }
 
 #[tauri::command]

@@ -1,3 +1,4 @@
+use anyhow::{Context, Result as AnyResult};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -91,7 +92,7 @@ pub fn compute_group_hash(fingerprint: &HashMap<String, Value>) -> String {
         hasher.update(b";");
     }
 
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// Derive BidsAslMetadata from a parsed sidecar JSON + derived M0Type + ASLContext.
@@ -181,19 +182,72 @@ fn derive_bids_metadata(
     }
 }
 
+/// Validate the acquisition before common-value projection can discard errors.
+/// Normalize only a validation copy, matching the frontend comma-number fields.
+fn validate_acquisition_metadata(metadata: &BidsAslMetadata) -> AnyResult<()> {
+    let mut normalized = serde_json::to_value(metadata)?;
+    for (field, array) in [
+        ("PostLabelingDelay", false),
+        ("LabelingDuration", false),
+        ("BolusCutOffDelayTime", false),
+        ("FlipAngle", false),
+        ("BackgroundSuppressionPulseTime", true),
+        ("SliceTiming", true),
+        ("DummyScanPositionInASL4D", true),
+        ("RepetitionTimePreparationM0", true),
+    ] {
+        if let Some(value) = normalized.get(field) {
+            anyhow::ensure!(
+                !value.is_null(),
+                "Invalid bidsParams.{field}: expected numbers"
+            );
+        }
+        let Some(text) = normalized.get(field).and_then(Value::as_str) else {
+            continue;
+        };
+        let numbers: AnyResult<Vec<Value>> = text
+            .split(',')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .map(|part| {
+                // ponytail: decimal/exponent strings; add JS radix literals if needed.
+                let number = part.parse::<f64>()?;
+                anyhow::ensure!(number.is_finite(), "Expected a finite number");
+                Ok(Value::from(number))
+            })
+            .collect();
+        let mut numbers = numbers.with_context(|| format!("Invalid bidsParams.{field}"))?;
+        if numbers.is_empty() {
+            normalized
+                .as_object_mut()
+                .expect("serialized metadata object")
+                .remove(field);
+        } else {
+            normalized[field] = if !array && numbers.len() == 1 {
+                numbers.remove(0)
+            } else {
+                Value::Array(numbers)
+            };
+        }
+    }
+    let typed = serde_json::from_value::<crate::project::model::BidsMetadata>(normalized)?;
+    crate::project::validation::validate_metadata(&typed)
+}
+
 /// Group subjects by fingerprint hash.
 ///
 /// Preflight image-owned JSON/associations per session; read context late while grouping.
-pub fn group_by_fingerprint(root: &Path, subjects: &[BidsSubject]) -> BidsSidecarScan {
+pub fn group_by_fingerprint(root: &Path, subjects: &[BidsSubject]) -> AnyResult<BidsSidecarScan> {
     // Map: hash → (SidecarGroup-under-construction, first sidecar JSON)
     use std::collections::BTreeMap;
 
-    // We'll collect: hash → (group_data, first_subject_context, first_sidecar)
+    // We'll collect: hash → (group_data, common_context, first_sidecar)
     struct GroupAccum {
         fingerprint_hash: String,
         subjects: Vec<GroupSubject>,
-        first_context: Option<String>,
+        common_context: Option<String>,
         first_sidecar: Option<Value>,
+        common_sidecar: serde_json::Map<String, Value>,
         // Per-spec D8: the group's M0Type is the DERIVED value for the first
         // subject in the group. Stored separately because the fingerprint
         // hash already reflects derived M0Type for each subject (see loop
@@ -264,6 +318,13 @@ pub fn group_by_fingerprint(root: &Path, subjects: &[BidsSubject]) -> BidsSideca
                 let perf_path = image_path.parent().expect("discovered image has a parent");
                 let derived_m0 = derive_m0_type(perf_path, asl_context.as_deref(), sidecar_m0type);
 
+                validate_acquisition_metadata(&derive_bids_metadata(
+                    &sidecar,
+                    &derived_m0,
+                    asl_context.as_deref(),
+                ))
+                .with_context(|| format!("Invalid metadata for image {}", image_path.display()))?;
+
                 // Extract fingerprint, then override M0Type entry with the derived
                 // value so the hash reflects the DERIVED M0Type, not the raw sidecar
                 // string.
@@ -277,11 +338,24 @@ pub fn group_by_fingerprint(root: &Path, subjects: &[BidsSubject]) -> BidsSideca
                     .or_insert_with(|| GroupAccum {
                         fingerprint_hash: hash,
                         subjects: Vec::new(),
-                        first_context: asl_context.clone(),
+                        common_context: asl_context.clone(),
                         first_sidecar: Some(sidecar.clone()),
+                        common_sidecar: sidecar
+                            .as_object()
+                            .expect("effective JSON is an object")
+                            .clone(),
                         first_m0_type: Some(derived_m0.clone()),
                     });
 
+                // Rounded/fuzzy fingerprints do not imply identical raw metadata.
+                // Only present values shared by every member, never the first member's
+                // differing value as though it described the whole group.
+                group
+                    .common_sidecar
+                    .retain(|key, value| sidecar.get(key) == Some(value));
+                if group.common_context != asl_context {
+                    group.common_context = None;
+                }
                 group.subjects.push(GroupSubject {
                     subject_label: subject.subject_label.clone(),
                     session_labels: vec![session.session_label.clone()],
@@ -324,9 +398,13 @@ pub fn group_by_fingerprint(root: &Path, subjects: &[BidsSubject]) -> BidsSideca
         // re-deriving post-hoc, which would only have access to the first
         // subject's filesystem state.
         let m0_type = accum.first_m0_type.unwrap_or_else(|| "Absent".to_string());
-        let asl_context_str = accum.first_context.as_deref();
+        let asl_context_str = accum.common_context.as_deref();
 
-        let bids_params = derive_bids_metadata(&first_sidecar, &m0_type, asl_context_str);
+        let bids_params = derive_bids_metadata(
+            &Value::Object(accum.common_sidecar),
+            &m0_type,
+            asl_context_str,
+        );
 
         // Use canonical vendor name (substring-derived) per spec wording:
         // "Manufacturer: canonical vendor name from substring detection".
@@ -373,7 +451,7 @@ pub fn group_by_fingerprint(root: &Path, subjects: &[BidsSubject]) -> BidsSideca
         skipped.len()
     );
 
-    BidsSidecarScan { groups, skipped }
+    Ok(BidsSidecarScan { groups, skipped })
 }
 
 /// Merge duplicate GroupSubject entries, accumulating session_labels.

@@ -46,6 +46,17 @@ fn test_derive_vendor_unknown() {
     assert_eq!(derive_vendor(None), "UnknownVendor");
 }
 
+#[test]
+fn derived_vendor_uses_fingerprint_normalization() {
+    for manufacturer in ["Siemens", "Siemns", "Philps", "ge_healthcare", "Canon"] {
+        assert_eq!(
+            derive_vendor(Some(manufacturer)),
+            normalize_manufacturer_for_fingerprint(manufacturer)
+                .unwrap_or_else(|| "UnknownVendor".to_string())
+        );
+    }
+}
+
 // ---- derive_m0_type ----
 
 #[test]

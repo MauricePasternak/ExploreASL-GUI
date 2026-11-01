@@ -246,7 +246,7 @@ fn test_extract_fingerprint_absent_field_is_null() {
 }
 
 #[test]
-fn test_extract_fingerprint_all_15_fields_present() {
+fn test_extract_fingerprint_all_fields_present() {
     let sidecar: Value = serde_json::from_str(
         r#"{
             "ArterialSpinLabelingType": "PCASL",
@@ -269,8 +269,8 @@ fn test_extract_fingerprint_all_15_fields_present() {
     .unwrap();
 
     let fp = extract_fingerprint(&sidecar);
-    assert_eq!(fp.len(), 15);
-    // All 15 fields should be present
+    assert_eq!(fp.len(), FINGERPRINT_FIELDS.len());
+    // Missing acquisition fields still participate as null.
     for field in FINGERPRINT_FIELDS {
         assert!(
             fp.contains_key(*field),
@@ -297,23 +297,23 @@ fn test_canonicalize_number_rounding() {
 // ---- Array canonicalization (D6) ----
 
 #[test]
-fn test_canonicalize_array_sort_independence() {
-    // [1.0, 1.5, 2.0] and [2.0, 1.5, 1.0] should produce same canonical form
+fn test_canonicalize_array_preserves_numeric_order() {
     let arr1 = vec![Value::from(1.0), Value::from(1.5), Value::from(2.0)];
     let arr2 = vec![Value::from(2.0), Value::from(1.5), Value::from(1.0)];
 
     let canon1 = canonicalize_array(&arr1);
     let canon2 = canonicalize_array(&arr2);
 
-    assert_eq!(canon1, canon2);
+    assert_ne!(canon1, canon2);
     // Should be ["1.000", "1.500", "2.000"]
     assert_eq!(canon1[0], Value::String("1.000".to_string()));
     assert_eq!(canon1[1], Value::String("1.500".to_string()));
     assert_eq!(canon1[2], Value::String("2.000".to_string()));
+    assert_eq!(canon2[0], Value::String("2.000".to_string()));
 }
 
 #[test]
-fn test_canonicalize_array_strings_sorted() {
+fn test_canonicalize_array_preserves_string_order() {
     let arr = vec![
         Value::String("control".to_string()),
         Value::String("m0scan".to_string()),
@@ -321,8 +321,8 @@ fn test_canonicalize_array_strings_sorted() {
     ];
     let canon = canonicalize_array(&arr);
     assert_eq!(canon[0], Value::String("control".to_string()));
-    assert_eq!(canon[1], Value::String("label".to_string()));
-    assert_eq!(canon[2], Value::String("m0scan".to_string()));
+    assert_eq!(canon[1], Value::String("m0scan".to_string()));
+    assert_eq!(canon[2], Value::String("label".to_string()));
 }
 
 #[test]

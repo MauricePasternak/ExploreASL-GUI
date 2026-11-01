@@ -1,12 +1,9 @@
 //! Read-only plans for BIDS/DICOM project creation and BIDS compatibility repair.
 use super::filesystem::{
-    EntryKind, Fingerprint, canonical_root, classify_marker, fixed_path, inspect, random_id,
-    read_regular, validate_fixed_hierarchy,
+    EntryKind, Fingerprint, canonical_root, fixed_path, inspect, random_id, read_regular,
+    validate_fixed_hierarchy,
 };
-use super::{
-    MarkerClassification, OperationKind, RAWDATA_MARKER_BYTES, RAWDATA_MARKER_PATH,
-    SetupCommitResult, SetupMode, SetupOperation, SetupPlan, SetupPlans,
-};
+use super::{OperationKind, SetupCommitResult, SetupMode, SetupOperation, SetupPlan, SetupPlans};
 use crate::project::validation::parse_summary;
 use anyhow::{Context, Result, anyhow, bail};
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,7 +19,6 @@ pub(super) struct CachedPlan {
     pub(super) root: PathBuf,
     pub(super) mode: SetupMode,
     pub(super) project_bytes: Option<Vec<u8>>,
-    pub(super) marker_bytes: Option<Vec<u8>>,
     pub(super) ignore_bytes: Option<Vec<u8>>,
     pub(super) observations: BTreeMap<String, Fingerprint>,
     pub(super) created: SystemTime,
@@ -97,18 +93,7 @@ fn observe_fixed(root: &Path, mode: SetupMode) -> Result<BTreeMap<String, Finger
         // operation, but it must be observed and revalidated so a BIDS repair
         // plan cannot be applied after the project becomes a different kind of
         // project (or is replaced by an unsafe entry).
-        SetupMode::Repair => &[
-            "project.easl",
-            ".bidsignore",
-            "rawdata",
-            RAWDATA_MARKER_PATH,
-        ],
-        SetupMode::Bids => &[
-            "project.easl",
-            ".bidsignore",
-            "rawdata",
-            RAWDATA_MARKER_PATH,
-        ],
+        SetupMode::Repair | SetupMode::Bids => &["project.easl", ".bidsignore", "rawdata"],
     };
     paths
         .iter()
@@ -169,20 +154,27 @@ pub(super) fn preflight(
     let mut operations = Vec::new();
     let mut warnings = Vec::new();
     let mut conflicts = Vec::new();
-    if mode != SetupMode::Repair {
-        let project = &observations["project.easl"];
-        let operation = if project.kind == EntryKind::Missing {
-            OperationKind::Create
-        } else {
-            conflicts
-                .push("project.easl already exists or is not a safe replacement target".into());
-            OperationKind::NoOp
-        };
-        operations.push(SetupOperation {
-            path: "project.easl".into(),
-            operation,
-            text_preview: None,
-        });
+    // Match commit order: compatibility directory, ignore rules, project file last.
+    if matches!(mode, SetupMode::Bids | SetupMode::Repair) {
+        match observations["rawdata"].kind {
+            EntryKind::Missing => operations.push(SetupOperation {
+                path: "rawdata/".into(),
+                operation: OperationKind::Create,
+                text_preview: None,
+            }),
+            EntryKind::Directory => {
+                operations.push(SetupOperation {
+                    path: "rawdata/".into(),
+                    operation: OperationKind::NoOp,
+                    text_preview: None,
+                });
+                let count = rawdata_subject_count(&root)?;
+                if count > 0 {
+                    warnings.push(format!("rawdata/ contains {count} sub-* directories; BIDS-direct processing ignores them."));
+                }
+            }
+            _ => conflicts.push("rawdata must be a directory, not a symlink or file".into()),
+        }
     }
     let ignore_existing = match read_regular(&fixed_path(&root, ".bidsignore")?) {
         Ok(value) => value,
@@ -207,58 +199,20 @@ pub(super) fn preflight(
                 .flatten(),
         });
     }
-    let mut marker_bytes = None;
-    if matches!(mode, SetupMode::Bids | SetupMode::Repair) {
-        match observations["rawdata"].kind {
-            EntryKind::Missing => operations.push(SetupOperation {
-                path: "rawdata/".into(),
-                operation: OperationKind::Create,
-                text_preview: None,
-            }),
-            EntryKind::Directory => {
-                operations.push(SetupOperation {
-                    path: "rawdata/".into(),
-                    operation: OperationKind::NoOp,
-                    text_preview: None,
-                });
-                let count = rawdata_subject_count(&root)?;
-                if count > 0 {
-                    warnings.push(format!("rawdata/ contains {count} sub-* directories; BIDS-direct processing ignores them."));
-                }
-            }
-            _ => conflicts.push("rawdata must be a directory, not a symlink or file".into()),
-        }
-        if !matches!(
-            observations["rawdata"].kind,
-            EntryKind::Missing | EntryKind::Directory
-        ) {
-            operations.push(SetupOperation {
-                path: RAWDATA_MARKER_PATH.into(),
-                operation: OperationKind::NoOp,
-                text_preview: None,
-            });
+    if mode != SetupMode::Repair {
+        let project = &observations["project.easl"];
+        let operation = if project.kind == EntryKind::Missing {
+            OperationKind::Create
         } else {
-            match classify_marker(&root)? {
-                MarkerClassification::Absent => {
-                    marker_bytes = Some(RAWDATA_MARKER_BYTES.to_vec());
-                    operations.push(SetupOperation {
-                        path: RAWDATA_MARKER_PATH.into(),
-                        operation: OperationKind::Create,
-                        text_preview: preview(RAWDATA_MARKER_BYTES),
-                    });
-                }
-                MarkerClassification::Exact => operations.push(SetupOperation {
-                    path: RAWDATA_MARKER_PATH.into(),
-                    operation: OperationKind::NoOp,
-                    text_preview: None,
-                }),
-                MarkerClassification::Foreign => {
-                    conflicts.push("rawdata/.easl-gui-managed is not this GUI's marker".into())
-                }
-                MarkerClassification::Unsafe => conflicts
-                    .push("rawdata/.easl-gui-managed must be a regular non-symlink file".into()),
-            }
-        }
+            conflicts
+                .push("project.easl already exists or is not a safe replacement target".into());
+            OperationKind::NoOp
+        };
+        operations.push(SetupOperation {
+            path: "project.easl".into(),
+            operation,
+            text_preview: None,
+        });
     }
     let displayed = SetupPlan { plan_id: random_id("setup"), root_path: root.to_string_lossy().into_owned(), mode, operations, warnings, conflicts, project_summary: summary, preserves_readme: true, temporary_artifacts: vec!["Same-parent candidates, validated backups, and a root-local journal are removed after commit or recovery.".into()] };
     Ok(CachedPlan {
@@ -266,7 +220,6 @@ pub(super) fn preflight(
         root,
         mode,
         project_bytes,
-        marker_bytes,
         ignore_bytes: ignore_plan
             .and_then(|p| (p.operation != OperationKind::NoOp).then_some(p.bytes)),
         observations,
@@ -333,12 +286,6 @@ pub fn verify(root: &Path) -> Result<()> {
         bail!(
             "BIDS compatibility setup is missing rawdata/. Review setup repair before processing."
         );
-    }
-    let marker = read_regular(&fixed_path(&root, RAWDATA_MARKER_PATH)?)?.ok_or_else(|| {
-        anyhow!("BIDS compatibility marker is missing. Review setup repair before processing.")
-    })?;
-    if marker != RAWDATA_MARKER_BYTES {
-        bail!("BIDS compatibility marker is invalid. Review setup repair before processing.");
     }
     Ok(())
 }

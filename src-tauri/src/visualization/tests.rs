@@ -38,6 +38,7 @@ fn test_load_qcbf_data_parses_columns_skips_units_and_caches() {
     let state = AppState::default();
     let result = load_qcbf_data_impl(root, "test.tsv".to_string(), &state).unwrap();
     assert_eq!(result.row_count, 1);
+    assert_eq!(result.qcbf_row_count, 1);
     assert!(result.external_hash.is_none());
     assert!(
         result
@@ -70,8 +71,9 @@ fn test_load_qcbf_data_parses_columns_skips_units_and_caches() {
     assert_eq!(gm.original_name, "GM_vol");
     assert!(!result.qcbf_hash.is_empty());
     let cached = state.active_data.lock().unwrap();
-    assert!(cached.is_some());
-    assert_eq!(cached.as_ref().unwrap().row_count, 1);
+    let cached = cached.as_ref().unwrap();
+    assert_eq!(cached.rows.len(), 1);
+    assert_eq!(cached.rows, cached.qcbf_rows);
 }
 
 #[test]
@@ -91,38 +93,6 @@ fn test_active_data_default_is_none() {
     let state = AppState::default();
     let data = state.active_data.lock().unwrap();
     assert!(data.is_none());
-}
-
-#[test]
-fn test_to_inspection_strips_rows() {
-    let columns = vec![ColumnMetadata {
-        name: "GM_vol".to_string(),
-        original_name: "GM_vol".to_string(),
-        source: ColumnSource::Qcbf,
-        units: "Liter".to_string(),
-        inferred_type: "continuous".to_string(),
-        levels: vec![],
-        is_identifier: false,
-    }];
-    let rows = vec![
-        std::collections::HashMap::from([("GM_vol".to_string(), "0.64".to_string())]),
-        std::collections::HashMap::from([("GM_vol".to_string(), "0.72".to_string())]),
-    ];
-    let active = ActiveData {
-        rows: rows.clone(),
-        columns: columns.clone(),
-        row_count: rows.len(),
-        qcbf_row_count: rows.len(),
-        qcbf_hash: "abc123".to_string(),
-        external_hash: Some("ext9".to_string()),
-        qcbf_rows: rows.clone(),
-    };
-    let inspection = active.to_inspection();
-    assert_eq!(inspection.columns, columns);
-    assert_eq!(inspection.row_count, 2);
-    assert_eq!(inspection.qcbf_row_count, 2);
-    assert_eq!(inspection.qcbf_hash, "abc123");
-    assert_eq!(inspection.external_hash, Some("ext9".to_string()));
 }
 
 #[test]
@@ -180,7 +150,51 @@ fn test_inspect_external_data_csv() {
             .any(|c| c.name == "Diagnosis" && c.inferred_type == "nominal")
     );
     assert!(result.sheet_name.is_none());
-    assert!(!result.file_hash.is_empty());
+    assert_eq!(
+        result.file_hash,
+        "2f0be0bdb4a2414c185663d868680d8fb5a21f48f343557121a5a86991c241dc"
+    );
+}
+
+#[test]
+fn test_inspect_external_data_xlsx_and_read_rows() {
+    use super::external::parse_external_xlsx_rows;
+
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("covariates.xlsx");
+    fs::write(
+        &path,
+        include_bytes!("../../../test/fixtures/metadata/covariates.xlsx"),
+    )
+    .unwrap();
+    let inspect =
+        |sheet| inspect_external_data_impl(path.to_string_lossy().into_owned(), sheet, None);
+    let result = inspect(None).unwrap();
+    assert_eq!(result.sheet_name.as_deref(), Some("Covariates"));
+    assert_eq!(result.row_count, 2);
+    assert_eq!(result.columns[0].name, "SubjectID");
+    assert!(result.columns.iter().all(|column| !column.is_identifier));
+    assert_eq!(result.columns[1].inferred_type, "continuous");
+    assert_eq!(result.columns[2].levels, ["AD"]);
+    assert_eq!(
+        result.file_hash,
+        "c4baa17ff135a825dde00b6fe6decf41c99c2e16e16a47cac5a56c58546cb66b"
+    );
+    let rows = parse_external_xlsx_rows(&path, None, &["NA".into()]).unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["Age"], "65");
+    assert_eq!(rows[1]["Age"], "70");
+    assert_eq!(rows[1]["Diagnosis"], "");
+
+    let result = inspect(Some("Alternate".into())).unwrap();
+    assert_eq!(result.sheet_name.as_deref(), Some("Alternate"));
+    assert_eq!(result.row_count, 1);
+    let rows = parse_external_xlsx_rows(&path, Some("Alternate".into()), &[]).unwrap();
+    assert_eq!(rows[0]["SubjectID"], "sub-Å_03");
+    assert_eq!(rows[0]["Age"], "");
+    assert_eq!(rows[0]["Diagnosis"], "Control");
+    assert!(inspect(Some("Missing".into())).is_err());
+    assert!(parse_external_xlsx_rows(&path, Some("Missing".into()), &[]).is_err());
 }
 
 #[test]
@@ -279,6 +293,8 @@ fn test_execute_join_basic() {
     .unwrap();
 
     assert_eq!(result.row_count, 2);
+    assert_eq!(result.qcbf_row_count, 2);
+    assert!(!result.qcbf_hash.is_empty());
     assert!(result.external_hash.is_some());
     assert!(
         result
@@ -288,8 +304,16 @@ fn test_execute_join_basic() {
     );
     assert!(!result.columns.iter().any(|c| c.name == "SubjectID"));
     let cached = state.active_data.lock().unwrap();
-    assert!(cached.is_some());
-    assert!(cached.as_ref().unwrap().external_hash.is_some());
+    let cached = cached.as_ref().unwrap();
+    assert_eq!(cached.rows.len(), 2);
+    assert_eq!(cached.rows[0]["Diagnosis"], "AD");
+    assert_eq!(cached.qcbf_rows.len(), 2);
+    assert!(
+        cached
+            .qcbf_rows
+            .iter()
+            .all(|row| !row.contains_key("Diagnosis"))
+    );
 }
 
 #[test]
@@ -581,22 +605,7 @@ fn test_check_join_sanity_does_not_modify_cache() {
 
     let state = AppState::default();
     load_qcbf_data_impl(temp.path().to_path_buf(), "test.tsv".to_string(), &state).unwrap();
-    let cached_before = state
-        .active_data
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .qcbf_hash
-        .clone();
-    let cached_ext_before = state
-        .active_data
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .external_hash
-        .clone();
+    let cached_before = state.active_data.lock().unwrap().as_ref().unwrap().clone();
 
     check_join_sanity_impl(
         temp.path().to_path_buf(),
@@ -613,24 +622,10 @@ fn test_check_join_sanity_does_not_modify_cache() {
     )
     .unwrap();
 
-    let cached_after = state
-        .active_data
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .qcbf_hash
-        .clone();
-    let cached_ext_after = state
-        .active_data
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .external_hash
-        .clone();
-    assert_eq!(cached_before, cached_after);
-    assert_eq!(cached_ext_before, cached_ext_after);
+    let cached_after = state.active_data.lock().unwrap();
+    let cached_after = cached_after.as_ref().unwrap();
+    assert_eq!(cached_before.rows, cached_after.rows);
+    assert_eq!(cached_before.qcbf_rows, cached_after.qcbf_rows);
 }
 
 #[test]

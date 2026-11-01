@@ -92,7 +92,7 @@ pub fn inspect_external_data_impl(
 
     let mut hasher = Sha256::new();
     hasher.update(&contents);
-    let file_hash = format!("{:x}", hasher.finalize());
+    let file_hash = hex::encode(hasher.finalize());
 
     let parsed_delimiter = match delimiter.as_deref() {
         Some(",") => Some(','),

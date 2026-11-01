@@ -630,11 +630,6 @@ fn native_participant_reads_preserve_bids_roots_and_skip_dicom_root_inputs() {
         let root_tsv = root.path().join("participants.tsv");
         if source == "bids" {
             fs::create_dir(root.path().join("rawdata")).unwrap();
-            fs::write(
-                root.path().join(crate::project::setup::RAWDATA_MARKER_PATH),
-                crate::project::setup::RAWDATA_MARKER_BYTES,
-            )
-            .unwrap();
             fs::create_dir_all(root.path().join("sub-01/perf")).unwrap();
             fs::write(root.path().join("sub-01/perf/sub-01_asl.nii"), b"fixture").unwrap();
             fs::write(

@@ -11,7 +11,7 @@ use super::common::project;
 fn every_structured_command_error_category_has_a_stable_wire_kind() {
     let cases = [
         (anyhow!("Setup plan expired"), "stale"),
-        (anyhow!("marker must be regular"), "conflict"),
+        (anyhow!("rawdata must be a directory"), "conflict"),
         (anyhow!("changes rolled back"), "rollback"),
         (
             anyhow!("could not synchronize directory"),
@@ -77,7 +77,7 @@ fn command_errors_report_completed_rollback() {
 fn completed_rollback_takes_precedence_over_the_original_failure() {
     for cause in [
         "could not synchronize directory",
-        "marker already exists",
+        "project.easl already exists",
         "Setup plan expired",
     ] {
         let error = command_error(anyhow!("Setup changes rolled back after failure: {cause}"));
@@ -90,7 +90,7 @@ fn completed_rollback_takes_precedence_over_the_original_failure() {
 #[test]
 fn failed_rollback_keeps_recovery_guidance_even_when_the_original_error_was_a_conflict() {
     let error = command_error(anyhow!(
-        "Setup failed (marker already exists); recovery required (could not synchronize changes rolled back earlier)"
+        "Setup failed (project.easl already exists); recovery required (could not synchronize changes rolled back earlier)"
     ));
     let value = serde_json::to_value(error).unwrap();
     assert_eq!(value["kind"], "recovery_required");

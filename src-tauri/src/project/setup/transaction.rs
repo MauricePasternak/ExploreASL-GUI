@@ -11,7 +11,7 @@ use super::journal::{
 };
 use super::planning::{CachedPlan, check_fresh};
 use super::recovery::{cleanup_terminal, rollback};
-use super::{RAWDATA_MARKER_PATH, SetupCommitResult, SetupMode, SetupPlans};
+use super::{SetupCommitResult, SetupMode, SetupPlans};
 use crate::app::state::AppState;
 use crate::project::ownership::{self, ActiveProject};
 use anyhow::{Context, Result, anyhow, bail};
@@ -61,7 +61,6 @@ pub(super) fn create_candidate(
 }
 pub(super) fn bytes_for<'a>(plan: &'a CachedPlan, destination: &str) -> Option<&'a [u8]> {
     match destination {
-        RAWDATA_MARKER_PATH => plan.marker_bytes.as_deref(),
         ".bidsignore" => plan.ignore_bytes.as_deref(),
         "project.easl" => plan.project_bytes.as_deref(),
         _ => None,
@@ -113,7 +112,6 @@ fn install_candidate(
     fail("install")?;
     fail(
         match destination.file_name().and_then(|name| name.to_str()) {
-            Some(".easl-gui-managed") => "install-marker",
             Some(".bidsignore") => "install-ignore",
             Some("project.easl") => "install-project",
             _ => return Err(anyhow!("Unsupported setup install destination")),
@@ -188,7 +186,7 @@ fn commit_plan(plan: &CachedPlan) -> Result<SetupCommitResult> {
             )?;
         }
         persist_phase(&plan.root, &mut journal, TransactionPhase::Committing)?;
-        // Journal order is marker, ignore, project. project.easl therefore remains the visibility point.
+        // Journal order is ignore, project. project.easl remains the visibility point.
         for index in 0..journal.operations.len() {
             let target = fixed_path(&plan.root, &journal.operations[index].destination)?;
             if journal.operations[index].before.kind == EntryKind::File {

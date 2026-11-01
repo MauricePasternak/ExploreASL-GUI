@@ -3,7 +3,7 @@
 use anyhow::{Context, Result as AnyResult, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 use super::data::{ActiveData, ColumnMetadata, ColumnSource, DataInspection};
@@ -20,6 +20,39 @@ fn normalize_key_val(val: &str) -> String {
         stripped.to_string()
     } else {
         lower
+    }
+}
+
+fn read_external_rows(
+    path: &Path,
+    sheet_name: Option<String>,
+    delimiter: Option<&str>,
+    na_tokens: &[String],
+) -> AnyResult<Vec<HashMap<String, String>>> {
+    let extension = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let parsed_delimiter = match delimiter {
+        Some(",") => Some(','),
+        Some(";") => Some(';'),
+        Some("\t") => Some('\t'),
+        _ => None,
+    };
+    match extension.as_str() {
+        "tsv" => parse_external_rows(path, '\t', na_tokens),
+        "csv" => {
+            let delim_char = if let Some(d) = parsed_delimiter {
+                d
+            } else {
+                let text = std::fs::read_to_string(path)?;
+                let first_line = text.lines().next().unwrap_or("");
+                detect_delimiter(first_line)
+            };
+            parse_external_rows(path, delim_char, na_tokens)
+        }
+        "xlsx" => parse_external_xlsx_rows(path, sheet_name, na_tokens),
+        _ => bail!("Unsupported file format: .{}", extension),
     }
 }
 
@@ -70,33 +103,7 @@ pub fn execute_join_impl(
     )?;
     let external_hash = ext_inspection.file_hash.clone();
 
-    let extension = ext_path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-
-    let parsed_delimiter = match delimiter.as_deref() {
-        Some(",") => Some(','),
-        Some(";") => Some(';'),
-        Some("\t") => Some('\t'),
-        _ => None,
-    };
-
-    let ext_rows: Vec<HashMap<String, String>> = match extension.as_str() {
-        "tsv" => parse_external_rows(&ext_path, '\t', &na_tokens)?,
-        "csv" => {
-            let delim_char = if let Some(d) = parsed_delimiter {
-                d
-            } else {
-                let text = std::fs::read_to_string(&ext_path)?;
-                let first_line = text.lines().next().unwrap_or("");
-                detect_delimiter(first_line)
-            };
-            parse_external_rows(&ext_path, delim_char, &na_tokens)?
-        }
-        "xlsx" => parse_external_xlsx_rows(&ext_path, sheet_name, &na_tokens)?,
-        _ => bail!("Unsupported file format: .{}", extension),
-    };
+    let ext_rows = read_external_rows(&ext_path, sheet_name, delimiter.as_deref(), &na_tokens)?;
 
     let mut ext_index: HashMap<Vec<String>, Vec<&HashMap<String, String>>> = HashMap::new();
     for row in &ext_rows {
@@ -223,11 +230,6 @@ pub fn execute_join_impl(
     let row_count = merged_rows.len();
     let active = ActiveData {
         rows: merged_rows,
-        columns: merged_columns.clone(),
-        row_count,
-        qcbf_row_count: qcbf_inspection.row_count,
-        qcbf_hash: qcbf_hash.clone(),
-        external_hash: Some(external_hash.clone()),
         qcbf_rows,
     };
     *state
@@ -285,33 +287,7 @@ pub fn check_join_sanity_impl(
     if !ext_path.exists() {
         bail!("External file not found: {}", external_absolute_path);
     }
-    let extension = ext_path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-
-    let parsed_delimiter = match delimiter.as_deref() {
-        Some(",") => Some(','),
-        Some(";") => Some(';'),
-        Some("\t") => Some('\t'),
-        _ => None,
-    };
-
-    let ext_rows: Vec<HashMap<String, String>> = match extension.as_str() {
-        "tsv" => parse_external_rows(&ext_path, '\t', &na_tokens)?,
-        "csv" => {
-            let delim_char = if let Some(d) = parsed_delimiter {
-                d
-            } else {
-                let text = std::fs::read_to_string(&ext_path)?;
-                let first_line = text.lines().next().unwrap_or("");
-                detect_delimiter(first_line)
-            };
-            parse_external_rows(&ext_path, delim_char, &na_tokens)?
-        }
-        "xlsx" => parse_external_xlsx_rows(&ext_path, sheet_name, &na_tokens)?,
-        _ => bail!("Unsupported file format: .{}", extension),
-    };
+    let ext_rows = read_external_rows(&ext_path, sheet_name, delimiter.as_deref(), &na_tokens)?;
 
     let mut right_key_counts: HashMap<Vec<String>, usize> = HashMap::new();
     for row in &ext_rows {

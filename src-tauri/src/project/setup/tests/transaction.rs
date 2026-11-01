@@ -9,8 +9,8 @@ use super::super::journal::JOURNAL_PREFIX;
 use super::super::planning::PLAN_TTL;
 use super::super::transaction::{backup_for, create_candidate};
 use super::super::{
-    OperationKind, RAWDATA_MARKER_BYTES, RAWDATA_MARKER_PATH, SetupCommandError, SetupMode,
-    SetupPlans, command_error, commit_for_state, preflight_for_state, recover_root, verify,
+    OperationKind, SetupCommandError, SetupMode, SetupPlans, command_error, commit_for_state,
+    preflight_for_state, recover_root, verify,
 };
 use super::common::{
     assert_confirmed_delta, changed_source_paths, project, source_snapshot, write_bids_fixture,
@@ -210,14 +210,10 @@ fn repair_transaction_changes_only_reviewed_compatibility_paths() {
         b"keep exactly"
     );
     assert_eq!(
-        fs::read(root.path().join(RAWDATA_MARKER_PATH)).unwrap(),
-        RAWDATA_MARKER_BYTES
-    );
-    assert_eq!(
         fs::read(root.path().join(".bidsignore")).unwrap(),
         b"derivatives/\r\nproject.easl\r\n.easl_staging\r\nrawdata/\r\n"
     );
-    assert_eq!(reviewed_paths, vec![".bidsignore", RAWDATA_MARKER_PATH]);
+    assert_eq!(reviewed_paths, vec![".bidsignore"]);
 }
 
 #[test]
@@ -238,9 +234,10 @@ fn transaction_installs_project_last_and_replays_result() {
         super::super::filesystem::hash(&fs::read(temp.path().join("project.easl")).unwrap()),
         plan.project_summary.unwrap().content_hash
     );
+    assert!(temp.path().join("rawdata").is_dir());
     assert_eq!(
-        fs::read(temp.path().join(RAWDATA_MARKER_PATH)).unwrap(),
-        RAWDATA_MARKER_BYTES
+        fs::read_dir(temp.path().join("rawdata")).unwrap().count(),
+        0
     );
     assert_eq!(
         commit_for_state(&state.setup_plans, &plan.plan_id).unwrap(),
@@ -407,29 +404,16 @@ fn fresh_and_existing_transactions_preserve_exact_bytes_and_project_is_last_visi
     commit_for_state(&plans, &plan.plan_id).unwrap();
     assert_eq!(
         take_install_observations(),
-        vec![
-            (".easl-gui-managed".into(), false),
-            (".bidsignore".into(), false),
-            ("project.easl".into(), true),
-        ]
+        vec![(".bidsignore".into(), false), ("project.easl".into(), true)]
     );
     assert_eq!(
         fs::read(root.path().join("project.easl")).unwrap(),
         project("bids")
     );
-    assert_eq!(
-        fs::read(root.path().join(RAWDATA_MARKER_PATH)).unwrap(),
-        RAWDATA_MARKER_BYTES
-    );
 
     let existing = TempDir::new().unwrap();
     fs::create_dir(existing.path().join("rawdata")).unwrap();
     fs::write(existing.path().join("rawdata/README.md"), b"keep").unwrap();
-    fs::write(
-        existing.path().join(RAWDATA_MARKER_PATH),
-        RAWDATA_MARKER_BYTES,
-    )
-    .unwrap();
     fs::write(existing.path().join(".bidsignore"), b"user\r\n").unwrap();
     let plans = SetupPlans::default();
     let plan = preflight_for_state(
@@ -445,10 +429,6 @@ fn fresh_and_existing_transactions_preserve_exact_bytes_and_project_is_last_visi
     assert_eq!(
         fs::read(existing.path().join("rawdata/README.md")).unwrap(),
         b"keep"
-    );
-    assert_eq!(
-        fs::read(existing.path().join(RAWDATA_MARKER_PATH)).unwrap(),
-        RAWDATA_MARKER_BYTES
     );
     assert_eq!(
         fs::read(existing.path().join(".bidsignore")).unwrap(),

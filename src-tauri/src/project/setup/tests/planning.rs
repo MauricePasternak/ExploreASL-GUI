@@ -4,8 +4,8 @@ use tempfile::TempDir;
 use super::super::filesystem::MAX_TEXT_BYTES;
 use super::super::planning::preflight;
 use super::super::{
-    IgnorePlan, OperationKind, RAWDATA_MARKER_BYTES, RAWDATA_MARKER_PATH, SetupMode, SetupPlans,
-    commit_for_state, plan_bidsignore, preflight_for_state, verify,
+    IgnorePlan, OperationKind, SetupMode, SetupPlans, commit_for_state, plan_bidsignore,
+    preflight_for_state, verify,
 };
 use super::common::{project, source_snapshot};
 use crate::project::validation::{ProjectParseError, parse_document, parse_summary};
@@ -312,49 +312,39 @@ fn inspection_and_planning_are_read_only() {
     let plan = preflight(temp.path(), SetupMode::Bids, Some(project("bids"))).unwrap();
     assert!(plan.displayed.conflicts.is_empty());
     assert!(plan.displayed.warnings[0].contains("1 sub-*"));
+    assert_eq!(plan.displayed.operations[0].path, "rawdata/");
+    assert_eq!(plan.displayed.operations[0].operation, OperationKind::NoOp);
     assert_eq!(
         fs::read(temp.path().join("rawdata/README.md")).unwrap(),
         before
     );
-    assert!(!temp.path().join(RAWDATA_MARKER_PATH).exists());
 }
 
 #[test]
 fn repair_preflight_excludes_project_and_preserves_legacy_entries_without_writes() {
-    for marker in [
-        None,
-        Some(RAWDATA_MARKER_BYTES),
-        Some(b"foreign".as_slice()),
-    ] {
-        let root = TempDir::new().unwrap();
-        fs::write(root.path().join("project.easl"), project("bids")).unwrap();
-        fs::create_dir(root.path().join("rawdata")).unwrap();
-        fs::write(root.path().join("rawdata/README.md"), b"user readme").unwrap();
-        fs::create_dir(root.path().join("rawdata/sub-existing")).unwrap();
-        fs::write(root.path().join(".bidsignore"), b"derivatives/\r\n").unwrap();
-        if let Some(bytes) = marker {
-            fs::write(root.path().join(RAWDATA_MARKER_PATH), bytes).unwrap();
-        }
-        let before = source_snapshot(root.path());
-        let plan = preflight(root.path(), SetupMode::Repair, None).unwrap();
-        assert!(
-            plan.displayed
-                .operations
-                .iter()
-                .all(|operation| operation.path != "project.easl")
-        );
-        assert!(plan.displayed.preserves_readme);
-        assert!(
-            plan.displayed
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("sub-*"))
-        );
-        if marker == Some(b"foreign".as_slice()) {
-            assert!(!plan.displayed.conflicts.is_empty());
-        }
-        assert_eq!(source_snapshot(root.path()), before);
-    }
+    let root = TempDir::new().unwrap();
+    fs::write(root.path().join("project.easl"), project("bids")).unwrap();
+    fs::create_dir(root.path().join("rawdata")).unwrap();
+    fs::write(root.path().join("rawdata/README.md"), b"user readme").unwrap();
+    fs::create_dir(root.path().join("rawdata/sub-existing")).unwrap();
+    fs::write(root.path().join(".bidsignore"), b"derivatives/\r\n").unwrap();
+    let before = source_snapshot(root.path());
+    let plan = preflight(root.path(), SetupMode::Repair, None).unwrap();
+    assert!(
+        plan.displayed
+            .operations
+            .iter()
+            .all(|operation| operation.path != "project.easl")
+    );
+    assert!(plan.displayed.conflicts.is_empty());
+    assert!(plan.displayed.preserves_readme);
+    assert!(
+        plan.displayed
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("sub-*"))
+    );
+    assert_eq!(source_snapshot(root.path()), before);
 
     let missing = TempDir::new().unwrap();
     fs::write(missing.path().join("project.easl"), project("bids")).unwrap();
@@ -365,12 +355,6 @@ fn repair_preflight_excludes_project_and_preserves_legacy_entries_without_writes
             .iter()
             .any(|operation| operation.path == "rawdata/"
                 && operation.operation == OperationKind::Create)
-    );
-    assert!(
-        plan.displayed
-            .operations
-            .iter()
-            .any(|operation| operation.path == RAWDATA_MARKER_PATH)
     );
 }
 
@@ -402,50 +386,45 @@ fn repair_requires_an_existing_bids_project_and_revalidates_its_identity() {
 }
 
 #[test]
-fn verification_is_read_only_and_rejects_missing_altered_and_wrong_type_setup() {
+fn verification_is_read_only_and_requires_a_rawdata_directory() {
     let root = TempDir::new().unwrap();
     let before = source_snapshot(root.path());
     assert!(verify(root.path()).is_err());
     assert_eq!(source_snapshot(root.path()), before);
 
+    fs::write(root.path().join("rawdata"), b"user file").unwrap();
+    let before = source_snapshot(root.path());
+    assert!(verify(root.path()).is_err());
+    assert_eq!(source_snapshot(root.path()), before);
+
+    fs::remove_file(root.path().join("rawdata")).unwrap();
     fs::create_dir(root.path().join("rawdata")).unwrap();
     let before = source_snapshot(root.path());
-    assert!(verify(root.path()).is_err());
-    assert_eq!(source_snapshot(root.path()), before);
-
-    fs::write(root.path().join(RAWDATA_MARKER_PATH), b"altered").unwrap();
-    let before = source_snapshot(root.path());
-    assert!(verify(root.path()).is_err());
-    assert_eq!(source_snapshot(root.path()), before);
-
-    fs::remove_file(root.path().join(RAWDATA_MARKER_PATH)).unwrap();
-    fs::create_dir(root.path().join(RAWDATA_MARKER_PATH)).unwrap();
-    let before = source_snapshot(root.path());
-    assert!(verify(root.path()).is_err());
+    verify(root.path()).unwrap();
     assert_eq!(source_snapshot(root.path()), before);
 }
 
 #[cfg(unix)]
 #[test]
-fn verification_rejects_symlinked_marker_without_following_it() {
+fn verification_rejects_symlinked_rawdata_without_following_it() {
     use std::os::unix::fs::symlink;
     let root = TempDir::new().unwrap();
     let outside = TempDir::new().unwrap();
-    fs::create_dir(root.path().join("rawdata")).unwrap();
-    let external = outside.path().join("marker");
-    fs::write(&external, RAWDATA_MARKER_BYTES).unwrap();
-    symlink(&external, root.path().join(RAWDATA_MARKER_PATH)).unwrap();
+    fs::write(outside.path().join("README.md"), b"outside").unwrap();
+    symlink(outside.path(), root.path().join("rawdata")).unwrap();
     let before = source_snapshot(root.path());
     assert!(verify(root.path()).is_err());
     assert_eq!(source_snapshot(root.path()), before);
-    assert_eq!(fs::read(external).unwrap(), RAWDATA_MARKER_BYTES);
+    assert_eq!(
+        fs::read(outside.path().join("README.md")).unwrap(),
+        b"outside"
+    );
 }
 
 #[test]
-fn marker_conflicts_and_dicom_omits_compatibility() {
+fn rawdata_file_conflicts_and_dicom_omits_compatibility() {
     let temp = TempDir::new().unwrap();
-    fs::create_dir(temp.path().join("rawdata")).unwrap();
-    fs::write(temp.path().join(RAWDATA_MARKER_PATH), b"foreign").unwrap();
+    fs::write(temp.path().join("rawdata"), b"user file").unwrap();
     assert!(
         !preflight(temp.path(), SetupMode::Bids, Some(project("bids")))
             .unwrap()
@@ -464,7 +443,7 @@ fn marker_conflicts_and_dicom_omits_compatibility() {
 }
 
 #[test]
-fn plan_serialization_is_display_only_and_complete_for_both_modes() {
+fn plan_serialization_is_display_only_and_ordered_for_all_modes() {
     let root = TempDir::new().unwrap();
     let bids = preflight(root.path(), SetupMode::Bids, Some(project("bids")))
         .unwrap()
@@ -492,20 +471,40 @@ fn plan_serialization_is_display_only_and_complete_for_both_modes() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|op| op["path"] == RAWDATA_MARKER_PATH
-                && op["textPreview"].as_str()
-                    == Some("{\"kind\":\"bids-direct-rawdata\",\"version\":1}\n"))
+            .any(|op| op["path"] == ".bidsignore"
+                && op["textPreview"].as_str() == Some("project.easl\n.easl_staging\nrawdata/\n"))
+    );
+    assert_eq!(
+        bids.operations
+            .iter()
+            .map(|op| op.path.as_str())
+            .collect::<Vec<_>>(),
+        ["rawdata/", ".bidsignore", "project.easl"]
     );
     assert_eq!(json["preservesReadme"], true);
     assert!(!json["temporaryArtifacts"].as_array().unwrap().is_empty());
     let dicom = preflight(root.path(), SetupMode::Dicom, Some(project("dicom")))
         .unwrap()
         .displayed;
-    assert!(
+    assert_eq!(
         dicom
             .operations
             .iter()
-            .all(|operation| !operation.path.starts_with("rawdata"))
+            .map(|op| op.path.as_str())
+            .collect::<Vec<_>>(),
+        [".bidsignore", "project.easl"]
+    );
+    fs::write(root.path().join("project.easl"), project("bids")).unwrap();
+    let repair = preflight(root.path(), SetupMode::Repair, None)
+        .unwrap()
+        .displayed;
+    assert_eq!(
+        repair
+            .operations
+            .iter()
+            .map(|op| op.path.as_str())
+            .collect::<Vec<_>>(),
+        ["rawdata/", ".bidsignore"]
     );
 }
 

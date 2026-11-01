@@ -347,8 +347,13 @@ fn launch<R: Runtime>(app: &AppHandle<R>, run_id: &str) -> Result<()> {
                     ));
                 }
             }
-            let drains = crate::execution::output::OutputDrains::new(
+            let drains = crate::execution::output::OutputDrains::new_with_stdout_level(
                 format!("[PROCESSING] run={run_id} worker={worker}"),
+                if reserved.request.workers > 1 {
+                    log::Level::Debug
+                } else {
+                    log::Level::Info
+                },
                 |_, _| {},
             );
             drains.configure(&mut worker_command);

@@ -203,7 +203,7 @@ fn values(value: &NumberOrArray) -> &[f64] {
     }
 }
 
-fn validate_metadata(metadata: &BidsMetadata) -> Result<()> {
+pub(crate) fn validate_metadata(metadata: &BidsMetadata) -> Result<()> {
     if let Some(context) = &metadata.ASLContext {
         let tokens = context
             .split(',')
@@ -306,6 +306,6 @@ pub(crate) fn parse_summary(bytes: &[u8]) -> Result<ProjectSummary> {
             DataSource::Dicom => "dicom",
         }
         .into(),
-        content_hash: format!("{:x}", Sha256::digest(bytes)),
+        content_hash: hex::encode(Sha256::digest(bytes)),
     })
 }

@@ -30,11 +30,6 @@ pub struct ColumnMetadata {
 #[serde(rename_all = "camelCase")]
 pub struct ActiveData {
     pub rows: Vec<HashMap<String, String>>,
-    pub columns: Vec<ColumnMetadata>,
-    pub row_count: usize,
-    pub qcbf_row_count: usize,
-    pub qcbf_hash: String,
-    pub external_hash: Option<String>,
     pub qcbf_rows: Vec<HashMap<String, String>>,
 }
 
@@ -48,18 +43,6 @@ pub struct DataInspection {
     pub qcbf_row_count: usize,
     pub qcbf_hash: String,
     pub external_hash: Option<String>,
-}
-
-impl ActiveData {
-    pub fn to_inspection(&self) -> DataInspection {
-        DataInspection {
-            columns: self.columns.clone(),
-            row_count: self.row_count,
-            qcbf_row_count: self.qcbf_row_count,
-            qcbf_hash: self.qcbf_hash.clone(),
-            external_hash: self.external_hash.clone(),
-        }
-    }
 }
 
 pub(super) fn is_missing_value(val: &str) -> bool {

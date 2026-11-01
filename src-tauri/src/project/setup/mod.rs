@@ -10,7 +10,6 @@ mod transaction;
 pub use crate::project::validation::ProjectSummary;
 #[cfg(test)]
 pub use fault_injection::{SetupFault, SetupFaultGuard, inject_setup_fault};
-pub use filesystem::classify_marker;
 pub(crate) use filesystem::open_regular_no_follow;
 pub use planning::{IgnorePlan, plan_bidsignore, preflight_for_state, verify};
 pub use recovery::recover_root;
@@ -22,9 +21,6 @@ use planning::CachedPlan;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
-
-pub const RAWDATA_MARKER_PATH: &str = "rawdata/.easl-gui-managed";
-pub const RAWDATA_MARKER_BYTES: &[u8] = b"{\"kind\":\"bids-direct-rawdata\",\"version\":1}\n";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
@@ -109,17 +105,6 @@ impl SetupCommandError {
             details: error.details,
         }
     }
-}
-
-/// Classification of the only file owned by BIDS-direct setup. Keep this
-/// separate from the planner so callers cannot mistake an arbitrary marker
-/// name for GUI ownership.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MarkerClassification {
-    Absent,
-    Exact,
-    Foreign,
-    Unsafe,
 }
 
 #[derive(Default)]

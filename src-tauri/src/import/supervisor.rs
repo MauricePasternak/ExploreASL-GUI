@@ -7,7 +7,6 @@ use super::finalization::{cancelled_subject_outcomes, settle_import_scope_exit};
 use super::output::owned_subject_spelling;
 use super::parser::{
     ImportOutputLine, ImportOutputLineSource, ImportOutputParser, ImportStructuredEvent,
-    progress_bar_re,
 };
 use super::runs::{persist, reservation_durability_is_uncertain};
 use super::types::{
@@ -102,29 +101,24 @@ fn stream_import_output<R: Runtime>(
     parser: &mut ImportOutputParser,
     warnings: &mut EmissionWarnings,
 ) -> bool {
-    let is_progress = progress_bar_re().is_match(&output_line.line);
-    if !is_progress {
-        let trimmed = output_line.line.trim().to_string();
-        if !parser.is_duplicate(&trimmed) {
-            parser.record_line(trimmed);
-            let state = app.state::<AppState>();
-            if let Ok(import_state) = state.import_state.lock()
-                && import_state.ownership_generation == generation
-            {
-                // Hold ownership through the event so stale raw output cannot
-                // be delivered after a replacement reservation.
-                warnings.check(
+    if parser.should_emit_raw_line(&output_line.line) {
+        let state = app.state::<AppState>();
+        if let Ok(import_state) = state.import_state.lock()
+            && import_state.ownership_generation == generation
+        {
+            // Hold ownership through the event so stale raw output cannot
+            // be delivered after a replacement reservation.
+            warnings.check(
+                "import-raw-event",
+                app.emit(
                     "import-raw-event",
-                    app.emit(
-                        "import-raw-event",
-                        ImportRawEventPayload {
-                            line: output_line.line.clone(),
-                            run_id: import_state.run_id.clone(),
-                            ownership_generation: generation,
-                        },
-                    ),
-                );
-            }
+                    ImportRawEventPayload {
+                        line: output_line.line.clone(),
+                        run_id: import_state.run_id.clone(),
+                        ownership_generation: generation,
+                    },
+                ),
+            );
         }
     }
 

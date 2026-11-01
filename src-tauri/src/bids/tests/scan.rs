@@ -85,7 +85,7 @@ fn test_parse_bids_structure_explicit_ses1() {
     let subjects = parse_bids_structure(tmp.path()).unwrap();
     assert_eq!(subjects.len(), 1);
     // parse_bids_structure stores the directory name including the
-    // `sub-` prefix; the frontend strips it via stripSubjectPrefix when
+    // `sub-` prefix; native confirmation strips it when
     // emitting SubjectRow.subject.
     assert_eq!(subjects[0].subject_label, "sub-01");
     assert_eq!(subjects[0].sessions.len(), 1);

@@ -76,23 +76,11 @@ pub(super) fn changed_source_paths(
 }
 
 pub(super) fn reviewed_changed_paths(plan: &SetupPlan) -> BTreeSet<String> {
-    let mut paths = plan
-        .operations
+    plan.operations
         .iter()
         .filter(|operation| operation.operation != OperationKind::NoOp)
         .map(|operation| operation.path.trim_end_matches('/').to_owned())
-        .collect::<BTreeSet<_>>();
-    // A reviewed no-op directory changes its metadata when a separately
-    // reviewed child marker is installed. It remains an explicitly
-    // disclosed operation path, unlike an unrelated parent directory.
-    for operation in &plan.operations {
-        if operation.path.ends_with('/')
-            && paths.iter().any(|path| path.starts_with(&operation.path))
-        {
-            paths.insert(operation.path.trim_end_matches('/').to_owned());
-        }
-    }
-    paths
+        .collect()
 }
 
 pub(super) fn assert_confirmed_delta(

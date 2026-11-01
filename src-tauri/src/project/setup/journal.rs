@@ -5,7 +5,7 @@ use super::filesystem::{
     read_bounded, safe_relative, sync_parent,
 };
 use super::planning::CachedPlan;
-use super::{OperationKind, RAWDATA_MARKER_PATH, SetupCommitResult, SetupMode};
+use super::{OperationKind, SetupCommitResult, SetupMode};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -95,7 +95,7 @@ pub(super) fn validate_journal(root: &Path, journal: &SetupJournal) -> Result<()
     for operation in &journal.operations {
         if !matches!(
             operation.destination.as_str(),
-            "project.easl" | ".bidsignore" | RAWDATA_MARKER_PATH
+            "project.easl" | ".bidsignore"
         ) || !destinations.insert(&operation.destination)
         {
             bail!("Setup journal has invalid operation destination");
@@ -180,9 +180,8 @@ pub(super) fn initial_journal(
     registry_id: String,
 ) -> Result<SetupJournal> {
     let mut operations = Vec::new();
-    for path in [RAWDATA_MARKER_PATH, ".bidsignore", "project.easl"] {
+    for path in [".bidsignore", "project.easl"] {
         let bytes = match path {
-            RAWDATA_MARKER_PATH => plan.marker_bytes.as_ref(),
             ".bidsignore" => plan.ignore_bytes.as_ref(),
             "project.easl" => plan.project_bytes.as_ref(),
             _ => None,

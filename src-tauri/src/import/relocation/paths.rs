@@ -37,7 +37,7 @@ pub(crate) fn project_identity(root: &Path) -> String {
     sha256_bytes(root.to_string_lossy().as_bytes())
 }
 pub(super) fn sha256_bytes(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
 
 pub(super) fn relative_path(root: &Path, path: &Path) -> AnyResult<String> {

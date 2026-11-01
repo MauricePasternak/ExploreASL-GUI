@@ -100,7 +100,7 @@ pub(super) fn file_hash(path: &Path) -> AnyResult<String> {
         }
         hash.update(&buffer[..count]);
     }
-    Ok(format!("{:x}", hash.finalize()))
+    Ok(hex::encode(hash.finalize()))
 }
 
 pub(super) fn copy_tree_reserved(
@@ -261,7 +261,7 @@ pub(super) fn hash_tree(path: &Path, base: &Path, hash: &mut Sha256) -> AnyResul
 pub(super) fn tree_fingerprint(path: &Path) -> AnyResult<String> {
     let mut hash = Sha256::new();
     hash_tree(path, path, &mut hash)?;
-    Ok(format!("{:x}", hash.finalize()))
+    Ok(hex::encode(hash.finalize()))
 }
 
 pub(super) fn remove_proven(path: &Path, expected: Option<&str>, ownership: &str) -> AnyResult<()> {

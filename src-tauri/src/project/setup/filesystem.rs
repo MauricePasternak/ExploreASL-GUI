@@ -1,6 +1,5 @@
 //! Fixed-path inspection and durable file writes for project setup.
 use super::fault_injection::fail;
-use super::{MarkerClassification, RAWDATA_MARKER_BYTES, RAWDATA_MARKER_PATH};
 use crate::fs_safety::{atomic_replace, sync_directory};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -34,7 +33,7 @@ pub(super) struct Fingerprint {
 }
 
 pub(super) fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
 pub(super) fn random_id(label: &str) -> String {
     format!("{label}-{}", uuid::Uuid::new_v4())
@@ -64,10 +63,7 @@ pub(super) fn safe_relative(relative: &str) -> Result<PathBuf> {
 }
 pub(super) fn fixed_path(root: &Path, relative: &str) -> Result<PathBuf> {
     let rel = safe_relative(relative)?;
-    if !matches!(
-        relative,
-        "project.easl" | ".bidsignore" | "rawdata" | RAWDATA_MARKER_PATH
-    ) {
+    if !matches!(relative, "project.easl" | ".bidsignore" | "rawdata") {
         bail!("Unsupported setup path");
     }
     Ok(root.join(rel))
@@ -230,23 +226,6 @@ pub(super) fn read_regular(path: &Path) -> Result<Option<Vec<u8>>> {
     }
 }
 
-pub fn classify_marker(root: &Path) -> Result<MarkerClassification> {
-    let root = canonical_root(root)?;
-    let rawdata = fixed_path(&root, "rawdata")?;
-    match inspect(&rawdata, false)?.kind {
-        EntryKind::Missing => return Ok(MarkerClassification::Absent),
-        EntryKind::Directory => validate_fixed_hierarchy(&root, &rawdata)?,
-        _ => return Ok(MarkerClassification::Unsafe),
-    }
-    let marker = fixed_path(&root, RAWDATA_MARKER_PATH)?;
-    match read_regular(&marker) {
-        Ok(None) => Ok(MarkerClassification::Absent),
-        Ok(Some(bytes)) if bytes == RAWDATA_MARKER_BYTES => Ok(MarkerClassification::Exact),
-        Ok(Some(_)) => Ok(MarkerClassification::Foreign),
-        Err(_) => Ok(MarkerClassification::Unsafe),
-    }
-}
-
 pub(super) fn sync_parent(path: &Path) -> Result<bool> {
     fail("flush")?;
     sync_directory(path)
@@ -339,15 +318,7 @@ pub(super) fn find_owned_sibling(
         .ok_or_else(|| anyhow!("Setup destination has invalid filename"))?;
     let prefix = format!(".{name}.easl-setup-{transaction}-{role}-");
     let mut matches = Vec::new();
-    let entries = match fs::read_dir(parent) {
-        Ok(entries) => entries,
-        // A candidate/backup under a directory that was never created cannot
-        // exist. This is the normal rollback state after an interruption
-        // before rawdata creation, not ambiguous ownership.
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.into()),
-    };
-    for entry in entries {
+    for entry in fs::read_dir(parent)? {
         let entry = entry?;
         if !entry.file_name().to_string_lossy().starts_with(&prefix) {
             continue;

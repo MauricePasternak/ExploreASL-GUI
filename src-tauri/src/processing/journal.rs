@@ -118,7 +118,7 @@ impl Evidence {
             (None, children)
         } else {
             (
-                Some(format!("{:x}", Sha256::digest(directory.read_regular(&p)?))),
+                Some(hex::encode(Sha256::digest(directory.read_regular(&p)?))),
                 Vec::new(),
             )
         };
@@ -151,7 +151,7 @@ impl Evidence {
             children.sort_by(|a, b| a.0.cmp(&b.0));
             None
         } else {
-            Some(format!("{:x}", Sha256::digest(directory.read_regular(&p)?)))
+            Some(hex::encode(Sha256::digest(directory.read_regular(&p)?)))
         };
         Ok(Self {
             directory: is_dir,
@@ -681,11 +681,8 @@ fn require_no_residue(directory: &ProjectDirectory, run_id: Uuid, manifest: bool
     Ok(())
 }
 
-/// Journal state that can safely outlive the fixed full current record.
-pub(crate) enum JournalCompactionState {
-    Cleaned,
-}
-pub(crate) fn compaction_state(root: &Path, run_id: Uuid) -> Result<JournalCompactionState> {
+/// Verify the journal can safely outlive the fixed full current record.
+pub(crate) fn compaction_state(root: &Path, run_id: Uuid) -> Result<()> {
     relative(run_id.to_string())?;
     let directory = ProjectDirectory::open(root)?;
     let path = format!("{AUTHORITY}/runs/{run_id}/launch.json");
@@ -693,7 +690,7 @@ pub(crate) fn compaction_state(root: &Path, run_id: Uuid) -> Result<JournalCompa
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             require_no_residue(&directory, run_id, false)?;
-            return Ok(JournalCompactionState::Cleaned);
+            return Ok(());
         }
         Err(error) => return Err(error.into()),
     };
@@ -703,7 +700,7 @@ pub(crate) fn compaction_state(root: &Path, run_id: Uuid) -> Result<JournalCompa
     match manifest.phase {
         Phase::Cleaned | Phase::RolledBack => {
             require_no_residue(&directory, run_id, true)?;
-            Ok(JournalCompactionState::Cleaned)
+            Ok(())
         }
         Phase::ExecutionCommitted => bail!("Processing journal cleanup remains unresolved"),
         _ => bail!("Processing journal cleanup remains unresolved"),

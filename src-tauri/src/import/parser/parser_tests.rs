@@ -228,21 +228,24 @@ mod tests {
 
     #[test]
     fn stream_parser_logs_stderr_without_mutating_stdout_parser_state() {
-        let parsed = parse_import_stream_lines(
-            &[
-                ImportOutputLine::stderr("Subject: NOISY, Module: xASL_module_Import"),
-                ImportOutputLine::stdout("Subject: BADDIE, Module: xASL_module_Import"),
-                ImportOutputLine::stderr(
-                    "Job-iteration 99 stopped at 12:34:56 and took 999 seconds",
-                ),
-                ImportOutputLine::stdout("Job-iteration 1 stopped at 12:35:56 and took 42 seconds"),
-            ],
-            &["BADDIE".to_string(), "NOISY".to_string()],
-        );
+        let mut parser = ImportOutputParser::new(&["BADDIE".to_string(), "NOISY".to_string()]);
+        let mut raw_events = Vec::new();
+        let mut structured_events = Vec::new();
+        for output_line in [
+            ImportOutputLine::stderr("Subject: NOISY, Module: xASL_module_Import"),
+            ImportOutputLine::stdout("Subject: BADDIE, Module: xASL_module_Import"),
+            ImportOutputLine::stderr("Job-iteration 99 stopped at 12:34:56 and took 999 seconds"),
+            ImportOutputLine::stdout("Job-iteration 1 stopped at 12:35:56 and took 42 seconds"),
+        ] {
+            if parser.should_emit_raw_line(&output_line.line) {
+                raw_events.push(output_line.clone());
+            }
+            structured_events.extend(parser.push_line(&output_line.line, output_line.source));
+        }
+        structured_events.extend(parser.finish());
 
         assert_eq!(
-            parsed
-                .raw_events
+            raw_events
                 .iter()
                 .map(|event| event.line.as_str())
                 .collect::<Vec<_>>(),
@@ -254,7 +257,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            parsed.structured_events,
+            structured_events,
             vec![
                 ImportStructuredEvent::SubjectStart {
                     subject: "BADDIE".to_string(),

@@ -612,10 +612,7 @@ fn truncate(value: &str, byte_limit: usize) -> String {
 pub(crate) fn request_digest(request: &ProcessingRequest) -> Result<String> {
     let mut canonical = request.clone();
     canonical.canonicalize()?;
-    Ok(format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&canonical)?)
-    ))
+    Ok(hex::encode(Sha256::digest(serde_json::to_vec(&canonical)?)))
 }
 pub(crate) fn current_project_id(root: &Path) -> Result<String> {
     let project: serde_json::Value = serde_json::from_slice(
@@ -629,7 +626,7 @@ pub(crate) fn current_project_id(root: &Path) -> Result<String> {
 // Project IDs are arbitrary strings. Hash the complete exact UTF-8 identity,
 // without truncation or normalization, so every compact record stays bounded.
 fn project_identity_digest(project_id: &str) -> String {
-    format!("{:x}", Sha256::digest(project_id.as_bytes()))
+    hex::encode(Sha256::digest(project_id.as_bytes()))
 }
 fn envelope(record: &ProcessingRecord) -> Result<HistoricalReplayEnvelope> {
     let terminal = record
@@ -767,9 +764,7 @@ pub(crate) fn validate_archives(root: &Path) -> Result<()> {
         if current.as_ref().is_some_and(|r| r.run_id == run) {
             continue;
         }
-        match super::journal::compaction_state(root, run)? {
-            super::journal::JournalCompactionState::Cleaned => {}
-        }
+        super::journal::compaction_state(root, run)?;
     }
     Ok(())
 }
@@ -915,12 +910,7 @@ pub(crate) fn acknowledge(
         next
     };
     let directory = ProjectDirectory::open(root)?;
-    if !matches!(
-        super::journal::compaction_state(root, run_id)?,
-        super::journal::JournalCompactionState::Cleaned
-    ) {
-        bail!("Processing journal cleanup remains unresolved");
-    }
+    super::journal::compaction_state(root, run_id)?;
     super::journal::checkpoint("beforeRequestBinding")?;
     publish_once(
         &directory,

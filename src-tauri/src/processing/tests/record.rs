@@ -366,10 +366,7 @@ fn confirmation_rolls_back_precommit_and_cleans_postcommit_journals() {
         assert_eq!(snapshot.available_action, AvailableAction::Acknowledge);
         let config = temp.path().join("derivatives/ExploreASL/dataPar.json");
         assert_eq!(config.exists(), committed, "committed={committed}");
-        assert!(matches!(
-            crate::processing::journal::compaction_state(temp.path(), interrupted.run_id),
-            Ok(crate::processing::journal::JournalCompactionState::Cleaned)
-        ));
+        crate::processing::journal::compaction_state(temp.path(), interrupted.run_id).unwrap();
     }
 }
 #[test]

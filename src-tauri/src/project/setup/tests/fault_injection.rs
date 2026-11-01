@@ -24,7 +24,6 @@ fn every_named_failure_stage_restores_before_state_or_keeps_recovery_evidence() 
         SetupFault::InstallIntent,
         SetupFault::BackupRename,
         SetupFault::Install,
-        SetupFault::MarkerInstall,
         SetupFault::IgnoreInstall,
         SetupFault::ProjectInstall,
         SetupFault::ParentFlush,

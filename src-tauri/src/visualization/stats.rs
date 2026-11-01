@@ -112,7 +112,7 @@ pub fn load_qcbf_data_impl(
 
     let mut hasher = Sha256::new();
     hasher.update(contents.as_bytes());
-    let qcbf_hash = format!("{:x}", hasher.finalize());
+    let qcbf_hash = hex::encode(hasher.finalize());
 
     let lines: Vec<&str> = contents.lines().collect();
     if lines.is_empty() {
@@ -319,11 +319,6 @@ pub fn load_qcbf_data_impl(
 
     let active = ActiveData {
         rows: rows.clone(),
-        columns: columns.clone(),
-        row_count,
-        qcbf_row_count: row_count,
-        qcbf_hash: qcbf_hash.clone(),
-        external_hash: None,
         qcbf_rows: rows,
     };
     *state

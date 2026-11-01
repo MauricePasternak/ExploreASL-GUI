@@ -275,11 +275,6 @@ fn shutdown_reservation_blocks_idle_project_replacement_without_holding_transiti
 fn populate_active_data(state: &AppState) {
     *state.active_data.lock().unwrap() = Some(ActiveData {
         rows: vec![],
-        columns: vec![],
-        row_count: 0,
-        qcbf_row_count: 0,
-        qcbf_hash: "test".to_string(),
-        external_hash: None,
         qcbf_rows: vec![],
     });
 }

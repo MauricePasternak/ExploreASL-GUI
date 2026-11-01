@@ -1,63 +1,24 @@
-use std::fs;
 use tempfile::TempDir;
 
-use super::super::filesystem::{fixed_path, sync_parent};
-use super::super::{
-    MarkerClassification, RAWDATA_MARKER_BYTES, RAWDATA_MARKER_PATH, classify_marker,
-};
+use super::super::filesystem::{fixed_path, hash, sync_parent};
 
 #[test]
-fn marker_classification_matrix_preserves_readme_and_confines_fixed_paths() {
-    let root = TempDir::new().unwrap();
+fn hashes_preserve_sha256_hex_format() {
     assert_eq!(
-        classify_marker(root.path()).unwrap(),
-        MarkerClassification::Absent
-    );
-    fs::create_dir(root.path().join("rawdata")).unwrap();
-    fs::write(root.path().join("rawdata/README.md"), b"user bytes").unwrap();
-    assert_eq!(
-        classify_marker(root.path()).unwrap(),
-        MarkerClassification::Absent
-    );
-    fs::write(root.path().join(RAWDATA_MARKER_PATH), RAWDATA_MARKER_BYTES).unwrap();
-    assert_eq!(
-        classify_marker(root.path()).unwrap(),
-        MarkerClassification::Exact
-    );
-    fs::write(root.path().join(RAWDATA_MARKER_PATH), b"foreign").unwrap();
-    assert_eq!(
-        classify_marker(root.path()).unwrap(),
-        MarkerClassification::Foreign
+        hash(b""),
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     );
     assert_eq!(
-        fs::read(root.path().join("rawdata/README.md")).unwrap(),
-        b"user bytes"
+        hash(b"286"),
+        "00328ce57bbc14b33bd6695bc8eb32cdf2fb5f3a7d89ec14a42825e15d39df60"
     );
-    assert!(fixed_path(root.path(), "../rawdata/.easl-gui-managed").is_err());
-    assert!(fixed_path(root.path(), "rawdata/README.md").is_err());
 }
 
-#[cfg(unix)]
 #[test]
-fn marker_wrong_type_and_symlink_are_never_followed() {
-    use std::os::unix::fs::symlink;
+fn fixed_paths_reject_traversal_and_uncontrolled_entries() {
     let root = TempDir::new().unwrap();
-    fs::create_dir(root.path().join("rawdata")).unwrap();
-    fs::create_dir(root.path().join(RAWDATA_MARKER_PATH)).unwrap();
-    assert_eq!(
-        classify_marker(root.path()).unwrap(),
-        MarkerClassification::Unsafe
-    );
-    fs::remove_dir(root.path().join(RAWDATA_MARKER_PATH)).unwrap();
-    let outside = TempDir::new().unwrap();
-    let external = outside.path().join("marker");
-    fs::write(&external, RAWDATA_MARKER_BYTES).unwrap();
-    symlink(&external, root.path().join(RAWDATA_MARKER_PATH)).unwrap();
-    assert_eq!(
-        classify_marker(root.path()).unwrap(),
-        MarkerClassification::Unsafe
-    );
-    assert_eq!(fs::read(external).unwrap(), RAWDATA_MARKER_BYTES);
+    assert!(fixed_path(root.path(), "../project.easl").is_err());
+    assert!(fixed_path(root.path(), "rawdata/README.md").is_err());
 }
 
 #[cfg(unix)]

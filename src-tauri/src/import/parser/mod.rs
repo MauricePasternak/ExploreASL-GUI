@@ -128,11 +128,6 @@ pub enum ImportStructuredEvent {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct ImportRawEvent {
-    pub line: String,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImportOutputLineSource {
     Stdout,
@@ -159,12 +154,6 @@ impl ImportOutputLine {
             line: line.into(),
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ParsedImportStream {
-    pub raw_events: Vec<ImportRawEvent>,
-    pub structured_events: Vec<ImportStructuredEvent>,
 }
 
 // =============================================================================
@@ -235,15 +224,19 @@ impl ImportOutputParser {
         }
     }
 
-    pub fn is_duplicate(&self, line: &str) -> bool {
-        self.recent_lines.contains(&line.to_string())
-    }
-
-    pub fn record_line(&mut self, line: String) {
+    pub fn should_emit_raw_line(&mut self, line: &str) -> bool {
+        if progress_bar_re().is_match(line) {
+            return false;
+        }
+        let trimmed = line.trim().to_string();
+        if self.recent_lines.contains(&trimmed) {
+            return false;
+        }
         if self.recent_lines.len() >= 40 {
             self.recent_lines.pop_front();
         }
-        self.recent_lines.push_back(line);
+        self.recent_lines.push_back(trimmed);
+        true
     }
 
     pub fn push_line(
@@ -556,35 +549,6 @@ pub fn parse_import_lines(lines: &[String], subject_list: &[String]) -> Vec<Impo
     events.extend(parser.finish());
 
     events
-}
-
-pub fn parse_import_stream_lines(
-    lines: &[ImportOutputLine],
-    subject_list: &[String],
-) -> ParsedImportStream {
-    let mut parser = ImportOutputParser::new(subject_list);
-    let mut raw_events = Vec::new();
-    let mut structured_events = Vec::new();
-
-    for output_line in lines {
-        let is_progress = progress_bar_re().is_match(&output_line.line);
-        if !is_progress {
-            let trimmed = output_line.line.trim().to_string();
-            if !parser.is_duplicate(&trimmed) {
-                parser.record_line(trimmed);
-                raw_events.push(ImportRawEvent {
-                    line: output_line.line.clone(),
-                });
-            }
-        }
-
-        structured_events.extend(parser.push_line(&output_line.line, output_line.source));
-    }
-    structured_events.extend(parser.finish());
-    ParsedImportStream {
-        raw_events,
-        structured_events,
-    }
 }
 
 #[cfg(test)]

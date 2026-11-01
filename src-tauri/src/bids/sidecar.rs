@@ -9,7 +9,8 @@ use crate::bids::vendor::{
     normalize_manufacturer_for_fingerprint, normalize_pulse_sequence_for_fingerprint,
 };
 
-/// 15 fingerprint fields per D24.
+/// Acquisition fields represented by group metadata, plus scanner model.
+/// ASLContext remains excluded by the scanning contract.
 pub const FINGERPRINT_FIELDS: &[&str] = &[
     "ArterialSpinLabelingType",
     "PostLabelingDelay",
@@ -26,6 +27,23 @@ pub const FINGERPRINT_FIELDS: &[&str] = &[
     "RepetitionTimePreparation",
     "PulseSequenceType",
     "EchoTime",
+    "PCASLType",
+    "CASLType",
+    "LabelingPulseAverageGradient",
+    "LabelingPulseMaximumGradient",
+    "LabelingPulseAverageB1",
+    "LabelingPulseDuration",
+    "LabelingPulseInterval",
+    "BolusCutOffFlag",
+    "BackgroundSuppressionPulseTime",
+    "VascularCrushing",
+    "FlipAngle",
+    "SliceTiming",
+    "M0_GMScaleFactor",
+    "DatasetType",
+    "LabelingType",
+    "DummyScanPositionInASL4D",
+    "RepetitionTimePreparationM0",
 ];
 
 /// Parse complete extensions before suffix and exact, nonduplicated entity pairs.
@@ -253,35 +271,17 @@ pub fn canonicalize_number(value: f64) -> String {
 
 /// Canonicalize an array for fingerprint hashing (D6).
 ///
-/// Numbers sorted ascending, each rounded to 3 decimals.
-/// Strings sorted ascending.
-/// Mixed-type: serialize as-is.
+/// Preserve order and multiplicity: timing arrays can describe volume/slice order.
+/// Numeric arrays retain the scalar three-decimal canonicalization rule.
+/// Other arrays remain unchanged.
 pub fn canonicalize_array(arr: &[Value]) -> Vec<Value> {
-    if arr.is_empty() {
-        return arr.to_vec();
-    }
-
-    // Check if all elements are numbers
-    let all_numbers = arr.iter().all(|v| v.is_number());
-    if all_numbers {
-        let mut nums: Vec<f64> = arr.iter().filter_map(|v| v.as_f64()).collect();
-        nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        nums.into_iter()
+    if arr.iter().all(Value::is_number) {
+        arr.iter()
+            .filter_map(Value::as_f64)
             .map(|n| Value::String(canonicalize_number(n)))
             .collect()
     } else {
-        // Check if all elements are strings
-        let all_strings = arr.iter().all(|v| v.is_string());
-        if all_strings {
-            let mut strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-            strs.sort();
-            strs.into_iter()
-                .map(|s| Value::String(s.to_string()))
-                .collect()
-        } else {
-            // Mixed type — serialize as-is
-            arr.to_vec()
-        }
+        arr.to_vec()
     }
 }
 

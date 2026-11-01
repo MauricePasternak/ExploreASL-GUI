@@ -136,7 +136,7 @@ fn fingerprint_entries(root: &Path, entries: &[RelocationEntry]) -> AnyResult<St
             }
         }
     }
-    Ok(format!("{:x}", hash.finalize()))
+    Ok(hex::encode(hash.finalize()))
 }
 
 pub fn inventory_subject(project_root: &Path, subject: &str) -> AnyResult<SubjectInventory> {
@@ -178,7 +178,7 @@ pub fn create_plan(
     Ok(RelocationPlan {
         plan_id,
         subjects: inventories,
-        fingerprint: format!("{:x}", hash.finalize()),
+        fingerprint: hex::encode(hash.finalize()),
         project_identity: project_identity(&root),
         project_root: root,
         bound_generation: None,

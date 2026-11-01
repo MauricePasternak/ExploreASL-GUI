@@ -73,29 +73,9 @@ pub fn normalize_pulse_sequence_for_fingerprint(value: &str) -> Option<String> {
 
 /// Derive vendor name from manufacturer string (case-insensitive substring match).
 pub fn derive_vendor(manufacturer: Option<&str>) -> String {
-    let m = match manufacturer {
-        Some(m) => m.to_lowercase(),
-        None => return "UnknownVendor".to_string(),
-    };
-
-    if m.contains("siemens") {
-        "Siemens".to_string()
-    } else if m.contains("philips") {
-        "Philips".to_string()
-    } else if m.contains("ge") {
-        "GE_product".to_string()
-    } else {
-        // Fallback fuzzy match
-        if fuzzy_match_token(&m, "siemens", 0.8) {
-            "Siemens".to_string()
-        } else if fuzzy_match_token(&m, "philips", 0.8) {
-            "Philips".to_string()
-        } else if fuzzy_match_token(&m, "ge", 0.8) || fuzzy_match_token(&m, "ge_product", 0.8) {
-            "GE_product".to_string()
-        } else {
-            "UnknownVendor".to_string()
-        }
-    }
+    manufacturer
+        .and_then(normalize_manufacturer_for_fingerprint)
+        .unwrap_or_else(|| "UnknownVendor".to_string())
 }
 
 /// Derive sequence type from MRAcquisitionType and PulseSequenceType.

@@ -28,9 +28,22 @@ impl OutputDrains {
         context: String,
         on_line: impl Fn(&'static str, String) + Send + Sync + 'static,
     ) -> Self {
+        Self::new_with_stdout_level(context, log::Level::Info, on_line)
+    }
+
+    pub(crate) fn new_with_stdout_level(
+        context: String,
+        stdout_level: log::Level,
+        on_line: impl Fn(&'static str, String) + Send + Sync + 'static,
+    ) -> Self {
         let on_line = Arc::new(on_line);
         let mut readers = Vec::new();
         for source in ["stdout", "stderr"] {
+            let level = if source == "stdout" {
+                stdout_level
+            } else {
+                log::Level::Info
+            };
             let (sender, receiver) = mpsc::channel::<Pipe>();
             let thread_context = context.clone();
             let callback = on_line.clone();
@@ -47,7 +60,7 @@ impl OutputDrains {
                                 log::warn!("{context} stream={source} output line truncated at {LINE_LIMIT} bytes; draining continues");
                             }
                         }
-                        log::info!("{context} stream={source} {line}");
+                        log::log!(level, "{context} stream={source} {line}");
                         callback(source, line);
                     });
                     if let Err(error) = result {

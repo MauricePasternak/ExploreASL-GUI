@@ -26,3 +26,4 @@ minimumReleaseAgeExclude:
   - "@oxlint/binding-win32-ia32-msvc@1.81.0"
   - "@oxlint/binding-win32-x64-msvc@1.81.0"
   - oxlint@1.81.0
+  - "@hookform/resolvers@7.0.1"

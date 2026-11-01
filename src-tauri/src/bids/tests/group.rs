@@ -91,7 +91,7 @@ fn test_group_by_fingerprint_single_group() {
     fs::write(perf2.join("sub-02_aslcontext.tsv"), context_tsv).unwrap();
 
     let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
-    let result = group_by_fingerprint(root, &subjects);
+    let result = group_by_fingerprint(root, &subjects).unwrap();
     assert_eq!(result.groups.len(), 1);
     assert_eq!(result.groups[0].subjects.len(), 2);
     assert!(result.skipped.is_empty());
@@ -126,7 +126,7 @@ fn test_group_by_fingerprint_multi_group() {
     .unwrap();
 
     let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
-    let result = group_by_fingerprint(root, &subjects);
+    let result = group_by_fingerprint(root, &subjects).unwrap();
     assert_eq!(result.groups.len(), 2);
     assert!(result.skipped.is_empty());
 }
@@ -159,7 +159,7 @@ fn test_group_by_fingerprint_skipped_missing_sidecar() {
     .unwrap();
 
     let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
-    let result = group_by_fingerprint(root, &subjects);
+    let result = group_by_fingerprint(root, &subjects).unwrap();
     assert_eq!(result.groups.len(), 1);
     assert_eq!(result.groups[0].subjects.len(), 1);
     assert_eq!(result.skipped.len(), 1);
@@ -195,7 +195,7 @@ fn test_group_by_fingerprint_skipped_partial_missing_sidecar() {
     .unwrap();
 
     let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
-    let result = group_by_fingerprint(root, &subjects);
+    let result = group_by_fingerprint(root, &subjects).unwrap();
     assert_eq!(result.groups.len(), 0);
     assert_eq!(result.skipped.len(), 1);
     assert_eq!(result.skipped[0], "sub-01_1");
@@ -206,7 +206,7 @@ fn test_group_by_fingerprint_derived_m0type_governs_over_raw_sidecar_label() {
     // D8 spec scenario: sidecar's M0Type (non-Estimate) is NOT trusted for
     // fingerprinting — the derived value governs. Two subjects with
     // different raw sidecar M0Type strings but identical derived M0Type
-    // (and identical other 14 fingerprint fields) MUST group together.
+    // (and identical remaining fingerprint fields) MUST group together.
     let tmp = TempDir::new().unwrap();
     let root = tmp.path();
 
@@ -250,8 +250,8 @@ fn test_group_by_fingerprint_derived_m0type_governs_over_raw_sidecar_label() {
     fs::write(perf_b.join("sub-02_aslcontext.tsv"), context_tsv).unwrap();
 
     let subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
-    let result = group_by_fingerprint(root, &subjects);
-    // Both subjects have identical other-14 fingerprint fields and both
+    let result = group_by_fingerprint(root, &subjects).unwrap();
+    // Both subjects have identical remaining fingerprint fields and both
     // derive M0Type=Separate (m0scan file present). MUST group together
     // despite raw sidecar M0Type differing ("Included" vs "Absent").
     assert_eq!(
@@ -274,24 +274,160 @@ fn test_group_by_fingerprint_derived_m0type_governs_over_raw_sidecar_label() {
 // ---- apply_label_collisions ----
 
 #[test]
+fn timing_array_order_separates_acquisitions() {
+    for field in [
+        "PostLabelingDelay",
+        "LabelingDuration",
+        "BolusCutOffDelayTime",
+    ] {
+        let a = serde_json::json!({field: [1.0, 1.5, 2.0]});
+        let b = serde_json::json!({field: [2.0, 1.5, 1.0]});
+        assert_ne!(
+            compute_group_hash(&extract_fingerprint(&a)),
+            compute_group_hash(&extract_fingerprint(&b)),
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn projected_acquisition_fields_participate_in_fingerprint() {
+    let absent = compute_group_hash(&extract_fingerprint(&serde_json::json!({})));
+    for (field, value) in [
+        ("PCASLType", serde_json::json!("balanced")),
+        ("CASLType", serde_json::json!("continuous")),
+        ("LabelingPulseAverageGradient", serde_json::json!(0.5)),
+        ("LabelingPulseMaximumGradient", serde_json::json!(5.0)),
+        ("LabelingPulseAverageB1", serde_json::json!(1.5)),
+        ("LabelingPulseDuration", serde_json::json!(0.01)),
+        ("LabelingPulseInterval", serde_json::json!(0.02)),
+        ("BolusCutOffFlag", serde_json::json!(true)),
+        ("BackgroundSuppressionPulseTime", serde_json::json!([1, 2])),
+        ("VascularCrushing", serde_json::json!(true)),
+        ("FlipAngle", serde_json::json!(90)),
+        ("SliceTiming", serde_json::json!([0, 0.1])),
+        ("M0_GMScaleFactor", serde_json::json!(1.2)),
+        ("DatasetType", serde_json::json!("raw")),
+        ("LabelingType", serde_json::json!("PCASL")),
+        ("DummyScanPositionInASL4D", serde_json::json!([1])),
+        ("RepetitionTimePreparationM0", serde_json::json!(4.0)),
+    ] {
+        assert_ne!(
+            compute_group_hash(&extract_fingerprint(&serde_json::json!({field: value}))),
+            absent,
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn group_params_do_not_claim_first_members_differing_raw_values() {
+    let tmp = TempDir::new().unwrap();
+    for (subject, echo, manufacturer) in [
+        ("sub-01", 0.0141, "SIEMENS"),
+        ("sub-02", 0.0142, "Siemens"),
+        ("sub-03", 0.0141, "SIEMENS"),
+    ] {
+        let perf = tmp.path().join(subject).join("perf");
+        fs::create_dir_all(&perf).unwrap();
+        let sidecar = serde_json::json!({
+            "EchoTime": echo, "Manufacturer": manufacturer,
+            "PostLabelingDelay": [2.0, 1.0, 2.0]
+        });
+        fs::write(
+            perf.join(format!("{subject}_asl.json")),
+            sidecar.to_string(),
+        )
+        .unwrap();
+        fs::write(perf.join(format!("{subject}_asl.nii")), b"fake").unwrap();
+        fs::write(
+            perf.join(format!("{subject}_aslcontext.tsv")),
+            "volume_type\ncontrol\nlabel\n",
+        )
+        .unwrap();
+    }
+    let subjects = crate::bids::scan::parse_bids_structure(tmp.path()).unwrap();
+    for subjects in [subjects.clone(), subjects.into_iter().rev().collect()] {
+        let scan = group_by_fingerprint(tmp.path(), &subjects).unwrap();
+        assert_eq!(scan.groups.len(), 1);
+        let group = &scan.groups[0];
+        assert_eq!(group.subjects.len(), 3);
+        assert_eq!(group.vendor, "Siemens");
+        assert!(group.bids_params.echo_time.is_none());
+        assert!(group.bids_params.manufacturer.is_none());
+        assert_eq!(
+            group.bids_params.post_labeling_delay,
+            Some(serde_json::json!([2.0, 1.0, 2.0]))
+        );
+        assert!(scan.skipped.is_empty());
+    }
+}
+
+#[test]
 fn multi_run_membership_and_late_context_contracts() {
     for (mode, group_count, skipped, context) in [
-        ("same", 1, false, "control,label"),
-        ("different", 2, false, "control,label"),
-        ("malformed", 1, false, "unexpected"),
-        ("unreadable", 1, true, "control,label"),
+        ("same", 1, false, Some("control,label")),
+        ("different", 2, false, Some("control,label")),
+        ("metadata", 2, false, Some("control,label")),
+        ("different_context", 1, false, None),
+        ("malformed", 0, false, None),
+        ("empty_context", 0, false, None),
+        ("negative_scale", 0, false, None),
+        ("invalid_timing", 0, false, None),
+        ("null_timing", 0, false, None),
+        ("invalid_pulses", 0, false, None),
+        ("numeric_strings", 1, false, Some("control,label")),
+        ("unreadable", 1, true, Some("control,label")),
     ] {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         let perf = root.join("sub-01/perf");
         fs::create_dir_all(&perf).unwrap();
         fs::write(root.join("asl.json"), r#"{"EchoTime":0.01}"#).unwrap();
+        if mode == "numeric_strings" {
+            fs::write(
+                root.join("asl.json"),
+                serde_json::json!({
+                    "PostLabelingDelay": " , 1.8, , ", "LabelingDuration": "1.8,, 2e0",
+                    "BolusCutOffDelayTime": "0, 1.2", "FlipAngle": "90",
+                    "BackgroundSuppressionPulseTime": ",", "SliceTiming": "0, 0.1",
+                    "DummyScanPositionInASL4D": "  ", "RepetitionTimePreparationM0": " 4, "
+                })
+                .to_string(),
+            )
+            .unwrap();
+        }
         for run in ["01", "02", "03"] {
             fs::write(perf.join(format!("sub-01_run-{run}_asl.nii")), b"fake").unwrap();
+            let delta = if run == "02" { 0.0002 } else { 0.0001 };
+            let invalid = match mode {
+                "negative_scale" => Some(serde_json::json!({"M0_GMScaleFactor": -delta})),
+                "invalid_timing" => Some(serde_json::json!({"PostLabelingDelay": 0.01 - delta})),
+                "null_timing" if run != "02" => {
+                    Some(serde_json::json!({"PostLabelingDelay": null}))
+                }
+                "invalid_pulses" => Some(
+                    serde_json::json!({"BackgroundSuppression": true, "BackgroundSuppressionNumberPulses": -1.0 - delta}),
+                ),
+                _ => None,
+            };
+            if let Some(invalid) = invalid {
+                fs::write(
+                    perf.join(format!("sub-01_run-{run}_asl.json")),
+                    invalid.to_string(),
+                )
+                .unwrap();
+            }
             let bytes: &[u8] = if mode == "unreadable" && run == "02" {
                 &[0xff]
-            } else if mode == "malformed" {
-                b"not_a_header\n unexpected\textra\n\n"
+            } else if mode == "different_context" && run == "02" {
+                b"volume_type\ncontrol\nlabel\ncontrol\nlabel\n"
+            } else if mode == "malformed" && run == "02" {
+                b"not_a_header\nunexpected_b\n"
+            } else if mode == "malformed" && run == "03" {
+                b"not_a_header\n unexpected_a\textra\n\n"
+            } else if mode == "empty_context" {
+                b"volume_type\n\n"
             } else {
                 b"volume_type\n control\textra\n\n label \n"
             };
@@ -300,11 +436,28 @@ fn multi_run_membership_and_late_context_contracts() {
         if mode == "different" || mode == "unreadable" {
             fs::write(perf.join("sub-01_run-03_asl.json"), r#"{"EchoTime":0.02}"#).unwrap();
         }
+        if mode == "metadata" {
+            fs::write(
+                perf.join("sub-01_run-03_asl.json"),
+                r#"{"SliceTiming":[0,0.1]}"#,
+            )
+            .unwrap();
+        }
         let mut subjects = crate::bids::scan::parse_bids_structure(root).unwrap();
         subjects[0].sessions[0]
             .asl_files
             .sort_by(|a, b| a.path.cmp(&b.path));
         let scan = group_by_fingerprint(root, &subjects);
+        if group_count == 0 {
+            let error = format!("{:#}", scan.unwrap_err());
+            assert!(
+                error.contains("Invalid metadata for image"),
+                "{mode}: {error}"
+            );
+            assert!(error.contains("bidsParams."), "{mode}: {error}");
+            continue;
+        }
+        let scan = scan.unwrap();
         assert_eq!(scan.groups.len(), group_count, "{mode}");
         assert_eq!(!scan.skipped.is_empty(), skipped, "{mode}");
         if skipped {
@@ -313,7 +466,22 @@ fn multi_run_membership_and_late_context_contracts() {
         for group in &scan.groups {
             assert_eq!(group.subjects.len(), 1);
             assert_eq!(group.subjects[0].session_labels, ["1"]);
-            assert_eq!(group.bids_params.asl_context.as_deref(), Some(context));
+            assert_eq!(group.bids_params.asl_context.as_deref(), context, "{mode}");
+            if mode == "numeric_strings" {
+                assert_eq!(
+                    group.bids_params.post_labeling_delay,
+                    Some(serde_json::json!(" , 1.8, , "))
+                );
+                assert_eq!(
+                    group.bids_params.repetition_time_preparation_m0,
+                    Some(serde_json::json!(" 4, "))
+                );
+            }
+            assert_eq!(
+                group.bids_params.m0_type.as_deref(),
+                Some("Absent"),
+                "{mode}"
+            );
         }
     }
 }
