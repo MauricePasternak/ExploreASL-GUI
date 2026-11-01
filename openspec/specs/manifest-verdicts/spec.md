@@ -99,7 +99,7 @@ Verdict edits SHALL allow an explicit registered reviewer ID or default to the r
 
 ### Requirement: Indexed reviewer staleness reference
 
-A captured verdict's `setAt` SHALL equal the integer maximum Structural/ASL completion mtime and SHALL be stale when that maximum changes. Staleness SHALL use a reviewer-indexed result for every reviewer count, including empty reviewer results. QC controls SHALL read only the active slice. Population-only reruns SHALL not make verdicts stale solely because Population's mtime changes.
+A captured verdict's `setAt` SHALL equal the integer maximum Structural/ASL completion mtime, or zero when unavailable. A nonzero `setAt` SHALL be stale when an available current maximum differs; zero or unavailable current mtimes SHALL not be marked stale. Staleness SHALL use a reviewer-indexed result for every reviewer count, including empty reviewer results. QC controls SHALL read only the active slice. Population-only reruns SHALL not make verdicts stale solely because Population's mtime changes.
 
 #### Scenario: Verdict flagged stale after prior module re-run
 

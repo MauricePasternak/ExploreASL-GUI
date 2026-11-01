@@ -9,13 +9,18 @@ import {
   aggregateMotionBySubject,
   formatMeanSd,
 } from "../../lib/manifestQc";
-import { getDefaultDataPar } from "../../lib/dataParDefaults";
 import { flattenRunDataPar, generateMethodsParagraph } from "../../lib/manifestMethods";
-import { renderHtml, renderMarkdown } from "../../lib/manifestExport";
+import {
+  QC_DENOMINATOR_NOTE,
+  renderHtml,
+  renderMarkdown,
+  sanitiseDataParForExport,
+} from "../../lib/manifestExport";
 import type { ManifestPayload } from "../../lib/manifestExport";
 import { generateVerdictsCsv } from "../../lib/manifestCsvExport";
 import { cohensKappa, fleissKappa, type KappaResult } from "../../lib/interRaterAgreement";
 import AgreementSummary from "./AgreementSummary";
+import PathEntryButton from "../common/PathEntryButton";
 import type { DataParState } from "../../schemas/dataParSchema";
 import type { ManifestVerdict } from "../../schemas/project";
 import type { MetadataGroup } from "../../schemas/importSchemas";
@@ -171,9 +176,17 @@ function useBuildManifestPayload(): ManifestPayload {
   const resolvedVerdicts = project?.uiState?.manifest?.resolvedVerdicts;
   const lastRun = project?.uiState?.processing?.population?.lastRun;
   const versions = {
-    exploreASL: lastRun?.exploreASLVersion || exploreAslGlobalVersion || undefined,
-    matlab: lastRun?.matlabVersion,
-    gui: lastRun?.guiVersion ?? import.meta.env.VITE_APP_VERSION,
+    exploreASL:
+      lastRun?.exploreASLVersion ||
+      (exploreAslGlobalVersion
+        ? `${exploreAslGlobalVersion} (current profile; not recorded run)`
+        : undefined),
+    matlab: lastRun?.matlabVersion || undefined,
+    gui:
+      lastRun?.guiVersion ||
+      (import.meta.env.VITE_APP_VERSION
+        ? `${import.meta.env.VITE_APP_VERSION} (current GUI build; not recorded run)`
+        : undefined),
   };
 
   const subjectSessionGroups = new Map<string, string>();
@@ -215,33 +228,30 @@ function useBuildManifestPayload(): ManifestPayload {
     }
     section1Groups.push({
       label: group.label,
-      nSubjects: members.length,
+      nParticipants: new Set(members.map((s) => s.subject.replace(/^sub-/, ""))).size,
+      nSubjectSessions: members.length,
       nRuns: totalRuns,
       params,
     });
   }
 
-  const groupedSs = new Set(
-    subjectRows.map((r) => {
-      const cleanSub = r.subject.replace(/^sub-/, "");
-      return `${cleanSub}_${r.session}`;
-    }),
-  );
+  const groupLabelsById = new Map(metadataGroups.map((group) => [group.id, group.label]));
   const ungroupedMembers = availableSubjects.filter((s) => {
     const cleanSs = s.subjectSession.replace(/^sub-/, "");
-    return !groupedSs.has(cleanSs);
+    const groupId = subjectSessionGroups.get(cleanSs);
+    return !groupId || !groupLabelsById.has(groupId);
   });
   if (ungroupedMembers.length > 0) {
     const totalRuns = ungroupedMembers.reduce((sum, s) => sum + s.aslRuns.length, 0);
     section1Groups.push({
       label: "Ungrouped",
-      nSubjects: ungroupedMembers.length,
+      nParticipants: new Set(ungroupedMembers.map((s) => s.subject.replace(/^sub-/, ""))).size,
+      nSubjectSessions: ungroupedMembers.length,
       nRuns: totalRuns,
       params: {},
     });
   }
 
-  const groupLabelsById = new Map(metadataGroups.map((group) => [group.id, group.label]));
   const groupForSubjectSession = new Map(
     [...subjectSessionGroups].map(([subjectSession, groupId]) => [
       normaliseSubjectSession(subjectSession),
@@ -269,12 +279,16 @@ function useBuildManifestPayload(): ManifestPayload {
 
   const qcGroups: ManifestPayload["qcGroups"] = [];
 
-  // Aggregate metadata groups
-  for (const group of metadataGroups) {
-    const memberSs = new Set<string>();
-    for (const [ss, gid] of subjectSessionGroups) {
-      if (gid === group.id) memberSs.add(ss);
-    }
+  const qcBuckets = metadataGroups.map((group) => ({
+    label: group.label,
+    members: availableSubjects.filter(
+      (s) => subjectSessionGroups.get(normaliseSubjectSession(s.subjectSession)) === group.id,
+    ),
+  }));
+  if (ungroupedMembers.length > 0) {
+    qcBuckets.push({ label: "Ungrouped", members: ungroupedMembers });
+  }
+  for (const { label, members } of qcBuckets) {
     const groupRows: Array<{
       verdict: string;
       reason?: string;
@@ -283,9 +297,7 @@ function useBuildManifestPayload(): ManifestPayload {
       motion?: number[];
       motionExclusionPct?: number | null;
     }> = [];
-    for (const s of availableSubjects) {
-      const cleanSs = s.subjectSession.replace(/^sub-/, "");
-      if (!memberSs.has(cleanSs)) continue;
+    for (const s of members) {
       const v = resolveFinalVerdict(s.subjectSession, reviewers, verdicts, resolvedVerdicts);
       if (!v) continue;
 
@@ -322,7 +334,7 @@ function useBuildManifestPayload(): ManifestPayload {
     const motionExclusionStats = aggregateMeanSd(groupRows, (r) => r.motionExclusionPct);
 
     qcGroups.push({
-      label: group.label,
+      label,
       passTotal: `${passCount} / ${passCount + failCount}`,
       coverage: formatMeanSd(coverageStats),
       spatialCov: formatMeanSd(spatialCovStats),
@@ -330,94 +342,40 @@ function useBuildManifestPayload(): ManifestPayload {
       motionExclusion: formatMeanSd(motionExclusionStats),
       failReasons,
       agreementRate: agreement
-        ? `${Math.round((agreement.perGroup.find((entry) => entry.label === group.label)?.result.agreementRate ?? 0) * 100)}%`
+        ? `${Math.round((agreement.perGroup.find((entry) => entry.label === label)?.result.agreementRate ?? 0) * 100)}%`
         : undefined,
     });
   }
 
-  // Aggregate Ungrouped members
-  if (ungroupedMembers.length > 0) {
-    const ungroupedSs = new Set(ungroupedMembers.map((m) => m.subjectSession));
-    const groupRows: Array<{
-      verdict: string;
-      reason?: string;
-      coverage?: number | null;
-      spatialCov?: number | null;
-      motion?: number[];
-      motionExclusionPct?: number | null;
-    }> = [];
-    for (const s of availableSubjects) {
-      if (!ungroupedSs.has(s.subjectSession)) continue;
-      const v = resolveFinalVerdict(s.subjectSession, reviewers, verdicts, resolvedVerdicts);
-      if (!v) continue;
-
-      const isNoInfo = qcLoaded && qcData != null && !(s.subjectSession in qcData);
-      if (isNoInfo) continue;
-
-      const qc = qcData?.[s.subjectSession];
-      groupRows.push({
-        verdict: v.status,
-        reason: v.reason,
-        coverage: qc?.coverage,
-        spatialCov: qc?.spatialCov,
-        motion: qc?.motion,
-        motionExclusionPct: qc?.motionExclusionPct,
-      });
-    }
-    if (groupRows.length > 0) {
-      const passCount = groupRows.filter((r) => r.verdict === "pass").length;
-      const failCount = groupRows.filter((r) => r.verdict === "fail").length;
-      const reasonCounts = aggregateFailReasons(groupRows);
-      const failReasons =
-        Object.entries(reasonCounts).length > 0
-          ? Object.entries(reasonCounts)
-              .map(([r, c]) => `${r}: ${c}`)
-              .join(", ")
-          : "none";
-
-      const coverageStats = aggregateMeanSd(groupRows, (r) => r.coverage);
-      const spatialCovStats = aggregateMeanSd(groupRows, (r) => r.spatialCov);
-      const motionStats = aggregateMeanSd(groupRows, (r) =>
-        r.motion ? (aggregateMotionBySubject(r.motion) ?? undefined) : undefined,
-      );
-      const motionExclusionStats = aggregateMeanSd(groupRows, (r) => r.motionExclusionPct);
-
-      qcGroups.push({
-        label: "Ungrouped",
-        passTotal: `${passCount} / ${passCount + failCount}`,
-        coverage: formatMeanSd(coverageStats),
-        spatialCov: formatMeanSd(spatialCovStats),
-        motion: formatMeanSd(motionStats),
-        motionExclusion: formatMeanSd(motionExclusionStats),
-        failReasons,
-        agreementRate: agreement
-          ? `${Math.round((agreement.perGroup.find((entry) => entry.label === "Ungrouped")?.result.agreementRate ?? 0) * 100)}%`
-          : undefined,
-      });
-    }
-  }
-
-  // Count SubjectSessions included in the manifest (excluding No Info) (Issue 4)
-  const includedSubjects = availableSubjects.filter(
+  // Summary excludes No Info; study-parameter group counts retain the full inventory.
+  const includedSubjectSessions = availableSubjects.filter(
     (s) => !(qcLoaded && qcData != null && !(s.subjectSession in qcData)),
   );
-  const nSubjects = includedSubjects.length;
+  const nParticipants = new Set(includedSubjectSessions.map((s) => s.subject.replace(/^sub-/, "")))
+    .size;
   const nGroups = metadataGroups.length + (ungroupedMembers.length > 0 ? 1 : 0);
 
-  const pipelineParagraph = `Data were processed with ExploreASL (version ${versions.exploreASL ?? "unknown"}) running in MATLAB ${versions.matlab ?? "unknown"} through the ExploreASL GUI (version ${versions.gui ?? "unknown"}). This manifest covers ${nSubjects} subjects across ${nGroups} groups.`;
+  const pipelineParagraph = `This manifest covers ${nParticipants} unique participant${nParticipants === 1 ? "" : "s"} with ${includedSubjectSessions.length} included subject-session${includedSubjectSessions.length === 1 ? "" : "s"} across ${nGroups} group${nGroups === 1 ? "" : "s"}.`;
 
-  const fullDataPar = {
-    ...getDefaultDataPar(),
-    ...flattenRunDataPar((dataPar ?? {}) as Record<string, unknown>),
-  } as DataParState;
-  const { paragraphs: methodsParagraphs, references: methodsReferences } =
-    generateMethodsParagraph(fullDataPar);
+  const {
+    paragraphs: methodsParagraphs,
+    references: methodsReferences,
+    disclaimer: methodsDisclaimer,
+  } = generateMethodsParagraph(
+    dataPar === null ? null : (flattenRunDataPar(dataPar) as DataParState),
+    {
+      populationRun: lastRun,
+      dataSource: project?.projectMeta.dataSource,
+      importCompleted: project?.uiState?.import?.completed,
+    },
+  );
 
   return {
     metadataGroups: section1Groups,
     versions,
     qcGroups,
     pipelineParagraph,
+    methodsDisclaimer,
     methodsParagraphs,
     methodsReferences,
     dataPar: dataPar ?? {},
@@ -433,24 +391,6 @@ function useBuildManifestPayload(): ManifestPayload {
   };
 }
 
-/**
- * Returns a sanitised copy of the dataPar object suitable for display:
- * - x.dataset.subjectRegexp defaults to "^sub-.*" if absent/empty
- * - x.dataset.ForceInclusionList is omitted (not relevant for reproducibility)
- */
-function sanitiseDataPar(dataPar: Record<string, unknown>): Record<string, unknown> {
-  const copy = structuredClone(dataPar) as Record<string, unknown>;
-  const x = copy["x"] as Record<string, unknown> | undefined;
-  if (x) {
-    const dataset = x["dataset"] as Record<string, unknown> | undefined;
-    if (dataset) {
-      dataset["subjectRegexp"] = "^sub-.*";
-      delete dataset["ForceInclusionList"];
-    }
-  }
-  return copy;
-}
-
 export default function ManifestPreview() {
   const payload = useBuildManifestPayload();
   const project = useProjectStore((s) => s.project);
@@ -458,9 +398,39 @@ export default function ManifestPreview() {
   const rawVerdicts = project?.uiState?.manifest?.verdicts;
   const exportDisabled = !hasVerdictEntries(reviewers, rawVerdicts);
 
-  const sanitisedDataPar = sanitiseDataPar(payload.dataPar as Record<string, unknown>);
+  const sanitisedDataPar = sanitiseDataParForExport(payload.dataPar ?? {});
   const dataParJson = JSON.stringify(sanitisedDataPar, null, 2);
   const hasDataPar = Object.keys(sanitisedDataPar).length > 0;
+
+  async function exportToPath(path: string, format: "md" | "html" | "csv") {
+    if (exportDisabled) return;
+    const content =
+      format === "md"
+        ? renderMarkdown(payload)
+        : format === "html"
+          ? renderHtml(payload)
+          : generateVerdictsCsv({
+              reviewers: reviewers ?? [],
+              subjectSessions: useProcessingStore
+                .getState()
+                .availableSubjects.map((subject) => subject.subjectSession),
+              verdicts: rawVerdicts ?? {},
+              resolvedVerdicts: project?.uiState?.manifest?.resolvedVerdicts,
+              qcMetrics: useManifestStore.getState().qcData ?? undefined,
+              agreement: payload.agreement
+                ? {
+                    numberOfReviewers: payload.agreement.numberOfReviewers,
+                    overall: payload.agreement.overall,
+                    numberOfDisagreements: payload.agreement.numberOfDisagreements,
+                    perGroup: payload.agreement.perGroup.map(({ label, result }) => ({
+                      group: label,
+                      result,
+                    })),
+                  }
+                : undefined,
+            });
+    await writeTextFile(path, content);
+  }
 
   return (
     <Stack data-testid="manifest-preview" gap="lg">
@@ -476,13 +446,24 @@ export default function ManifestPreview() {
               filters: [{ name: "Markdown", extensions: ["md"] }],
             });
             if (!path) return;
-            await writeTextFile(path, renderMarkdown(payload));
+            await exportToPath(path, "md");
           }}
           disabled={exportDisabled}
           data-testid="export-markdown-btn"
         >
           Export Markdown
         </Button>
+        <PathEntryButton
+          title="Save Markdown manifest"
+          testId="export-markdown-path"
+          defaultPath={
+            project?.projectMeta.rootPath ? `${project.projectMeta.rootPath}/manifest.md` : ""
+          }
+          extensions={["md"]}
+          save
+          disabled={exportDisabled}
+          onSelect={(path) => exportToPath(path, "md")}
+        />
         <Button
           variant="outline"
           size="sm"
@@ -494,13 +475,24 @@ export default function ManifestPreview() {
               filters: [{ name: "HTML", extensions: ["html"] }],
             });
             if (!path) return;
-            await writeTextFile(path, renderHtml(payload));
+            await exportToPath(path, "html");
           }}
           disabled={exportDisabled}
           data-testid="export-html-btn"
         >
           Export HTML
         </Button>
+        <PathEntryButton
+          title="Save HTML manifest"
+          testId="export-html-path"
+          defaultPath={
+            project?.projectMeta.rootPath ? `${project.projectMeta.rootPath}/manifest.html` : ""
+          }
+          extensions={["html"]}
+          save
+          disabled={exportDisabled}
+          onSelect={(path) => exportToPath(path, "html")}
+        />
         <Button
           variant="outline"
           size="sm"
@@ -513,35 +505,26 @@ export default function ManifestPreview() {
               filters: [{ name: "CSV", extensions: ["csv"] }],
             });
             if (!path) return;
-            await writeTextFile(
-              path,
-              generateVerdictsCsv({
-                reviewers: reviewers ?? [],
-                subjectSessions: useProcessingStore
-                  .getState()
-                  .availableSubjects.map((subject) => subject.subjectSession),
-                verdicts: rawVerdicts ?? {},
-                resolvedVerdicts: project?.uiState?.manifest?.resolvedVerdicts,
-                qcMetrics: useManifestStore.getState().qcData ?? undefined,
-                agreement: payload.agreement
-                  ? {
-                      numberOfReviewers: payload.agreement.numberOfReviewers,
-                      overall: payload.agreement.overall,
-                      numberOfDisagreements: payload.agreement.numberOfDisagreements,
-                      perGroup: payload.agreement.perGroup.map(({ label, result }) => ({
-                        group: label,
-                        result,
-                      })),
-                    }
-                  : undefined,
-              }),
-            );
+            await exportToPath(path, "csv");
           }}
           disabled={exportDisabled}
           data-testid="export-csv-btn"
         >
           Export CSV
         </Button>
+        <PathEntryButton
+          title="Save CSV manifest"
+          testId="export-csv-path"
+          defaultPath={
+            project?.projectMeta.rootPath
+              ? `${project.projectMeta.rootPath}/manifest_export.csv`
+              : ""
+          }
+          extensions={["csv"]}
+          save
+          disabled={exportDisabled}
+          onSelect={(path) => exportToPath(path, "csv")}
+        />
       </Group>
 
       <Accordion
@@ -558,7 +541,7 @@ export default function ManifestPreview() {
       >
         {/* Section 1: Study Parameters */}
         <Accordion.Item value="study-parameters" data-testid="manifest-section-study-parameters">
-          <Accordion.Control>
+          <Accordion.Control data-testid="manifest-study-parameters-toggle">
             <Title order={3}>Study Parameters</Title>
           </Accordion.Control>
           <Accordion.Panel>
@@ -584,8 +567,14 @@ export default function ManifestPreview() {
                   </Table.Thead>
                   <Table.Tbody>
                     <Table.Tr>
-                      <Table.Td>N Subjects</Table.Td>
-                      <Table.Td>{g.nSubjects}</Table.Td>
+                      <Table.Td>N Participants</Table.Td>
+                      <Table.Td data-testid={`participants-${g.label}`}>{g.nParticipants}</Table.Td>
+                    </Table.Tr>
+                    <Table.Tr>
+                      <Table.Td>N Subject-Sessions</Table.Td>
+                      <Table.Td data-testid={`subject-sessions-${g.label}`}>
+                        {g.nSubjectSessions}
+                      </Table.Td>
                     </Table.Tr>
                     <Table.Tr>
                       <Table.Td>N Total Runs</Table.Td>
@@ -606,7 +595,7 @@ export default function ManifestPreview() {
 
         {/* Section 2: Software Manifest */}
         <Accordion.Item value="software-manifest" data-testid="manifest-section-software-manifest">
-          <Accordion.Control>
+          <Accordion.Control data-testid="manifest-software-manifest-toggle">
             <Title order={3}>Software Manifest</Title>
           </Accordion.Control>
           <Accordion.Panel>
@@ -655,6 +644,10 @@ export default function ManifestPreview() {
                 <Title order={5} mb="xs">
                   ExploreASL Data Parameter Configuration
                 </Title>
+                <Text size="sm" data-testid="datapar-evidence-note">
+                  Machine-local paths are redacted. Subject selection and inclusion settings are
+                  preserved.
+                </Text>
                 <Code block data-testid="datapar-table">
                   {dataParJson}
                 </Code>
@@ -665,10 +658,13 @@ export default function ManifestPreview() {
 
         {/* Section 3: QC Summary */}
         <Accordion.Item value="qc-summary" data-testid="manifest-section-qc-summary">
-          <Accordion.Control>
+          <Accordion.Control data-testid="manifest-qc-summary-toggle">
             <Title order={3}>QC Summary</Title>
           </Accordion.Control>
           <Accordion.Panel>
+            <Text size="sm" data-testid="qc-denominator-note">
+              {QC_DENOMINATOR_NOTE}
+            </Text>
             {payload.qcGroups.map((g, i) => (
               <Box key={i} mt="sm">
                 <Text fw={600}>{g.label}</Text>
@@ -693,7 +689,7 @@ export default function ManifestPreview() {
                   </Table.Thead>
                   <Table.Tbody>
                     <Table.Tr>
-                      <Table.Td>Pass / Total</Table.Td>
+                      <Table.Td>Pass / Total (subject-sessions)</Table.Td>
                       <Table.Td data-testid={`pass-total-${g.label}`}>{g.passTotal}</Table.Td>
                       {payload.agreement && (
                         <Table.Td data-testid={`agreement-rate-${g.label}`}>
@@ -745,7 +741,7 @@ export default function ManifestPreview() {
             value="inter-rater-agreement"
             data-testid="manifest-section-inter-rater-agreement"
           >
-            <Accordion.Control>
+            <Accordion.Control data-testid="manifest-inter-rater-agreement-toggle">
               <Title order={3}>Inter-Rater Agreement</Title>
             </Accordion.Control>
             <Accordion.Panel>
@@ -761,7 +757,7 @@ export default function ManifestPreview() {
 
         {/* Section 4: Pipeline Summary */}
         <Accordion.Item value="pipeline-summary" data-testid="manifest-section-pipeline-summary">
-          <Accordion.Control>
+          <Accordion.Control data-testid="manifest-pipeline-summary-toggle">
             <Title order={3}>Pipeline Summary</Title>
           </Accordion.Control>
           <Accordion.Panel>
@@ -769,6 +765,7 @@ export default function ManifestPreview() {
             {payload.methodsParagraphs.length > 0 && (
               <Stack mt="md" gap="sm" data-testid="manifest-methods">
                 <Title order={5}>Methods</Title>
+                <Text data-testid="manifest-methods-disclaimer">{payload.methodsDisclaimer}</Text>
                 {payload.methodsParagraphs.map((paragraph, index) => (
                   <Text key={index}>{paragraph}</Text>
                 ))}

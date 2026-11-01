@@ -1,3 +1,5 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
@@ -32,7 +34,7 @@ interface ResolutionRow extends ManifestDisagreement {
 type PendingFail = { reason?: ManifestFailReason; notes?: string };
 
 interface VerdictResolutionProps {
-  disagreements?: ManifestDisagreement[];
+  disagreements: ManifestDisagreement[];
 }
 
 const EMPTY_RUN_ERROR_MAP: Record<string, boolean> = {};
@@ -51,11 +53,7 @@ function formatMetric(value: number | null | undefined, suffix = "") {
   return value === null || value === undefined ? "Unavailable" : `${value}${suffix}`;
 }
 
-export default function VerdictResolution({
-  disagreements: suppliedDisagreements,
-}: VerdictResolutionProps) {
-  const storedDisagreements = useManifestStore((state) => state.disagreements);
-  const disagreements = suppliedDisagreements ?? storedDisagreements;
+export default function VerdictResolution({ disagreements }: VerdictResolutionProps) {
   const qcData = useManifestStore((state) => state.qcData);
   const projectRoot = useProjectStore((state) => state.project?.projectMeta.rootPath);
   const reviewers = useProjectStore(
@@ -253,7 +251,7 @@ export default function VerdictResolution({
                   ]}
                   onChange={(status) => handleStatusChange(row.subjectSession, status)}
                   aria-label={`Final verdict for ${row.subjectSession}`}
-                  data-testid={`final-verdict-${row.subjectSession}`}
+                  {...segmentedControlTestIds(`final-verdict-${row.subjectSession}`)}
                 />
                 <Badge
                   color={row.resolution && !pendingFail ? "teal" : "yellow"}
@@ -275,7 +273,7 @@ export default function VerdictResolution({
                   error={!reason ? "Reason required" : undefined}
                   onChange={(value) => handleReasonChange(row.subjectSession, value)}
                   aria-label={`Failure reason for ${row.subjectSession}`}
-                  data-testid={`final-reason-${row.subjectSession}`}
+                  {...comboboxTestIds(`final-reason-${row.subjectSession}`)}
                 />
               )}
               {row.resolution && !pendingFail && (

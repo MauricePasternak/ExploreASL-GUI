@@ -12,8 +12,6 @@ const mockLoadPriorModulesMtimes = vi.fn();
 const mockComputeStaleVerdicts = vi.fn();
 const mockLoadQcData = vi.fn();
 const mockLoadDataPar = vi.fn();
-const mockComputeDisagreements = vi.fn();
-let mockDisagreements: { subjectSession: string }[] = [];
 let mockQcData: Record<string, unknown> | null = null;
 let mockQcLoaded = false;
 let renderedReviewerIds: (string | undefined)[] = [];
@@ -47,8 +45,6 @@ vi.mock("../stores/manifestStore", () => ({
       computeStaleVerdicts: mockComputeStaleVerdicts,
       loadQcData: mockLoadQcData,
       loadDataPar: mockLoadDataPar,
-      computeDisagreements: mockComputeDisagreements,
-      disagreements: mockDisagreements,
       qcData: mockQcData,
       qcLoaded: mockQcLoaded,
     };
@@ -142,7 +138,6 @@ describe("ManifestPage", () => {
   afterEach(() => {
     cleanup();
     mockStep = 0;
-    mockDisagreements = [];
     mockQcData = null;
     mockQcLoaded = false;
     mockAvailableSubjects = [];
@@ -223,7 +218,6 @@ describe("ManifestPage", () => {
     mockQcData = { "sub-01_01": {} };
     // Store-derived disagreements can lag one render behind a verdict change.
     // Step topology must reflect the current reviewer verdicts immediately.
-    mockDisagreements = [];
     (mockProjectState.project.uiState.manifest as any).reviewers = [
       { id: reviewerOne, label: "Reviewer 1" },
       { id: reviewerTwo, label: "Reviewer 2" },
@@ -325,7 +319,6 @@ describe("ManifestPage", () => {
     const reviewerOne = "11111111-1111-4111-8111-111111111111";
     const reviewerTwo = "22222222-2222-4222-8222-222222222222";
     mockStep = 1;
-    mockDisagreements = [{ subjectSession: "sub-01_01" }];
     (mockProjectState.project.uiState.manifest as any).reviewers = [
       { id: reviewerOne, label: "Reviewer 1" },
       { id: reviewerTwo, label: "Reviewer 2" },
@@ -356,7 +349,6 @@ describe("ManifestPage", () => {
     const reviewerOne = "11111111-1111-4111-8111-111111111111";
     const reviewerTwo = "22222222-2222-4222-8222-222222222222";
     mockStep = 1;
-    mockDisagreements = [{ subjectSession: "sub-new_01" }];
     (mockProjectState.project.uiState.manifest as any).reviewers = [
       { id: reviewerOne, label: "Reviewer 1" },
       { id: reviewerTwo, label: "Reviewer 2" },

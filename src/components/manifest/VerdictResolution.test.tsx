@@ -72,10 +72,7 @@ describe("areDisagreementsResolved", () => {
   });
 });
 
-function setState(
-  resolutionDisagreements: ManifestDisagreement[] = disagreements,
-  resolvedVerdicts: Record<string, unknown> | undefined = undefined,
-) {
+function setState(resolvedVerdicts: Record<string, unknown> | undefined = undefined) {
   useProjectStore.setState({
     project: projectView(
       projectFixture("project-1", "Verdict resolution", "/project", {
@@ -96,7 +93,6 @@ function setState(
     loaded: true,
   });
   useManifestStore.setState({
-    disagreements: resolutionDisagreements,
     priorModulesMtimes: { "sub-01_01": 10, "sub-02_02": 20 },
     qcData: {
       "sub-01_01": {
@@ -116,10 +112,10 @@ function setState(
   };
 }
 
-function renderResolution() {
+function renderResolution(resolutionDisagreements = disagreements) {
   return render(
     <MantineProvider env="test">
-      <VerdictResolution />
+      <VerdictResolution disagreements={resolutionDisagreements} />
     </MantineProvider>,
   );
 }
@@ -130,7 +126,7 @@ afterEach(() => {
   resetProjectLifecycleForTests();
   vi.mocked(invoke).mockReset();
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
-  useManifestStore.setState({ disagreements: [], priorModulesMtimes: {}, qcData: null });
+  useManifestStore.setState({ priorModulesMtimes: {}, qcData: null });
   vi.restoreAllMocks();
   mockFetchLogContent.mockReset();
   mockFetchLogContent.mockRejectedValue(new Error("Failed to load logs"));
@@ -138,9 +134,9 @@ afterEach(() => {
 
 describe("VerdictResolution", () => {
   it("renders an identifiable empty state", () => {
-    setState([]);
+    setState();
 
-    renderResolution();
+    renderResolution([]);
 
     expect(screen.getByTestId("verdict-resolution")).toBeInTheDocument();
     expect(screen.getByTestId("verdict-resolution-empty")).toHaveTextContent(
@@ -230,7 +226,7 @@ describe("VerdictResolution", () => {
 
   it("displays existing resolutions and permits overwriting them", async () => {
     const user = userEvent.setup();
-    const reply = setState(disagreements, {
+    const reply = setState({
       "sub-01_01": { status: "pass", notes: "prior", setAt: 1 },
     });
     reply.document.uiState.manifest.resolvedVerdicts["sub-01_01"] = {
@@ -257,7 +253,7 @@ describe("VerdictResolution", () => {
 
   it("preserves accepted pass and blocks flush while a replacement fail lacks its required reason", async () => {
     const user = userEvent.setup();
-    setState(disagreements, { "sub-01_01": { status: "pass", notes: "prior", setAt: 1 } });
+    setState({ "sub-01_01": { status: "pass", notes: "prior", setAt: 1 } });
 
     renderResolution();
     await user.click(
@@ -279,7 +275,7 @@ describe("VerdictResolution", () => {
 
   it("bulk-copies each reviewer verdict only into unresolved rows and derives completion", async () => {
     const user = userEvent.setup();
-    const reply = setState(disagreements, {
+    const reply = setState({
       "sub-01_01": { status: "pass", notes: "manual", setAt: 1 },
     });
     reply.document.uiState.manifest.resolvedVerdicts["sub-02_02"] = { status: "pass", setAt: 20 };

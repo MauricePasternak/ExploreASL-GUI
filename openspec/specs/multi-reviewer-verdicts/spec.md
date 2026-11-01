@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines how verdicts are stored, accessed, and tracked in multi-reviewer mode. Verdicts become reviewer-indexed (`Record<reviewerId, Record<subjectSession, ManifestVerdict>>`). Each reviewer works in isolation (blinded review), and the "Next" gate requires all reviewers to complete their verdicts before proceeding.
+Defines reviewer-indexed verdict storage and tab-scoped QC selection. The "Next" gate requires all reviewers to complete their verdicts before proceeding.
 
 ## Requirements
 
@@ -10,11 +10,11 @@ Defines how verdicts are stored, accessed, and tracked in multi-reviewer mode. V
 
 ### Requirement: Per-Reviewer Staleness Tracking
 
-Every reviewer SHALL have an indexed staleness result, including empty results and sole-reviewer projects. Staleness SHALL compare captured prior-module mtime with the current maximum Structural/ASL completion mtime. QC selection SHALL display only the active reviewer's staleness and SHALL not reveal another reviewer's verdicts or stale indicators.
+Every reviewer SHALL have an indexed staleness result, including empty results and sole-reviewer projects. Staleness SHALL compare nonzero captured prior-module mtime with the current maximum Structural/ASL completion mtime when available. QC selection SHALL display only the active reviewer's stale indicators.
 
 #### Scenario: One reviewer's verdict stale while another's is fresh
 
-- **WHEN** only one captured timestamp differs from current prior-module mtime
+- **WHEN** only one nonzero captured timestamp differs from an available current prior-module mtime
 - **THEN** only that reviewer's result SHALL include the SubjectSession
 
 #### Scenario: Multi-reviewer staleness exposes every reviewer slice
@@ -27,16 +27,16 @@ Every reviewer SHALL have an indexed staleness result, including empty results a
 - **WHEN** the user switches between a stale and fresh reviewer
 - **THEN** stale indicators SHALL follow only the selected slice
 
-### Requirement: Blinded Review via Tab Isolation
+### Requirement: Reviewer Tab Isolation
 
-In multi-reviewer mode, the QC Selection step SHALL render a tabbed interface where each reviewer's tab displays ONLY that reviewer's own verdicts. No reviewer SHALL be able to see, infer, or access another reviewer's verdict data through the QC Selection UI.
+In multi-reviewer mode, the QC Selection step SHALL render a tabbed interface where each reviewer's table displays only that reviewer's verdicts. Other reviewers' completion counts remain visible in tab badges, and their verdicts are accessible by switching tabs; this is not an access-control or strict blinding mechanism.
 
 Each `Tabs.Panel` SHALL render its own `QcSelectionTable` instance, subscribed exclusively to the active reviewer's verdict slice from `verdicts[activeReviewerId]` and, for stale indicators, `staleVerdicts[activeReviewerId]`. Switching tabs SHALL update `activeReviewerId` and cause the table to re-render with the newly selected reviewer's verdicts and staleness slice.
 
 #### Scenario: Reviewer sees only their own verdicts
 
 - **WHEN** the "Reviewer 1" tab is active and "Reviewer 1" has marked `"sub-01_01"` as Pass but "Reviewer 2" has marked `"sub-01_01"` as Fail
-- **THEN** the table SHALL display `"sub-01_01"` with SegmentedControl value "Pass"; "Reviewer 2"'s Fail verdict SHALL NOT be visible anywhere in the UI
+- **THEN** the active table SHALL display `"sub-01_01"` with SegmentedControl value "Pass"; switching to "Reviewer 2" SHALL display that reviewer's Fail verdict
 
 #### Scenario: Switching tabs shows different verdicts
 

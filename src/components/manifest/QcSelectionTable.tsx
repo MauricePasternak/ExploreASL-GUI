@@ -1,3 +1,5 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Badge,
@@ -25,12 +27,10 @@ import {
   type ManifestFailReason,
 } from "../../schemas/project";
 
-import type { LogFileInfo, LogContent } from "../../lib/logViewer";
-import { fetchModuleLogs, fetchLogContent } from "../../lib/logViewer";
 import LogViewerModal from "../processing/LogViewerModal";
 
-import { fetchSubjectReports } from "../../lib/reportViewer";
 import ReportViewerModal from "../processing/ReportViewerModal";
+import { useSubjectViewers } from "../processing/useSubjectViewers";
 import type { ModuleDisplayStatus } from "../processing/SubjectSelection.helpers";
 import { resolveLogBadge, resolveModuleDisplay } from "../processing/SubjectSelection.helpers";
 import { StatusIcon } from "../processing/SubjectSelection";
@@ -132,76 +132,16 @@ export default function QcSelectionTable({
   const qcLoaded = useManifestStore((s) => s.qcLoaded);
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
 
-  const [logFiles, setLogFiles] = useState<Map<string, LogFileInfo[]>>(new Map());
-  const [modalOpened, setModalOpened] = useState(false);
-  const [modalModule, setModalModule] = useState<"structural" | "asl">("structural");
-  const [modalSubjectSession, setModalSubjectSession] = useState("");
-  const [modalContent, setModalContent] = useState<LogContent | null>(null);
-  const [modalLoading, setModalLoading] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
-
-  const [existingReports, setExistingReports] = useState<Set<string>>(new Set());
-  const [reportModalOpened, setReportModalOpened] = useState(false);
-  const [reportModalModule, setReportModalModule] = useState<"structural" | "asl">("structural");
-  const [reportModalSubjectSession, setReportModalSubjectSession] = useState("");
-  const [reportModalRuns, setReportModalRuns] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!projectRoot) return;
-    fetchModuleLogs(projectRoot)
-      .then((files) => {
-        const map = new Map<string, LogFileInfo[]>();
-        for (const f of files) {
-          const key = `${f.subjectSession}:${f.module}`;
-          const existing = map.get(key) ?? [];
-          existing.push(f);
-          map.set(key, existing);
-        }
-        setLogFiles(map);
-      })
-      .catch((err) => {
-        console.warn("[QcSelectionTable] Failed to fetch module logs:", err);
-        setLogFiles(new Map());
-      });
-  }, [projectRoot, processingPhase]);
-
-  useEffect(() => {
-    if (!projectRoot) return;
-    fetchSubjectReports(projectRoot)
-      .then((reports) => {
-        const set = new Set<string>();
-        for (const r of reports) {
-          set.add(`${r.subjectSession}:${r.module}`);
-        }
-        setExistingReports(set);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch reports list:", err);
-        setExistingReports(new Set());
-      });
-  }, [projectRoot, processingPhase]);
-
-  const structuralLogInfo = useMemo(() => {
-    const map = new Map<string, LogFileInfo[]>();
-    for (const [key, files] of logFiles) {
-      if (key.endsWith(":structural")) {
-        const ss = key.replace(/:structural$/, "");
-        map.set(ss, files);
-      }
-    }
-    return map;
-  }, [logFiles]);
-
-  const aslLogInfo = useMemo(() => {
-    const map = new Map<string, LogFileInfo[]>();
-    for (const [key, files] of logFiles) {
-      if (key.endsWith(":asl")) {
-        const ss = key.replace(/:asl$/, "");
-        map.set(ss, files);
-      }
-    }
-    return map;
-  }, [logFiles]);
+  const {
+    structuralLogInfo,
+    aslLogInfo,
+    existingReports,
+    handleViewLog,
+    openReport,
+    logModal,
+    reportModal,
+  } = useSubjectViewers(projectRoot, processingPhase);
+  const { module: modalModule, subjectSession: modalSubjectSession } = logModal;
 
   const noInfoSubjects = useMemo(() => {
     const set = new Set<string>(propNoInfoSubjects);
@@ -363,56 +303,12 @@ export default function QcSelectionTable({
     });
   }, [availableSubjects, statusIndex, rowGroupMap, groupMap, verdicts, noInfoSubjects]);
 
-  const handleViewLog = useCallback(
-    async (subjectSession: string, module: "structural" | "asl") => {
-      console.log(
-        `[QcSelectionTable] Viewing logs for subjectSession: ${subjectSession}, module: ${module}`,
-      );
-      if (!projectRoot) return;
-      setModalModule(module);
-      setModalSubjectSession(subjectSession);
-      setModalOpened(true);
-      setModalLoading(true);
-      setModalError(null);
-      try {
-        const content = await fetchLogContent(projectRoot, subjectSession, module);
-        setModalContent(content);
-      } catch {
-        setModalError("Failed to load log content");
-        setModalContent(null);
-      } finally {
-        setModalLoading(false);
-      }
-    },
-    [projectRoot],
-  );
-
-  const handleCloseModal = useCallback(() => {
-    setModalOpened(false);
-    setModalContent(null);
-    setModalLoading(false);
-    setModalError(null);
-  }, []);
-
-  const handleCloseReportModal = useCallback(() => {
-    setReportModalOpened(false);
-    setReportModalSubjectSession("");
-    setReportModalRuns([]);
-  }, []);
-
   const handleViewReport = useCallback(
     (subjectSession: string, module: "structural" | "asl") => {
-      console.log(
-        `[QcSelectionTable] Viewing reports for subjectSession: ${subjectSession}, module: ${module}`,
-      );
       const row = rows.find((r) => r.subjectSession === subjectSession);
-      const runs = row?.aslRuns || [];
-      setReportModalSubjectSession(subjectSession);
-      setReportModalModule(module);
-      setReportModalRuns(runs);
-      setReportModalOpened(true);
+      openReport(subjectSession, module, row?.aslRuns || []);
     },
-    [rows],
+    [rows, openReport],
   );
 
   const modalRunErrorMap = useMemo(() => {
@@ -694,7 +590,7 @@ export default function QcSelectionTable({
                 value={segValue}
                 disabled={row.noInfo}
                 onChange={(v) => handleVerdictChange(row.subjectSession, v)}
-                data-testid={`verdict-control-${row.subjectSession}`}
+                {...segmentedControlTestIds(`verdict-control-${row.subjectSession}`)}
               />
               {isPendingFail && (
                 <Select
@@ -708,7 +604,7 @@ export default function QcSelectionTable({
                   onChange={(v) => handleReasonChange(row.subjectSession, v)}
                   placeholder="Reason"
                   error={!reasonValue ? "Reason required" : undefined}
-                  data-testid={`verdict-reason-${row.subjectSession}`}
+                  {...comboboxTestIds(`verdict-reason-${row.subjectSession}`)}
                 />
               )}
               {effectiveVerdict !== "neutral" && !isPendingFail && (
@@ -845,7 +741,7 @@ export default function QcSelectionTable({
               </Stack>
             ),
           }))}
-          data-testid="qc-filter"
+          {...segmentedControlTestIds("qc-filter")}
         />
       </Group>
 
@@ -863,29 +759,18 @@ export default function QcSelectionTable({
           totalRecords={filteredRows.length}
           recordsPerPage={10}
           paginationSize="sm"
+          getPaginationControlProps={(control) => ({
+            "data-testid": `qc-verdict-table-page-${control}`,
+            "aria-label": `${control[0].toUpperCase()}${control.slice(1)} page`,
+          })}
+          getPaginationItemProps={(page) => ({ "data-testid": `qc-verdict-table-page-${page}` })}
           minHeight={240}
           data-testid="qc-verdict-table"
         />
       </Box>
 
-      <LogViewerModal
-        opened={modalOpened}
-        onClose={handleCloseModal}
-        logContent={modalContent}
-        module={modalModule}
-        subjectSession={modalSubjectSession}
-        loading={modalLoading}
-        error={modalError}
-        runErrorMap={modalRunErrorMap}
-      />
-      <ReportViewerModal
-        opened={reportModalOpened}
-        onClose={handleCloseReportModal}
-        projectRoot={projectRoot}
-        subjectSession={reportModalSubjectSession}
-        module={reportModalModule}
-        runs={reportModalRuns}
-      />
+      <LogViewerModal {...logModal} runErrorMap={modalRunErrorMap} />
+      <ReportViewerModal {...reportModal} />
     </Stack>
   );
 }

@@ -6,9 +6,20 @@ Defines initial inter-rater agreement computation and display for multi-reviewer
 
 ## Requirements
 
+### Requirement: Preview-Owned Agreement Calculation
+
+The manifest preview payload builder SHALL derive agreement from current registered reviewers' original verdicts, metadata-group assignments, available SubjectSessions, and QC eligibility. It SHALL use the statistical functions in `src/lib/interRaterAgreement.ts`, without a separate manifest-store calculation action or cached agreement result. Preview and exports SHALL consume the derived payload.
+
+Only available SubjectSessions rated by every registered reviewer SHALL contribute to overall and per-group statistics and disagreement counts. After successful QC loading, No Info SubjectSessions SHALL be excluded even if stored verdicts remain. A failed QC load SHALL NOT itself exclude SubjectSessions. Resolved verdicts and verdict slices belonging to unregistered reviewers SHALL NOT affect initial agreement.
+
+#### Scenario: Agreement follows current eligible ratings
+
+- **WHEN** registered reviewer verdicts or inventory/QC eligibility change
+- **THEN** the preview payload SHALL derive updated agreement from eligible complete ratings without invoking a manifest-store agreement action
+
 ### Requirement: Cohen's Kappa Computation For Two Reviewers
 
-When exactly 2 reviewers exist, the manifest store SHALL compute Cohen's Kappa (κ) on the pass/fail verdicts. The computation SHALL:
+When exactly 2 reviewers exist, the manifest preview payload builder SHALL compute Cohen's Kappa (κ) on the eligible pass/fail verdicts. The computation SHALL:
 
 1. Construct a 2×2 contingency table from both reviewers' verdicts across all subjectSessions where both reviewers have a non-Neutral verdict.
 2. Compute observed agreement (pₒ) as the proportion of subjectSessions where both reviewers agree on status.
@@ -68,7 +79,7 @@ function cohensKappa(
 
 ### Requirement: Fleiss' Kappa Computation For More Than Two Reviewers
 
-When more than 2 reviewers exist, the manifest store SHALL compute Fleiss' Kappa (κ) on the pass/fail verdicts. The computation SHALL:
+When more than 2 reviewers exist, the manifest preview payload builder SHALL compute Fleiss' Kappa (κ) on the eligible pass/fail verdicts. The computation SHALL:
 
 1. For each subjectSession, count the number of reviewers assigning `"pass"` and `"fail"`.
 2. Compute the proportion of agreeing pairs per subjectSession: Pᵢ = (1 / (k(k-1))) × Σⱼ(nᵢⱼ(nᵢⱼ - 1)), where k is the number of reviewers and nᵢⱼ is the count for category j.
@@ -111,7 +122,7 @@ Only subjectSessions where ALL reviewers have a verdict SHALL be included in the
 
 ### Requirement: Initial Agreement Rate Computation
 
-The manifest store SHALL compute an overall initial agreement rate as the proportion of subjectSessions where ALL reviewers agree on `status` (pass vs fail) before resolution. The initial agreement rate SHALL be a simple ratio: `agreementsCount / totalSubjectSessions`, expressed as a number between 0 and 1. The internal result property SHALL remain `agreementRate`.
+The manifest preview payload builder SHALL compute an overall initial agreement rate as the proportion of eligible, completely rated subjectSessions where ALL reviewers agree on `status` (pass vs fail) before resolution. The initial agreement rate SHALL be a simple ratio: `agreementsCount / totalSubjectSessions`, expressed as a number between 0 and 1, or 0 when no subjectSessions qualify. The internal result property SHALL remain `agreementRate`.
 
 #### Scenario: Initial agreement rate with mixed verdicts
 
@@ -125,7 +136,7 @@ The manifest store SHALL compute an overall initial agreement rate as the propor
 
 ### Requirement: Per-Group Agreement Computation
 
-The manifest store SHALL compute agreement statistics (Kappa and initial agreement rate) per `MetadataGroup`. For each group, the computation SHALL use only the subjectSessions assigned to that group. Groups with fewer than 2 subjectSessions rated by all reviewers SHALL report `kappa: null` (insufficient data) with initial agreement rate still computed.
+The manifest preview payload builder SHALL compute agreement statistics (Kappa and initial agreement rate) per `MetadataGroup`. For each group, the computation SHALL use only eligible, completely rated subjectSessions assigned to that group. Groups with fewer than 2 subjectSessions rated by all reviewers SHALL report `kappa: null` (insufficient data) with initial agreement rate still computed.
 
 #### Scenario: Per-group Kappa computed independently
 
@@ -144,10 +155,11 @@ The manifest store SHALL compute agreement statistics (Kappa and initial agreeme
 
 ### Requirement: Agreement Results Shape
 
-The agreement computation SHALL return results conforming to the following TypeScript shape:
+In multi-reviewer mode, the preview payload builder SHALL populate `ManifestPayload.agreement` with the following TypeScript shape. Single-reviewer payloads SHALL omit agreement data.
 
 ```typescript
-interface AgreementResults {
+interface ManifestAgreement {
+  numberOfReviewers: number;
   overall: {
     kappa: number | null;
     ci95Lower: number | null;
@@ -155,38 +167,51 @@ interface AgreementResults {
     n: number;
     agreementRate: number;
   };
-  perGroup: Record<
-    string,
-    {
+  numberOfDisagreements: number;
+  perGroup: Array<{
+    label: string;
+    result: {
       kappa: number | null;
       ci95Lower: number | null;
       ci95Upper: number | null;
       n: number;
       agreementRate: number;
-    }
-  >;
+    };
+  }>;
 }
 ```
 
-The `overall` field SHALL contain statistics computed across ALL subjectSessions. The `perGroup` field SHALL be keyed by `MetadataGroup.label` (or `"Ungrouped"` for unassigned subjects).
+The `overall` field SHALL contain statistics computed across eligible subjectSessions rated by all registered reviewers. The `perGroup` array SHALL contain entries labeled by `MetadataGroup.label`, in metadata-group order, followed by `"Ungrouped"` only when available SubjectSessions have no assignment to a current metadata group. Such an Ungrouped entry SHALL remain present even if none of its SubjectSessions are eligible and completely rated. The `numberOfDisagreements` field SHALL count eligible, completely rated SubjectSessions with differing original reviewer statuses.
 
 #### Scenario: Results shape populated correctly
 
-- **WHEN** agreement is computed with 2 reviewers, 50 total subjectSessions across 2 groups
-- **THEN** the returned object SHALL have an `overall` field with nullable `kappa`, `ci95Lower`, and `ci95Upper`, `n: 50`, and `agreementRate`, plus a `perGroup` field with entries for each group label
+- **WHEN** agreement is computed with 2 reviewers, 50 eligible, completely rated subjectSessions across 2 groups
+- **THEN** the agreement payload SHALL have `numberOfReviewers: 2`, an `overall` field with nullable `kappa`, `ci95Lower`, and `ci95Upper`, `n: 50`, and `agreementRate`, plus a `perGroup` array with a labeled result for each group and a `numberOfDisagreements` count
 
 #### Scenario: Results shape with null per-group Kappa
 
 - **WHEN** a group has only 1 rated subjectSession
-- **THEN** the `perGroup` entry for that group SHALL have `kappa: null`, `ci95Lower: null`, `ci95Upper: null`, `n: 1`, and a numeric `agreementRate`
+- **THEN** the `perGroup` entry for that group SHALL have a `result` with `kappa: null`, `ci95Lower: null`, `ci95Upper: null`, `n: 1`, and a numeric `agreementRate`
+
+#### Scenario: No Ungrouped entry for fully assigned inventory
+
+- **WHEN** every available SubjectSession is assigned to a current metadata group
+- **THEN** the agreement payload SHALL omit the `"Ungrouped"` entry
 
 ### Requirement: Agreement Display In Manifest Preview
 
 When in multi-reviewer mode, the manifest Preview step SHALL display an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. The section SHALL render:
 
-1. **Overall statistics table** with rows: Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Kappa (κ) with 95% CI in bracket notation (e.g., `"κ = 0.82 [0.71, 0.90]"`), Number of Subjects (n), Subjects Requiring Resolution (count of disagreements).
-2. **Per-group statistics table** with one row per MetadataGroup, each showing: Group Label, n, Initial Agreement Rate formatted as `"N% (agreed/total)"`, Kappa with CI (or "N/A" if `kappa` is `null`).
-3. **Kappa guidance** beneath the summary: `Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.` The same guidance SHALL appear in Markdown and HTML exports, but not CSV output.
+1. **Overall statistics table** with rows: Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Kappa (κ) with 95% CI in bracket notation (e.g., `"κ = 0.82 [0.71, 0.90]"`), Number of Subject-Sessions (n), Subject-Sessions Requiring Resolution (count of disagreements).
+2. **Per-group statistics table** with one row per MetadataGroup, each showing: Group Label, n (subject-sessions), Initial Agreement Rate formatted as `"N% (agreed/total)"`, Kappa with CI (or "N/A" if `kappa` is `null`).
+3. **Kappa guidance** beneath the summary: `Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject-session counts.` The same guidance SHALL appear in Markdown and HTML exports, but not CSV output.
+
+Preview and Markdown/HTML exports SHALL label overall n, per-group n, and counts requiring resolution as subject-sessions (participant visits: GUI/BIDS Sessions, ExploreASL Visits), not unique participants. Repeated visits SHALL remain separate rated units; this labeling SHALL NOT change eligibility, resolution, Kappa, confidence intervals, agreement rates, or persisted schema.
+
+#### Scenario: Repeated visits retain rated observation counts
+
+- **WHEN** two reviewers rate both visits of each of three eligible participants
+- **THEN** agreement n SHALL remain 6 and display as Number of Subject-Sessions, not 6 subjects or 3 rated units
 
 The section SHALL NOT be rendered in single-reviewer mode.
 
@@ -219,7 +244,7 @@ The separate QC Summary Initial Agreement Rate SHALL remain percentage-only. Mar
 
 ### Requirement: Pure TypeScript Implementation
 
-All inter-rater agreement computations (Cohen's κ, Fleiss' κ, confidence intervals, agreement rates) SHALL be implemented in pure TypeScript without external statistical library dependencies. The implementation SHALL reside in `src/lib/interRaterAgreement.ts`.
+All inter-rater agreement computations (Cohen's κ, Fleiss' κ, confidence intervals, agreement rates) SHALL be implemented in pure TypeScript without external statistical library dependencies. The statistical implementation SHALL reside in `src/lib/interRaterAgreement.ts`; preview eligibility and per-group orchestration SHALL remain in the preview payload builder.
 
 #### Scenario: No external dependency imported
 

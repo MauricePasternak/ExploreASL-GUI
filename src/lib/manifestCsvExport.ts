@@ -150,11 +150,18 @@ export function generateAgreementCsv(payload: AgreementCsvPayload): string {
     csvRow(["Kappa", overall.kappa]),
     csvRow(["Kappa_CI_Lower", overall.ci95Lower]),
     csvRow(["Kappa_CI_Upper", overall.ci95Upper]),
-    csvRow(["N_Subjects", overall.n]),
-    csvRow(["N_Disagreements", payload.numberOfDisagreements]),
+    csvRow(["N_SubjectSessions", overall.n]),
+    csvRow(["N_SubjectSessions_Requiring_Resolution", payload.numberOfDisagreements]),
     "",
     csvRow(["Per_Group_Agreement"]),
-    csvRow(["Group", "N", "Initial_Agreement_Rate", "Kappa", "Kappa_CI_Lower", "Kappa_CI_Upper"]),
+    csvRow([
+      "Group",
+      "N_SubjectSessions",
+      "Initial_Agreement_Rate",
+      "Kappa",
+      "Kappa_CI_Lower",
+      "Kappa_CI_Upper",
+    ]),
   ];
 
   for (const { group, result } of payload.perGroup) {

@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { readAllSubjectQcOutputs, type SubjectQcOutputs } from "../lib/manifestQc";
-import { cohensKappa, fleissKappa, type KappaResult } from "../lib/interRaterAgreement";
 import { type ManifestUiState, type ManifestVerdict } from "../schemas/project";
 import type { ReviewerMode } from "../schemas/manifestSchemas";
 import { useProjectStore } from "./projectStore";
@@ -17,19 +16,11 @@ export interface ManifestDisagreement {
   verdictsByReviewer: Record<string, ManifestVerdict>;
 }
 
-export interface AgreementResults {
-  overall: KappaResult;
-  perGroup: Record<string, KappaResult>;
-}
-
 export type StaleVerdicts = Record<string, Set<string>>;
 
 interface ManifestState {
   step: 0 | 1 | 2;
   filter: "all" | "neutral" | "pass" | "fail" | "no-info";
-  reviewerMode: ReviewerMode;
-  disagreements: ManifestDisagreement[];
-  agreementResults: AgreementResults | null;
   staleVerdicts: StaleVerdicts;
   priorModulesMtimes: Record<string, number | null>;
   qcData: Record<string, SubjectQcOutputs> | null;
@@ -39,8 +30,6 @@ interface ManifestState {
   setStep: (step: 0 | 1 | 2) => void;
   setFilter: (filter: ManifestState["filter"]) => void;
   loadPriorModulesMtimes: () => Promise<void>;
-  computeDisagreements: () => void;
-  computeAgreement: () => void;
   computeStaleVerdicts: () => void;
   resetStep: () => void;
   resetManifest: () => void;
@@ -52,9 +41,6 @@ function createInitialManifestState() {
   return {
     step: 0 as const,
     filter: "all" as const,
-    reviewerMode: "single" as const,
-    disagreements: [],
-    agreementResults: null,
     staleVerdicts: {} as StaleVerdicts,
     priorModulesMtimes: {},
     qcData: null,
@@ -64,7 +50,7 @@ function createInitialManifestState() {
   };
 }
 
-function reviewerMode(manifest: ManifestUiState | undefined): ReviewerMode {
+export function reviewerMode(manifest: ManifestUiState | undefined): ReviewerMode {
   return (manifest?.reviewers?.length ?? 0) >= 2 ? "multi" : "single";
 }
 
@@ -116,62 +102,8 @@ export function deriveDisagreements(manifest: ManifestUiState | undefined): Mani
   );
 }
 
-function verdictsForSubjects(
-  verdictsByReviewer: NestedManifestVerdicts,
-  subjectSessions: Iterable<string>,
-): NestedManifestVerdicts {
-  const selected = new Set(subjectSessions);
-  return Object.fromEntries(
-    Object.entries(verdictsByReviewer).map(([reviewerId, verdicts]) => [
-      reviewerId,
-      Object.fromEntries(
-        Object.entries(verdicts)
-          .filter(([subjectSession]) => selected.has(subjectSession))
-          .map(([subjectSession, verdict]) => [subjectSession, verdict]),
-      ),
-    ]),
-  );
-}
-
-function statusVerdicts(
-  verdictsByReviewer: NestedManifestVerdicts,
-): Record<string, Record<string, "pass" | "fail">> {
-  return Object.fromEntries(
-    Object.entries(verdictsByReviewer).map(([reviewerId, verdicts]) => [
-      reviewerId,
-      Object.fromEntries(
-        Object.entries(verdicts).map(([subjectSession, verdict]) => [
-          subjectSession,
-          verdict.status,
-        ]),
-      ),
-    ]),
-  );
-}
-
-function computeKappa(verdictsByReviewer: NestedManifestVerdicts): KappaResult {
-  const reviewerVerdicts = Object.values(statusVerdicts(verdictsByReviewer));
-  if (reviewerVerdicts.length === 2) {
-    return cohensKappa(reviewerVerdicts[0], reviewerVerdicts[1]);
-  }
-  return fleissKappa(statusVerdicts(verdictsByReviewer));
-}
-
 function emptyStaleVerdicts(manifest: ManifestUiState | undefined): StaleVerdicts {
   return Object.fromEntries((manifest?.reviewers ?? []).map(({ id }) => [id, new Set<string>()]));
-}
-
-function subjectSessionGroupIds(
-  manifestProject: ReturnType<typeof useProjectStore.getState>["project"],
-) {
-  const groupIds = new Map<string, string>();
-  for (const row of manifestProject?.mappingState?.subjectRows ?? []) {
-    const subject = row.subject.replace(/^sub-/, "");
-    groupIds.set(row.id, row.groupId);
-    groupIds.set(`${row.subject}_${row.session}`, row.groupId);
-    groupIds.set(`sub-${subject}_${row.session}`, row.groupId);
-  }
-  return groupIds;
 }
 
 export const useManifestStore = create<ManifestState>((set, get) => ({
@@ -223,7 +155,6 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
     if (subjectSessions.length === 0) {
       const activeManifest = currentManifest();
       set({
-        reviewerMode: reviewerMode(activeManifest),
         staleVerdicts: emptyStaleVerdicts(activeManifest),
         priorModulesMtimes: {},
       });
@@ -240,48 +171,9 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
       if (!isCurrentProject()) return;
       const activeManifest = currentManifest();
       set({
-        reviewerMode: reviewerMode(activeManifest),
         staleVerdicts: emptyStaleVerdicts(activeManifest),
       });
     }
-  },
-
-  computeDisagreements: () => {
-    const manifest = useProjectStore.getState().project?.uiState?.manifest;
-    const mode = reviewerMode(manifest);
-    set({ reviewerMode: mode, disagreements: deriveDisagreements(manifest) });
-  },
-
-  computeAgreement: () => {
-    const project = useProjectStore.getState().project;
-    const manifest = project?.uiState?.manifest;
-    const mode = reviewerMode(manifest);
-    if (mode === "single") {
-      set({ reviewerMode: mode, agreementResults: null });
-      return;
-    }
-
-    const verdictsByReviewer = registeredReviewerVerdicts(manifest);
-    const completeSessions = completeSubjectSessions(verdictsByReviewer);
-    const overall = computeKappa(verdictsForSubjects(verdictsByReviewer, completeSessions));
-    const groups = project?.mappingState?.metadataGroups ?? [];
-    const groupIdsBySubjectSession = subjectSessionGroupIds(project);
-    const perGroup: Record<string, KappaResult> = {};
-
-    for (const group of groups) {
-      const groupSessions = completeSessions.filter(
-        (subjectSession) => groupIdsBySubjectSession.get(subjectSession) === group.id,
-      );
-      perGroup[group.label] = computeKappa(verdictsForSubjects(verdictsByReviewer, groupSessions));
-    }
-
-    const groupedIds = new Set(groups.map(({ id }) => id));
-    const ungroupedSessions = completeSessions.filter(
-      (subjectSession) => !groupedIds.has(groupIdsBySubjectSession.get(subjectSession) ?? ""),
-    );
-    perGroup.Ungrouped = computeKappa(verdictsForSubjects(verdictsByReviewer, ungroupedSessions));
-
-    set({ reviewerMode: mode, agreementResults: { overall, perGroup } });
   },
 
   computeStaleVerdicts: () => {
@@ -302,7 +194,7 @@ export const useManifestStore = create<ManifestState>((set, get) => ({
         return [reviewerId, stale];
       }),
     );
-    set({ reviewerMode: reviewerMode(manifest), staleVerdicts: staleByReviewer });
+    set({ staleVerdicts: staleByReviewer });
   },
 
   loadQcData: async (projectRoot) => {

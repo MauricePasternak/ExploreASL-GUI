@@ -48,11 +48,19 @@ Preview/export SHALL use SubjectSession resolution when present, otherwise unani
 
 The manifest preview SHALL render a "Study Parameters" section. For each `MetadataGroup` defined in the project's import snapshot, the section SHALL render one table with the group's `label` as a subheading and rows containing:
 
-- N Subjects (count of SubjectSessions assigned to the group)
+- N Participants (unique `SubjectInfo.subject` identities among assigned inventory entries, with an optional leading `sub-` removed)
+- N Subject-Sessions (count of SubjectSession inventory entries assigned to the group)
 - N Total Runs (Σ `aslRuns.length` across group members)
 - The group's stored `bidsParams` entries, using raw sidecar keys rather than humanized parameter names
 
 Null or undefined values and keys `id` and `label` SHALL be omitted. `LabelingDuration` SHALL be omitted for PASL, and `BolusCutOffDelayTime` SHALL be omitted when `BolusCutOffFlag` is false or absent. Other scalar values SHALL render as stored text without added unit normalization. `ASLContext` SHALL use its display summary. Arrays SHALL render all stringified entries in brackets without a suffix when at most five distinct stringified values exist. Otherwise, they SHALL render the first five original entries in order, stringified, followed by `, … (+N more unique values)` inside the brackets, where N is the total number of distinct stringified values minus five.
+
+Subject-sessions SHALL mean participant visits (GUI/BIDS Sessions, ExploreASL Visits), not ASL runs (ExploreASL Sessions). Participant identity SHALL come from `SubjectInfo.subject`, never splitting the composite `subjectSession` key. Group membership and inventory scope SHALL remain assignment-based and SHALL NOT exclude No Info entries from Study Parameters. A participant MAY belong to different groups across visits and SHALL count once within each group containing that participant.
+
+#### Scenario: Repeated visits do not inflate participant counts
+
+- **WHEN** three participants each have two visits in the inventory and all six SubjectSessions belong to one metadata group
+- **THEN** Study Parameters SHALL report N Participants 3, N Subject-Sessions 6, and the unchanged sum of ASL runs in preview, Markdown, and HTML
 
 #### Scenario: PCASL group shows Labeling Duration
 
@@ -64,10 +72,12 @@ Null or undefined values and keys `id` and `label` SHALL be omitted. `LabelingDu
 - **WHEN** a metadata group has `ArterialSpinLabelingType: "PASL"`
 - **THEN** the rendered Section 1 table for that group SHALL NOT include a `"LabelingDuration"` row
 
-#### Scenario: Ungrouped subjects bucket
+#### Scenario: Ungrouped subject-sessions bucket
 
-- **WHEN** SubjectSessions exist with no assigned `MetadataGroup`
-- **THEN** Section 1 SHALL render an additional "Ungrouped" subheading with N Subjects and N Total Runs computed across ungrouped SubjectSessions, without parameter rows
+- **WHEN** SubjectSessions exist with no assignment or an assignment referencing no defined `MetadataGroup`
+- **THEN** Section 1 SHALL render an additional "Ungrouped" subheading with N Participants, N Subject-Sessions, and N Total Runs computed across ungrouped inventory entries using the same identity/count rules, without parameter rows
+
+The same Ungrouped membership SHALL apply to QC Summary and inter-rater agreement in preview and exports, consistent with QC Selection.
 
 ### Requirement: Manifest Section 2 Software Manifest
 
@@ -81,25 +91,26 @@ A 3-row table with columns `Software` / `Version`, listing:
 - ExploreASL GUI Version (from `uiState.processing.population.lastRun.guiVersion`, otherwise build-time `VITE_APP_VERSION`, otherwise `"unknown"`)
 - MATLAB Version (from `uiState.processing.population.lastRun.matlabVersion`, or `"unknown"` if absent)
 
-For this display fallback, the active execution profile SHALL be the configured `selectedProfileId` when that profile exists, otherwise the first profile whose validation state is valid. Recorded run versions, including a recorded `"unknown"`, SHALL take precedence over settings/build fallbacks. Preview fallback SHALL NOT replace recorded Population provenance.
+For this display fallback, the active execution profile SHALL be the configured `selectedProfileId` when that profile exists, otherwise the first profile whose validation state is valid. Nonempty recorded run versions, including a recorded `"unknown"`, SHALL take precedence over settings/build fallbacks. Profile fallbacks SHALL be suffixed `" (current profile; not recorded run)"`; GUI build fallbacks SHALL be suffixed `" (current GUI build; not recorded run)"`. Preview fallback SHALL NOT replace recorded Population provenance or imply software used for every SubjectSession or earlier processing module.
 
 #### Sub-section: ExploreASL Data Parameter Configuration
 
 When `dataPar` is non-empty, the preview SHALL render a `<Code block>` (Mantine) containing the full `dataPar` object serialised as pretty-printed JSON (`JSON.stringify(..., null, 2)`), after the following sanitisation:
 
-- `x.dataset.subjectRegexp` SHALL always be replaced with the canonical shorthand `"^sub-.*"` (the actual stored regex is a long BIDS-derived pattern and is not meaningful for reproducibility reporting).
-- `x.dataset.ForceInclusionList` SHALL be omitted entirely (not relevant for reproducibility).
+- Subject-selection expressions, including `x.dataset.subjectRegexp`, and inclusion identifiers, including `x.dataset.ForceInclusionList`, SHALL be preserved exactly. Absent selection/inclusion fields SHALL NOT be inserted.
+- Machine-local filesystem paths SHALL be redacted recursively, retaining their final path component as `[redacted path]/<name>` (or `[redacted path]` when no final component exists). Location fields with names ending in `path`, `dir`, `folder`, or `root` (case-insensitive) and absolute POSIX, Windows-drive, UNC, or home-relative path strings SHALL be redacted; selection expressions and inclusion identifiers SHALL be exempt. Numeric/scientific settings SHALL remain unchanged.
 
-The sanitised copy is used only for display; the underlying stored `dataPar` is unchanged.
+One shared sanitisation function SHALL serve preview, Markdown, HTML, and configuration-derived Methods text without mutating stored `dataPar`. A visible note SHALL explain path redaction and preservation of selection/inclusion settings without another execution disclaimer.
 
-The source SHALL be the `dataPar.json` file written under `<project_root>/derivatives/ExploreASL/dataPar.json` at the most recent `startProcessing`.
+The source SHALL be the available `<project_root>/derivatives/ExploreASL/dataPar.json` file, normally written during native processing preparation. Its contents SHALL NOT be represented as an immutable snapshot tied to the recorded Population run or all included subjects.
 
 A spec-level reservation SHALL note that human-readable label translation of `dataPar.json` keys is a future expansion point — no v0 implementation required.
 
-#### Scenario: dataPar code block shows sanitised values
+#### Scenario: dataPar code block preserves analytical selection
 
 - **WHEN** the most recent `dataPar.json` contains `x.dataset.subjectRegexp: "^sub-(?!excluded).*"` and `x.dataset.ForceInclusionList: ["sub-01"]`
-- **THEN** Section 2's data parameter code block SHALL display `"subjectRegexp": "^sub-.*"` and SHALL NOT contain a `ForceInclusionList` key
+- **THEN** Section 2's data parameter code block SHALL retain both the exact regex and the inclusion list
+- **AND** any machine-local path such as `x.opts.subjectFolder: "/private/study"` SHALL display as `"[redacted path]/study"` without modifying the stored configuration
 
 #### Scenario: Unknown version placeholder
 
@@ -109,7 +120,8 @@ A spec-level reservation SHALL note that human-readable label translation of `da
 #### Scenario: Missing run versions use display fallbacks
 
 - **WHEN** run version fields are absent, the selected execution profile records ExploreASL `"1.12.0"`, and `VITE_APP_VERSION` is `"0.1.2"`
-- **THEN** Section 2 and Pipeline Summary SHALL display ExploreASL `"1.12.0"`, GUI `"0.1.2"`, and MATLAB `"unknown"`
+- **THEN** Section 2 SHALL display ExploreASL `"1.12.0 (current profile; not recorded run)"`, GUI `"0.1.2 (current GUI build; not recorded run)"`, and MATLAB `"unknown"`
+- **AND** Methods SHALL NOT attribute those current settings to processing or add an inventory of missing versions
 
 #### Scenario: Missing selected profile uses first valid profile
 
@@ -119,14 +131,15 @@ A spec-level reservation SHALL note that human-readable label translation of `da
 #### Scenario: Recorded versions remain preferred provenance
 
 - **WHEN** recorded Population versions differ from current execution-profile or GUI build versions
-- **THEN** Section 2 and Pipeline Summary SHALL use the recorded versions without rewriting them
+- **THEN** Section 2 and Methods SHALL use the recorded versions without rewriting them
+- **AND** Methods SHALL NOT add a current-profile explanation
 
 ### Requirement: Manifest Section 3 Qc Summary
 
-The preview SHALL render a "QC Summary" section. For each `MetadataGroup`, the section SHALL render a subheading and a table with rows:
+The preview SHALL render a "QC Summary" section. For each `MetadataGroup` with an eligible final verdict, the section SHALL render a subheading and a table with rows:
 
 - Metadata group name (group `label`)
-- Pass / Total (count with final verdict Pass / count with final verdict Pass or Fail, displayed as `"N / Total"`)
+- Pass / Total (subject-sessions) (count with final verdict Pass / count with final verdict Pass or Fail, displayed as `"N / Total"`)
 - Mean ASL Coverage Percentage & SD (mean and sample standard deviation across final-Pass group members' `Coverage.tsv`, formatted as `"mean (SD)"`)
 - Mean Spatial Coefficient of Variation in Gray Matter & SD (mean and sample standard deviation across final-Pass group members' `SpatialCoV.tsv`, formatted as `"mean (SD)"`)
 - Mean Motion in mm RMS & SD (maximum across each final-Pass SubjectSession's ASL runs, then mean and sample standard deviation across group members, formatted as `"mean (SD)"`)
@@ -134,7 +147,9 @@ The preview SHALL render a "QC Summary" section. For each `MetadataGroup`, the s
 
 Rows with final verdict Fail SHALL be excluded from all QC metric aggregations but SHALL count toward the Total denominator. No Info rows SHALL be excluded from numerator and denominator. Pass / Total SHALL therefore render `"<passCount> / <passCount + failCount>"`.
 
-Numeric means and SDs SHALL render with two decimal places. When a group has fewer than 2 available Pass metric values, the SD component SHALL be rendered as the literal `"N/A"` (sample SD undefined for n < 2), with an available mean rendered to two decimal places. When no metric value is available, the cell SHALL render `"N/A"`.
+Preview, Markdown, and HTML SHALL label Pass / Total as subject-sessions and visibly explain that its reviewed units are participant visits, not unique participants, excluding No Info. The same note SHALL explain that metric n counts final-Pass subject-sessions contributing an available value for that metric. Repeated visits SHALL NOT be collapsed for QC counts or aggregation; eligibility, final-verdict resolution, averaging, and maximum-across-runs motion aggregation SHALL remain unchanged.
+
+Numeric means and SDs SHALL render with two decimal places. When a group has fewer than 2 available Pass metric values, the SD component SHALL be rendered as the literal `"N/A"` (sample SD undefined for n < 2), with an available mean rendered to two decimal places. When no metric value is available, the base value SHALL be `"N/A"`. Each metric cell SHALL append `"; n=N"`, where N counts final-Pass SubjectSessions contributing an available value for that metric, excluding null and undefined. Motion SHALL contribute at most one value per SubjectSession after the existing maximum-across-runs aggregation. Counts SHALL be metric-specific, not the group's Pass count; these rules apply equally to named and Ungrouped groups in preview, Markdown, and HTML.
 
 In multi-reviewer mode, each per-group QC Summary table SHALL include an Initial Agreement Rate column showing the percentage of eligible SubjectSessions where all reviewers' statuses were unanimous before resolution, formatted as `"N%"`. This column SHALL be omitted in single-reviewer mode.
 
@@ -146,12 +161,17 @@ In multi-reviewer mode, each per-group QC Summary table SHALL include an Initial
 #### Scenario: Fail rows excluded from coverage mean and SD
 
 - **WHEN** a metadata group has 3 SubjectSessions: 2 final Pass (coverage 95%, 90%) and 1 final Fail (coverage 50%)
-- **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"92.50 (3.54)"` (mean and sample standard deviation of 95 and 90, Fail excluded)
+- **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"92.50 (3.54); n=2"` (mean and sample standard deviation of 95 and 90, Fail excluded)
 
 #### Scenario: SD renders N/A for single-subject group
 
 - **WHEN** a metadata group has 1 SubjectSession with final verdict Pass and coverage 88%
-- **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"88.00 (N/A)"`
+- **THEN** the "Mean ASL Coverage Percentage & SD" cell SHALL render `"88.00 (N/A); n=1"`
+
+#### Scenario: Missing metrics have independent contributing counts
+
+- **WHEN** two final-Pass SubjectSessions contribute coverage, only one contributes Spatial CoV, and neither has available motion
+- **THEN** coverage SHALL show n=2, Spatial CoV SHALL show n=1, and motion SHALL show `"N/A; n=0"`
 
 #### Scenario: Motion aggregation uses worst run per subject
 
@@ -170,14 +190,14 @@ In multi-reviewer mode, each per-group QC Summary table SHALL include an Initial
 
 ### Requirement: Inter-Rater Agreement Section
 
-In multi-reviewer mode, preview SHALL render an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. Its overall table SHALL show Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Cohen's Kappa for exactly two reviewers or Fleiss' Kappa for more reviewers with unclamped 95% confidence interval formatted as `"κ = 0.82 [0.71, 0.90]"`, Number of Subjects, and Subjects Requiring Resolution. A per-group table SHALL show group label, n, Initial Agreement Rate formatted as `"N% (agreed/total)"`, and Kappa with CI or `"N/A"` when undefined. The QC Summary's Initial Agreement Rate SHALL remain percentage-only.
+In multi-reviewer mode, preview SHALL render an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. Its overall table SHALL show Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Cohen's Kappa for exactly two reviewers or Fleiss' Kappa for more reviewers with unclamped 95% confidence interval formatted as `"κ = 0.82 [0.71, 0.90]"`, Number of Subject-Sessions, and Subject-Sessions Requiring Resolution. A per-group table SHALL show group label, n (subject-sessions), Initial Agreement Rate formatted as `"N% (agreed/total)"`, and Kappa with CI or `"N/A"` when undefined. These counts SHALL retain the existing eligible, completely rated SubjectSession units, not unique participants. The QC Summary's Initial Agreement Rate SHALL remain percentage-only.
 
-Below the tables, the section SHALL display: `Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.` The entire section SHALL be omitted in single-reviewer mode.
+Below the tables, the section SHALL display: `Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject-session counts.` The entire section SHALL be omitted in single-reviewer mode.
 
 #### Scenario: Agreement section displayed in multi-reviewer mode
 
 - **WHEN** two reviewers rate 50 eligible SubjectSessions, agree initially on 43, and disagree on 7
-- **THEN** the section SHALL show 2 reviewers, `"86% (43/50)"`, Kappa with 95% CI, 50 subjects, 7 requiring resolution, and small-sample guidance
+- **THEN** the section SHALL show 2 reviewers, `"86% (43/50)"`, Kappa with 95% CI, 50 subject-sessions, 7 subject-sessions requiring resolution, and small-sample guidance
 
 #### Scenario: Agreement section omitted in single-reviewer mode
 
@@ -196,32 +216,116 @@ Below the tables, the section SHALL display: `Initial agreement is unadjusted. K
 
 ### Requirement: Manifest Section 4 Pipeline Summary Paragraph
 
-The preview SHALL render a "Pipeline Summary" section with an opening paragraph generated from an inline static template. The paragraph SHALL state that data were processed with ExploreASL running in MATLAB through the ExploreASL GUI, followed by the number of subjects and groups covered by the manifest. It SHALL substitute:
+The preview SHALL render a "Pipeline Summary" section with an opening paragraph stating the number of unique participants, included subject-sessions, and groups covered by the manifest. The paragraph SHALL use correct singular and plural forms. It SHALL substitute:
 
-- ExploreASL, MATLAB, and GUI versions → the same resolved display versions as Software Manifest, including its recorded-run preference, profile/build fallbacks, and `"unknown"` placeholders
-- Subject count → total SubjectSessions included in the manifest (excluding No Info)
+- Participant count → unique normalized `SubjectInfo.subject` identities across all included SubjectSessions (excluding No Info), deduplicated globally rather than summed across groups
+- Subject-session count → total SubjectSessions included in the manifest (excluding No Info)
 - Group count → metadata group count plus an Ungrouped bucket when present
 
-Clauses SHALL NOT be toggled based on `dataPar.json` flags in v0 — the paragraph structure is static. A spec-level reservation SHALL note that clause-toggling based on `dataPar.json` is a future expansion point.
+The opening paragraph SHALL NOT repeat execution-evidence qualifications or describe mutable execution-profile settings. Scientific processing descriptions SHALL appear in Methods.
+
+#### Scenario: Participants deduplicate across groups while visits remain observations
+
+- **WHEN** three participants each have two included visits, with participant A's visits and B's first visit in Group A, B's second visit in Group B, and C's visits Ungrouped
+- **THEN** Study Parameters SHALL report participants/subject-sessions as 2/3 for Group A, 1/1 for Group B, and 1/2 for Ungrouped
+- **AND** the summary SHALL report 3 unique participants with 6 included subject-sessions across 3 groups, not 4 participants or 6 subjects
+- **AND** excluding a No Info visit SHALL reduce the included subject-session count, but SHALL remove its participant only when no other included visit remains
 
 #### Scenario: Unknown versions substituted in paragraph
 
 - **WHEN** Population `lastRun` version fields and applicable profile/build version fallbacks are unavailable and the user previews the manifest
-- **THEN** Section 4 SHALL contain the substring `"unknown"` in the positions where ExploreASL, MATLAB, and GUI versions would otherwise appear
+- **THEN** Section 2 SHALL show `"unknown"` for unavailable versions
+- **AND** the count-only opening paragraph and Methods SHALL NOT add an inventory of missing versions
+
+#### Scenario: Singular summary
+
+- **WHEN** the manifest covers one participant, one included subject-session, and one group
+- **THEN** the opening paragraph SHALL use `participant`, `subject-session`, and `group` in the singular
 
 #### Scenario: Paragraph is static for v0
 
 - **WHEN** `dataPar.json` has `bPVCNativeSpace: true` in one project and `bPVCNativeSpace: false` in another project (otherwise identical)
-- **THEN** the rendered Section 4 paragraphs for the two projects SHALL be textual identical (modulo version / count substitutions)
+- **THEN** the opening Pipeline Summary paragraphs SHALL be identical with the same counts, while Methods SHALL reflect the corresponding processing choices
 
 ### Requirement: Methods And References Subsections
 
-The preview and exported manifest formats SHALL contain "Methods" and "References" subsections under Section 4: Pipeline Summary. The "Methods" subsection SHALL contain a list of paragraphs generated dynamically based on the current `dataPar.json` configuration parameters (such as `motionCorrection`, `bLesionFilling`, `bPVCNativeSpace`, `bSegmentSPM12`, etc.), falling back to default parameter values when missing. The "References" subsection SHALL contain a sorted, unique list of corresponding bibliographic references derived from the generated methods paragraphs.
+Preview, Markdown, and HTML SHALL show Methods and References subsections under Pipeline Summary when their respective generated lists are nonempty. One shared generator SHALL produce the Methods paragraphs, a separate disclaimer, and sorted unique references for all formats.
+
+The disclaimer SHALL read: `This Methods draft reflects the dataPar.json available when this manifest was generated. Authors should verify that it describes the processing performed before publication.` Each output SHALL display it once above any Methods narrative. It SHALL NOT appear within a scientific paragraph.
+
+For an available configuration, Methods SHALL contain five paragraphs in this order:
+
+1. Import, distinguishing existing BIDS input from completed DICOM conversion and including available software versions without guessed versions.
+2. Subject-session inclusion and exclusion rules, generated from the supported selection and skip settings without calculating affected scan or subject counts.
+3. Structural processing, including relevant segmentation, registration, and lesion-handling settings.
+4. ASL processing, including relevant motion, registration, calibration, quantification, masking, and partial-volume correction settings.
+5. Population processing, including a generated list of atlas and tissue extraction choices.
+
+The generator SHALL use the available file settings and only the fixed defaults verified against operative code in the local ExploreASL 2.0.0_BETA checkout. It SHALL distinguish omitted, false, zero, and empty settings according to their consumers. GUI display placeholders SHALL NOT supply processing defaults. Data-dependent choices SHALL use conditional scientific descriptions rather than guessed values or claims that every subject-session had the required inputs.
+
+The narrative SHALL use manuscript-style scientific prose and the supplied unslop writing rules. It SHALL NOT contain repeated requested/selected/not-verified warnings, inventories of unknown versions, mutable-profile explanations, raw flag arrays, or GPT-style filler. Scientific acronyms, units, and citations SHALL remain correct. Missing versions and unsupported settings SHALL be omitted rather than invented. An absent configuration SHALL produce no Methods paragraphs, references, or disclaimer. An available empty configuration SHALL produce the five paragraphs using source-supported defaults.
+
+The shared path-redaction function SHALL continue to protect machine-local paths without changing stored configuration, subject selection, or inclusion identifiers. The configuration display note SHALL retain its path-redaction explanation without another execution disclaimer. The Software Manifest version table SHALL retain recorded-version precedence, labeled current-profile/current-build fallbacks, and recorded `unknown` values.
+
+Descriptions SHALL respect supported parameter meanings: numeric M0 is scalar calibration, not a separate scan; an explicitly supplied absolute motion threshold, including zero, takes precedence over the relative ENABLE threshold, which is fractional t-statistic improvement rather than a Z-score; PVC flat dimensions use voxels and Gaussian FWHM uses millimeters; registration settings SHALL NOT imply unrecorded M0-to-T1w alignment. Data-dependent physiological values SHALL NOT be invented.
 
 #### Scenario: Dynamic methods and references populated
 
-- **WHEN** `dataPar.json` specifies white matter hyperintensity segmentations (`bLesionFilling: true`) and native space partial volume correction (`bPVCNativeSpace: 1`)
-- **THEN** the Methods subsection SHALL contain description paragraphs for these pipeline choices, and the References subsection SHALL contain the corresponding citations (e.g. Asllani 2008, Battaglini 2012, Oliver 2015, Schmidt 2012, de Sitter 2017a).
+- **WHEN** an available configuration specifies lesion filling, separate-scan M0 calibration, native-space PVC, and Population extraction settings
+- **THEN** the generator SHALL produce the five paragraphs in the required order and the separate disclaimer
+- **AND** references SHALL be unique, sorted, and relevant to the described methods
+
+#### Scenario: Sparse configuration does not invent scientific methods
+
+- **WHEN** an available configuration omits parameters with fixed defaults in the audited ExploreASL code
+- **THEN** Methods SHALL describe those default workflow choices without merging GUI placeholders
+- **AND** field-strength-dependent physiological values and other unresolved data-dependent values SHALL NOT be invented
+
+#### Scenario: Existing BIDS input is not DICOM conversion
+
+- **WHEN** the project uses existing BIDS input
+- **THEN** the import paragraph SHALL describe that input workflow without claiming that the GUI converted DICOM data
+
+#### Scenario: Current container profile does not rewrite run evidence
+
+- **WHEN** the recorded Population run names ExploreASL version 2.1 and the current profile selects Apptainer with ExploreASL version 3.0
+- **THEN** any ExploreASL version included in Methods SHALL retain 2.1
+- **AND** Methods SHALL NOT add a current-profile explanation or an unknown-version inventory
+
+### Requirement: Methods inclusion and exclusion rules
+
+The inclusion paragraph SHALL describe initial dataset selection and the separate Structural module skip rules. `ForceInclusionList`, when present, SHALL take precedence over `subjectRegexp` for initial selection. Exact `exclusion` identifiers SHALL apply afterward. The default selection expression SHALL be `^sub-.*$`. The generator SHALL preserve supplied expressions and identifiers without evaluating the regex or calculating cohort sizes.
+
+The operative `SkipIfNoASL`, `SkipIfNoFlair`, and `SkipIfNoM0` flags SHALL default off. An enabled flag SHALL describe skipping Structural processing for a participant visit when the corresponding resolved input image is absent. It SHALL NOT describe cohort-wide exclusion, checking every ASL run, or a guarantee of successful processing when a skip flag is disabled. Missing T1w SHALL be described as a Structural skip condition without inventing a `SkipIfNoT1` option. Unsupported aliases SHALL NOT acquire behavior. No inventory scans or affected-scan counts SHALL be required.
+
+#### Scenario: Independent missing-input rules
+
+- **WHEN** missing-ASL and missing-FLAIR skip rules are enabled while the missing-M0 rule is disabled
+- **THEN** the paragraph SHALL describe the enabled Structural skip conditions without removing visits from the study, adding a missing-M0 rule, or claiming that every retained visit had an M0 image
+
+#### Scenario: Selection identifiers remain exact
+
+- **WHEN** the available dataPar.json contains a subject-selection expression and explicit inclusion identifiers
+- **THEN** their supported selection roles SHALL appear in the inclusion paragraph without replacing their values or calculating a resulting cohort size
+
+### Requirement: Methods Population extraction description
+
+The Population paragraph SHALL describe image types, atlases, tissues, thresholds, masking, WMH inclusion, and minimum ROI volume according to their operative extraction settings. Each atlas, tissue, and threshold at the same index SHALL define one extraction choice. Duplicate atlas entries SHALL remain separate when their tissues or thresholds differ. Selected image types SHALL apply to these choices as the source's outer loop. Atlas display labels SHALL use the existing label map where available. Mismatched selection arrays SHALL NOT be silently repaired or described as a valid extraction list.
+
+When all three selection fields are absent, the paragraph SHALL describe the source defaults: Total with GM thresholds 0.7 and 0.5, DeepWM with WM threshold 0.5, and Tatu_ACA_MCA_PCA with GM thresholds 0.7 and 0.5. Missing thresholds for matching supplied atlas and tissue arrays SHALL default to 0.7. Explicit empty atlas and tissue arrays SHALL NOT invoke absent-field defaults. Missing or empty `DataTypes` SHALL use qCBF.
+
+Thresholds SHALL identify the tissue or extraction choice they constrain and SHALL describe a strict greater-than test on the selected or summed tissue partial volumes. Minimum ROI volume SHALL use mL and default to 1 for ordinary atlas extraction. `bWMH` SHALL describe retaining existing WMH contributions in tissue partial volumes or subtracting them when false, not WMH detection or unconditional inclusion of every WMH voxel. The mask tuple SHALL refer to Population extraction masks. Disabled tissue masking SHALL NOT be described as applying a tissue-probability threshold or tissue-based regional PVC. Native-space ASL PVC SHALL NOT imply native-space Population extraction.
+
+#### Scenario: Atlas and tissue extraction choices
+
+- **WHEN** Population settings select multiple atlases and tissue extraction choices
+- **THEN** the paragraph SHALL enumerate their source-supported extraction relationship with the corresponding threshold meanings and units
+- **AND** it SHALL NOT describe WMH inclusion as WMH detection
+
+#### Scenario: Explicit disabled extraction
+
+- **WHEN** the configuration disables a Population extraction choice according to its operative reader
+- **THEN** the paragraph SHALL NOT describe that choice as performed or replace it with a GUI display default
 
 ### Requirement: Live Preview Updates On Verdict Changes
 
@@ -244,9 +348,9 @@ The preview SHALL expose "Export Markdown" and "Export HTML" buttons. Clicking e
 - Markdown: produced by a TS template literal; written via `@tauri-apps/plugin-fs` `writeTextFile`.
 - HTML: produced by templating the same Markdown payload into an inline-CSS single-file wrapper. The wrapper SHALL include all CSS inline; SHALL NOT reference external stylesheets; SHALL NOT invoke the WebView rendering pipeline (no `webview.printToPdf`).
 
-Both buttons SHALL be disabled when no reviewer has any stored verdict entry. In multi-reviewer mode, Markdown and HTML SHALL include Inter-Rater Agreement between QC Summary and Pipeline Summary with the preview's reviewer count, overall and per-group Initial Agreement Rate, Kappa and unclamped CI, subjects requiring resolution, and Kappa guidance. Single-reviewer exports SHALL omit this section.
+Both buttons SHALL be disabled when no reviewer has any stored verdict entry. Markdown and HTML SHALL use the preview's separate participant/subject-session counts and QC denominator labels/note. In multi-reviewer mode, Markdown and HTML SHALL include Inter-Rater Agreement between QC Summary and Pipeline Summary with the preview's reviewer count, overall and per-group Initial Agreement Rate, Kappa and unclamped CI, subject-sessions requiring resolution, and Kappa guidance. Overall and per-group n SHALL be labeled as subject-sessions. Single-reviewer exports SHALL omit this section.
 
-In the exported formats, the "ExploreASL Data Parameter Configuration" sub-section SHALL be rendered as a fenced JSON code block (` ```json ``` ` in Markdown; `<pre><code>…</code></pre>` in HTML), using the same sanitisation rules (subjectRegexp canonical shorthand, ForceInclusionList omitted) as the preview. The HTML wrapper SHALL include `pre` / `pre code` CSS rules for legible monospace rendering.
+In the exported formats, the "ExploreASL Data Parameter Configuration" sub-section SHALL be rendered as a fenced JSON code block (` ```json ``` ` in Markdown; `<pre><code>…</code></pre>` in HTML), using the same semantics-preserving path redaction and path-redaction note as the preview. The HTML wrapper SHALL include `pre` / `pre code` CSS rules for legible monospace rendering.
 
 In Markdown and HTML, overall Initial Agreement Rate SHALL include percentage and agreed/total counts, while per-group Initial Agreement Rate SHALL remain percentage-only, unlike the preview's Inter-Rater Agreement per-group table. QC Summary rates SHALL remain percentage-only in preview and exports.
 

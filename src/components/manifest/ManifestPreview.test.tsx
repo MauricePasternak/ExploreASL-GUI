@@ -1,16 +1,20 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { save } from "@tauri-apps/plugin-dialog";
+import { exists, writeTextFile } from "@tauri-apps/plugin-fs";
 
 import ManifestPreview from "./ManifestPreview";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useManifestStore } from "../../stores/manifestStore";
+import { useGlobalStore } from "../../stores/globalStore";
 import type { SubjectInfo } from "../../schemas/processingSchemas";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
 import type { ManifestVerdict } from "../../schemas/project";
 import { generateVerdictsCsv } from "../../lib/manifestCsvExport";
+import { flattenRunDataPar, generateMethodsParagraph } from "../../lib/manifestMethods";
 import { projectFixture } from "../../test/projectFixtures";
 import { projectView } from "../../schemas/project";
 
@@ -19,6 +23,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
   writeTextFile: vi.fn(),
+  exists: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -172,6 +177,7 @@ afterEach(() => {
   useProjectStore.setState({ project: null, isDirty: false, loaded: false });
   useProcessingStore.setState({ availableSubjects: [], subjectStatuses: [] });
   useManifestStore.setState({ qcData: null, qcLoaded: false, dataPar: null });
+  useGlobalStore.setState(useGlobalStore.getInitialState());
 });
 
 // ---------------------------------------------------------------------------
@@ -179,6 +185,33 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("ManifestPreview", () => {
+  it.each(["markdown", "html", "csv"])(
+    "manual %s export matches native export and confirms overwrite",
+    async (format) => {
+      mockAvailableSubjects = [subj1];
+      mockVerdicts = { SUB_01: { status: "pass", setAt: 1 } };
+      vi.mocked(exists).mockResolvedValue(true);
+      vi.mocked(writeTextFile).mockResolvedValue(undefined);
+      const extension = format === "markdown" ? "md" : format;
+      const path = `/study/manifest.${extension}`;
+      vi.mocked(save).mockResolvedValue(path);
+      renderPreview();
+      await userEvent.click(screen.getByTestId(`export-${format}-btn`));
+      const nativeContent = vi.mocked(writeTextFile).mock.lastCall?.[1];
+      vi.mocked(writeTextFile).mockClear();
+      vi.mocked(save).mockClear();
+      const testId = `export-${format}-path`;
+      fireEvent.click(screen.getByTestId(testId));
+      fireEvent.change(screen.getByTestId(`${testId}-input`), { target: { value: path } });
+      await userEvent.click(screen.getByTestId(`${testId}-confirm`));
+      expect(await screen.findByTestId(`${testId}-overwrite-warning`)).toBeInTheDocument();
+      expect(writeTextFile).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByTestId(`${testId}-confirm`));
+      expect(writeTextFile).toHaveBeenCalledExactlyOnceWith(path, nativeContent);
+      expect(save).not.toHaveBeenCalled();
+    },
+  );
+
   // 13.1 — renders 4 sections
   // 13.4 — conditional rows: PCASL shows LabelingDuration, PASL omits
   it("omits LabelingDuration row for PASL groups and shows it for PCASL", () => {
@@ -249,6 +282,41 @@ describe("ManifestPreview", () => {
     expect(screen.getByTestId("version-matlab")).toHaveTextContent("R2024a");
   });
 
+  it("labels current-profile fallbacks and never replaces recorded unknown versions", () => {
+    useGlobalStore.setState({
+      settings: {
+        ...useGlobalStore.getState().settings,
+        executionProfiles: [
+          {
+            id: "profile",
+            label: "Container",
+            type: "apptainer",
+            sifPath: "/private/image.sif",
+            apptainerPath: "apptainer",
+            exploreAslVersion: "3.0",
+          },
+        ],
+      },
+      profileValidationState: { profile: { valid: true, errors: [] } },
+    });
+    renderPreview();
+    expect(screen.getByTestId("version-exploreasl")).toHaveTextContent(
+      "3.0 (current profile; not recorded run)",
+    );
+    if (import.meta.env.VITE_APP_VERSION)
+      expect(screen.getByTestId("version-gui")).toHaveTextContent(
+        "(current GUI build; not recorded run)",
+      );
+    expect(screen.queryByTestId("manifest-methods")).not.toBeInTheDocument();
+    act(() => {
+      mockVersions = { exploreASLVersion: "unknown", guiVersion: "unknown" };
+      useProjectStore.setState({ project: buildProjectState() });
+    });
+    expect(screen.getByTestId("version-exploreasl").textContent).toBe("unknown");
+    expect(screen.getByTestId("version-gui").textContent).toBe("unknown");
+    expect(screen.queryByTestId("manifest-methods")).not.toBeInTheDocument();
+  });
+
   // 13.6 — Pass/Total from stored verdicts
   // 13.6a — Pass/Total when all subjects pass
   // 13.6a — coverage/CoV/motion render "N/A" when QC data is not loaded
@@ -274,16 +342,18 @@ describe("ManifestPreview", () => {
   it("renders metric aggregates when QC data is loaded", () => {
     mockMetadataGroups = [groupPcasl];
     mockSubjectRows = [subjectRow1, subjectRow2];
-    mockAvailableSubjects = [subj1, subj2];
+    mockAvailableSubjects = [subj1, subj2, ungroupedSubj];
     mockVerdicts = {
       SUB_01: { status: "pass", setAt: 1 },
       SUB2_01: { status: "pass", setAt: 1 },
+      SUB_X_01: { status: "pass", setAt: 1 },
     };
 
     useManifestStore.setState({
       qcData: {
         SUB_01: { coverage: 95, spatialCov: 8, motion: [0.3, 0.4], motionExclusionPct: 5 },
         SUB2_01: { coverage: 90, spatialCov: 9, motion: [0.5], motionExclusionPct: 3 },
+        SUB_X_01: { coverage: null, spatialCov: 8, motion: [], motionExclusionPct: 2 },
       },
       qcLoaded: true,
     });
@@ -298,17 +368,33 @@ describe("ManifestPreview", () => {
     expect(screen.getByTestId("Group A (PCASL)-motion")).toHaveTextContent("0.45 (0.07)");
     // motionExclusion: mean of 5, 3 is 4; SD is 1.41
     expect(screen.getByTestId("Group A (PCASL)-motionExclusion")).toHaveTextContent("4.00 (1.41)");
+    expect(screen.getByTestId("Group A (PCASL)-coverage")).toHaveTextContent("n=2");
+    expect(screen.getByTestId("Ungrouped-coverage")).toHaveTextContent("N/A; n=0");
+    expect(screen.getByTestId("Ungrouped-spatialCov")).toHaveTextContent("8.00 (N/A); n=1");
+    expect(screen.getByTestId("Ungrouped-motion")).toHaveTextContent("N/A; n=0");
+    expect(screen.getByTestId("Ungrouped-motionExclusion")).toHaveTextContent("2.00 (N/A); n=1");
   });
 
   // 13.6d — No Info rows are excluded from Pass/Total and summary paragraph
   it("excludes No Info rows from Pass/Total and pipeline summary count", () => {
     mockMetadataGroups = [groupPcasl];
     const subjectRow4InG1 = { id: "SUB4/01", subject: "SUB4", session: "01", groupId: "g1" };
-    mockSubjectRows = [subjectRow1, subjectRow2, subjectRow4InG1];
-    mockAvailableSubjects = [subj1, subj2, subj4];
+    mockSubjectRows = [
+      subjectRow1,
+      { ...subjectRow1, id: "SUB/02", session: "02" },
+      subjectRow2,
+      subjectRow4InG1,
+    ];
+    mockAvailableSubjects = [
+      subj1,
+      { ...subj1, subjectSession: "SUB_02", session: "02" },
+      subj2,
+      subj4,
+    ];
 
     mockVerdicts = {
       SUB_01: { status: "pass", setAt: 1 },
+      SUB_02: { status: "pass", setAt: 1 },
       SUB2_01: { status: "fail", reason: "motion", setAt: 1 },
       SUB4_01: { status: "pass", setAt: 1 },
     };
@@ -326,7 +412,9 @@ describe("ManifestPreview", () => {
     expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("1 / 2");
 
     const summary = screen.getByTestId("manifest-section-pipeline-summary");
-    expect(summary).toHaveTextContent("2 subjects");
+    expect(summary).toHaveTextContent("2 unique participants with 2 included subject-sessions");
+    expect(screen.getByTestId("participants-Group A (PCASL)")).toHaveTextContent("3");
+    expect(screen.getByTestId("subject-sessions-Group A (PCASL)")).toHaveTextContent("4");
   });
 
   // 13.6c — Fail Reasons breakdown per group
@@ -361,18 +449,41 @@ describe("ManifestPreview", () => {
   });
 
   // Section 4 pipeline paragraph
-  it("renders pipeline summary paragraph with subject and group counts", () => {
+  it("reports three participants and six visits separately across groups in preview and exports", async () => {
+    vi.mocked(writeTextFile).mockResolvedValue(undefined);
     mockMetadataGroups = [groupPcasl, groupPasl];
-    mockSubjectRows = [subjectRow1, subjectRow2, subjectRow3];
-    mockAvailableSubjects = [subj1, subj2, subj3];
-    mockVerdicts = {};
+    mockSubjectRows = [
+      subjectRow1,
+      { ...subjectRow1, id: "SUB/02", session: "02" },
+      subjectRow2,
+      { ...subjectRow2, id: "SUB2/02", session: "02", groupId: "g2" },
+    ];
+    mockAvailableSubjects = [
+      subj1,
+      { ...subj1, subjectSession: "SUB_02", subject: "sub-SUB", session: "02" },
+      subj2,
+      { ...subj2, subjectSession: "SUB2_02", session: "02" },
+      ungroupedSubj,
+      { ...ungroupedSubj, subjectSession: "SUB_X_02", session: "02" },
+    ];
+    const verdicts = Object.fromEntries(
+      mockAvailableSubjects.map((s) => [s.subjectSession, { status: "pass", setAt: 1 }]),
+    );
+    mockReviewers = [
+      { id: "reviewer-1", label: "First", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "reviewer-2", label: "Second", createdAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    mockVerdicts = Object.fromEntries(mockReviewers.map((r) => [r.id, verdicts])) as any;
     mockVersions = { exploreASLVersion: "1.0", matlabVersion: "R2023b", guiVersion: "0.1" };
 
     useManifestStore.setState({
       qcData: {
         SUB_01: { coverage: 95, spatialCov: 8, motion: [0.4], motionExclusionPct: 5 },
+        SUB_02: { coverage: 85, spatialCov: 10, motion: [0.6], motionExclusionPct: 2 },
         SUB2_01: { coverage: 90, spatialCov: 9, motion: [0.5], motionExclusionPct: 3 },
-        SUB3_01: { coverage: 85, spatialCov: 10, motion: [0.6], motionExclusionPct: 2 },
+        SUB2_02: { coverage: 85, spatialCov: 10, motion: [0.6], motionExclusionPct: 2 },
+        SUB_X_01: { coverage: 80, spatialCov: 10, motion: [0.6], motionExclusionPct: 2 },
+        SUB_X_02: { coverage: null, spatialCov: 10, motion: [0.6], motionExclusionPct: 2 },
       },
       qcLoaded: true,
     });
@@ -380,12 +491,56 @@ describe("ManifestPreview", () => {
     renderPreview();
 
     const summary = screen.getByTestId("manifest-section-pipeline-summary");
-    expect(summary).toHaveTextContent("ExploreASL (version 1.0)");
-    expect(summary).toHaveTextContent("MATLAB R2023b");
-    expect(summary).toHaveTextContent("3 subjects");
-    expect(summary).toHaveTextContent("2 groups");
-    expect(screen.getByTestId("manifest-methods")).toBeInTheDocument();
-    expect(screen.getByTestId("manifest-references")).toBeInTheDocument();
+    expect(summary).toHaveTextContent(
+      "3 unique participants with 6 included subject-sessions across 3 groups",
+    );
+    const parameterTables = within(
+      screen.getByTestId("manifest-section-study-parameters"),
+    ).getAllByRole("table");
+    for (const [index, [participants, observations, runs]] of [
+      [2, 3, 5],
+      [1, 1, 1],
+      [1, 2, 2],
+    ].entries()) {
+      expect(parameterTables[index]).toHaveTextContent(`N Participants${participants}`);
+      expect(parameterTables[index]).toHaveTextContent(`N Subject-Sessions${observations}`);
+      expect(parameterTables[index]).toHaveTextContent(`N Total Runs${runs}`);
+    }
+    expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("3 / 3");
+    expect(screen.getByTestId("Group A (PCASL)-coverage")).toHaveTextContent("90.00 (5.00); n=3");
+    expect(screen.getByTestId("pass-total-Ungrouped")).toHaveTextContent("2 / 2");
+    expect(screen.getByTestId("Ungrouped-coverage")).toHaveTextContent("80.00 (N/A); n=1");
+    expect(screen.getByTestId("agreement-overall-table")).toHaveTextContent(
+      "Number of Subject-Sessions6",
+    );
+    expect(screen.getByTestId("agreement-summary")).toHaveTextContent("100% (6/6)");
+    expect(screen.getByTestId("qc-denominator-note")).toHaveTextContent(
+      "subject-sessions (participant visits), not unique participants",
+    );
+    expect(screen.queryByTestId("manifest-methods")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("manifest-references")).not.toBeInTheDocument();
+
+    expect(screen.queryByTestId("manifest-methods-disclaimer")).not.toBeInTheDocument();
+
+    for (const format of ["markdown", "html"]) {
+      vi.mocked(save).mockResolvedValueOnce(`/chosen/manifest.${format}`);
+      await userEvent.click(screen.getByTestId(`export-${format}-btn`));
+      const output = vi.mocked(writeTextFile).mock.lastCall?.[1];
+      expect(output).toContain("3 unique participants with 6 included subject-sessions");
+      expect(output).toContain("N Participants");
+      expect(output).toContain("N Subject-Sessions");
+      expect(output).toContain("Pass / Total (subject-sessions)");
+      expect(output).toContain("Metric n counts final-Pass subject-sessions");
+      expect(output).toContain("Number of Subject-Sessions");
+      expect(output).toContain("100% (6/6)");
+      expect(output).toContain("90.00 (5.00); n=3");
+      expect(output).not.toContain("N Subjects");
+      expect(output).not.toContain("This Methods draft");
+      expect(output).not.toMatch(/### (Methods|References)|<h3>(Methods|References)<\/h3>/);
+    }
+    vi.mocked(save).mockResolvedValueOnce("/chosen/manifest.csv");
+    await userEvent.click(screen.getByTestId("export-csv-btn"));
+    expect(vi.mocked(writeTextFile).mock.lastCall?.[1]).toContain("N_SubjectSessions,6\n");
   });
 
   // 13.6b — Ungrouped subjects appear in study parameters
@@ -460,6 +615,15 @@ describe("ManifestPreview", () => {
     mockSubjectRows = [subjectRow1];
     mockAvailableSubjects = [subj1];
     mockVerdicts = { SUB_01: { status: "pass", setAt: 1 } };
+    useManifestStore.setState({
+      dataPar: {
+        x: {
+          opts: { subjectFolder: "/private/study" },
+          S: { Atlases: ["/private/atlas.nii"] },
+          dataset: { subjectRegexp: "^sub-01$", ForceInclusionList: ["sub-01"] },
+        },
+      } as any,
+    });
 
     renderPreview();
 
@@ -473,6 +637,46 @@ describe("ManifestPreview", () => {
       }),
     );
     expect(writeTextFile).toHaveBeenCalledWith("/tmp/manifest.md", expect.any(String));
+    expect(screen.getByTestId("datapar-table")).toHaveTextContent('"subjectRegexp": "^sub-01$"');
+    expect(screen.getByTestId("datapar-table")).toHaveTextContent("ForceInclusionList");
+    expect(screen.getByTestId("datapar-table")).not.toHaveTextContent("/private");
+    expect(screen.getByTestId("manifest-methods")).not.toHaveTextContent("/private");
+    expect(vi.mocked(writeTextFile).mock.calls.slice(-1)[0]?.[1]).not.toContain("/private");
+
+    const disclaimer =
+      "This Methods draft reflects the dataPar.json available when this manifest was generated. Authors should verify that it describes the processing performed before publication.";
+    const methods = screen.getByTestId("manifest-methods");
+    const paragraphs = Array.from(methods.querySelectorAll("p"), (p) => p.textContent);
+    expect(paragraphs).toHaveLength(6);
+    expect(paragraphs[0]).toBe(disclaimer);
+    expect(screen.getAllByText(disclaimer)).toHaveLength(1);
+    const project = useProjectStore.getState().project!;
+    const generated = generateMethodsParagraph(
+      flattenRunDataPar(useManifestStore.getState().dataPar),
+      {
+        populationRun: project.uiState.processing?.population?.lastRun,
+        dataSource: project.projectMeta.dataSource,
+        importCompleted: project.uiState.import?.completed,
+      },
+    );
+    expect(paragraphs.slice(1)).toEqual(generated.paragraphs);
+    expect(screen.getByTestId("datapar-evidence-note").textContent).toBe(
+      "Machine-local paths are redacted. Subject selection and inclusion settings are preserved.",
+    );
+    vi.mocked(save).mockResolvedValueOnce("/chosen/manifest.html");
+    await userEvent.click(screen.getByTestId("export-html-btn"));
+    const markdown = vi.mocked(writeTextFile).mock.calls.slice(-2)[0]?.[1] ?? "";
+    const html = vi.mocked(writeTextFile).mock.lastCall?.[1] ?? "";
+    const htmlText = new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+    for (const output of [markdown, htmlText]) {
+      expect(output.split(disclaimer)).toHaveLength(2);
+      let previous = output.indexOf(disclaimer);
+      for (const paragraph of paragraphs.slice(1)) {
+        const position = output.indexOf(paragraph!);
+        expect(position).toBeGreaterThan(previous);
+        previous = position;
+      }
+    }
   });
 
   // 14.3 — Export HTML invokes save + writeTextFile
@@ -545,6 +749,9 @@ describe("ManifestPreview", () => {
     expect(screen.queryByTestId("agreement-summary")).not.toBeInTheDocument();
     expect(screen.queryByTestId("manifest-section-inter-rater-agreement")).not.toBeInTheDocument();
     expect(screen.getByTestId("pass-total-Group A (PCASL)")).toHaveTextContent("1 / 1");
+    expect(screen.getByTestId("manifest-section-pipeline-summary")).toHaveTextContent(
+      "This manifest covers 1 unique participant with 1 included subject-session across 1 group.",
+    );
   });
 
   it("renders resolved final verdicts and agreement data in an ordered multi-reviewer preview", () => {
@@ -597,11 +804,17 @@ describe("ManifestPreview", () => {
       "Initial Agreement Rate",
     );
     expect(screen.getByTestId("agreement-summary")).toHaveTextContent(
-      "Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.",
+      "Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject-session counts.",
     );
     expect(screen.getByTestId("agreement-summary")).toHaveTextContent("67% (2/3)");
+    expect(screen.getByTestId("agreement-overall-table")).toHaveTextContent(
+      "Number of Subject-Sessions3",
+    );
+    expect(screen.getByTestId("agreement-per-group-table")).toHaveTextContent(
+      "n (subject-sessions)",
+    );
     expect(screen.getByTestId("agreement-summary")).toHaveTextContent(
-      "Subjects Requiring Resolution1",
+      "Subject-Sessions Requiring Resolution1",
     );
     expect(screen.getByTestId("agreement-summary")).toHaveTextContent("Group A (PCASL)");
     expect(screen.getByTestId("agreement-summary")).toHaveTextContent("N/A");
@@ -649,9 +862,68 @@ describe("ManifestPreview", () => {
 
     expect(screen.getByTestId("agreement-summary")).toHaveTextContent("100% (1/1)");
     expect(screen.getByTestId("agreement-summary")).toHaveTextContent(
-      "Subjects Requiring Resolution0",
+      "Subject-Sessions Requiring Resolution0",
     );
   });
+
+  it.each([
+    [2, "0.40"],
+    [3, "0.55"],
+  ])(
+    "derives live agreement for %i registered reviewers from eligible complete ratings",
+    (count, kappa) => {
+      mockMetadataGroups = [groupPcasl];
+      mockSubjectRows = [subjectRow1, subjectRow2];
+      mockAvailableSubjects = [subj1, subj2, subj3, subj4, ungroupedSubj];
+      mockReviewers = Array.from({ length: count }, (_, index) => ({
+        id: `reviewer-${index}`,
+        label: `Reviewer ${index}`,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }));
+      const verdictsByReviewer: Record<string, Record<string, ManifestVerdict>> = {
+        ...Object.fromEntries(
+          mockReviewers.map(({ id }, index) => [
+            id,
+            {
+              SUB_01: { status: "pass", setAt: 1 },
+              SUB2_01: { status: "fail", setAt: 1 },
+              SUB4_01: { status: "fail", setAt: 1 },
+              SUB_X_01: { status: index === 0 ? "fail" : "pass", setAt: 1 },
+              REMOVED_01: { status: "fail", setAt: 1 },
+              ...(index === 0 ? {} : { SUB3_01: { status: "pass", setAt: 1 } }),
+            },
+          ]),
+        ),
+        "removed-reviewer": {},
+      };
+      mockVerdicts = verdictsByReviewer as any;
+      const qc = { coverage: null, spatialCov: null, motion: [], motionExclusionPct: null };
+      useManifestStore.setState({
+        qcLoaded: true,
+        qcData: { SUB_01: qc, SUB2_01: qc, SUB3_01: qc, SUB_X_01: qc },
+      });
+
+      renderPreview();
+
+      const overall = screen.getByTestId("agreement-overall-table");
+      expect(overall).toHaveTextContent("Number of Subject-Sessions3");
+      expect(overall).toHaveTextContent("67% (2/3)");
+      expect(overall).toHaveTextContent(`κ = ${kappa}`);
+      expect(overall).toHaveTextContent("Subject-Sessions Requiring Resolution1");
+      const groups = screen.getByTestId("agreement-per-group-table");
+      expect(groups).toHaveTextContent("Group A (PCASL)2100% (2/2)1.00 [1.00, 1.00]");
+      expect(groups).toHaveTextContent("Ungrouped10% (0/1)N/A");
+
+      act(() => {
+        verdictsByReviewer["reviewer-0"].SUB_X_01 = { status: "pass", setAt: 1 };
+        useProjectStore.setState({ project: buildProjectState() });
+      });
+
+      expect(overall).toHaveTextContent("100% (3/3)");
+      expect(overall).toHaveTextContent("κ = 1.00 [1.00, 1.00]");
+      expect(overall).toHaveTextContent("Subject-Sessions Requiring Resolution0");
+    },
+  );
 
   it("assigns BIDS-prefixed subject sessions to their metadata group for agreement", () => {
     mockMetadataGroups = [groupPcasl];
@@ -687,6 +959,9 @@ describe("ManifestPreview", () => {
     expect(screen.getByTestId("agreement-per-group-table")).toHaveTextContent(
       "Group A (PCASL)1100% (1/1)N/A",
     );
+    expect(
+      within(screen.getByTestId("agreement-per-group-table")).queryByText("Ungrouped"),
+    ).not.toBeInTheDocument();
   });
 
   it("exports authoritative CSV after confirmation and does not write after cancellation", async () => {

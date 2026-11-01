@@ -46,12 +46,12 @@ The manifest SHALL NOT expose an explicit "multi-reviewer mode" toggle. Mode swi
 - Adding a second reviewer (via `addReviewer`) activates multi-reviewer mode.
 - Removing all but one reviewer (via `removeReviewer`) reverts to single-reviewer mode.
 
-The UI SHALL adapt dynamically: reviewer tabs, per-reviewer completion badges, and the conditional Verdict Resolution step SHALL appear only in multi-reviewer mode.
+The UI SHALL adapt dynamically: reviewer tabs and per-reviewer completion badges SHALL appear only in multi-reviewer mode. The Verdict Resolution step SHALL appear only when multiple reviewers have a disagreement.
 
 #### Scenario: Adding second reviewer shows tabs
 
 - **WHEN** `addReviewer` is called on a single-reviewer project (transitioning to multi-reviewer mode)
-- **THEN** the QC Selection UI SHALL render reviewer tabs, and the stepper SHALL support up to 3 steps (QC Selection → Verdict Resolution → Preview & Export)
+- **THEN** the QC Selection UI SHALL render reviewer tabs, and the stepper SHALL include Verdict Resolution only if a disagreement exists
 
 #### Scenario: Reverting to single-reviewer hides tabs
 
@@ -67,7 +67,7 @@ Reviewers SHALL use anonymous labels by default: `"Reviewer 1"`, `"Reviewer 2"`,
 - **WHEN** three reviewers are added sequentially from an empty state
 - **THEN** the reviewer labels SHALL be `"Reviewer 1"`, `"Reviewer 2"`, `"Reviewer 3"` respectively
 
-#### Scenario: Label numbering does not reuse after removal
+#### Scenario: Label numbering uses current count after removal
 
 - **WHEN** "Reviewer 2" is removed from a 3-reviewer setup and a new reviewer is added
 - **THEN** the new reviewer's label SHALL be `"Reviewer 3"` (based on current array length + 1, which is 3), not `"Reviewer 4"`

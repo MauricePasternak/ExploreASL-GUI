@@ -87,12 +87,15 @@ describe("aggregateMeanSd", () => {
     const rows: QcRow[] = [
       { verdict: "pass", coverage: 95 },
       { verdict: "pass", coverage: 90 },
+      { verdict: "pass", spatialCov: 8 },
       { verdict: "fail", coverage: 50 },
       { verdict: "no-info", coverage: undefined },
     ];
     const result = aggregateMeanSd(rows, (r) => r.coverage);
     expect(result.mean).toBeCloseTo(92.5, 2);
     expect(result.sd).toBeCloseTo(3.54, 2);
+    expect(result.n).toBe(2);
+    expect(aggregateMeanSd(rows, (r) => r.spatialCov).n).toBe(1);
   });
 
   it("returns null SD for single-subject group", () => {
@@ -100,12 +103,13 @@ describe("aggregateMeanSd", () => {
     const result = aggregateMeanSd(rows, (r) => r.coverage);
     expect(result.mean).toBeCloseTo(88, 2);
     expect(result.sd).toBeNull();
+    expect(result.n).toBe(1);
   });
 
   it("returns null mean and SD when zero pass rows", () => {
     const rows: QcRow[] = [{ verdict: "fail", coverage: 80 }];
     const result = aggregateMeanSd(rows, (r) => r.coverage);
-    expect(result).toEqual({ mean: null, sd: null });
+    expect(result).toEqual({ mean: null, sd: null, n: 0 });
   });
 });
 
@@ -124,12 +128,12 @@ describe("aggregateFailReasons", () => {
 
 describe("formatMeanSd", () => {
   it("returns N/A for null mean", () => {
-    expect(formatMeanSd({ mean: null, sd: null })).toBe("N/A");
+    expect(formatMeanSd({ mean: null, sd: null, n: 0 })).toBe("N/A; n=0");
   });
   it("returns mean with N/A SD", () => {
-    expect(formatMeanSd({ mean: 88, sd: null })).toBe("88.00 (N/A)");
+    expect(formatMeanSd({ mean: 88, sd: null, n: 1 })).toBe("88.00 (N/A); n=1");
   });
   it("returns mean with SD", () => {
-    expect(formatMeanSd({ mean: 95.0, sd: 3.54 })).toBe("95.00 (3.54)");
+    expect(formatMeanSd({ mean: 95.0, sd: 3.54, n: 2 })).toBe("95.00 (3.54); n=2");
   });
 });

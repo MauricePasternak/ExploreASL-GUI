@@ -40,11 +40,11 @@ export default function AgreementSummary({
             </Table.Td>
           </Table.Tr>
           <Table.Tr>
-            <Table.Td>Number of Subjects</Table.Td>
+            <Table.Td>Number of Subject-Sessions</Table.Td>
             <Table.Td>{overall.n}</Table.Td>
           </Table.Tr>
           <Table.Tr>
-            <Table.Td>Subjects Requiring Resolution</Table.Td>
+            <Table.Td>Subject-Sessions Requiring Resolution</Table.Td>
             <Table.Td>{disagreementCount}</Table.Td>
           </Table.Tr>
         </Table.Tbody>
@@ -59,7 +59,7 @@ export default function AgreementSummary({
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Group</Table.Th>
-            <Table.Th>n</Table.Th>
+            <Table.Th>n (subject-sessions)</Table.Th>
             <Table.Th>Initial Agreement Rate</Table.Th>
             <Table.Th>Kappa Value</Table.Th>
           </Table.Tr>

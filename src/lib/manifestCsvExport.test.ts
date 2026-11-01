@@ -80,11 +80,11 @@ describe("generateVerdictsCsv", () => {
         "Kappa,\n" +
         "Kappa_CI_Lower,\n" +
         "Kappa_CI_Upper,\n" +
-        "N_Subjects,0\n" +
-        "N_Disagreements,0\n" +
+        "N_SubjectSessions,0\n" +
+        "N_SubjectSessions_Requiring_Resolution,0\n" +
         "\n" +
         "Per_Group_Agreement\n" +
-        "Group,N,Initial_Agreement_Rate,Kappa,Kappa_CI_Lower,Kappa_CI_Upper",
+        "Group,N_SubjectSessions,Initial_Agreement_Rate,Kappa,Kappa_CI_Lower,Kappa_CI_Upper",
     );
   });
 
@@ -165,11 +165,11 @@ describe("generateAgreementCsv", () => {
         "Kappa,\n" +
         "Kappa_CI_Lower,\n" +
         "Kappa_CI_Upper,\n" +
-        "N_Subjects,50\n" +
-        "N_Disagreements,10\n" +
+        "N_SubjectSessions,50\n" +
+        "N_SubjectSessions_Requiring_Resolution,10\n" +
         "\n" +
         "Per_Group_Agreement\n" +
-        "Group,N,Initial_Agreement_Rate,Kappa,Kappa_CI_Lower,Kappa_CI_Upper\n" +
+        "Group,N_SubjectSessions,Initial_Agreement_Rate,Kappa,Kappa_CI_Lower,Kappa_CI_Upper\n" +
         "Group A,20,1,1,1,1\n" +
         "Group B,30,0,,,",
     );

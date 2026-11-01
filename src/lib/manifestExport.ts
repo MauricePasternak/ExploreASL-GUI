@@ -1,9 +1,13 @@
 import { formatKappa, KAPPA_GUIDANCE } from "./interRaterAgreement";
 
+export const QC_DENOMINATOR_NOTE =
+  "Pass / Total counts reviewed subject-sessions (participant visits), not unique participants, excluding No Info. Metric n counts final-Pass subject-sessions with an available value for that metric.";
+
 export interface ManifestPayload {
   metadataGroups: Array<{
     label: string;
-    nSubjects: number;
+    nParticipants: number;
+    nSubjectSessions: number;
     nRuns: number;
     params: Record<string, string>;
   }>;
@@ -40,27 +44,35 @@ export interface ManifestPayload {
     }>;
   };
   pipelineParagraph: string;
+  methodsDisclaimer: string;
   methodsParagraphs: string[];
   methodsReferences: string[];
   dataPar?: Record<string, unknown>;
 }
 
-/**
- * Returns a sanitised copy of the dataPar object suitable for export:
- * - x.dataset.subjectRegexp defaults to "^sub-.*" if absent/empty
- * - x.dataset.ForceInclusionList is omitted (not relevant for reproducibility)
- */
-function sanitiseDataParForExport(dataPar: Record<string, unknown>): Record<string, unknown> {
-  const copy = structuredClone(dataPar) as Record<string, unknown>;
-  const x = copy["x"] as Record<string, unknown> | undefined;
-  if (x) {
-    const dataset = x["dataset"] as Record<string, unknown> | undefined;
-    if (dataset) {
-      dataset["subjectRegexp"] = "^sub-.*";
-      delete dataset["ForceInclusionList"];
+/** Redact machine paths, never selection expressions or inclusion identifiers. */
+export function sanitiseDataParForExport(
+  dataPar: Record<string, unknown>,
+): Record<string, unknown> {
+  function redact(value: unknown, key: string): unknown {
+    if (key === "subjectRegexp" || key === "ForceInclusionList") return structuredClone(value);
+    if (typeof value === "string") {
+      const isPath =
+        /(?:path|dir|folder|root)$/i.test(key) || /^(?:\/|[A-Za-z]:[\\/]|\\\\|~[\\/])/.test(value);
+      if (!value || !isPath) return value;
+      const name = value
+        .replace(/[\\/]+$/, "")
+        .split(/[\\/]/)
+        .slice(-1)[0];
+      return name && !/^[A-Za-z]:$/.test(name) ? `[redacted path]/${name}` : "[redacted path]";
     }
+    if (Array.isArray(value)) return value.map((entry) => redact(entry, key));
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redact(v, k)]));
+    }
+    return value;
   }
-  return copy;
+  return redact(dataPar, "") as Record<string, unknown>;
 }
 
 export function renderMarkdown(m: ManifestPayload): string {
@@ -75,7 +87,8 @@ export function renderMarkdown(m: ManifestPayload): string {
     lines.push("");
     lines.push("| Parameter | Value |");
     lines.push("|-----------|-------|");
-    lines.push(`| N Subjects | ${g.nSubjects} |`);
+    lines.push(`| N Participants | ${g.nParticipants} |`);
+    lines.push(`| N Subject-Sessions | ${g.nSubjectSessions} |`);
     lines.push(`| N Total Runs | ${g.nRuns} |`);
     for (const [key, value] of Object.entries(g.params)) {
       lines.push(`| ${key} | ${value} |`);
@@ -95,6 +108,10 @@ export function renderMarkdown(m: ManifestPayload): string {
   if (m.dataPar && Object.keys(m.dataPar).length > 0) {
     lines.push("### ExploreASL Data Parameter Configuration");
     lines.push("");
+    lines.push(
+      "Machine-local paths are redacted. Subject selection and inclusion settings are preserved.",
+    );
+    lines.push("");
     lines.push("```json");
     lines.push(JSON.stringify(sanitiseDataParForExport(m.dataPar), null, 2));
     lines.push("```");
@@ -103,13 +120,15 @@ export function renderMarkdown(m: ManifestPayload): string {
 
   lines.push("## Section 3: QC Summary");
   lines.push("");
+  lines.push(QC_DENOMINATOR_NOTE);
+  lines.push("");
   for (const g of m.qcGroups) {
     lines.push(`### ${g.label}`);
     lines.push("");
     if (g.agreementRate === undefined) {
       lines.push("| Metric | Value |");
       lines.push("|--------|-------|");
-      lines.push(`| Pass / Total | ${g.passTotal} |`);
+      lines.push(`| Pass / Total (subject-sessions) | ${g.passTotal} |`);
       lines.push(`| Mean ASL Coverage % (SD) | ${g.coverage} |`);
       lines.push(`| Mean Spatial CoV % (SD) | ${g.spatialCov} |`);
       lines.push(`| Mean Motion (mm RMS) (SD) | ${g.motion} |`);
@@ -118,7 +137,7 @@ export function renderMarkdown(m: ManifestPayload): string {
     } else {
       lines.push("| Metric | Value | Initial Agreement Rate |");
       lines.push("|--------|-------|----------------|");
-      lines.push(`| Pass / Total | ${g.passTotal} | ${g.agreementRate} |`);
+      lines.push(`| Pass / Total (subject-sessions) | ${g.passTotal} | ${g.agreementRate} |`);
       lines.push(`| Mean ASL Coverage % (SD) | ${g.coverage} | |`);
       lines.push(`| Mean Spatial CoV % (SD) | ${g.spatialCov} | |`);
       lines.push(`| Mean Motion (mm RMS) (SD) | ${g.motion} | |`);
@@ -144,12 +163,12 @@ export function renderMarkdown(m: ManifestPayload): string {
       `| Overall Initial Agreement Rate | ${Math.round(overall.agreementRate * 100)}% (${agreed}/${overall.n}) |`,
     );
     lines.push(`| Kappa Value | ${kappa} |`);
-    lines.push(`| Number of Subjects | ${overall.n} |`);
-    lines.push(`| Subjects Requiring Resolution | ${m.agreement.numberOfDisagreements} |`);
+    lines.push(`| Number of Subject-Sessions | ${overall.n} |`);
+    lines.push(`| Subject-Sessions Requiring Resolution | ${m.agreement.numberOfDisagreements} |`);
     lines.push("");
     lines.push(KAPPA_GUIDANCE);
     lines.push("");
-    lines.push("| Group | n | Initial Agreement Rate | Kappa Value |");
+    lines.push("| Group | n (subject-sessions) | Initial Agreement Rate | Kappa Value |");
     lines.push("|-------|---|----------------|-------------|");
     for (const group of m.agreement.perGroup) {
       const result = group.result;
@@ -171,6 +190,8 @@ export function renderMarkdown(m: ManifestPayload): string {
 
   if (m.methodsParagraphs.length > 0) {
     lines.push("### Methods");
+    lines.push("");
+    lines.push(m.methodsDisclaimer);
     lines.push("");
     for (const paragraph of m.methodsParagraphs) {
       lines.push(paragraph);

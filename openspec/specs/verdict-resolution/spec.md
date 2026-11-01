@@ -139,7 +139,7 @@ Current manifest configuration SHALL store resolutions in `resolvedVerdicts`, a 
 
 ### Requirement: Resolution Gate For Preview
 
-The stepper's "Next" button on the Verdict Resolution step (proceeding to Preview & Export) SHALL be disabled whenever any disagreement subjectSession lacks a corresponding entry in `resolvedVerdicts`. The gate SHALL be re-evaluated on every resolution change. The button tooltip SHALL read "Resolve every current reviewer disagreement before previewing the manifest". A separate status above the table SHALL show the number of disagreements remaining, or "All disagreements resolved" when none remain.
+The stepper's "Next" button on the Verdict Resolution step (proceeding to Preview & Export) SHALL be disabled whenever any disagreement subjectSession lacks a corresponding entry in `resolvedVerdicts` or a review draft is incomplete. The gate SHALL be re-evaluated on every resolution change. The button tooltip SHALL read "Resolve every current reviewer disagreement before previewing the manifest". A separate status above the table SHALL show the number of disagreements without stored resolutions, or "All disagreements resolved" when none remain.
 
 #### Scenario: Next disabled with unresolved disagreements
 
@@ -158,7 +158,7 @@ The stepper's "Next" button on the Verdict Resolution step (proceeding to Previe
 
 ### Requirement: Bulk Resolution Actions
 
-The Verdict Resolution step SHALL provide bulk resolution buttons labeled "Resolve all as Reviewer N" for each reviewer in the registry. Clicking a bulk resolution button SHALL set `resolvedVerdicts[subjectSession]` to match the specified reviewer's verdict for every unresolved disagreement. Already-resolved disagreements SHALL NOT be overwritten by the bulk action.
+The Verdict Resolution step SHALL provide a bulk resolution button labeled "Resolve all as <reviewer label>" for each reviewer in the registry. Clicking a bulk resolution button SHALL set `resolvedVerdicts[subjectSession]` to match the specified reviewer's verdict for every unresolved disagreement. Already-resolved disagreements SHALL NOT be overwritten by the bulk action.
 
 #### Scenario: Bulk resolve as Reviewer 1
 

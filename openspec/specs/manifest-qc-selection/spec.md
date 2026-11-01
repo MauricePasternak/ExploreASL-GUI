@@ -8,7 +8,7 @@ Define QC verdict selection for manifest subjects and reviewers.
 
 ### Requirement: QcSelection Table Shape
 
-QC Selection SHALL retain Subject/Session columns, read-only Structural/ASL statuses, metadata group labels, and Neutral/Pass/Fail controls without processing row-selection controls. Structural and ASL columns SHALL expose available Logs/Errors and Report badges that open the existing log and report viewers; unavailable artifacts SHALL show No Logs or No Report, and skipped modules SHALL omit those artifact controls. Outdated reports SHALL be labeled View Outdated Report. With multiple reviewers it SHALL render labeled tabs scoped to the active reviewer. With one reviewer it SHALL render the same table without tabs, reading the sole registered reviewer's indexed slice. Missing group assignment SHALL show dim "Ungrouped" and remain included in the manifest's Ungrouped bucket.
+QC Selection SHALL retain Subject/Session columns, read-only Structural/ASL statuses, metadata group labels, and Neutral/Pass/Fail controls without processing row-selection controls. Structural and ASL columns SHALL expose available Logs/Errors and Report badges that open the existing log and report viewers; unavailable artifacts SHALL show No Logs or No Report, and skipped modules SHALL omit those artifact controls. Outdated reports SHALL be labeled View Outdated Report. With multiple reviewers it SHALL render labeled tabs scoped to the active reviewer. With one reviewer it SHALL render the same table without tabs, reading the sole registered reviewer's indexed slice. A missing or unmatched group assignment SHALL show "Ungrouped".
 
 #### Scenario: Row shows metadata group label
 
@@ -18,7 +18,7 @@ QC Selection SHALL retain Subject/Session columns, read-only Structural/ASL stat
 #### Scenario: Row with no metadata group assignment
 
 - **WHEN** its assignment matches no group
-- **THEN** the row SHALL show Ungrouped and remain eligible for manifest grouping
+- **THEN** the row SHALL show Ungrouped
 
 #### Scenario: Single-reviewer mode renders without tabs
 
@@ -75,11 +75,11 @@ In multi-reviewer mode, each reviewer tab SHALL display an inline completion bad
 
 ### Requirement: Derived No-Info Status
 
-Missing Population QC data SHALL produce read-only No Info, not a user verdict. Otherwise, a stored verdict SHALL display its status from the active reviewer slice for every reviewer count; absence SHALL display Neutral. No Info rows SHALL not produce stored verdicts.
+After successful Population QC loading, a SubjectSession absent from the returned data SHALL display read-only No Info, not a user verdict. A failed QC load SHALL not itself classify rows as No Info. Otherwise, a stored verdict SHALL display its status from the active reviewer slice for every reviewer count; absence SHALL display Neutral. No Info rows SHALL not permit new verdict edits; previously stored verdicts SHALL remain stored.
 
 #### Scenario: Missing QC outputs disable verdict control
 
-- **WHEN** QC output files cannot be located
+- **WHEN** QC loading succeeds but returns no entry for a SubjectSession
 - **THEN** the row SHALL display No Info without an interactive verdict control
 
 #### Scenario: Stored verdict displayed for active reviewer
@@ -155,5 +155,5 @@ Rows whose stored verdict's `setAt` mtime does not match the current completion 
 
 #### Scenario: Toggling stale verdict clears staleness
 
-- **WHEN** the user toggles a stale row from Pass to Fail on the active reviewer's tab
-- **THEN** the active reviewer's stored verdict SHALL become `{ status: "fail", setAt: <current prior modules' completion mtime> }` and the Stale pill SHALL disappear on that tab
+- **WHEN** the user toggles a stale row from Pass to Fail on the active reviewer's tab and selects a failure reason
+- **THEN** the active reviewer's stored verdict SHALL become Fail with that reason and the current prior-module completion mtime, and the Stale pill SHALL disappear on that tab

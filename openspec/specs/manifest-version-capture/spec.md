@@ -8,7 +8,7 @@ Define capture of processing environment versions for manifests.
 
 ### Requirement: Native preparation captures versions
 
-For a reserved Population run, native processing preparation SHALL capture ExploreASL, MATLAB, and GUI versions during `preparing`, in parallel with independent participant preparation, and SHALL await capture before scientific workers spawn. The native snapshot SHALL carry this provenance. The renderer SHALL NOT launch processing-time version probes. Exact terminal persistence SHALL write accepted native values to `uiState.processing.population.lastRun.exploreASLVersion`, `matlabVersion`, and `guiVersion` via `setLastRunProfileId` after Population execution has committed.
+For a reserved Population run, native processing preparation SHALL capture ExploreASL, MATLAB, and GUI versions during `preparing`, in parallel with independent participant preparation, and SHALL await capture before scientific workers spawn. The native snapshot SHALL carry this provenance. The renderer SHALL NOT launch processing-time version probes. Native terminal reconciliation SHALL write accepted values to `uiState.processing.population.lastRun.exploreASLVersion`, `matlabVersion`, and `guiVersion` after Population execution has committed.
 
 A settled probe failure that permits fallback SHALL set the corresponding field to the literal string `"unknown"` without discarding other captured versions. A timed-out or otherwise unsettled probe SHALL fail preparation and settle its owned process scope before terminal publication; scientific workers SHALL NOT spawn with unresolved probe ownership.
 
@@ -29,7 +29,7 @@ A settled probe failure that permits fallback SHALL set the corresponding field 
 
 ### Requirement: Mtime Capture For Population Run
 
-Native completion SHALL audit the Population ready file at `derivatives/ExploreASL/lock/xASL_module_Population/xASL_module_Population/999_ready.status` and supply `populationReadyMtimeMs` in the accepted snapshot. Exact terminal persistence SHALL save that native value to `uiState.processing.population.lastRun.Mtime` as integer milliseconds since epoch via `setLastPopulationRunMtime`. The renderer SHALL NOT perform a completion-time filesystem probe.
+Native completion SHALL audit the Population ready file at `derivatives/ExploreASL/lock/xASL_module_Population/xASL_module_Population/999_ready.status` and supply `populationReadyMtimeMs` in the accepted snapshot. Native terminal reconciliation SHALL save that value to `uiState.processing.population.lastRun.Mtime` as integer milliseconds since epoch. The renderer SHALL NOT perform a completion-time filesystem probe.
 
 #### Scenario: Mtime persisted after Population completes
 
@@ -43,7 +43,7 @@ Native completion SHALL audit the Population ready file at `derivatives/ExploreA
 
 ### Requirement: Capture Replaces Prior Values
 
-Accepted native Population execution-commit evidence SHALL invalidate prior completion and ready mtime. Exact terminal persistence SHALL replace prior `lastRun` version fields with that run's native provenance and save the accepted completion mtime, or `null` when the committed run did not complete. Rejected reservation or preparation failure before execution commit SHALL preserve prior completion and provenance. Non-Population runs SHALL NOT alter these fields.
+Accepted native Population execution-commit evidence SHALL invalidate prior completion while retaining the prior `lastRun` until terminal reconciliation. Terminal reconciliation SHALL replace the Population `lastRun` version fields and mtime with the committed run's native provenance. Rejected reservation or preparation failure before execution commit SHALL preserve prior completion and provenance. Non-Population runs SHALL NOT alter the Population fields.
 
 #### Scenario: Re-run overwrites prior versions
 

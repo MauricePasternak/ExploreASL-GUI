@@ -53,7 +53,7 @@ In multi-reviewer mode, the CSV SHALL contain a header row followed by one data 
    - `Reviewer_N_Verdict` — the reviewer's `status` (`"pass"` or `"fail"`), or `""` if no verdict.
    - `Reviewer_N_Reason` — the reviewer's `reason` string, or `""` if none.
    - `Reviewer_N_Notes` — the reviewer's `notes` string, or `""` if none.
-3. `Final_Verdict` — the final verdict `status`. For subjectSessions with unanimous agreement, this SHALL be the unanimous status. For subjectSessions with disagreements, this SHALL be the resolved verdict's `status` from `resolvedVerdicts`. If unresolved, SHALL be `""`.
+3. `Final_Verdict` — the resolved verdict's `status` from `resolvedVerdicts` when present; otherwise the unanimous status when every reviewer has agreed, or `""` when no final verdict is available.
 4. `Resolution_Notes` — the `notes` from the resolved verdict, or `""` if no resolution or no notes.
 5. `Coverage_Pct` — the subjectSession's coverage percentage from `Coverage.tsv`, or `""` if unavailable.
 6. `SpatialCoV` — the subjectSession's Spatial Coefficient of Variation from `SpatialCoV.tsv`, or `""` if unavailable.
@@ -111,16 +111,23 @@ In multi-reviewer mode, the CSV file SHALL include an agreement statistics secti
 
 1. A row: `Agreement Statistics` (spanning the first column, other columns empty).
 2. A row: `Metric,Value` header.
-3. Data rows for: `Number_of_Reviewers`, `Overall_Initial_Agreement_Rate`, `Kappa`, `Kappa_CI_Lower`, `Kappa_CI_Upper`, `N_Subjects`, `N_Disagreements`.
+3. Data rows for: `Number_of_Reviewers`, `Overall_Initial_Agreement_Rate`, `Kappa`, `Kappa_CI_Lower`, `Kappa_CI_Upper`, `N_SubjectSessions`, `N_SubjectSessions_Requiring_Resolution`.
 4. A blank row followed by `Per_Group_Agreement` header.
-5. Per-group rows: `Group,N,Initial_Agreement_Rate,Kappa,Kappa_CI_Lower,Kappa_CI_Upper`.
+5. Per-group rows: `Group,N_SubjectSessions,Initial_Agreement_Rate,Kappa,Kappa_CI_Lower,Kappa_CI_Upper`.
+
+Overall n, per-group n, and counts requiring resolution SHALL count the existing rated subject-session units (participant visits: GUI/BIDS Sessions, ExploreASL Visits), not unique participants. Only labels SHALL change; eligibility, statistical calculations, verdict resolution, and stored schema SHALL remain unchanged.
 
 In single-reviewer mode, the agreement statistics section SHALL NOT be included.
 
 #### Scenario: Agreement statistics appended in multi-reviewer CSV
 
-- **WHEN** the CSV is exported in multi-reviewer mode with 2 reviewers, 50 subjects, and Kappa of 0.82
+- **WHEN** the CSV is exported in multi-reviewer mode with 2 reviewers, 50 rated subject-sessions, and Kappa of 0.82
 - **THEN** the CSV SHALL contain, after the last verdict data row, a blank row followed by the agreement statistics section with `Kappa,0.82` and per-group breakdown rows
+
+#### Scenario: Repeated visits are labeled as subject-sessions
+
+- **WHEN** two reviewers rate both visits of each of three eligible participants and disagree on one visit
+- **THEN** agreement statistics SHALL contain `N_SubjectSessions,6` and `N_SubjectSessions_Requiring_Resolution,1`, and the per-group count header SHALL be `N_SubjectSessions`
 
 #### Scenario: Agreement statistics omitted in single-reviewer mode
 

@@ -16,7 +16,8 @@ function makeFixtureManifest(): ManifestPayload {
     metadataGroups: [
       {
         label: "Group A",
-        nSubjects: 2,
+        nParticipants: 2,
+        nSubjectSessions: 2,
         nRuns: 4,
         params: {
           "Arterial Spin Labeling Type": "PCASL",
@@ -28,7 +29,8 @@ function makeFixtureManifest(): ManifestPayload {
       },
       {
         label: "Group B",
-        nSubjects: 1,
+        nParticipants: 1,
+        nSubjectSessions: 1,
         nRuns: 2,
         params: {
           "Arterial Spin Labeling Type": "PASL",
@@ -41,7 +43,8 @@ function makeFixtureManifest(): ManifestPayload {
       },
       {
         label: "Ungrouped",
-        nSubjects: 1,
+        nParticipants: 1,
+        nSubjectSessions: 1,
         nRuns: 1,
         params: {
           "Arterial Spin Labeling Type": "PCASL",
@@ -57,38 +60,39 @@ function makeFixtureManifest(): ManifestPayload {
       {
         label: "Group A",
         passTotal: "2 / 2",
-        coverage: "95.00 (3.54)",
-        spatialCov: "8.50 (0.71)",
-        motion: "0.40 (0.14)",
-        motionExclusion: "5.00 (4.24)",
+        coverage: "95.00 (3.54); n=2",
+        spatialCov: "8.50 (0.71); n=2",
+        motion: "0.40 (0.14); n=2",
+        motionExclusion: "5.00 (4.24); n=2",
         failReasons: "none",
       },
       {
         label: "Group B",
         passTotal: "0 / 1",
-        coverage: "N/A",
-        spatialCov: "N/A",
-        motion: "N/A",
-        motionExclusion: "N/A",
+        coverage: "N/A; n=0",
+        spatialCov: "N/A; n=0",
+        motion: "N/A; n=0",
+        motionExclusion: "N/A; n=0",
         failReasons: "motion: 1",
       },
       {
         label: "Ungrouped",
         passTotal: "1 / 1",
-        coverage: "88.00 (N/A)",
-        spatialCov: "10.00 (N/A)",
-        motion: "0.50 (N/A)",
-        motionExclusion: "2.00 (N/A)",
+        coverage: "88.00 (N/A); n=1",
+        spatialCov: "10.00 (N/A); n=1",
+        motion: "0.50 (N/A); n=1",
+        motionExclusion: "2.00 (N/A); n=1",
         failReasons: "none",
       },
     ],
     pipelineParagraph:
-      "Data were processed with ExploreASL (version 1.0.0) running in MATLAB R2023b through the ExploreASL GUI (version 0.1.0). This manifest covers 4 subjects across 3 groups.",
+      "This manifest covers 4 unique participants with 4 included subject-sessions across 3 groups.",
     ...(() => {
       const methods = generateMethodsParagraph(getDefaultDataPar());
       return {
         methodsParagraphs: methods.paragraphs,
         methodsReferences: methods.references,
+        methodsDisclaimer: methods.disclaimer,
       };
     })(),
     dataPar: {

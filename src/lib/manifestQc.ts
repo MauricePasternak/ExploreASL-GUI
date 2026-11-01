@@ -41,22 +41,25 @@ export function aggregateMotionBySubject(runMotions: number[]): number | null {
 export function aggregateMeanSd<T extends { verdict: string }>(
   rows: T[],
   val: (r: T) => number | null | undefined,
-): { mean: number | null; sd: number | null } {
+): { mean: number | null; sd: number | null; n: number } {
   const vals = rows
     .filter((r) => r.verdict === "pass")
     .map(val)
     .filter((v): v is number => v !== undefined && v !== null);
-  if (vals.length === 0) return { mean: null, sd: null };
+  const n = vals.length;
+  if (n === 0) return { mean: null, sd: null, n };
   const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-  if (vals.length < 2) return { mean, sd: null };
+  if (n < 2) return { mean, sd: null, n };
   const variance = vals.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (vals.length - 1);
-  return { mean, sd: Math.sqrt(variance) };
+  return { mean, sd: Math.sqrt(variance), n };
 }
 
-export function formatMeanSd(stats: { mean: number | null; sd: number | null }): string {
-  if (stats.mean === null) return "N/A";
-  if (stats.sd === null) return `${stats.mean.toFixed(2)} (N/A)`;
-  return `${stats.mean.toFixed(2)} (${stats.sd.toFixed(2)})`;
+export function formatMeanSd(stats: { mean: number | null; sd: number | null; n: number }): string {
+  const value =
+    stats.mean === null
+      ? "N/A"
+      : `${stats.mean.toFixed(2)} (${stats.sd === null ? "N/A" : stats.sd.toFixed(2)})`;
+  return `${value}; n=${stats.n}`;
 }
 
 export function aggregateFailReasons<T extends { verdict: string; reason?: string }>(

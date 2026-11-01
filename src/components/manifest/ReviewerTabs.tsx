@@ -131,6 +131,7 @@ export default function ReviewerTabs({ eligibleSubjectSessions, children }: Revi
         onClose={() => setPendingRemovalId(null)}
         title="Remove reviewer?"
         data-testid="remove-reviewer-confirmation"
+        attributes={{ close: { "data-testid": "remove-reviewer-confirmation-close" } }}
         centered
       >
         <Text size="sm">

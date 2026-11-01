@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { exists } from "@tauri-apps/plugin-fs";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { useManifestStore } from "./manifestStore";
+import { deriveDisagreements, reviewerMode, useManifestStore } from "./manifestStore";
 import {
   activateProjectLease,
   invalidateProjectLease,
@@ -139,21 +139,17 @@ describe("useManifestStore multi-reviewer derived state", () => {
     { id: "reviewer-c", label: "Reviewer C", createdAt: "2026-01-01T00:00:00.000Z" },
   ];
 
-  function setManifestProject(manifest: Record<string, unknown>, mappingState = {}) {
+  function setManifestProject(manifest: Record<string, unknown>) {
     mockGetState.mockReturnValue({
       project: {
         projectMeta: { rootPath: "/test/root" },
         uiState: { manifest },
-        mappingState,
       },
     });
   }
 
   beforeEach(() => {
     useManifestStore.setState({
-      reviewerMode: "single",
-      disagreements: [],
-      agreementResults: null,
       staleVerdicts: {},
       priorModulesMtimes: {},
     });
@@ -165,9 +161,7 @@ describe("useManifestStore multi-reviewer derived state", () => {
   ] as const)("derives %s reviewers as %s mode", (configuredReviewers, expectedMode) => {
     setManifestProject({ reviewers: configuredReviewers, verdicts: {} });
 
-    useManifestStore.getState().computeDisagreements();
-
-    expect(useManifestStore.getState().reviewerMode).toBe(expectedMode);
+    expect(reviewerMode(mockGetState().project.uiState.manifest)).toBe(expectedMode);
   });
 
   it("reports deterministic status-only disagreements with complete full verdicts", () => {
@@ -202,9 +196,7 @@ describe("useManifestStore multi-reviewer derived state", () => {
       },
     });
 
-    useManifestStore.getState().computeDisagreements();
-
-    expect(useManifestStore.getState().disagreements).toEqual([
+    expect(deriveDisagreements(mockGetState().project.uiState.manifest)).toEqual([
       {
         subjectSession: "sub-01_01",
         verdictsByReviewer: {
@@ -222,119 +214,6 @@ describe("useManifestStore multi-reviewer derived state", () => {
         },
       },
     ]);
-  });
-
-  it("computes Cohen agreement from complete intersections and grouped subjects", () => {
-    setManifestProject(
-      {
-        reviewers: reviewers.slice(0, 2),
-        verdicts: {
-          "reviewer-a": {
-            "sub-01_01": { status: "pass", setAt: 1 },
-            "sub-02_01": { status: "fail", reason: "motion", setAt: 1 },
-            "sub-03_01": { status: "pass", setAt: 1 },
-          },
-          "reviewer-b": {
-            "sub-01_01": { status: "pass", setAt: 1 },
-            "sub-02_01": { status: "fail", reason: "coverage", setAt: 1 },
-          },
-        },
-      },
-      {
-        metadataGroups: [{ id: "group-a", label: "Group A", bidsParams: {} }],
-        subjectRows: [
-          { id: "sub-01/01", subject: "sub-01", session: "01", groupId: "group-a" },
-          { id: "sub-02/01", subject: "sub-02", session: "01", groupId: "group-a" },
-        ],
-      },
-    );
-
-    useManifestStore.getState().computeAgreement();
-
-    expect(useManifestStore.getState().agreementResults).toEqual({
-      overall: { kappa: 1, ci95Lower: 1, ci95Upper: 1, n: 2, agreementRate: 1 },
-      perGroup: {
-        "Group A": { kappa: 1, ci95Lower: 1, ci95Upper: 1, n: 2, agreementRate: 1 },
-        Ungrouped: { kappa: null, ci95Lower: null, ci95Upper: null, n: 0, agreementRate: 0 },
-      },
-    });
-  });
-
-  it("maps DICOM subject rows to BIDS subjectSession keys for per-group agreement", () => {
-    setManifestProject(
-      {
-        reviewers: reviewers.slice(0, 2),
-        verdicts: {
-          "reviewer-a": {
-            "sub-SUB_01": { status: "pass", setAt: 1 },
-            "sub-OTHER_01": { status: "fail", reason: "motion", setAt: 1 },
-          },
-          "reviewer-b": {
-            "sub-SUB_01": { status: "pass", setAt: 1 },
-            "sub-OTHER_01": { status: "fail", reason: "coverage", setAt: 1 },
-          },
-        },
-      },
-      {
-        metadataGroups: [{ id: "group-a", label: "Group A", bidsParams: {} }],
-        subjectRows: [{ id: "SUB/01", subject: "SUB", session: "01", groupId: "group-a" }],
-      },
-    );
-
-    useManifestStore.getState().computeAgreement();
-
-    expect(useManifestStore.getState().agreementResults?.perGroup).toEqual({
-      "Group A": { kappa: null, ci95Lower: null, ci95Upper: null, n: 1, agreementRate: 1 },
-      Ungrouped: { kappa: null, ci95Lower: null, ci95Upper: null, n: 1, agreementRate: 1 },
-    });
-  });
-
-  it("computes Fleiss agreement for three reviewers and null kappa for small groups", () => {
-    setManifestProject(
-      {
-        reviewers,
-        verdicts: {
-          "reviewer-a": {
-            "sub-01_01": { status: "pass", setAt: 1 },
-            "sub-02_01": { status: "fail", reason: "motion", setAt: 1 },
-            "sub-03_01": { status: "pass", setAt: 1 },
-          },
-          "reviewer-b": {
-            "sub-01_01": { status: "pass", setAt: 1 },
-            "sub-02_01": { status: "fail", reason: "motion", setAt: 1 },
-            "sub-03_01": { status: "pass", setAt: 1 },
-          },
-          "reviewer-c": {
-            "sub-01_01": { status: "pass", setAt: 1 },
-            "sub-02_01": { status: "fail", reason: "motion", setAt: 1 },
-            "sub-03_01": { status: "fail", reason: "coverage", setAt: 1 },
-          },
-        },
-      },
-      {
-        metadataGroups: [{ id: "group-a", label: "Group A", bidsParams: {} }],
-        subjectRows: [
-          { id: "sub-01/01", subject: "sub-01", session: "01", groupId: "group-a" },
-          { id: "sub-02/01", subject: "sub-02", session: "01", groupId: "group-a" },
-        ],
-      },
-    );
-
-    useManifestStore.getState().computeAgreement();
-
-    expect(useManifestStore.getState().agreementResults).toEqual({
-      overall: {
-        kappa: 0.55,
-        ci95Lower: -0.11144958655634174,
-        ci95Upper: 1.2114495865563417,
-        n: 3,
-        agreementRate: 2 / 3,
-      },
-      perGroup: {
-        "Group A": { kappa: 1, ci95Lower: 1, ci95Upper: 1, n: 2, agreementRate: 1 },
-        Ungrouped: { kappa: null, ci95Lower: null, ci95Upper: null, n: 1, agreementRate: 0 },
-      },
-    });
   });
 
   it("computes indexed single-reviewer staleness from prior-module mtimes only", () => {

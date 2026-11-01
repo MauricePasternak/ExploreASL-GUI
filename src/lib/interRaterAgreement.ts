@@ -1,7 +1,7 @@
 type Verdict = "pass" | "fail";
 
 export const KAPPA_GUIDANCE =
-  "Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject counts.";
+  "Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject-session counts.";
 
 export interface KappaResult {
   kappa: number | null;
