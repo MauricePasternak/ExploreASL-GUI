@@ -82,10 +82,10 @@
 | **Component Library** | [Mantine 9](https://mantine.dev/)                                                             |
 | **State Management**  | [Zustand 5](https://zustand-demo.pmnd.rs/)                                                    |
 | **Schema Validation** | Rust Serde for project configuration; [Zod 4](https://zod.dev/) for form drafts and other IPC |
-| **Routing**           | [React Router 7](https://reactrouter.com/)                                                    |
+| **Routing**           | [React Router 8](https://reactrouter.com/)                                                    |
 | **Forms**             | [React Hook Form 7](https://react-hook-form.com/)                                             |
 | **Build Tool**        | [Vite 8](https://vitejs.dev/)                                                                 |
-| **Testing**           | [Vitest 4](https://vitest.dev/) + [Testing Library](https://testing-library.com/)             |
+| **Testing**           | [Vitest 5](https://vitest.dev/) + [Testing Library](https://testing-library.com/)             |
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -93,23 +93,23 @@
 
 ## 📋 Prerequisites
 
-Before running ExploreASL GUI you will need two dependencies installed separately:
+For a MATLAB execution profile, install MATLAB and ExploreASL separately:
 
-| Dependency     | Version                                             | Link                                                                         |
-| -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------- |
-| **MATLAB**     | R2019a or later                                     | [mathworks.com/downloads](https://www.mathworks.com/downloads/)              |
-| **ExploreASL** | v11.1.0 or later (v2+ / `develop` branch preferred) | [github.com/ExploreASL/ExploreASL](https://github.com/ExploreASL/ExploreASL) |
+| Dependency     | Version                                                                            | Link                                                                         |
+| -------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **MATLAB**     | R2019a or later                                                                    | [mathworks.com/downloads](https://www.mathworks.com/downloads/)              |
+| **ExploreASL** | Choose a release or commit compatible with your analysis; record its exact version | [github.com/ExploreASL/ExploreASL](https://github.com/ExploreASL/ExploreASL) |
 
 > [!NOTE]
-> The app manages execution using **Execution Profiles**, which support running ExploreASL via different backends. While currently restricted to MATLAB + GitHub-based ExploreASL (installed via Git or ZIP), the profiling system is built to support future pre-compiled packages (running via the free MATLAB Runtime) or containerized engines (Docker, Apptainer, etc.) to run independent of a local MATLAB dependency.
+> **Execution Profiles** support MATLAB installations and Apptainer/Singularity with a compatible ExploreASL `.sif` image. The container profile uses the runtime inside the image rather than a local MATLAB installation. Profile validation does not establish scientific compatibility for every engine version or dataset.
 
 ### Platform Dependencies (for running from source only)
 
 | Dependency                                                        | Notes                                                          |
 | ----------------------------------------------------------------- | -------------------------------------------------------------- |
-| [Rust toolchain](https://rustup.rs/)                              | Stable channel, ≥ 1.77                                         |
-| [Node.js](https://nodejs.org/)                                    | ≥ 20 LTS                                                       |
-| [pnpm](https://pnpm.io/)                                          | ≥ 9                                                            |
+| [Rust toolchain](https://rustup.rs/)                              | Current stable toolchain (Rust 2024 edition)                   |
+| [Node.js](https://nodejs.org/)                                    | Node 22 LTS, ≥ 22.13.0                                         |
+| [pnpm](https://pnpm.io/)                                          | 12.16.1 (pinned in `package.json`)                             |
 | [Tauri v2 system deps](https://v2.tauri.app/start/prerequisites/) | Platform-specific (WebView2 on Windows, WebKit on Linux/macOS) |
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -147,7 +147,7 @@ Open the `.dmg` and drag the application bundle to your Applications folder.
 
 ## 🔧 Setting Up MATLAB & ExploreASL
 
-The GUI requires both MATLAB and ExploreASL to be installed on your machine before it can process data. Follow the steps below for your operating system.
+The following steps configure the MATLAB backend. An Apptainer profile instead requires Apptainer/Singularity and a compatible ExploreASL `.sif` image.
 
 > [!TIP]
 > The ExploreASL team maintains a detailed installation tutorial with screenshots: [exploreasl.github.io/Documentation/latest/Tutorials-Install](https://exploreasl.github.io/Documentation/latest/Tutorials-Install/)
@@ -160,7 +160,7 @@ The GUI requires both MATLAB and ExploreASL to be installed on your machine befo
 4. Complete the installation and launch MATLAB once to confirm it opens without errors.
 
 > [!TIP]
-> Already have MATLAB installed? You can check your version by opening MATLAB and typing `version` in the command window. Any version from R2019a onward will work.
+> Already have MATLAB installed? Check its version by typing `version` in the command window, and verify compatibility with your selected ExploreASL release.
 
 ### Step 2 — Install ExploreASL from GitHub
 
@@ -169,7 +169,7 @@ ExploreASL is a free, open-source MATLAB toolbox. You obtain it by downloading o
 #### Option A — Download the ZIP (no Git required)
 
 1. Go to [github.com/ExploreASL/ExploreASL](https://github.com/ExploreASL/ExploreASL).
-2. Near the top of the page, you will see a dropdown button that says **main**. Click it and select **develop** — this is the recommended version.
+2. Use the branch/tag dropdown to select the release or commit intended for your analysis. If testing development code, select **develop** and record its commit.
 3. Click the green **<> Code** button, then select **Download ZIP**.
 4. Extract the ZIP file:
    - **Windows:** Right-click the downloaded `.zip` file and select **Extract All…**, then click **Extract**. Move the extracted folder to a location like `C:\ExploreASL`.
@@ -190,18 +190,18 @@ If you are comfortable with the command line:
 git clone --branch develop https://github.com/ExploreASL/ExploreASL.git
 ```
 
-This clones the latest `develop` branch (v2+), which is the recommended version.
+This clones the current `develop` branch. Record its commit (`git -C ExploreASL rev-parse HEAD`) before validation or analysis; a moving branch is not a pinned software version.
 
 ### Step 3 — Configure Execution Profiles
 
 Instead of a single global path, ExploreASL GUI uses **Execution Profiles** to manage how the ExploreASL pipeline is run. This allows you to configure multiple installations or execution methods and switch between them.
 
 1. **Onboarding:** When launching the app with no configured profiles, a welcome card is shown blocking project actions. Click **Open Settings** to set up your first profile.
-2. **Add Profile:** In global Settings under **Execution Profiles**, click **Add Profile** and choose a profile type (currently **MATLAB**).
+2. **Add Profile:** In global Settings under **Execution Profiles**, click **Add Profile** and choose **MATLAB** for these instructions. **Apptainer** is also available.
 3. **Paths Configuration:**
    - **MATLAB Path:** Enter the path to the MATLAB executable (e.g. `/usr/local/MATLAB/R2024b/bin/matlab` on Linux/macOS or `C:\Program Files\MATLAB\R2024b\bin\matlab.exe` on Windows). You can click **Detect MATLAB** to search your system automatically or **Browse** to choose it manually.
    - **ExploreASL Path:** Browse to the folder where you extracted or cloned ExploreASL in Step 2 (containing `ExploreASL.m`).
-4. **Validation:** Click **Save**. The GUI runs a validation command to ensure the MATLAB executable works, `ExploreASL.m` exists, and detects the ExploreASL version automatically.
+4. **Validation:** Click **Save Profile**. The GUI checks the MATLAB executable path, confirms `ExploreASL.m` exists, and reads the ExploreASL version. This path check does not launch MATLAB or test license availability.
 
 You can add multiple profiles and switch between them from the dropdown selectors on the Import and Processing pages.
 
@@ -213,6 +213,8 @@ You can add multiple profiles and switch between them from the dropdown selector
 ---
 
 ## 🔄 Workflow
+
+For a step-by-step local-data walkthrough, see the [test_dataset tutorial](docs/tutorials/test-dataset.md).
 
 ### Project configuration and saving
 
@@ -244,7 +246,7 @@ Workers use separate execution records; native results persist before exact-run 
 Opening, setup planning, and creation still require a valid execution profile. Profile validation
 timing and scientific execution checks are unchanged.
 
-ExploreASL GUI follows a three-phase analysis pipeline:
+ExploreASL GUI follows this analysis workflow:
 
 ```
 Raw DICOM / NIfTI
@@ -295,12 +297,12 @@ Use this if you have raw scanner DICOM files. The wizard walks you through five 
 4. **Acquisition Metadata** — Configure ASL-specific parameters (labelling type, PLD, labelling duration) with per-scan overrides
 5. **Preview & Run** — Review the staging layout and `dataPar.json`, then execute the import via dcm2niix
 
-#### Pathway B: Direct BIDS Import (Skip Import)
+#### Pathway B: Use Existing BIDS Images
 
 Use this if you already have a BIDS-compliant dataset (containing NIfTI images, sidecar `.json` metadata, and `_aslcontext.tsv` files).
 
 1. Select the BIDS folder during project creation.
-2. The landing detection dialog will detect the existing BIDS structure and prompt you to **Skip Import**.
+2. Choose **Use existing BIDS images** in the setup dialog. Review the setup information, then select **Create project**. No DICOM conversion is needed; existing images remain unchanged during setup. Exact file changes are available under **Technical details: planned file changes**.
 3. This opens the **BIDS Review Panel**, which automatically scans all subject sidecars, groups scans with matching acquisition parameters, and flags any skipped subjects (e.g. subjects with missing/unparseable files).
 4. Assign group labels and click **Confirm** to populate project mappings and transition directly to pipeline parameters configuration.
 
@@ -342,7 +344,7 @@ pnpm tauri dev
 ```
 
 > [!TIP]
-> Most frontend work can be done at `http://localhost:1420` with `pnpm dev`. Tauri APIs (filesystem, dialogs, subprocess) are mocked during browser development — start `pnpm tauri dev` only when you need to test native functionality.
+> `pnpm dev` serves the frontend at `http://localhost:1420`, but native APIs are not mocked there. Use `pnpm tauri dev` for application workflows requiring settings, filesystem access, dialogs, or execution. Vitest tests provide their own Tauri mocks.
 
 ### Typed native commands
 
@@ -442,7 +444,7 @@ Unit tests cover schemas, Zustand stores, and utility functions. Component tests
 - [x] Project manifest export
 - [x] Import BIDS-ready datasets
 - [x] Auto-update support
-- [ ] Validated execution profiles for Apptainer
+- [ ] Scientific validation of Apptainer execution workflows
 - [x] Multi-reviewer manifest review workflow
 - [ ] Documentation site
 
@@ -489,7 +491,7 @@ Please read the [AGENTS.md](AGENTS.md) file for coding conventions, testing requ
 
 ## 📄 License
 
-Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information.
+Distributed under the Apache License 2.0. See [`LICENSE`](LICENSE) for more information.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -501,7 +503,7 @@ Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information
 
 This GUI is built around [ExploreASL](https://exploreasl.github.io/Documentation/latest/), an open-source MATLAB/SPM-based pipeline for ASL MRI data analysis, developed and maintained by the ExploreASL community. Please cite the ExploreASL paper if you use this software in your research:
 
-> Mutsaerts, H.J.M.M., et al. (2021). _ExploreASL: An image processing pipeline for multi-center ASL perfusion MRI studies._ NeuroImage, 225, 117549. https://doi.org/10.1016/j.neuroimage.2020.117549
+> Mutsaerts, H.J.M.M., et al. (2020). _ExploreASL: An image processing pipeline for multi-center ASL perfusion MRI studies._ NeuroImage, 219, 117031. https://doi.org/10.1016/j.neuroimage.2020.117031
 
 ### Previous Version
 

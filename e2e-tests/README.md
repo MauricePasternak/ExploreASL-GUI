@@ -5,7 +5,7 @@ repository root. Do not embed machine-specific paths; use the overrides below.
 
 ## Prerequisites
 
-- Node 22 and pnpm 11.11.0.
+- Node 22 and pnpm 12.16.1.
 - Rust/Cargo, Tauri platform dependencies, and `tauri-driver` available on `PATH` or through
   `E2E_TAURI_DRIVER`.
 - Linux: WebKitGTK WebDriver and a display. CI supplies `webkit2gtk-driver` and runs under Xvfb.
