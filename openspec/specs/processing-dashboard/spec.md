@@ -158,7 +158,7 @@ Missing `derivatives/ExploreASL/dataPar.json` SHALL NOT by itself produce a rend
 
 ### Requirement: Execution Dashboard
 
-The execution dashboard SHALL display module-grouped collapsible sections for Structural, ASL, and Population. Each section SHALL show module-level progress. Structural and ASL sections SHALL show one row per selected eligible SubjectSession with a step timeline; Population SHALL show one study-level row. Rows SHALL display the subject/session identifier, timeline icons with step-name tooltips, and applicable Running/Done status badges, without standalone current-step or elapsed-time text fields. The dashboard SHALL render only information admitted for the attached native `runId`.
+The execution dashboard SHALL display module-grouped collapsible sections for Structural, ASL, and Population. Each section SHALL show module-level progress. Structural and ASL sections SHALL show one row per selected eligible SubjectSession; Population SHALL show one study-level row. Rows SHALL display the subject/session identifier and applicable Running/Done status badges. Single-run rows SHALL show timeline icons with step-name tooltips; multi-run ASL rows SHALL show a completion summary and expandable run timelines. Rows SHALL not show standalone current-step or elapsed-time text fields. The dashboard SHALL render only information admitted for the attached native `runId`.
 
 The active dashboard SHALL remain visible during `preparing`, `running`, `finalizing`, and `cancelling`. It SHALL be hidden after `completed`, `failed`, `cancelled`, or `interrupted`, while the terminal result remains available through existing status/error UI. Controls and labels SHALL reflect the attached native lifecycle rather than a frontend-inferred worker count.
 
@@ -255,15 +255,6 @@ Starting selected work (including confirmed reprocessing of completed subjects) 
 - **WHEN** the user selects a subject with `999_ready.status` for Structural and confirms reprocessing with Structural checked
 - **THEN** native preparation SHALL quarantine that subject's Structural `.status` files before worker launch, allowing reprocessing from the beginning of the Structural module without deleting scientific outputs
 
-### Requirement: Subject Row Extensibility
-
-Each SubjectSession row in the execution dashboard SHALL be architected to accommodate future per-row actions without row schema changes. Specifically, the row structure SHALL support: a "View Errors" button (reads ExploreASL log file on demand), a "View QC" button (opens QC images in a modal), and inline error text (similar to the import module's error display). These features are out of scope for the initial implementation but the row component API SHALL not preclude their addition.
-
-#### Scenario: Row action slot for future features
-
-- **WHEN** a SubjectSession row is rendered
-- **THEN** the row component SHALL expose an actions slot or callback area that can later accommodate error viewing, QC viewing, and inline error text
-
 ### Requirement: QC metric labels are resolved in the renderer
 
 The report viewer SHALL derive human-readable QC labels from the metric key using the frontend QC-label dictionary. Unknown keys SHALL use the frontend's title-case fallback formatter. It SHALL consume native key/value measures without requiring a backend display-label field.
@@ -280,7 +271,7 @@ The report viewer SHALL derive human-readable QC labels from the metric key usin
 
 ### Requirement: ASL Run Display
 
-For ASL module rows, run sub-rows SHALL only be displayed when a SubjectSession has more than one ASL run (multiple `xASL_module_ASL_ASL_<n>` directories in the lock structure). When there is exactly one run, the ASL row SHALL display progress inline without sub-rows.
+For ASL module rows, run sub-rows SHALL only be displayed when a SubjectSession has more than one ASL run, combining discovered run IDs with status entries. When there is exactly one run, the ASL row SHALL display progress inline without sub-rows.
 
 #### Scenario: Single ASL run
 

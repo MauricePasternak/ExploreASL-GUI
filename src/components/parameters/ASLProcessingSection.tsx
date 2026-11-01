@@ -1,3 +1,5 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import { numberInputTestIds } from "../common/numberInputTestIds";
 import { Group, NumberInput, Paper, Select, SimpleGrid, Stack, Switch, Text } from "@mantine/core";
 import { IconActivity, IconFocus2, IconTimeline } from "@tabler/icons-react";
 
@@ -74,7 +76,11 @@ export function ASLProcessingSection({
         </Stack>
       </Paper>
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
+      <AdvancedDivider
+        showAdvanced={showAdvanced}
+        onToggle={onToggleAdvanced}
+        testId="asl-processing-advanced-toggle"
+      />
 
       {showAdvanced && (
         <Stack gap="md">
@@ -105,7 +111,7 @@ export function ASLProcessingSection({
                     onFieldChange("bRegistrationContrast", v ? Number(v) : undefined)
                   }
                   placeholder={FIELD_METADATA.bRegistrationContrast.defaultHint}
-                  data-testid="field-bRegistrationContrast"
+                  {...comboboxTestIds("field-bRegistrationContrast")}
                 />
 
                 <Select
@@ -120,7 +126,7 @@ export function ASLProcessingSection({
                   }
                   onChange={(v) => onFieldChange("bAffineRegistration", v ? Number(v) : undefined)}
                   placeholder={FIELD_METADATA.bAffineRegistration.defaultHint}
-                  data-testid="field-bAffineRegistration"
+                  {...comboboxTestIds("field-bAffineRegistration")}
                 />
 
                 <Select
@@ -133,7 +139,7 @@ export function ASLProcessingSection({
                   value={dataPar.bDCTRegistration != null ? String(dataPar.bDCTRegistration) : null}
                   onChange={(v) => onFieldChange("bDCTRegistration", v ? Number(v) : undefined)}
                   placeholder={FIELD_METADATA.bDCTRegistration.defaultHint}
-                  data-testid="field-bDCTRegistration"
+                  {...comboboxTestIds("field-bDCTRegistration")}
                 />
 
                 <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
@@ -162,7 +168,7 @@ export function ASLProcessingSection({
                   placeholder={FIELD_METADATA.SpikeRemovalThreshold.defaultHint}
                   value={dataPar.SpikeRemovalThreshold}
                   onChange={(v) => onFieldChange("SpikeRemovalThreshold", v === "" ? undefined : v)}
-                  data-testid="field-SpikeRemovalThreshold"
+                  {...numberInputTestIds("field-SpikeRemovalThreshold")}
                 />
 
                 <NumberInput
@@ -172,7 +178,7 @@ export function ASLProcessingSection({
                   onChange={(v) =>
                     onFieldChange("SpikeRemovalAbsoluteThreshold", v === "" ? undefined : v)
                   }
-                  data-testid="field-SpikeRemovalAbsoluteThreshold"
+                  {...numberInputTestIds("field-SpikeRemovalAbsoluteThreshold")}
                 />
 
                 <Select
@@ -185,7 +191,7 @@ export function ASLProcessingSection({
                   value={dataPar.bHct2BloodT1 != null ? String(dataPar.bHct2BloodT1) : null}
                   onChange={(v) => onFieldChange("bHct2BloodT1", v ? Number(v) : undefined)}
                   placeholder={FIELD_METADATA.bHct2BloodT1.defaultHint}
-                  data-testid="field-bHct2BloodT1"
+                  {...comboboxTestIds("field-bHct2BloodT1")}
                 />
               </SimpleGrid>
 

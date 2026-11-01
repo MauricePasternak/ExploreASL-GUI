@@ -286,7 +286,7 @@ When the user clicks Remove on Select Data, `joinConfig` SHALL be set to `null` 
 
 ### Requirement: External File mtime Re-Validation
 
-On Tauri window focus, if `joinConfig` is active, the system SHALL stat the external file's mtime. If the mtime has changed since the last validation, `execute_join` SHALL re-run and the returned `externalHash` SHALL be compared with `joinConfig.externalSource.fileHash`. If the hash mismatches or the external file is missing or unreadable, the saved `joinConfig` and dependent contract settings SHALL remain unchanged. The system SHALL show a persistent Relink warning, disable joined-data actions, and keep readable qCBF-only data available through `load_qcbf_data`. Relinking matching content SHALL preserve setup; adopting changed content SHALL require confirmation before resetting dependent setup, as defined in `data-vis-contract`.
+On Tauri window focus, if `joinConfig` is active, the system SHALL stat the external file's mtime. If the mtime has changed since the last validation, `execute_join` SHALL re-run and the returned `externalHash` SHALL be compared with `joinConfig.externalSource.fileHash`. If the hash mismatches or the external file is missing or unreadable, the saved `joinConfig` and dependent contract settings SHALL remain unchanged. The system SHALL show a persistent Relink warning, disable Select Data Next, and keep readable qCBF-only data available through `load_qcbf_data`. Relinking matching content SHALL preserve setup; adopting changed content SHALL require confirmation before resetting dependent setup, as defined in `data-vis-contract`.
 
 #### Scenario: External file unchanged on focus
 
@@ -301,7 +301,7 @@ On Tauri window focus, if `joinConfig` is active, the system SHALL stat the exte
 #### Scenario: External file deleted on focus
 
 - **WHEN** the window regains focus and the external file no longer exists
-- **THEN** `joinConfig` SHALL remain unchanged, joined-data actions SHALL be disabled, and a persistent Relink warning SHALL identify the missing saved source
+- **THEN** `joinConfig` SHALL remain unchanged, Select Data Next SHALL be disabled, and a persistent Relink warning SHALL identify the missing saved source
 
 ### Requirement: Join Execution on Step Advance
 
@@ -365,7 +365,7 @@ A Rust command `stat_file` SHALL accept `path: String` and return a `FileStats` 
 The `AppState.active_data: Mutex<Option<ActiveData>>` slot SHALL serve as the single unified data cache for both qCBF-only and join-active flows. The following invariants SHALL hold:
 
 1. **Always populated when needed**: `active_data` SHALL be populated (non-`None`) whenever the "Column Types" or "Visualize" step is active — `read_data_columns` SHALL never encounter an empty cache during these steps.
-2. **Wholesale replacement on load**: Successful `load_qcbf_data` and `execute_join` operations SHALL replace `active_data` entirely, not partially update it. Join configuration edits, external preview inspection, matching-hash relinking, and external removal SHALL NOT themselves replace the backend cache.
+2. **Wholesale replacement on load**: Successful `load_qcbf_data` and `execute_join` operations SHALL replace `active_data` entirely, not partially update it. `execute_join` first loads qCBF into the cache, so a later join failure MAY leave qCBF-only data cached. Join configuration edits, external preview inspection, matching-hash relinking, and external removal SHALL NOT themselves replace the backend cache.
 3. **One slot per project**: Exactly one `ActiveData` entry SHALL exist per project. The cache SHALL be cleared (`None`) when the active project changes via `set_active_project` or `clear_active_project`.
 4. **No disk I/O on read**: `read_data_columns` SHALL read exclusively from the in-memory cache — it SHALL NOT touch disk.
 5. **Frontend hash validation**: Hash comparison SHALL occur in the frontend after `load_qcbf_data` or `execute_join` returns — Rust SHALL return hashes, the frontend SHALL compare them against persisted values.
@@ -375,12 +375,12 @@ The `AppState.active_data: Mutex<Option<ActiveData>>` slot SHALL serve as the si
 #### Scenario: active_data populated after load_qcbf_data
 
 - **WHEN** `load_qcbf_data` is called and succeeds
-- **THEN** `AppState.active_data` SHALL be `Some(ActiveData)` with the parsed qCBF rows, columns, and `external_hash: None`
+- **THEN** `AppState.active_data` SHALL be `Some(ActiveData)` with the parsed qCBF rows in both `rows` and `qcbf_rows`; column metadata, counts, and hashes SHALL be returned in `DataInspection`, not duplicated in the cache
 
 #### Scenario: active_data replaced after execute_join
 
 - **WHEN** `execute_join` is called and succeeds
-- **THEN** `AppState.active_data` SHALL be `Some(ActiveData)` with the merged rows, merged columns, `qcbf_hash`, and `external_hash: Some(hash)` — the previous cache content SHALL be entirely replaced
+- **THEN** `AppState.active_data` SHALL be `Some(ActiveData)` with merged `rows` and original unjoined `qcbf_rows` — the previous cache content SHALL be entirely replaced; merged column metadata, counts, and hashes SHALL be returned in `DataInspection`, not duplicated in the cache
 
 #### Scenario: active_data cleared on project switch
 

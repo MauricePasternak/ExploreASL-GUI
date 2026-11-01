@@ -39,7 +39,8 @@ export default function LevelOrdering() {
   return (
     <Stack data-testid="level-ordering">
       <Text size="sm" c="dimmed">
-        Reorder levels for categorical columns. This controls X-axis tick order in swarmplots.
+        Reorder levels for categorical columns in this editor. Swarmplots keep categories in
+        encounter order from filtered chart rows.
       </Text>
       {categoricalColumns.map((col) => {
         const levels = levelOrderings[col.name] ?? col.levels;

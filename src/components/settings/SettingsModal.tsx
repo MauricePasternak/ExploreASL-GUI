@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import {
   Button,
   Divider,
@@ -60,6 +61,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
       title="Settings"
       size="lg"
       data-testid="settings-modal"
+      attributes={{ close: { "data-testid": "settings-modal-close" } }}
     >
       <Stack gap="md">
         <div>
@@ -78,7 +80,7 @@ export default function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 setTheme(value);
               }
             }}
-            data-testid="settings-theme-select"
+            {...comboboxTestIds("settings-theme-select")}
           />
         </div>
 

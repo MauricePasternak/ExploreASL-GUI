@@ -1,4 +1,5 @@
 import { Badge, Box, Button, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
+import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
 import {
   IconAlertCircle,
   IconBan,
@@ -14,15 +15,14 @@ import {
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { LogContent, LogFileInfo } from "../../lib/logViewer";
-import { fetchLogContent, fetchModuleLogs } from "../../lib/logViewer";
+import type { LogFileInfo } from "../../lib/logViewer";
 import type { SubjectInfo } from "../../schemas/processingSchemas";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
 import LogViewerModal from "./LogViewerModal";
 
-import { fetchSubjectReports } from "../../lib/reportViewer";
 import ReportViewerModal from "./ReportViewerModal";
+import { useSubjectViewers } from "./useSubjectViewers";
 import type { ModuleDisplayStatus } from "./SubjectSelection.helpers";
 import { resolveLogBadge, resolveModuleDisplay } from "./SubjectSelection.helpers";
 import { indexSubjectStatuses } from "./subjectStatusIndex";
@@ -355,113 +355,16 @@ export default function SubjectSelection() {
   const processingPhase = useProcessingStore((s) => s.processingPhase);
   const projectRoot = useProjectStore((s) => s.project?.projectMeta.rootPath);
 
-  const [logFiles, setLogFiles] = useState<Map<string, LogFileInfo[]>>(new Map());
-  const [modalOpened, setModalOpened] = useState(false);
-  const [modalModule, setModalModule] = useState<"structural" | "asl">("structural");
-  const [modalSubjectSession, setModalSubjectSession] = useState("");
-  const [modalContent, setModalContent] = useState<LogContent | null>(null);
-  const [modalLoading, setModalLoading] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
-
-  const [existingReports, setExistingReports] = useState<Set<string>>(new Set());
-  const [reportModalOpened, setReportModalOpened] = useState(false);
-  const [reportModalModule, setReportModalModule] = useState<"structural" | "asl">("structural");
-  const [reportModalSubjectSession, setReportModalSubjectSession] = useState("");
-  const [reportModalRuns, setReportModalRuns] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!projectRoot) return;
-    fetchModuleLogs(projectRoot)
-      .then((files) => {
-        const map = new Map<string, LogFileInfo[]>();
-        for (const f of files) {
-          const key = `${f.subjectSession}:${f.module}`;
-          const existing = map.get(key) ?? [];
-          existing.push(f);
-          map.set(key, existing);
-        }
-        setLogFiles(map);
-      })
-      .catch((err) => {
-        console.warn("[SubjectSelection] Failed to fetch module logs:", err);
-        setLogFiles(new Map());
-      });
-  }, [projectRoot]);
-
-  useEffect(() => {
-    if (!projectRoot) return;
-    fetchSubjectReports(projectRoot)
-      .then((reports) => {
-        const set = new Set<string>();
-        for (const r of reports) {
-          set.add(`${r.subjectSession}:${r.module}`);
-        }
-        setExistingReports(set);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch reports list:", err);
-        setExistingReports(new Set());
-      });
-  }, [projectRoot]);
-
-  const structuralLogInfo = useMemo(() => {
-    const map = new Map<string, LogFileInfo[]>();
-    for (const [key, files] of logFiles) {
-      if (key.endsWith(":structural")) {
-        const ss = key.replace(/:structural$/, "");
-        map.set(ss, files);
-      }
-    }
-    return map;
-  }, [logFiles]);
-
-  const aslLogInfo = useMemo(() => {
-    const map = new Map<string, LogFileInfo[]>();
-    for (const [key, files] of logFiles) {
-      if (key.endsWith(":asl")) {
-        const ss = key.replace(/:asl$/, "");
-        map.set(ss, files);
-      }
-    }
-    return map;
-  }, [logFiles]);
-
-  const handleViewLog = useCallback(
-    async (subjectSession: string, module: "structural" | "asl") => {
-      console.log(
-        `[SubjectSelection] Viewing logs for subjectSession: ${subjectSession}, module: ${module}`,
-      );
-      if (!projectRoot) return;
-      setModalModule(module);
-      setModalSubjectSession(subjectSession);
-      setModalOpened(true);
-      setModalLoading(true);
-      setModalError(null);
-      try {
-        const content = await fetchLogContent(projectRoot, subjectSession, module);
-        setModalContent(content);
-      } catch {
-        setModalError("Failed to load log content");
-        setModalContent(null);
-      } finally {
-        setModalLoading(false);
-      }
-    },
-    [projectRoot],
-  );
-
-  const handleCloseModal = useCallback(() => {
-    setModalOpened(false);
-    setModalContent(null);
-    setModalLoading(false);
-    setModalError(null);
-  }, []);
-
-  const handleCloseReportModal = useCallback(() => {
-    setReportModalOpened(false);
-    setReportModalSubjectSession("");
-    setReportModalRuns([]);
-  }, []);
+  const {
+    structuralLogInfo,
+    aslLogInfo,
+    existingReports,
+    handleViewLog,
+    openReport,
+    logModal,
+    reportModal,
+  } = useSubjectViewers(projectRoot);
+  const { module: modalModule, subjectSession: modalSubjectSession } = logModal;
 
   const [filter, setFilter] = useState<FilterValue>("all");
   const [page, setPage] = useState(1);
@@ -559,17 +462,13 @@ export default function SubjectSelection() {
     updateSubjects([]);
   }, [updateSubjects]);
 
-  const handleViewReport = useCallback((subjectSession: string, module: "structural" | "asl") => {
-    console.log(
-      `[SubjectSelection] Viewing reports for subjectSession: ${subjectSession}, module: ${module}`,
-    );
-    const row = rowsRef.current.find((r) => r.subjectSession === subjectSession);
-    const runs = row?.aslRuns || [];
-    setReportModalSubjectSession(subjectSession);
-    setReportModalModule(module);
-    setReportModalRuns(runs);
-    setReportModalOpened(true);
-  }, []);
+  const handleViewReport = useCallback(
+    (subjectSession: string, module: "structural" | "asl") => {
+      const row = rowsRef.current.find((r) => r.subjectSession === subjectSession);
+      openReport(subjectSession, module, row?.aslRuns || []);
+    },
+    [openReport],
+  );
 
   const columns = useMemo(
     () =>
@@ -665,7 +564,7 @@ export default function SubjectSelection() {
               </Stack>
             ),
           }))}
-          data-testid="subject-filter"
+          {...segmentedControlTestIds("subject-filter")}
         />
       </Group>
 
@@ -675,6 +574,12 @@ export default function SubjectSelection() {
           columns={columns}
           selectedRecords={selectedRecords}
           onSelectedRecordsChange={handleSelectedRecordsChange}
+          allRecordsSelectionCheckboxProps={{
+            attributes: { input: { "data-testid": "subject-table-select-all" } },
+          }}
+          getRecordSelectionCheckboxProps={(row) => ({
+            attributes: { input: { "data-testid": `subject-table-select-${row.subjectSession}` } },
+          })}
           idAccessor="subjectSession"
           striped
           highlightOnHover
@@ -687,27 +592,16 @@ export default function SubjectSelection() {
           recordsPerPageOptions={[10, 25, 50]}
           onRecordsPerPageChange={setRecordsPerPage}
           paginationSize="sm"
+          getPaginationControlProps={(control) => ({
+            "data-testid": `subject-table-page-${control}`,
+            "aria-label": `${control[0].toUpperCase()}${control.slice(1)} page`,
+          })}
+          getPaginationItemProps={(page) => ({ "data-testid": `subject-table-page-${page}` })}
           data-testid="subject-table"
         />
       </Box>
-      <LogViewerModal
-        opened={modalOpened}
-        onClose={handleCloseModal}
-        logContent={modalContent}
-        module={modalModule}
-        subjectSession={modalSubjectSession}
-        loading={modalLoading}
-        error={modalError}
-        runErrorMap={modalRunErrorMap}
-      />
-      <ReportViewerModal
-        opened={reportModalOpened}
-        onClose={handleCloseReportModal}
-        projectRoot={projectRoot}
-        subjectSession={reportModalSubjectSession}
-        module={reportModalModule}
-        runs={reportModalRuns}
-      />
+      <LogViewerModal {...logModal} runErrorMap={modalRunErrorMap} />
+      <ReportViewerModal {...reportModal} />
     </Stack>
   );
 }

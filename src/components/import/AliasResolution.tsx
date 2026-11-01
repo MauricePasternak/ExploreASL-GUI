@@ -1,4 +1,4 @@
-import { Button, Group, Stack, Tabs, Text } from "@mantine/core";
+import { Button, Group, Tabs, Text } from "@mantine/core";
 import {
   IconArrowLeft,
   IconArrowRight,
@@ -20,6 +20,7 @@ import { useProjectStore } from "../../stores/projectStore";
 import ModalityMappingTable from "./ModalityMappingTable";
 import OrderAliasTable from "./SessionRunOrder";
 import SubjectRenameTable from "./SubjectRenameTable";
+import ImportStepLayout from "./ImportStepLayout";
 
 function compareAlphaNumeric(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -210,7 +211,29 @@ export default function AliasResolution() {
   }
 
   return (
-    <Stack gap="md" data-testid="alias-resolution">
+    <ImportStepLayout
+      testId="alias-resolution"
+      navigation={
+        <Group justify="space-between" data-testid="alias-nav">
+          <Button
+            leftSection={<IconArrowLeft size={16} />}
+            variant="light"
+            onClick={handleBack}
+            data-testid="alias-back-btn"
+          >
+            Back: Tokenize Paths
+          </Button>
+          <Button
+            rightSection={<IconArrowRight size={16} />}
+            onClick={handleNext}
+            disabled={!canProceed}
+            data-testid="alias-next-btn"
+          >
+            Next: Metadata
+          </Button>
+        </Group>
+      }
+    >
       <HeaderCard
         icon={IconTags}
         title="Alias Resolution"
@@ -291,37 +314,6 @@ export default function AliasResolution() {
           Map at least one modality to ASL4D or T1w before continuing.
         </Text>
       )}
-
-      <Group
-        justify="space-between"
-        pos="sticky"
-        bottom={40}
-        style={{
-          zIndex: 2,
-          paddingTop: "var(--mantine-spacing-md)",
-          paddingBottom: "var(--mantine-spacing-md)",
-          backgroundColor: "var(--mantine-color-body)",
-          boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.06)",
-        }}
-        data-testid="alias-nav"
-      >
-        <Button
-          leftSection={<IconArrowLeft size={16} />}
-          variant="light"
-          onClick={handleBack}
-          data-testid="alias-back-btn"
-        >
-          Back: Tokenize Paths
-        </Button>
-        <Button
-          rightSection={<IconArrowRight size={16} />}
-          onClick={handleNext}
-          disabled={!canProceed}
-          data-testid="alias-next-btn"
-        >
-          Next: Metadata
-        </Button>
-      </Group>
-    </Stack>
+    </ImportStepLayout>
   );
 }

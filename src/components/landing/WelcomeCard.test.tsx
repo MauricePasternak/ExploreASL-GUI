@@ -25,5 +25,9 @@ describe("WelcomeCard", () => {
     expect(screen.getByTestId("welcome-card-project-types")).toBeInTheDocument();
     expect(screen.getByTestId("welcome-card-project-types")).toHaveTextContent(/dicom projects/i);
     expect(screen.getByTestId("welcome-card-project-types")).toHaveTextContent(/bids projects/i);
+    expect(screen.getByTestId("welcome-card-project-types")).toHaveTextContent(
+      /Use existing BIDS images without DICOM conversion/i,
+    );
+    expect(screen.getByTestId("welcome-card-project-types")).not.toHaveTextContent(/skip import/i);
   });
 });

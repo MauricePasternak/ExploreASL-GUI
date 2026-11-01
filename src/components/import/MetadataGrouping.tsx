@@ -1,4 +1,4 @@
-import { Badge, Button, Card, Checkbox, Group, Stack, Table, Text } from "@mantine/core";
+import { Badge, Button, Card, Checkbox, Group, Table, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconFileImport, IconPlus } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import HeaderCard from "../common/HeaderCard";
@@ -19,6 +19,7 @@ import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore"
 import { useProjectStore } from "../../stores/projectStore";
 import type { PathPattern_Serialize as PathPattern } from "../../generated/bindings";
 import MetadataModal from "./MetadataModal";
+import ImportStepLayout from "./ImportStepLayout";
 
 const DEFAULT_GROUP_ID = "global-defaults";
 
@@ -282,7 +283,28 @@ export default function MetadataGrouping() {
   }
 
   return (
-    <Stack gap="md" data-testid="metadata-grouping">
+    <ImportStepLayout
+      testId="metadata-grouping"
+      navigation={
+        <Group justify="space-between" data-testid="metadata-nav">
+          <Button
+            leftSection={<IconArrowLeft size={16} />}
+            variant="light"
+            onClick={handleBack}
+            data-testid="metadata-back-btn"
+          >
+            Back: Resolve Aliases
+          </Button>
+          <Button
+            rightSection={<IconArrowRight size={16} />}
+            onClick={handleNext}
+            data-testid="metadata-next-btn"
+          >
+            Next: Preview Import
+          </Button>
+        </Group>
+      }
+    >
       <HeaderCard
         icon={IconFileImport}
         title="Metadata Grouping"
@@ -427,36 +449,6 @@ export default function MetadataGrouping() {
         )}
       </Card>
 
-      <Group
-        justify="space-between"
-        pos="sticky"
-        bottom={40}
-        style={{
-          zIndex: 2,
-          paddingTop: "var(--mantine-spacing-md)",
-          paddingBottom: "var(--mantine-spacing-md)",
-          backgroundColor: "var(--mantine-color-body)",
-          boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.06)",
-        }}
-        data-testid="metadata-nav"
-      >
-        <Button
-          leftSection={<IconArrowLeft size={16} />}
-          variant="light"
-          onClick={handleBack}
-          data-testid="metadata-back-btn"
-        >
-          Back: Resolve Aliases
-        </Button>
-        <Button
-          rightSection={<IconArrowRight size={16} />}
-          onClick={handleNext}
-          data-testid="metadata-next-btn"
-        >
-          Next: Preview Import
-        </Button>
-      </Group>
-
       <MetadataModal
         opened={modalMode !== null && defaultGroup !== null}
         title={
@@ -469,6 +461,6 @@ export default function MetadataGrouping() {
         }}
         onSubmit={handleModalSubmit}
       />
-    </Stack>
+    </ImportStepLayout>
   );
 }

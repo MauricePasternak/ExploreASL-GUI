@@ -419,7 +419,7 @@ export function assembleStudyPar(
     // Sub-group subjects by their session set signature
     const sessionSignatureMap = new Map<string, Set<string>>();
     for (const [subject, sessions] of subjectSessions) {
-      const signature = [...sessions].sort().join(",");
+      const signature = JSON.stringify([...sessions].sort());
       const existing = sessionSignatureMap.get(signature);
       if (existing) {
         existing.add(subject);
@@ -430,7 +430,7 @@ export function assembleStudyPar(
 
     // Emit one StudyPars block per session signature
     for (const [signature, subjects] of sessionSignatureMap) {
-      const sessions = signature.split(",");
+      const sessions = JSON.parse(signature) as string[];
       const escapedSubjects = [...subjects].map(escapeRegex);
       const subjectRegEx =
         escapedSubjects.length === 1

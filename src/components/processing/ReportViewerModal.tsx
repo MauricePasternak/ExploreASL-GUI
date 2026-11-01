@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import {
   Alert,
   Box,
@@ -13,7 +14,7 @@ import {
   Title,
 } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { fetchReportImage, fetchSubjectQC, type QcMeasure } from "../../lib/reportViewer";
 import { getQcMeasureLabel } from "../../lib/qcLabels";
@@ -29,23 +30,56 @@ interface ReportViewerModalProps {
 
 interface ImageCardProps {
   title: string;
-  url: string | null;
-  loading: boolean;
-  error: boolean;
+  opened: boolean;
+  projectRoot: string | undefined;
+  subjectSession: string;
+  module: "structural" | "asl" | "m0";
+  run?: string;
+  view: "axial" | "coronal";
   errorLabel: string;
   testIdPrefix: string;
 }
 
-function ImageCard({ title, url, loading, error, errorLabel, testIdPrefix }: ImageCardProps) {
-  const [prevUrl, setPrevUrl] = useState<string | null>(url);
-  const [decodeError, setDecodeError] = useState(false);
+function ImageCard({
+  title,
+  opened,
+  projectRoot,
+  subjectSession,
+  module,
+  run,
+  view,
+  errorLabel,
+  testIdPrefix,
+}: ImageCardProps) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const loading = Boolean(opened && projectRoot && subjectSession && !url && !error);
 
-  if (url !== prevUrl) {
-    setPrevUrl(url);
-    setDecodeError(false);
-  }
+  useEffect(() => {
+    if (!opened || !projectRoot || !subjectSession) return;
 
-  const hasError = error || decodeError;
+    let active = true;
+    let objectUrl: string | null = null;
+
+    const loadImage = async () => {
+      try {
+        const bytes = await fetchReportImage(projectRoot, subjectSession, module, run, view);
+        if (!active) return;
+        objectUrl = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/jpeg" }));
+        setUrl(objectUrl);
+      } catch (err) {
+        console.error(err);
+        if (active) setError(true);
+      }
+    };
+
+    void loadImage();
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [opened, projectRoot, subjectSession, module, run, view]);
 
   return (
     <Box
@@ -72,7 +106,7 @@ function ImageCard({ title, url, loading, error, errorLabel, testIdPrefix }: Ima
         >
           <Loader size="sm" />
         </Box>
-      ) : hasError ? (
+      ) : error ? (
         <Alert
           color="orange"
           m="xs"
@@ -88,7 +122,7 @@ function ImageCard({ title, url, loading, error, errorLabel, testIdPrefix }: Ima
           fit="contain"
           style={{ width: "100%", height: "auto", display: "block" }}
           data-testid={`${testIdPrefix}-image`}
-          onError={() => setDecodeError(true)}
+          onError={() => setError(true)}
         />
       ) : null}
     </Box>
@@ -107,26 +141,6 @@ export default function ReportViewerModal({
   const [prevSubjectSession, setPrevSubjectSession] = useState<string>("");
   const [selectedRun, setSelectedRun] = useState<string>("1");
 
-  const [axialUrl, setAxialUrl] = useState<string | null>(null);
-  const [coronalUrl, setCoronalUrl] = useState<string | null>(null);
-  const [m0AxialUrl, setM0AxialUrl] = useState<string | null>(null);
-  const [m0CoronalUrl, setM0CoronalUrl] = useState<string | null>(null);
-
-  const [axialLoading, setAxialLoading] = useState(false);
-  const [coronalLoading, setCoronalLoading] = useState(false);
-  const [m0AxialLoading, setM0AxialLoading] = useState(false);
-  const [m0CoronalLoading, setM0CoronalLoading] = useState(false);
-
-  const [axialErr, setAxialErr] = useState(false);
-  const [coronalErr, setCoronalErr] = useState(false);
-  const [m0AxialErr, setM0AxialErr] = useState(false);
-  const [m0CoronalErr, setM0CoronalErr] = useState(false);
-
-  const axialUrlRef = useRef<string | null>(null);
-  const coronalUrlRef = useRef<string | null>(null);
-  const m0AxialUrlRef = useRef<string | null>(null);
-  const m0CoronalUrlRef = useRef<string | null>(null);
-
   const [qcMeasures, setQcMeasures] = useState<QcMeasure[]>([]);
   const [qcLoading, setQcLoading] = useState(false);
   const [qcError, setQcError] = useState<string | null>(null);
@@ -139,29 +153,14 @@ export default function ReportViewerModal({
     setSelectedRun(runs && runs.length > 0 ? runs[0] : "1");
   }
 
-  // Reset QC state when parameters change
+  // Reset QC state and remount image cards when report parameters change.
   const [prevQCKey, setPrevQCKey] = useState<string>("");
-  const qcKey = `${opened}-${projectRoot}-${subjectSession}-${module}-${selectedRun}`;
-  if (qcKey !== prevQCKey) {
-    setPrevQCKey(qcKey);
+  const reportKey = JSON.stringify([opened, projectRoot, subjectSession, module, selectedRun]);
+  if (reportKey !== prevQCKey) {
+    setPrevQCKey(reportKey);
     setQcMeasures([]);
     setQcLoading(Boolean(opened && projectRoot && subjectSession));
     setQcError(null);
-  }
-
-  // Reset image URL and error states when parameters change
-  const [prevImageKey, setPrevImageKey] = useState<string>("");
-  const imageKey = `${opened}-${projectRoot}-${subjectSession}-${module}-${selectedRun}`;
-  if (imageKey !== prevImageKey) {
-    setPrevImageKey(imageKey);
-    setAxialUrl(null);
-    setCoronalUrl(null);
-    setM0AxialUrl(null);
-    setM0CoronalUrl(null);
-    setAxialErr(false);
-    setCoronalErr(false);
-    setM0AxialErr(false);
-    setM0CoronalErr(false);
   }
 
   useEffect(() => {
@@ -197,139 +196,6 @@ export default function ReportViewerModal({
     };
   }, [opened, projectRoot, subjectSession, module, selectedRun]);
 
-  const cleanupUrls = () => {
-    if (axialUrlRef.current) {
-      URL.revokeObjectURL(axialUrlRef.current);
-      axialUrlRef.current = null;
-    }
-    if (coronalUrlRef.current) {
-      URL.revokeObjectURL(coronalUrlRef.current);
-      coronalUrlRef.current = null;
-    }
-    if (m0AxialUrlRef.current) {
-      URL.revokeObjectURL(m0AxialUrlRef.current);
-      m0AxialUrlRef.current = null;
-    }
-    if (m0CoronalUrlRef.current) {
-      URL.revokeObjectURL(m0CoronalUrlRef.current);
-      m0CoronalUrlRef.current = null;
-    }
-  };
-
-  const loadImage = useCallback(
-    async (
-      mod: "structural" | "asl" | "m0",
-      view: "axial" | "coronal",
-      runVal: string | undefined,
-      setUrl: (url: string | null) => void,
-      setLoad: (l: boolean) => void,
-      setErr: (e: boolean) => void,
-      urlRef: React.MutableRefObject<string | null>,
-      active: { current: boolean },
-    ) => {
-      if (!projectRoot || !subjectSession) return;
-      setLoad(true);
-      setErr(false);
-      setUrl(null);
-      try {
-        const bytes = await fetchReportImage(projectRoot, subjectSession, mod, runVal, view);
-        if (!active.current) return;
-        const blob = new Blob([bytes as BlobPart], { type: "image/jpeg" });
-        const url = URL.createObjectURL(blob);
-        urlRef.current = url;
-        setUrl(url);
-      } catch (err) {
-        console.error(err);
-        if (!active.current) return;
-        setErr(true);
-      } finally {
-        if (active.current) {
-          setLoad(false);
-        }
-      }
-    },
-    [projectRoot, subjectSession],
-  );
-
-  useEffect(() => {
-    const active = { current: true };
-
-    if (!opened || !projectRoot || !subjectSession) {
-      return;
-    }
-
-    const runParam = module === "asl" ? selectedRun : undefined;
-
-    if (module === "structural") {
-      loadImage(
-        "structural",
-        "axial",
-        undefined,
-        setAxialUrl,
-        setAxialLoading,
-        setAxialErr,
-        axialUrlRef,
-        active,
-      );
-      loadImage(
-        "structural",
-        "coronal",
-        undefined,
-        setCoronalUrl,
-        setCoronalLoading,
-        setCoronalErr,
-        coronalUrlRef,
-        active,
-      );
-    } else {
-      loadImage(
-        "asl",
-        "axial",
-        runParam,
-        setAxialUrl,
-        setAxialLoading,
-        setAxialErr,
-        axialUrlRef,
-        active,
-      );
-      loadImage(
-        "asl",
-        "coronal",
-        runParam,
-        setCoronalUrl,
-        setCoronalLoading,
-        setCoronalErr,
-        coronalUrlRef,
-        active,
-      );
-      loadImage(
-        "m0",
-        "axial",
-        runParam,
-        setM0AxialUrl,
-        setM0AxialLoading,
-        setM0AxialErr,
-        m0AxialUrlRef,
-        active,
-      );
-      loadImage(
-        "m0",
-        "coronal",
-        runParam,
-        setM0CoronalUrl,
-        setM0CoronalLoading,
-        setM0CoronalErr,
-        m0CoronalUrlRef,
-        active,
-      );
-    }
-
-    return () => {
-      active.current = false;
-      cleanupUrls();
-    };
-  }, [opened, projectRoot, subjectSession, module, selectedRun, loadImage]);
-
   // Parse subject and session labels
   const [sub, ses] = subjectSession ? subjectSession.split("_") : ["", ""];
   const subjectLabel = sub.startsWith("sub-") ? sub.slice(4) : sub;
@@ -338,6 +204,12 @@ export default function ReportViewerModal({
   const showRunSelect = module === "asl" && runs.length > 1;
 
   const modalTitle = `${module === "structural" ? "Structural" : "ASL"} QC Report — sub-${subjectLabel} / ses-${sessionLabel}`;
+  const imageProps = {
+    opened,
+    projectRoot,
+    subjectSession,
+    run: module === "asl" ? selectedRun : undefined,
+  };
 
   return (
     <Modal
@@ -346,6 +218,7 @@ export default function ReportViewerModal({
       title={<Text fw={600}>{modalTitle}</Text>}
       size="85%"
       data-testid="report-viewer-modal"
+      attributes={{ close: { "data-testid": "report-viewer-modal-close" } }}
     >
       <Stack gap="lg">
         {showRunSelect && (
@@ -358,13 +231,13 @@ export default function ReportViewerModal({
               value={selectedRun}
               onChange={(val) => setSelectedRun(val || "1")}
               style={{ width: 120 }}
-              data-testid="report-run-select"
+              {...comboboxTestIds("report-run-select")}
             />
           </Group>
         )}
 
         {module === "structural" ? (
-          <Stack gap="md" data-testid="structural-report-section">
+          <Stack key={reportKey} gap="md" data-testid="structural-report-section">
             <Stack gap="xs">
               <Title order={4} data-testid="report-heading" style={{ lineHeight: 1.3 }}>
                 {`Registration to standard space and white matter segmentation for Subject ${subjectLabel} Session ${sessionLabel}`}
@@ -378,25 +251,25 @@ export default function ReportViewerModal({
 
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" style={{ marginTop: 10 }}>
               <ImageCard
+                {...imageProps}
                 title="Axial View (Transversal)"
-                url={axialUrl}
-                loading={axialLoading}
-                error={axialErr}
+                module="structural"
+                view="axial"
                 errorLabel="Structural axial registration image not found."
                 testIdPrefix="axial"
               />
               <ImageCard
+                {...imageProps}
                 title="Coronal View"
-                url={coronalUrl}
-                loading={coronalLoading}
-                error={coronalErr}
+                module="structural"
+                view="coronal"
                 errorLabel="Structural coronal registration image not found."
                 testIdPrefix="coronal"
               />
             </SimpleGrid>
           </Stack>
         ) : (
-          <Stack gap="xl" data-testid="asl-report-section">
+          <Stack key={reportKey} gap="xl" data-testid="asl-report-section">
             {/* 1. ASL-Structural Registration */}
             <Stack gap="md" data-testid="asl-struct-section">
               <Stack gap="xs">
@@ -412,18 +285,18 @@ export default function ReportViewerModal({
               </Stack>
               <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
                 <ImageCard
+                  {...imageProps}
                   title="ASL-Structural Registration (Axial View)"
-                  url={axialUrl}
-                  loading={axialLoading}
-                  error={axialErr}
+                  module="asl"
+                  view="axial"
                   errorLabel="ASL-Structural axial registration image not found."
                   testIdPrefix="asl-axial"
                 />
                 <ImageCard
+                  {...imageProps}
                   title="ASL-Structural Registration (Coronal View)"
-                  url={coronalUrl}
-                  loading={coronalLoading}
-                  error={coronalErr}
+                  module="asl"
+                  view="coronal"
                   errorLabel="ASL-Structural coronal registration image not found."
                   testIdPrefix="asl-coronal"
                 />
@@ -445,18 +318,18 @@ export default function ReportViewerModal({
               </Stack>
               <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
                 <ImageCard
+                  {...imageProps}
                   title="M0-ASL Registration (Axial View)"
-                  url={m0AxialUrl}
-                  loading={m0AxialLoading}
-                  error={m0AxialErr}
+                  module="m0"
+                  view="axial"
                   errorLabel="M0-ASL axial registration image not found."
                   testIdPrefix="m0-axial"
                 />
                 <ImageCard
+                  {...imageProps}
                   title="M0-ASL Registration (Coronal View)"
-                  url={m0CoronalUrl}
-                  loading={m0CoronalLoading}
-                  error={m0CoronalErr}
+                  module="m0"
+                  view="coronal"
                   errorLabel="M0-ASL coronal registration image not found."
                   testIdPrefix="m0-coronal"
                 />

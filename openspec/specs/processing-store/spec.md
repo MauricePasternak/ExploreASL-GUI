@@ -193,7 +193,7 @@ The store SHALL provide `availableSubjects` populated by calling `list_subjects`
 
 ### Requirement: Per-Subject Progress Tracking
 
-The store SHALL maintain `subjectStatuses` as an array of `SubjectModuleStatus` objects. Each entry SHALL track: `subjectSession`, `module` (structural/asl/population), optional `run` (for ASL), `status` (pending/incomplete/complete), `completedSteps` (array of step code strings), and `locked` (boolean). The `locked` field is a separate attribute from `status` — when `locked` is true and `status` is not `complete`, the subject is being processed. Active progress SHALL be projected from native target snapshots. Native watcher observations SHALL inform progress only; they SHALL NOT establish successful run completion. Idle historical status reads SHALL remain presentation-only.
+The store SHALL maintain `subjectStatuses` as an array of `SubjectModuleStatus` objects. Each entry SHALL track: `subjectSession`, `module` (structural/asl/population), optional `run` (for ASL), `status` (pending/incomplete/complete/outdated), `completedSteps` (array of step code strings), and `locked` (boolean). The `locked` field is a separate attribute from `status` — when `locked` is true and `status` is not `complete`, the subject is being processed. Active progress SHALL be projected from native target snapshots. Native watcher observations SHALL inform progress only; they SHALL NOT establish successful run completion. Idle historical status reads SHALL remain presentation-only.
 
 #### Scenario: LockCreated event received
 

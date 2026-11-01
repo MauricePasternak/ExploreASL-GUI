@@ -607,7 +607,9 @@ export default function BIDSReviewPanel() {
             defaultValue={paramsExpanded ? ["params", "subjects"] : []}
           >
             <Accordion.Item value="params">
-              <Accordion.Control>Parameters</Accordion.Control>
+              <Accordion.Control data-testid="bids-review-parameters-toggle">
+                Parameters
+              </Accordion.Control>
               <Accordion.Panel>
                 <Table striped>
                   <Table.Tbody>
@@ -627,7 +629,9 @@ export default function BIDSReviewPanel() {
             </Accordion.Item>
 
             <Accordion.Item value="subjects">
-              <Accordion.Control>Subjects ({subjectCount})</Accordion.Control>
+              <Accordion.Control data-testid="bids-review-subjects-toggle">
+                Subjects ({subjectCount})
+              </Accordion.Control>
               <Accordion.Panel>
                 <Stack gap={4}>
                   {sortedSubjects.map((subj) => (

@@ -1,5 +1,5 @@
 import { TestMantineProvider as MantineProvider } from "../../test/render";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as reportViewer from "../../lib/reportViewer";
 import ReportViewerModal from "./ReportViewerModal";
@@ -12,7 +12,8 @@ vi.mock("../../lib/reportViewer", () => ({
 }));
 
 describe("ReportViewerModal", () => {
-  const mockCreateObjectURL = vi.fn((_blob: Blob) => "blob:test-url");
+  let nextUrl = 0;
+  const mockCreateObjectURL = vi.fn((_blob: Blob) => `blob:test-url-${nextUrl++}`);
   const mockRevokeObjectURL = vi.fn();
 
   beforeAll(() => {
@@ -23,6 +24,7 @@ describe("ReportViewerModal", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    nextUrl = 0;
     vi.spyOn(reportViewer, "fetchSubjectQC").mockResolvedValue([]);
   });
 
@@ -31,11 +33,7 @@ describe("ReportViewerModal", () => {
   });
 
   const renderModal = (props: any) => {
-    return render(
-      <MantineProvider env="test">
-        <ReportViewerModal {...props} />
-      </MantineProvider>,
-    );
+    return render(<ReportViewerModal {...props} />, { wrapper: MantineProvider });
   };
 
   it("does not render when closed", () => {
@@ -48,7 +46,25 @@ describe("ReportViewerModal", () => {
     });
 
     expect(screen.queryByTestId("report-heading")).not.toBeInTheDocument();
+    expect(reportViewer.fetchReportImage).not.toHaveBeenCalled();
   });
+
+  it.each([{ projectRoot: undefined }, { subjectSession: "" }])(
+    "does not fetch images with missing report inputs: %j",
+    async (missingInput) => {
+      renderModal({
+        opened: true,
+        onClose: vi.fn(),
+        projectRoot: "/mock-project",
+        subjectSession: "sub-001Philips_01",
+        module: "structural",
+        ...missingInput,
+      });
+
+      expect(reportViewer.fetchReportImage).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("axial-loading")).not.toBeInTheDocument();
+    },
+  );
 
   it("renders structural report correctly", async () => {
     const fetchSpy = vi
@@ -170,6 +186,10 @@ describe("ReportViewerModal", () => {
       "coronal",
     );
 
+    const previousUrls = mockCreateObjectURL.mock.results.map(({ value }) => value);
+    fireEvent.error(screen.getByTestId("asl-axial-image"));
+    expect(screen.getByTestId("asl-axial-error")).toBeInTheDocument();
+
     // Click on the select input to open the dropdown
     fireEvent.click(select);
 
@@ -179,7 +199,10 @@ describe("ReportViewerModal", () => {
 
     // Expect cleanup of previous blob URLs and new fetches for Run 2
     await waitFor(() => {
-      expect(mockRevokeObjectURL).toHaveBeenCalled();
+      for (const prefix of ["asl-axial", "asl-coronal", "m0-axial", "m0-coronal"]) {
+        expect(screen.getByTestId(`${prefix}-image`)).toBeInTheDocument();
+        expect(screen.queryByTestId(`${prefix}-error`)).not.toBeInTheDocument();
+      }
       expect(fetchSpy).toHaveBeenCalledWith(
         "/mock-project",
         "sub-001Philips_01",
@@ -188,6 +211,83 @@ describe("ReportViewerModal", () => {
         "axial",
       );
     });
+    expect(mockCreateObjectURL).toHaveBeenCalledTimes(8);
+    expect(mockRevokeObjectURL.mock.calls).toEqual(previousUrls.map((url) => [url]));
+  });
+
+  it.each([
+    { change: "project", changedProps: { projectRoot: "/other-project" } },
+    { change: "subject/session", changedProps: { subjectSession: "sub-002Philips_02" } },
+    { change: "module", changedProps: { module: "structural" as const } },
+    { change: "run", changedProps: { runs: ["2"] } },
+    { change: "close", changedProps: { opened: false } },
+    { change: "unmount", changedProps: null },
+  ])("cleans up URLs and ignores stale results after $change", async ({ changedProps }) => {
+    const pending: {
+      resolve: (bytes: Uint8Array) => void;
+      reject: (error: Error) => void;
+    }[] = [];
+    vi.spyOn(reportViewer, "fetchReportImage").mockImplementation(
+      () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    );
+    const props = {
+      opened: true,
+      onClose: vi.fn(),
+      projectRoot: "/mock-project",
+      subjectSession: "sub-001Philips_01",
+      module: "asl" as const,
+      runs: ["1", "2"],
+    };
+    const { rerender, unmount } = renderModal(props);
+    expect(pending).toHaveLength(4);
+
+    // One image has a URL; three requests remain in flight when the report changes.
+    await act(async () => pending[0].resolve(new Uint8Array([1])));
+    expect(screen.getByTestId("asl-axial-image")).toBeInTheDocument();
+    const firstUrl = mockCreateObjectURL.mock.results[0].value;
+
+    if (changedProps) {
+      rerender(<ReportViewerModal {...props} {...changedProps} />);
+    } else {
+      unmount();
+    }
+    const replacementImages =
+      !changedProps || changedProps.opened === false
+        ? 0
+        : changedProps.module === "structural"
+          ? 2
+          : 4;
+    expect(pending).toHaveLength(4 + replacementImages);
+    expect(mockRevokeObjectURL.mock.calls).toEqual([[firstUrl]]);
+
+    await act(async () => {
+      pending[1].resolve(new Uint8Array([2]));
+      pending[2].reject(new Error("Stale image failure"));
+      pending[3].resolve(new Uint8Array([3]));
+    });
+    expect(mockCreateObjectURL).toHaveBeenCalledTimes(1);
+    for (const prefix of [
+      "axial",
+      "coronal",
+      "asl-axial",
+      "asl-coronal",
+      "m0-axial",
+      "m0-coronal",
+    ]) {
+      expect(screen.queryByTestId(`${prefix}-image`)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(`${prefix}-error`)).not.toBeInTheDocument();
+    }
+
+    // Only the replacement report may create URLs, and each URL must be revoked once.
+    await act(async () => {
+      pending.slice(4).forEach(({ resolve }) => resolve(new Uint8Array([4])));
+    });
+    expect(mockCreateObjectURL).toHaveBeenCalledTimes(1 + replacementImages);
+    expect(screen.queryAllByRole("img")).toHaveLength(replacementImages);
+    unmount();
+    expect(mockRevokeObjectURL.mock.calls).toEqual(
+      mockCreateObjectURL.mock.results.map(({ value }) => [value]),
+    );
   });
 
   it("handles partial fetch failures robustly (e.g. M0 missing but ASL succeeds)", async () => {

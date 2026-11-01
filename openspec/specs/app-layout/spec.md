@@ -27,7 +27,7 @@ The Layout component SHALL mount the processing status bar in the active project
 
 ### Requirement: DataPar Page Warning Banner
 
-The data parameters route (`/project/:id/parameters`) SHALL display a warning banner when processing is active (`processingPhase` is `running`). The banner SHALL read: "Processing is running. Changes will take effect on next run." The dataPar editor SHALL NOT be locked — edits persist to `.easl` immediately but `dataPar.json` is only written at launch time.
+The data parameters route (`/project/:id/parameters`) SHALL display a warning banner when `processingPhase` is `preparing`, `running`, `finalizing`, or `cancelling`. The banner SHALL read: "Processing is running. Changes will take effect on next run." The dataPar editor SHALL NOT be locked — accepted edits use shared project autosave, while `dataPar.json` is only written at launch time.
 
 #### Scenario: Warning banner appears during processing
 

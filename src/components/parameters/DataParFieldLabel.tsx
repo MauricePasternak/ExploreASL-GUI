@@ -53,6 +53,7 @@ export function DataParFieldLabel({ fieldKey, label, htmlFor }: DataParFieldLabe
       <FieldInfoIcon
         tooltipLabel={meta.description}
         aria-label={`Info for ${meta.label}`}
+        data-testid={`field-${fieldKey}-info`}
         onClick={(e) => {
           // Prevent clicking the tooltip info icon from toggling the checkbox/switch or focusing text input
           e.preventDefault();

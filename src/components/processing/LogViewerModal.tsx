@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import { useRef, useEffect, useState, useMemo } from "react";
 import { Alert, Badge, Box, Loader, Modal, Select, Stack } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
@@ -157,6 +158,7 @@ export default function LogViewerModal({
       title={modalTitle}
       size="85%"
       data-testid="log-viewer-modal"
+      attributes={{ close: { "data-testid": "log-viewer-modal-close" } }}
     >
       <Stack gap="sm">
         {error && (
@@ -196,7 +198,7 @@ export default function LogViewerModal({
                     </span>
                   );
                 }}
-                data-testid="log-run-select"
+                {...comboboxTestIds("log-run-select")}
               />
             )}
             <Box

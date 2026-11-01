@@ -290,7 +290,7 @@ export default function ExecutionDashboard() {
       <Accordion multiple defaultValue={enabledModules} variant="separated">
         {enabledModules.map((module) => (
           <Accordion.Item key={module} value={module}>
-            <Accordion.Control>
+            <Accordion.Control data-testid={`execution-module-${module}-toggle`}>
               <ModuleHeader module={module} subjects={selectedSubjects} statusIndex={statusIndex} />
             </Accordion.Control>
             <Accordion.Panel>

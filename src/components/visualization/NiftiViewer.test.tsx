@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { Niivue } from "@niivue/niivue";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,26 +11,26 @@ import {
   resetProjectLifecycleForTests,
 } from "../../lib/projectLifecycle";
 
-vi.mock("@niivue/niivue", () => {
-  class MockNiivue {
+vi.mock("@niivue/niivue", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@niivue/niivue")>();
+  // Retain real viewer options; the windowing regression restores real volume loading.
+  class MockNiivue extends actual.Niivue {
     attachToCanvas = vi.fn();
     setRadiologicalConvention = vi.fn();
     setSliceType = vi.fn();
     setMultiplanarLayout = vi.fn();
     setColormap = vi.fn();
     loadVolumes() {
-      return Promise.resolve();
+      return Promise.resolve(this);
     }
     updateGLVolume = vi.fn();
     removeVolumeByIndex = vi.fn();
     drawScene = vi.fn();
-    volumes: unknown[] = [];
-    opts = { backColor: [0, 0, 0, 1], multiplanarShowRender: 2 };
-    sliceTypeMultiplanar = 4;
+    closePAQD = vi.fn();
+    setVolume = vi.fn();
     cleanup = vi.fn();
-    constructor() {}
   }
-  return { Niivue: MockNiivue, MULTIPLANAR_TYPE: { GRID: 2 }, SHOW_RENDER: { ALWAYS: 1 } };
+  return { ...actual, Niivue: MockNiivue };
 });
 
 const originalGetContext = HTMLCanvasElement.prototype.getContext;
@@ -54,6 +55,8 @@ describe("NiftiViewer", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     resetProjectLifecycleForTests();
     HTMLCanvasElement.prototype.getContext = originalGetContext;
   });
@@ -84,12 +87,26 @@ describe("NiftiViewer", () => {
     expect(screen.getByTestId("niivue-canvas")).toBeInTheDocument();
   });
 
-  it("renders subject/session/run header when point is selected", () => {
+  it("loads qCBF with automatic windowing and renders subject/session/run header", async () => {
     HTMLCanvasElement.prototype.getContext = vi.fn((type: string) => {
       if (type === "webgl2") return {} as WebGL2RenderingContext;
       return originalGetContext.call(document.createElement("canvas"), type);
     }) as typeof originalGetContext;
 
+    const actual = await vi.importActual<typeof import("@niivue/niivue")>("@niivue/niivue");
+    const voxels = Float32Array.from({ length: 8 ** 3 }, (_, i) => 20 + (i % 21));
+    const bytes = actual.NVImage.createNiftiArray([8, 8, 8], [1, 1, 1], undefined, 16, voxels);
+    const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    header.setFloat32(112, 2, true); // scl_slope
+    header.setFloat32(116, 10, true); // scl_inter
+    header.setFloat32(124, 1738, true); // stale cal_max
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array(bytes).buffer)),
+    );
+    const loadVolumesMock = vi
+      .spyOn(Niivue.prototype, "loadVolumes")
+      .mockImplementation(actual.Niivue.prototype.loadVolumes);
     useVisualizationStore.setState({
       selectedPointId: "sub-01_run-01",
       chartData: [
@@ -111,6 +128,24 @@ describe("NiftiViewer", () => {
     expect(screen.getByTestId("nifti-viewer-header")).toHaveTextContent(
       "Subject: Subject01 | Session: 02 | Run: 01",
     );
+    await waitFor(() =>
+      expect(loadVolumesMock).toHaveBeenCalledWith([
+        expect.objectContaining({
+          url: "niivue://localhost/qCBF/sub-01/01.nii.gz",
+          name: "qCBF_sub-01_01.nii.gz",
+        }),
+      ]),
+    );
+    await waitFor(() => expect(useVisualizationStore.getState().viewerState.status).toBe("loaded"));
+    const volume = (loadVolumesMock.mock.contexts[0] as Niivue).volumes[0];
+    expect(volume.cal_min).toBeGreaterThanOrEqual(50);
+    expect(volume.cal_max).toBeLessThanOrEqual(90);
+    expect(volume.cal_max! - volume.cal_min!).toBeGreaterThan(20);
+    expect(volume.img).toEqual(voxels);
+    expect(volume.hdr!.scl_slope).toBe(2);
+    expect(volume.hdr!.scl_inter).toBe(10);
+    expect(volume.hdr!.cal_max).toBe(1738);
+    loadVolumesMock.mockRestore();
   });
 
   it("renders error overlay when loading fails", async () => {

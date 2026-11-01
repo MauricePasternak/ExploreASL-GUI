@@ -13,6 +13,7 @@ import { projectFixture } from "../../test/projectFixtures";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
 import JoinConfig from "./JoinConfig";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 
 // Mock NiiVue since child components (like JoinDiagram / SanityChecks) are loaded
 vi.mock("@niivue/niivue", () => ({
@@ -110,6 +111,27 @@ describe("JoinConfig", () => {
     // Verify the columns from external data are available in the dropdown
     const select = screen.getByPlaceholderText("column from external data");
     expect(select).toBeInTheDocument();
+  });
+
+  it("manual external path uses native inspection without opening a chooser", async () => {
+    vi.mocked(open).mockClear();
+    mockInvoke.mockRejectedValue(new Error("Unreadable external file"));
+    renderComponent();
+    fireEvent.click(screen.getByTestId("external-data-path"));
+    fireEvent.change(screen.getByTestId("external-data-path-input"), {
+      target: { value: "/study/covariates.xlsx" },
+    });
+    fireEvent.click(screen.getByTestId("external-data-path-confirm"));
+    expect(
+      await screen.findByText(/Failed to inspect external file: Unreadable external file/),
+    ).toBeInTheDocument();
+    expect(mockInvoke).toHaveBeenCalledWith("inspect_external_data", {
+      absolutePath: "/study/covariates.xlsx",
+      sheetName: null,
+      delimiter: "auto",
+    });
+    expect(open).not.toHaveBeenCalled();
+    expect(acceptedVisualizationSettings().joinConfig).toBeNull();
   });
 
   it("warns without mutation when replacement hash differs", async () => {

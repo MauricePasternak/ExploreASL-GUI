@@ -22,7 +22,7 @@ A project SHALL declare its data source at creation via `projectMeta.dataSource:
 
 #### Scenario: BIDS project creates with explicit choice
 
-- **WHEN** user selects a BIDS-direct folder and confirms "Skip Import" at the landing detection dialog
+- **WHEN** user selects a BIDS-direct folder, chooses "Use existing BIDS images", and selects "Create project" at the landing detection dialog
 - **THEN** `createProject()` sets `projectMeta.dataSource = "bids"`, `currentPhase = "import"`
 
 #### Scenario: Both paths land on Import phase

@@ -5,6 +5,7 @@ import {
   formatNumberOrArray,
   parseCommaSeparatedNumbers,
   parseNumberOrArray,
+  type ParseResult,
 } from "../lib/commaNumbers";
 
 function valueKey(v: unknown): string {
@@ -22,76 +23,8 @@ export interface CommaNumberInputProps {
   testId?: string;
 }
 
-export function CommaNumberInput({
-  label,
-  description,
-  placeholder,
-  value,
-  onChange,
-  error,
-  testId,
-}: CommaNumberInputProps) {
-  const [localText, setLocalText] = useState(() => {
-    if (typeof value === "string") return value;
-    return formatNumberOrArray(value);
-  });
-  const [isFocused, setIsFocused] = useState(false);
-  const [prevValueKey, setPrevValueKey] = useState(() => valueKey(value));
-
-  const currentKey = valueKey(value);
-  if (currentKey !== prevValueKey) {
-    setPrevValueKey(currentKey);
-    if (!isFocused) {
-      const currentTextFormatted = typeof value === "string" ? value : formatNumberOrArray(value);
-      const parsedLocal = parseNumberOrArray(localText);
-      const parsedValue =
-        typeof value === "string" ? parseNumberOrArray(value) : { ok: true, value };
-      const localValStr = parsedLocal.ok ? valueKey(parsedLocal.value) : "invalid";
-      const valueValStr = parsedValue.ok ? valueKey(parsedValue.value) : "invalid";
-      if (localValStr !== valueValStr) {
-        setLocalText(currentTextFormatted);
-      }
-    }
-  }
-
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const text = event.currentTarget.value;
-    setLocalText(text);
-
-    if (text.trim() === "") {
-      onChange(undefined);
-      return;
-    }
-
-    const result = parseNumberOrArray(text);
-    if (result.ok) {
-      onChange(result.value);
-    } else {
-      onChange(text); // Pass raw invalid string to trigger schema validation error
-    }
-  };
-
-  const handleFocus = () => {
-    setIsFocused(true);
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-  };
-
-  return (
-    <TextInput
-      label={label}
-      description={description}
-      placeholder={placeholder}
-      value={localText}
-      onChange={handleChange}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      error={error}
-      data-testid={testId}
-    />
-  );
+export function CommaNumberInput(props: CommaNumberInputProps) {
+  return <CommaInput {...props} parse={parseNumberOrArray} format={formatNumberOrArray} />;
 }
 
 export interface CommaArrayInputProps {
@@ -104,18 +37,26 @@ export interface CommaArrayInputProps {
   testId?: string;
 }
 
-export function CommaArrayInput({
-  label,
-  description,
-  placeholder,
+export function CommaArrayInput(props: CommaArrayInputProps) {
+  return <CommaInput {...props} parse={parseCommaSeparatedNumbers} format={formatNumberArray} />;
+}
+
+function CommaInput<T extends number | number[]>({
   value,
   onChange,
-  error,
   testId,
-}: CommaArrayInputProps) {
+  parse,
+  format,
+  ...props
+}: Omit<CommaNumberInputProps, "value" | "onChange"> & {
+  value: T | string | undefined;
+  onChange: (value: T | string | undefined) => void;
+  parse: (text: string) => ParseResult<T | undefined>;
+  format: (value: T | undefined) => string;
+}) {
   const [localText, setLocalText] = useState(() => {
     if (typeof value === "string") return value;
-    return formatNumberArray(value);
+    return format(value);
   });
   const [isFocused, setIsFocused] = useState(false);
   const [prevValueKey, setPrevValueKey] = useState(() => valueKey(value));
@@ -124,10 +65,9 @@ export function CommaArrayInput({
   if (currentKey !== prevValueKey) {
     setPrevValueKey(currentKey);
     if (!isFocused) {
-      const currentTextFormatted = typeof value === "string" ? value : formatNumberArray(value);
-      const parsedLocal = parseCommaSeparatedNumbers(localText);
-      const parsedValue =
-        typeof value === "string" ? parseCommaSeparatedNumbers(value) : { ok: true, value };
+      const currentTextFormatted = typeof value === "string" ? value : format(value);
+      const parsedLocal = parse(localText);
+      const parsedValue = typeof value === "string" ? parse(value) : { ok: true, value };
       const localValStr = parsedLocal.ok ? valueKey(parsedLocal.value) : "invalid";
       const valueValStr = parsedValue.ok ? valueKey(parsedValue.value) : "invalid";
       if (localValStr !== valueValStr) {
@@ -140,37 +80,17 @@ export function CommaArrayInput({
     const text = event.currentTarget.value;
     setLocalText(text);
 
-    if (text.trim() === "") {
-      onChange(undefined);
-      return;
-    }
-
-    const result = parseCommaSeparatedNumbers(text);
-    if (result.ok) {
-      onChange(result.value);
-    } else {
-      onChange(text); // Pass raw invalid string to trigger schema validation error
-    }
-  };
-
-  const handleFocus = () => {
-    setIsFocused(true);
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
+    const result = parse(text);
+    onChange(result.ok ? result.value : text); // Keep invalid drafts for schema validation.
   };
 
   return (
     <TextInput
-      label={label}
-      description={description}
-      placeholder={placeholder}
+      {...props}
       value={localText}
       onChange={handleChange}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      error={error}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
       data-testid={testId}
     />
   );

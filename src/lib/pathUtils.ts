@@ -15,35 +15,6 @@ export function getRelativePath(fullPath: string, rootPath: string): string {
 }
 
 /**
- * Classify a set of values at a given path depth as "fixed" (all identical)
- * or "varying" (multiple unique values).
- */
-export function classifySegment(values: string[]): "fixed" | "varying" {
-  if (values.length === 0) return "fixed";
-  const unique = new Set(values);
-  return unique.size === 1 ? "fixed" : "varying";
-}
-
-/**
- * Generate a human-readable label for a segment based on its values.
- * - If fixed: returns the literal value (e.g., "DICOM")
- * - If varying: tries to classify (e.g., "SUBJECT", "NUMBER", "VARYING")
- */
-export function labelSegment(values: string[]): string {
-  const unique = [...new Set(values)];
-  if (unique.length === 1) {
-    return unique[0];
-  }
-
-  // Check if all values are numeric
-  if (unique.every((v) => /^\d+$/.test(v))) {
-    return "NUMBER";
-  }
-
-  return "VARYING";
-}
-
-/**
  * Compute a human-readable pattern signature from path blocks and their
  * unique values across all matching paths.
  *
@@ -250,42 +221,4 @@ export function splitBySubDelimiters(
   subBlocks.push(current);
 
   return { subBlocks, delimiters };
-}
-
-/**
- * Count unique values at each sub-block position within a folder level
- * across all paths matching a pattern.
- *
- * @param paths - All relative paths matching a pattern
- * @param blockIndex - Which folder depth level to analyze
- * @returns Map of sub-block index → unique values
- */
-export function analyzeSubBlocks(
-  paths: string[],
-  blockIndex: number,
-  delimitersToSplitOn: string[] = ["_"],
-): Record<number, string[]> {
-  const result: Record<number, string[]> = {};
-
-  const allSubBlocks = paths
-    .map((p) => {
-      const segments = p.split("/").filter(Boolean);
-      if (blockIndex >= segments.length) return null;
-      return splitBySubDelimiters(segments[blockIndex], delimitersToSplitOn);
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
-
-  if (allSubBlocks.length === 0) return result;
-
-  // Find the maximum number of sub-blocks at this level
-  const maxSubBlocks = Math.max(...allSubBlocks.map((s) => s.subBlocks.length));
-
-  for (let i = 0; i < maxSubBlocks; i++) {
-    const values = allSubBlocks
-      .map((s) => s.subBlocks[i])
-      .filter((v): v is string => v !== undefined);
-    result[i] = [...new Set(values)].sort();
-  }
-
-  return result;
 }

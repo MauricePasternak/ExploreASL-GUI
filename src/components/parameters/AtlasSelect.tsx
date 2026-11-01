@@ -1,4 +1,6 @@
-import { MultiSelect, Select, NumberInput, Group, Text, Stack } from "@mantine/core";
+import { MultiSelect, Select, NumberInput, Group, Text, Stack, Pill } from "@mantine/core";
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import { numberInputTestIds } from "../common/numberInputTestIds";
 
 import {
   ATLAS_OPTIONS,
@@ -91,7 +93,17 @@ export function AtlasSelect({
         onChange={handleChange}
         placeholder="Select atlases"
         searchable
-        data-testid="field-Atlases"
+        renderPill={({ option, onRemove, disabled }) => (
+          <Pill
+            withRemoveButton={!option.disabled}
+            onRemove={onRemove}
+            disabled={disabled}
+            attributes={{ remove: { "data-testid": `field-Atlases-remove-${option.value}` } }}
+          >
+            {option.label}
+          </Pill>
+        )}
+        {...comboboxTestIds("field-Atlases")}
       />
       {atlases.map((atlas, idx) => (
         <Group key={atlas} gap="xs" align="center" wrap="nowrap">
@@ -111,11 +123,12 @@ export function AtlasSelect({
               placeholder="Tissue masking"
               size="xs"
               w={120}
-              data-testid={`field-TissueMasking-${atlas}`}
+              {...comboboxTestIds(`field-TissueMasking-${atlas}`)}
             />
             <FieldInfoIcon
               tooltipLabel={FIELD_METADATA.TissueMasking.description}
               aria-label={`Info for Tissue Masking (${atlas})`}
+              data-testid={`field-TissueMasking-${atlas}-info`}
             />
           </Group>
           <Group gap={4} align="center" wrap="nowrap">
@@ -127,11 +140,12 @@ export function AtlasSelect({
               max={1}
               size="xs"
               w={100}
-              data-testid={`field-TissueThreshold-${atlas}`}
+              {...numberInputTestIds(`field-TissueThreshold-${atlas}`)}
             />
             <FieldInfoIcon
               tooltipLabel={FIELD_METADATA.TissueThreshold.description}
               aria-label={`Info for Tissue Threshold (${atlas})`}
+              data-testid={`field-TissueThreshold-${atlas}-info`}
             />
           </Group>
         </Group>

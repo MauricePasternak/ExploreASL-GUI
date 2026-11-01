@@ -260,6 +260,7 @@ export default function OverviewPage() {
             <Text
               component="a"
               href="https://exploreasl.github.io/Documentation/latest/Tutorials-Install/"
+              data-testid="overview-install-tutorial-link"
               target="_blank"
               rel="noopener noreferrer"
               c="blue"
@@ -274,6 +275,7 @@ export default function OverviewPage() {
         <Accordion variant="separated" data-testid="prerequisites-accordion">
           <Accordion.Item value="matlab">
             <Accordion.Control
+              data-testid="overview-matlab-toggle"
               icon={<IconSettings size={16} color="var(--mantine-color-blue-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -293,6 +295,7 @@ export default function OverviewPage() {
                     <Text
                       component="a"
                       href="https://www.mathworks.com/downloads/"
+                      data-testid="overview-matlab-download-link"
                       target="_blank"
                       rel="noopener noreferrer"
                       c="blue"
@@ -339,6 +342,7 @@ export default function OverviewPage() {
 
           <Accordion.Item value="exploreasl-download">
             <Accordion.Control
+              data-testid="overview-exploreasl-download-toggle"
               icon={<IconFolder size={16} color="var(--mantine-color-blue-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -362,6 +366,7 @@ export default function OverviewPage() {
                     <Text
                       component="a"
                       href="https://github.com/ExploreASL/ExploreASL"
+                      data-testid="overview-exploreasl-repository-link"
                       target="_blank"
                       rel="noopener noreferrer"
                       c="blue"
@@ -448,6 +453,7 @@ export default function OverviewPage() {
 
           <Accordion.Item value="exploreasl-configure">
             <Accordion.Control
+              data-testid="overview-exploreasl-configure-toggle"
               icon={<IconRoute size={16} color="var(--mantine-color-blue-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -540,6 +546,7 @@ export default function OverviewPage() {
         <Accordion variant="separated" data-testid="project-management-accordion">
           <Accordion.Item value="what-is-project">
             <Accordion.Control
+              data-testid="overview-what-is-project-toggle"
               icon={<IconFolder size={16} color="var(--mantine-color-teal-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -637,6 +644,7 @@ export default function OverviewPage() {
 
           <Accordion.Item value="create-project">
             <Accordion.Control
+              data-testid="overview-create-project-toggle"
               icon={<IconPlus size={16} color="var(--mantine-color-teal-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -662,6 +670,7 @@ export default function OverviewPage() {
 
           <Accordion.Item value="open-project">
             <Accordion.Control
+              data-testid="overview-open-project-toggle"
               icon={<IconFolderOpen size={16} color="var(--mantine-color-teal-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -714,6 +723,7 @@ export default function OverviewPage() {
             <Text
               component="a"
               href="https://pubmed.ncbi.nlm.nih.gov/32526385/"
+              data-testid="overview-exploreasl-pubmed-link"
               target="_blank"
               rel="noopener noreferrer"
               c="blue"
@@ -727,6 +737,7 @@ export default function OverviewPage() {
             <Text
               component="a"
               href="https://doi.org/10.1016/j.neuroimage.2020.117031"
+              data-testid="overview-exploreasl-doi-link"
               target="_blank"
               rel="noopener noreferrer"
               c="blue"
@@ -783,6 +794,7 @@ export default function OverviewPage() {
         <Accordion variant="separated" data-testid="troubleshooting-accordion">
           <Accordion.Item value="shortcuts">
             <Accordion.Control
+              data-testid="overview-shortcuts-toggle"
               icon={<IconCopy size={16} color="var(--mantine-color-orange-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -818,6 +830,7 @@ export default function OverviewPage() {
 
           <Accordion.Item value="logs">
             <Accordion.Control
+              data-testid="overview-logs-toggle"
               icon={<IconFileText size={16} color="var(--mantine-color-orange-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -869,6 +882,7 @@ export default function OverviewPage() {
 
           <Accordion.Item value="error-boundary">
             <Accordion.Control
+              data-testid="overview-error-boundary-toggle"
               icon={<IconExclamationMark size={16} color="var(--mantine-color-orange-filled)" />}
             >
               <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1063,6 +1077,7 @@ export default function OverviewPage() {
               <Accordion variant="separated" data-testid="import-accordion">
                 <Accordion.Item value="ingest">
                   <Accordion.Control
+                    data-testid="overview-ingest-toggle"
                     icon={<IconDatabase size={16} color="var(--mantine-color-blue-filled)" />}
                   >
                     <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1086,6 +1101,7 @@ export default function OverviewPage() {
 
                 <Accordion.Item value="tokenize">
                   <Accordion.Control
+                    data-testid="overview-tokenize-toggle"
                     icon={<IconRoute size={16} color="var(--mantine-color-blue-filled)" />}
                   >
                     <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1108,6 +1124,7 @@ export default function OverviewPage() {
 
                 <Accordion.Item value="aliases">
                   <Accordion.Control
+                    data-testid="overview-aliases-toggle"
                     icon={<IconTags size={16} color="var(--mantine-color-blue-filled)" />}
                   >
                     <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1128,6 +1145,7 @@ export default function OverviewPage() {
 
                 <Accordion.Item value="metadata">
                   <Accordion.Control
+                    data-testid="overview-metadata-toggle"
                     icon={<IconFileImport size={16} color="var(--mantine-color-blue-filled)" />}
                   >
                     <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1160,6 +1178,7 @@ export default function OverviewPage() {
                         <Text
                           component="a"
                           href="https://dicom.offis.de/en/dcmtk/dcmtk-tools/"
+                          data-testid="overview-dcmtk-link"
                           target="_blank"
                           rel="noopener noreferrer"
                           c="blue"
@@ -1175,6 +1194,7 @@ export default function OverviewPage() {
 
                 <Accordion.Item value="preview">
                   <Accordion.Control
+                    data-testid="overview-preview-toggle"
                     icon={<IconEye size={16} color="var(--mantine-color-blue-filled)" />}
                   >
                     <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1210,6 +1230,7 @@ export default function OverviewPage() {
 
                 <Accordion.Item value="execution">
                   <Accordion.Control
+                    data-testid="overview-execution-toggle"
                     icon={<IconPlayerPlay size={16} color="var(--mantine-color-blue-filled)" />}
                   >
                     <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1265,7 +1286,7 @@ export default function OverviewPage() {
             <Tabs.Panel value="bids" pt="xs">
               <Card withBorder p="md" radius="sm" data-testid="bids-direct-panel">
                 <Title order={3} style={{ fontSize: "1.1rem" }} mb="xs">
-                  Direct BIDS Dataset Import (Skip DICOM Conversion)
+                  Use Existing BIDS Images
                 </Title>
                 <Text size="sm" mb="md">
                   If you already have a fully BIDS-compliant dataset (which has already been
@@ -1278,9 +1299,11 @@ export default function OverviewPage() {
                   <Alert color="teal" title="How it Works" icon={<IconCheck size={18} />}>
                     <Text size="sm">
                       When you create a project, select your existing BIDS dataset directory. The
-                      GUI will scan the folder, detect that it is a BIDS-compliant directory, and
-                      prompt you to <strong>"Skip Import"</strong>. This sets your project's data
-                      source to BIDS and takes you to the BIDS Review step.
+                      GUI will check for BIDS ASL images. Choose{" "}
+                      <strong>Use existing BIDS images</strong>, review the setup information, then
+                      select <strong>Create project</strong>. No DICOM conversion is needed. Next,
+                      review scan information in the BIDS Review step before choosing processing
+                      settings.
                     </Text>
                   </Alert>
 
@@ -1368,6 +1391,7 @@ export default function OverviewPage() {
           <Accordion variant="separated" data-testid="parameters-accordion">
             <Accordion.Item value="options">
               <Accordion.Control
+                data-testid="overview-options-toggle"
                 icon={<IconRoute size={16} color="var(--mantine-color-grape-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1390,6 +1414,7 @@ export default function OverviewPage() {
 
             <Accordion.Item value="advanced">
               <Accordion.Control
+                data-testid="overview-advanced-toggle"
                 icon={<IconAdjustments size={16} color="var(--mantine-color-grape-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1403,6 +1428,7 @@ export default function OverviewPage() {
                   <Text
                     component="a"
                     href="https://pubmed.ncbi.nlm.nih.gov/24715426/"
+                    data-testid="overview-asl-consensus-link"
                     target="_blank"
                     rel="noopener noreferrer"
                     c="blue"
@@ -1465,6 +1491,7 @@ export default function OverviewPage() {
           <Accordion variant="separated" data-testid="processing-accordion">
             <Accordion.Item value="structural">
               <Accordion.Control
+                data-testid="overview-structural-toggle"
                 icon={<IconBrain size={16} color="var(--mantine-color-teal-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1499,6 +1526,7 @@ export default function OverviewPage() {
 
             <Accordion.Item value="asl">
               <Accordion.Control
+                data-testid="overview-asl-toggle"
                 icon={<IconPlayerPlay size={16} color="var(--mantine-color-teal-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1550,6 +1578,7 @@ export default function OverviewPage() {
 
             <Accordion.Item value="population">
               <Accordion.Control
+                data-testid="overview-population-toggle"
                 icon={<IconTags size={16} color="var(--mantine-color-teal-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1610,6 +1639,7 @@ export default function OverviewPage() {
           <Accordion variant="separated" data-testid="visualization-accordion">
             <Accordion.Item value="data-contract">
               <Accordion.Control
+                data-testid="overview-data-contract-toggle"
                 icon={<IconFileText size={16} color="var(--mantine-color-orange-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1633,6 +1663,7 @@ export default function OverviewPage() {
 
             <Accordion.Item value="charts">
               <Accordion.Control
+                data-testid="overview-charts-toggle"
                 icon={<IconChartDots size={16} color="var(--mantine-color-orange-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1668,6 +1699,7 @@ export default function OverviewPage() {
 
             <Accordion.Item value="webgl">
               <Accordion.Control
+                data-testid="overview-webgl-toggle"
                 icon={<IconBrain size={16} color="var(--mantine-color-orange-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1726,6 +1758,7 @@ export default function OverviewPage() {
           <Accordion variant="separated" data-testid="manifest-accordion">
             <Accordion.Item value="qc-triage">
               <Accordion.Control
+                data-testid="overview-qc-triage-toggle"
                 icon={<IconListCheck size={16} color="var(--mantine-color-teal-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1797,6 +1830,7 @@ export default function OverviewPage() {
 
             <Accordion.Item value="manifest-sections">
               <Accordion.Control
+                data-testid="overview-manifest-sections-toggle"
                 icon={<IconFileReport size={16} color="var(--mantine-color-teal-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">
@@ -1843,6 +1877,7 @@ export default function OverviewPage() {
 
             <Accordion.Item value="manifest-export">
               <Accordion.Control
+                data-testid="overview-manifest-export-toggle"
                 icon={<IconFileText size={16} color="var(--mantine-color-teal-filled)" />}
               >
                 <Title order={3} style={{ fontSize: "1rem" }} component="h2">

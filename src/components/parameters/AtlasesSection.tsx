@@ -1,3 +1,4 @@
+import { numberInputTestIds } from "../common/numberInputTestIds";
 import {
   Switch,
   NumberInput,
@@ -90,7 +91,11 @@ export function AtlasesSection({
         </Stack>
       </Paper>
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
+      <AdvancedDivider
+        showAdvanced={showAdvanced}
+        onToggle={onToggleAdvanced}
+        testId="atlases-advanced-toggle"
+      />
 
       {showAdvanced && (
         <Paper p="md" radius="md" withBorder>
@@ -140,7 +145,7 @@ export function AtlasesSection({
                 value={dataPar.MinimalROIVolume}
                 onChange={(v) => onFieldChange("MinimalROIVolume", v === "" ? undefined : v)}
                 suffix=" mL"
-                data-testid="field-MinimalROIVolume"
+                {...numberInputTestIds("field-MinimalROIVolume")}
               />
 
               <Group gap="xs" align="center" style={{ minHeight: "36px" }}>

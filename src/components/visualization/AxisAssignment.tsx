@@ -11,6 +11,7 @@ import { IconAdjustmentsHorizontal } from "@tabler/icons-react";
 import { useVisualizationStore } from "../../stores/visualizationStore";
 import { visualizationSettings } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { comboboxTestIds } from "../common/comboboxTestIds";
 
 interface AxisComboboxItem extends ComboboxItem {
   type?: string;
@@ -77,7 +78,7 @@ export default function AxisAssignment() {
           onChange={(val) => setAxisAssignment({ x: val, colorBy: null })}
           renderOption={renderOption}
           searchable
-          data-testid="x-axis-select"
+          {...comboboxTestIds("x-axis-select")}
         />
       </Grid.Col>
       <Grid.Col span={{ base: 12, sm: 3.5 }}>
@@ -89,7 +90,7 @@ export default function AxisAssignment() {
           onChange={(val) => setAxisAssignment({ y: val, colorBy: null })}
           renderOption={renderOption}
           searchable
-          data-testid="y-axis-select"
+          {...comboboxTestIds("y-axis-select")}
         />
       </Grid.Col>
       <Grid.Col span={{ base: 12, sm: 3.5 }}>
@@ -99,7 +100,7 @@ export default function AxisAssignment() {
           value={axisAssignment.colorBy ?? ""}
           onChange={(val) => setAxisAssignment({ colorBy: val || null })}
           renderOption={renderOption}
-          data-testid="color-by-select"
+          {...comboboxTestIds("color-by-select")}
         />
       </Grid.Col>
       <Grid.Col span={{ base: 12, sm: 1.5 }}>

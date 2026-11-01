@@ -2,13 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   canEnterStep5,
-  canSelectImportStep,
-  getMaxUnlockedImportStep,
   hasValidExecutionProfile,
   isAliasResolutionComplete,
   isIngestionComplete,
   isTokenizerComplete,
-  TOTAL_IMPORT_STEPS,
 } from "./importStepAccess";
 import type { PathPattern } from "../schemas/importSchemas";
 import { makeMatlabProfile } from "../test/profileFixtures";
@@ -70,23 +67,11 @@ const READY_FOR_PREVIEW_STATE = {
 };
 
 describe("importStepAccess", () => {
-  it("defines six import wizard steps", () => {
-    expect(TOTAL_IMPORT_STEPS).toBe(6);
-  });
-
-  it("requires ingestion results before unlocking tokenizer", () => {
+  it("requires ingestion results", () => {
     expect(isIngestionComplete({ ingestionComplete: false, pathPatterns: [] })).toBe(false);
-    expect(
-      getMaxUnlockedImportStep({
-        ingestionComplete: false,
-        pathPatterns: [],
-        tokenizerConfigs: {},
-        modalityAliases: [],
-      }),
-    ).toBe(0);
   });
 
-  it("unlocks tokenizer after ingestion", () => {
+  it("accepts completed ingestion", () => {
     const state = {
       ingestionComplete: true,
       pathPatterns: [PATTERN],
@@ -95,11 +80,9 @@ describe("importStepAccess", () => {
     };
 
     expect(isIngestionComplete(state)).toBe(true);
-    expect(getMaxUnlockedImportStep(state)).toBe(1);
-    expect(canSelectImportStep(2, state)).toBe(false);
   });
 
-  it("unlocks alias step only after Subject and Modality are assigned", () => {
+  it("requires Subject and Modality tags to complete tokenization", () => {
     const incomplete = {
       ingestionComplete: true,
       pathPatterns: [PATTERN],
@@ -110,7 +93,6 @@ describe("importStepAccess", () => {
     };
 
     expect(isTokenizerComplete(incomplete)).toBe(false);
-    expect(getMaxUnlockedImportStep(incomplete)).toBe(1);
 
     const tokenized = {
       ...incomplete,
@@ -123,11 +105,9 @@ describe("importStepAccess", () => {
     };
 
     expect(isTokenizerComplete(tokenized)).toBe(true);
-    expect(getMaxUnlockedImportStep(tokenized)).toBe(2);
-    expect(canSelectImportStep(3, tokenized)).toBe(false);
   });
 
-  it("requires ASL4D or T1w mapping before unlocking metadata", () => {
+  it("requires ASL4D or T1w mapping to complete alias resolution", () => {
     const tokenized = {
       ingestionComplete: true,
       pathPatterns: [PATTERN],
@@ -141,7 +121,6 @@ describe("importStepAccess", () => {
     };
 
     expect(isAliasResolutionComplete(tokenized)).toBe(false);
-    expect(getMaxUnlockedImportStep(tokenized)).toBe(2);
 
     const mapped = {
       ...tokenized,
@@ -149,19 +128,11 @@ describe("importStepAccess", () => {
     };
 
     expect(isAliasResolutionComplete(mapped)).toBe(true);
-    expect(getMaxUnlockedImportStep(mapped)).toBe(4);
-    expect(canSelectImportStep(3, mapped)).toBe(true);
   });
 
   it("keeps run import locked until metadata and valid profile gate are satisfied", () => {
     expect(hasValidExecutionProfile(VALID_GATE)).toBe(true);
     expect(canEnterStep5(READY_FOR_PREVIEW_STATE, VALID_GATE, VALID_STAGING_GATE)).toBe(true);
-    expect(getMaxUnlockedImportStep(READY_FOR_PREVIEW_STATE, VALID_GATE, VALID_STAGING_GATE)).toBe(
-      5,
-    );
-    expect(canSelectImportStep(5, READY_FOR_PREVIEW_STATE, VALID_GATE, VALID_STAGING_GATE)).toBe(
-      true,
-    );
 
     expect(
       canEnterStep5(

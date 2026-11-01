@@ -376,6 +376,7 @@ export default function ChartPanel() {
       </Text>
       <div
         ref={chartContainerRef}
+        data-testid="chart-canvas-container"
         style={{
           flex: 1,
           minHeight: 280,

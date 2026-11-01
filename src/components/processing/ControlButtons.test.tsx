@@ -258,9 +258,9 @@ describe("ControlButtons Start button disabled state", () => {
       mode: "repair",
       operations: [
         {
-          path: "rawdata/.easl-gui-managed",
+          path: "rawdata/",
           operation: "create",
-          textPreview: '{"kind":"bids-direct-rawdata","version":1}\n',
+          textPreview: null,
         },
       ],
       warnings: [],
@@ -646,18 +646,18 @@ describe("ControlButtons BIDS compatibility repair", () => {
   });
 
   it("renders a repair action for a verification failure", () => {
-    mockBidsCompatibilityError = "BIDS marker is missing";
+    mockBidsCompatibilityError = "BIDS compatibility directory is missing";
     renderButtons();
     expect(screen.getByTestId("bids-compatibility-error-modal")).toBeInTheDocument();
     expect(screen.getByTestId("bids-compatibility-error-text")).toHaveTextContent(
-      "BIDS marker is missing",
+      "BIDS compatibility directory is missing",
     );
     expect(screen.getByTestId("bids-repair-preflight-btn")).toBeInTheDocument();
   });
 
   it("clears verification error when Close is clicked", async () => {
     const user = userEvent.setup();
-    mockBidsCompatibilityError = "BIDS marker is missing";
+    mockBidsCompatibilityError = "BIDS compatibility directory is missing";
     renderButtons();
 
     await user.click(screen.getByTestId("bids-compatibility-error-close-btn"));
@@ -668,14 +668,14 @@ describe("ControlButtons BIDS compatibility repair", () => {
 
   it("opens a read-only repair review and commits only its opaque plan after confirmation", async () => {
     const user = userEvent.setup();
-    mockBidsCompatibilityError = "BIDS marker is missing";
+    mockBidsCompatibilityError = "BIDS compatibility directory is missing";
     renderButtons();
 
     await user.click(screen.getByTestId("bids-repair-preflight-btn"));
     expect(mockPreflightBidsSetupRepair).toHaveBeenCalledWith("/test/bids");
-    expect(
-      await screen.findByTestId("bids-repair-operation-rawdata--easl-gui-managed"),
-    ).toHaveTextContent("rawdata/.easl-gui-managed");
+    expect(await screen.findByTestId("bids-repair-operation-rawdata-")).toHaveTextContent(
+      "rawdata/",
+    );
     expect(mockCommitBidsProjectMutations).not.toHaveBeenCalled();
 
     await user.click(screen.getByTestId("bids-repair-confirm-btn"));

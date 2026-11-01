@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import {
   Alert,
   Button,
@@ -5,6 +6,7 @@ import {
   Group,
   Modal,
   Paper,
+  Pill,
   Select,
   Stack,
   TagsInput,
@@ -21,6 +23,7 @@ import { useVisualizationStore } from "../../stores/visualizationStore";
 import { visualizationSettings } from "../../stores/visualizationStore";
 import JoinDiagram from "./JoinDiagram";
 import SanityChecks from "./SanityChecks";
+import PathEntryButton from "../common/PathEntryButton";
 import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 
 const DEFAULT_NA_TOKENS = ["", "NaN", "NA", "n/a", "<NA>"];
@@ -120,7 +123,7 @@ export default function JoinConfig() {
     };
   }, [joinConfig, extInspection, setExternalSourceAvailability]);
 
-  async function handleBrowse() {
+  async function handleBrowse(selectedPath?: string) {
     const lease = captureProjectLease();
     let defaultPath: string | undefined = undefined;
     if (joinConfig?.externalSource?.absolutePath) {
@@ -136,11 +139,13 @@ export default function JoinConfig() {
     }
 
     console.log("[JoinConfig] Browsing for external file...");
-    const selected = await open({
-      filters: [{ name: "Data files", extensions: ["csv", "tsv", "xlsx"] }],
-      multiple: false,
-      defaultPath,
-    });
+    const selected =
+      selectedPath ??
+      (await open({
+        filters: [{ name: "Data files", extensions: ["csv", "tsv", "xlsx"] }],
+        multiple: false,
+        defaultPath,
+      }));
     if (lease && !isCurrentProjectLease(lease)) return;
     if (!selected || typeof selected !== "string") {
       console.log("[JoinConfig] File browse cancelled");
@@ -283,11 +288,17 @@ export default function JoinConfig() {
             <Button
               leftSection={<IconUpload size={16} />}
               variant="default"
-              onClick={handleBrowse}
+              onClick={() => void handleBrowse()}
               data-testid="browse-external-btn"
             >
               Browse...
             </Button>
+            <PathEntryButton
+              title="Select external data file"
+              testId="external-data-path"
+              extensions={["csv", "tsv", "xlsx"]}
+              onSelect={handleBrowse}
+            />
             {error && <Alert color="red">{error}</Alert>}
           </Stack>
         </Paper>
@@ -318,7 +329,7 @@ export default function JoinConfig() {
             <Button
               variant="light"
               size="xs"
-              onClick={handleBrowse}
+              onClick={() => void handleBrowse()}
               data-testid="external-source-relink-btn"
             >
               Relink
@@ -351,11 +362,18 @@ export default function JoinConfig() {
             leftSection={<IconUpload size={16} />}
             variant="default"
             size="xs"
-            onClick={handleBrowse}
+            onClick={() => void handleBrowse()}
             data-testid="change-external-btn"
           >
             Change file...
           </Button>
+          <PathEntryButton
+            title="Select external data file"
+            testId="external-data-path"
+            defaultPath={joinConfig.externalSource.absolutePath}
+            extensions={["csv", "tsv", "xlsx"]}
+            onSelect={handleBrowse}
+          />
         </Stack>
       </Paper>
 
@@ -364,6 +382,7 @@ export default function JoinConfig() {
         onClose={() => setPendingRelink(null)}
         title="External data content changed"
         data-testid="external-relink-mismatch-dialog"
+        attributes={{ close: { "data-testid": "external-relink-mismatch-dialog-close" } }}
       >
         <Stack>
           <Text size="sm">
@@ -409,7 +428,7 @@ export default function JoinConfig() {
                 data={leftColumns}
                 value={pair.left || null}
                 onChange={(val) => handleKeyPairChange(i, "left", val)}
-                data-testid={`key-pair-${i}-left`}
+                {...comboboxTestIds(`key-pair-${i}-left`)}
               />
               <Text>↔</Text>
               <Select
@@ -417,7 +436,7 @@ export default function JoinConfig() {
                 data={extColumns}
                 value={pair.right || null}
                 onChange={(val) => handleKeyPairChange(i, "right", val)}
-                data-testid={`key-pair-${i}-right`}
+                {...comboboxTestIds(`key-pair-${i}-right`)}
               />
               <Button
                 variant="subtle"
@@ -461,7 +480,7 @@ export default function JoinConfig() {
             ]}
             value={joinConfig.delimiter}
             onChange={handleDelimiterChange}
-            data-testid="delimiter-select"
+            {...comboboxTestIds("delimiter-select")}
           />
           <Text fw={500} size="sm">
             Missing values
@@ -471,7 +490,17 @@ export default function JoinConfig() {
             description="Values treated as missing in the external file"
             value={joinConfig.naTokens}
             onChange={handleNaTokensChange}
-            data-testid="na-tokens-input"
+            {...comboboxTestIds("na-tokens-input")}
+            renderPill={({ option, onRemove, disabled }) => (
+              <Pill
+                withRemoveButton
+                onRemove={onRemove}
+                disabled={disabled}
+                attributes={{ remove: { "data-testid": `na-tokens-input-remove-${option.value}` } }}
+              >
+                {option.label}
+              </Pill>
+            )}
           />
           {joinConfig.naTokens.length === 0 && (
             <Alert color="yellow" data-testid="no-na-tokens-warning">

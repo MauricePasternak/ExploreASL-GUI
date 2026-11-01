@@ -117,32 +117,3 @@ export function sortStagingIssues(issues: StagingValidationIssue[]): StagingVali
     );
   });
 }
-
-export function portableCollisionIssues(
-  values: Array<{ value: string; entryIndex: number }>,
-  field: Extract<StagingValidationField, "subject" | "session" | "run" | "runAlias">,
-): StagingValidationIssue[] {
-  const byKey = new Map<string, Array<{ value: string; entryIndex: number }>>();
-  for (const value of values) {
-    const group = byKey.get(portableKey(value.value)) ?? [];
-    group.push(value);
-    byKey.set(portableKey(value.value), group);
-  }
-  const issues: StagingValidationIssue[] = [];
-  for (const group of byKey.values()) {
-    if (group.length < 2) continue;
-    for (const entry of group) {
-      for (const conflict of group) {
-        if (entry.entryIndex === conflict.entryIndex) continue;
-        issues.push({
-          code: "PORTABLE_COLLISION",
-          field,
-          entryIndex: entry.entryIndex,
-          conflictingEntryIndex: conflict.entryIndex,
-          message: "Identifier collides with another value under portable filesystem rules.",
-        });
-      }
-    }
-  }
-  return sortStagingIssues(issues);
-}

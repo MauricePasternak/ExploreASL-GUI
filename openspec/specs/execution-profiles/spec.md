@@ -148,7 +148,7 @@ The welcome card SHALL be shown whenever `executionProfiles` is empty, not only 
 
 Profile validation SHALL occur at four points in the application lifecycle. The system SHALL maintain an in-memory `profileValidationState: Record<string, { valid: boolean, errors: string[] }>` in the global store. This state is NOT persisted — it is recomputed at each validation trigger. When validation runs, `exploreAslVersion` SHALL also be re-detected via the Rust validation command and updated on the profile if it has changed.
 
-**`profileValidationState` reconciliation:** The state map SHALL mirror the `executionProfiles[]` array — one entry per profile, no gaps, no orphans. Store actions (`addProfile`, `updateProfile`, `deleteProfile`, `validateAllProfiles`) manage both the array and the state map atomically. Adding a profile: validate first, then persist the profile AND set its validation entry. Deleting a profile: remove from both array and map. No external code SHALL ever observe a profile in the array missing from the validation map. `hasValidProfile()` derives from `profiles.some(p => validationState[p.id]?.valid === true)`.
+**`profileValidationState` reconciliation:** Adding a profile SHALL insert it and an initially invalid validation entry together, then apply the supplied or freshly obtained validation result and persist. Deleting a profile SHALL remove it from both array and map. Updating a profile SHALL update the profile without independently refreshing its validation entry. `validateAllProfiles` SHALL reconcile the map against current profiles; loading settings publishes profiles before validation, and a failed validation call can leave entries absent. `hasValidProfile()` derives from `profiles.some(p => validationState[p.id]?.valid === true)`.
 
 **Validation triggers:**
 
@@ -174,12 +174,12 @@ UI-facing validation `errors` SHALL contain human-readable explanations and next
 #### Scenario: Invalid MATLAB path blocks save
 
 - **WHEN** the user enters `/nonexistent/matlab` as the MATLAB path and clicks Save
-- **THEN** the save is blocked, an error "MATLAB executable not found at this path" is shown inline
+- **THEN** the save is blocked and inline guidance reports that the MATLAB executable was not found or is unavailable
 
 #### Scenario: ExploreASL path missing ExploreASL.m blocks save
 
 - **WHEN** the user enters a valid directory without `ExploreASL.m` and clicks Save
-- **THEN** the save is blocked, an error "ExploreASL.m not found in this directory" is shown inline
+- **THEN** the save is blocked and inline guidance reports that `ExploreASL.m` was not found at the selected path
 
 #### Scenario: Startup validation finds invalid profile
 
@@ -502,7 +502,7 @@ For future profile types, validation SHALL be type-specific.
 #### Scenario: Singular validation — invalid profile
 
 - **WHEN** `validate_execution_profile` is called with a `Matlab` profile whose `matlab_path` does not exist
-- **THEN** the result SHALL have `valid: false`, `errors` containing "MATLAB executable not found", and `explore_asl_version: null`
+- **THEN** the result SHALL have `valid: false` and `errors` containing MATLAB executable guidance; `explore_asl_version` SHALL still be detected if the ExploreASL path is valid and contains a version marker
 
 #### Scenario: Batch validation
 

@@ -1,4 +1,5 @@
 import { Group, NumberInput } from "@mantine/core";
+import { numberInputTestIds } from "../common/numberInputTestIds";
 
 export interface NumberTupleInputProps {
   value: [number, number, number] | undefined;
@@ -19,7 +20,7 @@ export function NumberTupleInput({
   value,
   onChange,
   labels = DEFAULT_LABELS,
-  testId,
+  testId = "number-tuple",
   min = 0,
   integerOnly = false,
   suffix,
@@ -56,7 +57,7 @@ export function NumberTupleInput({
             min={min}
             suffix={suffix}
             placeholder={placeholder?.[i]?.toString()}
-            data-testid={testId ? `${testId}-${testIdSuffix}` : undefined}
+            {...numberInputTestIds(`${testId}-${testIdSuffix}`)}
           />
         );
       })}

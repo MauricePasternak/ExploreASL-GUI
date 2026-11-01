@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import { Card, Select, Stack, Table, Text } from "@mantine/core";
 
 import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
@@ -72,7 +73,9 @@ export default function ModalityMappingTable() {
                   w={360}
                   maw="100%"
                   comboboxProps={{ withinPortal: false }}
-                  data-testid={`modality-select-${alias.captured.replace(/[^a-z0-9]/gi, "-")}`}
+                  {...comboboxTestIds(
+                    `modality-select-${alias.captured.replace(/[^a-z0-9]/gi, "-")}`,
+                  )}
                 />
               </Table.Td>
             </Table.Tr>

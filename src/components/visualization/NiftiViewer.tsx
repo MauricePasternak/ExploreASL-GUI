@@ -114,6 +114,8 @@ export default function NiftiViewer() {
 
     const nv = new Niivue({
       dragAndDropEnabled: false,
+      // loadVolumes uses this viewer-level option, not the per-volume option.
+      trustCalMinMax: false,
       backColor: getBackColor(paramsRef.current.nvBackColor),
       fontColor: getFontColor(paramsRef.current.nvBackColor),
       show3Dcrosshair: paramsRef.current.nvCrosshair,

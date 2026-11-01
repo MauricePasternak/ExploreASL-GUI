@@ -68,6 +68,7 @@ export default function ErrorDetailsModal() {
       closeButtonProps={{
         "aria-label": "Close error details",
       }}
+      attributes={{ close: { "data-testid": "error-details-modal-close" } }}
       data-testid="error-details-modal"
     >
       {error && (

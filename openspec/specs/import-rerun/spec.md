@@ -242,7 +242,7 @@ The project file schema SHALL restructure import-related UI state under `uiState
 - `uiState.importActiveStep` → `uiState.import.activeStep`
 - `uiState.importCompleted` → `uiState.import.completed`
 - `uiState.importPhase` → `uiState.import.currentPhase`
-- NEW: `uiState.import.mostRecentConfig` (gzip+base64 string, or null)
+- `uiState.import.mostRecentConfig` (snapshot object or null)
 
 The old flat keys SHALL be removed from the schema entirely. No backward compatibility migration is needed (v0.1, not yet distributed).
 

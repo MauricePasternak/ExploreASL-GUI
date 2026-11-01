@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import { Alert, Select, Stack, Text } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { commands, unwrap } from "../../lib/ipc";
@@ -101,7 +102,7 @@ export default function DataSelection() {
         value={qcbfSource?.relativePath ?? null}
         onChange={handleSelectQcbf}
         searchable
-        data-testid="qcbf-file-dropdown"
+        {...comboboxTestIds("qcbf-file-dropdown")}
       />
       {qcbfSource && <JoinConfig />}
     </Stack>

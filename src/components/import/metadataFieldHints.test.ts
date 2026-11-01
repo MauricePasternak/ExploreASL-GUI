@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { METADATA_FIELD_HINT_TEXT, stripEmptyBidsParams } from "./metadataFieldHints";
+import { stripEmptyBidsParams } from "./metadataFieldHints";
 
 describe("stripEmptyBidsParams", () => {
   it("removes undefined, empty strings, and empty arrays", () => {
@@ -27,12 +27,5 @@ describe("stripEmptyBidsParams", () => {
       BackgroundSuppression: false,
       M0Type: "Separate",
     });
-  });
-});
-
-describe("METADATA_FIELD_HINT_TEXT", () => {
-  it("documents DICOM-likely fields as override-only", () => {
-    expect(METADATA_FIELD_HINT_TEXT.dicomLikely).toMatch(/DICOM/i);
-    expect(METADATA_FIELD_HINT_TEXT.dicomLikely).toMatch(/omitted/i);
   });
 });

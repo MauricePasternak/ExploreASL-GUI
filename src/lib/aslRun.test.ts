@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { aslRunsEqual, normalizeAslRunId, toExploreAslSessionLabel } from "./aslRun";
+import { aslRunsEqual, normalizeAslRunId } from "./aslRun";
 
 describe("normalizeAslRunId", () => {
   it("strips leading zeros from numeric BIDS run labels", () => {
@@ -45,13 +45,5 @@ describe("aslRunsEqual", () => {
   it("treats both missing as equal", () => {
     expect(aslRunsEqual(undefined, undefined)).toBe(true);
     expect(aslRunsEqual(undefined, "1")).toBe(false);
-  });
-});
-
-describe("toExploreAslSessionLabel", () => {
-  it("formats canonical ExploreASL session labels", () => {
-    expect(toExploreAslSessionLabel("01")).toBe("ASL_1");
-    expect(toExploreAslSessionLabel("1")).toBe("ASL_1");
-    expect(toExploreAslSessionLabel("ASL_2")).toBe("ASL_2");
   });
 });

@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import { Switch, Select, Stack, Group, Paper, Text, SimpleGrid } from "@mantine/core";
 import { IconBrain } from "@tabler/icons-react";
 
@@ -51,7 +52,7 @@ export function StructuralSection({ dataPar, onFieldChange }: StructuralSectionP
               value={dataPar.WMHsegmAlg ?? null}
               onChange={(v) => onFieldChange("WMHsegmAlg", v)}
               placeholder={FIELD_METADATA.WMHsegmAlg.defaultHint}
-              data-testid="field-WMHsegmAlg"
+              {...comboboxTestIds("field-WMHsegmAlg")}
             />
           </SimpleGrid>
         </Stack>

@@ -162,7 +162,7 @@ The Tauri commands `launch_import_run` and `run_pipeline` SHALL support executio
 
 2. **Processing execution (`run_pipeline`) & Import execution (`launch_import_run`)**:
    Before spawning any worker or running import, the backend SHALL check for a pre-flight MCR cache.
-   - The MCR cache directory is determined by checking the environment variable `$MCR_CACHE_ROOT` on the host system. If not set, it defaults to `$HOME/.mcrCache9.7/` (where `$HOME` is derived from the environment variable `$HOME`).
+   - The MCR cache directory is determined by checking the environment variable `$MCR_CACHE_ROOT` on the host system. If not set, it defaults to `$HOME/.mcrCache9.7/`; if neither variable is set, it falls back to the relative path `.mcrCache9.7`.
    - If that directory does not exist, the backend SHALL perform a warmup run synchronously by executing:
      ```
      <profile.apptainerPath> exec --cleanenv --writable-tmpfs --bind <dataset_root>:/data --bind <cache_dir>:<cache_dir> --env MCR_CACHE_ROOT=<cache_dir> <profile.sifPath> /bin/bash /opt/xasl/xASL_latest/run_xASL_latest.sh /opt/mcr/v97/

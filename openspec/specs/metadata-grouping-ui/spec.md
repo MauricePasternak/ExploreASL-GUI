@@ -77,50 +77,7 @@ export type DerivedMetadataGroup = z.infer<typeof DerivedMetadataGroupSchema>;
 
 ### Requirement: Zod transforms for PulseSequenceType and Manufacturer
 
-`BidsAslMetadataBaseSchema.PulseSequenceType` SHALL use a Zod transform replacing the strict `z.enum(["spiral", "GRASE", "EPI"])`:
-
-```typescript
-PulseSequenceType: z
-  .string()
-  .transform((val, ctx) => {
-    const v = val.toLowerCase();
-    if (
-      v.includes("epi") ||
-      v.includes("ep2d") ||
-      v.includes("epfid") ||
-      v.includes("pepolar")
-    ) {
-      return "EPI";
-    }
-    if (v.includes("grase") || v.includes("tgse")) {
-      return "GRASE";
-    }
-    if (v.includes("spiral")) {
-      return "spiral";
-    }
-    return undefined; // matches ExploreASL's rmfield semantics
-  })
-  .optional(),
-```
-
-`BidsAslMetadataBaseSchema.Manufacturer` SHALL use a Zod transform replacing the strict `z.enum(["GE_product", "Philips", "Siemens"])`:
-
-```typescript
-Manufacturer: z
-  .string()
-  .transform((val, ctx) => {
-    const v = val.toLowerCase();
-    if (v.includes("siemens")) return "Siemens";
-    if (v.includes("philips")) return "Philips";
-    if (v.includes("ge"))      return "GE_product";
-    return undefined;
-  })
-  .optional(),
-```
-
-Transforms live in `src/lib/bids/normalize.ts` and are consumed by `src/schemas/importSchemas.ts`.
-
-Both are symmetric with ExploreASL's MATLAB `regexpi` pattern: case-insensitive substring match, canonical emission, drop field on no match.
+`BidsAslMetadataBaseSchema` SHALL use the optional string transforms in `src/lib/bids/normalize.ts` for `PulseSequenceType` and `Manufacturer`. They use case-insensitive substring matching followed by token-based Jaro-Winkler fuzzy matching at threshold 0.8, returning canonical values or `undefined` when unrecognized.
 
 #### Scenario: PulseSequenceType normalization (ds000240)
 
@@ -135,7 +92,7 @@ Both are symmetric with ExploreASL's MATLAB `regexpi` pattern: case-insensitive 
 #### Scenario: Unrecognized PulseSequenceType dropped
 
 - **WHEN** schema validates `PulseSequenceType: "unknown_readout"`
-- **THEN** transform returns `undefined`; field absent from parsed object
+- **THEN** transform returns `undefined`
 
 #### Scenario: Manufacturer normalization (SIEMENS longhand)
 
@@ -150,7 +107,7 @@ Both are symmetric with ExploreASL's MATLAB `regexpi` pattern: case-insensitive 
 #### Scenario: Unrecognized manufacturer dropped
 
 - **WHEN** schema validates `Manufacturer: "Canon Medical Systems"`
-- **THEN** transform returns `undefined`; field absent from parsed object; downstream `derive_vendor` falls back to `"UnknownVendor"`
+- **THEN** transform returns `undefined`; native vendor derivation falls back to `"UnknownVendor"`
 
 ### Requirement: summarizeAslContext helper
 
@@ -175,11 +132,11 @@ Manifest §1 and `BIDSReviewPanel` parameter expansions use this summary form. R
 
 ### Requirement: ASLContext persists raw in mappingState
 
-When BIDS review confirms, `mappingState.metadataGroups[].bidsParams.ASLContext` SHALL contain the raw first-subject ASLContext string (109+ tokens for ds000240). The schema's `ASLContext` field stays `.optional()` (file-presence enforcement lives at Rust scan layer; missing `aslcontext.tsv` skips session).
+When BIDS review confirms, `mappingState.metadataGroups[].bidsParams.ASLContext` SHALL contain the parsed raw ASLContext string only when every acquisition contributing to that group has the same context string. If contexts differ, the group field SHALL be omitted rather than copying the first acquisition's context. The schema's `ASLContext` field is `.nullish()`; missing applicable context skips the session at the native scan layer.
 
 #### Scenario: Raw ASLContext persisted
 
-- **WHEN** user confirms BIDS review for ds000240 with 1 group whose first subject has 109 ASLContext tokens
+- **WHEN** user confirms BIDS review for ds000240 with 1 group whose contributing acquisitions all share the same 109-token ASLContext string
 - **THEN** `mappingState.metadataGroups[0].bidsParams.ASLContext` contains the raw 109-token string (full data preserved); `manifest §1` rendering displays the summarized form via `summarizeAslContext`
 
 ### Requirement: schemas updated for BIDS-spec M0Type value

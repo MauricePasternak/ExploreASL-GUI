@@ -155,9 +155,9 @@ Actions:
 
 - `startBidsScan(rootPath: string)`: invokes `scan_bids_sidecars`, populates `detectedGroups` and `skippedSubjects` on success
 - `setDetectedGroups(groups)`: syncs the result of a scan
-- `retryBidsScan()`: clears `scanError` and re-invokes `scan_bids_sidecars`
+- `retryBidsScan(rootPath: string)`: clears `scanError` and re-invokes `scan_bids_sidecars`
 - `rescanConfirmedBidsProject(rootPath: string)`: starts a fresh scan for an already-confirmed BIDS project without clearing persisted project mapping state
-- `backToLanding()`: navigates to `/` (abandons project; project remains in store)
+- `backToLanding()`: resets BIDS review state; the calling component navigates to `/`
 - `resetBidsReview()`: clears BIDS review state (called on project switch)
 
 Session-only state. Not persisted to `.easl`. The `confirmed` flag is NOT in this slice — `project.uiState.import.bidsReviewConfirmed` (persisted) is the single source of truth for confirmed state.

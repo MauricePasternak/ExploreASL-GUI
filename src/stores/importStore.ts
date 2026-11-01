@@ -153,7 +153,6 @@ export interface ImportState {
     patterns: PathPattern[],
     lease?: ProjectLease | null,
   ) => Promise<void>;
-  setSourceAvailability: (availability: DicomSourceAvailability) => void;
   inspectSourceAvailability: () => Promise<void>;
   beginStagingPreflight: (fingerprint: string, lease: ProjectLease | null) => number;
   resolveStagingPreflight: (
@@ -203,7 +202,6 @@ export interface ImportState {
   bindImportRunSnapshot: (snapshot: ImportRunSnapshot) => void;
   reconcileImportRunSnapshot: (snapshot: ImportRunSnapshot, lease?: ProjectLease | null) => void;
   markSubjectDiagnosticFailure: (subject: string, message: string) => void;
-  applyStaleness: (staleness: Record<string, boolean>) => void;
   reconstructProgressFromLockFiles: (
     statuses: ImportSubjectStatus[],
     subjects: string[],
@@ -406,7 +404,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
     });
   },
 
-  setSourceAvailability: (sourceAvailability) => set({ sourceAvailability }),
   inspectSourceAvailability: async () => {
     const project = useProjectStore.getState().project;
     const path = project?.mappingState.sourceDataPath;
@@ -875,18 +872,6 @@ export const useImportStore = create<ImportState>((set, get) => ({
 
   clearProfileError: () => {
     set({ profileError: null });
-  },
-
-  applyStaleness: (staleness) => {
-    set((state) => {
-      const importProgress = { ...state.importProgress };
-      for (const [subject, stale] of Object.entries(staleness)) {
-        if (importProgress[subject]) {
-          importProgress[subject] = { ...importProgress[subject], stale };
-        }
-      }
-      return { importProgress };
-    });
   },
 
   reconstructProgressFromLockFiles: (statuses, subjects, staleness) => {

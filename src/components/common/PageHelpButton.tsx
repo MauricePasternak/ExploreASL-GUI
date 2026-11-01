@@ -187,16 +187,16 @@ const HELP_DATA: Record<string, HelpContent> = {
   "viz-levelOrdering": {
     title: "Order Categorical Levels",
     subtitle: "Phase 4: Visualization Module",
-    goal: "Control the display order of categories for ordinal and nominal columns on the X-axis.",
+    goal: "Control the display order of categories for ordinal and nominal columns in this editor only.",
     steps: [
       "Each categorical column shows its discovered levels in the current order.",
       "Use the up/down arrow buttons to reorder levels for each column.",
-      "Ordinal columns default to alphanumeric sorting; nominal columns default to file encounter order.",
-      "This ordering only affects visual tick order on swarmplots — it has no statistical effect.",
+      "Ordinal and nominal columns both default to file encounter order.",
+      "Saved ordering affects this editor only, not swarmplot tick order or statistics.",
     ],
-    tipTitle: "Visual Only",
+    tipTitle: "Chart Order Unchanged",
     tipContent:
-      "Reordering levels does not imply any statistical relationship or trend. It purely controls the left-to-right display order on the chart.",
+      "Swarmplots use the encounter order of categories in filtered chart rows, regardless of the saved level order.",
   },
   manifest: {
     title: "Project Manifest",
@@ -310,6 +310,7 @@ function PageHelpButtonInner() {
         size="lg"
         centered
         data-testid="page-help-modal"
+        attributes={{ close: { "data-testid": "page-help-modal-close" } }}
       >
         <Stack gap="md">
           <Text size="sm" style={{ lineHeight: 1.6 }}>
@@ -362,7 +363,11 @@ function PageHelpButtonInner() {
             >
               Open Full Overview Guide
             </Button>
-            <Button variant="default" onClick={() => setOpened(false)}>
+            <Button
+              variant="default"
+              onClick={() => setOpened(false)}
+              data-testid="page-help-modal-dismiss-btn"
+            >
               Got it
             </Button>
           </Group>

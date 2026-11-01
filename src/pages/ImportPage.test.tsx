@@ -863,7 +863,37 @@ describe("ImportPage stepper navigation", () => {
     depth: 2,
   };
 
-  it("stepper clicks do not navigate (display-only)", () => {
+  it.each([
+    [0, "dicom-nav"],
+    [1, "tokenizer-nav"],
+    [2, "alias-nav"],
+    [3, "metadata-nav"],
+    [4, "preview-nav"],
+    [5, "import-execution-nav"],
+  ] as const)("renders step %s navigation inside the stepper", (activeStep, navigationId) => {
+    const snapshot = projectFixture();
+    snapshot.document.uiState.import = { mostRecentConfig: null, activeStep };
+    snapshot.document.mappingState.metadataGroups = [
+      { id: "global-defaults", label: "Global Defaults", bidsParams: {} },
+    ];
+    if (activeStep === 5) useImportStore.setState({ importPhase: "failed" });
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "get_active_import_run") return null;
+      if (command === "read_import_status") return [];
+      if (command === "preflight_staging_plan") return { valid: false, issues: [] };
+      return undefined;
+    });
+    useProjectStore.getState().acceptSnapshot(snapshot);
+
+    renderWithProviders();
+
+    const navigation = screen.getByTestId(navigationId);
+    expect(screen.getByTestId("import-stepper")).toContainElement(navigation);
+    expect(screen.getByTestId("import-step-panel")).not.toContainElement(navigation);
+    expect(screen.getAllByTestId(/-footer$/)).toHaveLength(1);
+  });
+
+  it("keeps navigation inside the stepper and stepper clicks display-only", async () => {
     const snapshot = projectFixture();
     snapshot.document.uiState.import = { mostRecentConfig: null, activeStep: 1 };
     Object.assign(snapshot.document.mappingState, {
@@ -876,17 +906,39 @@ describe("ImportPage stepper navigation", () => {
       { blockIndex: 1, subBlockIndex: null, tag: "Modality" },
     ];
     snapshot.document.mappingState.tokenizerConfigs = { "VARYING/VARYING": assignments };
+    const accepted = structuredClone(snapshot);
+    accepted.acceptedRevision = 1;
+    accepted.document.uiState.import!.activeStep = 0;
+    vi.mocked(invoke).mockResolvedValueOnce(accepted);
 
     useProjectStore.getState().acceptSnapshot(snapshot);
     renderWithProviders();
     const sidebar = screen.getAllByTestId("import-stepper-sidebar")[0];
-    expect(sidebar).toHaveStyle({ position: "sticky", top: "var(--mantine-spacing-md)" });
+    const stepper = within(sidebar).getByTestId("import-stepper");
+    const steps = within(stepper).getByTestId("import-stepper-steps");
+    expect(within(stepper).getByRole("region", { name: "Import steps" })).toBe(steps);
+    expect(steps).toHaveAttribute("tabindex", "0");
+    expect(steps).toHaveStyle({ overflowY: "auto", flex: "1", minHeight: "0" });
+    expect(screen.getByTestId("import-page")).toHaveStyle({ flex: "1", minHeight: "0" });
+    expect(screen.getByTestId("import-panels")).toHaveStyle({ flex: "1", minHeight: "0" });
+    const content = screen.getByTestId("path-tokenizer-content");
+    const footer = screen.getByTestId("path-tokenizer-footer");
+    expect(content).toHaveStyle({ flex: "1", minHeight: "0", overflow: "auto" });
+    expect(footer).toHaveStyle({ flexShrink: "0" });
+    expect(within(stepper).getByTestId("import-stepper-navigation")).toContainElement(footer);
+    expect(footer).toContainElement(screen.getByTestId("tokenizer-nav"));
+    expect(content).not.toContainElement(footer);
+    expect(screen.getByTestId("import-step-panel")).not.toContainElement(footer);
 
     fireEvent.click(within(sidebar).getByTestId("import-step-2"));
     expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(1);
 
     fireEvent.click(within(sidebar).getByTestId("import-step-3"));
     expect(useProjectStore.getState().project?.uiState.import?.activeStep).toBe(1);
+
+    fireEvent.click(within(sidebar).getByTestId("tokenizer-back-btn"));
+    await waitFor(() => expect(within(stepper).getByTestId("dicom-next-btn")).toBeEnabled());
+    expect(within(stepper).queryByTestId("tokenizer-nav")).not.toBeInTheDocument();
   });
 });
 

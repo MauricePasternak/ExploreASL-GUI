@@ -84,7 +84,12 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
           {this.state.errorInfo && (
             <details>
-              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Component stack</summary>
+              <summary
+                style={{ cursor: "pointer", fontWeight: 600 }}
+                data-testid="error-component-stack-toggle"
+              >
+                Component stack
+              </summary>
               <Code block mt="xs" style={{ whiteSpace: "pre-wrap" }}>
                 {this.state.errorInfo.componentStack}
               </Code>

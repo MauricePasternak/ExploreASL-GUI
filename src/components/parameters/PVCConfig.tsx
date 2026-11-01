@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import { Switch, Group, Stack, Select } from "@mantine/core";
 import { DataParFieldLabel } from "./DataParFieldLabel";
 import { NumberTupleInput } from "./NumberTupleInput";
@@ -48,7 +49,7 @@ export function PVCConfig({
               ]}
               value={gaussianEnabled ? "1" : "0"}
               onChange={(v) => onGaussianChange(toFlag(v === "1"))}
-              data-testid="field-bPVCGaussianMM"
+              {...comboboxTestIds("field-bPVCGaussianMM")}
             />
             <DataParFieldLabel fieldKey="bPVCGaussianMM" htmlFor="switch-bPVCGaussianMM" />
           </Group>

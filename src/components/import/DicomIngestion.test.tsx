@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -59,12 +59,36 @@ afterEach(() => {
 });
 
 describe("DicomIngestion", () => {
-  it.each(["scan", "scan-error", "browse", "relink"])(
+  it.each(["source", "relink"])("manual %s path retains source validation", async (action) => {
+    seedProject();
+    if (action === "relink")
+      useImportStore.setState({
+        sourceAvailability: { status: "missing", savedPath: "/missing", message: "Missing source" },
+      });
+    vi.mocked(invoke).mockImplementation(async () => ({ exists: false }));
+    renderWithProviders();
+    const testId = `dicom-${action}-path`;
+    fireEvent.click(screen.getByTestId(testId));
+    fireEvent.change(screen.getByTestId(`${testId}-input`), {
+      target: { value: "/unavailable/source" },
+    });
+    fireEvent.click(screen.getByTestId(`${testId}-confirm`));
+    expect(await screen.findByTestId("dicom-scan-error")).toHaveTextContent(
+      "unavailable or unreadable",
+    );
+    expect(invoke).toHaveBeenCalledWith(
+      "inspect_source_path",
+      expect.objectContaining({ sourcePath: "/unavailable/source" }),
+    );
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it.each(["scan", "scan-error", "browse", "relink", "path", "relink-path"])(
     "discards stale %s work after same-project reactivation",
     async (action) => {
       const mapping = { sourceDataPath: "/source", rawPaths: ["sub-01/ASL"] };
       seedProject(undefined, mapping);
-      if (action === "relink")
+      if (action === "relink" || action === "relink-path")
         useImportStore.setState({
           sourceAvailability: { status: "missing", savedPath: "/source", message: "Missing" },
         });
@@ -80,7 +104,7 @@ describe("DicomIngestion", () => {
           : Promise.resolve("/replacement"),
       );
       vi.mocked(invoke).mockImplementation(async (command) =>
-        command === "walk_directory"
+        command === "walk_directory" || (action === "path" && command === "inspect_source_path")
           ? pending
           : command === "inspect_source_path"
             ? {
@@ -93,20 +117,41 @@ describe("DicomIngestion", () => {
             : null,
       );
       renderWithProviders();
-      await userEvent.click(
-        screen.getAllByTestId(
-          action === "browse"
-            ? "dicom-browse-btn"
-            : action === "relink"
-              ? "dicom-relink-btn"
-              : "scan-dicoms-btn",
-        )[0],
-      );
+      if (action === "path" || action === "relink-path") {
+        const testId = action === "path" ? "dicom-source-path" : "dicom-relink-path";
+        fireEvent.click(screen.getByTestId(testId));
+        fireEvent.change(screen.getByTestId(`${testId}-input`), {
+          target: { value: "/replacement" },
+        });
+        fireEvent.click(screen.getByTestId(`${testId}-confirm`));
+      } else
+        await userEvent.click(
+          screen.getAllByTestId(
+            action === "browse"
+              ? "dicom-browse-btn"
+              : action === "relink"
+                ? "dicom-relink-btn"
+                : "scan-dicoms-btn",
+          )[0],
+        );
       seedProject(undefined, mapping);
       useImportStore.getState().resetImport();
       const before = useImportStore.getState();
       if (action === "scan-error") fail(new Error("Old scan failed"));
-      else finish(action === "browse" ? "/replacement" : ["sub-02/ASL"]);
+      else
+        finish(
+          action === "browse"
+            ? "/replacement"
+            : action === "path"
+              ? {
+                  exists: true,
+                  readable: true,
+                  isDirectory: true,
+                  ownership: "external",
+                  absolutePath: "/replacement",
+                }
+              : ["sub-02/ASL"],
+        );
       await waitFor(() => expect(useProjectStore.getState().pendingEdits).toBe(0));
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(invoke).not.toHaveBeenCalledWith("accept_project_edit", expect.anything());
@@ -151,63 +196,83 @@ describe("DicomIngestion", () => {
     );
   });
 
-  it("stores an internal selected source as project-relative", async () => {
-    seedProject();
-    const accepted = {
-      ...projectFixture("project-1", "Brain Study", "/tmp/brain-study"),
-      acceptedRevision: 1,
-    };
-    accepted.document.mappingState.sourceDataPath = "./sourcedata";
-    vi.mocked(open).mockResolvedValue("/tmp/brain-study/sourcedata");
-    vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "accept_project_edit") return accepted;
-      if (command === "inspect_source_path") {
-        return {
-          absolutePath: "/tmp/brain-study/sourcedata",
-          exists: true,
-          readable: true,
-          isDirectory: true,
-          ownership: "internal",
-          projectRelativePath: "./sourcedata",
-        };
+  it.each(["browse", "path"])(
+    "stores an internal selected source as project-relative via %s",
+    async (selection) => {
+      seedProject();
+      const accepted = {
+        ...projectFixture("project-1", "Brain Study", "/tmp/brain-study"),
+        acceptedRevision: 1,
+      };
+      accepted.document.mappingState.sourceDataPath = "./sourcedata";
+      vi.mocked(open).mockResolvedValue("/tmp/brain-study/sourcedata");
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "accept_project_edit") return accepted;
+        if (command === "inspect_source_path") {
+          return {
+            absolutePath: "/tmp/brain-study/sourcedata",
+            exists: true,
+            readable: true,
+            isDirectory: true,
+            ownership: "internal",
+            projectRelativePath: "./sourcedata",
+          };
+        }
+        return null;
+      });
+
+      renderWithProviders();
+      if (selection === "browse") await userEvent.click(getBrowseButton());
+      else {
+        fireEvent.click(screen.getByTestId("dicom-source-path"));
+        fireEvent.change(screen.getByTestId("dicom-source-path-input"), {
+          target: { value: "/tmp/brain-study/sourcedata" },
+        });
+        fireEvent.click(screen.getByTestId("dicom-source-path-confirm"));
       }
-      return null;
-    });
 
-    renderWithProviders();
-    await userEvent.click(getBrowseButton());
+      await waitFor(() => expect(acceptedImportSettings().sourceDataPath).toBe("./sourcedata"));
+    },
+  );
 
-    expect(acceptedImportSettings().sourceDataPath).toBe("./sourcedata");
-  });
+  it.each(["browse", "path"])(
+    "stores an external selected source as absolute via %s",
+    async (selection) => {
+      seedProject();
+      const accepted = {
+        ...projectFixture("project-1", "Brain Study", "/tmp/brain-study"),
+        acceptedRevision: 1,
+      };
+      accepted.document.mappingState.sourceDataPath = "/media/dicom";
+      vi.mocked(open).mockResolvedValue("/media/dicom");
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "accept_project_edit") return accepted;
+        if (command === "inspect_source_path") {
+          return {
+            absolutePath: "/media/dicom",
+            exists: true,
+            readable: true,
+            isDirectory: true,
+            ownership: "external",
+            projectRelativePath: null,
+          };
+        }
+        return null;
+      });
 
-  it("stores an external selected source as absolute", async () => {
-    seedProject();
-    const accepted = {
-      ...projectFixture("project-1", "Brain Study", "/tmp/brain-study"),
-      acceptedRevision: 1,
-    };
-    accepted.document.mappingState.sourceDataPath = "/media/dicom";
-    vi.mocked(open).mockResolvedValue("/media/dicom");
-    vi.mocked(invoke).mockImplementation(async (command) => {
-      if (command === "accept_project_edit") return accepted;
-      if (command === "inspect_source_path") {
-        return {
-          absolutePath: "/media/dicom",
-          exists: true,
-          readable: true,
-          isDirectory: true,
-          ownership: "external",
-          projectRelativePath: null,
-        };
+      renderWithProviders();
+      if (selection === "browse") await userEvent.click(getBrowseButton());
+      else {
+        fireEvent.click(screen.getByTestId("dicom-source-path"));
+        fireEvent.change(screen.getByTestId("dicom-source-path-input"), {
+          target: { value: "/media/dicom" },
+        });
+        fireEvent.click(screen.getByTestId("dicom-source-path-confirm"));
       }
-      return null;
-    });
 
-    renderWithProviders();
-    await userEvent.click(getBrowseButton());
-
-    expect(acceptedImportSettings().sourceDataPath).toBe("/media/dicom");
-  });
+      await waitFor(() => expect(acceptedImportSettings().sourceDataPath).toBe("/media/dicom"));
+    },
+  );
 
   it("scans the resolved source while storing source-relative raw entries", async () => {
     seedProject(undefined, { sourceDataPath: "./sourcedata" });

@@ -75,13 +75,8 @@ describe("existing BIDS project repair and retry integration", () => {
         },
         {
           path: "rawdata/",
-          operation: "no_op" as const,
-          textPreview: null,
-        },
-        {
-          path: "rawdata/.easl-gui-managed",
           operation: "create" as const,
-          textPreview: '{"kind":"bids-direct-rawdata","version":1}\n',
+          textPreview: null,
         },
       ],
       warnings: [],
@@ -98,8 +93,7 @@ describe("existing BIDS project repair and retry integration", () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useProcessingStore.setState(useProcessingStore.getInitialState(), true);
     root = await mkdtemp(join(tmpdir(), "easl-existing-repair-"));
-    await mkdir(join(root, "rawdata"));
-    await writeFile(join(root, "rawdata", "README.md"), "user README\r\n");
+    await writeFile(join(root, "README.md"), "user README\r\n");
     await writeFile(join(root, "unrelated.bin"), "keep\0bytes");
     await writeFile(join(root, ".bidsignore"), "derivatives/\r\n");
     const profile = useGlobalStore.getState().settings.executionProfiles[0]!;
@@ -196,10 +190,7 @@ describe("existing BIDS project repair and retry integration", () => {
       if (command === "commit_bids_project_mutations") {
         if (!reviewedPlan) throw new Error("unknown repair plan");
         await writeFile(join(root, ".bidsignore"), reviewedPlan.operations[0].textPreview!);
-        await writeFile(
-          join(root, "rawdata", ".easl-gui-managed"),
-          reviewedPlan.operations[2].textPreview!,
-        );
+        await mkdir(join(root, "rawdata"));
         return {
           outcome: "committed",
           projectPath: null,
@@ -251,15 +242,10 @@ describe("existing BIDS project repair and retry integration", () => {
       expect(screen.queryByTestId("bids-repair-confirm-btn")).not.toBeInTheDocument(),
     );
     const afterRepair = await snapshot(root);
-    expect(changed(openedBefore, afterRepair)).toEqual([
-      ".bidsignore",
-      // Directory entry size changes when the reviewed child marker appears;
-      // rawdata/ itself is explicitly displayed as a no-op parent operation.
-      "rawdata",
-      "rawdata/.easl-gui-managed",
-    ]);
+    expect(changed(openedBefore, afterRepair)).toEqual([".bidsignore", "rawdata"]);
     expect(await readFile(join(root, "project.easl"), "utf8")).toBe(projectBytes);
-    expect(await readFile(join(root, "rawdata", "README.md"), "utf8")).toBe("user README\r\n");
+    expect(await readFile(join(root, "README.md"), "utf8")).toBe("user README\r\n");
+    expect(await readdir(join(root, "rawdata"))).toEqual([]);
     for (const operation of displayed.operations) {
       if (operation.textPreview) {
         expect(await readFile(join(root, operation.path), "utf8")).toBe(operation.textPreview);

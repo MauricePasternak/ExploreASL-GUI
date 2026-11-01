@@ -80,11 +80,7 @@ function plan(rootPath: string, planId = "reviewed-plan") {
     mode: "bids" as const,
     operations: [
       { path: "project.easl", operation: "create" as const, textPreview: null },
-      {
-        path: "rawdata/.easl-gui-managed",
-        operation: "create" as const,
-        textPreview: '{"kind":"bids-direct-rawdata","version":1}\n',
-      },
+      { path: "rawdata/", operation: "create" as const, textPreview: null },
     ],
     warnings: [],
     conflicts: [],
@@ -190,7 +186,7 @@ describe("Landing BIDS pre-confirmation source-tree integration", () => {
     useProjectStore.setState({
       preflightProjectSetup: vi
         .fn()
-        .mockRejectedValueOnce(new Error("marker is a symbolic link"))
+        .mockRejectedValueOnce(new Error(".bidsignore is a symbolic link"))
         .mockResolvedValueOnce(plan(root, "stale-plan")),
     });
 
@@ -212,7 +208,7 @@ describe("Landing BIDS pre-confirmation source-tree integration", () => {
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
     const setupError = await screen.findByTestId("bids-setup-plan-error");
     expect(setupError).toHaveTextContent("Project setup could not be inspected.");
-    expect(setupError).not.toHaveTextContent("marker is a symbolic link");
+    expect(setupError).not.toHaveTextContent(".bidsignore is a symbolic link");
     expect(await snapshotTree(root)).toEqual(before);
     expect(vi.mocked(invoke)).not.toHaveBeenCalledWith(
       "commit_bids_project_mutations",

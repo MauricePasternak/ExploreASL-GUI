@@ -8,7 +8,7 @@ Define compilation of metadata group assignments into ExploreASL studyPar config
 
 ### Requirement: Generate Specially Grouped Regex Combinations From Subject Assignments
 
-The system SHALL aggregate the `subjectRows` assignments for every `MetadataGroup` into discrete `StudyPars` blocks designed exclusively via target subject strings. The compiler MUST locate all subjects who share an identical set of sessions within a singular metadata group, joining the subject names together inside a single generated `SubjectRegExp` string alongside a corresponding joined `VisitRegExp` string.
+The system SHALL aggregate the `subjectRows` assignments for every `MetadataGroup` into discrete `StudyPars` blocks designed exclusively via target subject strings. Within each group, the compiler SHALL sort each subject's deduplicated session list and group subjects with identical session sets using a lossless signature. It SHALL preserve complete session labels when generating the joined `VisitRegExp` and join the subject names in `SubjectRegExp`. Session labels containing commas SHALL remain literal labels and SHALL NOT collide with multi-session signatures.
 
 #### Scenario: Aggregating subjects with matching session profiles
 
@@ -25,6 +25,11 @@ The system SHALL aggregate the `subjectRows` assignments for every `MetadataGrou
 - **WHEN** a `MetadataGroup` exists but zero `subjectRows` reference its `groupId`
 - **THEN** the compiler SHALL NOT output any `StudyPars` blocks corresponding to that group.
 
+#### Scenario: Session label contains a comma
+
+- **WHEN** a subject has the session label `01,02`
+- **THEN** its session signature SHALL produce `VisitRegExp: "^(01,02)$"` and SHALL NOT group with subjects assigned both `01` and `02`
+
 #### Scenario: Single-group project with a shared session profile emits explicit regex
 
 - **WHEN** only one `MetadataGroup` exists (e.g., Global Defaults) with at least one assigned subject and all subjects sharing the same session set
@@ -32,7 +37,7 @@ The system SHALL aggregate the `subjectRows` assignments for every `MetadataGrou
 
 ### Requirement: Match final staging identifiers
 
-The compiler SHALL apply the supplied session aliases to captured `subjectRows` sessions before deduplication, session-set compression, and regex escaping. `VisitRegExp` SHALL target staged BIDS sessions (ExploreASL Visits). Row subjects already contain final subject labels and SHALL NOT have subject renames reapplied. Compilation SHALL preserve persisted row identities and group assignments, unaliased session labels, and explicit metadata values including `false` and `0`. Preview, validation, and execution SHALL compile with the same session aliases.
+The compiler SHALL apply the supplied session aliases to captured `subjectRows` sessions before deduplication, session-set compression, and regex escaping. `VisitRegExp` SHALL target complete staged BIDS session labels (ExploreASL Visits). Row subjects already contain final subject labels and SHALL NOT have subject renames reapplied. Compilation SHALL preserve persisted row identities and group assignments and explicit metadata values including `false` and `0`. Preview, validation, and execution SHALL compile with the same session aliases.
 
 #### Scenario: Session aliases retain group-specific metadata
 

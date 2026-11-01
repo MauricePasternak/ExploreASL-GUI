@@ -74,6 +74,41 @@ describe("LandingPage", () => {
     });
   });
 
+  it.each(["new", "open"])(
+    "manual %s path retains normal validation without a native dialog",
+    async (action) => {
+      vi.mocked(invoke).mockImplementation(async (command) => {
+        if (command === "is_writable") return false;
+        throw new Error("Invalid project file");
+      });
+      render(
+        <MantineProvider env="test">
+          <MemoryRouter>
+            <LandingPage />
+          </MemoryRouter>
+        </MantineProvider>,
+      );
+      const testId = `landing-${action}-project-path`;
+      fireEvent.click(screen.getByTestId(testId));
+      fireEvent.change(screen.getByTestId(`${testId}-input`), {
+        target: { value: "/study/project.easl" },
+      });
+      fireEvent.click(screen.getByTestId(`${testId}-confirm`));
+      await waitFor(() =>
+        expect(showErrorNotification).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: action === "new" ? "Directory not writable" : "Invalid project file",
+          }),
+        ),
+      );
+      expect(open).not.toHaveBeenCalled();
+      expect(invoke).toHaveBeenCalledWith(
+        action === "new" ? "is_writable" : "inspect_project",
+        expect.objectContaining({ path: "/study/project.easl" }),
+      );
+    },
+  );
+
   it("rejects project creation when the selected directory is not writable", async () => {
     const createProject = vi.fn();
     useProjectStore.setState({ createProject });
@@ -654,17 +689,13 @@ describe("LandingPage BIDS detection dialogs", () => {
       rootPath,
       mode,
       operations: [
-        { path: "project.easl", operation: "create" as const, textPreview: null },
+        { path: "rawdata/", operation: "no_op" as const, textPreview: null },
         {
           path: ".bidsignore",
           operation: "update" as const,
           textPreview: "project.easl\n.easl_staging\nrawdata/\n",
         },
-        {
-          path: "rawdata/.easl-gui-managed",
-          operation: "create" as const,
-          textPreview: '{"kind":"bids-direct-rawdata","version":1}\n',
-        },
+        { path: "project.easl", operation: "create" as const, textPreview: null },
       ],
       warnings: ["rawdata/ contains 2 sub-* directories"],
       conflicts,
@@ -680,7 +711,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     };
   }
 
-  it("renders every reviewed operation, exact text, summary, preservation, warnings, and temporary disclosure", async () => {
+  it("keeps technical details collapsed while showing plain-language setup and warnings", async () => {
     useProjectStore.setState({
       preflightProjectSetup: vi.fn(async (rootPath, _name, mode) => reviewedPlan(rootPath, mode)),
     });
@@ -695,6 +726,37 @@ describe("LandingPage BIDS detection dialogs", () => {
     await screen.findByTestId("bids-detection-dialog");
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
     await screen.findByTestId("bids-setup-plan");
+    const details = screen.getByTestId("bids-setup-details");
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByTestId("bids-setup-details-content")).not.toBeVisible();
+    expect(screen.getByTestId("bids-setup-overview-description")).toHaveTextContent(
+      "Existing images and documentation remain unchanged during setup.",
+    );
+    expect(screen.getByTestId("bids-setup-warning")).toBeVisible();
+    expect(screen.getByTestId("bids-dataset-counts")).toHaveTextContent(
+      "25 participants · 25 imaging sessions",
+    );
+    expect(screen.getByTestId("bids-setup-consent-notice")).toHaveTextContent(
+      "Nothing changes until you select Create project.",
+    );
+    expect(screen.getByTestId("bids-detection-dialog-continue-btn")).toHaveTextContent(
+      "Create project",
+    );
+    expect(screen.queryByText(/skip import|cross-sectional/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("bids-setup-details-toggle"));
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByTestId("bids-setup-details-content")).toBeVisible();
+    expect(
+      screen
+        .getAllByTestId(/^bids-setup-operation-(?!preview-)/)
+        .map((element) => element.dataset.testid),
+    ).toEqual([
+      "bids-setup-operation-rawdata-",
+      "bids-setup-operation--bidsignore",
+      "bids-setup-operation-project-easl",
+    ]);
+    expect(screen.getByTestId("bids-setup-root")).toHaveTextContent("Folder: /dataset");
     expect(screen.getByTestId("bids-setup-operation-project-easl")).toHaveTextContent(
       "create project.easl",
     );
@@ -704,15 +766,43 @@ describe("LandingPage BIDS detection dialogs", () => {
     expect(screen.getByTestId("bids-setup-operation-preview--bidsignore").textContent).toBe(
       "project.easl\n.easl_staging\nrawdata/\n",
     );
-    expect(screen.getByTestId("bids-setup-operation-rawdata--easl-gui-managed")).toHaveTextContent(
-      "create rawdata/.easl-gui-managed",
-    );
+    expect(screen.getByTestId("bids-setup-operation-rawdata-")).toHaveTextContent("no-op rawdata/");
     expect(screen.getByTestId("bids-setup-project-summary")).toHaveTextContent(
       /Dataset.*schema 2.*project-id/i,
     );
+    expect(screen.getByTestId("bids-setup-project-summary")).toHaveTextContent("a".repeat(64));
     expect(screen.getByTestId("bids-setup-readme-notice")).toBeInTheDocument();
     expect(screen.getByTestId("bids-setup-warning")).toHaveTextContent("2 sub-*");
     expect(screen.getByTestId("bids-setup-temporary-artifacts")).toHaveTextContent("Candidates");
+  });
+
+  it("explains both choices and shows single-participant counts before any setup is authorised", async () => {
+    const createProject = vi.fn();
+    useProjectStore.setState({ createProject });
+    vi.mocked(open).mockResolvedValue("/test/test_Oxford_ASL_singlePLD");
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "is_writable") return true;
+      if (command === "check_bids_dataset") {
+        return { ...BASE_BIDS_RESULT, aslSubjectCount: 1, aslSessionCount: 1 };
+      }
+      return null;
+    });
+    renderLanding();
+    fireEvent.click(screen.getByTestId("landing-new-project-btn"));
+    await screen.findByTestId("bids-detection-dialog");
+    expect(screen.getByTestId("bids-dataset-name")).toHaveTextContent("test_Oxford_ASL_singlePLD");
+    expect(screen.getByTestId("bids-dataset-counts")).toHaveTextContent(
+      "Found ASL images for 1 participant · 1 imaging session.",
+    );
+    expect(
+      screen.getByRole("radio", { name: "Use existing BIDS images — Recommended" }),
+    ).toHaveAccessibleDescription(/No DICOM conversion is needed.*review scan information/i);
+    expect(
+      screen.getByRole("radio", { name: "Import original scanner files (DICOM)" }),
+    ).toHaveAccessibleDescription(/select those files next; conversion does not start here/i);
+    expect(screen.getByTestId("bids-detection-dialog-continue-btn")).toBeDisabled();
+    expect(useProjectStore.getState().preflightProjectSetup).not.toHaveBeenCalled();
+    expect(createProject).not.toHaveBeenCalled();
   });
 
   it("keeps confirmation disabled for conflicts and does not commit on review cancellation or preflight failure", async () => {
@@ -720,7 +810,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     useProjectStore.setState({
       createProject,
       preflightProjectSetup: vi.fn(async (rootPath, _name, mode) =>
-        reviewedPlan(rootPath, mode, ["foreign marker"]),
+        reviewedPlan(rootPath, mode, ["project.easl already exists"]),
       ),
     });
     vi.mocked(open).mockResolvedValue("/dataset");
@@ -734,6 +824,8 @@ describe("LandingPage BIDS detection dialogs", () => {
     await screen.findByTestId("bids-detection-dialog");
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
     await screen.findByTestId("bids-setup-conflict");
+    expect(screen.getByTestId("bids-setup-conflict")).toBeVisible();
+    expect(screen.getByTestId("bids-setup-details")).not.toHaveAttribute("open");
     expect(screen.getByTestId("bids-detection-dialog-continue-btn")).toBeDisabled();
     fireEvent.click(screen.getByTestId("bids-detection-dialog-cancel-btn"));
     expect(createProject).not.toHaveBeenCalled();
@@ -796,14 +888,18 @@ describe("LandingPage BIDS detection dialogs", () => {
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
     await waitFor(() => expect(resolveBids).toBeTypeOf("function"));
     fireEvent.click(screen.getByTestId("bids-detection-dialog-dicom-radio"));
-    await screen.findByText(/Project Dataset.*dicom/i);
+    await waitFor(() =>
+      expect(screen.getByTestId("bids-setup-project-summary")).toHaveTextContent(
+        /Project Dataset.*dicom/i,
+      ),
+    );
     resolveBids(reviewedPlan("/dataset", "bids"));
     await Promise.resolve();
     expect(screen.getByTestId("bids-setup-plan")).toHaveTextContent(/dicom/);
     expect(screen.getByTestId("bids-detection-dialog-continue-btn")).not.toBeDisabled();
   });
 
-  it("creates BIDS project when user selects Skip Import and clicks Continue", async () => {
+  it("creates BIDS project when user chooses existing BIDS images and confirms creation", async () => {
     const createProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({ createProject });
     vi.mocked(open).mockResolvedValue("/tmp/bids-dataset");
@@ -820,7 +916,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       expect(screen.getByTestId("bids-detection-dialog")).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/ASL subjects:/i)).toBeInTheDocument();
+    expect(screen.getByTestId("bids-dataset-counts")).toHaveTextContent("25 participants");
     expect(screen.getByTestId("bids-detection-dialog-skip-radio")).toBeInTheDocument();
     expect(screen.getByTestId("bids-detection-dialog-dicom-radio")).toBeInTheDocument();
     expect(screen.getByTestId("bids-detection-dialog-continue-btn")).toBeInTheDocument();
@@ -848,7 +944,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     });
   });
 
-  it("creates DICOM project when user selects Import from DICOM and clicks Continue", async () => {
+  it("creates DICOM project when user chooses original scanner files and confirms creation", async () => {
     const createProject = vi.fn().mockResolvedValue(undefined);
     useProjectStore.setState({ createProject });
     vi.mocked(open).mockResolvedValue("/tmp/bids-dataset");
@@ -911,7 +1007,7 @@ describe("LandingPage BIDS detection dialogs", () => {
     });
     expect(screen.getByTestId("bids-no-asl-choose-btn")).toBeInTheDocument();
     expect(screen.getByTestId("bids-no-asl-dialog")).toHaveTextContent(
-      "Ensure at least one subject has ASL images in perf/ and applicable ASL JSON metadata.",
+      "Participant folders were found, but no ASL images with the required scan information were detected.",
     );
 
     // Click cancel button
@@ -948,6 +1044,11 @@ describe("LandingPage BIDS detection dialogs", () => {
     });
     expect(screen.getByTestId("bids-corrupt-desc-skip-btn")).toBeInTheDocument();
     expect(screen.getByTestId("bids-corrupt-desc-cancel-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("bids-description-warning")).toBeVisible();
+    expect(screen.getByTestId("bids-description-warning")).toHaveTextContent(
+      "this does not repair that file.",
+    );
+    expect(screen.queryByText(/skip import/i)).not.toBeInTheDocument();
     expect(createProject).not.toHaveBeenCalled();
   });
 
@@ -981,29 +1082,35 @@ describe("LandingPage BIDS detection dialogs", () => {
     expect(createProject).not.toHaveBeenCalled();
   });
 
-  it("shows missing aslcontext warning when missing_aslcontext_count > 0", async () => {
-    const createProject = vi.fn();
-    useProjectStore.setState({ createProject });
-    vi.mocked(open).mockResolvedValue("/tmp/bids-dataset");
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "is_writable") return true;
-      if (cmd === "check_bids_dataset") {
-        return { ...BASE_BIDS_RESULT, missingAslcontextCount: 3 };
-      }
-      return true;
-    });
+  it.each([1, 3])(
+    "counts missing context as %i ASL runs, not participant sessions",
+    async (count) => {
+      const createProject = vi.fn();
+      useProjectStore.setState({ createProject });
+      vi.mocked(open).mockResolvedValue("/tmp/bids-dataset");
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        if (cmd === "is_writable") return true;
+        if (cmd === "check_bids_dataset") {
+          return { ...BASE_BIDS_RESULT, missingAslcontextCount: count };
+        }
+        return true;
+      });
 
-    renderLanding();
-    fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
+      renderLanding();
+      fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
-    await waitFor(() => {
-      expect(screen.getByTestId("bids-detection-dialog")).toBeInTheDocument();
-    });
+      await waitFor(() => {
+        expect(screen.getByTestId("bids-detection-dialog")).toBeInTheDocument();
+      });
 
-    // The warning is rendered inside the dialog — check it exists
-    const dialog = screen.getByTestId("bids-detection-dialog");
-    expect(dialog.textContent).toMatch(/3.*session.*skip/i);
-  });
+      const warning = screen.getByTestId("bids-missing-context-warning");
+      expect(warning).toBeVisible();
+      expect(warning).toHaveTextContent(
+        count === 1 ? "1 ASL run is missing" : "3 ASL runs are missing",
+      );
+      expect(warning).toHaveTextContent("Affected participant sessions will be excluded");
+    },
+  );
 
   it("disables BIDS and allows DICOM import confirm when no BIDS subjects are found", async () => {
     const createProject = vi.fn().mockResolvedValue(undefined);

@@ -26,7 +26,7 @@ The system SHALL represent supported flat DataPar settings through the shared cu
 
 ### Requirement: Field metadata constant
 
-The system SHALL define `FIELD_METADATA` for field labels, help, hints, sections, tiers, conditions and widgets. Descriptions SHALL match operative meanings and units in the audited ExploreASL checkout `6dafdba4cd2333eede4525d05f110b1cfa3f63c6`, identified by `VERSION_2.0.0_BETA`; this SHALL NOT imply support across all releases. Hints SHALL distinguish GUI display choices from fixed or data-dependent MATLAB defaults. Metadata defaults SHALL NOT populate unset processing fields.
+The system SHALL define `FIELD_METADATA` for field labels, help, hints and defaults. Parameter components SHALL own section placement, basic/advanced grouping, widget selection and conditional visibility without duplicating those descriptors in `FIELD_METADATA`. Descriptions SHALL match operative meanings and units in the audited ExploreASL checkout `6dafdba4cd2333eede4525d05f110b1cfa3f63c6`, identified by `VERSION_2.0.0_BETA`; this SHALL NOT imply support across all releases. Hints SHALL distinguish GUI display choices from fixed or data-dependent MATLAB defaults. Metadata defaults SHALL NOT populate unset processing fields.
 
 FSL help SHALL describe the GUI's initially on display and MATLAB's default automatic search when no FSL directory is already available. Lesion-filling help SHALL distinguish the GUI's initially off display from MATLAB's true default when unset. VABY discovery help SHALL state that the audited checkout does not implement automatic discovery and requires configured `x.external.VABYdir` for requested VABY quantification; existing discovery flag values SHALL remain preserved.
 
@@ -34,16 +34,6 @@ FSL help SHALL describe the GUI's initially on display and MATLAB's default auto
 
 - **WHEN** `bTopUp` metadata is accessed
 - **THEN** help SHALL describe automatic data-dependent TopUp selection when unset and the GUI's initially off display
-
-#### Scenario: Conditional field not shown
-
-- **WHEN** `BackgroundSuppressionPulseTime` metadata `condition` is evaluated with state where `M0` is "Absent"
-- **THEN** condition returns `false`
-
-#### Scenario: Conditional field shown
-
-- **WHEN** `BackgroundSuppressionPulseTime` metadata `condition` is evaluated with state where `M0` is "UseControlAsM0" AND `BackgroundSuppressionNumberPulses` > 0
-- **THEN** the pulse-time control SHALL appear with milliseconds as its processing unit
 
 ### Requirement: M0 field widget
 
@@ -69,13 +59,23 @@ The `x.Q.M0` field SHALL be rendered as a Mantine `Select` with options: `separa
 - **WHEN** user changes M0 selection from "Custom value" to "Absent"
 - **THEN** state field `M0` is set to `"Absent"`, any previously entered custom number is discarded
 
+#### Scenario: Conditional field not shown
+
+- **WHEN** the M0 section is displayed with `M0` set to "Absent"
+- **THEN** the pulse-time control SHALL be hidden
+
+#### Scenario: Conditional field shown
+
+- **WHEN** the M0 section is displayed with `M0` set to "UseControlAsM0" AND `BackgroundSuppressionNumberPulses` > 0
+- **THEN** the pulse-time control SHALL appear with milliseconds as its processing unit
+
 ### Requirement: ApplyQuantification checkbox group
 
-The `x.modules.asl.ApplyQuantification` field SHALL be rendered as 6 labeled checkboxes, each corresponding to one quantification step in order: "Apply ScaleSlopes ASL4D", "Apply ScaleSlopes M0", "Convert PWI a.u. to label", "Quantify M0 a.u.", "Perform division by M0", "Apply all scaling". A "Select all" / "Deselect all" toggle SHALL be shown above the group. Default SHALL be all checked.
+The `x.modules.asl.ApplyQuantification` field SHALL be rendered as 6 labeled checkboxes, in order: "Apply pixel intensity scaling to ASL timeseries", "Apply pixel intensity scaling to M0 image", "Convert perfusion-weighted signal to label volume", "Calibrate M0 intensity (correct T1 relaxation)", "Divide perfusion signal by M0", "Apply global scaling factors to final CBF map". A "Select all" / "Deselect all" toggle SHALL be shown above the group. An unset value SHALL display all checked without writing a default.
 
 #### Scenario: User deselects step 5
 
-- **WHEN** user unchecks "Perform division by M0"
+- **WHEN** user unchecks "Divide perfusion signal by M0"
 - **THEN** state field `ApplyQuantification` is set to `[1, 1, 1, 1, 0, 1]`
 
 #### Scenario: Deselect all then select individual steps

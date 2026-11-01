@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import { inspectProject } from "../lib/projectPersistence";
 import { transitionProjectRuntime } from "../lib/projectCoordinator";
 import { useGlobalStore } from "../stores/globalStore";
-import { deriveDisagreements, useManifestStore } from "../stores/manifestStore";
+import { useManifestStore } from "../stores/manifestStore";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
 
@@ -46,7 +46,6 @@ async function seedManifestDisagreements(easlPath: string) {
   await transitionProjectRuntime(await inspectProject(easlPath));
   const project = useProjectStore.getState().project!;
   const manifest = project.uiState.manifest;
-  const disagreements = deriveDisagreements(manifest);
 
   // `loaded` is the render gate. Set it last so App never observes partial fixture state.
   useGlobalStore.setState({
@@ -90,9 +89,6 @@ async function seedManifestDisagreements(easlPath: string) {
   useManifestStore.setState({
     step: 1,
     filter: "all",
-    reviewerMode: "multi",
-    disagreements,
-    agreementResults: null,
     staleVerdicts: Object.fromEntries(manifest.reviewers.map(({ id }) => [id, new Set<string>()])),
     priorModulesMtimes: {
       "sub-01_01": null,

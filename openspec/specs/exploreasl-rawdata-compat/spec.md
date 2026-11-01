@@ -38,7 +38,7 @@ ExploreASL reads `x.opts.subjectFolder` in `xASL_init_SubjectList.m` and overrid
 #### Scenario: BIDS-direct project processing
 
 - **WHEN** `startProcessing` runs on a BIDS-direct project (`dataSource = "bids"`)
-- **THEN** native preparation SHALL verify the existing compatibility directory and marker without modifying them, write `dataPar.json` with `x.opts.subjectFolder = <rootPath>`, and launch ExploreASL to scan root-level `sub-*/`
+- **THEN** native preparation SHALL verify the existing compatibility directory without modifying it, write `dataPar.json` with `x.opts.subjectFolder = <rootPath>`, and launch ExploreASL to scan root-level `sub-*/`
 
 #### Scenario: DICOM project processing unchanged
 
@@ -59,7 +59,7 @@ Cross-sectional handling: `parse_bids_structure` defaults missing `ses-*` to ses
 #### Scenario: parse_bids_structure handles rawdata scan
 
 - **WHEN** `parse_bids_structure` scans a path with `sub-001/ses-01/perf/`, `sub-002/ses-01/perf/`
-- **THEN** two `BidsSubject` entries returned, each with `subject_label = "001"`/`"002"`, single `BidsSession` with `session_label = "01"` and `has_explicit_session = true`
+- **THEN** two `BidsSubject` entries returned, with `subject_label = "sub-001"`/`"sub-002"`, each with one `BidsSession` with `session_label = "01"` and `has_explicit_session = true`
 
 ### Requirement: participants.tsv site-column precedence for BIDS-direct projects
 
@@ -89,14 +89,14 @@ For DICOM-import projects, the existing behavior is preserved (group labels writ
 - **WHEN** ds000240 (with root-level `participants.tsv` containing 16 clinical columns) is processed end-to-end as a BIDS-direct project
 - **THEN** root-level `participants.tsv` retains its original 16 columns throughout; ExploreASL-generated columns (`site`, `gm_vol`, `motion`, etc.) live in `derivatives/ExploreASL/participants.tsv` only
 
-### Requirement: BIDS compatibility setup uses owned marker
+### Requirement: BIDS compatibility setup ensures rawdata directory
 
-Confirmed BIDS-direct project creation SHALL ensure `rawdata/` exists and SHALL create or verify `rawdata/.easl-gui-managed` with the versioned bytes defined by `bids-project-mutation-preflight`. It SHALL preserve every pre-existing entry in `rawdata/`, including `README.md`, and SHALL add `rawdata/` to `.bidsignore` through the confirmed transaction. Existing `sub-*` directories SHALL produce a pre-confirmation warning that BIDS-direct processing scans root-level subjects and ignores those directories.
+Confirmed BIDS-direct project creation SHALL ensure `rawdata/` exists. It SHALL preserve every pre-existing entry in `rawdata/`, including `README.md`, and SHALL add `rawdata/` to `.bidsignore` through the confirmed transaction. Existing `sub-*` directories SHALL produce a pre-confirmation warning that BIDS-direct processing scans root-level subjects and ignores those directories.
 
 #### Scenario: Fresh project creates compatibility artifacts
 
 - **WHEN** a fresh BIDS-direct project mutation plan commits
-- **THEN** `rawdata/`, the GUI-owned marker, and the planned `rawdata/` ignore entry SHALL exist before import review begins
+- **THEN** `rawdata/` and the planned `rawdata/` ignore entry SHALL exist before import review begins
 
 #### Scenario: Existing README remains user-owned
 
@@ -110,19 +110,19 @@ Confirmed BIDS-direct project creation SHALL ensure `rawdata/` exists and SHALL 
 
 ### Requirement: Processing verifies compatibility without mutation
 
-Before BIDS-direct processing starts, the system SHALL verify that `rawdata/` is a directory and `rawdata/.easl-gui-managed` is the expected regular file. Verification SHALL be read-only. Missing, altered, symbolic-link, or wrong-type compatibility artifacts SHALL block processing with an action that returns the user to a fresh mutation preflight; processing SHALL NOT silently repair them. DICOM processing SHALL not require this marker.
+Before BIDS-direct processing starts, the system SHALL verify that `rawdata/` is a real directory, not a symbolic link. Verification SHALL be read-only. A missing, symbolic-link, or wrong-type compatibility directory SHALL block processing with an action that returns the user to a fresh mutation preflight; processing SHALL NOT silently repair it. DICOM processing SHALL not require this verification.
 
 #### Scenario: Valid setup permits BIDS processing
 
-- **WHEN** BIDS-direct processing finds the expected directory and marker
+- **WHEN** BIDS-direct processing finds the expected directory
 - **THEN** compatibility verification SHALL succeed without changing source-tree entries
 
-#### Scenario: Missing marker blocks without repair
+#### Scenario: Missing directory blocks without repair
 
-- **WHEN** BIDS-direct processing finds `rawdata/` but no GUI-owned marker
-- **THEN** processing SHALL remain unstarted, report that setup must be reviewed again, and SHALL not create the marker
+- **WHEN** BIDS-direct processing finds no `rawdata/` directory
+- **THEN** processing SHALL remain unstarted, report that setup must be reviewed again, and SHALL not create the directory
 
-#### Scenario: DICOM project remains marker-independent
+#### Scenario: DICOM project remains unchanged
 
 - **WHEN** processing starts for a DICOM project
-- **THEN** BIDS-direct compatibility marker verification SHALL not run
+- **THEN** BIDS-direct compatibility directory verification SHALL not run

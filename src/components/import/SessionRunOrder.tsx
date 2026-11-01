@@ -1,3 +1,4 @@
+import { numberInputTestIds } from "../common/numberInputTestIds";
 import { Button, Card, NumberInput, Stack, Table, Text, TextInput } from "@mantine/core";
 
 import type { SessionAlias } from "../../schemas/importSchemas";
@@ -131,7 +132,7 @@ export default function OrderAliasTable({
                     min={1}
                     size="xs"
                     w={70}
-                    data-testid={`order-index-input-${rowId}`}
+                    {...numberInputTestIds(`order-index-input-${rowId}`)}
                   />
                 </Table.Td>
               </Table.Tr>

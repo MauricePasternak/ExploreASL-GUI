@@ -71,7 +71,7 @@ When a new project is created, the Import phase SHALL initialize `selectedProfil
 
 `createProject` SHALL set `projectMeta.dataSource` from this parameter. `projectMeta.currentPhase` SHALL be set to `"import"` regardless of `dataSource` (both paths land on Import page; both advance to Parameters on completion).
 
-`projectMeta.dataSource` is immutable after `createProject` returns. No runtime guard enforces immutability — JSDoc documents the constraint and callers MUST NOT mutate post-creation. One unit test verifies `createProject` sets the value and downstream update paths do not change it.
+`projectMeta.dataSource` is established at creation and is not a user-editable field in the native `ProjectEdit` contract.
 
 #### Scenario: DICOM project creation
 
@@ -88,10 +88,10 @@ When a new project is created, the Import phase SHALL initialize `selectedProfil
 - **WHEN** `createProject(path, name, {})` is called (no `dataSource`)
 - **THEN** the call throws a validation error; no project is created
 
-#### Scenario: Immutability test
+#### Scenario: Source kind is not a project edit
 
-- **WHEN** `createProject(path, name, { dataSource: "bids" })` returns and subsequent `updateProjectMeta({ dataSource: "dicom" })` is attempted
-- **THEN** the test verifies either the call returns without mutation OR the test documents that callers are trusted not to make this call (per the trust-callers + JSDoc contract)
+- **WHEN** a caller submits a project edit after creating a BIDS project
+- **THEN** the native edit contract SHALL NOT offer a `dataSource` change
 
 ### Requirement: BIDS review confirm writes to mappingState
 

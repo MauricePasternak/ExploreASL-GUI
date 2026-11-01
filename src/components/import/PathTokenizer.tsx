@@ -1,6 +1,8 @@
 import { Badge, Button, Card, Code, Group, Select, Stack, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconChevronRight, IconRoute } from "@tabler/icons-react";
 import HeaderCard from "../common/HeaderCard";
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import ImportStepLayout from "./ImportStepLayout";
 
 import { isTokenizerComplete } from "../../lib/importStepAccess";
 import { splitBySubDelimiters } from "../../lib/pathUtils";
@@ -63,7 +65,29 @@ export default function PathTokenizer() {
   });
 
   return (
-    <Stack gap="md" data-testid="path-tokenizer">
+    <ImportStepLayout
+      testId="path-tokenizer"
+      navigation={
+        <Group justify="space-between" data-testid="tokenizer-nav">
+          <Button
+            leftSection={<IconArrowLeft size={16} />}
+            variant="light"
+            onClick={handleBack}
+            data-testid="tokenizer-back-btn"
+          >
+            Back: Ingest DICOMs
+          </Button>
+          <Button
+            rightSection={<IconArrowRight size={16} />}
+            disabled={!allConfigured}
+            onClick={handleNext}
+            data-testid="tokenizer-next-btn"
+          >
+            Next: Resolve Aliases
+          </Button>
+        </Group>
+      }
+    >
       <HeaderCard
         icon={IconRoute}
         title="Path Tokenizer"
@@ -75,38 +99,7 @@ export default function PathTokenizer() {
       {pathPatterns.map((pattern) => (
         <PatternCard key={pattern.signature} pattern={pattern} />
       ))}
-
-      <Group
-        justify="space-between"
-        pos="sticky"
-        bottom={40}
-        style={{
-          zIndex: 2,
-          paddingTop: "var(--mantine-spacing-md)",
-          paddingBottom: "var(--mantine-spacing-md)",
-          backgroundColor: "var(--mantine-color-body)",
-          boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.06)",
-        }}
-        data-testid="tokenizer-nav"
-      >
-        <Button
-          leftSection={<IconArrowLeft size={16} />}
-          variant="light"
-          onClick={handleBack}
-          data-testid="tokenizer-back-btn"
-        >
-          Back: Ingest DICOMs
-        </Button>
-        <Button
-          rightSection={<IconArrowRight size={16} />}
-          disabled={!allConfigured}
-          onClick={handleNext}
-          data-testid="tokenizer-next-btn"
-        >
-          Next: Resolve Aliases
-        </Button>
-      </Group>
-    </Stack>
+    </ImportStepLayout>
   );
 }
 
@@ -169,7 +162,7 @@ function PatternCard({ pattern }: { pattern: PathPattern }) {
             mb={4}
             className="tokenizer-config-toggle"
             style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-            data-testid="tokenizer-config-toggle"
+            data-testid={`tokenizer-config-toggle-${pattern.signature}`}
           >
             <IconChevronRight
               size={14}
@@ -267,6 +260,7 @@ function BlockAssigner({
             size="xs"
             w={100}
             comboboxProps={{ withinPortal: true }}
+            {...comboboxTestIds(`tokenizer-assign-${pattern.signature}-${blockIndex}`)}
           />
           {uniqueCount > 0 && (
             <Text size="xs" c="dimmed">
@@ -318,6 +312,9 @@ function BlockAssigner({
                   size="xs"
                   w={90}
                   comboboxProps={{ withinPortal: true }}
+                  {...comboboxTestIds(
+                    `tokenizer-assign-${pattern.signature}-${blockIndex}-${subIndex}`,
+                  )}
                 />
               </Stack>
             </Group>

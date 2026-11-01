@@ -1,4 +1,7 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
 import { useMemo } from "react";
+import { numberInputTestIds } from "../common/numberInputTestIds";
 import { useProjectStore } from "../../stores/projectStore";
 import { visualizationSettings } from "../../stores/visualizationStore";
 import {
@@ -125,6 +128,7 @@ export default function SettingsDrawer() {
       title="Visualization Settings"
       size="md"
       data-testid="settings-drawer"
+      attributes={{ close: { "data-testid": "settings-drawer-close" } }}
     >
       <Stack gap="md">
         {/* Nivo Chart Section */}
@@ -144,6 +148,7 @@ export default function SettingsDrawer() {
                 value={pointSize}
                 onChange={setPointSize}
                 data-testid="setting-point-size"
+                attributes={{ thumb: { "data-testid": "setting-point-size-thumb" } }}
               />
             </div>
 
@@ -158,6 +163,7 @@ export default function SettingsDrawer() {
                 value={swarmSpacing}
                 onChange={setSwarmSpacing}
                 data-testid="setting-swarm-spacing"
+                attributes={{ thumb: { "data-testid": "setting-swarm-spacing-thumb" } }}
               />
             </div>
 
@@ -172,6 +178,7 @@ export default function SettingsDrawer() {
                 value={chartOpacity}
                 onChange={setChartOpacity}
                 data-testid="setting-chart-opacity"
+                attributes={{ thumb: { "data-testid": "setting-chart-opacity-thumb" } }}
               />
             </div>
 
@@ -209,7 +216,7 @@ export default function SettingsDrawer() {
                 value={domainFilters.xMin ?? undefined}
                 onChange={(val) => setDomainFilters({ xMin: typeof val === "number" ? val : null })}
                 size="xs"
-                data-testid="filter-x-min"
+                {...numberInputTestIds("filter-x-min")}
               />
             </Grid.Col>
             <Grid.Col span={6}>
@@ -219,7 +226,7 @@ export default function SettingsDrawer() {
                 value={domainFilters.xMax ?? undefined}
                 onChange={(val) => setDomainFilters({ xMax: typeof val === "number" ? val : null })}
                 size="xs"
-                data-testid="filter-x-max"
+                {...numberInputTestIds("filter-x-max")}
               />
             </Grid.Col>
             <Grid.Col span={6}>
@@ -229,7 +236,7 @@ export default function SettingsDrawer() {
                 value={domainFilters.yMin ?? undefined}
                 onChange={(val) => setDomainFilters({ yMin: typeof val === "number" ? val : null })}
                 size="xs"
-                data-testid="filter-y-min"
+                {...numberInputTestIds("filter-y-min")}
               />
             </Grid.Col>
             <Grid.Col span={6}>
@@ -239,7 +246,7 @@ export default function SettingsDrawer() {
                 value={domainFilters.yMax ?? undefined}
                 onChange={(val) => setDomainFilters({ yMax: typeof val === "number" ? val : null })}
                 size="xs"
-                data-testid="filter-y-max"
+                {...numberInputTestIds("filter-y-max")}
               />
             </Grid.Col>
           </Grid>
@@ -268,7 +275,7 @@ export default function SettingsDrawer() {
                   value={xLegendOffset}
                   onChange={(val) => setXLegendOffset(typeof val === "number" ? val : 36)}
                   size="xs"
-                  data-testid="setting-x-legend-offset"
+                  {...numberInputTestIds("setting-x-legend-offset")}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
@@ -277,7 +284,7 @@ export default function SettingsDrawer() {
                   value={xTickSize}
                   onChange={(val) => setXTickSize(typeof val === "number" ? val : 5)}
                   size="xs"
-                  data-testid="setting-x-tick-size"
+                  {...numberInputTestIds("setting-x-tick-size")}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
@@ -286,7 +293,7 @@ export default function SettingsDrawer() {
                   value={xTickPadding}
                   onChange={(val) => setXTickPadding(typeof val === "number" ? val : 5)}
                   size="xs"
-                  data-testid="setting-x-tick-padding"
+                  {...numberInputTestIds("setting-x-tick-padding")}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
@@ -295,7 +302,7 @@ export default function SettingsDrawer() {
                   value={xTickRotation}
                   onChange={(val) => setXTickRotation(typeof val === "number" ? val : 0)}
                   size="xs"
-                  data-testid="setting-x-tick-rotation"
+                  {...numberInputTestIds("setting-x-tick-rotation")}
                 />
               </Grid.Col>
             </Grid>
@@ -325,7 +332,7 @@ export default function SettingsDrawer() {
                   value={yLegendOffset}
                   onChange={(val) => setYLegendOffset(typeof val === "number" ? val : -40)}
                   size="xs"
-                  data-testid="setting-y-legend-offset"
+                  {...numberInputTestIds("setting-y-legend-offset")}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
@@ -334,7 +341,7 @@ export default function SettingsDrawer() {
                   value={yTickSize}
                   onChange={(val) => setYTickSize(typeof val === "number" ? val : 5)}
                   size="xs"
-                  data-testid="setting-y-tick-size"
+                  {...numberInputTestIds("setting-y-tick-size")}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
@@ -343,7 +350,7 @@ export default function SettingsDrawer() {
                   value={yTickPadding}
                   onChange={(val) => setYTickPadding(typeof val === "number" ? val : 5)}
                   size="xs"
-                  data-testid="setting-y-tick-padding"
+                  {...numberInputTestIds("setting-y-tick-padding")}
                 />
               </Grid.Col>
               <Grid.Col span={6}>
@@ -352,7 +359,7 @@ export default function SettingsDrawer() {
                   value={yTickRotation}
                   onChange={(val) => setYTickRotation(typeof val === "number" ? val : 0)}
                   size="xs"
-                  data-testid="setting-y-tick-rotation"
+                  {...numberInputTestIds("setting-y-tick-rotation")}
                 />
               </Grid.Col>
             </Grid>
@@ -373,7 +380,7 @@ export default function SettingsDrawer() {
               value={nvSliceType}
               onChange={(val) => setNvSliceType(val as NvSliceType)}
               size="xs"
-              data-testid="setting-nv-slice-type"
+              {...comboboxTestIds("setting-nv-slice-type")}
             />
 
             <Select
@@ -382,7 +389,7 @@ export default function SettingsDrawer() {
               value={nvColormap}
               onChange={(val) => setNvColormap(val || "gray")}
               size="xs"
-              data-testid="setting-nv-colormap"
+              {...comboboxTestIds("setting-nv-colormap")}
             />
 
             <div>
@@ -399,7 +406,7 @@ export default function SettingsDrawer() {
                 onChange={(val) => setNvBackColor(val as NvBackColor)}
                 size="xs"
                 fullWidth
-                data-testid="setting-nv-back-color"
+                {...segmentedControlTestIds("setting-nv-back-color")}
               />
             </div>
 

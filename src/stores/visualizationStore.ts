@@ -46,7 +46,6 @@ interface EphemeralState {
   chartData: ChartPoint[];
   selectedPointId: string | null;
   viewerState: ViewerState;
-  viewerError: string | null;
   webglAvailable: boolean;
   exclusionCount: { plotted: number; excluded: number };
   _lastExtMtime: string | null;
@@ -107,7 +106,6 @@ interface VisualizationActions {
   setChartData: (data: ChartPoint[]) => void;
   selectPoint: (id: string | null) => void;
   setViewerState: (state: ViewerState) => void;
-  setViewerError: (error: string | null) => void;
   setWebglAvailable: (available: boolean) => void;
   setExclusionCount: (count: { plotted: number; excluded: number }) => void;
   _setLastExtMtime: (mtime: string | null) => void;
@@ -164,7 +162,6 @@ const INITIAL_EPHEMERAL: EphemeralState = {
   chartData: [],
   selectedPointId: null,
   viewerState: { status: "idle" },
-  viewerError: null,
   webglAvailable: false,
   exclusionCount: { plotted: 0, excluded: 0 },
   _lastExtMtime: null,
@@ -282,7 +279,6 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
   setChartData: (data) => set({ chartData: data }),
   selectPoint: (id) => set({ selectedPointId: id }),
   setViewerState: (state) => set({ viewerState: state }),
-  setViewerError: (error) => set({ viewerError: error }),
   setWebglAvailable: (available) => set({ webglAvailable: available }),
   setExclusionCount: (count) => set({ exclusionCount: count }),
   _setLastExtMtime: (mtime) => set({ _lastExtMtime: mtime }),

@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import {
   ActionIcon,
   Alert,
@@ -445,7 +446,7 @@ export default function ProfileManager() {
                 }
               }}
               allowDeselect={false}
-              data-testid="profile-form-type"
+              {...comboboxTestIds("profile-form-type")}
             />
 
             <TextInput
@@ -683,6 +684,7 @@ export default function ProfileManager() {
         onClose={() => setDeleteTargetId(null)}
         title="Delete execution profile?"
         data-testid="profile-delete-dialog"
+        attributes={{ close: { "data-testid": "profile-delete-dialog-close" } }}
         transitionProps={{ duration: 0 }}
       >
         <Stack gap="sm">
@@ -697,7 +699,11 @@ export default function ProfileManager() {
             </Alert>
           ) : null}
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setDeleteTargetId(null)}>
+            <Button
+              variant="default"
+              onClick={() => setDeleteTargetId(null)}
+              data-testid="profile-delete-cancel-btn"
+            >
               Cancel
             </Button>
             <Button

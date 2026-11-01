@@ -26,8 +26,3 @@ export function aslRunsEqual(a: string | null | undefined, b: string | null | un
   if (a == null || b == null) return false;
   return normalizeAslRunId(a) === normalizeAslRunId(b);
 }
-
-/** Convert a canonical run id to ExploreASL legacy session label (`ASL_1`). */
-export function toExploreAslSessionLabel(run: string): string {
-  return `ASL_${normalizeAslRunId(run)}`;
-}

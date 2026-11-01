@@ -438,6 +438,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         data-testid="layout-main"
       >
         <Modal
+          attributes={{ close: { "data-testid": "leave-project-modal-close" } }}
           opened={leaveModalOpen}
           onClose={() => setLeaveModalOpen(false)}
           title={

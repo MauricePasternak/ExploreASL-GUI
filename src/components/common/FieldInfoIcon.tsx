@@ -17,13 +17,14 @@ const wrapperStyle: CSSProperties = {
 
 interface FieldInfoIconProps {
   "aria-label": string;
+  "data-testid"?: string;
   tooltipLabel?: ReactNode;
   onClick?: (e: MouseEvent<HTMLSpanElement>) => void;
   onMouseDown?: (e: MouseEvent<HTMLSpanElement>) => void;
 }
 
 export const FieldInfoIcon = forwardRef<HTMLSpanElement, FieldInfoIconProps>(function FieldInfoIcon(
-  { "aria-label": ariaLabel, tooltipLabel, onClick, onMouseDown },
+  { "aria-label": ariaLabel, "data-testid": testId, tooltipLabel, onClick, onMouseDown },
   ref,
 ) {
   const iconNode = (
@@ -31,7 +32,7 @@ export const FieldInfoIcon = forwardRef<HTMLSpanElement, FieldInfoIconProps>(fun
       ref={ref}
       aria-label={ariaLabel}
       role="img"
-      data-testid="field-info-icon"
+      data-testid={testId ?? `field-info-${ariaLabel}`}
       onClick={onClick}
       onMouseDown={onMouseDown}
       style={wrapperStyle}

@@ -39,8 +39,8 @@ export default function WelcomeCard({ onOpenSettings }: WelcomeCardProps) {
             automatically convert to BIDS structure.
           </Text>
           <Text size="sm" c="dimmed">
-            • <strong>BIDS Projects:</strong> Open or skip import for pre-existing, BIDS-compliant
-            datasets (containing sub-* directories).
+            • <strong>BIDS Projects:</strong> Use existing BIDS images without DICOM conversion,
+            then review scan information before choosing processing settings.
           </Text>
         </Stack>
         <Button

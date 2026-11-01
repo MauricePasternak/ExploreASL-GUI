@@ -3,7 +3,7 @@ import { Alert, Button, Group, Modal, Stack, TextInput } from "@mantine/core";
 import { useEffect, useRef } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 
-import { BIDS_FIELD_HINTS, stripEmptyBidsParams } from "./metadataFieldHints";
+import { stripEmptyBidsParams } from "./metadataFieldHints";
 import {
   BidsCheckboxField,
   BidsCommaArrayField,
@@ -90,6 +90,7 @@ export default function MetadataModal({
       centered
       size="xl"
       data-testid="metadata-modal"
+      attributes={{ close: { "data-testid": "metadata-modal-close" } }}
     >
       <form
         onSubmit={(event) => {
@@ -149,7 +150,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.ASLContext"
                 label="ASL Context"
-                hint={BIDS_FIELD_HINTS.ASLContext}
                 placeholder="m0scan, label, control, label, control"
                 testId="field-asl-context"
               />
@@ -158,7 +158,6 @@ export default function MetadataModal({
                   control={control}
                   name="bidsParams.M0Type"
                   label="M0 Type"
-                  hint={BIDS_FIELD_HINTS.M0Type}
                   data={["Separate", "Absent", "Estimate"]}
                   testId="field-m0-type"
                 />
@@ -168,7 +167,6 @@ export default function MetadataModal({
                   control={control}
                   name="bidsParams.M0Type"
                   label="M0 Type"
-                  hint={BIDS_FIELD_HINTS.M0Type}
                   data={["Included"]}
                   testId="field-m0-type"
                 />
@@ -177,7 +175,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.M0_GMScaleFactor"
                 label="M0 GM Scale Factor"
-                hint={BIDS_FIELD_HINTS.M0_GMScaleFactor}
                 min={0}
                 testId="field-m0-gm-scale-factor"
               />
@@ -185,14 +182,12 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.DummyScanPositionInASL4D"
                 label="Dummy Scan Position in ASL4D"
-                hint={BIDS_FIELD_HINTS.DummyScanPositionInASL4D}
                 testId="field-dummy-scan-position"
               />
               <BidsCommaArrayField
                 control={control}
                 name="bidsParams.RepetitionTimePreparationM0"
                 label="Repetition Time Preparation M0"
-                hint={BIDS_FIELD_HINTS.RepetitionTimePreparationM0}
                 testId="field-repetition-time-prep-m0"
               />
             </MetadataSectionCard>
@@ -205,7 +200,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.Manufacturer"
                 label="Manufacturer"
-                hint={BIDS_FIELD_HINTS.Manufacturer}
                 data={[
                   { value: "GE_product", label: "GE" },
                   { value: "Philips", label: "Philips" },
@@ -217,7 +211,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.PulseSequenceType"
                 label="Pulse Sequence Type"
-                hint={BIDS_FIELD_HINTS.PulseSequenceType}
                 data={[
                   { value: "spiral", label: "Stack of Spirals" },
                   { value: "GRASE", label: "GRadient and Spin Echo (GRaSE)" },
@@ -229,7 +222,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.MRAcquisitionType"
                 label="MR Acquisition Type"
-                hint={BIDS_FIELD_HINTS.MRAcquisitionType}
                 data={["2D", "3D"]}
                 testId="field-mr-acquisition-type"
               />
@@ -237,7 +229,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.MagneticFieldStrength"
                 label="Magnetic Field Strength (T)"
-                hint={BIDS_FIELD_HINTS.MagneticFieldStrength}
                 decimalScale={2}
                 testId="field-magnetic-field-strength"
               />
@@ -245,21 +236,18 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.EchoTime"
                 label="Echo Time"
-                hint={BIDS_FIELD_HINTS.EchoTime}
                 testId="field-echo-time"
               />
               <BidsNumberField
                 control={control}
                 name="bidsParams.RepetitionTimePreparation"
                 label="Repetition Time Preparation"
-                hint={BIDS_FIELD_HINTS.RepetitionTimePreparation}
                 testId="field-repetition-time-prep"
               />
               <BidsCommaNumberField
                 control={control}
                 name="bidsParams.FlipAngle"
                 label="Flip Angle"
-                hint={BIDS_FIELD_HINTS.FlipAngle}
                 testId="field-flip-angle"
               />
             </MetadataSectionCard>
@@ -269,7 +257,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.TotalAcquiredPairs"
                 label="Total Acquired Control–Label Pairs"
-                hint={BIDS_FIELD_HINTS.TotalAcquiredPairs}
                 decimalScale={0}
                 min={1}
                 testId="field-total-acquired-pairs"
@@ -278,7 +265,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.ArterialSpinLabelingType"
                 label="Arterial Spin Labeling Type"
-                hint={BIDS_FIELD_HINTS.ArterialSpinLabelingType}
                 data={["CASL", "PCASL", "PASL"]}
                 testId="field-arterial-spin-labeling-type"
               />
@@ -286,7 +272,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.PostLabelingDelay"
                 label="Post Labeling Delay"
-                hint={BIDS_FIELD_HINTS.PostLabelingDelay}
                 description="Comma-separated for multiple values. For multi-PLD schemes, place 0 where M0 and/or dummy ASL volumes are found"
                 testId="field-post-labeling-delay"
               />
@@ -296,7 +281,6 @@ export default function MetadataModal({
                   control={control}
                   name="bidsParams.LabelingDuration"
                   label="Labeling Duration"
-                  hint={BIDS_FIELD_HINTS.LabelingDuration}
                   testId="field-labeling-duration"
                 />
               )}
@@ -306,7 +290,6 @@ export default function MetadataModal({
                   control={control}
                   name="bidsParams.PCASLType"
                   label="PCASL Type"
-                  hint={BIDS_FIELD_HINTS.PCASLType}
                   data={["balanced", "unbalanced"]}
                   testId="field-pcasl-type"
                 />
@@ -317,7 +300,6 @@ export default function MetadataModal({
                   control={control}
                   name="bidsParams.CASLType"
                   label="CASL Type"
-                  hint={BIDS_FIELD_HINTS.CASLType}
                   data={["single-coil", "double-coil"]}
                   testId="field-casl-type"
                 />
@@ -328,7 +310,6 @@ export default function MetadataModal({
                   control={control}
                   name="bidsParams.BolusCutOffFlag"
                   label="Bolus Cut Off Flag"
-                  hint={BIDS_FIELD_HINTS.BolusCutOffFlag}
                   testId="field-bolus-cutoff-flag"
                 />
               )}
@@ -339,7 +320,6 @@ export default function MetadataModal({
                     control={control}
                     name="bidsParams.BolusCutOffTechnique"
                     label="Bolus Cut Off Technique"
-                    hint={BIDS_FIELD_HINTS.BolusCutOffTechnique}
                     data={["Q2TIPS", "QUIPSS", "QUIPSSII"]}
                     testId="field-bolus-cutoff-technique"
                   />
@@ -347,7 +327,6 @@ export default function MetadataModal({
                     control={control}
                     name="bidsParams.BolusCutOffDelayTime"
                     label="Bolus Cut Off Delay Time"
-                    hint={BIDS_FIELD_HINTS.BolusCutOffDelayTime}
                     description="Saturation-pulse timings in seconds, in increasing order. For Q2TIPS, enter the first and last pulse timings, comma-separated."
                     testId="field-bolus-cutoff-delay"
                   />
@@ -358,7 +337,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.BackgroundSuppression"
                 label="Background Suppression"
-                hint={BIDS_FIELD_HINTS.BackgroundSuppression}
                 testId="field-background-suppression"
               />
 
@@ -368,7 +346,6 @@ export default function MetadataModal({
                     control={control}
                     name="bidsParams.BackgroundSuppressionNumberPulses"
                     label="Background Suppression Number Pulses"
-                    hint={BIDS_FIELD_HINTS.BackgroundSuppressionNumberPulses}
                     min={0}
                     testId="field-bg-suppression-pulses"
                   />
@@ -376,7 +353,6 @@ export default function MetadataModal({
                     control={control}
                     name="bidsParams.BackgroundSuppressionPulseTime"
                     label="Background Suppression Pulse Time"
-                    hint={BIDS_FIELD_HINTS.BackgroundSuppressionPulseTime}
                     testId="field-bg-suppression-pulse-time"
                   />
                 </>
@@ -386,7 +362,6 @@ export default function MetadataModal({
                 control={control}
                 name="bidsParams.VascularCrushing"
                 label="Vascular Crushing"
-                hint={BIDS_FIELD_HINTS.VascularCrushing}
                 testId="field-vascular-crushing"
               />
 
@@ -395,7 +370,6 @@ export default function MetadataModal({
                   control={control}
                   name="bidsParams.SliceTiming"
                   label="Slice Timing"
-                  hint={BIDS_FIELD_HINTS.SliceTiming}
                   testId="field-slice-timing"
                 />
               )}

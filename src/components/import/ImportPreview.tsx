@@ -12,6 +12,7 @@ import { useProjectStore } from "../../stores/projectStore";
 import { resolveLogicalSource } from "../../lib/projectPaths";
 import ConfigPreview from "./ConfigPreview";
 import StagingMappingTable from "./StagingMappingTable";
+import ImportStepLayout from "./ImportStepLayout";
 
 export default function ImportPreview() {
   const rawPaths = useProjectStore(
@@ -116,7 +117,29 @@ export default function ImportPreview() {
   );
 
   return (
-    <Stack gap="md" data-testid="import-preview">
+    <ImportStepLayout
+      testId="import-preview"
+      navigation={
+        <Group justify="space-between" data-testid="preview-nav">
+          <Button
+            leftSection={<IconArrowLeft size={16} />}
+            variant="light"
+            onClick={() => setActiveStep(3)}
+            data-testid="preview-back-btn"
+          >
+            Back: Metadata
+          </Button>
+          <Button
+            leftSection={<IconArrowRight size={16} />}
+            disabled={!canProceedToStep5}
+            onClick={() => setActiveStep(5)}
+            data-testid="preview-next-btn"
+          >
+            Next: Run Import
+          </Button>
+        </Group>
+      }
+    >
       <HeaderCard
         icon={IconEye}
         title="Preview Import"
@@ -202,36 +225,6 @@ export default function ImportPreview() {
           </Stack>
         </Alert>
       )}
-      <Group
-        justify="space-between"
-        pos="sticky"
-        bottom={40}
-        style={{
-          zIndex: 2,
-          paddingTop: "var(--mantine-spacing-md)",
-          paddingBottom: "var(--mantine-spacing-md)",
-          backgroundColor: "var(--mantine-color-body)",
-          boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.06)",
-        }}
-        data-testid="preview-nav"
-      >
-        <Button
-          leftSection={<IconArrowLeft size={16} />}
-          variant="light"
-          onClick={() => setActiveStep(3)}
-          data-testid="preview-back-btn"
-        >
-          Back: Metadata
-        </Button>
-        <Button
-          leftSection={<IconArrowRight size={16} />}
-          disabled={!canProceedToStep5}
-          onClick={() => setActiveStep(5)}
-          data-testid="preview-next-btn"
-        >
-          Next: Run Import
-        </Button>
-      </Group>
-    </Stack>
+    </ImportStepLayout>
   );
 }

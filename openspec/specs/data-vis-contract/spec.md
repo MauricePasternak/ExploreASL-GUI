@@ -22,7 +22,7 @@ A Rust command `list_stats_files` SHALL accept `projectRoot: String` and return 
 
 ### Requirement: qCBF Data Loading Command
 
-A Rust command `load_qcbf_data` SHALL accept `projectRoot: String` and `relativePath: String` and return a `DataInspection` object containing: `columns` (array of `{ name, originalName, source, units, inferredType, levels, isIdentifier }`), `rowCount` (excluding the units row), `qcbfRowCount` (matching `rowCount`), `qcbfHash` (SHA-256 hex string), and `externalHash` (always `null` for qCBF-only load). The command SHALL parse the TSV, build column metadata with `source: "qcbf"` and `originalName` equal to `name` (no suffixes in qCBF-only mode), and cache the parsed data in `AppState.active_data`. The command SHALL skip the second row (units row) if detected. The command SHALL split `participant_id` into Subject and Session identifiers and map the `session` column to Run. Four columns SHALL have `isIdentifier: true`: `participant_id`, `subject`, `session`, and `run`. Type inference SHALL classify columns as `"continuous"`, `"ordinal"`, or `"nominal"` (never `"excluded"` — that is user-only). This command replaces the former `inspect_tsv` command.
+A Rust command `load_qcbf_data` SHALL accept `projectRoot: String` and `relativePath: String` and return a `DataInspection` object containing: `columns` (array of `{ name, originalName, source, units, inferredType, levels, isIdentifier }`), `rowCount` (excluding the units row), `qcbfRowCount` (matching `rowCount`), `qcbfHash` (SHA-256 hex string after stripping a leading UTF-8 BOM), and `externalHash` (always `null` for qCBF-only load). The command SHALL parse the TSV, build column metadata with `source: "qcbf"` and `originalName` equal to `name` (no suffixes in qCBF-only mode), and cache the parsed data in `AppState.active_data`. The command SHALL skip the second row (units row) if detected. When present, `participant_id` SHALL produce Subject and Session identifiers, and the TSV `session` column SHALL map to Run. Present identifier columns SHALL have `isIdentifier: true`. Type inference SHALL classify columns as `"continuous"`, `"ordinal"`, or `"nominal"` (never `"excluded"` — that is user-only).
 
 #### Scenario: Load qCBF TSV with identifier parsing
 
@@ -42,7 +42,7 @@ A Rust command `load_qcbf_data` SHALL accept `projectRoot: String` and `relative
 #### Scenario: qCBF hash returned
 
 - **WHEN** `load_qcbf_data` is called on a valid TSV
-- **THEN** `qcbfHash` SHALL be the SHA-256 hex digest of the file contents and `externalHash` SHALL be `null`
+- **THEN** `qcbfHash` SHALL be the SHA-256 hex digest of the UTF-8 contents after stripping any leading BOM and `externalHash` SHALL be `null`
 
 #### Scenario: Type inference for continuous columns
 
@@ -56,7 +56,7 @@ A Rust command `load_qcbf_data` SHALL accept `projectRoot: String` and `relative
 
 ### Requirement: Data Column Read Command
 
-A Rust command `read_data_columns` SHALL accept `projectRoot: String` and `columnNames: Vec<String>` and return an array of row objects from the `AppState.active_data` cache. Each row SHALL always include `participant_id`, `subject`, `session`, and `run` fields regardless of `columnNames`. Requested columns SHALL be included as string values. The command SHALL NOT perform file I/O — it reads exclusively from the in-memory cache. All values SHALL be returned as strings — numeric parsing is the frontend's responsibility. This command replaces the former `read_tsv_columns` command and is used for both qCBF-only and joined data.
+A Rust command `read_data_columns` SHALL accept `projectRoot: String` and `columnNames: Vec<String>` and return an array of row objects from the `AppState.active_data` cache. Each row SHALL include any present `participant_id`, `subject`, `session`, and `run` fields regardless of `columnNames`, and any present requested columns as string values. Absent fields SHALL be omitted. The command SHALL NOT perform file I/O — it reads exclusively from the in-memory cache. Numeric parsing is the frontend's responsibility.
 
 #### Scenario: Read specific columns from cache
 
@@ -231,7 +231,7 @@ The data contract SHALL persist to `uiState.dataVis` in the `.easl` project file
 
 The qCBF source SHALL retain its SHA-256 hash and project-relative path. On page activation without a join, matching content SHALL preserve setup; changed content SHALL reset column types, level orderings, axes, and stage with "Data file has changed. Please reconfigure." Missing qCBF content SHALL invalidate its contract with "File '{filename}' no longer exists."
 
-Joined-data validation SHALL inspect both sources. Missing/unreadable external data SHALL preserve the complete saved join, allow available qCBF-only work, and disable joined actions with persistent Relink guidance. A same-hash external replacement SHALL change only its absolute path. Different replacement content SHALL require confirmation before adopting the source and resetting dependent join/column/level/axis/filter/chart setup. Accepted replacement edits SHALL use project-wide autosave without a manual-save-only mode; cancellation SHALL preserve configuration. If both sources are readable but qCBF changed, the full contract SHALL invalidate. External-only content changes SHALL preserve configuration until reset is confirmed.
+Mount-time joined-data validation SHALL inspect both sources. Missing/unreadable external data SHALL preserve the complete saved join, allow available qCBF-only work, and disable Select Data Next with persistent Relink guidance. A same-hash external replacement SHALL change only its absolute path. Different replacement content SHALL require confirmation before adopting the source and resetting dependent join/column/level/axis/filter/chart setup. Accepted replacement edits SHALL use project-wide autosave without a manual-save-only mode; cancellation SHALL preserve configuration. At mount, if both sources are readable but qCBF changed, the full contract SHALL invalidate. External-only content changes SHALL preserve configuration until reset is confirmed.
 
 #### Scenario: Hash match preserves contract
 
@@ -256,7 +256,7 @@ Joined-data validation SHALL inspect both sources. Missing/unreadable external d
 #### Scenario: External source is missing
 
 - **WHEN** joined external data is missing or unreadable
-- **THEN** saved join state SHALL remain, joined actions SHALL disable, and Relink guidance SHALL appear
+- **THEN** saved join state SHALL remain, Select Data Next SHALL be disabled, and Relink guidance SHALL appear
 
 #### Scenario: Join-active validation with external hash mismatch only
 
@@ -291,7 +291,7 @@ Joined-data validation SHALL inspect both sources. Missing/unreadable external d
 #### Scenario: Join-active validation when external file deleted
 
 - **WHEN** joined external content disappears
-- **THEN** the saved join SHALL remain available for relinking while joined actions disable
+- **THEN** the saved join SHALL remain available for relinking while Select Data Next is disabled
 
 ### Requirement: Missing Data Handling in Type Inference
 

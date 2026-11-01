@@ -5,7 +5,6 @@ import { SourcestructureJsonSchema, StudyParJsonSchema } from "../schemas/import
 import { assembleSourcestructure, assembleStudyPar } from "./tokenizerUtils";
 import type { StagingPreflightState } from "../stores/importStore";
 
-export const TOTAL_IMPORT_STEPS = 6;
 type ImportSettings = ReturnType<typeof acceptedImportSettings>;
 
 type StepPrerequisiteState = Pick<
@@ -72,60 +71,6 @@ export function hasTokenizerTag(
 /** Step 2 complete: at least one core pipeline modality is mapped. */
 export function isAliasResolutionComplete(state: Pick<ImportSettings, "modalityAliases">): boolean {
   return state.modalityAliases.some((alias) => alias.mapped === "ASL4D" || alias.mapped === "T1w");
-}
-
-/**
- * Highest import wizard step index the user may jump to via the stepper.
- * Mirrors the gates on each step's "Next" button.
- */
-export function getMaxUnlockedImportStep(
-  state: Step5State,
-  gate?: ImportExecutionGate,
-  stagingGate?: StagingValidationGate,
-): number {
-  if (!isIngestionComplete(state)) {
-    return 0;
-  }
-
-  if (!isTokenizerComplete(state)) {
-    return 1;
-  }
-
-  if (!isAliasResolutionComplete(state)) {
-    return 2;
-  }
-
-  if (!gate || !stagingGate || !canEnterStep5(state, gate, stagingGate)) {
-    return 4;
-  }
-
-  return 5;
-}
-
-export function getMaxRestorableImportStep(state: Step5State): number {
-  if (!isIngestionComplete(state)) {
-    return 0;
-  }
-
-  if (!isTokenizerComplete(state)) {
-    return 1;
-  }
-
-  if (!isAliasResolutionComplete(state)) {
-    return 2;
-  }
-
-  // Native preflight is session-only, so restored projects always return to Preview.
-  return 4;
-}
-
-export function canSelectImportStep(
-  stepIndex: number,
-  state: Step5State,
-  gate?: ImportExecutionGate,
-  stagingGate?: StagingValidationGate,
-): boolean {
-  return stepIndex >= 0 && stepIndex <= getMaxUnlockedImportStep(state, gate, stagingGate);
 }
 
 export function canEnterStep5(

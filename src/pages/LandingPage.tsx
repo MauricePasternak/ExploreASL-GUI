@@ -15,6 +15,7 @@ import { useGlobalStore } from "../stores/globalStore";
 import { useProjectStore } from "../stores/projectStore";
 import RecentProjectsList from "../components/landing/RecentProjectsList";
 import WelcomeCard from "../components/landing/WelcomeCard";
+import PathEntryButton from "../components/common/PathEntryButton";
 import type { LayoutOutletContext } from "../components/Layout";
 import { logAction } from "../lib/debug";
 import { showErrorNotification } from "../lib/errorNotifications";
@@ -174,7 +175,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     return openedProject !== null;
   }
 
-  async function handleNewProject() {
+  async function handleNewProject(selectedPath?: string) {
     setLoading(true);
     logAction("landing_new_project_start");
     let selectedDirectory: string | undefined;
@@ -196,12 +197,14 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         }
       }
 
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Project Root Directory",
-        defaultPath,
-      });
+      const selected =
+        selectedPath ??
+        (await open({
+          directory: true,
+          multiple: false,
+          title: "Select Project Root Directory",
+          defaultPath,
+        }));
 
       if (typeof selected !== "string") {
         logAction("landing_new_project_cancelled");
@@ -338,13 +341,13 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     if (!bidsDialog) return "";
     switch (bidsDialog.kind) {
       case "bids-detected":
-        return "BIDS Dataset Detected";
+        return "Use this existing ASL dataset?";
       case "no-subjects":
-        return "No BIDS Subjects Found";
+        return "Set up a DICOM import";
       case "no-asl":
-        return "No Valid ASL BIDS Data Found";
+        return "No usable BIDS ASL images found";
       case "corrupt-desc":
-        return "Corrupt dataset_description.json";
+        return "Dataset information needs attention";
     }
   };
 
@@ -388,17 +391,6 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       case "corrupt-desc":
         return "bids-corrupt-desc-skip-btn";
     }
-  };
-
-  const getConfirmLabel = () => {
-    if (!bidsDialog) return "";
-    if (bidsDialog.kind === "corrupt-desc" && bidsRadioValue === "bids") {
-      return "Skip Import anyway";
-    }
-    if (bidsDialog.kind === "bids-detected") {
-      return "Continue";
-    }
-    return "Confirm";
   };
 
   function handleDialogCancel() {
@@ -460,7 +452,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     await handleNewProject();
   }
 
-  async function handleOpenProject() {
+  async function handleOpenProject(selectedPath?: string) {
     setLoading(true);
     logAction("landing_open_project_start");
 
@@ -485,12 +477,14 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         }
       }
 
-      const selected = await open({
-        filters: [{ name: "ExploreASL Project", extensions: ["easl"] }],
-        multiple: false,
-        title: "Open Project File",
-        defaultPath,
-      });
+      const selected =
+        selectedPath ??
+        (await open({
+          filters: [{ name: "ExploreASL Project", extensions: ["easl"] }],
+          multiple: false,
+          title: "Open Project File",
+          defaultPath,
+        }));
 
       if (typeof selected !== "string") {
         logAction("landing_open_project_cancelled");
@@ -693,22 +687,35 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
                   leftSection={<IconPlus size={20} />}
                   loading={loading}
                   disabled={projectActionsDisabled}
-                  onClick={handleNewProject}
+                  onClick={() => void handleNewProject()}
                   data-testid="landing-new-project-btn"
                 >
                   New Project
                 </Button>
+                <PathEntryButton
+                  title="Select project root directory"
+                  testId="landing-new-project-path"
+                  disabled={projectActionsDisabled || loading}
+                  onSelect={handleNewProject}
+                />
                 <Button
                   size="lg"
                   variant="outline"
                   leftSection={<IconFolderOpen size={20} />}
                   loading={loading}
                   disabled={projectActionsDisabled}
-                  onClick={handleOpenProject}
+                  onClick={() => void handleOpenProject()}
                   data-testid="landing-open-project-btn"
                 >
                   Open Project
                 </Button>
+                <PathEntryButton
+                  title="Select project file"
+                  testId="landing-open-project-path"
+                  extensions={["easl"]}
+                  disabled={projectActionsDisabled || loading}
+                  onSelect={handleOpenProject}
+                />
               </Group>
 
               <Divider
@@ -733,6 +740,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         title="Project identity already exists"
         centered
         data-testid="project-identity-dialog"
+        attributes={{ close: { "data-testid": "project-identity-dialog-close" } }}
         transitionProps={{ duration: 0, exitDuration: 0 }}
       >
         <Stack gap="md">
@@ -777,6 +785,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         title="Recovered project available"
         centered
         data-testid="project-recovery-dialog"
+        attributes={{ close: { "data-testid": "project-recovery-dialog-close" } }}
         transitionProps={{ duration: 0, exitDuration: 0 }}
       >
         <Stack gap="md">
@@ -813,17 +822,71 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
         onClose={handleDialogCancel}
         title={getModalTitle()}
         centered
+        size={720}
         data-testid={getModalTestId()}
+        attributes={{ close: { "data-testid": `${getModalTestId()}-close` } }}
         transitionProps={{ duration: 0, exitDuration: 0 }}
       >
         {bidsDialog && (
           <Stack gap="md">
-            <Text size="sm">
-              Select the data source structure for this project. ExploreASL GUI can configure the
-              project for direct BIDS metadata review or a new DICOM import.
-            </Text>
+            <Stack gap={4} data-testid="bids-dataset-summary">
+              <Text fw={600} style={{ overflowWrap: "anywhere" }} data-testid="bids-dataset-name">
+                {pendingFolder?.name}
+              </Text>
+              {bidsDialog.result.aslSubjectCount > 0 && (
+                <Text size="sm" data-testid="bids-dataset-counts">
+                  Found ASL images for {bidsDialog.result.aslSubjectCount} participant
+                  {bidsDialog.result.aslSubjectCount === 1 ? "" : "s"} ·{" "}
+                  {bidsDialog.result.aslSessionCount} imaging session
+                  {bidsDialog.result.aslSessionCount === 1 ? "" : "s"}.
+                </Text>
+              )}
+            </Stack>
+
+            {bidsDialog.kind === "no-subjects" && (
+              <Alert color="blue" data-testid="bids-no-subjects-notice">
+                No existing BIDS ASL dataset was found in this folder. You can import original
+                scanner files (DICOM), or choose another folder containing BIDS images.
+              </Alert>
+            )}
+
+            {bidsDialog.kind === "no-asl" && (
+              <Alert color="blue" data-testid="bids-no-asl-notice">
+                Participant folders were found, but no ASL images with the required scan information
+                were detected. Choose another BIDS folder, or import original scanner files (DICOM).
+              </Alert>
+            )}
+
+            {bidsDialog.kind === "corrupt-desc" && (
+              <Alert
+                color="yellow"
+                title="Dataset description could not be read"
+                icon={<IconAlertTriangle size={16} />}
+                data-testid="bids-description-warning"
+              >
+                The dataset information file (dataset_description.json) could not be read, but ASL
+                images were found. You can continue to review the scans; this does not repair that
+                file.
+              </Alert>
+            )}
+
+            {bidsDialog.result.missingAslcontextCount > 0 && (
+              <Alert
+                color="yellow"
+                title="Some scans are missing label/control information"
+                icon={<IconAlertTriangle size={16} />}
+                data-testid="bids-missing-context-warning"
+              >
+                {bidsDialog.result.missingAslcontextCount} ASL run
+                {bidsDialog.result.missingAslcontextCount === 1 ? " is" : "s are"} missing
+                label/control information (*_aslcontext.tsv). Affected participant sessions will be
+                excluded from BIDS scan review.
+              </Alert>
+            )}
 
             <Radio.Group
+              label="Which images would you like to use?"
+              data-testid="bids-detection-source-group"
               value={bidsRadioValue ?? ""}
               onChange={(val) => {
                 setSetupPlan(null);
@@ -831,61 +894,59 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
                 setBidsRadioValue(val as "bids" | "dicom");
               }}
             >
-              <Stack gap="sm">
+              <Stack gap="md" mt="sm" data-testid="bids-detection-source-options">
                 <Radio
                   value="bids"
-                  label="Skip Import — review BIDS metadata"
+                  label={
+                    bidsDialog.kind === "bids-detected"
+                      ? "Use existing BIDS images — Recommended"
+                      : "Use existing BIDS images"
+                  }
+                  description={
+                    bidsDialog.kind === "no-subjects" || bidsDialog.kind === "no-asl"
+                      ? "No usable BIDS ASL images were found in this folder."
+                      : "Use the images already organised in this folder. No DICOM conversion is needed. Next, review scan information before choosing processing settings."
+                  }
+                  styles={{
+                    label: { fontWeight: 600 },
+                    description: {
+                      fontSize: "var(--mantine-font-size-sm)",
+                      color: "var(--mantine-color-text)",
+                    },
+                  }}
                   disabled={bidsDialog.kind === "no-subjects" || bidsDialog.kind === "no-asl"}
                   data-testid="bids-detection-dialog-skip-radio"
                 />
                 <Radio
                   value="dicom"
-                  label="Import from DICOM"
+                  label="Import original scanner files (DICOM)"
+                  description="Convert original scanner files instead of using existing BIDS images. You will select those files next; conversion does not start here."
+                  styles={{
+                    label: { fontWeight: 600 },
+                    description: {
+                      fontSize: "var(--mantine-font-size-sm)",
+                      color: "var(--mantine-color-text)",
+                    },
+                  }}
                   data-testid="bids-detection-dialog-dicom-radio"
                 />
               </Stack>
             </Radio.Group>
 
-            {/* Case-specific helper text & alerts */}
-            {bidsDialog.kind === "bids-detected" && (
-              <Stack gap="xs" style={{ paddingLeft: 24 }}>
-                <Text size="xs" c="dimmed">
-                  The selected folder contains a BIDS-formatted dataset with ASL data.
-                </Text>
-                <Text size="xs" c="dimmed">
-                  <strong>ASL subjects:</strong> {bidsDialog.result.aslSubjectCount} |{" "}
-                  <strong>ASL sessions:</strong> {bidsDialog.result.aslSessionCount} |{" "}
-                  <strong>Cross-sectional:</strong>{" "}
-                  {bidsDialog.result.isCrossSectional ? "Yes" : "No"}
-                </Text>
-                {bidsDialog.result.missingAslcontextCount > 0 && (
-                  <Alert
-                    color="yellow"
-                    icon={<IconAlertTriangle size={16} />}
-                    py="xs"
-                    style={{ fontSize: "12px" }}
-                  >
-                    {bidsDialog.result.missingAslcontextCount} session
-                    {bidsDialog.result.missingAslcontextCount > 1 ? "s" : ""} will be skipped during
-                    review due to missing{" "}
-                    <Text span ff="monospace" size="xs">
-                      *_aslcontext.tsv
-                    </Text>{" "}
-                    files.
-                  </Alert>
-                )}
-                <Text size="xs" c="dimmed">
-                  Review exact setup changes before confirmation. Nothing is written during this
-                  review.
-                </Text>
-              </Stack>
-            )}
+            <Stack gap="xs" data-testid="bids-setup-overview">
+              <Text size="sm" fw={600} data-testid="bids-setup-overview-title">
+                What will change?
+              </Text>
+              <Text size="sm" data-testid="bids-setup-overview-description">
+                ExploreASL will save project settings in this folder and prepare any required
+                support files. Existing images and documentation remain unchanged during setup.
+              </Text>
+            </Stack>
 
-            {pendingFolder?.requiresSetupPlan && (
-              <Divider label="Reviewed setup changes" labelPosition="center" />
-            )}
             {pendingFolder?.requiresSetupPlan && setupPlanLoading && (
-              <Text data-testid="bids-setup-plan-loading">Loading setup plan…</Text>
+              <Text size="sm" data-testid="bids-setup-plan-loading">
+                Checking required setup changes…
+              </Text>
             )}
             {pendingFolder?.requiresSetupPlan && setupPlanError && (
               <Alert color="red" data-testid="bids-setup-plan-error">
@@ -894,117 +955,122 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
             )}
             {pendingFolder?.requiresSetupPlan && setupPlan && (
               <Stack gap="xs" data-testid="bids-setup-plan">
-                {setupPlan.projectSummary && (
-                  <Text size="xs" data-testid="bids-setup-project-summary">
-                    Project {setupPlan.projectSummary.name} · schema{" "}
-                    {setupPlan.projectSummary.schemaVersion} · hash{" "}
-                    {setupPlan.projectSummary.contentHash} · ID {setupPlan.projectSummary.projectId}{" "}
-                    · {setupPlan.projectSummary.dataSource}
-                  </Text>
-                )}
-                {setupPlan.preservesReadme && (
-                  <Text size="xs" data-testid="bids-setup-readme-notice">
-                    rawdata/README.md is preserved.
-                  </Text>
-                )}
-                {setupPlan.operations.map((operation) => (
-                  <Stack
-                    gap={2}
-                    key={operation.path}
-                    data-testid={`bids-setup-operation-${operation.path.replace(/[/.]/g, "-")}`}
-                  >
-                    <Text size="xs">
-                      <strong>{operation.operation}</strong> {operation.path}
-                    </Text>
-                    {operation.textPreview !== undefined && operation.textPreview !== null && (
-                      <Text
-                        ff="monospace"
-                        size="xs"
-                        style={{ whiteSpace: "pre-wrap" }}
-                        data-testid={`bids-setup-operation-preview-${operation.path.replace(/[/.]/g, "-")}`}
-                      >
-                        {operation.textPreview}
-                      </Text>
-                    )}
-                  </Stack>
-                ))}
                 {setupPlan.warnings.map((warning) => (
-                  <Alert key={warning} color="yellow" data-testid="bids-setup-warning">
+                  <Alert
+                    key={warning}
+                    color="yellow"
+                    title="Please review before continuing"
+                    data-testid="bids-setup-warning"
+                  >
                     {warning}
                   </Alert>
                 ))}
                 {setupPlan.conflicts.map((conflict) => (
-                  <Alert key={conflict} color="red" data-testid="bids-setup-conflict">
+                  <Alert
+                    key={conflict}
+                    color="red"
+                    title="Project setup is blocked"
+                    data-testid="bids-setup-conflict"
+                  >
                     {conflict}
                   </Alert>
                 ))}
-                <Text size="xs" c="dimmed" data-testid="bids-setup-temporary-artifacts">
-                  {setupPlan.temporaryArtifacts.join(" ")}
-                </Text>
+                <details
+                  data-testid="bids-setup-details"
+                  style={{ fontSize: "var(--mantine-font-size-sm)" }}
+                >
+                  <summary data-testid="bids-setup-details-toggle" style={{ cursor: "pointer" }}>
+                    Technical details: planned file changes
+                  </summary>
+                  <Stack
+                    gap="sm"
+                    mt="sm"
+                    style={{ overflowWrap: "anywhere" }}
+                    data-testid="bids-setup-details-content"
+                  >
+                    <Text size="sm" data-testid="bids-setup-root">
+                      Folder: {setupPlan.rootPath}
+                    </Text>
+                    {setupPlan.projectSummary && (
+                      <Text size="sm" data-testid="bids-setup-project-summary">
+                        Project {setupPlan.projectSummary.name} · schema{" "}
+                        {setupPlan.projectSummary.schemaVersion} · hash{" "}
+                        {setupPlan.projectSummary.contentHash} · ID{" "}
+                        {setupPlan.projectSummary.projectId} · {setupPlan.projectSummary.dataSource}
+                      </Text>
+                    )}
+                    {setupPlan.preservesReadme && (
+                      <Text size="sm" data-testid="bids-setup-readme-notice">
+                        rawdata/README.md is preserved.
+                      </Text>
+                    )}
+                    {setupPlan.operations.map((operation) => (
+                      <Stack
+                        gap={2}
+                        key={operation.path}
+                        data-testid={`bids-setup-operation-${operation.path.replace(/[/.]/g, "-")}`}
+                      >
+                        <Text size="sm">
+                          <strong>
+                            {operation.operation === "no_op" ? "no-op" : operation.operation}
+                          </strong>{" "}
+                          {operation.path}
+                        </Text>
+                        {operation.textPreview !== undefined && operation.textPreview !== null && (
+                          <Text
+                            ff="monospace"
+                            size="sm"
+                            style={{ whiteSpace: "pre-wrap" }}
+                            data-testid={`bids-setup-operation-preview-${operation.path.replace(/[/.]/g, "-")}`}
+                          >
+                            {operation.textPreview}
+                          </Text>
+                        )}
+                      </Stack>
+                    ))}
+                    <Text size="sm" data-testid="bids-setup-temporary-artifacts">
+                      {setupPlan.temporaryArtifacts.join(" ")}
+                    </Text>
+                  </Stack>
+                </details>
               </Stack>
             )}
 
-            {bidsDialog.kind === "no-subjects" && (
-              <Alert color="blue" icon={<IconAlertTriangle size={16} />}>
-                No BIDS subjects found in the selected folder. Ensure the folder contains{" "}
-                <Text span ff="monospace" size="xs">
-                  sub-*
-                </Text>{" "}
-                directories with ASL data.
-              </Alert>
-            )}
-
-            {bidsDialog.kind === "no-asl" && (
-              <Alert color="blue" icon={<IconAlertTriangle size={16} />}>
-                The selected folder contains BIDS subjects but none have valid ASL data. Ensure at
-                least one subject has ASL images in{" "}
-                <Text span ff="monospace" size="xs">
-                  perf/
-                </Text>{" "}
-                and applicable ASL JSON metadata.
-              </Alert>
-            )}
-
-            {bidsDialog.kind === "corrupt-desc" && (
-              <Alert color="yellow" icon={<IconAlertTriangle size={16} />}>
-                The{" "}
-                <Text span ff="monospace" size="xs">
-                  dataset_description.json
-                </Text>{" "}
-                file is corrupt, but {bidsDialog.result.aslSubjectCount} ASL subjects were found.
-              </Alert>
-            )}
-
-            <Group justify="flex-end" gap="sm">
-              <Button
-                variant="default"
-                onClick={handleDialogCancel}
-                data-testid={getCancelTestId()}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="default"
-                onClick={handleNoBidsChooseDifferent}
-                data-testid={getChooseTestId()}
-              >
-                Choose Different Folder
-              </Button>
-              <Button
-                disabled={
-                  !bidsRadioValue ||
-                  (pendingFolder?.requiresSetupPlan &&
-                    (!setupPlan ||
-                      setupPlanLoading ||
-                      setupPlan.mode !== bidsRadioValue ||
-                      setupPlan.conflicts.length > 0))
-                }
-                onClick={handleConfirm}
-                data-testid={getConfirmTestId()}
-              >
-                {getConfirmLabel()}
-              </Button>
-            </Group>
+            <Stack gap="sm" py="sm" data-testid="bids-detection-footer">
+              <Text size="sm" data-testid="bids-setup-consent-notice">
+                Nothing changes until you select Create project.
+              </Text>
+              <Group justify="flex-end" gap="sm" data-testid="bids-detection-actions">
+                <Button
+                  variant="default"
+                  onClick={handleDialogCancel}
+                  data-testid={getCancelTestId()}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={handleNoBidsChooseDifferent}
+                  data-testid={getChooseTestId()}
+                >
+                  Choose another folder
+                </Button>
+                <Button
+                  disabled={
+                    !bidsRadioValue ||
+                    (pendingFolder?.requiresSetupPlan &&
+                      (!setupPlan ||
+                        setupPlanLoading ||
+                        setupPlan.mode !== bidsRadioValue ||
+                        setupPlan.conflicts.length > 0))
+                  }
+                  onClick={handleConfirm}
+                  data-testid={getConfirmTestId()}
+                >
+                  Create project
+                </Button>
+              </Group>
+            </Stack>
           </Stack>
         )}
       </Modal>

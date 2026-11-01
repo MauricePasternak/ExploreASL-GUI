@@ -4,6 +4,16 @@ Define the import workflow steps, validation gates, and navigation.
 
 ## Requirements
 
+### Requirement: Navigation inside the stepper
+
+The DICOM import wizard SHALL render each step's Back/Next navigation inside the vertical stepper sidebar, beneath the step list and outside the scrolling content panel. Navigation buttons SHALL stack to fit the sidebar. The step list SHALL scroll independently while navigation remains visible. Step labels SHALL remain display-only; existing validation and execution locks SHALL remain unchanged. BIDS-direct review SHALL remain unaffected.
+
+#### Scenario: Navigating between import steps
+
+- **WHEN** a DICOM import step is displayed or changed using its navigation buttons
+- **THEN** only that step's navigation SHALL appear inside the stepper, including Preview and Run Import
+- **AND** scrolling the step content or step list SHALL NOT scroll its navigation away
+
 ### Requirement: Stepper step count and gating
 
 The import stepper SHALL have 6 steps (indices 0-5). Step 4 "Preview Import" is review-only with validation gating. Step 5 "Run Import Module" handles execution. Entry to step 5 SHALL require Zod validation of the generated `sourcestructure.json` and `studyPar.json`, successful frontend validation of every staging identifier and destination, and successful read-only native preflight of the complete staging plan. Step 5 access also requires a valid configured execution profile.

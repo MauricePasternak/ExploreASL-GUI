@@ -25,7 +25,7 @@ Define the BIDS-direct import review interface and its validation workflow.
 `BIDSReviewPanel` SHALL render one card per detected `DerivedMetadataGroup`. Each card shows:
 
 - Label as an inline editable input (auto-suggested value pre-filled; user may edit)
-- Subject count + session count for the group
+- Subject count; session count is also shown when it exceeds the subject count
 - Subject list (collapsible; sorted alphabetically), showing `subjectLabel` and `sessionLabels`
 - Parameters table (expandable; shows `bidsParams` entries; `summarizeAslContext()` applied to `ASLContext` value when present)
 - Vendor / sequence / labeling_type displayed as clean metadata badges:
@@ -36,7 +36,7 @@ Define the BIDS-direct import review interface and its validation workflow.
 #### Scenario: ds000240 single-group review
 
 - **WHEN** `BIDSReviewPanel` renders with 1 detected group containing 25 subjects
-- **THEN** one group card shows "25 subjects", label input pre-filled with `"Siemens_3T_PCASL_3D_Included"`, subject list collapsed by default
+- **THEN** one group card shows "25 subjects", label input pre-filled with `"Siemens_3T_PCASL_3D_Included"`, and the subject list expanded by default
 
 #### Scenario: Label edit handled without re-collision
 
@@ -46,11 +46,11 @@ Define the BIDS-direct import review interface and its validation workflow.
 #### Scenario: Large dataset collapses cards by default
 
 - **WHEN** `BIDSReviewPanel` renders with 10+ groups
-- **THEN** all group cards start collapsed; parameters table hidden by default
+- **THEN** each card is visible with its parameters and subject list collapsed
 
 ### Requirement: Pre-existing participants.tsv banner persisted
 
-`BIDSReviewPanel` SHALL render a persisted banner at the top of the panel body (above group cards, visible at first render) when `participants.tsv` exists at project root. The frontend checks for this file's existence asynchronously on mount using the Tauri fs plugin `exists` command on `<projectRoot>/participants.tsv`.
+`BIDSReviewPanel` SHALL render a banner above group cards in editable review and confirmed summary when `participants.tsv` exists at project root. The frontend checks for this file asynchronously using the Tauri fs plugin `exists` command on `<projectRoot>/participants.tsv`.
 
 > "Your existing `participants.tsv` (at project root) is not modified by ExploreASL GUI. During processing, ExploreASL generates its own working copy at `derivatives/ExploreASL/participants.tsv` and appends processing-derived columns (`site`, `gm_vol`, `motion`, etc.) there. Your root-level file stays as you authored it."
 
@@ -77,13 +77,13 @@ The block SHALL show shared guidance: "These subjects will be excluded from proc
 | State          | UI                                                                                                                                                                                                                          |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Scan running   | Skeleton loader                                                                                                                                                                                                             |
-| Scan error     | Error alert with `[Retry]` and `[Back to Landing]` buttons; after 2 failed retries, additional hint: "Persistent scan failure — check directory permissions or delete project and recreate." (hint only, no counting logic) |
+| Scan error     | Error alert with `[Retry]` and `[Back to Landing]` buttons; after 2 retry clicks, additional hint: "Persistent scan failure — check directory permissions or delete project and recreate." |
 | 0 groups found | Error alert with same buttons; message "No ASL metadata groups detected"                                                                                                                                                    |
-| 1 group only   | Parameter table expanded by default                                                                                                                                                                                         |
-| 2-9 groups     | Cards start collapsed by default; parameters table hidden by default (user can expand)                                                                                                                                      |
-| 10+ groups     | All cards collapsed by default                                                                                                                                                                                              |
+| 1 group only   | Parameter table and subject list expanded by default                                                                                                                                                                       |
+| 2-9 groups     | Cards visible; parameters and subject lists collapsed by default                                                                                                                                                           |
+| 10+ groups     | Cards visible; parameters and subject lists collapsed by default                                                                                                                                                           |
 
-`importStore` BIDS review slice provides `retryBidsScan()` (re-calls `scan_bids_sidecars`, clears `scanError`) and `backToLanding()` (navigate to `/`, abandons project).
+`importStore` BIDS review slice provides `retryBidsScan()` (re-calls `scan_bids_sidecars`, clears `scanError`) and `backToLanding()` (resets review state); the panel performs navigation to `/`. Failed or empty confirmed-project rescans instead offer `[Back to Confirmed Summary]`.
 
 #### Scenario: Scan error recovery retry
 
@@ -93,7 +93,7 @@ The block SHALL show shared guidance: "These subjects will be excluded from proc
 #### Scenario: Back to landing aborts
 
 - **WHEN** user clicks `[Back to Landing]` on scan error
-- **THEN** `importStore.backToLanding()` navigates to `/`; project remains in store but user is out of import flow
+- **THEN** `importStore.backToLanding()` resets review state and the panel navigates to `/`; project remains in store
 
 ### Requirement: Confirmation flow
 
@@ -106,7 +106,7 @@ If validation fails: inline errors per offending group; confirmation blocked; `b
 
 Passing label validation is necessary but not sufficient: native confirmation SHALL reject a subject/session assigned to different group IDs, even when labels are unique. On rejection, the accepted project mapping, confirmation state, and phase SHALL remain unchanged, and the panel SHALL not navigate to Parameters. The panel does not provide a per-run mapping or automatic merge for this conflict.
 
-On successful native confirmation: sync to project store (write `metadataGroups`, `subjectRows`, `ingestionComplete = true`, `skippedSubjects` to `mappingState` and `ImportUiState`); set `uiState.import.bidsReviewConfirmed = true`; set `projectMeta.currentPhase = "parameters"`; save `project.easl`; navigate to `/project/:id/parameters`.
+On successful native confirmation: persist `metadataGroups`, `subjectRows`, and `ingestionComplete = true` in `mappingState`; persist `skippedSubjects` and `bidsReviewConfirmed = true` in `uiState.import`; set `projectMeta.currentPhase = "parameters"`; navigate to `/project/:id/parameters`.
 
 #### Scenario: Confirm with valid unique labels
 
@@ -128,7 +128,7 @@ On successful native confirmation: sync to project store (write `metadataGroups`
 When `uiState.import.bidsReviewConfirmed === true` and user navigates back to Import, `BIDSReviewPanel` SHALL render a persisted summary with an explicit re-scan action:
 
 - Banner: "BIDS metadata groups confirmed. Import is complete."
-- Group cards sourced from persisted `mappingState.metadataGroups` and `mappingState.subjectRows`, collapsed by default.
+- Group cards sourced from persisted `mappingState.metadataGroups` and `mappingState.subjectRows`, with parameters and subject lists collapsed by default.
 - Skipped subjects warning sourced from persisted `uiState.import.skippedSubjects`.
 - `[Re-scan BIDS]` action.
 
@@ -139,7 +139,7 @@ Project deletion/editing uses the standard project list flow, not BIDSReviewPane
 #### Scenario: Revisit after confirmation
 
 - **WHEN** user with `bidsReviewConfirmed = true` navigates back to Import page
-- **THEN** `BIDSReviewPanel` renders persisted summary with banner, collapsed group cards, skipped subjects warning, and `[Re-scan BIDS]`
+- **THEN** `BIDSReviewPanel` renders persisted summary with banner, group cards with collapsed details, skipped subjects warning when applicable, and `[Re-scan BIDS]`
 
 #### Scenario: Re-scan enables edit
 

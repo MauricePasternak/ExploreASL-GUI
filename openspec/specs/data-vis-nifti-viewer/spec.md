@@ -8,7 +8,7 @@ Define NIfTI volume delivery and viewing for population analysis data.
 
 ### Requirement: Custom NiiVue Tauri Protocol
 
-A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. The protocol SHALL serve NIfTI files from the project's Population directory. The URL format SHALL be `niivue://localhost/{volumeType}/{participant_id}/{run?}` where `run` is optional (present for qCBF, absent for PV volumes) and corresponds to the TSV `session` column value (e.g. `ASL_1`). Rust SHALL own the filename template per volume type. The AppState SHALL maintain a project root registry for path resolution, set via a `set_active_project` command when a project opens, and cleared when the project closes.
+A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. The protocol SHALL serve qCBF NIfTI files from the project's Population directory. The URL format SHALL be `niivue://localhost/qCBF/{participant_id}/{run}`, optionally with a `.nii` or `.nii.gz` suffix on the run. Run corresponds to the TSV `session` column value (e.g. `ASL_1`). Rust SHALL own the filename template. The AppState SHALL maintain a project root registry for path resolution, set via a `set_active_project` command when a project opens, and cleared when the project closes.
 
 #### Scenario: qCBF volume served with run
 
@@ -27,8 +27,8 @@ A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. The
 
 #### Scenario: Path traversal rejected
 
-- **WHEN** the participant_id contains path traversal characters (e.g. `../`)
-- **THEN** the protocol SHALL reject the request and return a 403 response
+- **WHEN** a resolved volume path is outside the canonical project root
+- **THEN** the protocol SHALL reject the request with a 403 response; paths that cannot be resolved SHALL return 404
 
 ### Requirement: AppState Project Root Registry
 
@@ -62,6 +62,11 @@ The viewer panel SHALL use a single NiiVue instance on one canvas, created after
 
 - **WHEN** a qCBF volume is rendered with `nvColormap` set to `viridis`
 - **THEN** NiiVue SHALL apply `viridis`; without a saved preference, it SHALL use `gray`
+
+#### Scenario: Stale qCBF header display limits
+
+- **WHEN** a qCBF volume has header display limits outside its actual voxel intensity range
+- **THEN** the NiiVue instance SHALL be configured with `trustCalMinMax: false` so `loadVolumes` uses its robust intensity window instead of those stale limits, without changing voxel values or NIfTI slope/intercept scaling
 
 #### Scenario: Single-plane preference
 

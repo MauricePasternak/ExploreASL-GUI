@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Box, Group, Loader, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
+import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
 import {
   IconCheck,
   IconMinus,
@@ -378,7 +379,7 @@ export default function ImportSubjectTable({
               </Stack>
             ),
           }))}
-          data-testid="import-filter"
+          {...segmentedControlTestIds("import-filter")}
         />
       </Group>
 
@@ -390,7 +391,13 @@ export default function ImportSubjectTable({
           onSelectedRecordsChange={handleSelectedRecordsChange}
           isRecordSelectable={() => !selectionLocked}
           selectionCheckboxProps={{ disabled: selectionLocked }}
-          allRecordsSelectionCheckboxProps={{ disabled: selectionLocked }}
+          allRecordsSelectionCheckboxProps={{
+            disabled: selectionLocked,
+            attributes: { input: { "data-testid": "import-table-select-all" } },
+          }}
+          getRecordSelectionCheckboxProps={(row) => ({
+            attributes: { input: { "data-testid": `import-table-select-${row.subject}` } },
+          })}
           idAccessor="subject"
           minHeight={240}
           striped
@@ -404,6 +411,11 @@ export default function ImportSubjectTable({
           recordsPerPageOptions={[10, 25, 50]}
           onRecordsPerPageChange={setRecordsPerPage}
           paginationSize="sm"
+          getPaginationControlProps={(control) => ({
+            "data-testid": `import-table-page-${control}`,
+            "aria-label": `${control[0].toUpperCase()}${control.slice(1)} page`,
+          })}
+          getPaginationItemProps={(page) => ({ "data-testid": `import-table-page-${page}` })}
           data-testid="import-table"
         />
       </Box>

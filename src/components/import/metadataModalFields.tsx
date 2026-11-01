@@ -1,3 +1,5 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import { numberInputTestIds } from "../common/numberInputTestIds";
 import {
   Card,
   Checkbox,
@@ -14,12 +16,8 @@ import { FieldInfoIcon } from "../common/FieldInfoIcon";
 
 import { CommaArrayInput, CommaNumberInput } from "../CommaNumberInput";
 import { BIDS_FIELD_DESCRIPTIONS } from "./metadataFieldDescriptions";
-import { BIDS_FIELD_HINTS, type MetadataFieldHint } from "./metadataFieldHints";
+import { BIDS_FIELD_HINTS } from "./metadataFieldHints";
 import type { MetadataGroupFormValues } from "./metadataModalTypes";
-
-function resolveFieldDescription(_hint?: MetadataFieldHint, extra?: string): string | undefined {
-  return extra;
-}
 
 export function MetadataHintLegend() {
   return (
@@ -73,7 +71,11 @@ export function BidsFieldLabel({ label, fieldName }: BidsFieldLabelProps) {
           </Text>
         )}
       </Text>
-      <FieldInfoIcon tooltipLabel={description} aria-label={`Info for ${label}`} />
+      <FieldInfoIcon
+        tooltipLabel={description}
+        aria-label={`Info for ${label}`}
+        data-testid={`metadata-${fieldName}-info`}
+      />
     </Group>
   );
 }
@@ -102,18 +104,10 @@ interface BidsSelectFieldProps {
   name: BidsFieldName;
   label: string;
   data: ComboboxItem[] | string[];
-  hint?: MetadataFieldHint;
   testId?: string;
 }
 
-export function BidsSelectField({
-  control,
-  name,
-  label,
-  data,
-  hint,
-  testId,
-}: BidsSelectFieldProps) {
+export function BidsSelectField({ control, name, label, data, testId }: BidsSelectFieldProps) {
   return (
     <Controller
       control={control}
@@ -121,14 +115,13 @@ export function BidsSelectField({
       render={({ field, fieldState }) => (
         <Select
           label={<BidsFieldLabel label={label} fieldName={name} />}
-          description={resolveFieldDescription(hint)}
           data={data}
           value={(field.value as string | undefined) ?? null}
           onChange={field.onChange}
           clearable
           error={fieldState.error?.message}
           comboboxProps={{ withinPortal: false }}
-          data-testid={testId}
+          {...comboboxTestIds(testId ?? `metadata-${name}`)}
         />
       )}
     />
@@ -141,7 +134,6 @@ interface BidsNumberFieldProps {
   label: string;
   decimalScale?: number;
   min?: number;
-  hint?: MetadataFieldHint;
   testId?: string;
 }
 
@@ -151,7 +143,6 @@ export function BidsNumberField({
   label,
   decimalScale,
   min,
-  hint,
   testId,
 }: BidsNumberFieldProps) {
   return (
@@ -161,7 +152,6 @@ export function BidsNumberField({
       render={({ field, fieldState }) => (
         <NumberInput
           label={<BidsFieldLabel label={label} fieldName={name} />}
-          description={resolveFieldDescription(hint)}
           value={
             typeof field.value === "number" || typeof field.value === "string" ? field.value : ""
           }
@@ -180,7 +170,7 @@ export function BidsNumberField({
           decimalScale={decimalScale}
           min={min}
           error={fieldState.error?.message}
-          data-testid={testId}
+          {...numberInputTestIds(testId ?? `metadata-${name}`)}
         />
       )}
     />
@@ -191,11 +181,10 @@ interface BidsCheckboxFieldProps {
   control: Control<MetadataGroupFormValues>;
   name: BidsFieldName;
   label: string;
-  hint?: MetadataFieldHint;
   testId?: string;
 }
 
-export function BidsCheckboxField({ control, name, label, hint, testId }: BidsCheckboxFieldProps) {
+export function BidsCheckboxField({ control, name, label, testId }: BidsCheckboxFieldProps) {
   return (
     <Controller
       control={control}
@@ -203,10 +192,9 @@ export function BidsCheckboxField({ control, name, label, hint, testId }: BidsCh
       render={({ field }) => (
         <Checkbox
           label={<BidsFieldLabel label={label} fieldName={name} />}
-          description={resolveFieldDescription(hint)}
           checked={(field.value as boolean | undefined) ?? false}
           onChange={(event) => field.onChange(event.currentTarget.checked)}
-          data-testid={testId}
+          data-testid={testId ?? `metadata-${name}`}
         />
       )}
     />
@@ -218,18 +206,10 @@ interface BidsTextFieldProps {
   name: BidsFieldName;
   label: string;
   placeholder?: string;
-  hint?: MetadataFieldHint;
   testId?: string;
 }
 
-export function BidsTextField({
-  control,
-  name,
-  label,
-  placeholder,
-  hint,
-  testId,
-}: BidsTextFieldProps) {
+export function BidsTextField({ control, name, label, placeholder, testId }: BidsTextFieldProps) {
   return (
     <Controller
       control={control}
@@ -238,11 +218,10 @@ export function BidsTextField({
         <TextInput
           label={<BidsFieldLabel label={label} fieldName={name} />}
           placeholder={placeholder}
-          description={resolveFieldDescription(hint)}
           value={(field.value as string | undefined) ?? ""}
           onChange={field.onChange}
           error={fieldState.error?.message}
-          data-testid={testId}
+          data-testid={testId ?? `metadata-${name}`}
         />
       )}
     />
@@ -253,7 +232,6 @@ interface BidsCommaNumberFieldProps {
   control: Control<MetadataGroupFormValues>;
   name: BidsFieldName;
   label: string;
-  hint?: MetadataFieldHint;
   description?: string;
   testId?: string;
 }
@@ -263,7 +241,6 @@ export function BidsCommaNumberField({
   control,
   name,
   label,
-  hint,
   description,
   testId,
 }: BidsCommaNumberFieldProps) {
@@ -274,14 +251,11 @@ export function BidsCommaNumberField({
       render={({ field, fieldState }) => (
         <CommaNumberInput
           label={<BidsFieldLabel label={label} fieldName={name} />}
-          description={resolveFieldDescription(
-            hint,
-            description ?? "Comma-separated for multiple values",
-          )}
+          description={description ?? "Comma-separated for multiple values"}
           value={field.value as number | number[] | undefined}
           onChange={field.onChange}
           error={fieldState.error?.message}
-          testId={testId}
+          testId={testId ?? `metadata-${name}`}
         />
       )}
     />
@@ -292,7 +266,6 @@ interface BidsCommaArrayFieldProps {
   control: Control<MetadataGroupFormValues>;
   name: BidsFieldName;
   label: string;
-  hint?: MetadataFieldHint;
   description?: string;
   testId?: string;
 }
@@ -302,7 +275,6 @@ export function BidsCommaArrayField({
   control,
   name,
   label,
-  hint,
   description,
   testId,
 }: BidsCommaArrayFieldProps) {
@@ -313,11 +285,11 @@ export function BidsCommaArrayField({
       render={({ field, fieldState }) => (
         <CommaArrayInput
           label={<BidsFieldLabel label={label} fieldName={name} />}
-          description={resolveFieldDescription(hint, description ?? "Comma-separated numbers")}
+          description={description ?? "Comma-separated numbers"}
           value={field.value as number[] | undefined}
           onChange={field.onChange}
           error={fieldState.error?.message}
-          testId={testId}
+          testId={testId ?? `metadata-${name}`}
         />
       )}
     />

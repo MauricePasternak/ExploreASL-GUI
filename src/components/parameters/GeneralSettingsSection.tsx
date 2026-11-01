@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import { Alert, Group, Paper, Select, SimpleGrid, Stack, Switch, Text } from "@mantine/core";
 import { IconAlertTriangle, IconAdjustmentsCheck, IconFilter } from "@tabler/icons-react";
 
@@ -45,7 +46,7 @@ export function GeneralSettingsSection({
               value={dataPar.Quality != null ? String(dataPar.Quality) : null}
               onChange={(v) => onFieldChange("Quality", v ? Number(v) : undefined)}
               placeholder={FIELD_METADATA.Quality.defaultHint}
-              data-testid="field-Quality"
+              {...comboboxTestIds("field-Quality")}
             />
 
             <Stack justify="flex-end">
@@ -83,7 +84,11 @@ export function GeneralSettingsSection({
         </Stack>
       </Paper>
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
+      <AdvancedDivider
+        showAdvanced={showAdvanced}
+        onToggle={onToggleAdvanced}
+        testId="general-settings-advanced-toggle"
+      />
 
       {showAdvanced && (
         <Paper p="md" radius="md" withBorder>

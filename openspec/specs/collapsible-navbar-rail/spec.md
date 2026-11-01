@@ -35,18 +35,18 @@ The rail expansion state SHALL persist within a given project's `uiState` as a b
 
 ### Requirement: Absence of Project Context
 
-When no project is loaded, the desktop shell MUST enforce a collapsed state. The rail is conceptually tied to project-level phases; thus, without a project, it SHALL NOT expand.
+When no project is loaded, the shell SHALL not render the project navbar or its expansion control.
 
 #### Scenario: No active project
 
 - **WHEN** the desktop application has no project loaded
-- **THEN** the rail remains fully collapsed and non-expandable to maximize screen real estate for the landing view
+- **THEN** the project navbar and its toggle SHALL be absent
 
-### Requirement: Mobile Drawer Separation
+### Requirement: Mobile Navbar
 
-The desktop rail interactions SHALL NOT affect mobile/responsive layouts. Mobile navigation MUST continue relying on the hidden `sm` breakpoint and a full drawer overlay invoked via the header burger icon.
+The shell SHALL use the `xs` breakpoint for responsive navigation. Below it, the header burger SHALL open or close the same AppShell navbar; its rail toggle SHALL use the project's shared expansion state.
 
 #### Scenario: Mobile viewport usage
 
 - **WHEN** viewing the application on a mobile or small viewport
-- **THEN** the rail is hidden, and the burger menu triggers an overlay drawer instead of side-by-side rail expansion
+- **THEN** the burger SHALL toggle the mobile navbar, including its rail expansion control

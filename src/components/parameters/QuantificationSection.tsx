@@ -1,3 +1,5 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import { numberInputTestIds } from "../common/numberInputTestIds";
 import { Group, NumberInput, Paper, Select, SimpleGrid, Stack, Switch, Text } from "@mantine/core";
 import { IconMathFunction, IconAtom, IconCpu } from "@tabler/icons-react";
 
@@ -61,12 +63,16 @@ export function QuantificationSection({
             value={dataPar.nCompartments != null ? String(dataPar.nCompartments) : null}
             onChange={(v) => onFieldChange("nCompartments", v ? Number(v) : undefined)}
             placeholder={FIELD_METADATA.nCompartments.defaultHint}
-            data-testid="field-nCompartments"
+            {...comboboxTestIds("field-nCompartments")}
           />
         </Stack>
       </Paper>
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
+      <AdvancedDivider
+        showAdvanced={showAdvanced}
+        onToggle={onToggleAdvanced}
+        testId="quantification-advanced-toggle"
+      />
 
       {showAdvanced && (
         <Stack gap="md">
@@ -87,7 +93,7 @@ export function QuantificationSection({
                     placeholder={FIELD_METADATA[key].defaultHint}
                     value={dataPar[key]}
                     onChange={(v) => onFieldChange(key, v === "" ? undefined : v)}
-                    data-testid={`field-${key}`}
+                    {...numberInputTestIds(`field-${key}`)}
                   />
                 ))}
               </SimpleGrid>
@@ -127,7 +133,7 @@ export function QuantificationSection({
                       value={dataPar.ExternalQuantificationType ?? null}
                       onChange={(v) => onFieldChange("ExternalQuantificationType", v)}
                       placeholder={FIELD_METADATA.ExternalQuantificationType.defaultHint}
-                      data-testid="field-ExternalQuantificationType"
+                      {...comboboxTestIds("field-ExternalQuantificationType")}
                     />
 
                     <Stack gap={4}>
@@ -160,7 +166,7 @@ export function QuantificationSection({
                       value={dataPar.ExchBASIL ?? null}
                       onChange={(v) => onFieldChange("ExchBASIL", v)}
                       placeholder={FIELD_METADATA.ExchBASIL.defaultHint}
-                      data-testid="field-ExchBASIL"
+                      {...comboboxTestIds("field-ExchBASIL")}
                     />
 
                     <Select
@@ -174,7 +180,7 @@ export function QuantificationSection({
                       value={dataPar.DispBASIL ?? null}
                       onChange={(v) => onFieldChange("DispBASIL", v)}
                       placeholder={FIELD_METADATA.DispBASIL.defaultHint}
-                      data-testid="field-DispBASIL"
+                      {...comboboxTestIds("field-DispBASIL")}
                     />
 
                     <NumberInput
@@ -182,7 +188,7 @@ export function QuantificationSection({
                       placeholder={FIELD_METADATA.ATTSDBASIL.defaultHint}
                       value={dataPar.ATTSDBASIL}
                       onChange={(v) => onFieldChange("ATTSDBASIL", v === "" ? undefined : v)}
-                      data-testid="field-ATTSDBASIL"
+                      {...numberInputTestIds("field-ATTSDBASIL")}
                     />
                   </SimpleGrid>
 

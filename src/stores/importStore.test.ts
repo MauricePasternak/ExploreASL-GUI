@@ -448,15 +448,22 @@ describe("importStore reset", () => {
 // ---------------------------------------------------------------------------
 // mostRecentConfig (ImportSnapshot)
 // ---------------------------------------------------------------------------
-// applyStaleness
+// Staleness during reconstruction
 // ---------------------------------------------------------------------------
-describe("importStore applyStaleness", () => {
+describe("importStore reconstruction staleness", () => {
   it("applies stale flag to matching subjects in importProgress", () => {
     const store = useImportStore.getState();
     updateImportProgress("BAR", { subject: "BAR", session: "01", status: "completed" });
     updateImportProgress("FOO", { subject: "FOO", session: "01", status: "completed" });
 
-    store.applyStaleness({ BAR: true, FOO: false });
+    store.reconstructProgressFromLockFiles(
+      [
+        { subject: "BAR", status: "completed" },
+        { subject: "FOO", status: "completed" },
+      ],
+      ["BAR", "FOO"],
+      { BAR: true, FOO: false },
+    );
 
     expect(useImportStore.getState().importProgress.BAR.stale).toBe(true);
     expect(useImportStore.getState().importProgress.FOO.stale).toBe(false);
@@ -466,7 +473,10 @@ describe("importStore applyStaleness", () => {
     const store = useImportStore.getState();
     updateImportProgress("BAR", { subject: "BAR", session: "01", status: "completed" });
 
-    store.applyStaleness({ BAR: true, MISSING: true });
+    store.reconstructProgressFromLockFiles([{ subject: "BAR", status: "completed" }], ["BAR"], {
+      BAR: true,
+      MISSING: true,
+    });
 
     expect(useImportStore.getState().importProgress.BAR.stale).toBe(true);
     expect(useImportStore.getState().importProgress.MISSING).toBeUndefined();
@@ -977,7 +987,14 @@ describe("authoritative import snapshot reconciliation", () => {
         },
       ],
     });
-    useImportStore.getState().applyStaleness({ BAR: false, FOO: true });
+    useImportStore.getState().reconstructProgressFromLockFiles(
+      [
+        { subject: "BAR", status: "failed" },
+        { subject: "FOO", status: "completed" },
+      ],
+      ["BAR", "FOO"],
+      { BAR: false, FOO: true },
+    );
     const progress = useImportStore.getState().importProgress;
     expect(progress.BAR).toMatchObject({ status: "failed", stale: false });
     expect(progress.FOO).toMatchObject({ status: "completed", stale: true });

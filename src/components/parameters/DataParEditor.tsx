@@ -98,7 +98,7 @@ export default function DataParEditor() {
         }}
       >
         <Accordion.Item value="generalSettings" data-testid="accordion-item-generalSettings">
-          <Accordion.Control>
+          <Accordion.Control data-testid="datapar-generalSettings-toggle">
             <Text fw={500} size="md">
               General Settings
             </Text>
@@ -118,7 +118,7 @@ export default function DataParEditor() {
         </Accordion.Item>
 
         <Accordion.Item value="m0" data-testid="accordion-item-m0">
-          <Accordion.Control>
+          <Accordion.Control data-testid="datapar-m0-toggle">
             <Text fw={500} size="md">
               M0 Configuration
             </Text>
@@ -138,7 +138,7 @@ export default function DataParEditor() {
         </Accordion.Item>
 
         <Accordion.Item value="quantification" data-testid="accordion-item-quantification">
-          <Accordion.Control>
+          <Accordion.Control data-testid="datapar-quantification-toggle">
             <Text fw={500} size="md">
               Quantification
             </Text>
@@ -158,7 +158,7 @@ export default function DataParEditor() {
         </Accordion.Item>
 
         <Accordion.Item value="aslProcessing" data-testid="accordion-item-aslProcessing">
-          <Accordion.Control>
+          <Accordion.Control data-testid="datapar-aslProcessing-toggle">
             <Text fw={500} size="md">
               ASL Processing
             </Text>
@@ -178,7 +178,7 @@ export default function DataParEditor() {
         </Accordion.Item>
 
         <Accordion.Item value="atlases" data-testid="accordion-item-atlases">
-          <Accordion.Control>
+          <Accordion.Control data-testid="datapar-atlases-toggle">
             <Text fw={500} size="md">
               Atlases
             </Text>
@@ -200,7 +200,7 @@ export default function DataParEditor() {
         {advancedVisibility.showAdvancedSections && (
           <>
             <Accordion.Item value="structural" data-testid="accordion-item-structural">
-              <Accordion.Control>
+              <Accordion.Control data-testid="datapar-structural-toggle">
                 <Text fw={500} size="md">
                   Structural
                 </Text>
@@ -211,7 +211,7 @@ export default function DataParEditor() {
             </Accordion.Item>
 
             <Accordion.Item value="environment" data-testid="accordion-item-environment">
-              <Accordion.Control>
+              <Accordion.Control data-testid="datapar-environment-toggle">
                 <Text fw={500} size="md">
                   Environment
                 </Text>

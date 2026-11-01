@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  analyzeSubBlocks,
-  classifySegment,
   computePatternSignature,
   discoverPathPatterns,
   getRelativePath,
-  labelSegment,
   splitBySubDelimiters,
 } from "./pathUtils";
 
@@ -59,44 +56,6 @@ describe("getRelativePath", () => {
         "C:\\data\\project\\sourcedata",
       ),
     ).toBe("BAR/05022026_01/scan");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// classifySegment
-// ---------------------------------------------------------------------------
-describe("classifySegment", () => {
-  it("classifies single unique value as fixed", () => {
-    expect(classifySegment(["DICOM", "DICOM", "DICOM"])).toBe("fixed");
-  });
-
-  it("classifies multiple unique values as varying", () => {
-    expect(classifySegment(["BAR", "FOO"])).toBe("varying");
-  });
-
-  it("classifies empty array as fixed", () => {
-    expect(classifySegment([])).toBe("fixed");
-  });
-
-  it("classifies single element as fixed", () => {
-    expect(classifySegment(["BAR"])).toBe("fixed");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// labelSegment
-// ---------------------------------------------------------------------------
-describe("labelSegment", () => {
-  it("returns literal for fixed segment", () => {
-    expect(labelSegment(["DICOM"])).toBe("DICOM");
-  });
-
-  it("returns NUMBER for all-numeric varying", () => {
-    expect(labelSegment(["001", "002", "003"])).toBe("NUMBER");
-  });
-
-  it("returns VARYING for mixed varying", () => {
-    expect(labelSegment(["BAR", "FOO"])).toBe("VARYING");
   });
 });
 
@@ -373,49 +332,5 @@ describe("splitBySubDelimiters", () => {
     const result = splitBySubDelimiters("002-12-R1", ["_", "-"]);
     expect(result.subBlocks).toEqual(["002", "12", "R1"]);
     expect(result.delimiters).toEqual(["-", "-"]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// analyzeSubBlocks
-// ---------------------------------------------------------------------------
-describe("analyzeSubBlocks", () => {
-  it("returns unique sub-block values at specified depth", () => {
-    const paths = [
-      "BAR/05022026_01/sernum-0001_ser-AAHead_Scout",
-      "BAR/05022026_01/sernum-0018_ser-pcasl_3d_multiTI",
-    ];
-
-    // Analyze depth 2 (scan names)
-    const result = analyzeSubBlocks(paths, 2);
-
-    // Sub-block 0 keeps the hyphenated prefix together when splitting by underscore.
-    expect(result[0]).toEqual(["sernum-0001", "sernum-0018"]);
-
-    // Sub-block 1 reflects the second underscore-separated token.
-    expect(result[1]).toEqual(["ser-AAHead", "ser-pcasl"]);
-  });
-
-  it("handles paths without enough depth", () => {
-    const paths = ["A/B"];
-    const result = analyzeSubBlocks(paths, 5);
-    expect(result).toEqual({});
-  });
-
-  it("returns unique sub-block values for date-like folders", () => {
-    const paths = ["BAR/05022026_01/scan", "FOO/05022026_01/scan"];
-
-    const result = analyzeSubBlocks(paths, 1);
-    expect(result[0]).toEqual(["05022026"]);
-    expect(result[1]).toEqual(["01"]);
-  });
-
-  it("uses custom delimiters at the target block depth", () => {
-    const paths = ["study/002-12-R1/scan", "study/002-13-R2/scan"];
-
-    const result = analyzeSubBlocks(paths, 1, ["_", "-"]);
-    expect(result[0]).toEqual(["002"]);
-    expect(result[1]).toEqual(["12", "13"]);
-    expect(result[2]).toEqual(["R1", "R2"]);
   });
 });

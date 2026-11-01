@@ -33,7 +33,7 @@ The application SHALL show an available update as a lower-right Mantine notifica
 
 The application SHALL install immediately when no project changes are dirty and no processing or import is active. Otherwise it SHALL request confirmation. Active work includes processing and import `preparing`, `running`, `finalizing`, and `cancelling`, plus `importRunning`.
 
-On confirmation the application SHALL stop processing through `killProcessing`, cancel cancellable import through `cancel_import_run` using its exact attached run ID, reconcile its terminal result, save dirty project state, and only then download/install. Import finalization or cancellation still in progress SHALL block update preparation rather than authorize another cancellation. Abort, reconciliation, or save failure SHALL prevent installation and show a ten-second actionable error. Cancelling the modal SHALL not alter work or install. The application SHALL recheck for dirty or active work before installation so work started during download is not interrupted.
+On confirmation the application SHALL stop processing through `killProcessing`, cancel cancellable import through `cancel_import_run` using its exact attached run ID, reconcile its terminal result, save dirty project state, and only then download/install. Import finalization or cancellation still in progress SHALL block update preparation rather than authorize another cancellation. Abort, reconciliation, or save failure SHALL prevent installation and show a persistent actionable error. Cancelling the modal SHALL not alter work or install. The application SHALL recheck for dirty or active work before installation so work started during download is not interrupted.
 
 #### Scenario: Dirty processing project
 
@@ -52,7 +52,7 @@ On confirmation the application SHALL stop processing through `killProcessing`, 
 
 ### Requirement: Download, install, and relaunch feedback
 
-The application SHALL maintain one persistent progress notification from updater Started, Progress, and Finished events. Finished SHALL change the message to "Installing update…", and installation SHALL use that message with `autoClose: false`. Download/install failures SHALL remove the progress notification, show a red ten-second error, and SHALL NOT relaunch. After successful installation, Linux and macOS SHALL relaunch through the process plugin. Windows SHALL hand off installation to the updater without an explicit frontend relaunch or progress-notification completion step; notification lifetime SHALL remain subject to the application/installer process lifecycle.
+The application SHALL maintain one persistent progress notification from updater Started, Progress, and Finished events. Finished SHALL change the message to "Installing update…", and installation SHALL use that message with `autoClose: false`. Download/install failures SHALL remove the progress notification, show a persistent red error, and SHALL NOT relaunch. After successful installation, Linux and macOS SHALL relaunch through the process plugin. Windows SHALL hand off installation to the updater without an explicit frontend relaunch or progress-notification completion step; notification lifetime SHALL remain subject to the application/installer process lifecycle.
 
 #### Scenario: Installation succeeds on Windows
 

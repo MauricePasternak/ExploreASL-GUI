@@ -17,7 +17,7 @@ Application command registration and TypeScript binding generation SHALL use the
 
 ### Requirement: Structured typed application errors
 
-Fallible application commands SHALL expose a discriminated success/error result in generated frontend bindings. Application errors SHALL include string `message` and `details` fields. Existing domain information, including storage categories and import validation issues, SHALL remain structured and available to callers. Error handling SHALL preserve existing save, recovery, and execution safety behavior and SHALL NOT log command arguments containing study data.
+Fallible application commands SHALL expose a discriminated success/error result in generated frontend bindings. Application errors SHALL include string `message` and `details` fields. Existing domain information, including storage categories and import validation issues, SHALL remain structured and available to callers. Error handling SHALL preserve existing save, recovery, and execution safety behavior. Existing command tracing logs some arguments, including project paths and subject/session identifiers.
 
 Both fields SHALL be human-facing: `message` SHALL concisely describe the failed operation; `details` SHALL explain a known cause or useful next steps. When no reliable explanation exists, `details` SHALL be empty rather than invent a cause or expose arbitrary diagnostics. Original developer diagnostics, including error chains and external tool output, SHALL be retained through the existing application logger before human-facing conversion, subject to its existing limits. Internal `anyhow` errors MAY remain; their context chains SHALL NOT automatically become user-facing copy.
 

@@ -8,7 +8,7 @@ Define chart configuration and rendering for population analysis data.
 
 ### Requirement: Axis Assignment UI
 
-The "Visualize" step SHALL render three dropdowns: X-axis, Y-axis, and color-by. Each dropdown SHALL list non-excluded columns. Each entry SHALL display a type badge (continuous/ordinal/nominal) next to the column name. The Y-axis dropdown SHALL be labeled "Y-axis (continuous)". The color-by dropdown SHALL include a "None" option (default). Only categorical (ordinal/nominal) columns SHALL be available in the color-by dropdown.
+The "Visualize" step SHALL render three dropdowns: X-axis, Y-axis, and color-by. X SHALL list non-excluded columns, Y only non-excluded continuous columns, and color-by only non-excluded categorical (ordinal/nominal) columns plus "None" (default). Column entries SHALL display a type badge. The Y-axis dropdown SHALL be labeled "Y-axis (continuous)". Changing X or Y SHALL clear color-by.
 
 #### Scenario: Dropdowns show type badges
 
@@ -32,12 +32,12 @@ The chart type SHALL be determined by the axis types: continuous Y + continuous 
 #### Scenario: Scatterplot for continuous×continuous
 
 - **WHEN** X-axis is assigned a continuous column and Y-axis is assigned a continuous column
-- **THEN** a scatterplot SHALL render using `ScatterPlotCanvas`
+- **THEN** a scatterplot SHALL render using `ResponsiveScatterPlotCanvas`
 
 #### Scenario: Swarmplot for continuous×categorical
 
 - **WHEN** X-axis is assigned a categorical column and Y-axis is assigned a continuous column
-- **THEN** a swarmplot SHALL render using `SwarmPlotCanvas`
+- **THEN** a swarmplot SHALL render using `ResponsiveSwarmPlotCanvas`
 
 #### Scenario: Unsupported categorical Y
 
@@ -93,17 +93,17 @@ Changing any axis dropdown (X, Y, or color-by) SHALL trigger `read_data_columns`
 
 ### Requirement: Canvas Chart Rendering
 
-Both scatterplot and swarmplot SHALL use nivo's canvas variants (`ScatterPlotCanvas` and `SwarmPlotCanvas`) exclusively. SVG variants SHALL NOT be used. This ensures acceptable performance with 1000+ data points.
+Both scatterplot and swarmplot SHALL use nivo's responsive canvas variants (`ResponsiveScatterPlotCanvas` and `ResponsiveSwarmPlotCanvas`) exclusively. SVG variants SHALL NOT be used.
 
 #### Scenario: Scatterplot uses canvas renderer
 
 - **WHEN** a scatterplot is rendered
-- **THEN** the `ScatterPlotCanvas` component SHALL be used, not `ScatterPlot`
+- **THEN** the `ResponsiveScatterPlotCanvas` component SHALL be used, not `ScatterPlot`
 
 #### Scenario: Swarmplot uses canvas renderer
 
 - **WHEN** a swarmplot is rendered
-- **THEN** the `SwarmPlotCanvas` component SHALL be used, not `SwarmPlot`
+- **THEN** the `ResponsiveSwarmPlotCanvas` component SHALL be used, not `SwarmPlot`
 
 ### Requirement: Hover Tooltips
 

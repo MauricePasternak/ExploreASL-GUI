@@ -1,4 +1,6 @@
 import { Select, NumberInput, Stack } from "@mantine/core";
+import { comboboxTestIds } from "../common/comboboxTestIds";
+import { numberInputTestIds } from "../common/numberInputTestIds";
 
 import { M0_OPTIONS } from "../../lib/dataParFieldMetadata";
 
@@ -8,7 +10,11 @@ interface M0SelectProps {
   "data-testid"?: string;
 }
 
-export function M0Select({ value, onChange, "data-testid": dataTestId }: M0SelectProps) {
+export function M0Select({
+  value,
+  onChange,
+  "data-testid": dataTestId = "field-M0",
+}: M0SelectProps) {
   const namedValues = M0_OPTIONS.map((o) => o.value);
   const isNumber = typeof value === "number";
   const isCustom = value === "__custom__" || (isNumber && !namedValues.includes(String(value)));
@@ -29,7 +35,7 @@ export function M0Select({ value, onChange, "data-testid": dataTestId }: M0Selec
           }
         }}
         placeholder="Select M0 source"
-        data-testid={dataTestId}
+        {...comboboxTestIds(dataTestId)}
       />
       {isCustom && (
         <NumberInput
@@ -39,7 +45,7 @@ export function M0Select({ value, onChange, "data-testid": dataTestId }: M0Selec
           }}
           placeholder="Custom M0 value"
           label="Custom value"
-          data-testid={`${dataTestId}-custom`}
+          {...numberInputTestIds(`${dataTestId}-custom`)}
         />
       )}
     </Stack>

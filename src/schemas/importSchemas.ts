@@ -495,18 +495,6 @@ const IMPORT_STATUSES = [
   "cancelled",
   "interrupted",
 ] as const;
-export const IMPORT_EXECUTION_PHASES = [
-  "idle",
-  "preparing",
-  "running",
-  "finalizing",
-  "completed",
-  "failed",
-  "cancelling",
-  "cancelled",
-  "interrupted",
-] as const;
-
 export const ImportLifecycleSchema = z.enum([
   "idle",
   "preparing",

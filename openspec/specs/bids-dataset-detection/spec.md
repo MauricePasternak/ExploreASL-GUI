@@ -14,13 +14,13 @@ Algorithm:
 
 1. Check whether `dataset_description.json` exists at `<root_path>`. If present, parse JSON to extract `BIDSVersion`. Parse failure is non-fatal; populate `dataset_desc_error`.
 2. Call `parse_bids_structure(root_path)` to enumerate `sub-*/` subjects and their sessions.
-3. For each subject/session containing ASL NIfTI files, verify that **every** `*_asl.nii` or `*_asl.nii.gz` file has a matching `*_asl.json` sidecar. If **all** runs have matching JSON sidecars, the session is valid for detection — increment `asl_session_count` once (not per run); if the subject has at least one such session, increment `asl_subject_count`. Context presence and readability do NOT determine detection validity.
-4. If a session contains ASL files but **any** run lacks its companion `*_asl.json` sidecar, add the subject/session identifier to `missing_sidecars` (using `sub-XX_<session>` convention). Sessions without ASL NIfTIs, including `anat/`-only sessions, are NOT added. For each ASL NIfTI whose JSON sidecar exists, increment `missing_aslcontext_count` if its corresponding `*_aslcontext.tsv` path is absent. This count is per ASL file/run, not per distinct session; existing but unreadable context paths are not counted. Missing context does NOT block `is_bids`, even when no session has context.
+3. For each subject/session containing ASL NIfTI files, discover applicable ASL JSON metadata per image, including inherited files as described in `bids-sidecar-scanning`. If every image has at least one applicable JSON file, increment `asl_session_count` once; if the subject has at least one such session, increment `asl_subject_count`. Context presence and readability do NOT determine detection validity.
+4. If any image in a session lacks applicable JSON, add its subject/session identifier to `missing_sidecars` (`sub-XX_<session>`). Sessions without ASL NIfTIs are NOT added. For each image with applicable JSON, increment `missing_aslcontext_count` if no applicable context path exists. This count is per image, not per session; unreadable existing context is not counted. Missing context does NOT block `is_bids`. Discovery errors, including ambiguous associations, fail detection.
 5. `is_bids = asl_subject_count >= 1`. `dataset_description.json` presence is informational — NOT a gate on `is_bids`.
 6. `is_cross_sectional = true` unless at least one subject has more than one explicit `ses-*` directory with usable BIDS content (`perf/` or `anat/`). Datasets with no `ses-*`, or exactly one explicit session per subject, are cross-sectional for GUI purposes. A single subject with `ses-01/` and `ses-02/` makes the dataset longitudinal (`is_cross_sectional = false`).
 7. If `!is_bids`, set `error` with a specific reason.
 
-Result `BidsCheckResult` fields: `is_bids: bool`, `has_dataset_description: bool`, `dataset_desc_error: Option<String>`, `bids_version: Option<String>` (renders as "Unknown" when field missing or parse failed), `asl_subject_count: u32`, `asl_session_count: u32`, `total_subject_count: u32`, `missing_sidecars: Vec<String>` (using `sub-XX_<session>` convention), `missing_aslcontext_count: u32`, `has_perf_directory: bool`, `is_cross_sectional: bool`, `error: Option<String>`.
+Result `BidsCheckResult` fields: `setup_recovered: usize`, `is_bids: bool`, `has_dataset_description: bool`, `dataset_desc_error: Option<String>`, `bids_version: Option<String>`, `asl_subject_count: u32`, `asl_session_count: u32`, `total_subject_count: u32`, `missing_sidecars: Vec<String>`, `missing_aslcontext_count: u32`, `has_perf_directory: bool`, `is_cross_sectional: bool`, `error: Option<String>`.
 
 #### Scenario: Valid BIDS dataset with ASL
 
@@ -76,23 +76,23 @@ Result `BidsCheckResult` fields: `is_bids: bool`, `has_dataset_description: bool
 
 After the folder picker returns a path, `LandingPage.handleNewProject()` MUST invoke `check_bids_dataset` for read-only detection after any separately disclosed prior-setup recovery. Based on the result, a unified project import setup modal MUST always be shown:
 
-- `error == null && is_bids` → show dialog: "BIDS Dataset Detected" with both "Skip Import — review BIDS metadata" and "Import from DICOM" enabled. Dialog displays `asl_subject_count`, `asl_session_count`, and "Cross-sectional: Yes/No" from `is_cross_sectional` (longitudinal only when at least one subject has multiple explicit sessions). When `missing_aslcontext_count > 0`, show a non-blocking missing-context warning using the reported per-ASL-file/run count. The current UI labels this number "session(s)", but it is not a count of distinct skipped sessions: multiple missing-context runs in one session contribute multiple counts.
-- `is_bids == false && asl_subject_count == 0 && total_subject_count == 0` → show dialog: "No BIDS Subjects Found" with BIDS option disabled and "Import from DICOM" enabled/auto-selected. Display the callout: "No BIDS subjects found in the selected folder. Ensure the folder contains sub-* directories with ASL data."
-- `is_bids == false && asl_subject_count == 0 && total_subject_count > 0` → show dialog: "No Valid ASL BIDS Data Found" with BIDS option disabled and "Import from DICOM" enabled/auto-selected. Display the callout: "The selected folder contains BIDS subjects but none have valid ASL data. Ensure at least one subject has a perf/ directory with *_asl.json sidecars."
-- `dataset_desc_error != null && asl_subject_count >= 1` → show dialog: "Corrupt dataset_description.json" with both options enabled. Display the callout: "dataset_description.json is corrupt, but ASL subjects were found."
+- `error == null && is_bids` → show dialog: "Use this existing ASL dataset?" with both "Use existing BIDS images — Recommended" and "Import original scanner files (DICOM)" enabled, without automatically selecting either. Display the selected folder name, `asl_subject_count` as participants, and `asl_session_count` as imaging sessions, with singular/plural wording. Do not display the redundant "Cross-sectional: Yes/No" field. When `missing_aslcontext_count > 0`, show a non-blocking warning that this many ASL runs lack label/control information (`*_aslcontext.tsv`) and affected participant sessions will be excluded from BIDS review. This is a per-ASL-file/run count, never a count of distinct excluded sessions.
+- `is_bids == false && asl_subject_count == 0 && total_subject_count == 0` → show dialog: "Set up a DICOM import" with BIDS option disabled and DICOM enabled/auto-selected. Explain that no existing BIDS ASL dataset was found and offer original scanner files or another BIDS folder.
+- `is_bids == false && asl_subject_count == 0 && total_subject_count > 0` → show dialog: "No usable BIDS ASL images found" with BIDS option disabled and DICOM enabled/auto-selected. Explain that participant folders were found but ASL images with required scan information were not detected; offer another BIDS folder or DICOM import.
+- `dataset_desc_error != null && asl_subject_count >= 1` → show dialog: "Dataset information needs attention" with both options enabled. Show a visible warning that `dataset_description.json` could not be read, ASL images were found, and continuing to scan review does not repair the file. Do not recommend the BIDS option without qualification.
 
-When detection reports `is_bids = true`, `total_subject_count > 0`, `has_dataset_description = true`, or non-null `dataset_desc_error`, the modal MUST obtain and display the read-only mutation plan for the currently selected import option before enabling `[Confirm]`. The displayed list MUST identify every applicable `create`, `update`, `no-op`, warning, and conflict for `project.easl`, `.bidsignore`, and any data-source-specific directory or marker. A blocking conflict or unavailable plan MUST disable confirmation. Changing the import option MUST replace the displayed plan rather than reusing a plan for another data source.
+When detection reports `is_bids = true`, `total_subject_count > 0`, `has_dataset_description = true`, or non-null `dataset_desc_error`, the modal MUST obtain and present the read-only mutation plan for the currently selected import option before enabling `[Create project]`. Present a plain-language overview by default and expose every applicable `create`, `update`, and `no-op` operation for `project.easl`, `.bidsignore`, and any data-source-specific directory under an initially collapsed "Technical details: planned file changes" disclosure. Warnings, conflicts, loading, and inspection errors MUST remain outside the disclosure. A blocking conflict or unavailable plan MUST disable confirmation. Changing the import option MUST replace the displayed plan rather than reusing a plan for another data source.
 
-In all cases, the dialog features `[Confirm]` (enabled only when an option is selected and, where required, has a current conflict-free plan), `[Choose a Different Folder]`, and `[Cancel]`. After any disclosed prior-setup recovery, cancel, dismissal, folder reselection, scans, and plan review MUST NOT modify the selected tree. Where a plan is required, confirmation MUST submit its displayed identity; project creation and navigation occur only after its transaction commits. Ordinary non-BIDS DICOM creation with none of the above indicators SHALL instead use the normal single-project-file creation path after explicit confirmation, without preflight or a plan identity; activation and navigation MUST wait for successful creation.
+In all cases, the dialog features `[Create project]` (enabled only when an option is selected and, where required, has a current conflict-free plan), `[Choose another folder]`, and `[Cancel]`. After any disclosed prior-setup recovery, cancel, dismissal, folder reselection, scans, and plan review MUST NOT modify the selected tree. Where a plan is required, confirmation MUST submit its displayed identity; project creation and navigation occur only after its transaction commits. Ordinary non-BIDS DICOM creation with none of the above indicators SHALL instead use the normal single-project-file creation path after explicit confirmation, without preflight or a plan identity; activation and navigation MUST wait for successful creation.
 
 #### Scenario: BIDS folder picked → user chooses BIDS-direct
 
-- **WHEN** user picks ds000240, selects "Skip Import", reviews a current conflict-free mutation plan, and confirms it
+- **WHEN** user picks ds000240, selects "Use existing BIDS images", reviews a current conflict-free mutation plan, and selects "Create project"
 - **THEN** exactly the displayed BIDS-direct project mutations SHALL commit before navigation to `/project/:id/import` and `BIDSReviewPanel` rendering
 
 #### Scenario: BIDS folder picked → user chooses DICOM anyway
 
-- **WHEN** user picks a BIDS folder, selects "Import from DICOM", reviews its current conflict-free mutation plan, and confirms it
+- **WHEN** user picks a BIDS folder, selects "Import original scanner files (DICOM)", reviews its current conflict-free mutation plan, and selects "Create project"
 - **THEN** exactly the displayed DICOM project mutations SHALL commit before navigation to the DICOM import wizard, without applying BIDS-direct-only compatibility mutations
 
 #### Scenario: Import option changes
@@ -114,3 +114,19 @@ In all cases, the dialog features `[Confirm]` (enabled only when an option is se
 
 - **WHEN** valid ASL subjects accompany a corrupt `dataset_description.json` and the user reviews the warning and current BIDS-direct mutation plan
 - **THEN** confirmation SHALL commit exactly that plan before project activation, while cancellation SHALL leave the source tree unchanged
+
+### Requirement: Dataset setup uses accessible, non-technical language
+
+The modal SHALL use a desktop width of approximately 720 CSS pixels, constrained to the available viewport on smaller windows. Body and option descriptions SHALL use readable text rather than extra-small technical captions. Long folder names, paths, hashes, and text previews SHALL wrap without horizontal overflow; actions SHALL wrap on narrow windows and remain reachable when technical details are expanded.
+
+The BIDS option SHALL explain that existing images are used without DICOM conversion and scan information is reviewed before processing settings. The DICOM option SHALL explain that original scanner files are selected next and conversion does not start in this dialog. Neither choice nor confirmation SHALL use "Skip Import". A visible "What will change?" summary SHALL explain project settings/support files and preservation of existing images and documentation during setup. A notice SHALL state that nothing changes until "Create project" is selected. This notice concerns new setup mutations, not separately disclosed prior-setup recovery.
+
+#### Scenario: Researcher opens the Oxford single-PLD dataset
+
+- **WHEN** detection finds one ASL participant and one imaging session in `test_Oxford_ASL_singlePLD`
+- **THEN** the dialog SHALL show the folder name and "1 participant · 1 imaging session", explain both choices, and leave confirmation unavailable until a choice and required plan are ready
+
+#### Scenario: Exact details remain accessible without hiding problems
+
+- **WHEN** a setup plan is presented with its technical disclosure collapsed
+- **THEN** warnings and conflicts SHALL remain visible, and expanding the keyboard-accessible disclosure SHALL reveal the canonical folder, project summary, every operation, exact text previews, preservation notice, and temporary-artifact disclosure

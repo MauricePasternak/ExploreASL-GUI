@@ -1,3 +1,4 @@
+import { comboboxTestIds } from "../common/comboboxTestIds";
 import { Badge, Group, Select, Stack, Table, Text } from "@mantine/core";
 
 import { useVisualizationStore } from "../../stores/visualizationStore";
@@ -107,7 +108,7 @@ export default function ColumnTypes() {
                     disabled={isEnforced}
                     size="xs"
                     style={{ width: 140 }}
-                    data-testid={`type-select-${col.name}`}
+                    {...comboboxTestIds(`type-select-${col.name}`)}
                   />
                 </Table.Td>
                 <Table.Td>

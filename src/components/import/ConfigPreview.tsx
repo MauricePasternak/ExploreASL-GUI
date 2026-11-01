@@ -33,7 +33,7 @@ export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPrevi
 
       <Accordion variant="separated">
         <Accordion.Item value="sourcestructure" data-testid="config-sourcestructure-accordion">
-          <Accordion.Control>
+          <Accordion.Control data-testid="config-sourcestructure-toggle">
             <Text fw={600} component="span">
               sourcestructure.json
             </Text>
@@ -59,7 +59,7 @@ export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPrevi
         </Accordion.Item>
 
         <Accordion.Item value="studypar" data-testid="config-studypar-accordion">
-          <Accordion.Control>
+          <Accordion.Control data-testid="config-studypar-toggle">
             <Text fw={600} component="span">
               studyPar.json
             </Text>

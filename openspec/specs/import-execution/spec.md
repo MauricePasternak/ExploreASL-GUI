@@ -556,24 +556,20 @@ Run-correlated structured events MAY update provisional running diagnostics, but
 - **WHEN** a `subject_start` event arrives for subject "GOOD" during an active import
 - **THEN** `importProgress["GOOD"].status` transitions from "pending" to "running"
 
-### Requirement: canAccessPhase dispatches on dataSource
+### Requirement: Native phase access
 
-`canAccessPhase(project, targetPhase)` SHALL implement the phase gating logic:
+`canAccessPhase(project, targetPhase)` SHALL check the native `allowedPhases` list. Native phase eligibility SHALL use:
 
 - `idx = PROJECT_PHASES.indexOf(targetPhase)`, `currentIdx = PROJECT_PHASES.indexOf(project.projectMeta.currentPhase)`.
-- If `idx <= currentIdx` → return `true`.
-- If `targetPhase === "parameters"` → return `true`.
-- If `targetPhase === "processing"` → dispatch on `dataSource`:
-  - `dataSource === "bids"` → return `project.uiState?.import?.bidsReviewConfirmed === true`
-  - `dataSource === "dicom"` → return `project.uiState?.import?.completed === true`
-- If `targetPhase === "visualization" || targetPhase === "manifest"` → return `project.uiState?.processing?.population?.completed === true`.
-- Else → return `false`.
+- Phases at or before the current cursor, Import, and Parameters are allowed.
+- Processing is also allowed when BIDS review is confirmed for BIDS projects or import is completed for DICOM projects.
+- Visualization and Manifest are also allowed when Population is completed.
 
-`dataSource` is required (no fallback default per `ProjectMetaSchema`). Existing test fixtures that omitted `dataSource` MUST be updated to set it explicitly.
+`dataSource` is required by the native project contract.
 
 #### Scenario: BIDS project before confirmation blocked from processing
 
-- **WHEN** `canAccessPhase(project, "processing")` is called where `dataSource = "bids"` and `bidsReviewConfirmed = false`
+- **WHEN** `canAccessPhase(project, "processing")` is called where the current phase precedes Processing, `dataSource = "bids"`, and `bidsReviewConfirmed = false`
 - **THEN** returns `false`
 
 #### Scenario: BIDS project after confirmation reaches processing

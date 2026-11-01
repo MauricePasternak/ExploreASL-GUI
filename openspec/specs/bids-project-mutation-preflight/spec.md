@@ -34,63 +34,60 @@ Scanning a candidate root, building/displaying a new mutation plan, changing imp
 
 ### Requirement: Plan discloses exact durable mutations
 
-The preflight result SHALL identify the canonical selected root, selected data source, an opaque plan identity, warnings, conflicts, and every durable project-relative operation as `create`, `update`, or `no-op`. For a BIDS-direct project, the operation list SHALL cover `project.easl`, `rawdata/`, `rawdata/.easl-gui-managed`, and `.bidsignore`; it SHALL state that `rawdata/README.md` is preserved. For DICOM import selected on a detected BIDS root, the list SHALL cover the applicable project and ignore-file operations and SHALL omit BIDS-direct-only compatibility artifacts. Any internal candidate, backup, or journal entries used during commit SHALL be identified separately as temporary transaction artifacts that are removed after commit or recovery.
+The preflight result SHALL identify the canonical selected root, selected data source, an opaque plan identity, warnings, conflicts, and every durable project-relative operation as `create`, `update`, or `no-op`. Operations SHALL be listed in execution order: `rawdata/`, `.bidsignore`, then `project.easl`, omitting paths not applicable to the selected mode. Existing entries marked `no-op` SHALL retain their position in that sequence. Both project creation and setup repair dialogs SHALL preserve this order. For a BIDS-direct project, the operation list SHALL cover these three paths; it SHALL state that `rawdata/README.md` is preserved. For DICOM import selected on a detected BIDS root, the list SHALL cover the applicable ignore-file and project operations and SHALL omit BIDS-direct-only compatibility artifacts. Any internal candidate, backup, or journal entries used during commit SHALL be identified separately as temporary transaction artifacts that are removed after commit or recovery.
 
 The plan SHALL expose the exact resulting UTF-8 bytes for each GUI-owned text file that would be created or updated. It SHALL summarize `project.easl` by schema version, project name, generated project ID, data source, and content hash without requiring the UI to display the complete project payload.
+
+The landing dialog SHALL present a plain-language setup overview by default. Exact operations, UTF-8 previews, canonical root, project summary, README preservation, and temporary-artifact information SHALL remain available in an initially collapsed, keyboard-accessible technical disclosure. Warnings, conflicts, and inspection failures SHALL remain visible outside that disclosure. Collapsing details SHALL NOT remove plan contents or weaken current-plan confirmation checks.
 
 #### Scenario: Fresh BIDS-direct root
 
 - **WHEN** preflight runs for BIDS-direct creation on a root without project artifacts
-- **THEN** the plan SHALL show creation of `project.easl`, `rawdata/`, `rawdata/.easl-gui-managed`, and `.bidsignore`, plus the exact marker and `.bidsignore` bytes
+- **THEN** the plan SHALL show creation of `rawdata/`, `.bidsignore`, and `project.easl` in that execution order, plus the exact `.bidsignore` bytes
 
 #### Scenario: Existing compatibility directory
 
 - **WHEN** `rawdata/` already exists and contains user entries
-- **THEN** the plan SHALL mark the directory as `no-op`, enumerate the marker and ignore-file changes separately, warn when `sub-*` directories will be ignored by BIDS-direct processing, and state that existing entries are preserved
+- **THEN** the plan SHALL mark the directory as `no-op`, enumerate the ignore-file changes separately, warn when `sub-*` directories will be ignored by BIDS-direct processing, and state that existing entries are preserved
 
 #### Scenario: Existing project conflicts
 
-- **WHEN** `project.easl` or an unrecognized `rawdata/.easl-gui-managed` entry already exists
+- **WHEN** `project.easl` already exists
 - **THEN** the plan SHALL report a blocking conflict and confirmation SHALL remain unavailable
 
-### Requirement: GUI-owned marker preserves user documentation
+### Requirement: Compatibility setup preserves existing entries
 
-BIDS-direct setup SHALL use `rawdata/.easl-gui-managed` as its compatibility ownership marker. A newly created marker SHALL contain exactly `{"kind":"bids-direct-rawdata","version":1}\n`. Setup and later verification SHALL NOT create, modify, rename, or remove `rawdata/README.md` or any other non-owned entry. A marker with different bytes or a non-regular-file marker entry SHALL be a conflict rather than an overwrite target.
+BIDS-direct setup and later verification SHALL NOT create, modify, rename, or remove `rawdata/README.md` or any other pre-existing entry within `rawdata/`.
 
 #### Scenario: User README is preserved
 
 - **WHEN** `rawdata/README.md` exists before confirmed setup
 - **THEN** its bytes, metadata-independent content hash, and path SHALL remain unchanged after commit
 
-#### Scenario: Valid marker already exists
-
-- **WHEN** the expected regular marker already contains the exact version-1 bytes
-- **THEN** preflight SHALL classify the marker operation as `no-op`
-
-#### Scenario: Foreign marker is rejected
-
-- **WHEN** the marker path contains different bytes, is a directory, or is a symbolic link
-- **THEN** preflight SHALL report a blocking ownership conflict without changing it
-
 ### Requirement: BIDS ignore output is deterministic
 
-The required ignore entries SHALL be `project.easl`, `.easl_staging`, and `rawdata/`, in that canonical append order. Entry matching SHALL compare trimmed logical lines. If `.bidsignore` is absent, the planned bytes SHALL be exactly `project.easl\n.easl_staging\nrawdata/\n`. If all entries exist, the file SHALL be a byte-preserving `no-op` even when spacing, ordering, duplicates, final-newline state, or CRLF differs.
+For BIDS-direct and repair, the required ignore entries SHALL be `project.easl`, `.easl_staging`, and `rawdata/`, in that canonical append order. Reviewed DICOM setup requires only the first two. Entry matching SHALL compare trimmed logical lines. If `.bidsignore` is absent for BIDS-direct or repair, the planned bytes SHALL be exactly `project.easl\n.easl_staging\nrawdata/\n`. If all required entries exist, the file SHALL be a byte-preserving `no-op` even when spacing, ordering, duplicates, final-newline state, or CRLF differs.
 
-When entries are missing, existing bytes SHALL be preserved exactly. The append newline SHALL use the first existing line-ending style (`\r\n` or `\n`), defaulting to `\n` when none exists. If nonempty existing content lacks a complete final line ending, one append newline SHALL first terminate it; each missing entry SHALL then be appended once in canonical order and terminated by that newline. A trailing `\r` SHALL be completed with `\n` rather than receiving an extra separator.
+When entries are missing, existing bytes SHALL be preserved exactly. The append newline SHALL be `\r\n` if any CRLF occurs in existing content, otherwise `\n`. If nonempty existing content lacks a complete final line ending, one append newline SHALL first terminate it; each missing entry SHALL then be appended once in canonical order and terminated by that newline. A trailing `\r` SHALL be completed with `\n` rather than receiving an extra separator.
 
 #### Scenario: Missing file has canonical bytes
 
-- **WHEN** `.bidsignore` does not exist
+- **WHEN** `.bidsignore` does not exist for BIDS-direct setup or repair
 - **THEN** preflight SHALL plan creation with exact bytes `project.easl\n.easl_staging\nrawdata/\n`
+
+#### Scenario: Missing file for reviewed DICOM setup
+
+- **WHEN** `.bidsignore` does not exist for reviewed DICOM setup
+- **THEN** preflight SHALL plan creation with exact bytes `project.easl\n.easl_staging\n`
 
 #### Scenario: LF file lacks final newline
 
-- **WHEN** `.bidsignore` contains exact bytes `derivatives/` and lacks all required entries
+- **WHEN** BIDS-direct setup or repair finds `.bidsignore` containing exact bytes `derivatives/` and lacking all required entries
 - **THEN** planned bytes SHALL be `derivatives/\nproject.easl\n.easl_staging\nrawdata/\n`
 
 #### Scenario: CRLF style is preserved
 
-- **WHEN** `.bidsignore` contains exact bytes `derivatives/\r\nproject.easl\r\n`
+- **WHEN** BIDS-direct setup or repair finds `.bidsignore` containing exact bytes `derivatives/\r\nproject.easl\r\n`
 - **THEN** planned bytes SHALL be `derivatives/\r\nproject.easl\r\n.easl_staging\r\nrawdata/\r\n`
 
 #### Scenario: Existing required lines cause byte-preserving no-op
@@ -119,13 +116,13 @@ Applying a setup plan SHALL require an explicit confirmation carrying the curren
 
 ### Requirement: Confirmed mutations are recoverable as one transaction
 
-Commit SHALL treat applicable project, compatibility marker/directory, and ignore-file changes as one reviewed transaction. Before exposing entries or replacing files, a durable root-local journal SHALL record transaction identity, owned paths, expected content, and before-state sufficient for safe rollback. New content SHALL validate and flush before installation; replacement SHALL use same-directory atomic candidates. Success SHALL require all planned entries and supported directory flushing to complete.
+Commit SHALL treat applicable project, compatibility directory, and ignore-file changes as one reviewed transaction. Before exposing entries or replacing files, a durable root-local journal SHALL record transaction identity, owned paths, expected content, and before-state sufficient for safe rollback. New content SHALL validate and flush before installation; replacement SHALL use same-directory atomic candidates. Success SHALL require all planned entries and supported directory flushing to complete.
 
 Ordinary failure SHALL restore prior bytes and remove only transaction-owned additions without activation. Interrupted transactions SHALL reconcile from validated root-local journals when the root is next selected, before a new setup plan, creation, or activation. Recovery SHALL finish a provable complete after-state or restore the complete before-state; ambiguous ownership SHALL block mutation. Application startup SHALL NOT scan unrelated project roots or require a global application-data pending registry. Filenames alone SHALL identify possible journals, never authorize ownership or cleanup. Selection-triggered recovery SHALL be a disclosed operation before read-only preflight; an unresolved transaction SHALL prevent preflight from claiming a clean root.
 
 #### Scenario: Failure during each mutation stage
 
-- **WHEN** candidate creation, flushing, journal writing, directory/marker creation, ignore replacement, project installation, or root flushing fails
+- **WHEN** candidate creation, flushing, journal writing, directory creation, ignore replacement, project installation, or root flushing fails
 - **THEN** the operation SHALL fail visibly and recovery SHALL retain a complete before-state or complete reviewed after-state
 
 #### Scenario: Rollback preserves prior bytes

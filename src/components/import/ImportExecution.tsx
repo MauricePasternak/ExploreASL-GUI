@@ -46,6 +46,7 @@ import { useProjectStore } from "../../stores/projectStore";
 import HeaderCard from "../common/HeaderCard";
 import ProfileSelector from "../common/ProfileSelector";
 import ImportSubjectTable from "./ImportSubjectTable";
+import ImportStepLayout from "./ImportStepLayout";
 
 const PHASE_META: Record<ImportPhase, { label: string; color: string }> = {
   idle: { label: "Idle", color: "gray" },
@@ -502,7 +503,42 @@ export default function ImportExecution() {
   const sourceAvailable = ["available", "unconfigured"].includes(sourceAvailability.status);
   const meta = PHASE_META[phase];
   return (
-    <Stack gap="md" data-testid="import-execution">
+    <ImportStepLayout
+      testId="import-execution"
+      navigation={
+        <Group justify="space-between" data-testid="import-execution-nav">
+          <Button
+            leftSection={<IconArrowLeft size={16} />}
+            disabled={locked}
+            onClick={() => setActiveStep(4)}
+            data-testid="import-back-btn"
+          >
+            Back: Preview
+          </Button>
+          <Button
+            disabled={locked}
+            onClick={async () => {
+              const lease = captureProjectLease();
+              const project = useProjectStore.getState().project;
+              if (project && lease && isCurrentProjectLease(lease) && isProjectWorkAccepted()) {
+                try {
+                  await useProjectStore.getState().setPhase("parameters");
+                  if (!isCurrentProjectLease(lease)) return;
+                  await useProjectStore.getState().saveProject();
+                  if (!isCurrentProjectLease(lease)) return;
+                  navigate(`/project/${project.projectMeta.id}/parameters`);
+                } catch {
+                  // Shared save status retains the error; navigation stays here.
+                }
+              }
+            }}
+            data-testid="import-next-params-btn"
+          >
+            Next: Parameters
+          </Button>
+        </Group>
+      }
+    >
       <HeaderCard
         icon={IconPlayerPlay}
         title="Run Import Module"
@@ -638,6 +674,7 @@ export default function ImportExecution() {
         onClose={() => setPendingConfirmation(null)}
         title="Replace existing imported data?"
         data-testid="confirm-reimport-dialog"
+        attributes={{ close: { "data-testid": "confirm-reimport-dialog-close" } }}
       >
         <Text size="sm">
           Re-importing replaces complete selected subject output. Native verification still decides
@@ -646,7 +683,7 @@ export default function ImportExecution() {
         <Stack gap="xs" mt="sm" data-testid="relocation-inventory">
           {pendingConfirmation?.plan.subjects.map((subject) => (
             <details key={subject.subject} data-testid={`relocation-inventory-${subject.subject}`}>
-              <summary>
+              <summary data-testid={`relocation-inventory-toggle-${subject.subject}`}>
                 {subject.subject}: {subject.fileCount} files, {subject.byteTotal} bytes
                 {subject.sessions.length > 0 ? `, ${subject.sessions.join(", ")}` : ""}
               </summary>
@@ -679,37 +716,6 @@ export default function ImportExecution() {
           </Button>
         </Group>
       </Modal>
-      <Group justify="space-between" data-testid="import-execution-nav">
-        <Button
-          leftSection={<IconArrowLeft size={16} />}
-          disabled={locked}
-          onClick={() => setActiveStep(4)}
-          data-testid="import-back-btn"
-        >
-          Back: Preview
-        </Button>
-        <Button
-          disabled={locked}
-          onClick={async () => {
-            const lease = captureProjectLease();
-            const project = useProjectStore.getState().project;
-            if (project && lease && isCurrentProjectLease(lease) && isProjectWorkAccepted()) {
-              try {
-                await useProjectStore.getState().setPhase("parameters");
-                if (!isCurrentProjectLease(lease)) return;
-                await useProjectStore.getState().saveProject();
-                if (!isCurrentProjectLease(lease)) return;
-                navigate(`/project/${project.projectMeta.id}/parameters`);
-              } catch {
-                // Shared save status retains the error; navigation stays here.
-              }
-            }
-          }}
-          data-testid="import-next-params-btn"
-        >
-          Next: Parameters
-        </Button>
-      </Group>
-    </Stack>
+    </ImportStepLayout>
   );
 }

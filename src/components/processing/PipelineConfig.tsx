@@ -1,3 +1,4 @@
+import { numberInputTestIds } from "../common/numberInputTestIds";
 import { Checkbox, Group, NumberInput, SimpleGrid, Stack, Text } from "@mantine/core";
 import { useCallback, useEffect } from "react";
 
@@ -118,6 +119,7 @@ export default function PipelineConfig() {
             <FieldInfoIcon
               tooltipLabel="Select which pipeline modules to run. 'Structural' processes anatomical scans, and 'ASL' processes functional perfusion scans."
               aria-label="Info for Modules"
+              data-testid="pipeline-modules-info"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -156,6 +158,7 @@ export default function PipelineConfig() {
                 <FieldInfoIcon
                   tooltipLabel="If checked, the app will force a re-synchronization of the raw imported/BIDS data with the initial ExploreASL derivatives. This is necessary if the raw source files (i.e. BIDS folders) have been altered after the initial import."
                   aria-label="Info for rerun BIDS2Legacy"
+                  data-testid="pipeline-force-resync-info"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -177,6 +180,7 @@ export default function PipelineConfig() {
               <FieldInfoIcon
                 tooltipLabel="Number of parallel workers. Multiple workers allow processing different subject-session datasets simultaneously."
                 aria-label="Info for Workers"
+                data-testid="pipeline-workers-info"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -198,7 +202,7 @@ export default function PipelineConfig() {
           min={1}
           max={systemCores || 4}
           clampBehavior="strict"
-          data-testid="worker-count-input"
+          {...numberInputTestIds("worker-count-input")}
         />
       </SimpleGrid>
     </Stack>

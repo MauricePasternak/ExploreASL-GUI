@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   componentValidationMessage,
-  portableCollisionIssues,
   portableKey,
   sortStagingIssues,
   suggestPortableComponent,
@@ -29,20 +28,6 @@ describe("stagingValidation", () => {
     for (const vector of vectors.portableKeys) {
       expect(portableKey(vector.value)).toBe(vector.key);
     }
-  });
-
-  it("reports both portable collision participants in deterministic order", () => {
-    const issues = portableCollisionIssues(
-      [
-        { value: "Straße", entryIndex: 2 },
-        { value: "STRASSE", entryIndex: 1 },
-      ],
-      "subject",
-    );
-    expect(issues).toMatchObject([
-      { entryIndex: 1, conflictingEntryIndex: 2 },
-      { entryIndex: 2, conflictingEntryIndex: 1 },
-    ]);
   });
 
   it("sorts issues without mutating input and suggests only safe replacements", () => {

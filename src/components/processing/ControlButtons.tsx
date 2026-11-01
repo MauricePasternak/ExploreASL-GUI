@@ -36,6 +36,7 @@ function ConfirmReprocessDialog({
       onClose={onClose}
       title="Re-process completed subjects?"
       data-testid="confirm-reprocess-dialog"
+      attributes={{ close: { "data-testid": "confirm-reprocess-dialog-close" } }}
     >
       <Text size="sm">
         The following {entries.length} subject(s) have already completed processing for the selected
@@ -218,6 +219,7 @@ const ControlButtons = memo(function ControlButtons({
         title="Stop Processing"
         size="sm"
         data-testid="stop-confirm-modal"
+        attributes={{ close: { "data-testid": "stop-confirm-modal-close" } }}
         returnFocus={false}
       >
         <Stack gap="md">
@@ -256,6 +258,7 @@ const ControlButtons = memo(function ControlButtons({
         title="BIDS setup needs repair"
         size="lg"
         data-testid="bids-compatibility-error-modal"
+        attributes={{ close: { "data-testid": "bids-compatibility-error-modal-close" } }}
         returnFocus={false}
         transitionProps={{ duration: 0, exitDuration: 0 }}
       >
@@ -290,6 +293,7 @@ const ControlButtons = memo(function ControlButtons({
         }}
         title="Review BIDS setup repair"
         data-testid="bids-repair-review-modal"
+        attributes={{ close: { "data-testid": "bids-repair-review-modal-close" } }}
       >
         <Stack gap="sm">
           {repairError && (

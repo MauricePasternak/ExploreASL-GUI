@@ -8,6 +8,7 @@ import { AdvancedDivider } from "./AdvancedDivider";
 import { M0Select } from "./M0Select";
 import { CommaNumberInput } from "../CommaNumberInput";
 import { FlagToggle } from "./FlagToggle";
+import { numberInputTestIds } from "../common/numberInputTestIds";
 
 interface M0SectionProps {
   dataPar: DataParState;
@@ -56,7 +57,7 @@ export function M0Section({
                 onFieldChange("BackgroundSuppressionNumberPulses", v === "" ? undefined : v)
               }
               min={0}
-              data-testid="field-BackgroundSuppressionNumberPulses"
+              {...numberInputTestIds("field-BackgroundSuppressionNumberPulses")}
             />
 
             {showPulseTime && (
@@ -87,7 +88,7 @@ export function M0Section({
               placeholder={FIELD_METADATA.M0_GMScaleFactor.defaultHint}
               value={dataPar.M0_GMScaleFactor}
               onChange={(v) => onFieldChange("M0_GMScaleFactor", v === "" ? undefined : v)}
-              data-testid="field-M0_GMScaleFactor"
+              {...numberInputTestIds("field-M0_GMScaleFactor")}
             />
 
             <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
@@ -101,7 +102,11 @@ export function M0Section({
         </Stack>
       </Paper>
 
-      <AdvancedDivider showAdvanced={showAdvanced} onToggle={onToggleAdvanced} />
+      <AdvancedDivider
+        showAdvanced={showAdvanced}
+        onToggle={onToggleAdvanced}
+        testId="m0-advanced-toggle"
+      />
 
       {showAdvanced && (
         <Paper p="md" radius="md" withBorder>

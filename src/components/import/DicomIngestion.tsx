@@ -30,6 +30,8 @@ import {
 import { useProjectStore } from "../../stores/projectStore";
 import HeaderCard from "../common/HeaderCard";
 import HelpTooltip from "../common/HelpTooltip";
+import PathEntryButton from "../common/PathEntryButton";
+import ImportStepLayout from "./ImportStepLayout";
 
 /**
  * Step 1: DICOM Ingestion.
@@ -80,23 +82,25 @@ export default function DicomIngestion() {
       : inspection.absolutePath;
   }
 
-  async function handleSelectFolder() {
+  async function handleSelectFolder(selectedPath?: string) {
     const lease = captureProjectLease();
     if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
     logAction("dicom_select_folder");
-    const selected = await open({
-      defaultPath: project?.projectMeta.rootPath,
-      directory: true,
-      multiple: false,
-      title: "Select DICOM source directory",
-    });
+    const selected =
+      selectedPath ??
+      (await open({
+        defaultPath: project?.projectMeta.rootPath,
+        directory: true,
+        multiple: false,
+        title: "Select DICOM source directory",
+      }));
     if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
     if (selected) {
       try {
-        const selectedPath = selected as string;
-        const logicalPath = await logicalSelectedPath(selectedPath);
+        const path = selected as string;
+        const logicalPath = await logicalSelectedPath(path);
         if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
-        await setSourceDataPath(selectedPath, lease);
+        await setSourceDataPath(path, lease);
         if (!isCurrentProjectLease(lease)) return;
         setError(null);
         logAction("dicom_folder_selected", { path: logicalPath });
@@ -109,15 +113,17 @@ export default function DicomIngestion() {
     }
   }
 
-  async function handleRelink() {
+  async function handleRelink(selectedPath?: string) {
     const lease = captureProjectLease();
     if (!lease || !isCurrentProjectLease(lease) || !isProjectWorkAccepted()) return;
-    const selected = await open({
-      defaultPath: project?.projectMeta.rootPath,
-      directory: true,
-      multiple: false,
-      title: "Relink DICOM source directory",
-    });
+    const selected =
+      selectedPath ??
+      (await open({
+        defaultPath: project?.projectMeta.rootPath,
+        directory: true,
+        multiple: false,
+        title: "Relink DICOM source directory",
+      }));
     if (!isCurrentProjectLease(lease) || !isProjectWorkAccepted() || typeof selected !== "string")
       return;
 
@@ -205,7 +211,21 @@ export default function DicomIngestion() {
   const totalPaths = pathPatterns.reduce((sum, p) => sum + p.count, 0);
 
   return (
-    <Stack gap="md" data-testid="dicom-ingestion">
+    <ImportStepLayout
+      testId="dicom-ingestion"
+      navigation={
+        <Group justify="flex-end" data-testid="dicom-nav">
+          <Button
+            rightSection={<IconArrowRight size={16} />}
+            onClick={handleNext}
+            disabled={!ingestionComplete}
+            data-testid="dicom-next-btn"
+          >
+            Next: Tokenize Paths
+          </Button>
+        </Group>
+      }
+    >
       <HeaderCard
         icon={IconDatabase}
         title="DICOM Ingestion"
@@ -226,12 +246,19 @@ export default function DicomIngestion() {
             <Code data-testid="dicom-missing-source-path">{sourceAvailability.savedPath}</Code>
             <Button
               variant="light"
-              onClick={handleRelink}
+              onClick={() => void handleRelink()}
               loading={scanning}
               data-testid="dicom-relink-btn"
             >
               Relink
             </Button>
+            <PathEntryButton
+              title="Relink DICOM source directory"
+              testId="dicom-relink-path"
+              defaultPath={project?.projectMeta.rootPath}
+              disabled={scanning}
+              onSelect={handleRelink}
+            />
           </Stack>
         </Alert>
       )}
@@ -258,15 +285,24 @@ export default function DicomIngestion() {
                 </Text>
               )}
             </div>
-            <Button
-              leftSection={<IconFolderSearch size={16} />}
-              variant="light"
-              onClick={handleSelectFolder}
-              disabled={sourceUnavailable}
-              data-testid="dicom-browse-btn"
-            >
-              Browse
-            </Button>
+            <Group gap="xs">
+              <Button
+                leftSection={<IconFolderSearch size={16} />}
+                variant="light"
+                onClick={() => void handleSelectFolder()}
+                disabled={sourceUnavailable}
+                data-testid="dicom-browse-btn"
+              >
+                Browse
+              </Button>
+              <PathEntryButton
+                title="Select DICOM source directory"
+                testId="dicom-source-path"
+                defaultPath={project?.projectMeta.rootPath}
+                disabled={sourceUnavailable || scanning}
+                onSelect={handleSelectFolder}
+              />
+            </Group>
           </Group>
 
           <div>
@@ -318,6 +354,7 @@ export default function DicomIngestion() {
         onClose={() => setPendingRelink(null)}
         title="DICOM folder structure changed"
         data-testid="dicom-relink-mismatch-dialog"
+        attributes={{ close: { "data-testid": "dicom-relink-mismatch-dialog-close" } }}
       >
         <Stack>
           <Text size="sm">
@@ -404,29 +441,6 @@ export default function DicomIngestion() {
           </Stack>
         </Card>
       )}
-
-      <Group
-        justify="flex-end"
-        pos="sticky"
-        bottom={40}
-        style={{
-          zIndex: 2,
-          paddingTop: "var(--mantine-spacing-md)",
-          paddingBottom: "var(--mantine-spacing-md)",
-          backgroundColor: "var(--mantine-color-body)",
-          boxShadow: "0 -4px 6px -1px rgba(0, 0, 0, 0.06)",
-        }}
-        data-testid="dicom-nav"
-      >
-        <Button
-          rightSection={<IconArrowRight size={16} />}
-          onClick={handleNext}
-          disabled={!ingestionComplete}
-          data-testid="dicom-next-btn"
-        >
-          Next: Tokenize Paths
-        </Button>
-      </Group>
-    </Stack>
+    </ImportStepLayout>
   );
 }

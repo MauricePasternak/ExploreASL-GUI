@@ -1,5 +1,6 @@
 import { Alert, Badge, Group, Select, Stack, Text } from "@mantine/core";
 import { useMemo } from "react";
+import { comboboxTestIds } from "./comboboxTestIds";
 
 import { showErrorNotification } from "../../lib/errorNotifications";
 import type { ExecutionProfile } from "../../schemas/executionProfile";
@@ -97,7 +98,7 @@ export default function ProfileSelector({
         onChange={(nextId) => void handleChange(nextId)}
         disabled={disabled}
         nothingFoundMessage="No profiles found"
-        data-testid="profile-selector"
+        {...comboboxTestIds("profile-selector")}
         data-profile-valid={selectedValid ? "true" : "false"}
         w="100%"
         style={{ maxWidth: 360, minWidth }}
@@ -106,7 +107,7 @@ export default function ProfileSelector({
           if (!profile) return <span>{option.label}</span>;
           const valid = profileValidationState[profile.id]?.valid === true;
           return (
-            <Group gap="xs" wrap="nowrap" data-testid={`profile-selector-option-${profile.id}`}>
+            <Group gap="xs" wrap="nowrap">
               <Text size="sm">{profile.label}</Text>
               <Badge size="xs" variant="light">
                 {profile.type === "matlab" ? "MATLAB" : "Apptainer"}

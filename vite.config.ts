@@ -8,7 +8,7 @@ const packageJson = JSON.parse(readFileSync("./package.json", "utf-8"));
 // These tests exercise schemas and helpers without browser APIs or shared IPC mocks.
 const nodeTests = [
   "src/schemas/**/*.test.ts",
-  "src/lib/bids/{errorFormatter,normalize,setup,sidecar,subjectRows}.test.ts",
+  "src/lib/bids/{errorFormatter,normalize,setup,sidecar}.test.ts",
   "src/lib/aslRun.test.ts",
   "src/lib/assembleDataPar.test.ts",
   "src/lib/commaNumbers.test.ts",
@@ -32,7 +32,6 @@ const nodeTests = [
   "src/lib/qcLabels.test.ts",
   "src/lib/snapshotCompression.test.ts",
   "src/lib/stagingValidation.test.ts",
-  "src/lib/subjectMatching.test.ts",
   "src/lib/tokenizerUtils.test.ts",
   "src/lib/tsvUtils.test.ts",
   "src/components/import/metadata{FieldHints,FormUtils}.test.ts",
