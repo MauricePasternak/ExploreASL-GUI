@@ -123,6 +123,50 @@ Return to Home, project replacement, and ordinary application close SHALL submit
 - **WHEN** writing the latest configuration fails
 - **THEN** close SHALL be cancelled and unsaved changes SHALL remain visible for retry
 
+### Requirement: Native emergency close
+
+One main-window Close SHALL request ordinary renderer shutdown and arm a five-second native fallback in development and packaged desktop builds. If the window remains open without a handled response, native code SHALL offer exit confirmation automatically. No second click or JavaScript execution SHALL be required for fallback. Confirmed exit SHALL warn about unsaved changes and active-work cancellation and SHALL retain native supervised shutdown.
+
+#### Scenario: Ordinary Close retains save guarantees
+
+- **WHEN** the user requests Close
+- **THEN** ordinary save and abort-confirmation behavior SHALL remain unchanged, without an immediate-process-exit or unguarded window-destruction path
+
+#### Scenario: Renderer cannot handle Close
+
+- **WHEN** the user requests Close once and the window remains open without a handled response for five seconds
+- **THEN** native code SHALL automatically show the emergency exit confirmation without JavaScript, developer tools, or another click; it SHALL NOT claim to diagnose renderer responsiveness
+
+#### Scenario: Renderer presents ordinary confirmation or a close error
+
+- **WHEN** the renderer presents its active-work confirmation or reports a normal close/save error
+- **THEN** it SHALL mark that specific native close request handled so the timeout does not add a redundant native dialog
+
+#### Scenario: Stale response or timer belongs to an earlier Close
+
+- **WHEN** a response or timeout for an earlier close request arrives during a newer request
+- **THEN** it SHALL NOT cancel the newer deadline or show its confirmation early
+
+#### Scenario: User confirms emergency exit
+
+- **WHEN** the user confirms the native exit warning
+- **THEN** native exit handling SHALL stop owned import/processing resources before allowing application exit, even if the renderer cannot execute
+
+#### Scenario: User keeps waiting
+
+- **WHEN** the user cancels the native exit confirmation
+- **THEN** no native exit or worker shutdown SHALL be initiated, normal close work MAY continue, and a later Close SHALL arm a fresh fallback
+
+#### Scenario: Repeated Close while native confirmation is pending
+
+- **WHEN** further Close requests arrive during the grace period, native confirmation, or confirmed exit
+- **THEN** native code SHALL NOT postpone the original deadline or create duplicate requests or confirmations
+
+#### Scenario: Native cleanup fails during emergency exit
+
+- **WHEN** native import or processing shutdown fails after emergency exit is confirmed
+- **THEN** the application SHALL remain open, show a native shutdown error, and permit a later Close attempt to retry
+
 ### Requirement: Missing external source guidance
 
 When a project opens with one or more unavailable external sources, the application shell SHALL show a summary notice without blocking project access. The Import or Visualization phase that owns each missing source SHALL show a persistent warning with the saved source location and a Relink action until that source is restored or explicitly removed. All warning and Relink controls SHALL expose stable `data-testid` attributes.

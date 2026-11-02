@@ -136,11 +136,18 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let disposed = false;
+    let closing = false;
 
     async function setupCloseListener() {
       try {
         const appWindow = getCurrentWindow();
-        unlisten = await appWindow.onCloseRequested(async (event) => {
+        const stop = await appWindow.listen<number>("app-close-requested", async ({ payload }) => {
+          if (disposed || closing) return;
+          const handled = () =>
+            appWindow.emitTo("main", "app-close-handled", payload).catch((error) => {
+              console.error("Could not acknowledge close request:", error);
+            });
           const { project: currentProject } = useProjectStore.getState();
           const currentProcessingPhase = useProcessingStore.getState().processingPhase;
           const currentImportPhase = useImportStore.getState().importPhase;
@@ -150,20 +157,29 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
             ["preparing", "running", "finalizing", "cancelling"].includes(currentImportPhase) ||
             currentImportRunning;
 
-          if (!currentProject) return;
-          event.preventDefault();
           if (activeProcess) {
             setLeaveTarget("exit");
             setLeaveModalOpen(true);
+            await handled();
             return;
           }
+          closing = true;
           try {
-            await useProjectStore.getState().closeProject();
+            if (currentProject) await useProjectStore.getState().closeProject();
             await appWindow.destroy();
           } catch (error) {
-            showCloseError(currentProject.projectMeta.id, "Could not close project", error);
+            showCloseError(
+              currentProject?.projectMeta.id ?? "none",
+              "Could not close project",
+              error,
+            );
+            await handled();
+          } finally {
+            closing = false;
           }
         });
+        if (disposed) stop();
+        else unlisten = stop;
       } catch (err) {
         console.error("Failed to setup close listener:", err);
       }
@@ -172,6 +188,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     void setupCloseListener();
 
     return () => {
+      disposed = true;
       if (unlisten) {
         unlisten();
       }

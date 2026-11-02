@@ -153,9 +153,31 @@ fn native_exit_decision_covers_idle_success_intercepted_success_and_failure() {
     for (import, processing, expected) in [
         (Ok(false), Ok(false), NativeExitDecision::Allow),
         (Ok(true), Ok(false), NativeExitDecision::PreventThenExit),
+        (Ok(false), Ok(true), NativeExitDecision::PreventThenExit),
+        (Ok(true), Ok(true), NativeExitDecision::PreventThenExit),
         (
             Err("cannot stop import".to_string()),
             Ok(false),
+            NativeExitDecision::Prevent,
+        ),
+        (
+            Ok(false),
+            Err("cannot stop processing".to_string()),
+            NativeExitDecision::Prevent,
+        ),
+        (
+            Ok(true),
+            Err("cannot stop processing".to_string()),
+            NativeExitDecision::Prevent,
+        ),
+        (
+            Err("cannot stop import".to_string()),
+            Ok(true),
+            NativeExitDecision::Prevent,
+        ),
+        (
+            Err("cannot stop import".to_string()),
+            Err("cannot stop processing".to_string()),
             NativeExitDecision::Prevent,
         ),
     ] {

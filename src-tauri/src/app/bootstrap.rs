@@ -1,5 +1,5 @@
 //! Tauri wiring, startup recovery, and application exit coordination.
-use super::{single_instance, state::AppState};
+use super::{close_fallback, single_instance, state::AppState};
 use crate::{import, processing, project::lifecycle};
 use tauri::Manager;
 #[cfg(debug_assertions)]
@@ -8,6 +8,7 @@ use tauri::{LogicalSize, Size};
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
+        .manage(close_fallback::CloseFallback::default())
         // Must remain first: second instances exit before any other plugin can
         // initialize project-facing behavior.
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -27,6 +28,11 @@ pub fn run() {
             "niivue",
             crate::visualization::niivue_protocol::handle_niivue_protocol,
         )
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                close_fallback::on_close_requested(window, api);
+            }
+        })
         .setup(|app| {
             super::logging::init(app.handle());
             log::info!(
@@ -42,6 +48,7 @@ pub fn run() {
             );
             let icon = tauri::image::Image::from_bytes(include_bytes!("../../icons/icon.png"))?;
             if let Some(window) = app.get_webview_window("main") {
+                close_fallback::install(&window);
                 window.set_icon(icon)?;
                 #[cfg(debug_assertions)]
                 {
@@ -69,7 +76,10 @@ pub fn run() {
 
                 match lifecycle::native_exit_decision(&import, &processing) {
                     lifecycle::NativeExitDecision::Allow => {}
-                    lifecycle::NativeExitDecision::Prevent => api.prevent_exit(),
+                    lifecycle::NativeExitDecision::Prevent => {
+                        api.prevent_exit();
+                        close_fallback::exit_failed(app_handle);
+                    }
                     lifecycle::NativeExitDecision::PreventThenExit => {
                         api.prevent_exit();
                         app_handle.exit(code.unwrap_or(0));

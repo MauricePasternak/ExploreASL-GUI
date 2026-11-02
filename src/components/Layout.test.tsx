@@ -5,6 +5,7 @@ import { TestMantineProvider as MantineProvider } from "../test/render";
 import { showErrorNotification } from "../lib/errorNotifications";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
@@ -715,6 +716,34 @@ describe("Layout", () => {
     expect(screen.getByTestId("layout-nav-manifest")).not.toHaveAttribute("data-disabled", "true");
   });
 
+  it("closes the landing window in response to one native request", async () => {
+    renderLayout();
+    await waitFor(() => expect((window as any).__mockNativeCloseRequestedListener).toBeDefined());
+
+    await (window as any).__mockNativeCloseRequestedListener({ payload: 1 });
+
+    expect(getCurrentWindow().listen).toHaveBeenCalledWith(
+      "app-close-requested",
+      expect.any(Function),
+    );
+    expect(getCurrentWindow().destroy).toHaveBeenCalledOnce();
+  });
+
+  it("removes a close listener whose setup completes after unmount", async () => {
+    const stop = vi.fn();
+    let finishSetup!: (unlisten: () => void) => void;
+    vi.mocked(getCurrentWindow().listen).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishSetup = resolve;
+      }),
+    );
+    const { unmount } = renderLayout();
+    unmount();
+    finishSetup(stop);
+
+    await waitFor(() => expect(stop).toHaveBeenCalledOnce());
+  });
+
   it("waits for shutdown before closing a clean project", async () => {
     let releaseShutdown!: () => void;
     const closeProject = vi.fn(
@@ -747,17 +776,17 @@ describe("Layout", () => {
     renderLayout("/project/project-1/import");
 
     await waitFor(() => {
-      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+      expect((window as any).__mockNativeCloseRequestedListener).toBeDefined();
     });
 
-    const preventDefault = vi.fn();
-    const closeRequest = (window as any).__mockCloseRequestedListener({ preventDefault });
+    const closeRequest = (window as any).__mockNativeCloseRequestedListener({ payload: 1 });
 
-    expect(preventDefault).toHaveBeenCalled();
     expect(screen.queryByText(/Save your changes/i)).not.toBeInTheDocument();
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
     expect(closeProject).toHaveBeenCalled();
     expect(getCurrentWindow().destroy).not.toHaveBeenCalled();
+    expect(getCurrentWindow().emitTo).not.toHaveBeenCalled();
+    await (window as any).__mockNativeCloseRequestedListener({ payload: 1 });
+    expect(closeProject).toHaveBeenCalledTimes(1);
 
     releaseShutdown();
     await closeRequest;
@@ -828,13 +857,11 @@ describe("Layout", () => {
       closeProject,
     });
     renderLayout("/project/project-1/import");
-    await waitFor(() => expect((window as any).__mockCloseRequestedListener).toBeDefined());
+    await waitFor(() => expect((window as any).__mockNativeCloseRequestedListener).toBeDefined());
 
-    const preventDefault = vi.fn();
-    await (window as any).__mockCloseRequestedListener({ preventDefault });
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await (window as any).__mockNativeCloseRequestedListener({ payload: 17 });
 
-    expect(preventDefault).toHaveBeenCalled();
+    expect(getCurrentWindow().emitTo).toHaveBeenCalledWith("main", "app-close-handled", 17);
     expect(getCurrentWindow().destroy).not.toHaveBeenCalled();
     expect(useProjectStore.getState().project?.projectMeta.id).toBe("project-1");
     expect(showErrorNotification).toHaveBeenCalledWith(
@@ -874,17 +901,13 @@ describe("Layout", () => {
     renderLayout("/project/project-1/import");
 
     await waitFor(() => {
-      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+      expect((window as any).__mockNativeCloseRequestedListener).toBeDefined();
     });
 
-    const preventDefault = vi.fn();
-    await (window as any).__mockCloseRequestedListener({ preventDefault });
-
-    expect(preventDefault).toHaveBeenCalled();
+    await (window as any).__mockNativeCloseRequestedListener({ payload: 1 });
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const appWindow = getCurrentWindow();
 
     await waitFor(() => {
@@ -919,17 +942,17 @@ describe("Layout", () => {
     renderLayout("/project/project-1/processing");
 
     await waitFor(() => {
-      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+      expect((window as any).__mockNativeCloseRequestedListener).toBeDefined();
     });
     useProcessingStore.setState({
       processingPhase: "running",
       activeRunId: "processing-run-1",
     });
 
-    const preventDefault = vi.fn();
-    await (window as any).__mockCloseRequestedListener({ preventDefault });
+    await (window as any).__mockNativeCloseRequestedListener({ payload: 23 });
 
-    expect(preventDefault).toHaveBeenCalled();
+    expect(getCurrentWindow().emitTo).toHaveBeenCalledWith("main", "app-close-handled", 23);
+    expect(getCurrentWindow().destroy).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(screen.getAllByText("Abort and exit").length).toBeGreaterThan(0);
@@ -943,7 +966,6 @@ describe("Layout", () => {
     const abortBtn = screen.getByRole("button", { name: /abort and exit/i });
     fireEvent.click(abortBtn);
 
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const appWindow = getCurrentWindow();
 
     await waitFor(() => {
@@ -981,13 +1003,13 @@ describe("Layout", () => {
     renderLayout("/project/project-1/import");
 
     await waitFor(() => {
-      expect((window as any).__mockCloseRequestedListener).toBeDefined();
+      expect((window as any).__mockNativeCloseRequestedListener).toBeDefined();
     });
 
-    const preventDefault = vi.fn();
-    await (window as any).__mockCloseRequestedListener({ preventDefault });
+    await (window as any).__mockNativeCloseRequestedListener({ payload: 29 });
 
-    expect(preventDefault).toHaveBeenCalled();
+    expect(getCurrentWindow().emitTo).toHaveBeenCalledWith("main", "app-close-handled", 29);
+    expect(getCurrentWindow().destroy).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(screen.getAllByText("Abort and exit").length).toBeGreaterThan(0);
@@ -996,7 +1018,6 @@ describe("Layout", () => {
     const abortBtn = screen.getByRole("button", { name: /abort and exit/i });
     fireEvent.click(abortBtn);
 
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const appWindow = getCurrentWindow();
 
     await waitFor(() => {

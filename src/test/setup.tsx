@@ -187,11 +187,13 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 const mockDestroy = vi.fn(() => Promise.resolve());
-const mockOnCloseRequested = vi.fn((cb) => {
-  (window as any).__mockCloseRequestedListener = cb;
+const mockWindowEmitTo = vi.fn(() => Promise.resolve());
+const mockWindowListen = vi.fn((event, cb) => {
+  if (event !== "app-close-requested") return Promise.resolve(() => {});
+  (window as any).__mockNativeCloseRequestedListener = cb;
   return Promise.resolve(() => {
-    if ((window as any).__mockCloseRequestedListener === cb) {
-      (window as any).__mockCloseRequestedListener = null;
+    if ((window as any).__mockNativeCloseRequestedListener === cb) {
+      (window as any).__mockNativeCloseRequestedListener = null;
     }
   });
 });
@@ -199,7 +201,8 @@ const mockOnCloseRequested = vi.fn((cb) => {
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: vi.fn(() => ({
     destroy: mockDestroy,
-    onCloseRequested: mockOnCloseRequested,
+    listen: mockWindowListen,
+    emitTo: mockWindowEmitTo,
   })),
 }));
 
