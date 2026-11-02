@@ -4,6 +4,7 @@ import {
   Select,
   Grid,
   Button,
+  useMantineTheme,
   type ComboboxItem,
   type ComboboxLikeRenderOptionInput,
 } from "@mantine/core";
@@ -18,6 +19,7 @@ interface AxisComboboxItem extends ComboboxItem {
 }
 
 export default function AxisAssignment() {
+  const theme = useMantineTheme();
   const inspection = useVisualizationStore((s) => s.inspection);
   const columnTypes = useProjectStore((s) => visualizationSettings(s.project).columnTypes);
   const axisAssignment = useProjectStore((s) => visualizationSettings(s.project).axisAssignment);
@@ -68,8 +70,14 @@ export default function AxisAssignment() {
   }
 
   return (
-    <Grid data-testid="axis-assignment" align="flex-end" gap="sm">
-      <Grid.Col span={{ base: 12, sm: 3.5 }}>
+    <Grid
+      data-testid="axis-assignment"
+      type="container"
+      breakpoints={theme.breakpoints}
+      align="flex-end"
+      gap="sm"
+    >
+      <Grid.Col span={{ base: 12, xs: 6, sm: 3.5 }}>
         <Select
           label="X-axis"
           placeholder="Select column"
@@ -81,7 +89,7 @@ export default function AxisAssignment() {
           {...comboboxTestIds("x-axis-select")}
         />
       </Grid.Col>
-      <Grid.Col span={{ base: 12, sm: 3.5 }}>
+      <Grid.Col span={{ base: 12, xs: 6, sm: 3.5 }}>
         <Select
           label="Y-axis (continuous)"
           placeholder="Select column"
@@ -93,7 +101,7 @@ export default function AxisAssignment() {
           {...comboboxTestIds("y-axis-select")}
         />
       </Grid.Col>
-      <Grid.Col span={{ base: 12, sm: 3.5 }}>
+      <Grid.Col span={{ base: 12, xs: 6, sm: 3.5 }}>
         <Select
           label="Color by"
           data={colorByData}
@@ -103,7 +111,7 @@ export default function AxisAssignment() {
           {...comboboxTestIds("color-by-select")}
         />
       </Grid.Col>
-      <Grid.Col span={{ base: 12, sm: 1.5 }}>
+      <Grid.Col span={{ base: 12, xs: 6, sm: 1.5 }}>
         <Button
           leftSection={<IconAdjustmentsHorizontal size={14} />}
           variant="light"

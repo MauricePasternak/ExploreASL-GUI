@@ -8,7 +8,7 @@ Define NIfTI volume delivery and viewing for population analysis data.
 
 ### Requirement: Custom NiiVue Tauri Protocol
 
-A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. The protocol SHALL serve qCBF NIfTI files from the project's Population directory. The URL format SHALL be `niivue://localhost/qCBF/{participant_id}/{run}`, optionally with a `.nii` or `.nii.gz` suffix on the run. Run corresponds to the TSV `session` column value (e.g. `ASL_1`). Rust SHALL own the filename template. The AppState SHALL maintain a project root registry for path resolution, set via a `set_active_project` command when a project opens, and cleared when the project closes.
+A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. It SHALL serve qCBF and rT1 NIfTI files from the active project's Population directory. Existing `niivue://localhost/qCBF/{participant_id}/{run}` URLs SHALL remain supported, with optional `.nii` or `.nii.gz` on Run. `niivue://localhost/rT1/{participant_id}` SHALL resolve `rT1_{participant_id}.nii`, with optional `.nii` or `.nii.gz` on the identifier and no Run segment. Raw participant identifiers SHALL be preserved: GUI Session is ExploreASL Visit; GUI Run is ExploreASL Session (TSV `session`). Rust SHALL own filename templates and SHALL try `.nii` before `.nii.gz`. The existing active-project root registry and canonical-path confinement SHALL remain authoritative.
 
 #### Scenario: qCBF volume served with run
 
@@ -17,8 +17,8 @@ A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. The
 
 #### Scenario: Gzip fallback
 
-- **WHEN** the `.nii` file does not exist but `qCBF_sub-001Philips_01_ASL_1.nii.gz` does
-- **THEN** Rust SHALL serve the `.nii.gz` file
+- **WHEN** the requested qCBF or rT1 `.nii` file is absent and the corresponding `.nii.gz` exists
+- **THEN** the protocol SHALL serve the compressed file without changing voxel data
 
 #### Scenario: Unknown volume type returns 404
 
@@ -28,7 +28,17 @@ A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. The
 #### Scenario: Path traversal rejected
 
 - **WHEN** a resolved volume path is outside the canonical project root
-- **THEN** the protocol SHALL reject the request with a 403 response; paths that cannot be resolved SHALL return 404
+- **THEN** the protocol SHALL reject the request with 403; unresolved paths SHALL return 404
+
+#### Scenario: Session-specific anatomy
+
+- **WHEN** NiiVue fetches `niivue://localhost/rT1/sub-01_1`
+- **THEN** Rust SHALL serve `Population/rT1_sub-01_1.nii` or its gzip alternative, not anatomy from another Session or Run
+
+#### Scenario: Malformed structural request
+
+- **WHEN** an rT1 request has an empty participant identifier or an additional Run segment
+- **THEN** the protocol SHALL return 400 without serving a file
 
 ### Requirement: AppState Project Root Registry
 
@@ -49,92 +59,58 @@ The AppState SHALL maintain a `Mutex<Option<PathBuf>>` storing the active projec
 - **WHEN** a `niivue://` request is made but the registry is `None`
 - **THEN** the protocol SHALL return a 404 response
 
-### Requirement: NiiVue Rendering Preferences
-
-The viewer panel SHALL use a single NiiVue instance on one canvas, created after the mount-time WebGL2 availability check and cleaned up on component unmount. Layout SHALL follow persisted `nvSliceType`: `multiplanar` (default), `axial`, `coronal`, `sagittal`, or `render`. Multiplanar mode SHALL configure a grid with axial, sagittal, coronal, and 3D rendering. Colormap SHALL follow persisted `nvColormap`, defaulting to `gray`. Settings changes SHALL update the existing instance. Volume swaps SHALL remove the old volume before awaiting `loadVolumes` for the replacement, without destroying the instance. The crosshair SHALL initialize at the center of volume.
-
-#### Scenario: Tri-planar grid renders on load
-
-- **WHEN** a qCBF volume is loaded with `nvSliceType` set to `multiplanar`
-- **THEN** the canvas SHALL use the multiplanar grid layout with orthogonal slices and 3D rendering
-
-#### Scenario: Configured colormap
-
-- **WHEN** a qCBF volume is rendered with `nvColormap` set to `viridis`
-- **THEN** NiiVue SHALL apply `viridis`; without a saved preference, it SHALL use `gray`
-
-#### Scenario: Stale qCBF header display limits
-
-- **WHEN** a qCBF volume has header display limits outside its actual voxel intensity range
-- **THEN** the NiiVue instance SHALL be configured with `trustCalMinMax: false` so `loadVolumes` uses its robust intensity window instead of those stale limits, without changing voxel values or NIfTI slope/intercept scaling
-
-#### Scenario: Single-plane preference
-
-- **WHEN** the user sets `nvSliceType` to `axial` in Visualization Settings
-- **THEN** the preference SHALL persist and the existing NiiVue instance SHALL switch to axial layout
-
-#### Scenario: Crosshair starts at volume center
-
-- **WHEN** a qCBF volume is loaded
-- **THEN** the crosshair SHALL be positioned at the geometric center of the image volume
-
-#### Scenario: Volume swap preserves instance
-
-- **WHEN** a new qCBF volume is loaded after clicking a different datapoint
-- **THEN** the NiiVue instance SHALL NOT be destroyed and recreated; its existing volume SHALL be removed before `loadVolumes` loads the replacement
-
-#### Scenario: Instance destroyed on unmount
-
-- **WHEN** the viewer component unmounts (user leaves the visualization phase)
-- **THEN** the NiiVue instance SHALL be destroyed and WebGL resources released
-
 ### Requirement: Viewer Panel States
 
-The viewer panel SHALL always be visible (not toggled on first click). With WebGL2 available and no selected point, it SHALL show header/image skeletons and "Click on a datapoint to load in its respective qCBF image." while hiding the canvas. When a point is clicked, the panel SHALL show a loading overlay while the image loads. The current volume SHALL be removed before the replacement load begins. If loading rejects, the panel SHALL show an error overlay with "Failed to load image for {participantId}_{run}." and SHALL NOT restore the removed volume. Missing files and other image load failures SHALL use this same frontend message rather than distinct missing/unreadable messages.
+The primary pane SHALL always be visible. With WebGL2 available and no selected point it SHALL show header/image skeletons and "Click on a datapoint to load in its respective qCBF image." with its canvas hidden. Each pane SHALL have independent idle/loading/loaded/error presentation. Replacement SHALL remove that pane's old image before loading begins; failure SHALL NOT restore it or affect the other pane. qCBF failures SHALL retain "Failed to load image for {participantId}_{run}."; rT1 failures SHALL show "Failed to load structural image for {participantId}." Missing and unreadable files SHALL use the same modality-specific message. An existing pin SHALL remain visible in Pinned mode when primary selection clears.
 
 #### Scenario: Placeholder before first click
 
-- **WHEN** the Visualize step is entered and no point has been clicked
-- **THEN** with WebGL2 available, the viewer panel SHALL show skeleton placeholders and "Click on a datapoint to load in its respective qCBF image." with the canvas hidden
+- **WHEN** Visualize is entered without selection or a pin and WebGL2 is available
+- **THEN** primary SHALL show the existing skeleton/message state with its canvas hidden
 
 #### Scenario: Loading overlay on image fetch
 
-- **WHEN** a point is clicked and the qCBF image is being fetched
-- **THEN** a loading indicator SHALL be displayed over the viewer panel
+- **WHEN** a pane begins loading an image
+- **THEN** that pane SHALL display a loading overlay independently of the other pane
 
 #### Scenario: Previous volume removed during replacement
 
-- **WHEN** a point is clicked while a previous image is displayed
-- **THEN** the previous volume SHALL be removed from NiiVue before awaiting the replacement load; successful replacement SHALL NOT be required before removal
+- **WHEN** a pane replaces its displayed scan
+- **THEN** its previous volume SHALL be removed before awaiting replacement, regardless of eventual success
 
 #### Scenario: Image loaded successfully
 
-- **WHEN** the qCBF image finishes loading
-- **THEN** the loading overlay SHALL be dismissed and the configured layout/colormap SHALL be applied to the new image
+- **WHEN** a current image finishes loading
+- **THEN** its pane SHALL dismiss loading and apply the modality's layout and colormap
 
 #### Scenario: Image file exists but fails to load
 
-- **WHEN** a qCBF load rejects because the file is corrupt or unreadable by NiiVue
-- **THEN** the loading overlay SHALL be replaced by "Failed to load image for {participantId}_{run}." without restoring the previous volume
+- **WHEN** a qCBF load rejects because the file is corrupt or unreadable
+- **THEN** that pane SHALL display "Failed to load image for {participantId}_{run}." without restoring its previous volume
+
+#### Scenario: Structural image unavailable
+
+- **WHEN** Structural mode cannot load the selected participant's rT1
+- **THEN** companion SHALL show "Failed to load structural image for {participantId}." while primary qCBF remains usable
 
 ### Requirement: WebGL2 Error Handling
 
-On NiiVue component mount, the viewer SHALL check WebGL2 context availability. If WebGL2 is unavailable, the viewer panel SHALL show: "WebGL2 not available. Cannot render NIfTI images." and the NiiVue instance SHALL NOT be created. The chart panel SHALL remain fully functional. If a WebGL context loss event occurs during a session, the viewer SHALL show: "WebGL context lost. Restart the application to restore the viewer." and the chart SHALL remain functional.
+Each pane SHALL check WebGL2 availability before creating its viewer. An unavailable pane SHALL show "WebGL2 not available. Cannot render NIfTI images." A pane losing its context SHALL show "WebGL context lost. Restart the application to restore the viewer." Failed panes SHALL be disconnected from synchronization. The chart and any healthy pane SHALL remain functional.
 
 #### Scenario: WebGL2 unavailable on mount
 
-- **WHEN** the viewer component mounts and WebGL2 is not available in the WebView
-- **THEN** the panel SHALL show "WebGL2 not available. Cannot render NIfTI images." and no NiiVue instance SHALL be created
+- **WHEN** a pane cannot obtain WebGL2
+- **THEN** it SHALL show the unavailable message without creating its viewer
 
 #### Scenario: Chart functional without WebGL2
 
 - **WHEN** WebGL2 is unavailable
-- **THEN** the chart panel SHALL remain fully interactive (hover, click, axis assignment, filters)
+- **THEN** chart hover, click, axis assignment, and filters SHALL remain functional
 
 #### Scenario: WebGL context loss during session
 
-- **WHEN** a WebGL context loss event fires while viewing an image
-- **THEN** the viewer panel SHALL show "WebGL context lost. Restart the application to restore the viewer." and the chart SHALL remain functional
+- **WHEN** one pane loses its WebGL context
+- **THEN** it SHALL show the context-loss message while chart and healthy pane remain interactive
 
 ### Requirement: qCBF Image Path Resolution
 
@@ -179,15 +155,6 @@ NiiVue's rendered background SHALL follow persisted `nvBackColor` (`black`, `gra
 - **WHEN** the user switches the theme from dark to light while the viewer is open
 - **THEN** the rendered background SHALL continue to follow `nvBackColor`, and the canvas CSS background SHALL remain black
 
-### Requirement: Single Volume Rendering
-
-The viewer SHALL render exactly one qCBF volume at a time. No overlay volumes (brain masks, PV maps, etc.) SHALL be loaded. Future volume type support is via the protocol's volume type segment, not via overlay UI.
-
-#### Scenario: No overlay support
-
-- **WHEN** a qCBF volume is displayed
-- **THEN** no overlay volume SHALL be loaded or rendered
-
 ### Requirement: NiiVue Package Integration
 
 The `@niivue/niivue` npm package SHALL be used as the NIfTI viewer. It SHALL be installed as a runtime dependency (in `dependencies`, not `devDependencies`). NiiVue SHALL load volumes via the custom `niivue://` protocol URL, not via direct file paths.
@@ -201,3 +168,38 @@ The `@niivue/niivue` npm package SHALL be used as the NIfTI viewer. It SHALL be 
 
 - **WHEN** NiiVue loads a qCBF volume
 - **THEN** it SHALL fetch from a `niivue://` URL, not a filesystem path
+
+### Requirement: Independent pane rendering preferences
+
+Each pane SHALL retain one viewer across image changes and release it on unmount. Existing saved layout, background, orientation, crosshair, and colorbar preferences SHALL apply to both panes; qCBF SHALL use saved `nvColormap` (default gray), rT1 grayscale. Automatic windowing SHALL ignore stale header limits without altering voxels or NIfTI scaling, unless explicit shared CBF limits apply.
+
+#### Scenario: Apply existing preferences
+
+- **WHEN** an existing project opens with axial layout and viridis selected
+- **THEN** qCBF panes SHALL use axial/viridis and Structural SHALL use axial/grayscale without changing saved preferences
+
+#### Scenario: Existing layouts remain available
+
+- **WHEN** a saved layout is applied
+- **THEN** panes SHALL support multiplanar with orthogonal slices and 3D rendering, axial, coronal, sagittal, and render layouts
+
+#### Scenario: Spatial continuity
+
+- **WHEN** primary qCBF loads for the first time or a linked image is replaced
+- **THEN** first primary load SHALL center its crosshair and subsequent linked loads SHALL preserve the current world-space position
+
+#### Scenario: Preserve robust windowing and voxel scaling
+
+- **WHEN** a qCBF image has stale header display limits and shared windowing is off
+- **THEN** automatic limits SHALL reflect voxel intensities while stored voxels and NIfTI scaling remain unchanged
+
+#### Scenario: Stale display limits inside the voxel range
+
+- **WHEN** qCBF or rT1 has stale header display limits that fall inside its voxel intensity range
+- **THEN** automatic windowing SHALL ignore those limits, including after a colormap change, without changing source files, voxel values, geometry, or slope/intercept scaling
+- **AND** explicit shared qCBF limits SHALL take precedence over automatic windowing and remain independent of structural contrast
+
+#### Scenario: Reuse and release viewers
+
+- **WHEN** a mounted pane changes scan, then unmounts
+- **THEN** scan replacement SHALL reuse its viewer and unmount SHALL release its viewer, listeners, and synchronization references

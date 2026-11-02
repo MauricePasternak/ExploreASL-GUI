@@ -25,7 +25,10 @@ describe("visualizationStore", () => {
     selectPoint("sub-X_01_ASL_1");
     expect(useVisualizationStore.getState().selectedPointId).toBe("sub-X_01_ASL_1");
     useVisualizationStore.getState().setChartData([]);
-    useVisualizationStore.getState().setViewerState({ status: "loaded" });
+    const store = useVisualizationStore.getState();
+    store.pinScan({ id: "A", participantId: "A", subject: "A", session: "1", run: "1" });
+    store.setLinkNavigation(false);
+    store.setShareCbfWindow(true);
     expect(invoke).not.toHaveBeenCalled();
     expect(useProjectStore.getState().pendingEdits).toBe(0);
   });
@@ -62,9 +65,16 @@ describe("visualizationStore", () => {
     store.setChartData([
       { id: "test", x: 1, y: 2, participantId: "p", subject: "s", session: "01", run: "ASL_1" },
     ]);
+    store.pinScan(useVisualizationStore.getState().chartData[0]);
     store.reset();
     expect(useVisualizationStore.getState().chartData).toEqual([]);
     expect(useVisualizationStore.getState().selectedPointId).toBeNull();
+    expect(useVisualizationStore.getState()).toMatchObject({
+      pinnedScan: null,
+      companionMode: "off",
+      linkNavigation: true,
+      shareCbfWindow: false,
+    });
   });
 
   it("sets new Nivo and NiiVue parameters", async () => {

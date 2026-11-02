@@ -376,8 +376,13 @@ export default function VisualizationPage() {
     <Stack
       data-testid="visualization-page"
       p="md"
-      h="calc(100vh - 128px)"
-      style={{ overflow: "hidden" }}
+      h={stage === "visualize" ? undefined : "calc(100vh - 128px)"}
+      mih="calc(100vh - 128px)"
+      style={{
+        flexShrink: stage === "visualize" ? 0 : undefined,
+        overflowX: stage === "visualize" ? "clip" : "hidden",
+        overflowY: stage === "visualize" ? "visible" : "hidden",
+      }}
     >
       <HeaderCard
         icon={IconChartDots}
@@ -426,7 +431,12 @@ export default function VisualizationPage() {
         active={activeStep}
         data-testid="visualization-stepper"
         styles={{
-          root: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 },
+          root: {
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: stage === "visualize" ? "auto" : 0,
+          },
           steps: {
             paddingBottom: "var(--mantine-spacing-md)",
             borderBottom: colorScheme === "dark" ? "1px solid #373a40" : "1px solid #e9ecef",
@@ -438,10 +448,10 @@ export default function VisualizationPage() {
           },
           content: {
             flex: 1,
-            minHeight: 0,
+            minHeight: stage === "visualize" ? "auto" : 0,
             display: "flex",
             flexDirection: "column",
-            overflow: "auto",
+            overflow: stage === "visualize" ? "visible" : "auto",
             paddingRight: "16px",
             paddingLeft: "4px",
             paddingTop: "var(--mantine-spacing-md)",

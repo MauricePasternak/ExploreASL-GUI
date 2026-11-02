@@ -48,6 +48,7 @@ export function transformToChartData(
   yCol: string,
   colorByCol: string | null,
   columnTypes: Record<string, string> = {},
+  motionColumn?: string,
 ): { points: ChartPoint[]; excluded: number } {
   const points: ChartPoint[] = [];
   let excluded = 0;
@@ -89,6 +90,10 @@ export function transformToChartData(
       subject,
       session,
       run,
+      meanMotion:
+        motionColumn && !isMissing(row[motionColumn]) && Number.isFinite(Number(row[motionColumn]))
+          ? Number(row[motionColumn])
+          : undefined,
     });
   }
 

@@ -55,6 +55,7 @@ export default function ChartPanel() {
   const axisAssignment = useProjectStore((s) => visualizationSettings(s.project).axisAssignment);
   const columnTypes = useProjectStore((s) => visualizationSettings(s.project).columnTypes);
   const inspection = useVisualizationStore((s) => s.inspection);
+  const pinnedScan = useVisualizationStore((s) => s.pinnedScan);
   const qcbfSource = useProjectStore((s) => visualizationSettings(s.project).qcbfSource);
   const chartData = useVisualizationStore((s) => s.chartData);
   const setChartData = useVisualizationStore((s) => s.setChartData);
@@ -111,6 +112,12 @@ export default function ChartPanel() {
   const fileSourcePath = qcbfSource?.relativePath;
   const fileSourceHash = qcbfSource?.fileHash;
   const columnTypesSerialized = JSON.stringify(columnTypes);
+  const motionColumn = inspection?.columns.find(
+    (c) =>
+      c.source === "qcbf" &&
+      c.originalName === "MeanMotion" &&
+      (columnTypes[c.name] ?? c.inferredType) !== "excluded",
+  )?.name;
 
   useEffect(() => {
     const lease = captureProjectLease();
@@ -119,6 +126,7 @@ export default function ChartPanel() {
       if (!projectRoot || !xCol || !yCol) return;
       const columnsToFetch = [xCol, yCol];
       if (colorByCol && !columnsToFetch.includes(colorByCol)) columnsToFetch.push(colorByCol);
+      if (motionColumn && !columnsToFetch.includes(motionColumn)) columnsToFetch.push(motionColumn);
       try {
         console.log("[ChartPanel] loading columns:", columnsToFetch);
         const rows = await unwrap(commands.readDataColumns(projectRoot, columnsToFetch));
@@ -129,6 +137,7 @@ export default function ChartPanel() {
           yCol,
           colorByCol,
           columnTypes,
+          motionColumn,
         );
         console.log(
           `[ChartPanel] successfully loaded ${points.length} points (excluded ${excluded})`,
@@ -154,6 +163,7 @@ export default function ChartPanel() {
     projectRoot,
     setChartData,
     setExclusionCount,
+    motionColumn,
   ]);
 
   // Reset selected point only when axes or file sources change
@@ -365,6 +375,23 @@ export default function ChartPanel() {
     return renderTooltipContent(props.data!);
   }
 
+  function renderNode(
+    ctx: CanvasRenderingContext2D,
+    node: { x: number; y: number; size: number; color: string; data: ChartPoint },
+  ) {
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, node.size / 2, 0, Math.PI * 2);
+    ctx.fillStyle = node.color;
+    ctx.fill();
+    if (node.data.id === pinnedScan?.id) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.size / 2 + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = colorScheme === "dark" ? "white" : "black";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
   return (
     <Stack data-testid="chart-panel" h="100%" gap={0} style={{ overflow: "visible" }}>
       <Text size="xs" c="dimmed" px="sm" py={4}>
@@ -396,6 +423,7 @@ export default function ChartPanel() {
                 : [hexToRgba(OKABE_ITO[0], chartOpacity)]
             }
             nodeSize={pointSize}
+            renderNode={renderNode}
             onClick={handleClick}
             axisBottom={axisBottomConfig}
             axisLeft={axisLeftConfig}
@@ -427,6 +455,7 @@ export default function ChartPanel() {
             value="value"
             groupBy="group"
             size={pointSize}
+            renderCircle={(ctx, { node }) => renderNode(ctx, node)}
             spacing={swarmSpacing}
             onClick={handleClick}
             axisBottom={axisBottomConfig}

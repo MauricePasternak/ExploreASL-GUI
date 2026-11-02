@@ -32,12 +32,18 @@ export interface ChartPoint {
   subject: string;
   session: string;
   run: string;
+  meanMotion?: number;
 }
 
-interface ViewerState {
-  status: "idle" | "loading" | "loaded" | "error";
-  errorMessage?: string;
-}
+export type ScanIdentity = Pick<ChartPoint, "id" | "participantId" | "subject" | "session" | "run">;
+export type CompanionMode = "off" | "structural" | "pinned";
+
+const INITIAL_COMPARISON = {
+  pinnedScan: null as ScanIdentity | null,
+  companionMode: "off" as CompanionMode,
+  linkNavigation: true,
+  shareCbfWindow: false,
+};
 
 // Ephemeral fields (not persisted)
 interface EphemeralState {
@@ -45,8 +51,10 @@ interface EphemeralState {
   inspection: DataInspection | null;
   chartData: ChartPoint[];
   selectedPointId: string | null;
-  viewerState: ViewerState;
-  webglAvailable: boolean;
+  pinnedScan: ScanIdentity | null;
+  companionMode: CompanionMode;
+  linkNavigation: boolean;
+  shareCbfWindow: boolean;
   exclusionCount: { plotted: number; excluded: number };
   _lastExtMtime: string | null;
   externalSourceAvailability: ExternalSourceAvailability;
@@ -105,8 +113,12 @@ interface VisualizationActions {
   setInspection: (inspection: EphemeralState["inspection"]) => void;
   setChartData: (data: ChartPoint[]) => void;
   selectPoint: (id: string | null) => void;
-  setViewerState: (state: ViewerState) => void;
-  setWebglAvailable: (available: boolean) => void;
+  pinScan: (scan: ScanIdentity) => void;
+  unpinScan: () => void;
+  setCompanionMode: (mode: CompanionMode) => void;
+  setLinkNavigation: (linked: boolean) => void;
+  setShareCbfWindow: (shared: boolean) => void;
+  resetComparison: () => void;
   setExclusionCount: (count: { plotted: number; excluded: number }) => void;
   _setLastExtMtime: (mtime: string | null) => void;
   setExternalSourceAvailability: (availability: ExternalSourceAvailability) => void;
@@ -161,8 +173,7 @@ const INITIAL_EPHEMERAL: EphemeralState = {
   inspection: null,
   chartData: [],
   selectedPointId: null,
-  viewerState: { status: "idle" },
-  webglAvailable: false,
+  ...INITIAL_COMPARISON,
   exclusionCount: { plotted: 0, excluded: 0 },
   _lastExtMtime: null,
   externalSourceAvailability: { status: "unconfigured", savedPath: null, message: null },
@@ -173,7 +184,6 @@ function createInitialVisualizationState() {
     ...INITIAL_EPHEMERAL,
     availableFiles: [],
     chartData: [],
-    viewerState: { status: "idle" as const },
     exclusionCount: { plotted: 0, excluded: 0 },
   };
 }
@@ -209,15 +219,22 @@ function editVisualization(
     .catch(() => undefined);
 }
 
-export const useVisualizationStore = create<VisualizationState>((set) => ({
+export const useVisualizationStore = create<VisualizationState>((set, get) => ({
   ...INITIAL_EPHEMERAL,
 
   // Persisted actions
-  setQcbfSource: (source) => editVisualization({ qcbfSource: source }),
-  setJoinConfig: (config) =>
+  setQcbfSource: (source) => {
+    const previous = acceptedVisualizationSettings().qcbfSource;
+    if (previous?.relativePath !== source?.relativePath || previous?.fileHash !== source?.fileHash)
+      set({ ...INITIAL_COMPARISON, selectedPointId: null, chartData: [] });
+    editVisualization({ qcbfSource: source });
+  },
+  setJoinConfig: (config) => {
+    set({ ...INITIAL_COMPARISON });
     editVisualization((state) => ({
       joinConfig: typeof config === "function" ? config(state.joinConfig) : config,
-    })),
+    }));
+  },
   setColumnType: (column, type) =>
     editVisualization((state) => ({
       columnTypes: { ...state.columnTypes, [column]: type },
@@ -241,6 +258,7 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
   setSplitRatio: (ratio) => editVisualization({ splitRatio: ratio }),
   setFiltersExpanded: (expanded) => editVisualization({ filtersExpanded: expanded }),
   invalidateContract: () => {
+    set({ ...INITIAL_COMPARISON, selectedPointId: null, chartData: [], inspection: null });
     void useProjectStore
       .getState()
       .submitEdit({ kind: "visualization", config: EMPTY_CONFIG })
@@ -275,11 +293,40 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
 
   // Ephemeral actions
   setAvailableFiles: (files) => set({ availableFiles: files }),
-  setInspection: (inspection) => set({ inspection }),
+  setInspection: (inspection) => {
+    const previous = get().inspection;
+    const changed =
+      previous &&
+      (!inspection ||
+        previous.qcbfHash !== inspection.qcbfHash ||
+        previous.externalHash !== inspection.externalHash ||
+        JSON.stringify(previous.columns) !== JSON.stringify(inspection.columns));
+    set(
+      changed
+        ? { inspection, ...INITIAL_COMPARISON, chartData: [], selectedPointId: null }
+        : { inspection },
+    );
+  },
   setChartData: (data) => set({ chartData: data }),
   selectPoint: (id) => set({ selectedPointId: id }),
-  setViewerState: (state) => set({ viewerState: state }),
-  setWebglAvailable: (available) => set({ webglAvailable: available }),
+  pinScan: ({ id, participantId, subject, session, run }) =>
+    set({
+      pinnedScan: { id, participantId, subject, session, run },
+      companionMode: "pinned",
+      shareCbfWindow: false,
+    }),
+  unpinScan: () =>
+    set({
+      pinnedScan: null,
+      shareCbfWindow: false,
+      companionMode: get().companionMode === "pinned" ? "off" : get().companionMode,
+    }),
+  setCompanionMode: (mode) => {
+    if (mode !== "pinned" || get().pinnedScan) set({ companionMode: mode });
+  },
+  setLinkNavigation: (linkNavigation) => set({ linkNavigation }),
+  setShareCbfWindow: (shareCbfWindow) => set({ shareCbfWindow }),
+  resetComparison: () => set({ ...INITIAL_COMPARISON }),
   setExclusionCount: (count) => set({ exclusionCount: count }),
   _setLastExtMtime: (mtime) => set({ _lastExtMtime: mtime }),
   setExternalSourceAvailability: (externalSourceAvailability) =>
@@ -317,7 +364,7 @@ export const useVisualizationStore = create<VisualizationState>((set) => ({
             inspection: null,
             chartData: [],
             selectedPointId: null,
-            viewerState: { status: "idle" },
+            ...INITIAL_COMPARISON,
             exclusionCount: { plotted: 0, excluded: 0 },
           });
       })

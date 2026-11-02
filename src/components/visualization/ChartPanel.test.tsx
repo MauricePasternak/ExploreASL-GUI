@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { ResponsiveScatterPlotCanvas } from "@nivo/scatterplot";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,13 +16,13 @@ import {
 } from "../../lib/projectLifecycle";
 
 vi.mock("@nivo/scatterplot", () => ({
-  ResponsiveScatterPlotCanvas: (props: any) => (
+  ResponsiveScatterPlotCanvas: vi.fn((props: any) => (
     <div
       data-testid="scatter-canvas"
       data-xscale={props.xScale ? JSON.stringify(props.xScale) : undefined}
       data-yscale={props.yScale ? JSON.stringify(props.yScale) : undefined}
     />
-  ),
+  )),
 }));
 vi.mock("@nivo/swarmplot", () => ({
   ResponsiveSwarmPlotCanvas: (props: any) => (
@@ -224,7 +225,7 @@ describe("ChartPanel", () => {
     expect(screen.getByTestId("chart-panel")).toHaveTextContent("No plottable data");
   });
 
-  it("renders scatter canvas for continuous×continuous", () => {
+  it("renders scatter canvas for continuous×continuous", async () => {
     Object.assign(useProjectStore.getState().project!.uiState.dataVis!, {
       axisAssignment: { x: "age", y: "score", colorBy: null },
       columnTypes: { age: "continuous", score: "continuous" },
@@ -263,8 +264,39 @@ describe("ChartPanel", () => {
         { x: 30, y: 110, id: "2", participantId: "p2", subject: "s2", session: "01", run: "01" },
       ],
     });
+    const column = useVisualizationStore.getState().inspection!.columns[0];
+    useVisualizationStore
+      .getState()
+      .inspection!.columns.push(
+        { ...column, name: "MeanMotion_x", originalName: "MeanMotion", units: "mm" },
+        { ...column, name: "MeanMotion_y", originalName: "MeanMotion", source: "external" },
+      );
+    useVisualizationStore.getState().pinScan(useVisualizationStore.getState().chartData[0]);
+    vi.mocked(invoke).mockResolvedValueOnce([
+      {
+        participant_id: "p1",
+        run: "01",
+        age: "25",
+        score: "100",
+        MeanMotion_x: "0.2",
+        MeanMotion_y: "9",
+      },
+    ]);
     renderComponent();
     expect(screen.getByTestId("scatter-canvas")).toBeInTheDocument();
+    await waitFor(() => expect(useVisualizationStore.getState().chartData[0].meanMotion).toBe(0.2));
+    expect(invoke).toHaveBeenCalledWith(
+      "read_data_columns",
+      expect.objectContaining({ columnNames: ["age", "score", "MeanMotion_x"] }),
+    );
+    const ctx = { beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), stroke: vi.fn(), fillStyle: "" };
+    const props = vi.mocked(ResponsiveScatterPlotCanvas).mock.calls[0][0];
+    props.renderNode!(
+      ctx as unknown as CanvasRenderingContext2D,
+      { x: 1, y: 2, size: 10, color: "orange", data: { id: "1" } } as never,
+    );
+    expect(ctx.stroke).toHaveBeenCalledOnce();
+    expect(ctx.fillStyle).toBe("orange");
   });
 
   it("renders swarm canvas for categorical×continuous", () => {

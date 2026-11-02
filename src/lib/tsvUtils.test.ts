@@ -34,6 +34,7 @@ describe("transformToChartData", () => {
         run: "ASL_1",
         GM_vol: "0.64",
         Site: "1",
+        MeanMotion_x: "0.12",
       },
       {
         participant_id: "sub-X_02",
@@ -42,12 +43,21 @@ describe("transformToChartData", () => {
         run: "ASL_1",
         GM_vol: "0.68",
         Site: "2",
+        MeanMotion_x: "",
       },
     ];
-    const { points, excluded } = transformToChartData(rows, "Site", "GM_vol", null, columnTypes);
+    const { points, excluded } = transformToChartData(
+      rows,
+      "Site",
+      "GM_vol",
+      null,
+      columnTypes,
+      "MeanMotion_x",
+    );
     expect(points).toHaveLength(2);
     expect(excluded).toBe(0);
     expect(points[0].y).toBe(0.64);
+    expect(points.map((p) => p.meanMotion)).toEqual([0.12, undefined]);
   });
 
   it("excludes rows with missing Y values", () => {

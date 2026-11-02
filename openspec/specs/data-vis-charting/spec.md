@@ -145,17 +145,17 @@ Clicking a datapoint SHALL store its composite ID in transient `selectedPointId`
 
 ### Requirement: Selected Point Clearing on Axis Change
 
-When any axis assignment changes (X, Y, or color-by), the selected point SHALL be cleared (`selectedPointId` set to `null`). The viewer panel SHALL return to its idle state.
+When any axis assignment changes (X, Y, or color-by), the selected point SHALL be cleared (`selectedPointId` set to `null`). The primary pane SHALL return to idle. An existing pinned reference SHALL remain available independently of current chart rows; Pinned mode SHALL retain its reference image. This SHALL NOT change the existing prohibition on selected-point chart styling.
 
 #### Scenario: X-axis change clears selection
 
 - **WHEN** a point is selected and the user changes the X-axis dropdown
-- **THEN** `selectedPointId` SHALL be cleared and the viewer panel SHALL return to idle state
+- **THEN** `selectedPointId` SHALL be cleared and primary SHALL return to idle without discarding a pin
 
 #### Scenario: Color-by change clears selection
 
-- **WHEN** a point is selected and the user changes the color-by dropdown
-- **THEN** `selectedPointId` SHALL be cleared and the viewer panel SHALL return to idle state
+- **WHEN** a point is selected and the user changes color-by
+- **THEN** `selectedPointId` SHALL be cleared while an existing pinned reference remains available
 
 ### Requirement: Color-By Grouping
 

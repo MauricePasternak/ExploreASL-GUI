@@ -23,7 +23,8 @@ vi.mock("@niivue/niivue", () => ({
     setSliceType: vi.fn(),
     setMultiplanarLayout: vi.fn(),
     setColormap: vi.fn(),
-    loadVolumes: vi.fn().mockResolvedValue(undefined),
+    addVolume: vi.fn(),
+    broadcastTo: vi.fn(),
     updateGLVolume: vi.fn(),
     removeVolumeByIndex: vi.fn(),
     drawScene: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@niivue/niivue", () => ({
   })),
   MULTIPLANAR_TYPE: { GRID: 2 },
   SHOW_RENDER: { ALWAYS: 1 },
+  NVImage: { loadFromUrl: vi.fn().mockResolvedValue({ id: "image" }) },
 }));
 
 import { invoke } from "@tauri-apps/api/core";
@@ -377,6 +379,9 @@ describe("Visualization setup flow integration", () => {
     renderWithMantine(<VisualizationPage />);
 
     // Select point AFTER mount/render
+    expect(screen.getByTestId("visualization-page")).toHaveStyle({ overflowY: "visible" });
+    expect(screen.getByTestId("visualization-page").style.height).toBe("");
+    expect(screen.getByTestId("visualization-stepper")).toHaveStyle({ minHeight: "auto" });
     useVisualizationStore.getState().selectPoint("sub-X_01");
 
     // Check that the point is successfully selected

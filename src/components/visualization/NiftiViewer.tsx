@@ -1,9 +1,8 @@
-import { Loader, Overlay, Skeleton, Stack, Text, useMantineColorScheme } from "@mantine/core";
-import { MULTIPLANAR_TYPE, Niivue, SHOW_RENDER } from "@niivue/niivue";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader, Overlay, Skeleton, Text } from "@mantine/core";
+import { MULTIPLANAR_TYPE, Niivue, NVImage, SHOW_RENDER } from "@niivue/niivue";
+import { useEffect, useRef, useState } from "react";
 
-import { useVisualizationStore } from "../../stores/visualizationStore";
-import { visualizationSettings } from "../../stores/visualizationStore";
+import { visualizationSettings, type ScanIdentity } from "../../stores/visualizationStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
 
@@ -13,167 +12,147 @@ const getBackColor = (color: string): [number, number, number, number] => {
   return [0, 0, 0, 1];
 };
 
-const getFontColor = (color: string): [number, number, number, number] => {
-  if (color === "white") return [0, 0, 0, 1];
-  return [1, 1, 1, 1];
-};
-
 function configureViewerLayout(nv: Niivue, sliceType: string) {
   if (sliceType === "multiplanar") {
     nv.setSliceType(nv.sliceTypeMultiplanar);
     nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID);
     nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS;
-  } else if (sliceType === "axial") {
-    nv.setSliceType(nv.sliceTypeAxial);
-  } else if (sliceType === "coronal") {
-    nv.setSliceType(nv.sliceTypeCoronal);
-  } else if (sliceType === "sagittal") {
-    nv.setSliceType(nv.sliceTypeSagittal);
-  } else if (sliceType === "render") {
-    nv.setSliceType(nv.sliceTypeRender);
-  }
+  } else if (sliceType === "axial") nv.setSliceType(nv.sliceTypeAxial);
+  else if (sliceType === "coronal") nv.setSliceType(nv.sliceTypeCoronal);
+  else if (sliceType === "sagittal") nv.setSliceType(nv.sliceTypeSagittal);
+  else if (sliceType === "render") nv.setSliceType(nv.sliceTypeRender);
 }
 
-export default function NiftiViewer() {
+export type CbfWindow = [number, number];
+interface Props {
+  scan: ScanIdentity | null;
+  modality: "qCBF" | "rT1";
+  pane: "primary" | "companion";
+  onReady?: (pane: "primary" | "companion", viewer: Niivue | null) => void;
+  onDisconnect?: (pane: "primary" | "companion") => void;
+  onWindowChange?: (limits: CbfWindow) => void;
+  windowLimits?: CbfWindow | null;
+}
+
+export default function NiftiViewer({
+  scan,
+  modality,
+  pane,
+  onReady,
+  onDisconnect,
+  onWindowChange,
+  windowLimits,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nvRef = useRef<Niivue | null>(null);
-  const loadedPointIdRef = useRef<string | null>(null);
-  const selectedPointId = useVisualizationStore((s) => s.selectedPointId);
-  const chartData = useVisualizationStore((s) => s.chartData);
-  const viewerState = useVisualizationStore((s) => s.viewerState);
-  const setViewerState = useVisualizationStore((s) => s.setViewerState);
-  const setWebglAvailable = useVisualizationStore((s) => s.setWebglAvailable);
-  const webglAvailable = useVisualizationStore((s) => s.webglAvailable);
-
-  // New settings
-  const nvRadiological = useProjectStore((s) => visualizationSettings(s.project).nvRadiological);
-  const nvColorbar = useProjectStore((s) => visualizationSettings(s.project).nvColorbar);
-  const nvCrosshair = useProjectStore((s) => visualizationSettings(s.project).nvCrosshair);
-  const nvCornerOrientation = useProjectStore(
-    (s) => visualizationSettings(s.project).nvCornerOrientation,
-  );
-  const nvColormap = useProjectStore((s) => visualizationSettings(s.project).nvColormap);
-  const nvSliceType = useProjectStore((s) => visualizationSettings(s.project).nvSliceType);
-  const nvBackColor = useProjectStore((s) => visualizationSettings(s.project).nvBackColor);
-
-  const { colorScheme } = useMantineColorScheme();
-  const [contextLost, setContextLost] = useState(false);
-  const [nvReady, setNvReady] = useState(false);
-
-  const paramsRef = useRef({
-    nvBackColor,
-    nvCrosshair,
-    nvColorbar,
-    nvCornerOrientation,
+  const generation = useRef(0);
+  const lastWorld = useRef<ReturnType<Niivue["frac2mm"]> | null>(null);
+  const project = useProjectStore((s) => s.project);
+  const {
     nvRadiological,
-    nvSliceType,
+    nvColorbar,
+    nvCrosshair,
+    nvCornerOrientation,
     nvColormap,
+    nvSliceType,
+    nvBackColor,
+  } = visualizationSettings(project);
+  const participantId = scan?.participantId;
+  const run = modality === "qCBF" ? scan?.run : undefined;
+  const requestKey = JSON.stringify([modality, participantId, run]);
+  const [renderedRequest, setRenderedRequest] = useState(requestKey);
+  const [ready, setReady] = useState(false);
+  const [state, setState] = useState<{
+    status: "idle" | "loading" | "loaded" | "error";
+    message?: string;
+  }>({ status: participantId ? "loading" : "idle" });
+  const [hover, setHover] = useState("—");
+  const [webglError, setWebglError] = useState<string | null>(null);
+  if (renderedRequest !== requestKey) {
+    setRenderedRequest(requestKey);
+    setState({ status: participantId ? "loading" : "idle" });
+    setHover("—");
+  }
+  const params = useRef({
+    onReady,
+    onDisconnect,
+    onWindowChange,
+    windowLimits,
+    nvColormap,
+    nvSliceType,
   });
   useEffect(() => {
-    paramsRef.current = {
-      nvBackColor,
-      nvCrosshair,
-      nvColorbar,
-      nvCornerOrientation,
-      nvRadiological,
-      nvSliceType,
+    params.current = {
+      onReady,
+      onDisconnect,
+      onWindowChange,
+      windowLimits,
       nvColormap,
+      nvSliceType,
     };
-  }, [
-    nvBackColor,
-    nvCrosshair,
-    nvColorbar,
-    nvCornerOrientation,
-    nvRadiological,
-    nvSliceType,
-    nvColormap,
-  ]);
+  }, [onReady, onDisconnect, onWindowChange, windowLimits, nvColormap, nvSliceType]);
 
-  const point = useMemo(() => {
-    return chartData.find((p) => p.id === selectedPointId) || null;
-  }, [chartData, selectedPointId]);
-
-  // Check WebGL2 availability on mount
   useEffect(() => {
-    const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl2");
-    if (!gl) {
-      setWebglAvailable(false);
-      setViewerState({
-        status: "error",
-        errorMessage: "WebGL2 not available. Cannot render NIfTI images.",
-      });
-    } else {
-      setWebglAvailable(true);
-    }
-  }, [setViewerState, setWebglAvailable]);
-
-  // Initialize NiiVue once WebGL is available
-  useEffect(() => {
-    if (!webglAvailable || !canvasRef.current) return;
-
-    const nv = new Niivue({
-      dragAndDropEnabled: false,
-      // loadVolumes uses this viewer-level option, not the per-volume option.
-      trustCalMinMax: false,
-      backColor: getBackColor(paramsRef.current.nvBackColor),
-      fontColor: getFontColor(paramsRef.current.nvBackColor),
-      show3Dcrosshair: paramsRef.current.nvCrosshair,
-      loadingText: "",
-      isColorbar: paramsRef.current.nvColorbar,
-      isCornerOrientationText: paramsRef.current.nvCornerOrientation,
-    });
-
-    nv.attachToCanvas(canvasRef.current);
-    nv.setRadiologicalConvention(paramsRef.current.nvRadiological);
-    configureViewerLayout(nv, paramsRef.current.nvSliceType);
-    nvRef.current = nv;
-    setNvReady(true);
-
-    // Handle WebGL context loss
     const canvas = canvasRef.current;
-    function handleContextLost(e: Event) {
-      e.preventDefault();
-      setContextLost(true);
-      setViewerState({
-        status: "error",
-        errorMessage: "WebGL context lost. Restart the application to restore the viewer.",
+    if (!canvas) return;
+    let mounted = true;
+    if (!document.createElement("canvas").getContext("webgl2")) {
+      void Promise.resolve().then(() => {
+        if (mounted) setWebglError("WebGL2 not available. Cannot render NIfTI images.");
       });
+      return () => {
+        mounted = false;
+      };
     }
-    canvas.addEventListener("webglcontextlost", handleContextLost);
-
+    const nv = new Niivue({ dragAndDropEnabled: false, trustCalMinMax: false, loadingText: "" });
+    nvRef.current = nv;
+    void Promise.resolve(nv.attachToCanvas(canvas)).then(() => {
+      if (mounted) setReady(true);
+    });
+    function contextLost(event: Event) {
+      event.preventDefault();
+      generation.current++;
+      nv.broadcastTo([]);
+      params.current.onReady?.(pane, null);
+      setHover("—");
+      setWebglError("WebGL context lost. Restart the application to restore the viewer.");
+    }
+    canvas.addEventListener("webglcontextlost", contextLost);
     return () => {
-      canvas.removeEventListener("webglcontextlost", handleContextLost);
-      // Disconnect NiiVue's internal ResizeObserver and event listeners
-      // to prevent post-unmount drawScene calls with zero-sized canvas
+      mounted = false;
+      canvas.removeEventListener("webglcontextlost", contextLost);
+      nv.broadcastTo([]);
+      params.current.onDisconnect?.(pane);
+      nv.onIntensityChange = () => {};
       nv.cleanup();
       nvRef.current = null;
-      setNvReady(false);
     };
-  }, [webglAvailable, setViewerState]);
+  }, [pane]);
 
-  // Reactively apply options when they change in the store
   useEffect(() => {
     const nv = nvRef.current;
-    if (!nv || !nvReady) return;
-
+    if (!nv || !ready || webglError) return;
     nv.opts.isColorbar = nvColorbar;
     nv.opts.show3Dcrosshair = nvCrosshair;
     nv.opts.isCornerOrientationText = nvCornerOrientation;
+    nv.opts.crosshairWidth = nvCrosshair ? 1 : 0;
     nv.setRadiologicalConvention(nvRadiological);
-
     nv.opts.backColor = getBackColor(nvBackColor);
-    nv.opts.fontColor = getFontColor(nvBackColor);
-
+    nv.opts.fontColor = nvBackColor === "white" ? [0, 0, 0, 1] : [1, 1, 1, 1];
     configureViewerLayout(nv, nvSliceType);
-
-    if (nv.volumes.length > 0) {
-      nv.setColormap(nv.volumes[0].id, nvColormap);
+    const image = nv.volumes[0];
+    if (image) {
+      const colormap = modality === "rT1" ? "gray" : nvColormap;
+      if (image.colormap !== colormap) nv.setColormap(image.id, colormap);
+      if (modality === "qCBF" && params.current.windowLimits)
+        [image.cal_min, image.cal_max] = params.current.windowLimits;
       nv.updateGLVolume();
     }
-
     nv.drawScene();
   }, [
+    ready,
+    webglError,
+    modality,
     nvColorbar,
     nvCrosshair,
     nvCornerOrientation,
@@ -181,200 +160,270 @@ export default function NiftiViewer() {
     nvBackColor,
     nvSliceType,
     nvColormap,
-    nvReady,
   ]);
 
-  // Load volume when selectedPointId changes or NiiVue becomes ready
   useEffect(() => {
-    if (!nvReady) return;
+    const nv = nvRef.current;
+    if (!ready || !nv || webglError) return;
+    const request = ++generation.current;
     const lease = captureProjectLease();
     let active = true;
-
-    async function loadVolume() {
-      const nv = nvRef.current;
-      console.log("[NiftiViewer] selectedPointId changed to:", selectedPointId);
-      if (!nv) {
-        console.warn("[NiftiViewer] NiiVue instance is not initialized yet");
-        return;
-      }
-      if (!selectedPointId) {
-        console.log("[NiftiViewer] No selectedPointId, clearing viewer");
-        loadedPointIdRef.current = null;
-        setViewerState({ status: "idle" });
-        return;
-      }
-
-      if (!point) {
-        console.error("[NiftiViewer] Datapoint not found in chartData for ID:", selectedPointId);
-        return;
-      }
-
-      if (selectedPointId === loadedPointIdRef.current && nv.volumes.length > 0) {
-        return;
-      }
-
-      console.log("[NiftiViewer] Found matching datapoint:", point);
-      setViewerState({ status: "loading" });
-
-      const url = `niivue://localhost/qCBF/${point.participantId}/${point.run}.nii.gz`;
-      console.log("[NiftiViewer] Loading volume from URL:", url);
-
-      // Extract the extension dynamically from the URL (e.g. .nii.gz or .nii)
-      const urlParts = url.split("/");
-      const lastSegment = urlParts[urlParts.length - 1];
-      const dotIndex = lastSegment.indexOf(".");
-      const ext = dotIndex !== -1 ? lastSegment.slice(dotIndex) : ".nii.gz";
-
+    const current = () =>
+      active &&
+      request === generation.current &&
+      nvRef.current === nv &&
+      (!lease || isCurrentProjectLease(lease));
+    if (nv.volumes[0]) lastWorld.current = nv.frac2mm(nv.scene.crosshairPos);
+    const world = lastWorld.current;
+    nv.broadcastTo([]);
+    params.current.onDisconnect?.(pane);
+    nv.onIntensityChange = () => {};
+    while (nv.volumes.length) nv.removeVolumeByIndex(0);
+    const load = async () => {
+      if (!participantId) return;
+      const suffix = modality === "qCBF" ? `/${run}.nii.gz` : "";
+      const name =
+        modality === "qCBF" ? `qCBF_${participantId}_${run}.nii.gz` : `rT1_${participantId}.nii.gz`;
       try {
-        // Remove existing volumes before loading new one
-        if (nv.volumes.length > 0) {
-          console.log("[NiftiViewer] Removing existing volume:", nv.volumes[0].name);
-          nv.removeVolumeByIndex(0);
-        }
-
-        await nv.loadVolumes([{ url, name: `qCBF_${point.participantId}_${point.run}${ext}` }]);
-        if (!active || (lease && !isCurrentProjectLease(lease))) return;
-        console.log("[NiftiViewer] Volume loaded successfully");
-        if (nv.volumes.length > 0) {
-          nv.setColormap(nv.volumes[0].id, paramsRef.current.nvColormap);
-        }
-        configureViewerLayout(nv, paramsRef.current.nvSliceType);
-        nv.updateGLVolume();
-        loadedPointIdRef.current = selectedPointId;
-        setViewerState({ status: "loaded" });
-      } catch (err) {
-        if (!active || (lease && !isCurrentProjectLease(lease))) return;
-        console.error("[NiftiViewer] Failed to load NIfTI from URL:", url, err);
-        setViewerState({
-          status: "error",
-          errorMessage: `Failed to load image for ${point.participantId}_${point.run}.`,
+        const image = await NVImage.loadFromUrl({
+          url: `niivue://localhost/${modality}/${participantId}${suffix}`,
+          name,
+          trustCalMinMax: false,
+          // NiiVue still accepts in-range header limits; clear display calibration in memory only.
+          cal_min: 0,
+          cal_max: 0,
+          colormap: modality === "rT1" ? "gray" : params.current.nvColormap,
         });
+        if (!current()) return;
+        const colormap = modality === "rT1" ? "gray" : params.current.nvColormap;
+        if (image.colormap !== colormap) image.colormap = colormap;
+        if (modality === "qCBF" && params.current.windowLimits)
+          [image.cal_min, image.cal_max] = params.current.windowLimits;
+        nv.addVolume(image);
+        configureViewerLayout(nv, params.current.nvSliceType);
+        nv.scene.crosshairPos = world ? nv.mm2frac(world) : [0.5, 0.5, 0.5];
+        nv.onIntensityChange = (volume) => {
+          if (
+            current() &&
+            modality === "qCBF" &&
+            Number.isFinite(volume.cal_min) &&
+            Number.isFinite(volume.cal_max)
+          )
+            params.current.onWindowChange?.([volume.cal_min!, volume.cal_max!]);
+        };
+        nv.updateGLVolume();
+        setState({ status: "loaded" });
+        params.current.onReady?.(pane, nv);
+      } catch {
+        if (current())
+          setState({
+            status: "error",
+            message:
+              modality === "qCBF"
+                ? `Failed to load image for ${participantId}_${run}.`
+                : `Failed to load structural image for ${participantId}.`,
+          });
       }
-    }
-    void loadVolume();
+    };
+    void load();
     return () => {
       active = false;
+      nv.broadcastTo([]);
+      params.current.onDisconnect?.(pane);
+      nv.onIntensityChange = () => {};
     };
-  }, [selectedPointId, point, nvReady, setViewerState]);
+  }, [participantId, run, modality, ready, pane, webglError]);
 
-  if (!webglAvailable) {
-    return (
-      <Stack data-testid="nifti-viewer" align="center" justify="center" h="100%">
-        <Text c="red">
-          {viewerState.errorMessage ?? "WebGL2 not available. Cannot render NIfTI images."}
-        </Text>
-      </Stack>
-    );
-  }
+  useEffect(() => {
+    const nv = nvRef.current;
+    if (!nv || modality !== "qCBF" || !windowLimits || !nv.volumes[0] || webglError) return;
+    [nv.volumes[0].cal_min, nv.volumes[0].cal_max] = windowLimits;
+    nv.updateGLVolume();
+  }, [windowLimits, modality, webglError]);
 
-  if (contextLost) {
-    return (
-      <Stack data-testid="nifti-viewer" align="center" justify="center" h="100%">
-        <Text c="red">WebGL context lost. Restart the application to restore the viewer.</Text>
-      </Stack>
-    );
-  }
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const nv = nvRef.current;
+    if (!canvas || !nv || state.status !== "loaded" || modality !== "qCBF" || webglError) return;
+    let frame = 0;
+    let position: [number, number] | null = null;
+    let lastVoxel = "";
+    const clear = () => {
+      lastVoxel = "";
+      setHover("—");
+    };
+    const sample = () => {
+      frame = 0;
+      const image = nv.volumes[0];
+      if (!position || !image) {
+        clear();
+        return;
+      }
+      const [x, y] = position;
+      if (
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        x < 0 ||
+        y < 0 ||
+        x >= canvas.width ||
+        y >= canvas.height
+      ) {
+        clear();
+        return;
+      }
+      const slice = nv.screenSlices.find(
+        ({ leftTopWidthHeight: [left, top, width, height] }) =>
+          x >= Math.min(left, left + width) &&
+          x < Math.max(left, left + width) &&
+          y >= top &&
+          y < top + height,
+      );
+      if (!slice || slice.axCorSag < 0 || slice.axCorSag > 2) {
+        clear();
+        return;
+      }
+      const frac = nv.canvasPos2frac(position);
+      if (Array.from(frac).some((v) => !Number.isFinite(v) || v < 0 || v > 1)) {
+        clear();
+        return;
+      }
+      const mm = nv.frac2mm(frac);
+      const voxel = Array.from(image.mm2vox(Array.from(mm).slice(0, 3), true));
+      const dims = image.dimsRAS;
+      if (!dims || voxel.some((v, i) => !Number.isFinite(v) || v < 0 || v >= dims[i + 1])) {
+        clear();
+        return;
+      }
+      const nearest = voxel.map(Math.round);
+      if (nearest.some((v, i) => v >= dims[i + 1])) {
+        clear();
+        return;
+      }
+      const key = nearest.join(",");
+      if (key === lastVoxel) return;
+      lastVoxel = key;
+      const value = image.getValue(nearest[0], nearest[1], nearest[2]);
+      setHover(
+        Number.isFinite(value) && image.matRAS
+          ? `CBF ${Number(value.toFixed(2))} mL/100g/min | ${Array.from(
+              image.vox2mm(nearest, image.matRAS),
+            )
+              .slice(0, 3)
+              .map((v) => v.toFixed(1))
+              .join(", ")} mm`
+          : "—",
+      );
+    };
+    const move = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      position = [
+        ((event.clientX - rect.left) * canvas.width) / rect.width,
+        ((event.clientY - rect.top) * canvas.height) / rect.height,
+      ];
+      if (!frame) frame = requestAnimationFrame(sample);
+    };
+    const leave = () => {
+      position = null;
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      clear();
+    };
+    canvas.addEventListener("pointermove", move);
+    canvas.addEventListener("pointerleave", leave);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerleave", leave);
+    };
+  }, [state.status, participantId, run, modality, webglError]);
 
   return (
-    <Stack data-testid="nifti-viewer" h="100%" gap={0}>
-      {selectedPointId && point ? (
-        <div
-          data-testid="nifti-viewer-header"
-          style={{
-            padding: "8px 12px",
-            borderBottom: "1px solid rgba(128,128,128,0.2)",
-            background: colorScheme === "dark" ? "#1a1a1a" : "#f8f9fa",
-          }}
-        >
-          <Text size="sm" fw={500}>
-            Subject: {point.subject || point.participantId} | Session: {point.session || "01"} |
-            Run: {point.run || "01"}
-          </Text>
-        </div>
-      ) : (
-        <div
-          data-testid="nifti-viewer-header-placeholder"
-          style={{
-            padding: "8px 12px",
-            borderBottom: "1px solid rgba(128,128,128,0.2)",
-            background: colorScheme === "dark" ? "#1a1a1a" : "#f8f9fa",
-            display: "flex",
-            alignItems: "center",
-          }}
-        >
-          <Skeleton height={22} width={280} radius="xs" />
-        </div>
-      )}
-
-      <div style={{ flex: 1, minHeight: 0, minWidth: 0, width: "100%", position: "relative" }}>
-        {!selectedPointId && (
+    <div
+      data-testid={pane === "primary" ? "nifti-viewer" : "companion-viewer"}
+      className="dataviz-viewer"
+    >
+      <div
+        data-testid={
+          scan
+            ? `${pane === "primary" ? "nifti-viewer" : "companion-viewer"}-header`
+            : `${pane}-header-placeholder`
+        }
+        className="dataviz-viewer-header"
+      >
+        {scan ? (
+          <>
+            <Text size="sm" fw={600} data-testid={`${pane}-modality`}>
+              {modality}
+            </Text>
+            <Text size="xs" data-testid={`${pane}-identity`}>
+              Subject: {scan.subject || scan.participantId} | Session: {scan.session || "01"}
+              {modality === "qCBF" && ` | Run: ${scan.run || "01"}`}
+            </Text>
+          </>
+        ) : (
+          <Skeleton height={22} width="80%" />
+        )}
+      </div>
+      <div data-testid={`${pane}-image`} className="dataviz-image">
+        {!scan && !webglError && (
           <>
             <Skeleton
               height="100%"
               width="100%"
-              data-testid="nifti-viewer-image-skeleton"
-              style={{ position: "absolute", top: 0, left: 0, zIndex: 0 }}
+              data-testid={`${pane}-image-skeleton`}
+              style={{ position: "absolute" }}
             />
-            <Stack
-              align="center"
-              justify="center"
-              h="100%"
-              style={{ position: "absolute", zIndex: 1, width: "100%", top: 0, left: 0 }}
+            <Text
+              data-testid={`${pane}-idle`}
+              style={{ position: "absolute", inset: 20 }}
+              ta="center"
             >
-              <Text
-                c="dimmed"
-                size="sm"
-                fw={500}
-                ta="center"
-                px="md"
-                data-testid="nifti-viewer-overlay-text"
-              >
-                Click on a datapoint to load in its respective qCBF image.
-              </Text>
-            </Stack>
+              Click on a datapoint to load in its respective qCBF image.
+            </Text>
           </>
         )}
-
-        {viewerState.status === "loading" && (
-          <Overlay
-            center
-            fixed={false}
-            zIndex={2}
-            color={colorScheme === "dark" ? "#000" : "#fff"}
-            backgroundOpacity={0.85}
-          >
-            <Loader size="xl" />
+        {state.status === "loading" && !webglError && (
+          <Overlay data-testid={`${pane}-loading`} center>
+            <Loader />
           </Overlay>
         )}
-
-        {viewerState.status === "error" && viewerState.errorMessage && selectedPointId && (
-          <Overlay
-            center
-            fixed={false}
-            zIndex={2}
-            color={colorScheme === "dark" ? "#000" : "#fff"}
-            opacity={0.85}
-          >
-            <Stack align="center" justify="center" h="100%" p="md">
-              <Text c="red" size="sm" ta="center" fw={500} data-testid="viewer-error">
-                {viewerState.errorMessage}
-              </Text>
-            </Stack>
+        {(webglError || state.status === "error") && (
+          <Overlay data-testid={`${pane}-error`} center>
+            <Text c="red" data-testid={pane === "primary" ? "viewer-error" : "companion-error"}>
+              {webglError || state.message}
+            </Text>
           </Overlay>
         )}
-
         <canvas
           ref={canvasRef}
+          data-testid={pane === "primary" ? "niivue-canvas" : "companion-canvas"}
           style={{
+            position: "absolute",
+            inset: 0,
             width: "100%",
             height: "100%",
             display: "block",
-            visibility: !selectedPointId ? "hidden" : "visible",
+            visibility: scan && state.status === "loaded" && !webglError ? "visible" : "hidden",
             backgroundColor: "#000",
           }}
-          data-testid="niivue-canvas"
         />
       </div>
-    </Stack>
+      <div data-testid={`${pane}-viewer-footer`} className="dataviz-viewer-footer">
+        {modality === "qCBF" ? (
+          <Text size="xs" data-testid={`${pane}-hover`}>
+            {hover}
+          </Text>
+        ) : (
+          <Text size="xs" c="dimmed" data-testid={`${pane}-intensity-label`}>
+            Structural intensity (a.u.)
+          </Text>
+        )}
+        {modality === "qCBF" && windowLimits && (
+          <Text size="xs" data-testid={`${pane}-cbf-window`}>
+            CBF window: {windowLimits[0]}–{windowLimits[1]} mL/100g/min
+          </Text>
+        )}
+      </div>
+    </div>
   );
 }
