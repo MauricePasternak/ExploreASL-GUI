@@ -74,14 +74,14 @@ The block SHALL show shared guidance: "These subjects will be excluded from proc
 
 `BIDSReviewPanel` SHALL render these edge states:
 
-| State          | UI                                                                                                                                                                                                                          |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scan running   | Skeleton loader                                                                                                                                                                                                             |
+| State          | UI                                                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Scan running   | Skeleton loader                                                                                                                                                                            |
 | Scan error     | Error alert with `[Retry]` and `[Back to Landing]` buttons; after 2 retry clicks, additional hint: "Persistent scan failure — check directory permissions or delete project and recreate." |
-| 0 groups found | Error alert with same buttons; message "No ASL metadata groups detected"                                                                                                                                                    |
-| 1 group only   | Parameter table and subject list expanded by default                                                                                                                                                                       |
-| 2-9 groups     | Cards visible; parameters and subject lists collapsed by default                                                                                                                                                           |
-| 10+ groups     | Cards visible; parameters and subject lists collapsed by default                                                                                                                                                           |
+| 0 groups found | Error alert with same buttons; message "No ASL metadata groups detected"                                                                                                                   |
+| 1 group only   | Parameter table and subject list expanded by default                                                                                                                                       |
+| 2-9 groups     | Cards visible; parameters and subject lists collapsed by default                                                                                                                           |
+| 10+ groups     | Cards visible; parameters and subject lists collapsed by default                                                                                                                           |
 
 `importStore` BIDS review slice provides `retryBidsScan()` (re-calls `scan_bids_sidecars`, clears `scanError`) and `backToLanding()` (resets review state); the panel performs navigation to `/`. Failed or empty confirmed-project rescans instead offer `[Back to Confirmed Summary]`.
 
