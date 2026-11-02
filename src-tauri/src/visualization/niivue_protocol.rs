@@ -1,4 +1,4 @@
-//! Niivue protocol responses and project-scoped qCBF volume resolution.
+//! Niivue protocol responses and project-scoped qCBF/rT1 volume resolution.
 
 use std::path::PathBuf;
 use tauri::Manager;
@@ -108,6 +108,19 @@ pub fn resolve_niivue_request(
                 }
             };
             format!("qCBF_{}_{}.nii", participant_id, r)
+        }
+        "rT1" => {
+            let identifier = participant_id
+                .strip_suffix(".nii.gz")
+                .or_else(|| participant_id.strip_suffix(".nii"))
+                .unwrap_or(participant_id);
+            if segments.len() != 2 || identifier.is_empty() {
+                return Err((
+                    http::StatusCode::BAD_REQUEST,
+                    b"Expected rT1 participant identifier without run",
+                ));
+            }
+            format!("rT1_{}.nii", identifier)
         }
         _ => {
             log::error!(

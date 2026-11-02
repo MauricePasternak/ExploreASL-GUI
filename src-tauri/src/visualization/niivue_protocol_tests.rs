@@ -48,6 +48,12 @@ fn test_resolve_niivue_request_with_real_data() {
     let res_no_ext = resolve_niivue_request(root.clone(), uri_path_no_ext).unwrap();
     assert_eq!(res_no_ext.1, "application/gzip");
     assert!(res_no_ext.0.ends_with("qCBF_sub-TEST_01_ASL_1.nii.gz"));
+
+    let anatomy = root.join("derivatives/ExploreASL/Population/rT1_sub-TEST_01.nii.gz");
+    fs::copy(&real_nii_gz_path, &anatomy).unwrap();
+    let structural = resolve_niivue_request(root, "/localhost/rT1/sub-TEST_01.nii.gz").unwrap();
+    assert_eq!(structural.0, fs::canonicalize(anatomy).unwrap());
+    assert_eq!(structural.1, "application/gzip");
 }
 
 #[test]
@@ -68,6 +74,12 @@ fn test_resolve_niivue_request_errors() {
     fs::create_dir_all(&pop_dir).unwrap();
     let err = resolve_niivue_request(root.clone(), "/localhost/qCBF/sub-01/ASL_1").unwrap_err();
     assert_eq!(err.0, http::StatusCode::NOT_FOUND);
+
+    fs::write(pop_dir.join("rT1_sub-01.nii"), b"anatomy").unwrap();
+    for path in ["/localhost/rT1/.nii.gz", "/localhost/rT1/sub-01/ASL_1"] {
+        let err = resolve_niivue_request(root.clone(), path).unwrap_err();
+        assert_eq!(err.0, http::StatusCode::BAD_REQUEST, "{path}");
+    }
 }
 
 #[cfg(unix)]
