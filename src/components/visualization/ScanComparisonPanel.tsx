@@ -93,6 +93,9 @@ export default function ScanComparisonPanel() {
 
   return (
     <Stack data-testid="scan-comparison-panel" className="dataviz-comparison" gap="xs">
+      <Text component="h2" size="md" fw={600} m={0} data-testid="comparison-heading">
+        {mode === "off" ? "Selected volume" : "Paired volumes"}
+      </Text>
       <Group data-testid="comparison-controls" gap="sm" justify="space-between" align="flex-end">
         <Group data-testid="comparison-mode-controls" gap="xs" align="flex-end">
           <Text
@@ -180,7 +183,7 @@ export default function ScanComparisonPanel() {
           />
         </Group>
       </Group>
-      {pinned && (
+      {pinned && mode !== "pinned" && (
         <Text size="xs" data-testid="pinned-identity">
           Pinned: {pinned.subject || pinned.participantId} | Session: {pinned.session} | Run:{" "}
           {pinned.run}
@@ -188,14 +191,6 @@ export default function ScanComparisonPanel() {
       )}
       {primary && (
         <Box data-testid="scan-measurements" className="dataviz-measurements">
-          <Text
-            size="xs"
-            fw={500}
-            className="dataviz-measurement-wide"
-            data-testid="measurement-identity"
-          >
-            Subject: {primary.subject} | Session: {primary.session} | Run: {primary.run}
-          </Text>
           <Text size="xs" data-testid="measurement-x">
             X — {measurement(axisAssignment.x, primary.x)}
           </Text>
@@ -240,6 +235,11 @@ export default function ScanComparisonPanel() {
           />
         )}
       </Box>
+      <Text size="xs" c="dimmed" data-testid="comparison-help">
+        Click / scroll slices; drag 3D to rotate. Linked crosshair and 2D pan/zoom use world
+        coordinates; 3D rotation stays independent. Structural uses grayscale and its own intensity
+        window. Matching coordinates alone do not establish registration accuracy.
+      </Text>
     </Stack>
   );
 }

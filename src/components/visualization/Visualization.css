@@ -1,3 +1,89 @@
+.visualization-page,
+.visualization-page > *,
+.visualization-page .mantine-Stack-root,
+.visualization-page .mantine-Paper-root {
+  min-width: 0;
+}
+
+.visualization-page {
+  width: 100%;
+}
+
+.visualization-page[data-stage="visualize"] {
+  max-width: 2800px;
+  margin-inline: auto;
+}
+
+.visualization-page > [data-testid="visualization-header"] {
+  margin-bottom: 0;
+}
+
+.dataviz-path,
+.dataviz-column-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.dataviz-option-source {
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+}
+
+.dataviz-types-table {
+  table-layout: fixed;
+  overflow-wrap: anywhere;
+}
+
+.dataviz-types-table th:nth-child(2) {
+  width: 164px;
+}
+
+.dataviz-types-table th:nth-child(3) {
+  width: 24%;
+}
+
+.dataviz-types-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--mantine-color-body);
+}
+
+.visualization-page [data-testid="column-types-scroll"]:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
+.visualization-page .mantine-Alert-message {
+  overflow-wrap: anywhere;
+}
+
+.dataviz-key-pair > .mantine-Select-root {
+  flex: 1;
+  min-width: min(100%, 180px);
+}
+
+.dataviz-join-diagram > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dataviz-join-source {
+  background: var(--mantine-color-default-hover);
+}
+
+.dataviz-join-columns {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dataviz-join-columns:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
 .dataviz-workspace {
   container: dataviz / inline-size;
   flex: 1 0 auto;
@@ -8,9 +94,8 @@
 .dataviz-panels {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: clamp(320px, 40vh, 420px) auto;
-  gap: var(--mantine-spacing-md);
-  flex: 1;
+  gap: 16px;
+  align-items: stretch;
 }
 
 .dataviz-panel {
@@ -19,8 +104,37 @@
   min-width: 0;
 }
 
+.dataviz-chart {
+  gap: var(--mantine-spacing-sm);
+}
+
+.dataviz-axes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.dataviz-axes > .mantine-Button-root {
+  grid-column: 3;
+}
+
+.dataviz-axes > * {
+  min-width: 0;
+}
+
+.dataviz-plot {
+  display: flex;
+  min-height: clamp(440px, 42cqi, 500px);
+  min-width: 0;
+}
+
+.dataviz-plot > * {
+  flex: 1;
+  min-width: 0;
+}
+
 .dataviz-comparison {
-  container: comparison / inline-size;
   flex: 1;
   min-width: 0;
 }
@@ -43,13 +157,13 @@
 .dataviz-panes {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--mantine-spacing-sm);
+  gap: 12px;
   flex: 1;
 }
 
 .dataviz-viewer {
   display: grid;
-  grid-template-rows: auto minmax(320px, 1fr) auto;
+  grid-template-rows: auto minmax(440px, 1fr) auto;
   min-width: 0;
   border: 1px solid var(--mantine-color-default-border);
   border-radius: var(--mantine-radius-sm);
@@ -58,7 +172,7 @@
 
 .dataviz-viewer-header,
 .dataviz-viewer-footer {
-  padding: 6px 10px;
+  padding: 8px 12px;
   background: var(--mantine-color-default-hover);
   overflow-wrap: anywhere;
 }
@@ -66,17 +180,17 @@
 .dataviz-image {
   position: relative;
   min-width: 0;
-  min-height: 320px;
+  min-height: 440px;
 }
 
 .dataviz-viewer-footer {
   font-variant-numeric: tabular-nums;
 }
 
-@container comparison (min-width: 700px) {
+@container dataviz (min-width: 740px) {
   .dataviz-panes[data-companion="true"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: auto minmax(320px, 1fr) auto;
+    grid-template-rows: auto minmax(440px, 1fr) auto;
     row-gap: 0;
   }
 
@@ -86,16 +200,42 @@
   }
 }
 
-@container dataviz (min-width: 1000px) {
-  .dataviz-panels[data-companion="false"] {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    grid-template-rows: 1fr;
+@container dataviz (min-width: 1100px) {
+  .dataviz-panels {
+    grid-template-columns: minmax(400px, 1fr) minmax(0, 1.7fr);
+  }
+
+  .dataviz-axes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dataviz-axes > .mantine-Button-root {
+    grid-column: 1;
+  }
+
+  .dataviz-plot {
+    min-height: 440px;
   }
 }
 
-@container dataviz (min-width: 1200px) {
-  .dataviz-panels[data-companion="true"] {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-    grid-template-rows: 1fr;
+@container dataviz (min-width: 1900px) {
+  .dataviz-panels {
+    grid-template-columns: clamp(400px, 32cqi, 760px) minmax(0, 1fr);
+    /* Reserve chrome and Back without clipping expanded controls or readouts. */
+    min-height: clamp(900px, calc(100dvh - 540px), 1320px);
+  }
+
+  .dataviz-plot {
+    flex: 1;
+  }
+}
+
+@container dataviz (max-width: 739px) {
+  .dataviz-axes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dataviz-axes > .mantine-Button-root {
+    grid-column: auto;
   }
 }

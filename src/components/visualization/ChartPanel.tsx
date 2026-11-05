@@ -259,7 +259,7 @@ export default function ChartPanel() {
 
   if (!xCol || !yCol) {
     return (
-      <Stack data-testid="chart-panel" align="center" justify="center" h="100%">
+      <Stack data-testid="chart-panel" align="center" justify="center" mih={440}>
         <Text c="dimmed">
           {!xCol && !yCol
             ? "Select X and Y columns to begin."
@@ -271,7 +271,7 @@ export default function ChartPanel() {
 
   if (isUnsupported) {
     return (
-      <Stack data-testid="chart-panel" align="center" justify="center" h="100%">
+      <Stack data-testid="chart-panel" align="center" justify="center" mih={440}>
         <Text c="dimmed">
           Unsupported combination. Use continuous×continuous (scatter) or continuous×categorical
           (swarm).
@@ -282,7 +282,7 @@ export default function ChartPanel() {
 
   if (filteredData.length === 0) {
     return (
-      <Stack data-testid="chart-panel" align="center" justify="center" h="100%">
+      <Stack data-testid="chart-panel" align="center" justify="center" mih={440}>
         <Text c="dimmed">No plottable data. Selected columns have no valid values.</Text>
       </Stack>
     );
@@ -393,7 +393,7 @@ export default function ChartPanel() {
   }
 
   return (
-    <Stack data-testid="chart-panel" h="100%" gap={0} style={{ overflow: "visible" }}>
+    <Stack data-testid="chart-panel" mih="min-content" gap={0} style={{ overflow: "visible" }}>
       <Text size="xs" c="dimmed" px="sm" py={4}>
         {filteredData.length} points plotted
         {chartData.length !== filteredData.length &&
@@ -406,7 +406,7 @@ export default function ChartPanel() {
         data-testid="chart-canvas-container"
         style={{
           flex: 1,
-          minHeight: 280,
+          minHeight: 440,
           minWidth: 0,
           width: "100%",
           position: "relative",

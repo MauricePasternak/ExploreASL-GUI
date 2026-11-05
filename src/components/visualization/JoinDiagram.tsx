@@ -28,14 +28,22 @@ export default function JoinDiagram({
     <Paper p="md" withBorder data-testid="join-diagram">
       <Stack gap="sm">
         <Text fw={500}>Join Preview</Text>
-        <Group gap="md" align="flex-start">
+        <Group gap="md" align="flex-start" wrap="nowrap" className="dataviz-join-diagram">
           <Stack gap={0} style={{ flex: 1 }} data-testid="diagram-qcbf-box">
-            <Paper p="xs" withBorder bg="blue.0">
+            <Paper p="xs" withBorder className="dataviz-join-source">
               <Text size="sm" fw={500}>
                 {qcbfFileName}
               </Text>
             </Paper>
-            <Stack gap={2} p="xs">
+            <Stack
+              gap={2}
+              p="xs"
+              className="dataviz-join-columns"
+              tabIndex={0}
+              role="region"
+              aria-label="qCBF columns"
+              data-testid="diagram-qcbf-columns"
+            >
               {qcbfColumns.map((col) => (
                 <Text
                   component="div"
@@ -80,12 +88,20 @@ export default function JoinDiagram({
           </Stack>
 
           <Stack gap={0} style={{ flex: 1 }} data-testid="diagram-external-box">
-            <Paper p="xs" withBorder bg="grape.0">
+            <Paper p="xs" withBorder className="dataviz-join-source">
               <Text size="sm" fw={500}>
                 {extFileName}
               </Text>
             </Paper>
-            <Stack gap={2} p="xs">
+            <Stack
+              gap={2}
+              p="xs"
+              className="dataviz-join-columns"
+              tabIndex={0}
+              role="region"
+              aria-label="External columns"
+              data-testid="diagram-external-columns"
+            >
               {extColumns.map((col) => (
                 <Text
                   key={col.name}

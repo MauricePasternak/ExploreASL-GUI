@@ -2,9 +2,8 @@ import {
   Badge,
   Group,
   Select,
-  Grid,
+  Box,
   Button,
-  useMantineTheme,
   type ComboboxItem,
   type ComboboxLikeRenderOptionInput,
 } from "@mantine/core";
@@ -16,10 +15,10 @@ import { comboboxTestIds } from "../common/comboboxTestIds";
 
 interface AxisComboboxItem extends ComboboxItem {
   type?: string;
+  source?: string;
 }
 
 export default function AxisAssignment() {
-  const theme = useMantineTheme();
   const inspection = useVisualizationStore((s) => s.inspection);
   const columnTypes = useProjectStore((s) => visualizationSettings(s.project).columnTypes);
   const axisAssignment = useProjectStore((s) => visualizationSettings(s.project).axisAssignment);
@@ -41,8 +40,9 @@ export default function AxisAssignment() {
   function buildData(columns: typeof availableColumns) {
     return columns.map((c) => ({
       value: c.name,
-      label: c.name,
+      label: `${c.name}${c.units ? ` (${c.units})` : ""}`,
       type: columnTypes[c.name] ?? c.inferredType,
+      source: c.source,
     }));
   }
 
@@ -60,68 +60,66 @@ export default function AxisAssignment() {
     const color =
       option.type === "continuous" ? "blue" : option.type === "ordinal" ? "orange" : "green";
     return (
-      <Group gap="xs">
+      <Group gap="xs" wrap="wrap">
         <Badge size="xs" color={color}>
           {option.type}
         </Badge>
-        <span>{option.label}</span>
+        <span className="dataviz-column-name" data-testid={`axis-option-name-${option.value}`}>
+          {option.label}
+        </span>
+        {option.source && (
+          <span
+            className="dataviz-option-source"
+            data-testid={`axis-option-source-${option.value}`}
+          >
+            {option.source}
+          </span>
+        )}
       </Group>
     );
   }
 
   return (
-    <Grid
-      data-testid="axis-assignment"
-      type="container"
-      breakpoints={theme.breakpoints}
-      align="flex-end"
-      gap="sm"
-    >
-      <Grid.Col span={{ base: 12, xs: 6, sm: 3.5 }}>
-        <Select
-          label="X-axis"
-          placeholder="Select column"
-          data={xData}
-          value={axisAssignment.x}
-          onChange={(val) => setAxisAssignment({ x: val, colorBy: null })}
-          renderOption={renderOption}
-          searchable
-          {...comboboxTestIds("x-axis-select")}
-        />
-      </Grid.Col>
-      <Grid.Col span={{ base: 12, xs: 6, sm: 3.5 }}>
-        <Select
-          label="Y-axis (continuous)"
-          placeholder="Select column"
-          data={yData}
-          value={axisAssignment.y}
-          onChange={(val) => setAxisAssignment({ y: val, colorBy: null })}
-          renderOption={renderOption}
-          searchable
-          {...comboboxTestIds("y-axis-select")}
-        />
-      </Grid.Col>
-      <Grid.Col span={{ base: 12, xs: 6, sm: 3.5 }}>
-        <Select
-          label="Color by"
-          data={colorByData}
-          value={axisAssignment.colorBy ?? ""}
-          onChange={(val) => setAxisAssignment({ colorBy: val || null })}
-          renderOption={renderOption}
-          {...comboboxTestIds("color-by-select")}
-        />
-      </Grid.Col>
-      <Grid.Col span={{ base: 12, xs: 6, sm: 1.5 }}>
-        <Button
-          leftSection={<IconAdjustmentsHorizontal size={14} />}
-          variant="light"
-          fullWidth
-          onClick={() => setFiltersExpanded(!filtersExpanded)}
-          data-testid="settings-toggle-btn"
-        >
-          Settings
-        </Button>
-      </Grid.Col>
-    </Grid>
+    <Box data-testid="axis-assignment" className="dataviz-axes">
+      <Select
+        label="X-axis"
+        placeholder="Select column"
+        data={xData}
+        value={axisAssignment.x}
+        onChange={(val) => setAxisAssignment({ x: val, colorBy: null })}
+        renderOption={renderOption}
+        searchable
+        {...comboboxTestIds("x-axis-select")}
+      />
+      <Select
+        label="Y-axis (continuous)"
+        placeholder="Select column"
+        data={yData}
+        value={axisAssignment.y}
+        onChange={(val) => setAxisAssignment({ y: val, colorBy: null })}
+        renderOption={renderOption}
+        searchable
+        {...comboboxTestIds("y-axis-select")}
+      />
+      <Select
+        label="Color by"
+        data={colorByData}
+        value={axisAssignment.colorBy ?? ""}
+        onChange={(val) => setAxisAssignment({ colorBy: val || null })}
+        renderOption={renderOption}
+        {...comboboxTestIds("color-by-select")}
+      />
+      <Button
+        leftSection={<IconAdjustmentsHorizontal size={14} />}
+        variant="light"
+        fullWidth
+        onClick={() => setFiltersExpanded(!filtersExpanded)}
+        aria-haspopup="dialog"
+        aria-expanded={filtersExpanded}
+        data-testid="settings-toggle-btn"
+      >
+        Settings
+      </Button>
+    </Box>
   );
 }

@@ -353,7 +353,7 @@ export default function NiftiViewer({
         {scan ? (
           <>
             <Text size="sm" fw={600} data-testid={`${pane}-modality`}>
-              {modality}
+              {modality === "qCBF" ? "ASL · qCBF" : "Structural · rT1"}
             </Text>
             <Text size="xs" data-testid={`${pane}-identity`}>
               Subject: {scan.subject || scan.participantId} | Session: {scan.session || "01"}
@@ -383,12 +383,17 @@ export default function NiftiViewer({
           </>
         )}
         {state.status === "loading" && !webglError && (
-          <Overlay data-testid={`${pane}-loading`} center>
+          <Overlay
+            data-testid={`${pane}-loading`}
+            role="status"
+            aria-label={`Loading ${modality} image`}
+            center
+          >
             <Loader />
           </Overlay>
         )}
         {(webglError || state.status === "error") && (
-          <Overlay data-testid={`${pane}-error`} center>
+          <Overlay data-testid={`${pane}-error`} role="alert" center>
             <Text c="red" data-testid={pane === "primary" ? "viewer-error" : "companion-error"}>
               {webglError || state.message}
             </Text>
@@ -397,6 +402,7 @@ export default function NiftiViewer({
         <canvas
           ref={canvasRef}
           data-testid={pane === "primary" ? "niivue-canvas" : "companion-canvas"}
+          aria-label={`${modality} volume. Click or scroll slices; drag 3D to rotate.`}
           style={{
             position: "absolute",
             inset: 0,

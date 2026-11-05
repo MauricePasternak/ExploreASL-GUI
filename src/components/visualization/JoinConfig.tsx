@@ -279,26 +279,33 @@ export default function JoinConfig() {
   if (!joinConfig) {
     return (
       <Stack data-testid="join-config">
-        <Paper p="md" withBorder>
+        <Paper
+          p="md"
+          withBorder
+          className="dataviz-setup-panel"
+          data-testid="external-data-optional"
+        >
           <Stack gap="sm">
             <Text fw={500}>External Data (optional)</Text>
             <Text c="dimmed" size="sm">
               Left-join covariates (Diagnosis, Age, etc.) onto your qCBF data.
             </Text>
-            <Button
-              leftSection={<IconUpload size={16} />}
-              variant="default"
-              onClick={() => void handleBrowse()}
-              data-testid="browse-external-btn"
-            >
-              Browse...
-            </Button>
-            <PathEntryButton
-              title="Select external data file"
-              testId="external-data-path"
-              extensions={["csv", "tsv", "xlsx"]}
-              onSelect={handleBrowse}
-            />
+            <Group data-testid="external-data-actions">
+              <Button
+                leftSection={<IconUpload size={16} />}
+                variant="default"
+                onClick={() => void handleBrowse()}
+                data-testid="browse-external-btn"
+              >
+                Browse...
+              </Button>
+              <PathEntryButton
+                title="Select external data file"
+                testId="external-data-path"
+                extensions={["csv", "tsv", "xlsx"]}
+                onSelect={handleBrowse}
+              />
+            </Group>
             {error && <Alert color="red">{error}</Alert>}
           </Stack>
         </Paper>
@@ -323,7 +330,12 @@ export default function JoinConfig() {
         >
           <Stack gap="xs">
             <Text size="sm">{externalSourceAvailability.message}</Text>
-            <Text size="sm" ff="monospace" data-testid="external-source-path">
+            <Text
+              size="sm"
+              ff="monospace"
+              className="dataviz-path"
+              data-testid="external-source-path"
+            >
               {externalSourceAvailability.savedPath}
             </Text>
             <Button
@@ -342,7 +354,7 @@ export default function JoinConfig() {
           {error}
         </Alert>
       )}
-      <Paper p="md" withBorder>
+      <Paper p="md" withBorder className="dataviz-setup-panel" data-testid="external-data-source">
         <Stack gap="sm">
           <Group justify="space-between">
             <Text fw={500}>External Data</Text>
@@ -355,25 +367,41 @@ export default function JoinConfig() {
               Remove
             </Button>
           </Group>
-          <Text c="dimmed" size="sm" ff="monospace">
+          <Text
+            c="dimmed"
+            size="sm"
+            ff="monospace"
+            className="dataviz-path"
+            data-testid="external-data-file"
+          >
             {joinConfig.externalSource.absolutePath}
           </Text>
-          <Button
-            leftSection={<IconUpload size={16} />}
-            variant="default"
-            size="xs"
-            onClick={() => void handleBrowse()}
-            data-testid="change-external-btn"
-          >
-            Change file...
-          </Button>
-          <PathEntryButton
-            title="Select external data file"
-            testId="external-data-path"
-            defaultPath={joinConfig.externalSource.absolutePath}
-            extensions={["csv", "tsv", "xlsx"]}
-            onSelect={handleBrowse}
-          />
+          {extInspection?.fileHash === joinConfig.externalSource.fileHash && (
+            <Text size="xs" c="dimmed" data-testid="external-data-inspection">
+              {extInspection.rowCount.toLocaleString()} rows · {extInspection.columns.length}{" "}
+              columns
+              {joinConfig.externalSource.sheetName &&
+                ` · XLSX first sheet: ${joinConfig.externalSource.sheetName}`}
+            </Text>
+          )}
+          <Group data-testid="external-data-change-actions">
+            <Button
+              leftSection={<IconUpload size={16} />}
+              variant="default"
+              size="xs"
+              onClick={() => void handleBrowse()}
+              data-testid="change-external-btn"
+            >
+              Change file...
+            </Button>
+            <PathEntryButton
+              title="Select external data file"
+              testId="external-data-path"
+              defaultPath={joinConfig.externalSource.absolutePath}
+              extensions={["csv", "tsv", "xlsx"]}
+              onSelect={handleBrowse}
+            />
+          </Group>
         </Stack>
       </Paper>
 
@@ -418,30 +446,43 @@ export default function JoinConfig() {
         </Stack>
       </Modal>
 
-      <Paper p="md" withBorder>
+      <Paper p="md" withBorder className="dataviz-setup-panel" data-testid="external-data-keys">
         <Stack gap="sm">
           <Text fw={500}>Join Keys</Text>
           {keyPairs.map((pair, i) => (
-            <Group key={i} gap="xs" data-testid={`key-pair-${i}`}>
+            <Group
+              key={i}
+              gap="xs"
+              align="flex-end"
+              className="dataviz-key-pair"
+              data-testid={`key-pair-${i}`}
+            >
               <Select
+                label={`qCBF key ${i + 1}`}
                 placeholder="column from qCBF data"
                 data={leftColumns}
                 value={pair.left || null}
                 onChange={(val) => handleKeyPairChange(i, "left", val)}
+                searchable
                 {...comboboxTestIds(`key-pair-${i}-left`)}
               />
-              <Text>↔</Text>
+              <Text pb={6} aria-hidden>
+                ↔
+              </Text>
               <Select
+                label={`External key ${i + 1}`}
                 placeholder="column from external data"
                 data={extColumns}
                 value={pair.right || null}
                 onChange={(val) => handleKeyPairChange(i, "right", val)}
+                searchable
                 {...comboboxTestIds(`key-pair-${i}-right`)}
               />
               <Button
                 variant="subtle"
                 size="xs"
                 onClick={() => handleRemoveKeyPair(i)}
+                aria-label={`Remove key pair ${i + 1}`}
                 data-testid={`key-pair-${i}-remove`}
               >
                 Remove
@@ -456,10 +497,14 @@ export default function JoinConfig() {
           >
             Add key pair
           </Button>
+          <Text size="xs" c="dimmed" data-testid="join-readiness-help">
+            Empty or incomplete keys keep current data on Next. Complete keys execute the left join.
+            Sanity-check warnings are advisory, not progression gates.
+          </Text>
         </Stack>
       </Paper>
 
-      <Paper p="md" withBorder>
+      <Paper p="md" withBorder className="dataviz-setup-panel" data-testid="external-data-options">
         <Stack gap="sm">
           <Text fw={500}>Options</Text>
           <Checkbox
@@ -472,6 +517,7 @@ export default function JoinConfig() {
             CSV Delimiter
           </Text>
           <Select
+            aria-label="CSV delimiter"
             data={[
               { value: "auto", label: "Auto-detect" },
               { value: ",", label: "Comma (,)" },

@@ -1,13 +1,4 @@
-import {
-  Alert,
-  Button,
-  Code,
-  Group,
-  Stack,
-  Stepper,
-  Text,
-  useMantineColorScheme,
-} from "@mantine/core";
+import { Alert, Button, Code, Group, Stack, Stepper, Text } from "@mantine/core";
 import { IconAlertCircle, IconChartDots } from "@tabler/icons-react";
 import { commands, unwrap } from "../lib/ipc";
 import type { FileStats } from "../generated/bindings";
@@ -22,10 +13,9 @@ import { useProjectStore } from "../stores/projectStore";
 import { useVisualizationStore } from "../stores/visualizationStore";
 import { visualizationSettings, acceptedVisualizationSettings } from "../stores/visualizationStore";
 import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
+import "../components/visualization/Visualization.css";
 
 export default function VisualizationPage() {
-  const { colorScheme } = useMantineColorScheme();
-
   const stage = useProjectStore((s) => visualizationSettings(s.project).stage);
   const setStage = useVisualizationStore((s) => s.setStage);
   const inspection = useVisualizationStore((s) => s.inspection);
@@ -375,13 +365,12 @@ export default function VisualizationPage() {
   return (
     <Stack
       data-testid="visualization-page"
+      className="visualization-page"
+      data-stage={stage}
       p="md"
-      h={stage === "visualize" ? undefined : "calc(100vh - 128px)"}
-      mih="calc(100vh - 128px)"
       style={{
-        flexShrink: stage === "visualize" ? 0 : undefined,
-        overflowX: stage === "visualize" ? "clip" : "hidden",
-        overflowY: stage === "visualize" ? "visible" : "hidden",
+        flexShrink: 0,
+        overflowY: "visible",
       }}
     >
       <HeaderCard
@@ -401,7 +390,7 @@ export default function VisualizationPage() {
         >
           <Stack gap="xs">
             <Text size="sm">{externalSourceAvailability.message}</Text>
-            <Code data-testid="visualization-missing-source-path">
+            <Code data-testid="visualization-missing-source-path" className="dataviz-path">
               {externalSourceAvailability.savedPath}
             </Code>
             {stage !== "selectData" && (
@@ -429,31 +418,28 @@ export default function VisualizationPage() {
 
       <Stepper
         active={activeStep}
+        size="sm"
+        aria-label="Visualization setup steps"
         data-testid="visualization-stepper"
         styles={{
           root: {
             display: "flex",
             flexDirection: "column",
             flex: 1,
-            minHeight: stage === "visualize" ? "auto" : 0,
+            minHeight: "auto",
           },
           steps: {
             paddingBottom: "var(--mantine-spacing-md)",
-            borderBottom: colorScheme === "dark" ? "1px solid #373a40" : "1px solid #e9ecef",
-            boxShadow:
-              colorScheme === "dark"
-                ? "0 4px 6px -1px rgba(0, 0, 0, 0.3)"
-                : "0 4px 6px -1px rgba(0, 0, 0, 0.03)",
-            zIndex: 10,
+            borderBottom: "1px solid var(--mantine-color-default-border)",
+            flexWrap: "wrap",
+            rowGap: "var(--mantine-spacing-xs)",
           },
           content: {
             flex: 1,
-            minHeight: stage === "visualize" ? "auto" : 0,
+            minHeight: "auto",
             display: "flex",
             flexDirection: "column",
-            overflow: stage === "visualize" ? "visible" : "auto",
-            paddingRight: "16px",
-            paddingLeft: "4px",
+            overflow: "visible",
             paddingTop: "var(--mantine-spacing-md)",
           },
         }}
@@ -479,13 +465,8 @@ export default function VisualizationPage() {
         mt="md"
         data-testid="dataviz-stepper-buttons-group"
         style={{
-          borderTop: colorScheme === "dark" ? "1px solid #373a40" : "1px solid #e9ecef",
-          boxShadow:
-            colorScheme === "dark"
-              ? "0 -4px 6px -1px rgba(0, 0, 0, 0.3)"
-              : "0 -4px 6px -1px rgba(0, 0, 0, 0.03)",
+          borderTop: "1px solid var(--mantine-color-default-border)",
           paddingTop: "var(--mantine-spacing-md)",
-          zIndex: 10,
         }}
       >
         {activeStep > 0 && (
