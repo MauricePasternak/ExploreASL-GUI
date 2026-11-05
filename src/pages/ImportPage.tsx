@@ -8,7 +8,8 @@ import {
   IconTags,
   IconAlertTriangle,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import "../components/import/DicomImport.css";
 
 import AliasResolution from "../components/import/AliasResolution";
 import BIDSReviewPanel from "../components/import/BIDSReviewPanel";
@@ -22,12 +23,12 @@ import { useImportStore } from "../stores/importStore";
 import { useProjectStore } from "../stores/projectStore";
 
 const IMPORT_STEPS = [
-  { label: "Ingest DICOMs", icon: IconDatabase, description: "Scan folders" },
-  { label: "Tokenize Paths", icon: IconRoute, description: "Assign tags" },
-  { label: "Resolve Aliases", icon: IconTags, description: "Map names" },
-  { label: "Metadata", icon: IconFileImport, description: "BIDS params" },
-  { label: "Preview Import", icon: IconEye, description: "Review" },
-  { label: "Run Import Module", icon: IconPlayerPlay, description: "Execute" },
+  { label: "Ingest DICOMs", icon: IconDatabase, description: "Find folder patterns" },
+  { label: "Tokenize Paths", icon: IconRoute, description: "Identify path elements" },
+  { label: "Resolve Aliases", icon: IconTags, description: "Name and order captures" },
+  { label: "Metadata", icon: IconFileImport, description: "Assign acquisition groups" },
+  { label: "Preview Import", icon: IconEye, description: "Review paths and checks" },
+  { label: "Run Import Module", icon: IconPlayerPlay, description: "Convert and verify" },
 ] as const;
 
 /**
@@ -47,6 +48,25 @@ export default function ImportPage() {
   const sourceAvailability = useImportStore((s) => s.sourceAvailability);
   const setActiveStep = useImportStore((s) => s.setActiveStep);
   const [navigationTarget, setNavigationTarget] = useState<HTMLDivElement | null>(null);
+  const stepperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const steps = stepperRef.current?.querySelector<HTMLElement>(
+      '[data-testid="import-stepper-steps"]',
+    );
+    const active = steps?.querySelector<HTMLElement>(`[data-testid="import-step-${activeStep}"]`);
+    if (!steps || !active) return;
+    const revealActive = () => {
+      const list = steps.getBoundingClientRect();
+      const row = active.getBoundingClientRect();
+      if (row.top < list.top) steps.scrollTop += row.top - list.top;
+      else if (row.bottom > list.bottom) steps.scrollTop += row.bottom - list.bottom;
+    };
+    revealActive();
+    const observer = new ResizeObserver(revealActive);
+    observer.observe(steps);
+    return () => observer.disconnect();
+  }, [activeStep]);
 
   // BIDS-direct: render BIDSReviewPanel only (skip stepper sidebar)
   if (dataSource === "bids") {
@@ -58,7 +78,7 @@ export default function ImportPage() {
   );
 
   return (
-    <Stack style={{ flex: 1, minHeight: 0 }} data-testid="import-page">
+    <Stack className="dicom-import" style={{ flex: 1, minHeight: 0 }} data-testid="import-page">
       {sourceUnavailable && activeStep !== 0 && (
         <Alert
           icon={<IconAlertTriangle size={16} />}
@@ -86,17 +106,22 @@ export default function ImportPage() {
           wrap="nowrap"
           style={{ flex: 1, minHeight: 0 }}
           data-testid="import-panels"
+          className="dicom-import-panels"
         >
           {/* Steps and content scroll independently; navigation stays inside the stepper. */}
           <Box
             data-testid="import-stepper-sidebar"
+            className="dicom-import-sidebar"
             style={{
-              width: 240,
               flexShrink: 0,
               minHeight: 0,
             }}
           >
+            <Text size="xs" fw={700} c="dimmed" mb="md" data-testid="import-workflow-label">
+              IMPORT WORKFLOW
+            </Text>
             <Stepper
+              ref={stepperRef}
               active={activeStep}
               orientation="vertical"
               size="sm"
@@ -124,6 +149,9 @@ export default function ImportPage() {
                   allowStepSelect={false}
                   data-testid={`import-step-${index}`}
                 >
+                  <Text size="xs" c="dimmed" data-testid="import-step-count">
+                    Step {activeStep + 1} of {IMPORT_STEPS.length}
+                  </Text>
                   <Box ref={setNavigationTarget} data-testid="import-stepper-navigation" />
                 </Stepper.Step>
               ))}
@@ -131,10 +159,7 @@ export default function ImportPage() {
           </Box>
 
           {/* Step content panel */}
-          <Box
-            style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}
-            data-testid="import-step-panel"
-          >
+          <Box style={{ flex: 1, minWidth: 0, minHeight: 0 }} data-testid="import-step-panel">
             {activeStep === 0 && <DicomIngestion />}
             {activeStep === 1 && <PathTokenizer />}
             {activeStep === 2 && <AliasResolution />}

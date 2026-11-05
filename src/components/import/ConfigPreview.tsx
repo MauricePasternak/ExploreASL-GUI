@@ -11,9 +11,9 @@ const FIELD_ANNOTATIONS: Record<string, string> = {
   folderHierarchy:
     "Each regex captures one token from the normalized staging tree (Subject/Session/Run/Modality). Since the staging tree uses clean extracted tokens as folder names, every level matches with ^(.*)$.",
   tokenOrdering:
-    "Maps capture groups to ExploreASL's [Subject, Visit, Session, Scan] ordering. Values are 0-based indices into folderHierarchy capture groups; -1 means the token is not extracted from the path (default used instead).",
+    "Maps capture groups to ExploreASL's [Subject, Visit, Session, Scan] ordering. Capture groups are numbered from 1; 0 means not captured. The normalized staging tree uses [1, 2, 3, 4].",
   tokenSessionAliases:
-    "Maps session folder names in the staging tree to ExploreASL visit names. E.g., ^01$ → ASL_1.",
+    "Maps GUI Run folders in the staging tree to ExploreASL Session aliases. E.g., ^01$ → ASL_1. GUI Session corresponds to ExploreASL Visit instead.",
   tokenVisitAliases:
     "Simple 1-to-1 mapping of visit-level folder names (no regex anchors). Required for backwards compatibility with ExploreASL v1.11.0.",
   tokenScanAliases:
@@ -40,7 +40,10 @@ export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPrevi
           </Accordion.Control>
           <Accordion.Panel>
             <Stack gap="xs">
-              {Object.entries(sourcestructure).map(([key, value]) => (
+              <Code block data-testid="config-sourcestructure-json">
+                {JSON.stringify(sourcestructure, null, 2)}
+              </Code>
+              {Object.keys(sourcestructure).map((key) => (
                 <Stack key={key} gap={0}>
                   <Text size="sm" fw={500} c="blue">
                     {key}
@@ -51,7 +54,6 @@ export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPrevi
                       </Text>
                     )}
                   </Text>
-                  <Code block>{JSON.stringify(value, null, 2)}</Code>
                 </Stack>
               ))}
             </Stack>
@@ -65,7 +67,9 @@ export default function ConfigPreview({ sourcestructure, studyPar }: ConfigPrevi
             </Text>
           </Accordion.Control>
           <Accordion.Panel>
-            <Code block>{JSON.stringify(studyPar, null, 2)}</Code>
+            <Code block data-testid="config-studypar-json">
+              {JSON.stringify(studyPar, null, 2)}
+            </Code>
           </Accordion.Panel>
         </Accordion.Item>
       </Accordion>

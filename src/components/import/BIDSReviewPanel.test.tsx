@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { projectFixture } from "../../test/projectFixtures";
 import { projectView } from "../../schemas/project";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../../lib/projectLifecycle";
+import { showErrorNotification } from "../../lib/errorNotifications";
 
 import BIDSReviewPanel from "./BIDSReviewPanel";
 import { useImportStore } from "../../stores/importStore";
@@ -19,6 +20,7 @@ vi.mock("react-router", async () => {
   const actual = await vi.importActual("react-router");
   return { ...actual, useNavigate: () => mockNavigate };
 });
+vi.mock("../../lib/errorNotifications", () => ({ showErrorNotification: vi.fn() }));
 
 const MOCK_GROUP: DerivedMetadataGroup = {
   id: "group-1",
@@ -117,7 +119,11 @@ describe("BIDSReviewPanel", () => {
 
     renderPanel();
     expect(screen.getByTestId("bids-review-scan-running")).toBeInTheDocument();
-    expect(screen.getByTestId("bids-review-header")).toBeInTheDocument();
+    const header = screen.getByTestId("bids-review-header");
+    expect(within(header).getByRole("heading", { name: "BIDS Review" })).toBeInTheDocument();
+    expect(header).toHaveTextContent(
+      "Review acquisition metadata and subject assignments before confirming.",
+    );
   });
 
   it("renders scan-error alert with Retry and Back to Landing buttons", () => {
@@ -392,6 +398,12 @@ describe("BIDSReviewPanel", () => {
     );
     expect(useProjectStore.getState().project).toEqual(prior);
     expect(mockNavigate).not.toHaveBeenCalled();
+    expect(showErrorNotification).toHaveBeenCalledWith({
+      id: "bids-review-confirm:proj-1",
+      title: "BIDS review not confirmed",
+      message: "BIDS review could not be confirmed. Stay on this page and try again.",
+      error: expect.any(Error),
+    });
     fireEvent.click(screen.getByTestId("bids-review-confirm-btn"));
     await waitFor(() =>
       expect(
@@ -604,6 +616,34 @@ describe("BIDSReviewPanel", () => {
       expect(screen.getByTestId("bids-review-readonly-banner")).toBeInTheDocument();
       expect(screen.getByDisplayValue("Siemens_3T_PCASL_3D_Included")).toHaveAttribute("readonly");
 
+      rescanSpy.mockRestore();
+    });
+
+    it("conflicting Re-scan BIDS can return to the unchanged confirmed summary", async () => {
+      const prior = useProjectStore.getState().project;
+      const rescanSpy = vi.spyOn(useImportStore.getState(), "rescanConfirmedBidsProject");
+      rescanSpy.mockImplementation(async () => {
+        useImportStore
+          .getState()
+          .setDetectedGroups([
+            MOCK_GROUP,
+            { ...MOCK_GROUP_2, subjects: [{ subjectLabel: "sub-01", sessionLabels: ["1"] }] },
+          ]);
+      });
+
+      renderPanel();
+      fireEvent.click(screen.getByTestId("bids-review-rescan-btn"));
+      expect(await screen.findByTestId("bids-review-group-conflict")).toHaveTextContent("sub-01_1");
+      expect(screen.getByTestId("bids-review-confirm-btn")).toBeDisabled();
+      expect(screen.getByTestId("bids-review-back-btn")).toHaveTextContent(
+        "Back to Confirmed Summary",
+      );
+      fireEvent.click(screen.getByTestId("bids-review-back-btn"));
+
+      expect(screen.getByTestId("bids-review-readonly-banner")).toBeInTheDocument();
+      expect(screen.queryByTestId("bids-review-group-conflict")).not.toBeInTheDocument();
+      expect(useProjectStore.getState().project).toEqual(prior);
+      expect(mockNavigate).not.toHaveBeenCalled();
       rescanSpy.mockRestore();
     });
   });

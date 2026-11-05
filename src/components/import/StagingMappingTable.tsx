@@ -3,6 +3,7 @@ import { TableVirtuoso } from "react-virtuoso";
 
 import type {
   MetadataGroup,
+  StagingEntry,
   StagingMappingByPattern,
   SubjectRow,
 } from "../../schemas/importSchemas";
@@ -41,11 +42,15 @@ export default function StagingMappingTable({
   }
 
   const rowById = new Map(subjectRows.map((r) => [r.id, r]));
+  const rowByTarget = new Map(subjectRows.map((r) => [`${r.subject}/${r.session}`, r]));
   const groupLabelById = new Map(metadataGroups.map((g) => [g.id, g.label]));
 
-  function getGroupLabel(subject: string, session: string): string {
-    const id = `${subject}/${session}`;
-    const row = rowById.get(id);
+  function getGroupLabel(entry: StagingEntry): string {
+    const captured = rowById.get(`captured:${entry.originalSubject}/${entry.originalSession}`);
+    const row =
+      captured?.subject === entry.subject
+        ? captured
+        : rowByTarget.get(`${entry.subject}/${entry.originalSession}`);
     if (!row) return "—";
     return groupLabelById.get(row.groupId) ?? row.groupId;
   }
@@ -94,7 +99,15 @@ export default function StagingMappingTable({
               data-testid={`staging-mapping-viewport-${decodedSignature}`}
               data={mapping.entries}
               components={{
-                Table: (props) => <Table striped highlightOnHover fz="xs" {...props} />,
+                Table: (props) => (
+                  <Table
+                    highlightOnHover
+                    fz="sm"
+                    miw={680}
+                    className="dicom-import-mapping-table"
+                    {...props}
+                  />
+                ),
                 TableHead: (props) => <Table.Thead {...props} />,
                 TableBody: (props) => <Table.Tbody {...props} />,
                 TableRow: (props) => <Table.Tr {...props} />,
@@ -116,7 +129,7 @@ export default function StagingMappingTable({
                     <Table.Td>{relative}</Table.Td>
                     <Table.Td>→</Table.Td>
                     <Table.Td>{stagingPath}</Table.Td>
-                    <Table.Td>{getGroupLabel(entry.subject, entry.session)}</Table.Td>
+                    <Table.Td>{getGroupLabel(entry)}</Table.Td>
                   </>
                 );
               }}

@@ -1,10 +1,11 @@
-import { Alert, Button, Group, Stack, Text } from "@mantine/core";
+import { Alert, Button, Group, Paper, Stack, Text } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconEye } from "@tabler/icons-react";
 import { useMemo } from "react";
 import HeaderCard from "../common/HeaderCard";
 
 import { buildImportPlan } from "../../lib/importPlan";
-import { canEnterStep5 } from "../../lib/importStepAccess";
+import { canEnterStep5, hasValidExecutionProfile } from "../../lib/importStepAccess";
+import { SourcestructureJsonSchema, StudyParJsonSchema } from "../../schemas/importSchemas";
 import { useStagingPreflight } from "../../hooks/useStagingPreflight";
 import { useGlobalStore } from "../../stores/globalStore";
 import { EMPTY_IMPORT_SETTINGS, useImportStore } from "../../stores/importStore";
@@ -92,6 +93,13 @@ export default function ImportPreview() {
 
   const totalEntries = plan.entries.length;
   const totalSubjects = new Set(plan.entries.map((entry) => entry.subject)).size;
+  const configChecks = [
+    {
+      name: "sourcestructure.json",
+      result: SourcestructureJsonSchema.safeParse(plan.sourcestructureJson),
+    },
+    { name: "studyPar.json", result: StudyParJsonSchema.safeParse(plan.studyparJson) },
+  ];
   const canProceedToStep5 = canEnterStep5(
     {
       ingestionComplete,
@@ -176,6 +184,34 @@ export default function ImportPreview() {
           {totalEntries !== 1 ? "s" : ""}
         </Text>
       </Stack>
+      <Paper withBorder p="md" data-testid="preview-configuration-status">
+        <Stack gap="xs">
+          <Text fw={600}>Configuration and admission checks</Text>
+          {configChecks.map(({ name, result }) => (
+            <Stack key={name} gap={4} data-testid={`preview-check-${name}`}>
+              <Text size="sm" c={result.success ? undefined : "red"}>
+                {name}: {result.success ? "valid" : "needs correction"}
+              </Text>
+              {result.error?.issues.map((issue, index) => (
+                <Text key={index} size="xs" c="red">
+                  {issue.path.join(".")}: {issue.message}
+                </Text>
+              ))}
+            </Stack>
+          ))}
+          <Text size="sm" data-testid="preview-native-status">
+            Native staging preflight: {stagingPreflight.status}
+          </Text>
+          {!hasValidExecutionProfile({
+            executionProfiles: settings.executionProfiles,
+            profileValidationState,
+          }) && (
+            <Text size="sm" c="red" data-testid="preview-profile-required">
+              Configure a valid execution profile in Settings before entering Run Import.
+            </Text>
+          )}
+        </Stack>
+      </Paper>
 
       <StagingMappingTable
         mappings={plan.mappings}

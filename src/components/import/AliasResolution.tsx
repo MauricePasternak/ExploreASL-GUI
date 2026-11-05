@@ -66,15 +66,20 @@ export default function AliasResolution() {
   const modalityAliases = useProjectStore(
     (s) => s.project?.mappingState.modalityAliases ?? EMPTY_IMPORT_SETTINGS.modalityAliases,
   );
-  const sessionAliases = useProjectStore(
+  const acceptedSessionAliases = useProjectStore(
     (s) => s.project?.mappingState.sessionAliases ?? EMPTY_IMPORT_SETTINGS.sessionAliases,
   );
-  const runAliases = useProjectStore(
+  const acceptedRunAliases = useProjectStore(
     (s) => s.project?.mappingState.runAliases ?? EMPTY_IMPORT_SETTINGS.runAliases,
   );
-  const subjectRenames = useProjectStore(
+  const acceptedSubjectRenames = useProjectStore(
     (s) => s.project?.mappingState.subjectRenames ?? EMPTY_IMPORT_SETTINGS.subjectRenames,
   );
+  const drafts = useImportStore((s) => s.aliasDrafts);
+  const sessionAliases = drafts.sessionAliases ?? acceptedSessionAliases;
+  const runAliases = drafts.runAliases ?? acceptedRunAliases;
+  const subjectRenames = drafts.subjectRenames ?? acceptedSubjectRenames;
+  const draftErrors = useProjectStore((s) => s.draftErrors);
   const setModalityAliases = useImportStore((s) => s.setModalityAliases);
   const setSessionAliases = useImportStore((s) => s.setSessionAliases);
   const setRunAliases = useImportStore((s) => s.setRunAliases);
@@ -242,14 +247,14 @@ export default function AliasResolution() {
         dataTestId="alias-resolution-header"
       />
 
-      <Tabs defaultValue="subjects">
-        <Tabs.List>
+      <Tabs defaultValue="subjects" className="dicom-import-alias-tabs" data-testid="alias-tabs">
+        <Tabs.List data-testid="alias-tab-list">
           <Tabs.Tab
             value="subjects"
             leftSection={<IconUsers size={16} />}
             data-testid="alias-tab-subjects"
           >
-            Subject Rename
+            Subjects
           </Tabs.Tab>
           <Tabs.Tab
             value="session"
@@ -257,7 +262,7 @@ export default function AliasResolution() {
             disabled={!hasSessionToken}
             data-testid="alias-tab-session"
           >
-            Session Order
+            Sessions (visits)
           </Tabs.Tab>
           <Tabs.Tab
             value="run"
@@ -265,14 +270,14 @@ export default function AliasResolution() {
             disabled={!hasRunToken}
             data-testid="alias-tab-run"
           >
-            Run Order
+            Runs
           </Tabs.Tab>
           <Tabs.Tab
             value="modality"
             leftSection={<IconCategory size={16} />}
             data-testid="alias-tab-modality"
           >
-            Modality Map
+            Modalities
           </Tabs.Tab>
         </Tabs.List>
 
@@ -285,7 +290,7 @@ export default function AliasResolution() {
             aliases={sessionAliases}
             onAliasesChange={setSessionAliases}
             emptyMessage='No sessions detected. Assign a "Session" tag in the Path Tokenizer step, or the default "01" will be used automatically.'
-            description="Assign display aliases and chronological ordering to each captured session value."
+            description="One row per captured Session (ExploreASL Visit), shared across subjects. Assign aliases and chronological order directly."
             emptyTestId="session-order-empty"
             tableTestId="session-order-table"
             validationField="session"
@@ -297,7 +302,7 @@ export default function AliasResolution() {
             aliases={runAliases}
             onAliasesChange={setRunAliases}
             emptyMessage='No runs detected. Assign a "Run" tag in the Path Tokenizer step, or the default "01" will be used automatically.'
-            description="Assign ASL run aliases and chronological ordering to each captured run value."
+            description="Run means ExploreASL Session, not a longitudinal visit. Assign ASL run aliases and chronological order directly."
             emptyTestId="run-order-empty"
             tableTestId="run-order-table"
             validationField="runAlias"
@@ -308,6 +313,14 @@ export default function AliasResolution() {
           <ModalityMappingTable />
         </Tabs.Panel>
       </Tabs>
+
+      {Object.entries(draftErrors)
+        .filter(([field]) => field.startsWith("import."))
+        .map(([field, error]) => (
+          <Text key={field} c="red" role="alert" data-testid={`alias-edit-error-${field}`}>
+            {error}
+          </Text>
+        ))}
 
       {!canProceed && modalityAliases.length > 0 && (
         <Text size="sm" c="red" data-testid="alias-modality-required">

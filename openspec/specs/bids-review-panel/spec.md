@@ -106,6 +106,8 @@ If validation fails: inline errors per offending group; confirmation blocked; `b
 
 Passing label validation is necessary but not sufficient: native confirmation SHALL reject a subject/session assigned to different group IDs, even when labels are unique. On rejection, the accepted project mapping, confirmation state, and phase SHALL remain unchanged, and the panel SHALL not navigate to Parameters. The panel does not provide a per-run mapping or automatic merge for this conflict.
 
+The editable panel SHALL detect these overlapping memberships before confirmation, display an error alert listing the affected subject/session identifiers, and disable confirmation. The alert SHALL explain the one-group-per-subject/session limitation, that renaming groups does not resolve it, and that genuinely different run acquisition parameters cannot be confirmed together. Re-scan and back actions SHALL remain available; confirmed-project rescans SHALL allow returning to the unchanged confirmed summary. Other confirmation failures SHALL produce a persistent error notification rather than only logging the failure.
+
 On successful native confirmation: persist `metadataGroups`, `subjectRows`, and `ingestionComplete = true` in `mappingState`; persist `skippedSubjects` and `bidsReviewConfirmed = true` in `uiState.import`; set `projectMeta.currentPhase = "parameters"`; navigate to `/project/:id/parameters`.
 
 #### Scenario: Confirm with valid unique labels
@@ -122,6 +124,16 @@ On successful native confirmation: persist `metadataGroups`, `subjectRows`, and 
 
 - **WHEN** user clicks `[Confirm]` while any group label is empty string
 - **THEN** that input shows error message "Label is required"; confirmation does not proceed
+
+#### Scenario: Conflicting runs discovered on re-scan
+
+- **WHEN** a confirmed project's re-scan returns the same subject/session in different metadata groups
+- **THEN** the editable panel SHALL show the conflict and affected identifier before confirmation, disable Confirm, and offer re-scan and return to the previous confirmed summary without changing the accepted mapping
+
+#### Scenario: Native confirmation fails
+
+- **WHEN** native confirmation rejects an otherwise conflict-free review
+- **THEN** the panel SHALL show a persistent error notification, remain on the review page, and allow another confirmation attempt
 
 ### Requirement: Revisit summary with re-scan/re-confirm
 

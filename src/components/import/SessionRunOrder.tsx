@@ -1,5 +1,17 @@
 import { numberInputTestIds } from "../common/numberInputTestIds";
-import { Button, Card, NumberInput, Stack, Table, Text, TextInput } from "@mantine/core";
+import {
+  Button,
+  Card,
+  Group,
+  NativeSelect,
+  NumberInput,
+  Stack,
+  Text,
+  TextInput,
+} from "@mantine/core";
+import { DataTable } from "mantine-datatable";
+import { useState } from "react";
+import { useImportTablePagination } from "./useImportTablePagination";
 
 import type { SessionAlias } from "../../schemas/importSchemas";
 import {
@@ -31,22 +43,39 @@ export default function OrderAliasTable({
   tableTestId,
   validationField,
 }: OrderAliasTableProps) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const conflicts = new Map<string, number[]>();
   aliases.forEach((entry, index) => {
     const indexes = conflicts.get(portableKey(entry.alias)) ?? [];
     indexes.push(index);
     conflicts.set(portableKey(entry.alias), indexes);
   });
-  function handleAliasChange(index: number, alias: string) {
-    const updated = [...aliases];
-    updated[index] = { ...updated[index], alias };
-    onAliasesChange(updated);
+  const records = aliases.map((entry) => ({
+    ...entry,
+    message:
+      componentValidationMessage(entry.alias) ??
+      ((conflicts.get(portableKey(entry.alias))?.length ?? 0) > 1
+        ? `${validationField === "session" ? "Session" : "Run"} alias collides with another row under portable filesystem rules.`
+        : undefined),
+  }));
+  const issueCount = records.filter((row) => row.message).length;
+  const filtered = records.filter(
+    (row) =>
+      `${row.captured} ${row.alias}`.toLowerCase().includes(search.toLowerCase()) &&
+      (filter === "all" || (filter === "issues" ? row.message : row.alias !== row.captured)),
+  );
+  const { setPage, tableProps } = useImportTablePagination(filtered, tableTestId);
+  function handleAliasChange(captured: string, alias: string) {
+    onAliasesChange(
+      aliases.map((entry) => (entry.captured === captured ? { ...entry, alias } : entry)),
+    );
   }
 
-  function handleIndexChange(index: number, newOrder: number) {
-    const updated = [...aliases];
-    updated[index] = { ...updated[index], index: newOrder };
-    onAliasesChange(updated);
+  function handleIndexChange(captured: string, newOrder: number) {
+    onAliasesChange(
+      aliases.map((entry) => (entry.captured === captured ? { ...entry, index: newOrder } : entry)),
+    );
   }
 
   function suggestion(value: string): string | undefined {
@@ -76,36 +105,75 @@ export default function OrderAliasTable({
       <Text size="sm" c="dimmed">
         {description}
       </Text>
-      <Table striped highlightOnHover data-testid={tableTestId}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Captured Value</Table.Th>
-            <Table.Th>Alias</Table.Th>
-            <Table.Th>Order</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {aliases.map((alias, idx) => {
-            const rowId = alias.captured.replace(/[^a-z0-9]/gi, "-");
-            const message =
-              componentValidationMessage(alias.alias) ??
-              ((conflicts.get(portableKey(alias.alias))?.length ?? 0) > 1
-                ? `${validationField === "session" ? "Session" : "Run"} alias collides with another row under portable filesystem rules.`
-                : undefined);
-            const suggested = message ? suggestion(alias.alias) : undefined;
-            return (
-              <Table.Tr key={alias.captured} data-testid={`${tableTestId}-row-${rowId}`}>
-                <Table.Td>
-                  <Text size="sm" ff="monospace">
-                    {alias.captured}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
+      <Group align="flex-end" data-testid={`${tableTestId}-tools`}>
+        <TextInput
+          label="Search captured or target name"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.currentTarget.value);
+            setPage(1);
+          }}
+          style={{ flex: 1, minWidth: 180 }}
+          data-testid={`${tableTestId}-search`}
+        />
+        <NativeSelect
+          label="Show labels"
+          value={filter}
+          onChange={(event) => {
+            setFilter(event.currentTarget.value);
+            setPage(1);
+          }}
+          data={[
+            { value: "all", label: "All" },
+            { value: "issues", label: `Issues (${issueCount})` },
+            { value: "changed", label: "Changed" },
+          ]}
+          data-testid={`${tableTestId}-filter`}
+        />
+      </Group>
+      <Text
+        size="xs"
+        c={issueCount ? "red" : "dimmed"}
+        role="status"
+        data-testid={`${tableTestId}-validation`}
+      >
+        {issueCount} rows need attention across all {records.length} labels. Validation includes
+        every page.
+      </Text>
+      <DataTable
+        idAccessor="captured"
+        {...tableProps}
+        styles={{ table: { minWidth: 480 } }}
+        highlightOnHover
+        verticalAlign="top"
+        customRowAttributes={(row) => ({
+          "data-testid": `${tableTestId}-row-${row.captured.replace(/[^a-z0-9]/gi, "-")}`,
+        })}
+        columns={[
+          {
+            accessor: "captured",
+            title: "Captured Value",
+            width: "32%",
+            render: (row) => (
+              <Text size="sm" ff="monospace">
+                {row.captured}
+              </Text>
+            ),
+          },
+          {
+            accessor: "alias",
+            title: "Alias",
+            render: (alias) => {
+              const rowId = alias.captured.replace(/[^a-z0-9]/gi, "-");
+              const { message } = alias;
+              const suggested = message ? suggestion(alias.alias) : undefined;
+              return (
+                <div>
                   <TextInput
+                    aria-label={`Target label for ${alias.captured}`}
                     value={alias.alias}
-                    onChange={(e) => handleAliasChange(idx, e.currentTarget.value)}
-                    size="xs"
-                    w={120}
+                    onChange={(e) => handleAliasChange(alias.captured, e.currentTarget.value)}
+                    size="sm"
                     error={message}
                     data-testid={`order-alias-input-${rowId}`}
                   />
@@ -118,28 +186,37 @@ export default function OrderAliasTable({
                     <Button
                       size="compact-xs"
                       variant="subtle"
-                      onClick={() => handleAliasChange(idx, suggested)}
+                      onClick={() => handleAliasChange(alias.captured, suggested)}
                       data-testid={`${tableTestId}-suggestion-${rowId}`}
                     >
                       Use suggestion: {suggested}
                     </Button>
                   )}
-                </Table.Td>
-                <Table.Td>
-                  <NumberInput
-                    value={alias.index}
-                    onChange={(v) => handleIndexChange(idx, Number(v))}
-                    min={1}
-                    size="xs"
-                    w={70}
-                    {...numberInputTestIds(`order-index-input-${rowId}`)}
-                  />
-                </Table.Td>
-              </Table.Tr>
-            );
-          })}
-        </Table.Tbody>
-      </Table>
+                </div>
+              );
+            },
+          },
+          {
+            accessor: "index",
+            title: "Order",
+            width: 90,
+            render: (alias) => (
+              <NumberInput
+                aria-label={`Chronological order for ${alias.captured}`}
+                value={alias.index}
+                onChange={(v) => handleIndexChange(alias.captured, Number(v))}
+                min={1}
+                size="xs"
+                w={70}
+                {...numberInputTestIds(
+                  `order-index-input-${alias.captured.replace(/[^a-z0-9]/gi, "-")}`,
+                )}
+              />
+            ),
+          },
+        ]}
+        data-testid={tableTestId}
+      />
     </Stack>
   );
 }

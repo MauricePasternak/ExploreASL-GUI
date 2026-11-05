@@ -1,4 +1,15 @@
-import { Badge, Button, Card, Checkbox, Group, Table, Text } from "@mantine/core";
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Group,
+  NativeSelect,
+  Table,
+  Text,
+  TextInput,
+} from "@mantine/core";
+import { DataTable } from "mantine-datatable";
 import { IconArrowLeft, IconArrowRight, IconFileImport, IconPlus } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import HeaderCard from "../common/HeaderCard";
@@ -20,6 +31,7 @@ import { useProjectStore } from "../../stores/projectStore";
 import type { PathPattern_Serialize as PathPattern } from "../../generated/bindings";
 import MetadataModal from "./MetadataModal";
 import ImportStepLayout from "./ImportStepLayout";
+import { useImportTablePagination } from "./useImportTablePagination";
 
 const DEFAULT_GROUP_ID = "global-defaults";
 
@@ -94,7 +106,8 @@ function deriveSubjectRows({
         ? extractAssignmentValue(segments, sessionAssignment, tokenSubDelimiters) || "01"
         : "01";
 
-      const id = `${subject}/${session}`;
+      // Keep source identity separate from mutable final subject labels.
+      const id = `captured:${rawSubject}/${session}`;
       if (!rows.has(id)) {
         rows.set(id, {
           id,
@@ -131,6 +144,7 @@ export default function MetadataGrouping() {
     (s) => s.project?.mappingState.subjectRows ?? EMPTY_IMPORT_SETTINGS.subjectRows,
   );
   const setSubjectRows = useImportStore((state) => state.setSubjectRows);
+  const assignmentError = useProjectStore((state) => state.draftErrors["import.subjectRows"]);
   const addMetadataGroup = useImportStore((state) => state.addMetadataGroup);
   const removeMetadataGroup = useImportStore((state) => state.removeMetadataGroup);
   const updateMetadataGroup = useImportStore((state) => state.updateMetadataGroup);
@@ -139,6 +153,8 @@ export default function MetadataGrouping() {
     sourceDataPath.length > 0 && rawPaths.length > 0 && pathPatterns.length > 0;
 
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState("all");
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
@@ -171,16 +187,52 @@ export default function MetadataGrouping() {
       return;
     }
 
-    const existingGroupMap = new Map(subjectRows.map((row) => [row.id, row.groupId]));
-    const nextRows = derivedRows.map((row) => ({
-      ...row,
-      groupId: existingGroupMap.get(row.id) ?? DEFAULT_GROUP_ID,
-    }));
+    const existingRowMap = new Map(subjectRows.map((row) => [row.id, row]));
+    const existingTargets = new Map(
+      subjectRows.map((row) => [`${row.subject}/${row.session}`, row]),
+    );
+    const targetCounts = new Map<string, number>();
+    for (const row of derivedRows) {
+      const target = `${row.subject}/${row.session}`;
+      targetCounts.set(target, (targetCounts.get(target) ?? 0) + 1);
+    }
+    const ambiguous = derivedRows.some((row) => {
+      const target = `${row.subject}/${row.session}`;
+      return (
+        !existingRowMap.has(row.id) &&
+        existingTargets.has(target) &&
+        (targetCounts.get(target) ?? 0) > 1
+      );
+    });
+    useProjectStore
+      .getState()
+      .setDraftError(
+        "import.subjectRows",
+        ambiguous
+          ? "Existing subject assignments are ambiguous. Restore a known-good mapping before renaming."
+          : null,
+      );
+    if (ambiguous) return;
+    const nextRows = derivedRows.map((row) => {
+      const existing = existingRowMap.get(row.id);
+      const prior =
+        existing?.subject === row.subject
+          ? existing
+          : existingTargets.get(`${row.subject}/${row.session}`);
+      return {
+        ...row,
+        id: prior?.id ?? row.id,
+        groupId: prior?.groupId ?? DEFAULT_GROUP_ID,
+      };
+    });
 
     if (
       subjectRows.length !== nextRows.length ||
       subjectRows.some(
-        (row, index) => row.id !== nextRows[index]?.id || row.groupId !== nextRows[index]?.groupId,
+        (row, index) =>
+          row.id !== nextRows[index]?.id ||
+          row.subject !== nextRows[index]?.subject ||
+          row.groupId !== nextRows[index]?.groupId,
       )
     ) {
       setSubjectRows(nextRows);
@@ -202,6 +254,14 @@ export default function MetadataGrouping() {
     () => new Map(metadataGroups.map((group) => [group.id, group.label])),
     [metadataGroups],
   );
+  const filteredRows = subjectRows.filter(
+    (row) =>
+      `${row.subject} ${row.session} ${groupLabelById.get(row.groupId) ?? ""}`
+        .toLowerCase()
+        .includes(search.toLowerCase()) &&
+      (groupFilter === "all" || row.groupId === groupFilter),
+  );
+  const { setPage, tableProps } = useImportTablePagination(filteredRows, "metadata");
 
   const defaultGroup = metadataGroups.find((group) => group.id === DEFAULT_GROUP_ID) ?? null;
 
@@ -317,75 +377,83 @@ export default function MetadataGrouping() {
         <Text fw={500} mb="md">
           Defined Metadata Groups
         </Text>
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Group Label</Table.Th>
-              <Table.Th>Scope / Target</Table.Th>
-              <Table.Th style={{ width: 150 }}>Actions</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {metadataGroups.map((group) => {
-              const isDefault = group.id === DEFAULT_GROUP_ID;
-              return (
-                <Table.Tr key={group.id} data-testid={`metadata-group-row-${group.id}`}>
-                  <Table.Td>
-                    <Text size="sm" fw={isDefault ? 600 : 400}>
-                      {group.label}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    {(() => {
-                      const groupRows = subjectRows.filter((row) => row.groupId === group.id);
-                      const uniqueSubjects = new Set(groupRows.map((r) => r.subject)).size;
-                      const uniqueSessions = new Set(groupRows.map((r) => r.session)).size;
-                      if (uniqueSubjects === 0) {
+        <Table.ScrollContainer minWidth={480} data-testid="metadata-groups-scroll">
+          <Table highlightOnHover data-testid="metadata-groups-table">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Group Label</Table.Th>
+                <Table.Th>Scope / Target</Table.Th>
+                <Table.Th style={{ width: 150 }}>Actions</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {metadataGroups.map((group) => {
+                const isDefault = group.id === DEFAULT_GROUP_ID;
+                return (
+                  <Table.Tr key={group.id} data-testid={`metadata-group-row-${group.id}`}>
+                    <Table.Td>
+                      <Text size="sm" fw={isDefault ? 600 : 400}>
+                        {group.label}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {(() => {
+                        const groupRows = subjectRows.filter((row) => row.groupId === group.id);
+                        const uniqueSubjects = new Set(groupRows.map((r) => r.subject)).size;
+                        const uniqueSessions = new Set(groupRows.map((r) => r.session)).size;
+                        if (uniqueSubjects === 0) {
+                          return (
+                            <Text size="xs" c="dimmed">
+                              No subjects assigned
+                            </Text>
+                          );
+                        }
                         return (
-                          <Text size="xs" c="dimmed">
-                            No subjects assigned
+                          <Text size="xs">
+                            Assigned to {uniqueSubjects} subject{uniqueSubjects !== 1 ? "s" : ""} (
+                            {uniqueSessions} session{uniqueSessions !== 1 ? "s" : ""}) ·{" "}
+                            {groupRows.length} subject/session entries
                           </Text>
                         );
-                      }
-                      return (
-                        <Text size="xs">
-                          Assigned to {uniqueSubjects} subject{uniqueSubjects !== 1 ? "s" : ""} (
-                          {uniqueSessions} session{uniqueSessions !== 1 ? "s" : ""})
-                        </Text>
-                      );
-                    })()}
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <Button
-                        size="xs"
-                        variant="light"
-                        onClick={() => handleEditGroup(group)}
-                        data-testid={`edit-group-btn-${group.id}`}
-                      >
-                        Edit
-                      </Button>
-                      {!isDefault && (
+                      })()}
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
                         <Button
                           size="xs"
                           variant="light"
-                          color="red"
-                          onClick={() => handleDeleteGroup(group.id)}
-                          data-testid={`delete-group-btn-${group.id}`}
+                          onClick={() => handleEditGroup(group)}
+                          data-testid={`edit-group-btn-${group.id}`}
                         >
-                          Delete
+                          Edit
                         </Button>
-                      )}
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
+                        {!isDefault && (
+                          <Button
+                            size="xs"
+                            variant="light"
+                            color="red"
+                            onClick={() => handleDeleteGroup(group.id)}
+                            data-testid={`delete-group-btn-${group.id}`}
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       </Card>
 
-      <Card withBorder p="md">
+      <Card withBorder p="md" data-testid="metadata-assignments">
+        {assignmentError && (
+          <Text c="red" role="alert" data-testid="metadata-assignment-error">
+            {assignmentError}
+          </Text>
+        )}
         <Group justify="space-between" mb="md">
           <Text fw={500}>Discovered combinations</Text>
           <Group>
@@ -409,43 +477,97 @@ export default function MetadataGrouping() {
             </Button>
           </Group>
         </Group>
+        <Group align="flex-end" mb="sm" data-testid="metadata-filter-tools">
+          <TextInput
+            label="Search subjects, visits or groups"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.currentTarget.value);
+              setPage(1);
+            }}
+            style={{ flex: 1, minWidth: 180 }}
+            data-testid="metadata-search"
+          />
+          <NativeSelect
+            label="Filter by group"
+            value={groupFilter}
+            onChange={(event) => {
+              setGroupFilter(event.currentTarget.value);
+              setPage(1);
+            }}
+            data={[
+              { value: "all", label: "All groups" },
+              ...metadataGroups.map((group) => ({ value: group.id, label: group.label })),
+            ]}
+            data-testid="metadata-group-filter"
+          />
+        </Group>
+        <Group gap="sm" mb="md" data-testid="metadata-selection-tools">
+          <Button
+            size="xs"
+            variant="light"
+            disabled={filteredRows.length === 0}
+            onClick={() =>
+              setSelectedRowIds((selected) => [
+                ...new Set([...selected, ...filteredRows.map((row) => row.id)]),
+              ])
+            }
+            data-testid="metadata-select-matching"
+          >
+            Select all {filteredRows.length} matching
+          </Button>
+          <Button
+            size="xs"
+            variant="subtle"
+            color="gray"
+            onClick={() => setSelectedRowIds([])}
+            data-testid="metadata-clear-selection"
+          >
+            Clear selection
+          </Button>
+          <Text size="xs" data-testid="metadata-selected-count">
+            {selectedRowIds.length} selected across all pages and filters
+          </Text>
+        </Group>
 
         {subjectRows.length === 0 ? (
           <Text c="dimmed" size="sm">
             Complete the tokenizer and alias steps to generate metadata rows.
           </Text>
         ) : (
-          <Table striped highlightOnHover data-testid="metadata-table">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th />
-                <Table.Th>Subject</Table.Th>
-                <Table.Th>Session</Table.Th>
-                <Table.Th>Metadata Group</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {subjectRows.map((row) => (
-                <Table.Tr key={row.id}>
-                  <Table.Td>
-                    <Checkbox
-                      checked={selectedRowIds.includes(row.id)}
-                      onChange={(event) => toggleRowSelection(row.id, event.currentTarget.checked)}
-                      aria-label={`Select ${row.id}`}
-                      data-testid={`metadata-row-checkbox-${row.id.replace(/[^a-z0-9]/gi, "-")}`}
-                    />
-                  </Table.Td>
-                  <Table.Td>{row.subject}</Table.Td>
-                  <Table.Td>{row.session}</Table.Td>
-                  <Table.Td>
-                    <Badge variant="light">
-                      {groupLabelById.get(row.groupId) ?? "Global Defaults"}
-                    </Badge>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+          <DataTable
+            idAccessor="id"
+            {...tableProps}
+            styles={{ table: { minWidth: 480 } }}
+            highlightOnHover
+            columns={[
+              {
+                accessor: "selected",
+                title: "Select",
+                width: 65,
+                render: (row) => (
+                  <Checkbox
+                    checked={selectedRowIds.includes(row.id)}
+                    onChange={(event) => toggleRowSelection(row.id, event.currentTarget.checked)}
+                    aria-label={`Select ${row.id}`}
+                    data-testid={`metadata-row-checkbox-${row.id.replace(/[^a-z0-9]/gi, "-")}`}
+                  />
+                ),
+              },
+              { accessor: "subject", title: "Subject" },
+              { accessor: "session", title: "Session (= Visit)" },
+              {
+                accessor: "groupId",
+                title: "Metadata Group",
+                render: (row) => (
+                  <Badge variant="light" color="gray" className="dicom-import-group-tag">
+                    {groupLabelById.get(row.groupId) ?? "Global Defaults"}
+                  </Badge>
+                ),
+              },
+            ]}
+            data-testid="metadata-table"
+          />
         )}
       </Card>
 

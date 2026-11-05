@@ -8,7 +8,9 @@ import {
 } from "@tabler/icons-react";
 import { commands, unwrap } from "../../lib/ipc";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { extractUniqueValues } from "../../lib/tokenizerUtils";
+import { isTokenizerComplete } from "../../lib/importStepAccess";
 
 import { logAction } from "../../lib/debug";
 import {
@@ -59,6 +61,51 @@ export default function DicomIngestion() {
   const sourceAvailability = useImportStore((s) => s.sourceAvailability);
   const relinkCompatibleSource = useImportStore((s) => s.relinkCompatibleSource);
   const relinkIncompatibleSource = useImportStore((s) => s.relinkIncompatibleSource);
+  const rawPaths = project?.mappingState.rawPaths ?? EMPTY_IMPORT_SETTINGS.rawPaths;
+  const tokenizerConfigs =
+    project?.mappingState.tokenizerConfigs ?? EMPTY_IMPORT_SETTINGS.tokenizerConfigs;
+  const capturedCounts = useMemo(() => {
+    if (!isTokenizerComplete({ ingestionComplete, pathPatterns, tokenizerConfigs })) return null;
+    const subjects = new Set<string>();
+    const visits = new Set<string>();
+    const entries = new Set<string>();
+    for (const pattern of pathPatterns) {
+      const assignments = tokenizerConfigs[pattern.signature] ?? [];
+      for (const path of rawPaths) {
+        const capturedSubjects = extractUniqueValues(
+          [path],
+          sourceDataPath,
+          assignments,
+          "Subject",
+          pattern,
+          tokenSubDelimiters,
+        );
+        const capturedVisits = extractUniqueValues(
+          [path],
+          sourceDataPath,
+          assignments,
+          "Session",
+          pattern,
+          tokenSubDelimiters,
+        );
+        capturedSubjects.forEach((subject) => {
+          subjects.add(subject);
+          (capturedVisits.length ? capturedVisits : ["01"]).forEach((visit) =>
+            entries.add(JSON.stringify([subject, visit])),
+          );
+        });
+        capturedVisits.forEach((visit) => visits.add(visit));
+      }
+    }
+    return { subjects: subjects.size, visits: visits.size, entries: entries.size };
+  }, [
+    ingestionComplete,
+    pathPatterns,
+    tokenizerConfigs,
+    rawPaths,
+    sourceDataPath,
+    tokenSubDelimiters,
+  ]);
 
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -264,10 +311,10 @@ export default function DicomIngestion() {
       )}
 
       {/* Folder selection */}
-      <Card withBorder p="md">
+      <Card withBorder p="md" data-testid="dicom-source-card">
         <Stack gap="sm">
           <Group justify="space-between">
-            <div>
+            <div style={{ minWidth: 0, flex: "1 1 240px" }}>
               <Group gap="xs">
                 <Text fw={500} size="sm">
                   Folder containing your scan files
@@ -278,7 +325,9 @@ export default function DicomIngestion() {
                 />
               </Group>
               {sourceDataPath ? (
-                <Code>{sourceDataPath}</Code>
+                <Code block className="dicom-import-literal" data-testid="dicom-source-value">
+                  {sourceDataPath}
+                </Code>
               ) : (
                 <Text c="dimmed" size="sm">
                   No folder selected yet
@@ -324,15 +373,17 @@ export default function DicomIngestion() {
             />
           </div>
 
-          <Button
-            leftSection={<IconFolderSearch size={16} />}
-            disabled={!sourceDataPath || sourceUnavailable}
-            loading={scanning}
-            onClick={handleScan}
-            data-testid="scan-dicoms-btn"
-          >
-            Scan for DICOMs
-          </Button>
+          <Group data-testid="dicom-scan-actions">
+            <Button
+              leftSection={<IconFolderSearch size={16} />}
+              disabled={!sourceDataPath || sourceUnavailable}
+              loading={scanning}
+              onClick={handleScan}
+              data-testid="scan-dicoms-btn"
+            >
+              Scan for DICOMs
+            </Button>
+          </Group>
         </Stack>
       </Card>
 
@@ -403,7 +454,7 @@ export default function DicomIngestion() {
 
       {/* Results */}
       {ingestionComplete && (
-        <Card withBorder p="md">
+        <Card withBorder p="md" data-testid="dicom-inventory">
           <Stack gap="sm">
             <Group>
               <IconCheck size={20} color="var(--mantine-color-green-6)" />
@@ -413,6 +464,11 @@ export default function DicomIngestion() {
                 {pathPatterns.length !== 1 ? "s" : ""}
               </Text>
             </Group>
+            <Text size="sm" c="dimmed" data-testid="dicom-captured-counts">
+              {capturedCounts
+                ? `${capturedCounts.subjects} subjects · ${capturedCounts.visits} captured visit labels · ${capturedCounts.entries} subject/session entries`
+                : "Subject, captured visit-label and subject/session counts become available after tokenization."}
+            </Text>
 
             {pathPatterns.map((pattern) => (
               <Card
@@ -422,20 +478,25 @@ export default function DicomIngestion() {
                 data-testid={`pattern-result-card-${pattern.signature}`}
               >
                 <Group gap="xs" mb="xs">
-                  <Badge variant="light" size="sm">
-                    {pattern.count} path{pattern.count !== 1 ? "s" : ""}
+                  <Badge variant="light" color="gray" size="sm">
+                    {pattern.count} location{pattern.count !== 1 ? "s" : ""}
                   </Badge>
                   <Badge variant="outline" size="sm">
                     depth {pattern.depth}
                   </Badge>
                 </Group>
                 <Text size="sm" fw={500} mb={4}>
-                  Pattern: {pattern.signature}
+                  Pattern
                 </Text>
+                <Code block className="dicom-import-literal">
+                  {pattern.signature}
+                </Code>
                 <Text size="xs" c="dimmed" mb={4}>
                   Example for this pattern:
                 </Text>
-                <Code block>{pattern.samplePath}</Code>
+                <Code block className="dicom-import-literal">
+                  {pattern.samplePath}
+                </Code>
               </Card>
             ))}
           </Stack>

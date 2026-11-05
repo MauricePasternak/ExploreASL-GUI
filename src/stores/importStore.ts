@@ -55,6 +55,69 @@ export function importSettings(project: ProjectFile | null) {
 }
 export const acceptedImportSettings = () => importSettings(useProjectStore.getState().project);
 
+type AliasDrafts = Partial<
+  Pick<Required<MappingState>, "subjectRenames" | "sessionAliases" | "runAliases">
+>;
+
+function renamedSubjectRows(state: Required<MappingState>, renames: SubjectRename[]) {
+  const targets = new Map(renames.map((rename) => [rename.original, rename.target]));
+  const byOriginal = new Map(state.subjectRenames.map((rename) => [rename.original, rename]));
+  const byTarget = new Map<string, SubjectRename[]>();
+  for (const rename of state.subjectRenames) {
+    const matches = byTarget.get(rename.target) ?? [];
+    matches.push(rename);
+    byTarget.set(rename.target, matches);
+  }
+  return state.subjectRows.map((row) => {
+    // Captured identity stays stable even while two draft targets collide.
+    const captured = row.id.startsWith("captured:")
+      ? byOriginal.get(row.id.slice("captured:".length, -row.session.length - 1))
+      : undefined;
+    const matches =
+      captured?.target === row.subject ? [captured] : (byTarget.get(row.subject) ?? []);
+    if (matches.length > 1)
+      throw new Error(
+        "Existing subject assignments are ambiguous. Restore a known-good mapping before renaming.",
+      );
+    const original = matches[0]?.original ?? row.subject;
+    return {
+      ...row,
+      id: `captured:${original}/${row.session}`,
+      subject: targets.get(original) ?? row.subject,
+    };
+  });
+}
+
+function editAliasList<K extends keyof AliasDrafts>(field: K, values: Required<AliasDrafts>[K]) {
+  const lease = captureProjectLease();
+  if (!lease || !isProjectWorkAccepted()) return;
+  useImportStore.setState((state) => ({ aliasDrafts: { ...state.aliasDrafts, [field]: values } }));
+  const errorKey = `import.${field}`;
+  useProjectStore.getState().setDraftError(errorKey, null);
+  void editMapping((state) => ({
+    [field]: values,
+    ...(field === "subjectRenames" &&
+      state.subjectRows.length > 0 && {
+        subjectRows: renamedSubjectRows(state, values as SubjectRename[]),
+      }),
+  })).then(
+    () => {
+      if (!isCurrentProjectLease(lease) || useImportStore.getState().aliasDrafts[field] !== values)
+        return;
+      const drafts = { ...useImportStore.getState().aliasDrafts };
+      delete drafts[field];
+      useImportStore.setState({ aliasDrafts: drafts });
+      useProjectStore.getState().setDraftError(errorKey, null);
+    },
+    (error: unknown) => {
+      if (isCurrentProjectLease(lease) && useImportStore.getState().aliasDrafts[field] === values)
+        useProjectStore
+          .getState()
+          .setDraftError(errorKey, error instanceof Error ? error.message : String(error));
+    },
+  );
+}
+
 function editMapping(
   update: Partial<MappingState> | ((mapping: Required<MappingState>) => Partial<MappingState>),
 ) {
@@ -109,6 +172,8 @@ export type DicomSourceAvailability =
   | { status: "missing" | "unreadable" | "ambiguous"; savedPath: string; message: string };
 
 export interface ImportState {
+  /** Unaccepted editor text only; never used to compile or save configuration. */
+  aliasDrafts: AliasDrafts;
   // Step 5: Import execution
   importPhase: ImportPhase;
   importCompleted: boolean;
@@ -222,6 +287,7 @@ export interface ImportState {
 // =============================================================================
 
 const INITIAL_STATE = {
+  aliasDrafts: {} as AliasDrafts,
   importPhase: "idle" as ImportPhase,
   importCompleted: false,
   importLog: [] as string[],
@@ -578,23 +644,23 @@ export const useImportStore = create<ImportState>((set, get) => ({
   },
 
   setSessionAliases: (aliases) => {
-    editMapping({ sessionAliases: aliases });
+    editAliasList("sessionAliases", aliases);
   },
 
   setRunAliases: (aliases) => {
-    editMapping({ runAliases: aliases });
+    editAliasList("runAliases", aliases);
   },
 
   setSubjectRenames: (renames) => {
-    editMapping({ subjectRenames: renames });
+    editAliasList("subjectRenames", renames);
   },
 
   updateSubjectRename: (original, target) => {
-    editMapping((state) => ({
-      subjectRenames: state.subjectRenames.map((r) =>
+    get().setSubjectRenames(
+      (get().aliasDrafts.subjectRenames ?? acceptedImportSettings().subjectRenames).map((r) =>
         r.original === original ? { ...r, target } : r,
       ),
-    }));
+    );
   },
 
   addMetadataGroup: (group, rowIds = []) => {

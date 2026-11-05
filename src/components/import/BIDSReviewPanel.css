@@ -1,0 +1,91 @@
+.bids-review-panel {
+  container-type: inline-size;
+  min-width: 0;
+  width: 100%;
+  padding-bottom: var(--mantine-spacing-md);
+  overflow-wrap: anywhere;
+}
+
+.bids-review-panel > *,
+.bids-review-details .mantine-Accordion-label {
+  min-width: 0;
+}
+
+.bids-review-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--mantine-spacing-md);
+}
+
+.bids-review-tag {
+  max-width: 100%;
+  height: auto;
+  min-height: 24px;
+  padding-block: 4px;
+  text-transform: none;
+}
+
+.bids-review-tag .mantine-Badge-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.bids-review-detail-summary {
+  display: block;
+  margin-top: 2px;
+}
+
+.bids-review-source-details > summary {
+  width: fit-content;
+  padding-block: 6px;
+  color: var(--mantine-color-anchor);
+  cursor: pointer;
+}
+
+.bids-review-source-details > summary:focus-visible,
+.bids-review-parameters-scroll:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
+.bids-review-parameters-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.bids-review-parameters-table {
+  min-width: 32rem;
+  table-layout: fixed;
+}
+
+.bids-review-parameters-table th,
+.bids-review-parameters-table td {
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
+.bids-review-parameters-table th {
+  width: 40%;
+}
+
+.bids-review-actions .mantine-Button-root {
+  max-width: 100%;
+  height: auto;
+  min-height: var(--button-height);
+  padding-block: 8px;
+}
+
+.bids-review-actions .mantine-Button-label {
+  white-space: normal;
+}
+
+@container (max-width: 30rem) {
+  .bids-review-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--mantine-spacing-xs);
+  }
+
+  .bids-review-actions .mantine-Button-root {
+    flex: 1 1 100%;
+  }
+}

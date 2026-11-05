@@ -246,7 +246,7 @@ describe("ImportPage metadata step", () => {
     const accepted = structuredClone(snapshot);
     accepted.acceptedRevision = 1;
     accepted.document.mappingState.subjectRows!.push({
-      id: "FOO/01",
+      id: "captured:FOO/01",
       subject: "FOO",
       session: "01",
       groupId: "global-defaults",
@@ -309,7 +309,7 @@ describe("ImportPage metadata step", () => {
     const accepted = structuredClone(snapshot);
     accepted.acceptedRevision = 1;
     accepted.document.mappingState.subjectRows = [
-      { id: "002/12", subject: "002", session: "12", groupId: "global-defaults" },
+      { id: "captured:002/12", subject: "002", session: "12", groupId: "global-defaults" },
     ];
     vi.mocked(invoke).mockResolvedValueOnce(accepted);
     useProjectStore.getState().acceptSnapshot(snapshot);
@@ -321,7 +321,7 @@ describe("ImportPage metadata step", () => {
     });
     expect(useProjectStore.getState().project?.mappingState.subjectRows).toEqual([
       {
-        id: "002/12",
+        id: "captured:002/12",
         subject: "002",
         session: "12",
         groupId: "global-defaults",
@@ -375,7 +375,7 @@ describe("ImportPage metadata step", () => {
     const accepted = structuredClone(snapshot);
     accepted.acceptedRevision = 1;
     accepted.document.mappingState.subjectRows = [
-      { id: "sub-001/01", subject: "sub-001", session: "01", groupId: "global-defaults" },
+      { id: "captured:sub-001/01", subject: "sub-001", session: "01", groupId: "global-defaults" },
     ];
     vi.mocked(invoke).mockResolvedValueOnce(accepted);
     useProjectStore.getState().acceptSnapshot(snapshot);
@@ -387,7 +387,7 @@ describe("ImportPage metadata step", () => {
     });
     expect(useProjectStore.getState().project?.mappingState.subjectRows).toEqual([
       {
-        id: "sub-001/01",
+        id: "captured:sub-001/01",
         subject: "sub-001",
         session: "01",
         groupId: "global-defaults",

@@ -1,0 +1,200 @@
+.dicom-import {
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+  --dicom-canvas: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+}
+
+.dicom-import > .mantine-Alert-root {
+  flex-shrink: 0;
+}
+
+.dicom-import-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 222px;
+  padding: 16px 12px 0;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+}
+
+.dicom-import-sidebar .mantine-Stepper-root {
+  flex: 1;
+}
+
+.dicom-import-sidebar .mantine-Stepper-steps,
+.dicom-import-content {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mantine-color-dimmed) var(--dicom-canvas);
+}
+
+.dicom-import-sidebar .mantine-Stepper-steps {
+  overflow-y: scroll !important;
+  scroll-behavior: smooth;
+}
+
+.dicom-import-sidebar .mantine-Stepper-step {
+  min-height: 72px;
+  flex-shrink: 0;
+}
+
+.dicom-import-sidebar .mantine-Stepper-stepIcon[data-progress] {
+  border-color: var(--mantine-color-pink-6);
+  color: var(--mantine-color-pink-6);
+}
+
+.dicom-import .import-stepper-footer {
+  padding-block: var(--mantine-spacing-sm);
+}
+
+.dicom-import .import-stepper-footer .mantine-Button-root {
+  max-width: 100%;
+  height: auto;
+  min-height: var(--button-height);
+  padding: 8px;
+}
+
+.dicom-import .mantine-Button-label {
+  white-space: normal;
+}
+
+.dicom-import-content {
+  padding: 2px 10px 16px 2px;
+  background: var(--dicom-canvas);
+  overflow-wrap: anywhere;
+}
+
+.dicom-import-content > .mantine-Stack-root > * {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.dicom-import-content [data-testid$="-header"] {
+  border: 0;
+  background: transparent;
+  padding: 12px 4px;
+  margin-bottom: 0;
+}
+
+.dicom-import-literal {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dicom-import-path-scroll {
+  overflow-x: auto;
+  padding: 8px 0 12px;
+}
+
+.dicom-import-token-lane {
+  width: max-content;
+  min-width: 100%;
+  flex-wrap: nowrap;
+}
+
+.dicom-import-token-lane .mantine-Group-root {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.dicom-import-token {
+  padding: 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--dicom-canvas);
+}
+
+.dicom-import-token .mantine-Badge-root {
+  height: auto;
+  max-width: none;
+  text-transform: none;
+  letter-spacing: normal;
+  background: transparent;
+  color: var(--mantine-color-text);
+  border: 0;
+  padding: 4px 0;
+  overflow: visible;
+}
+
+.dicom-import-token .mantine-Badge-label {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.dicom-import-alias-tabs > .mantine-Tabs-list {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--mantine-color-body);
+}
+
+.dicom-import-alias-tabs .mantine-Tabs-tab {
+  flex-shrink: 0;
+}
+
+.dicom-import .mantine-Table-td {
+  vertical-align: top;
+}
+
+.dicom-import .mantine-datatable-pagination {
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+}
+
+.dicom-import-group-tag {
+  height: auto;
+  max-width: 100%;
+  padding-block: 4px;
+  text-transform: none;
+}
+
+.dicom-import-group-tag .mantine-Badge-label {
+  white-space: normal;
+}
+
+.dicom-import-mapping-table td {
+  font-family: var(--mantine-font-family-monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dicom-import-status-filters {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  padding-bottom: 4px;
+}
+
+.dicom-import-status-filters .mantine-SegmentedControl-root {
+  flex-shrink: 0;
+}
+
+.dicom-import [data-testid="profile-selector-container"] {
+  flex: 1 1 240px;
+  max-width: 360px;
+}
+
+.dicom-import-content:focus-visible,
+.dicom-import-path-scroll:focus-visible,
+.dicom-import-sidebar .mantine-Stepper-steps:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+}
+
+@container (max-width: 50rem) {
+  .dicom-import-sidebar {
+    width: 194px;
+    padding-inline: 8px;
+  }
+
+  .dicom-import-panels {
+    gap: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dicom-import-sidebar .mantine-Stepper-steps {
+    scroll-behavior: auto;
+  }
+}

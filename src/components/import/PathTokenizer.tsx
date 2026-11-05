@@ -91,7 +91,7 @@ export default function PathTokenizer() {
       <HeaderCard
         icon={IconRoute}
         title="Path Tokenizer"
-        subtitle="Assign semantic tags to each folder level. Click a block to expand sub-blocks if the folder contains multiple tokens separated by the configured tokenizer delimiters."
+        subtitle="Assign tags to folders or split tokens at the configured separators. Original paths stay unchanged. Session = ExploreASL Visit; Run = ExploreASL Session."
         color="blue"
         dataTestId="path-tokenizer-header"
       />
@@ -99,6 +99,10 @@ export default function PathTokenizer() {
       {pathPatterns.map((pattern) => (
         <PatternCard key={pattern.signature} pattern={pattern} />
       ))}
+      <Text size="sm" c="dimmed" data-testid="tokenizer-defaults">
+        Staging always uses Subject/Session/Run/Modality. Uncaptured Session and Run default to 01;
+        the default ExploreASL run alias is ASL_1.
+      </Text>
     </ImportStepLayout>
   );
 }
@@ -119,25 +123,46 @@ function PatternCard({ pattern }: { pattern: PathPattern }) {
     <Card withBorder p="md" data-testid={`pattern-card-${pattern.signature}`}>
       <Stack gap="sm">
         <Group gap="xs">
-          <Badge variant="light" size="sm">
+          <Badge variant="light" color="gray" size="sm">
             {pattern.count} path{pattern.count !== 1 ? "s" : ""}
           </Badge>
           <Badge variant="outline" size="sm">
             depth {pattern.depth}
           </Badge>
-          <Text size="xs" c="dimmed" ml="auto">
-            {pattern.signature}
-          </Text>
         </Group>
+        <Code
+          block
+          className="dicom-import-literal"
+          data-testid={`tokenizer-pattern-${pattern.signature}`}
+        >
+          {pattern.signature}
+        </Code>
+        <Text size="xs" c="dimmed">
+          Source example · separators are literal
+        </Text>
+        <Code
+          block
+          className="dicom-import-literal"
+          data-testid={`tokenizer-source-${pattern.signature}`}
+        >
+          {pattern.samplePath}
+        </Code>
 
         {/* Sample path with clickable blocks */}
-        <Card withBorder p="sm">
+        <div
+          className="dicom-import-path-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label={`Token assignments for ${pattern.signature}`}
+          data-testid={`tokenizer-scroll-${pattern.signature}`}
+        >
           <Text size="xs" c="dimmed" mb={4}>
             Sample path:
           </Text>
           <Group
             gap={4}
-            wrap="wrap"
+            wrap="nowrap"
+            className="dicom-import-token-lane"
             align="flex-start"
             data-testid={`tokenizer-sample-path-${pattern.signature}`}
           >
@@ -152,7 +177,7 @@ function PatternCard({ pattern }: { pattern: PathPattern }) {
               />
             ))}
           </Group>
-        </Card>
+        </div>
 
         <details data-testid={`tokenizer-config-disclosure-${pattern.signature}`}>
           <Text
@@ -199,6 +224,7 @@ function BlockAssigner({
 }) {
   const setTokenAssignment = useImportStore((s) => s.setTokenAssignment);
   const removeTokenAssignment = useImportStore((s) => s.removeTokenAssignment);
+  const setTokenizerConfig = useImportStore((s) => s.setTokenizerConfig);
   const tokenSubDelimiters = useGlobalStore((s) => s.settings.tokenSubDelimiters);
 
   // Check if this block has sub-block assignments
@@ -244,7 +270,7 @@ function BlockAssigner({
             /
           </Text>
         )}
-        <Stack gap={2} align="center">
+        <Stack gap={6} align="center" className="dicom-import-token">
           <Badge
             variant={tagColor ? "filled" : "outline"}
             color={tagColor ?? "gray"}
@@ -254,6 +280,7 @@ function BlockAssigner({
             {blockName}
           </Badge>
           <Select
+            aria-label={`Tag folder ${blockName}`}
             data={[IGNORE_OPTION, ...TAG_OPTIONS]}
             value={wholeAssignmentValue}
             onChange={handleWholeAssign}
@@ -266,6 +293,22 @@ function BlockAssigner({
             <Text size="xs" c="dimmed">
               {uniqueCount} unique
             </Text>
+          )}
+          {hasSubBlocks && (
+            <Button
+              variant="subtle"
+              color="gray"
+              size="compact-xs"
+              onClick={() =>
+                setTokenizerConfig(
+                  pattern.signature,
+                  assignments.filter((a) => a.blockIndex !== blockIndex),
+                )
+              }
+              data-testid={`tokenizer-split-${pattern.signature}-${blockIndex}`}
+            >
+              Split at separators
+            </Button>
           )}
         </Stack>
       </Group>
@@ -280,47 +323,64 @@ function BlockAssigner({
           /
         </Text>
       )}
-      <Group gap={2} wrap="nowrap">
-        {subBlocks.map((subBlock, subIndex) => {
-          const subAssignment = blockAssignments.find((a) => a.subBlockIndex === subIndex);
-          const subColor =
-            subAssignment && subAssignment.tag !== "Ignore"
-              ? TAG_COLORS[subAssignment.tag]
-              : undefined;
-          const subAssignmentValue =
-            subAssignment?.tag === "Ignore" ? "—" : (subAssignment?.tag ?? "—");
+      <Stack gap={6} className="dicom-import-token">
+        <Group gap={2} wrap="nowrap">
+          {subBlocks.map((subBlock, subIndex) => {
+            const subAssignment = blockAssignments.find((a) => a.subBlockIndex === subIndex);
+            const subColor =
+              subAssignment && subAssignment.tag !== "Ignore"
+                ? TAG_COLORS[subAssignment.tag]
+                : undefined;
+            const subAssignmentValue =
+              subAssignment?.tag === "Ignore" ? "—" : (subAssignment?.tag ?? "—");
 
-          return (
-            <Group key={`${blockIndex}-${subIndex}`} gap={2}>
-              {subIndex > 0 && (
-                <Text size="sm" c="dimmed">
-                  {delimiters[subIndex - 1]}
-                </Text>
-              )}
-              <Stack gap={2} align="center">
-                <Badge
-                  variant={subColor ? "filled" : "outline"}
-                  color={subColor ?? "gray"}
-                  size="md"
-                >
-                  {subBlock}
-                </Badge>
-                <Select
-                  data={[IGNORE_OPTION, ...TAG_OPTIONS]}
-                  value={subAssignmentValue}
-                  onChange={(v) => handleSubBlockAssign(subIndex, v)}
-                  size="xs"
-                  w={90}
-                  comboboxProps={{ withinPortal: true }}
-                  {...comboboxTestIds(
-                    `tokenizer-assign-${pattern.signature}-${blockIndex}-${subIndex}`,
-                  )}
-                />
-              </Stack>
-            </Group>
-          );
-        })}
-      </Group>
+            return (
+              <Group key={`${blockIndex}-${subIndex}`} gap={2}>
+                {subIndex > 0 && (
+                  <Text size="sm" c="dimmed">
+                    {delimiters[subIndex - 1]}
+                  </Text>
+                )}
+                <Stack gap={2} align="center">
+                  <Badge
+                    variant={subColor ? "filled" : "outline"}
+                    color={subColor ?? "gray"}
+                    size="md"
+                  >
+                    {subBlock}
+                  </Badge>
+                  <Select
+                    aria-label={`Tag token ${subBlock} in ${blockName}`}
+                    data={[IGNORE_OPTION, ...TAG_OPTIONS]}
+                    value={subAssignmentValue}
+                    onChange={(v) => handleSubBlockAssign(subIndex, v)}
+                    size="xs"
+                    w={90}
+                    comboboxProps={{ withinPortal: true }}
+                    {...comboboxTestIds(
+                      `tokenizer-assign-${pattern.signature}-${blockIndex}-${subIndex}`,
+                    )}
+                  />
+                </Stack>
+              </Group>
+            );
+          })}
+        </Group>
+        <Button
+          variant="subtle"
+          color="gray"
+          size="compact-xs"
+          onClick={() =>
+            setTokenizerConfig(pattern.signature, [
+              ...assignments.filter((a) => a.blockIndex !== blockIndex),
+              { blockIndex, subBlockIndex: null, tag: "Ignore" },
+            ])
+          }
+          data-testid={`tokenizer-whole-${pattern.signature}-${blockIndex}`}
+        >
+          Use whole folder
+        </Button>
+      </Stack>
     </Group>
   );
 }

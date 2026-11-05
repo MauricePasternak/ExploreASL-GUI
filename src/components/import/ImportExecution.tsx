@@ -116,7 +116,9 @@ function ImportLogPanel({ lines }: { lines: string[] }) {
         <div style={{ height: 300 }} data-testid="import-log-lines">
           <Virtuoso
             data={lines}
-            followOutput="smooth"
+            followOutput={
+              window.matchMedia("(prefers-reduced-motion: reduce)").matches ? true : "smooth"
+            }
             itemContent={(_index, line) => (
               <Text size="xs" ff="monospace" style={{ whiteSpace: "pre" }}>
                 {line || "\u00a0"}
@@ -509,6 +511,7 @@ export default function ImportExecution() {
         <Group justify="space-between" data-testid="import-execution-nav">
           <Button
             leftSection={<IconArrowLeft size={16} />}
+            variant="default"
             disabled={locked}
             onClick={() => setActiveStep(4)}
             data-testid="import-back-btn"
@@ -615,38 +618,46 @@ export default function ImportExecution() {
           </Text>
         </Paper>
       ) : null}
-      <Group align="flex-end" data-testid="import-execution-controls">
-        <ProfileSelector
-          value={effectiveProfileId ?? ""}
-          onChange={setSelectedProfileId}
-          disabled={runAdmissionLocked}
-          minWidth={300}
-        />
-        <Button
-          leftSection={<IconPlayerPlay size={16} />}
-          onClick={() => void start()}
-          disabled={
-            runAdmissionLocked ||
-            starting ||
-            !profileValid ||
-            !sourceAvailable ||
-            selectedSubjects.length === 0
-          }
-          data-testid="start-import-btn"
-        >
-          Start Import
-        </Button>
-        <Button
-          leftSection={<IconPlayerStop size={16} />}
-          color="red"
-          variant="light"
-          onClick={() => void stop()}
-          disabled={phase !== "running" || stopping}
-          data-testid="stop-import-btn"
-        >
-          Stop
-        </Button>
-      </Group>
+      <Paper withBorder p="md" data-testid="import-execution-settings">
+        <Stack gap="sm">
+          <Text fw={600}>Execution settings</Text>
+          <Text size="sm" data-testid="import-execution-selected-count">
+            {selectedSubjects.length} subjects selected · every visit for each selected subject
+          </Text>
+          <Group align="flex-end" data-testid="import-execution-controls">
+            <ProfileSelector
+              value={effectiveProfileId ?? ""}
+              onChange={setSelectedProfileId}
+              disabled={runAdmissionLocked}
+              minWidth={0}
+            />
+            <Button
+              leftSection={<IconPlayerPlay size={16} />}
+              onClick={() => void start()}
+              disabled={
+                runAdmissionLocked ||
+                starting ||
+                !profileValid ||
+                !sourceAvailable ||
+                selectedSubjects.length === 0
+              }
+              data-testid="start-import-btn"
+            >
+              Start Import
+            </Button>
+            <Button
+              leftSection={<IconPlayerStop size={16} />}
+              color="red"
+              variant="light"
+              onClick={() => void stop()}
+              disabled={phase !== "running" || stopping}
+              data-testid="stop-import-btn"
+            >
+              Stop
+            </Button>
+          </Group>
+        </Stack>
+      </Paper>
       {profileError ? (
         <Alert color="red" data-testid="profile-error-alert">
           {profileError}

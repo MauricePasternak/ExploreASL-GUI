@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Box, Group, Loader, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
+import {
+  Badge,
+  Box,
+  Button,
+  Group,
+  Loader,
+  SegmentedControl,
+  Stack,
+  Text,
+  TextInput,
+  Tooltip,
+} from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
 import {
@@ -156,6 +167,7 @@ export default function ImportSubjectTable({
   const [modalError, setModalError] = useState<string | null>(null);
 
   const [filter, setFilter] = useState<FilterValue>("all");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [recordsPerPage, setRecordsPerPage] = useState(10);
   const [prevFilter, setPrevFilter] = useState(filter);
@@ -235,14 +247,18 @@ export default function ImportSubjectTable({
   }, [rows, selectedSubjects, importLogInfo]);
 
   const filteredRows = useMemo(() => {
-    if (filter === "all") return enrichRows;
-    return enrichRows.filter((r) => r._filterStatus === filter);
-  }, [enrichRows, filter]);
+    return enrichRows.filter(
+      (r) =>
+        (filter === "all" || r._filterStatus === filter) &&
+        r.subject.toLowerCase().includes(search.toLowerCase()),
+    );
+  }, [enrichRows, filter, search]);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredRows.length / recordsPerPage)));
 
   const paginatedRows = useMemo(() => {
-    const from = (page - 1) * recordsPerPage;
+    const from = (currentPage - 1) * recordsPerPage;
     return filteredRows.slice(from, from + recordsPerPage);
-  }, [filteredRows, page, recordsPerPage]);
+  }, [filteredRows, currentPage, recordsPerPage]);
 
   const selectedRecords = useMemo(() => paginatedRows.filter((r) => r._selected), [paginatedRows]);
 
@@ -302,18 +318,17 @@ export default function ImportSubjectTable({
           }
           const hasError = row.status === "failed";
           return (
-            <Badge
+            <Button
               size="sm"
               color={hasError ? "red" : "teal"}
-              variant="outline"
-              style={{ cursor: "pointer" }}
+              variant="subtle"
               onClick={() => handleViewLog(row.subject)}
               data-testid={
                 hasError ? `view-import-errors-${row.subject}` : `view-import-logs-${row.subject}`
               }
             >
               {hasError ? "View Errors" : "View Logs"}
-            </Badge>
+            </Button>
           );
         },
       },
@@ -360,7 +375,16 @@ export default function ImportSubjectTable({
 
   return (
     <Stack gap="sm" data-testid="import-subject-table">
-      <Group gap="xs" align="center">
+      <TextInput
+        label="Find a subject"
+        value={search}
+        onChange={(event) => {
+          setSearch(event.currentTarget.value);
+          setPage(1);
+        }}
+        data-testid="import-subject-search"
+      />
+      <Group gap="xs" align="center" className="dicom-import-status-filters">
         <IconSelector size={16} color="var(--mantine-color-dimmed)" />
         <SegmentedControl
           size="xs"
@@ -382,6 +406,35 @@ export default function ImportSubjectTable({
           {...segmentedControlTestIds("import-filter")}
         />
       </Group>
+      <Group gap="sm" data-testid="import-subject-selection-tools">
+        <Button
+          size="xs"
+          variant="light"
+          disabled={selectionLocked || filteredRows.length === 0}
+          onClick={() =>
+            onSelectedSubjectsChange([
+              ...new Set([...selectedSubjects, ...filteredRows.map((row) => row.subject)]),
+            ])
+          }
+          data-testid="import-subject-select-matching"
+        >
+          Select all {filteredRows.length} matching
+        </Button>
+        <Button
+          size="xs"
+          variant="subtle"
+          color="gray"
+          disabled={selectionLocked}
+          onClick={() => onSelectedSubjectsChange([])}
+          data-testid="import-subject-clear-selection"
+        >
+          Deselect all
+        </Button>
+        <Text size="xs" data-testid="import-subject-selected-count">
+          {selectedSubjects.length} subjects selected across all pages and filters · includes all
+          visits
+        </Text>
+      </Group>
 
       <Box style={{ flexShrink: 0, isolation: "isolate" }} data-testid="import-table-container">
         <DataTable
@@ -400,11 +453,11 @@ export default function ImportSubjectTable({
           })}
           idAccessor="subject"
           minHeight={240}
-          striped
           highlightOnHover
           borderRadius="sm"
           withTableBorder
-          page={page}
+          styles={{ table: { minWidth: 540 } }}
+          page={currentPage}
           onPageChange={setPage}
           totalRecords={filteredRows.length}
           recordsPerPage={recordsPerPage}

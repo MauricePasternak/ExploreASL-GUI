@@ -84,12 +84,15 @@ describe("AliasResolution", () => {
     await user.click(screen.getByTestId("alias-tab-subjects"));
     expect(screen.getByDisplayValue("BAR")).toBeInTheDocument();
     await useProjectStore.getState().flushEdits();
-    expect(invoke).toHaveBeenLastCalledWith(
+    const edits = vi
+      .mocked(invoke)
+      .mock.calls.filter(([command]) => command === "accept_project_edit");
+    expect(edits[edits.length - 1]).toEqual([
       "accept_project_edit",
       expect.objectContaining({
         edit: expect.objectContaining({ kind: "import", mapping: accepted.document.mappingState }),
       }),
-    );
+    ]);
   });
 
   it("renders the title", () => {
@@ -99,10 +102,10 @@ describe("AliasResolution", () => {
 
   it("renders all four tab labels", () => {
     renderWithProviders();
-    expect(screen.getByText("Subject Rename")).toBeInTheDocument();
-    expect(screen.getByText("Session Order")).toBeInTheDocument();
-    expect(screen.getByText("Run Order")).toBeInTheDocument();
-    expect(screen.getByText("Modality Map")).toBeInTheDocument();
+    expect(screen.getByText("Subjects")).toBeInTheDocument();
+    expect(screen.getByText("Sessions (visits)")).toBeInTheDocument();
+    expect(screen.getByText("Runs")).toBeInTheDocument();
+    expect(screen.getByText("Modalities")).toBeInTheDocument();
   });
 
   it("disables session and run tabs when those tags are not assigned", () => {
