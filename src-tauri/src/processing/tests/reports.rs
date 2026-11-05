@@ -1,10 +1,10 @@
-use super::common::*;
 use crate::processing::reports::*;
 use std::fs;
 
 #[test]
 fn test_list_subject_reports_and_read_report_image() {
-    let root = unique_temp_path("test-qc-reports");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let derivatives = root
         .join("derivatives")
         .join("ExploreASL")
@@ -163,6 +163,4 @@ fn test_list_subject_reports_and_read_report_image() {
         "The report image could not be opened."
     );
     assert!(unknown_view.details.is_empty());
-
-    let _ = fs::remove_dir_all(root);
 }

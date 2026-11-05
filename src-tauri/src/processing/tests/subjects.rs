@@ -1,4 +1,3 @@
-use super::common::*;
 use crate::processing::identifiers::{normalize_asl_run_id, normalize_asl_run_id_opt};
 use crate::processing::subjects::*;
 use std::fs;
@@ -9,7 +8,8 @@ use std::fs;
 
 #[test]
 fn list_subjects_bids_direct_scans_project_root() {
-    let root = unique_temp_path("list-bids-root");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let perf = root.join("sub-01").join("perf");
     fs::create_dir_all(&perf).unwrap();
     fs::write(perf.join("sub-01_asl.nii.gz"), b"fake").unwrap();
@@ -21,26 +21,23 @@ fn list_subjects_bids_direct_scans_project_root() {
     assert_eq!(subjects.len(), 1);
     assert_eq!(subjects[0].subject_session, "sub-01_1");
     assert_eq!(subjects[0].session, "1");
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn list_subjects_returns_empty_when_rawdata_missing() {
-    let root = unique_temp_path("no-rawdata");
-    fs::create_dir_all(&root).expect("test root should be created");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
 
     let subjects = list_subjects(root.to_string_lossy().to_string(), None)
         .expect("list_subjects should succeed");
 
     assert!(subjects.is_empty());
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn list_subjects_returns_subjects_with_sessions() {
-    let root = unique_temp_path("list-subjects");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let rawdata = root.join("rawdata");
     fs::create_dir_all(rawdata.join("sub-001").join("ses-01").join("anat")).unwrap();
     fs::write(
@@ -79,13 +76,12 @@ fn list_subjects_returns_subjects_with_sessions() {
     assert_eq!(sub002.session, "02");
     assert!(!sub002.has_structural);
     assert!(!sub002.has_asl);
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn list_subjects_skips_non_sub_directories() {
-    let root = unique_temp_path("list-skip");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let rawdata = root.join("rawdata");
     fs::create_dir_all(rawdata.join("sub-001").join("ses-01")).unwrap();
     fs::create_dir_all(rawdata.join("README")).unwrap();
@@ -96,13 +92,12 @@ fn list_subjects_skips_non_sub_directories() {
 
     assert_eq!(subjects.len(), 1);
     assert_eq!(subjects[0].subject, "001");
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn list_subjects_cross_sectional_defaults_session_to_1() {
-    let root = unique_temp_path("cross-sectional");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let rawdata = root.join("rawdata");
     let perf = rawdata.join("sub-01").join("perf");
     fs::create_dir_all(&perf).unwrap();
@@ -119,13 +114,12 @@ fn list_subjects_cross_sectional_defaults_session_to_1() {
     assert_eq!(sub01.subject_session, "sub-01_1");
     assert!(sub01.has_asl);
     assert_eq!(sub01.asl_runs, vec!["1"]);
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn list_subjects_parses_run_entities_from_filenames() {
-    let root = unique_temp_path("run-entities");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let rawdata = root.join("rawdata");
     let perf = rawdata.join("sub-01").join("ses-01").join("perf");
     fs::create_dir_all(&perf).unwrap();
@@ -139,13 +133,12 @@ fn list_subjects_parses_run_entities_from_filenames() {
 
     assert_eq!(subjects.len(), 1);
     assert_eq!(subjects[0].asl_runs, vec!["2", "5"]);
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn list_subjects_normalizes_zero_padded_bids_run_to_exploreasl_legacy() {
-    let root = unique_temp_path("run-padded");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let rawdata = root.join("rawdata");
     let perf = rawdata.join("sub-01").join("ses-01").join("perf");
     fs::create_dir_all(&perf).unwrap();
@@ -157,13 +150,12 @@ fn list_subjects_normalizes_zero_padded_bids_run_to_exploreasl_legacy() {
 
     assert_eq!(subjects.len(), 1);
     assert_eq!(subjects[0].asl_runs, vec!["1"]);
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn list_subjects_normalizes_non_numeric_run_to_default() {
-    let root = unique_temp_path("run-alpha");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let rawdata = root.join("rawdata");
     let perf = rawdata.join("sub-01").join("ses-01").join("perf");
     fs::create_dir_all(&perf).unwrap();
@@ -174,8 +166,6 @@ fn list_subjects_normalizes_non_numeric_run_to_default() {
         .expect("list_subjects should succeed");
 
     assert_eq!(subjects[0].asl_runs, vec!["1"]);
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
@@ -190,7 +180,8 @@ fn normalize_asl_run_id_matches_exploreasl_str2num() {
 
 #[test]
 fn list_subjects_asl_run_default_when_no_run_entity() {
-    let root = unique_temp_path("default-run");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let rawdata = root.join("rawdata");
     let perf = rawdata.join("sub-01").join("ses-01").join("perf");
     fs::create_dir_all(&perf).unwrap();
@@ -202,6 +193,4 @@ fn list_subjects_asl_run_default_when_no_run_entity() {
 
     assert_eq!(subjects.len(), 1);
     assert_eq!(subjects[0].asl_runs, vec!["1"]);
-
-    let _ = fs::remove_dir_all(root);
 }

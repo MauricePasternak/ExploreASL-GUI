@@ -1,4 +1,3 @@
-use super::common::unique_temp_path;
 use crate::processing::locks::determine_status;
 use crate::processing::logs::{check_log_for_error, is_mutex_related_line};
 use crate::processing::logs::{list_module_logs, read_module_logs};
@@ -11,14 +10,13 @@ fn mutex_log_errors_do_not_mask_real_errors() {
     ));
     assert!(!is_mutex_related_line("ERROR: file not found"));
 
-    let root = unique_temp_path("log-errors");
-    fs::create_dir_all(&root).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let log = root.join("worker.log");
     fs::write(&log, "ERROR: mutex is locked\n").unwrap();
     assert!(!check_log_for_error(&log));
     fs::write(&log, "ERROR: mutex is locked\nERROR: file not found\n").unwrap();
     assert!(check_log_for_error(&log));
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -31,8 +29,8 @@ fn mutex_detection_accepts_case_and_whitespace_but_rejects_unrelated_errors() {
 
 #[test]
 fn log_error_detection_handles_empty_and_real_error_only_logs() {
-    let root = unique_temp_path("log-error-matrix");
-    fs::create_dir_all(&root).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let log = root.join("worker.log");
     fs::write(&log, "").unwrap();
     assert!(!check_log_for_error(&log));
@@ -42,12 +40,12 @@ fn log_error_detection_handles_empty_and_real_error_only_logs() {
     )
     .unwrap();
     assert!(check_log_for_error(&log));
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn ready_status_remains_complete_with_mutex_log_entry() {
-    let root = unique_temp_path("ready-mutex");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let lock = root.join("lock");
     fs::create_dir_all(&lock).unwrap();
     fs::write(lock.join("999_ready.status"), "").unwrap();
@@ -56,12 +54,12 @@ fn ready_status_remains_complete_with_mutex_log_entry() {
 
     assert_eq!(determine_status(&lock).0, "complete");
     assert!(!check_log_for_error(&log));
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn incomplete_and_never_run_statuses_do_not_turn_mutex_only_logs_into_errors() {
-    let root = unique_temp_path("incomplete-mutex");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let lock = root.join("lock");
     fs::create_dir_all(&lock).unwrap();
     fs::write(lock.join("060_Segment_T1w.status"), "").unwrap();
@@ -72,12 +70,12 @@ fn incomplete_and_never_run_statuses_do_not_turn_mutex_only_logs_into_errors() {
     assert!(!check_log_for_error(&log));
     fs::remove_file(lock.join("060_Segment_T1w.status")).unwrap();
     assert_eq!(determine_status(&lock).0, "pending");
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn module_log_commands_find_and_read_staging_import_logs() {
-    let root = unique_temp_path("staging-import-logs");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
     let log_dir = root.join(".easl_staging/derivatives/ExploreASL/log");
     fs::create_dir_all(&log_dir).unwrap();
     let filename = "xASL_module_Import_sub-001Philips.log";
@@ -94,5 +92,4 @@ fn module_log_commands_find_and_read_staging_import_logs() {
     )
     .unwrap();
     assert_eq!(contents[filename], "import log body");
-    fs::remove_dir_all(root).unwrap();
 }

@@ -1,16 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-pub(crate) fn unique_temp_path(name: &str) -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("exploreasl-gui-{name}-{suffix}"))
-}
 
 pub(crate) fn get_test_temp_dir() -> tempfile::TempDir {
+    // Keep executable fixtures on the crate filesystem, not a possibly noexec temp mount.
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let target_dir = manifest_dir.join("target");
     let _ = fs::create_dir_all(&target_dir);

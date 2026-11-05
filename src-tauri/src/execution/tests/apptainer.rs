@@ -135,7 +135,8 @@ fn apptainer_discovery_and_profile_timeout_settle_supported_scopes() {
 
 #[test]
 fn mcr_cache_path_prefers_explicit_environment_variable() {
-    let cache = unique_temp_path("mcr-cache");
+    let temp = get_test_temp_dir();
+    let cache = temp.path().join("mcr-cache");
     let previous = env::var_os("MCR_CACHE_ROOT");
     unsafe {
         env::set_var("MCR_CACHE_ROOT", &cache);
@@ -182,7 +183,8 @@ fn formats_labels_from_binary_name_and_version() {
 fn discovers_all_apptainer_and_singularity_candidates_on_path() {
     use std::os::unix::fs::PermissionsExt;
 
-    let root = unique_temp_path("discover-multiple");
+    let temp = get_test_temp_dir();
+    let root = temp.path();
     let first_bin = root.join("first");
     let second_bin = root.join("second");
     fs::create_dir_all(&first_bin).expect("first bin should be created");
@@ -204,7 +206,6 @@ fn discovers_all_apptainer_and_singularity_candidates_on_path() {
         paths,
         vec![first_bin.join("apptainer"), second_bin.join("singularity")]
     );
-    let _ = fs::remove_dir_all(root);
 }
 
 #[cfg(unix)]
@@ -212,8 +213,8 @@ fn discovers_all_apptainer_and_singularity_candidates_on_path() {
 fn custom_apptainer_paths_are_deduplicated_and_skip_path_scan() {
     use std::os::unix::fs::PermissionsExt;
 
-    let root = unique_temp_path("discover-custom");
-    fs::create_dir_all(&root).expect("candidate directory should be created");
+    let temp = get_test_temp_dir();
+    let root = temp.path();
     let candidate = root.join("custom-apptainer");
     let path_candidate = candidate.to_string_lossy().to_string();
     fs::write(&candidate, "#!/bin/sh\n").expect("candidate should be written");
@@ -226,7 +227,6 @@ fn custom_apptainer_paths_are_deduplicated_and_skip_path_scan() {
     );
 
     assert_eq!(paths, vec![candidate]);
-    let _ = fs::remove_dir_all(root);
 }
 
 #[cfg(unix)]

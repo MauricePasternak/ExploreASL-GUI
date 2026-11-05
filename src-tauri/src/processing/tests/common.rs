@@ -1,21 +1,12 @@
 use crate::app::state::AppState;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) fn state_with_active_project(root: &Path) -> Arc<AppState> {
     let state = Arc::new(AppState::default());
     crate::project::ownership::own_project(&state, &root.canonicalize().unwrap());
     state
-}
-
-pub(crate) fn unique_temp_path(name: &str) -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("exploreasl-gui-proc-{name}-{suffix}"))
 }
 
 pub(crate) fn create_lock_tree(root: &Path) {

@@ -51,8 +51,9 @@ fn execution_profile_id_returns_profile_id() {
 
 #[test]
 fn validate_accepts_valid_matlab_profile_paths() {
-    let matlab = unique_temp_path("valid-matlab");
-    let exploreasl = unique_temp_path("valid-exploreasl");
+    let temp = get_test_temp_dir();
+    let matlab = temp.path().join("matlab");
+    let exploreasl = temp.path().join("exploreasl");
     create_executable(&matlab);
     create_exploreasl_root(&exploreasl, true);
 
@@ -67,15 +68,13 @@ fn validate_accepts_valid_matlab_profile_paths() {
         Some(matlab.to_string_lossy().to_string())
     );
     assert_eq!(validation.explore_asl_path, Some(exploreasl.clone()));
-
-    let _ = fs::remove_file(matlab);
-    let _ = fs::remove_dir_all(exploreasl);
 }
 
 #[test]
 fn validate_rejects_missing_matlab_executable() {
-    let missing_matlab = unique_temp_path("missing-matlab").join("matlab");
-    let exploreasl = unique_temp_path("exploreasl-for-missing-matlab");
+    let temp = get_test_temp_dir();
+    let missing_matlab = temp.path().join("missing-matlab");
+    let exploreasl = temp.path().join("exploreasl");
     create_exploreasl_root(&exploreasl, false);
 
     let profile = make_matlab_profile(
@@ -91,14 +90,13 @@ fn validate_rejects_missing_matlab_executable() {
     assert!(validation.errors[0].contains("Select the MATLAB executable file"));
     assert!(validation.matlab_path.is_none());
     assert_eq!(validation.explore_asl_path, Some(exploreasl.clone()));
-
-    let _ = fs::remove_dir_all(exploreasl);
 }
 
 #[test]
 fn validate_rejects_missing_exploreasl_main_file() {
-    let matlab = unique_temp_path("matlab-for-missing-exploreasl");
-    let exploreasl = unique_temp_path("missing-exploreasl-main");
+    let temp = get_test_temp_dir();
+    let matlab = temp.path().join("matlab");
+    let exploreasl = temp.path().join("exploreasl");
     create_executable(&matlab);
     fs::create_dir_all(&exploreasl).expect("exploreasl dir should be created");
 
@@ -115,16 +113,14 @@ fn validate_rejects_missing_exploreasl_main_file() {
         Some(matlab.to_string_lossy().to_string())
     );
     assert!(validation.explore_asl_path.is_none());
-
-    let _ = fs::remove_file(matlab);
-    let _ = fs::remove_dir_all(exploreasl);
 }
 
 #[cfg(unix)]
 #[test]
 fn validate_accepts_apptainer_profile_and_detects_container_version() {
-    let apptainer = unique_temp_path("apptainer-stub");
-    let sif = unique_temp_path("exploreasl-image").with_extension("sif");
+    let temp = get_test_temp_dir();
+    let apptainer = temp.path().join("apptainer");
+    let sif = temp.path().join("image.sif");
     create_apptainer_stub(&apptainer, "1.11.0");
     fs::write(&sif, "fake SIF").expect("SIF placeholder should be written");
 
@@ -139,9 +135,6 @@ fn validate_accepts_apptainer_profile_and_detects_container_version() {
         Some(apptainer.to_string_lossy().to_string())
     );
     assert_eq!(validation.sif_path, Some(sif.clone()));
-
-    let _ = fs::remove_file(apptainer);
-    let _ = fs::remove_file(sif);
 }
 
 #[cfg(unix)]
@@ -194,7 +187,8 @@ fn validation_results_explain_probe_failures_without_raw_diagnostics() {
 
 #[test]
 fn validate_rejects_missing_apptainer_sif_image() {
-    let missing_sif = unique_temp_path("missing-image").with_extension("sif");
+    let temp = get_test_temp_dir();
+    let missing_sif = temp.path().join("missing.sif");
     let profile = make_apptainer_profile(&missing_sif.to_string_lossy(), "/missing/apptainer");
 
     let validation = profile.validate();
@@ -237,8 +231,8 @@ fn validate_distinguishes_missing_and_not_file_sif_paths() {
 
 #[test]
 fn resolve_apptainer_uses_singularity_fallback_for_default_command() {
-    let bin_dir = unique_temp_path("apptainer-fallback-bin");
-    fs::create_dir_all(&bin_dir).expect("bin directory should be created");
+    let temp = get_test_temp_dir();
+    let bin_dir = temp.path();
     let singularity = bin_dir.join("singularity");
     create_executable(&singularity);
 
@@ -248,13 +242,13 @@ fn resolve_apptainer_uses_singularity_fallback_for_default_command() {
         resolved.expect("singularity fallback should resolve"),
         singularity
     );
-    let _ = fs::remove_dir_all(bin_dir);
 }
 
 #[test]
 fn validate_all_execution_profiles_returns_one_result_per_profile() {
-    let matlab = unique_temp_path("valid-matlab-batch");
-    let exploreasl = unique_temp_path("valid-exploreasl-batch");
+    let temp = get_test_temp_dir();
+    let matlab = temp.path().join("matlab");
+    let exploreasl = temp.path().join("exploreasl");
     create_executable(&matlab);
     create_exploreasl_root(&exploreasl, true);
 
@@ -269,7 +263,4 @@ fn validate_all_execution_profiles_returns_one_result_per_profile() {
     assert!(!results[1].valid);
     assert_eq!(results[0].id, valid.id());
     assert_eq!(results[1].errors.len(), 1);
-
-    let _ = fs::remove_file(matlab);
-    let _ = fs::remove_dir_all(exploreasl);
 }
