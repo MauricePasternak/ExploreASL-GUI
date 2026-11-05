@@ -38,13 +38,11 @@ function setManifest(manifest: Record<string, unknown>) {
 function renderTabs(eligibleSubjectSessions = ["sub-01_01", "sub-02_01"]) {
   return render(
     <MantineProvider env="test">
-      <ReviewerTabs eligibleSubjectSessions={eligibleSubjectSessions}>
-        {(reviewerId, addControl) => (
-          <div data-testid="reviewer-content">
-            {reviewerId}
-            {addControl}
-          </div>
-        )}
+      <ReviewerTabs
+        eligibleSubjectSessions={eligibleSubjectSessions}
+        inventoryCount={eligibleSubjectSessions.length}
+      >
+        {(reviewerId) => <div data-testid="reviewer-content">{reviewerId}</div>}
       </ReviewerTabs>
     </MantineProvider>,
   );
@@ -173,7 +171,7 @@ describe("ReviewerTabs", () => {
 
     view.rerender(
       <MantineProvider env="test">
-        <ReviewerTabs eligibleSubjectSessions={["sub-01_01"]}>
+        <ReviewerTabs eligibleSubjectSessions={["sub-01_01"]} inventoryCount={1}>
           {(reviewerId) => <div data-testid="reviewer-content">{reviewerId}</div>}
         </ReviewerTabs>
       </MantineProvider>,

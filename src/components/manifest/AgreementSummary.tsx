@@ -21,7 +21,7 @@ export default function AgreementSummary({
 }: AgreementSummaryProps) {
   return (
     <div data-testid="agreement-summary">
-      <Table withTableBorder withColumnBorders striped data-testid="agreement-overall-table">
+      <Table verticalSpacing="xs" data-testid="agreement-overall-table">
         <Table.Tbody>
           <Table.Tr>
             <Table.Td>Number of Reviewers</Table.Td>
@@ -55,7 +55,7 @@ export default function AgreementSummary({
       <Text fw={600} mt="md">
         Per-Group Agreement
       </Text>
-      <Table withTableBorder withColumnBorders striped data-testid="agreement-per-group-table">
+      <Table verticalSpacing="xs" data-testid="agreement-per-group-table">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Group</Table.Th>

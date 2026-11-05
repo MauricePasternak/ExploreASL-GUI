@@ -53,19 +53,7 @@ vi.mock("../stores/manifestStore", () => ({
 }));
 
 vi.mock("../components/manifest/QcSelectionTable", () => ({
-  default: vi.fn(({ onNextReady }) => {
-    return (
-      <div data-testid="qc-selection-table">
-        QC Table
-        <button data-testid="trigger-ready" onClick={() => onNextReady?.(true)}>
-          Ready
-        </button>
-        <button data-testid="trigger-unready" onClick={() => onNextReady?.(false)}>
-          Unready
-        </button>
-      </div>
-    );
-  }),
+  default: vi.fn(() => <div data-testid="qc-selection-table">QC Table</div>),
 }));
 
 vi.mock("../components/manifest/ManifestPreview", () => ({
@@ -114,6 +102,7 @@ vi.mock("../stores/processingStore", () => {
 const mockProjectState = {
   project: projectView(projectFixture("project-1", "Manifest", "/test/project")),
   draftErrors: {},
+  setDraftError: vi.fn(),
 };
 
 vi.mock("../stores/projectStore", () => {
@@ -179,9 +168,32 @@ describe("ManifestPage", () => {
   });
 
   it("Next button is disabled by default and progression is gated", () => {
+    mockQcLoaded = true;
+    mockQcData = { "sub-01_01": {} };
+    mockAvailableSubjects = [{ subjectSession: "sub-01_01" }];
     renderPage();
     const nextBtn = screen.getByTestId("next-button");
     expect(nextBtn).toBeDisabled();
+  });
+
+  it("keeps the existing Manifest card header and waits for QC evidence before enabling Next", async () => {
+    const reviewerId = mockProjectState.project.uiState.manifest.reviewers[0].id;
+    mockAvailableSubjects = [{ subjectSession: "sub-01_01" }];
+    mockProjectState.project.uiState.manifest.verdicts = {
+      [reviewerId]: { "sub-01_01": { status: "pass", setAt: 1 } },
+    };
+    const view = renderPage();
+    expect(screen.getByTestId("manifest-header")).toHaveTextContent("Manifest");
+    expect(screen.getByTestId("next-button")).toBeDisabled();
+
+    mockQcLoaded = true;
+    mockQcData = { "sub-01_01": {} };
+    view.rerender(
+      <MantineProvider env="test">
+        <ManifestPage />
+      </MantineProvider>,
+    );
+    expect(screen.getByTestId("next-button")).toBeEnabled();
   });
 
   it("shows exactly two indicators and advances directly to Preview for complete unanimous reviewers", async () => {

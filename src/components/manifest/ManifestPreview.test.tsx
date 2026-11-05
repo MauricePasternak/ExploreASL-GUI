@@ -788,7 +788,9 @@ describe("ManifestPreview", () => {
 
     expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(5);
     expect(
-      screen.getAllByRole("button", { expanded: true }).map((button) => button.textContent),
+      screen
+        .getAllByRole("button", { expanded: true })
+        .map((button) => within(button).getByRole("heading").textContent),
     ).toEqual([
       "Study Parameters",
       "Software Manifest",

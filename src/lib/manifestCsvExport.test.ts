@@ -26,6 +26,18 @@ describe("escapeCsvField", () => {
 });
 
 describe("generateVerdictsCsv", () => {
+  it("requires prepared agreement in multi-reviewer mode", () => {
+    expect(() =>
+      generateVerdictsCsv({
+        reviewers: [
+          { id: "a", label: "A" },
+          { id: "b", label: "B" },
+        ],
+        subjectSessions: [],
+        verdicts: {},
+      }),
+    ).toThrow("requires prepared agreement");
+  });
   it("renders the exact simplified single-reviewer columns without agreement data", () => {
     const csv = generateVerdictsCsv({
       reviewers: [{ id: "reviewer-a", label: "First" }],
@@ -55,13 +67,17 @@ describe("generateVerdictsCsv", () => {
 
   it("retains headers when single-reviewer verdict data is empty", () => {
     expect(
-      generateVerdictsCsv({ reviewers: [{ id: "reviewer-a", label: "First" }], verdicts: {} }),
+      generateVerdictsCsv({
+        reviewers: [{ id: "reviewer-a", label: "First" }],
+        subjectSessions: [],
+        verdicts: {},
+      }),
     ).toBe(
       "SubjectSession,Verdict,Reason,Notes,Coverage_Pct,SpatialCoV,Motion_mm,Motion_Exclusion_Pct",
     );
   });
 
-  it("appends default agreement statistics after an empty multi-reviewer body", () => {
+  it("appends prepared agreement statistics after an empty multi-reviewer body", () => {
     expect(
       generateVerdictsCsv({
         reviewers: [
@@ -69,6 +85,13 @@ describe("generateVerdictsCsv", () => {
           { id: "reviewer-b", label: "Second" },
         ],
         verdicts: {},
+        subjectSessions: [],
+        agreement: {
+          numberOfReviewers: 2,
+          overall: { agreementRate: 0, kappa: null, ci95Lower: null, ci95Upper: null, n: 0 },
+          numberOfDisagreements: 0,
+          perGroup: [],
+        },
       }),
     ).toBe(
       "SubjectSession,Reviewer_1_Verdict,Reviewer_1_Reason,Reviewer_1_Notes,Reviewer_2_Verdict,Reviewer_2_Reason,Reviewer_2_Notes,Final_Verdict,Resolution_Notes,Coverage_Pct,SpatialCoV,Motion_mm,Motion_Exclusion_Pct\n" +

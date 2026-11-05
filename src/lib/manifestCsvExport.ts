@@ -1,4 +1,4 @@
-import { cohensKappa, fleissKappa, type KappaResult } from "./interRaterAgreement";
+import type { KappaResult } from "./interRaterAgreement";
 
 export interface CsvVerdict {
   status: "pass" | "fail";
@@ -33,8 +33,8 @@ export interface AgreementCsvPayload {
 export interface VerdictsCsvPayload {
   /** Registry order determines reviewer column order. Two or more reviewers enable multi mode. */
   reviewers: readonly CsvReviewer[];
-  /** When supplied, this order controls verdict data row order. */
-  subjectSessions?: readonly string[];
+  /** Inventory order controls verdict data row order. */
+  subjectSessions: readonly string[];
   verdicts: Record<string, Record<string, CsvVerdict>>;
   resolvedVerdicts?: Record<string, CsvVerdict>;
   qcMetrics?: Record<string, CsvQcMetrics | undefined>;
@@ -84,21 +84,6 @@ function qcValues(metrics: CsvQcMetrics | undefined): string[] {
   ];
 }
 
-function subjectSessions(payload: VerdictsCsvPayload): string[] {
-  if (payload.subjectSessions) return [...payload.subjectSessions];
-
-  const keys = new Set<string>([
-    ...Object.keys(payload.resolvedVerdicts ?? {}),
-    ...Object.keys(payload.qcMetrics ?? {}),
-  ]);
-  for (const reviewer of payload.reviewers) {
-    for (const subjectSession of Object.keys(payload.verdicts[reviewer.id] ?? {}))
-      keys.add(subjectSession);
-  }
-
-  return [...keys].sort();
-}
-
 function unanimousStatus(
   subjectSession: string,
   reviewers: readonly CsvReviewer[],
@@ -107,37 +92,6 @@ function unanimousStatus(
   const statuses = reviewers.map((reviewer) => verdicts[reviewer.id]?.[subjectSession]?.status);
   if (statuses.some((status) => status === undefined)) return undefined;
   return statuses.every((status) => status === statuses[0]) ? statuses[0] : undefined;
-}
-
-function defaultAgreement(
-  payload: VerdictsCsvPayload,
-  reviewers: readonly CsvReviewer[],
-  verdicts: Record<string, Record<string, CsvVerdict>>,
-): AgreementCsvPayload {
-  const reviewerStatuses: Record<string, Record<string, CsvVerdict["status"]>> = Object.fromEntries(
-    reviewers.map((reviewer) => [
-      reviewer.id,
-      Object.fromEntries(
-        Object.entries(verdicts[reviewer.id] ?? {}).map(([subjectSession, verdict]) => [
-          subjectSession,
-          verdict.status,
-        ]),
-      ),
-    ]),
-  );
-  const overall =
-    reviewers.length === 2
-      ? cohensKappa(reviewerStatuses[reviewers[0].id], reviewerStatuses[reviewers[1].id])
-      : fleissKappa(reviewerStatuses);
-  const numberOfDisagreements = subjectSessions(payload).filter((subjectSession) => {
-    const statuses = reviewers.map((reviewer) => verdicts[reviewer.id]?.[subjectSession]?.status);
-    return (
-      statuses.every((status) => status !== undefined) &&
-      !statuses.every((status) => status === statuses[0])
-    );
-  }).length;
-
-  return { numberOfReviewers: reviewers.length, overall, numberOfDisagreements, perGroup: [] };
 }
 
 export function generateAgreementCsv(payload: AgreementCsvPayload): string {
@@ -183,12 +137,14 @@ export function generateAgreementCsv(payload: AgreementCsvPayload): string {
 export function generateVerdictsCsv(payload: VerdictsCsvPayload): string {
   const reviewers = payload.reviewers;
   const multiReviewerMode = reviewers.length >= 2;
+  if (multiReviewerMode && !payload.agreement)
+    throw new Error("Multi-reviewer CSV requires prepared agreement statistics");
   const rows: string[] = [];
 
   if (!multiReviewerMode) {
     rows.push(csvRow(["SubjectSession", "Verdict", "Reason", "Notes", ...QC_HEADERS]));
     const verdicts = payload.verdicts[reviewers[0]?.id] ?? {};
-    for (const subjectSession of subjectSessions(payload)) {
+    for (const subjectSession of payload.subjectSessions) {
       const verdict = verdicts[subjectSession];
       rows.push(
         csvRow([
@@ -216,7 +172,7 @@ export function generateVerdictsCsv(payload: VerdictsCsvPayload): string {
   rows.push(csvRow(header));
 
   const verdicts = payload.verdicts;
-  for (const subjectSession of subjectSessions(payload)) {
+  for (const subjectSession of payload.subjectSessions) {
     const resolution = payload.resolvedVerdicts?.[subjectSession];
     const reviewerValues = reviewers.flatMap((reviewer) => {
       const verdict = verdicts[reviewer.id]?.[subjectSession];
@@ -234,9 +190,6 @@ export function generateVerdictsCsv(payload: VerdictsCsvPayload): string {
     );
   }
 
-  rows.push(
-    "",
-    generateAgreementCsv(payload.agreement ?? defaultAgreement(payload, reviewers, verdicts)),
-  );
+  rows.push("", generateAgreementCsv(payload.agreement!));
   return rows.join("\n");
 }

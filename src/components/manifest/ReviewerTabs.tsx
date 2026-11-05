@@ -8,10 +8,15 @@ import { useProjectStore } from "../../stores/projectStore";
 export interface ReviewerTabsProps {
   /** Subject-sessions eligible for review; excludes No Info rows. */
   eligibleSubjectSessions: Iterable<string>;
-  children: (reviewerId?: string, addControl?: ReactNode) => ReactNode;
+  inventoryCount: number;
+  children: (reviewerId?: string) => ReactNode;
 }
 
-export default function ReviewerTabs({ eligibleSubjectSessions, children }: ReviewerTabsProps) {
+export default function ReviewerTabs({
+  eligibleSubjectSessions,
+  inventoryCount,
+  children,
+}: ReviewerTabsProps) {
   const manifest = useProjectStore((state) => state.project?.uiState.manifest);
   const addReviewer = useProjectStore((state) => state.addReviewer);
   const removeReviewer = useProjectStore((state) => state.removeReviewer);
@@ -70,19 +75,47 @@ export default function ReviewerTabs({ eligibleSubjectSessions, children }: Revi
       </Box>
     </Tooltip>
   );
+  const heading = (
+    <Group justify="space-between" align="start" mb="md" data-testid="qc-worklist-heading">
+      <Box>
+        <Text fw={600} size="lg">
+          QC work list
+        </Text>
+        <Text size="xs" c="dimmed" data-testid="qc-cohort-summary">
+          {inventoryCount.toLocaleString()} inventory entries ·{" "}
+          {eligibleSessions.length.toLocaleString()} eligible ·{" "}
+          {(inventoryCount - eligibleSessions.length).toLocaleString()} No Info
+        </Text>
+      </Box>
+      {addControl}
+    </Group>
+  );
 
   if (!multiReviewer) {
-    return <Box data-testid="reviewer-tabs-controls">{children(activeReviewerId, addControl)}</Box>;
+    return (
+      <Box className="manifest-worklist" data-testid="reviewer-tabs-controls">
+        {heading}
+        {activeReviewerId && (
+          <Text size="sm" fw={600} mb="sm" data-testid="single-reviewer-completion">
+            {reviewers[0]?.label} · {completion(activeReviewerId)}/{eligibleSessions.length}{" "}
+            complete
+          </Text>
+        )}
+        {children(activeReviewerId)}
+      </Box>
+    );
   }
 
   return (
     <>
       <Tabs
+        className="manifest-worklist"
         value={activeReviewerId}
         onChange={(reviewerId) => reviewerId && setActiveReviewerId(reviewerId)}
         keepMounted={false}
         data-testid="reviewer-tabs"
       >
+        {heading}
         <Group justify="space-between" align="center" mb="sm" wrap="wrap">
           <Tabs.List>
             {reviewers.map((reviewer) => (
@@ -121,7 +154,7 @@ export default function ReviewerTabs({ eligibleSubjectSessions, children }: Revi
 
         {reviewers.map((reviewer) => (
           <Tabs.Panel key={reviewer.id} value={reviewer.id} pt="sm">
-            {children(reviewer.id, addControl)}
+            {children(reviewer.id)}
           </Tabs.Panel>
         ))}
       </Tabs>

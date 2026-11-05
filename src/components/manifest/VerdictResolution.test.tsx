@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +11,8 @@ vi.mock("../../lib/logViewer", () => ({
   fetchLogContent: mockFetchLogContent,
 }));
 
-import VerdictResolution from "./VerdictResolution";
+import { useState } from "react";
+import VerdictResolution, { type ResolutionDrafts } from "./VerdictResolution";
 import { areDisagreementsResolved } from "./VerdictResolution.helpers";
 import { useManifestStore, type ManifestDisagreement } from "../../stores/manifestStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -112,10 +113,15 @@ function setState(resolvedVerdicts: Record<string, unknown> | undefined = undefi
   };
 }
 
+function ResolutionHarness({ disagreements }: { disagreements: ManifestDisagreement[] }) {
+  const draftState = useState<ResolutionDrafts>(() => ({ pendingFails: {}, notes: {} }));
+  return <VerdictResolution disagreements={disagreements} draftState={draftState} />;
+}
+
 function renderResolution(resolutionDisagreements = disagreements) {
   return render(
     <MantineProvider env="test">
-      <VerdictResolution disagreements={resolutionDisagreements} />
+      <ResolutionHarness disagreements={resolutionDisagreements} />
     </MantineProvider>,
   );
 }
@@ -133,6 +139,30 @@ afterEach(() => {
 });
 
 describe("VerdictResolution", () => {
+  it.each(["newer draft", "expired lease"])(
+    "retains controlled notes after an ACK with %s",
+    async (change) => {
+      setState({ "sub-01_01": { status: "pass", setAt: 1 } });
+      renderResolution();
+      let acknowledge!: () => void;
+      const submit = vi.spyOn(useProjectStore.getState(), "setResolvedVerdict").mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            acknowledge = resolve;
+          }),
+      );
+      const notes = screen.getByTestId("final-notes-sub-01_01");
+      fireEvent.change(notes, { target: { value: "submitted" } });
+      fireEvent.blur(notes);
+      if (change === "newer draft") fireEvent.change(notes, { target: { value: "newer" } });
+      else activateProjectLease("project-1", "/project");
+      await act(async () => acknowledge());
+      expect(notes).toHaveValue(change === "newer draft" ? "newer" : "submitted");
+      expect(screen.getByTestId("resolution-draft-status")).toHaveTextContent("1 pending notes");
+      submit.mockRestore();
+    },
+  );
+
   it("renders an identifiable empty state", () => {
     setState();
 
@@ -251,7 +281,7 @@ describe("VerdictResolution", () => {
     ).toMatchObject({ status: "fail", reason: "artifact", setAt: 10 });
   });
 
-  it("preserves accepted pass and blocks flush while a replacement fail lacks its required reason", async () => {
+  it("preserves accepted pass while a replacement fail draft lacks its required reason", async () => {
     const user = userEvent.setup();
     setState({ "sub-01_01": { status: "pass", notes: "prior", setAt: 1 } });
 
@@ -263,8 +293,8 @@ describe("VerdictResolution", () => {
     expect(
       useProjectStore.getState().project?.uiState.manifest?.resolvedVerdicts?.["sub-01_01"],
     ).toEqual({ status: "pass", notes: "prior", setAt: 1 });
-    await expect(useProjectStore.getState().flushEdits()).rejects.toThrow(
-      "Complete pending Fail resolutions",
+    expect(screen.getByTestId("resolution-draft-status")).toHaveTextContent(
+      "1 pending Fail drafts",
     );
     expect(screen.getByTestId("resolution-state-sub-01_01")).toHaveTextContent("Pending");
     expect(screen.getByTestId("final-reason-sub-01_01")).toHaveAccessibleName(

@@ -1,26 +1,26 @@
 import { comboboxTestIds } from "../common/comboboxTestIds";
 import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import {
   Badge,
   Box,
   Button,
   Group,
+  NativeSelect,
   SegmentedControl,
   Select,
   Stack,
   Text,
   TextInput,
-  Tooltip,
 } from "@mantine/core";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
-import { IconSquareCheck, IconBook, IconPlus } from "@tabler/icons-react";
+import "./Manifest.css";
 
 import { useManifestStore } from "../../stores/manifestStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
-import { FAIL_REASON_LABELS, MAX_REVIEWERS } from "../../schemas/manifestSchemas";
+import { FAIL_REASON_LABELS } from "../../schemas/manifestSchemas";
 import {
   MANIFEST_FAIL_REASONS,
   type ManifestVerdict,
@@ -35,13 +35,15 @@ import type { ModuleDisplayStatus } from "../processing/SubjectSelection.helpers
 import { resolveLogBadge, resolveModuleDisplay } from "../processing/SubjectSelection.helpers";
 import { StatusIcon } from "../processing/SubjectSelection";
 import { indexSubjectStatuses } from "../processing/subjectStatusIndex";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
+import QcMetricsPopover from "./QcMetricsPopover";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 type DisplayVerdict = "neutral" | "pass" | "fail" | "no-info";
-type FilterValue = "all" | "neutral" | "pass" | "fail" | "no-info";
+type FilterValue = "all" | "neutral" | "pass" | "fail" | "no-info" | "stale";
 
 interface QcRow {
   subjectSession: string;
@@ -59,15 +61,18 @@ interface QcRow {
 }
 
 interface QcSelectionTableProps {
-  noInfoSubjects?: Set<string>;
-  onNextReady?: (ready: boolean) => void;
   reviewerId?: string;
-  addControl?: ReactNode;
+  draftState: [QcSelectionDrafts, Dispatch<SetStateAction<QcSelectionDrafts>>];
 }
 
 type FlatManifestVerdicts = Record<string, ManifestVerdict>;
 type PendingFails = Map<string, string | undefined>;
 type PendingFailsByScope = Map<string, PendingFails>;
+
+export interface QcSelectionDrafts {
+  pendingFails: PendingFailsByScope;
+  notes: Map<string, Map<string, string>>;
+}
 
 const EMPTY_VERDICTS: FlatManifestVerdicts = {};
 const EMPTY_STALE_VERDICTS = new Set<string>();
@@ -97,25 +102,19 @@ const FILTER_OPTIONS: { label: string; value: FilterValue }[] = [
   { label: "Pass", value: "pass" },
   { label: "Fail", value: "fail" },
   { label: "No Info", value: "no-info" },
+  { label: "Stale", value: "stale" },
 ];
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function QcSelectionTable({
-  noInfoSubjects: propNoInfoSubjects = new Set(),
-  onNextReady,
-  reviewerId,
-  addControl,
-}: QcSelectionTableProps) {
-  const addReviewer = useProjectStore((s) => s.addReviewer);
+export default function QcSelectionTable({ reviewerId, draftState }: QcSelectionTableProps) {
   const availableSubjects = useProcessingStore((s) => s.availableSubjects);
   const subjectStatuses = useProcessingStore((s) => s.subjectStatuses);
   const processingPhase = useProcessingStore((s) => s.processingPhase);
   const mappingState = useProjectStore((s) => s.project?.mappingState);
   const reviewers = useProjectStore((s) => s.project?.uiState?.manifest?.reviewers);
-  const reviewerCount = reviewers?.length ?? 0;
   const activeReviewerId = useProjectStore((s) => s.project?.uiState?.manifest?.activeReviewerId);
   const selectedReviewerId = reviewerId ?? activeReviewerId;
   const scopedReviewerId = reviewers?.some((reviewer) => reviewer.id === selectedReviewerId)
@@ -144,7 +143,7 @@ export default function QcSelectionTable({
   const { module: modalModule, subjectSession: modalSubjectSession } = logModal;
 
   const noInfoSubjects = useMemo(() => {
-    const set = new Set<string>(propNoInfoSubjects);
+    const set = new Set<string>();
     if (qcLoaded && qcData) {
       for (const info of availableSubjects) {
         if (!(info.subjectSession in qcData)) {
@@ -153,36 +152,59 @@ export default function QcSelectionTable({
       }
     }
     return set;
-  }, [propNoInfoSubjects, availableSubjects, qcData, qcLoaded]);
+  }, [availableSubjects, qcData, qcLoaded]);
 
   const [filter, setFilter] = useState<FilterValue>("all");
   const [page, setPage] = useState(1);
-  const [pendingFailsByScope, setPendingFailsByScope] = useState<PendingFailsByScope>(new Map());
+  const [pageSize, setPageSize] = useState(10);
+  const [query, setQuery] = useState("");
+  const [visit, setVisit] = useState("");
+  const [drafts, setDrafts] = draftState;
+  const pendingFailsByScope = drafts.pendingFails;
   const pendingFails = pendingFailsByScope.get(verdictScopeKey) ?? EMPTY_PENDING_FAILS;
-  const setDraftError = useProjectStore((s) => s.setDraftError);
-  useEffect(() => {
-    setDraftError(
-      "manifest:qc",
-      pendingFailsByScope.size ? "Complete pending Fail verdicts" : null,
-    );
-    return () => setDraftError("manifest:qc", null);
-  }, [pendingFailsByScope, setDraftError]);
+  const notesDrafts = drafts.notes.get(verdictScopeKey);
 
   const updatePendingFails = useCallback(
     (update: (pendingFails: PendingFails) => void) => {
-      setPendingFailsByScope((previous) => {
-        const next = new Map(previous);
+      setDrafts((previous) => {
+        const next = new Map(previous.pendingFails);
+        const previousSlice = next.get(verdictScopeKey);
         const pendingFailsForScope = new Map(next.get(verdictScopeKey));
         update(pendingFailsForScope);
+        if (!previousSlice?.size && !pendingFailsForScope.size) return previous;
         if (pendingFailsForScope.size === 0) {
           next.delete(verdictScopeKey);
         } else {
           next.set(verdictScopeKey, pendingFailsForScope);
         }
-        return next;
+        return { ...previous, pendingFails: next };
       });
     },
-    [verdictScopeKey],
+    [verdictScopeKey, setDrafts],
+  );
+
+  const updateNotesDraft = useCallback(
+    // A supplied third argument is an ACK, including an explicitly submitted undefined.
+    (
+      subjectSession: string,
+      notes: string | undefined,
+      ...acknowledgement: [] | [submittedNotes: string | undefined]
+    ) => {
+      setDrafts((previous) => {
+        const previousSlice = previous.notes.get(verdictScopeKey);
+        if (notes === undefined && !previousSlice?.has(subjectSession)) return previous;
+        if (acknowledgement.length && previousSlice?.get(subjectSession) !== acknowledgement[0])
+          return previous;
+        const next = new Map(previous.notes);
+        const slice = new Map(next.get(verdictScopeKey));
+        if (notes === undefined) slice.delete(subjectSession);
+        else slice.set(subjectSession, notes);
+        if (slice.size) next.set(verdictScopeKey, slice);
+        else next.delete(verdictScopeKey);
+        return { ...previous, notes: next };
+      });
+    },
+    [setDrafts, verdictScopeKey],
   );
 
   const groupMap = useMemo(() => {
@@ -213,6 +235,7 @@ export default function QcSelectionTable({
   const handleVerdictChange = useCallback(
     (subjectSession: string, value: string) => {
       if (value === "pass") {
+        updateNotesDraft(subjectSession, undefined);
         updatePendingFails((pendingFailsForScope) => pendingFailsForScope.delete(subjectSession));
         useProjectStore
           .getState()
@@ -223,6 +246,7 @@ export default function QcSelectionTable({
           pendingFailsForScope.set(subjectSession, undefined),
         );
       } else if (value === "neutral") {
+        updateNotesDraft(subjectSession, undefined);
         updatePendingFails((pendingFailsForScope) => pendingFailsForScope.delete(subjectSession));
         useProjectStore
           .getState()
@@ -230,29 +254,50 @@ export default function QcSelectionTable({
           .catch(() => undefined);
       }
     },
-    [scopedReviewerId, updatePendingFails],
+    [scopedReviewerId, updatePendingFails, updateNotesDraft],
   );
 
   const handleReasonChange = useCallback(
     (subjectSession: string, reason: string | null) => {
       if (!reason) return;
       if (!isManifestFailReason(reason)) return;
+      const notes = notesDrafts?.get(subjectSession) ?? verdicts[subjectSession]?.notes;
       updatePendingFails((pendingFailsForScope) =>
         pendingFailsForScope.set(subjectSession, reason),
       );
+      if (Array.from(notes ?? "").length > 500) return;
+      const lease = captureProjectLease();
       useProjectStore
         .getState()
-        .setManifestVerdict(subjectSession, "fail", { reason }, scopedReviewerId)
-        .then(() => updatePendingFails((pending) => pending.delete(subjectSession)))
+        .setManifestVerdict(
+          subjectSession,
+          "fail",
+          { reason, ...(notes !== undefined ? { notes } : {}) },
+          scopedReviewerId,
+        )
+        .then(() => {
+          if (!isCurrentProjectLease(lease)) return;
+          updatePendingFails((pending) => {
+            if (pending.get(subjectSession) === reason) pending.delete(subjectSession);
+          });
+          updateNotesDraft(subjectSession, undefined, notes);
+        })
         .catch(() => undefined);
     },
-    [scopedReviewerId, updatePendingFails],
+    [scopedReviewerId, updatePendingFails, notesDrafts, verdicts, updateNotesDraft],
   );
 
   const handleNotesBlur = useCallback(
     (subjectSession: string, notes: string) => {
       const current = verdicts[subjectSession];
+      if (Array.from(notes).length > 500) return;
+      if (pendingFails.has(subjectSession)) {
+        const reason = pendingFails.get(subjectSession);
+        if (reason) handleReasonChange(subjectSession, reason);
+        return;
+      }
       if (!current) return;
+      const lease = captureProjectLease();
       useProjectStore
         .getState()
         .setManifestVerdict(
@@ -261,16 +306,23 @@ export default function QcSelectionTable({
           { reason: current.reason, notes: notes || undefined },
           scopedReviewerId,
         )
+        .then(() => {
+          if (isCurrentProjectLease(lease)) updateNotesDraft(subjectSession, undefined, notes);
+        })
         .catch(() => undefined);
     },
-    [verdicts, scopedReviewerId],
+    [verdicts, scopedReviewerId, pendingFails, handleReasonChange, updateNotesDraft],
   );
 
+  const sortedSubjects = useMemo(
+    () =>
+      [...availableSubjects].sort((a, b) =>
+        a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
+      ),
+    [availableSubjects],
+  );
   const rows: QcRow[] = useMemo(() => {
-    const sorted = [...availableSubjects].sort((a, b) =>
-      a.subjectSession.localeCompare(b.subjectSession, undefined, { numeric: true }),
-    );
-    return sorted.map((info) => {
+    return sortedSubjects.map((info) => {
       const structuralStatus = resolveModuleDisplay(info, "structural", statusIndex);
       const aslStatus = resolveModuleDisplay(info, "asl", statusIndex);
       const cleanSs = info.subjectSession.replace(/^sub-/, "");
@@ -301,7 +353,7 @@ export default function QcSelectionTable({
         aslRuns: info.aslRuns || [],
       };
     });
-  }, [availableSubjects, statusIndex, rowGroupMap, groupMap, verdicts, noInfoSubjects]);
+  }, [sortedSubjects, statusIndex, rowGroupMap, groupMap, verdicts, noInfoSubjects]);
 
   const handleViewReport = useCallback(
     (subjectSession: string, module: "structural" | "asl") => {
@@ -336,8 +388,10 @@ export default function QcSelectionTable({
       pass: 0,
       fail: 0,
       "no-info": 0,
+      stale: 0,
     };
     for (const row of rows) {
+      if (!row.noInfo && staleVerdicts.has(row.subjectSession)) counts.stale++;
       if (pendingFails.has(row.subjectSession)) {
         counts.fail++;
       } else {
@@ -345,230 +399,144 @@ export default function QcSelectionTable({
       }
     }
     return counts;
-  }, [rows, pendingFails]);
+  }, [rows, pendingFails, staleVerdicts]);
 
   const filteredRows = useMemo(() => {
-    if (filter === "all") return rows;
+    const search = query.trim().toLocaleLowerCase();
     return rows.filter((row) => {
+      if (search && !`${row.subject} ${row.groupLabel}`.toLocaleLowerCase().includes(search))
+        return false;
+      if (visit && row.session !== visit) return false;
+      if (filter === "all") return true;
+      if (filter === "stale") return !row.noInfo && staleVerdicts.has(row.subjectSession);
       if (pendingFails.has(row.subjectSession)) return filter === "fail";
       return row.displayedVerdict === filter;
     });
-  }, [rows, filter, pendingFails]);
+  }, [rows, filter, pendingFails, query, visit, staleVerdicts]);
+
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredRows.length / pageSize)));
 
   const paginatedRows = useMemo(() => {
-    const from = (page - 1) * 10;
-    return filteredRows.slice(from, from + 10);
-  }, [filteredRows, page]);
+    const from = (currentPage - 1) * pageSize;
+    return filteredRows.slice(from, from + pageSize);
+  }, [filteredRows, currentPage, pageSize]);
+
+  const renderModuleEvidence = useCallback(
+    (row: QcRow, module: "structural" | "asl") => {
+      const status = module === "structural" ? row.structuralStatus : row.aslStatus;
+      const files = (module === "structural" ? structuralLogInfo : aslLogInfo).get(
+        row.subjectSession,
+      );
+      const logBadge = resolveLogBadge(status, files);
+      const hasReport =
+        existingReports.has(`${row.subjectSession}:${module}`) ||
+        (module === "asl" && existingReports.has(`${row.subjectSession}:m0`));
+      return (
+        <Stack gap={4} align="start" data-testid={`qc-${module}-evidence-${row.subjectSession}`}>
+          <Group gap={4} wrap="nowrap">
+            <StatusIcon status={status} processingPhase={processingPhase} />
+            <Text size="xs" tt="capitalize">
+              {status}
+            </Text>
+          </Group>
+          {status !== "skipped" && (
+            <>
+              {logBadge === "no-logs" ? (
+                <Text size="xs" c="dimmed" data-testid={`no-${module}-logs`}>
+                  No Logs
+                </Text>
+              ) : (
+                <Button
+                  size="compact-xs"
+                  color={logBadge === "errors" ? "red" : "blue"}
+                  variant="subtle"
+                  onClick={() => handleViewLog(row.subjectSession, module)}
+                  aria-label={`View ${module} ${logBadge === "errors" ? "errors" : "logs"} for ${row.subjectSession}`}
+                  data-testid={`view-${module}-${logBadge === "errors" ? "errors" : "logs"}`}
+                >
+                  {logBadge === "errors" ? "View Errors" : "View Logs"}
+                </Button>
+              )}
+              {hasReport ? (
+                <Button
+                  size="compact-xs"
+                  color="blue"
+                  variant="subtle"
+                  onClick={() => handleViewReport(row.subjectSession, module)}
+                  aria-label={`View ${status === "outdated" ? "outdated " : ""}${module} report for ${row.subjectSession}`}
+                  data-testid={`view-${module}-report`}
+                >
+                  {status === "outdated" ? "View Outdated Report" : "View Report"}
+                </Button>
+              ) : (
+                <Text size="xs" c="dimmed" data-testid={`no-${module}-report`}>
+                  No Report
+                </Text>
+              )}
+            </>
+          )}
+        </Stack>
+      );
+    },
+    [
+      structuralLogInfo,
+      aslLogInfo,
+      existingReports,
+      processingPhase,
+      handleViewLog,
+      handleViewReport,
+    ],
+  );
 
   const columns: DataTableColumn<QcRow>[] = useMemo(
     () => [
       {
         accessor: "subject",
-        title: "Subject",
-        sortable: true,
+        title: "Subject / Session (visit)",
         render: (row) => (
-          <Text size="sm" ff="monospace">
-            {row.subject}
-          </Text>
-        ),
-      },
-      {
-        accessor: "session",
-        title: "Session",
-        sortable: true,
-        render: (row) => (
-          <Text size="sm" ff="monospace">
-            {row.session}
-          </Text>
+          <Stack gap={2} align="start">
+            <Text size="sm" fw={600} ff="monospace">
+              {row.subject.replace(/^sub-/, "")}
+            </Text>
+            <Text size="xs" c="dimmed">
+              Session {row.session}
+            </Text>
+            <QcMetricsPopover
+              subjectSession={row.subjectSession}
+              metrics={qcData?.[row.subjectSession]}
+              dropdownTestId={`qc-metrics-${row.subjectSession}`}
+            />
+          </Stack>
         ),
       },
       {
         accessor: "groupLabel",
-        title: "Metadata Group",
-        sortable: true,
+        title: "Metadata group",
       },
       {
         accessor: "structuralStatus",
-        title: (
-          <>
-            Structural
-            <br />
-            Status
-          </>
-        ),
-        textAlign: "center",
-        render: (row) => (
-          <StatusIcon status={row.structuralStatus} processingPhase={processingPhase} />
-        ),
-      },
-      {
-        accessor: "structuralLogs",
-        title: (
-          <>
-            Structural
-            <br />
-            Logs/Errors
-          </>
-        ),
-        textAlign: "center",
-        render: (row) => {
-          if (row.structuralStatus === "skipped") return null;
-          const files = structuralLogInfo.get(row.subjectSession);
-          const badge = resolveLogBadge(row.structuralStatus, files);
-          if (badge === "no-logs") {
-            return (
-              <Text size="xs" c="dimmed" data-testid="no-structural-logs">
-                No Logs
-              </Text>
-            );
-          }
-          const isError = badge === "errors";
-          return (
-            <Badge
-              size="sm"
-              color={isError ? "red" : "teal"}
-              variant="outline"
-              leftSection={<IconBook size={12} />}
-              style={{ cursor: "pointer" }}
-              onClick={() => handleViewLog(row.subjectSession, "structural")}
-              data-testid={isError ? "view-structural-errors" : "view-structural-logs"}
-            >
-              {isError ? "View Errors" : "View Logs"}
-            </Badge>
-          );
-        },
-      },
-      {
-        accessor: "structuralReport",
-        title: (
-          <>
-            Structural
-            <br />
-            Report
-          </>
-        ),
-        textAlign: "center",
-        render: (row) => {
-          if (row.structuralStatus === "skipped") return null;
-          const hasReport = existingReports.has(`${row.subjectSession}:structural`);
-          if (!hasReport) {
-            return (
-              <Text size="xs" c="dimmed" data-testid="no-structural-report">
-                No Report
-              </Text>
-            );
-          }
-          const isOutdated = row.structuralStatus === "outdated";
-          return (
-            <Badge
-              size="sm"
-              color={isOutdated ? "orange" : "blue"}
-              variant="outline"
-              style={{ cursor: "pointer" }}
-              onClick={() => handleViewReport(row.subjectSession, "structural")}
-              data-testid="view-structural-report"
-            >
-              {isOutdated ? "View Outdated Report" : "View Report"}
-            </Badge>
-          );
-        },
+        title: "Structural",
+        render: (row) => renderModuleEvidence(row, "structural"),
       },
       {
         accessor: "aslStatus",
-        title: (
-          <>
-            ASL
-            <br />
-            Status
-          </>
-        ),
-        textAlign: "center",
-        render: (row) => <StatusIcon status={row.aslStatus} processingPhase={processingPhase} />,
-      },
-      {
-        accessor: "aslLogs",
-        title: (
-          <>
-            ASL
-            <br />
-            Logs/Errors
-          </>
-        ),
-        textAlign: "center",
-        render: (row) => {
-          if (row.aslStatus === "skipped") return null;
-          const files = aslLogInfo.get(row.subjectSession);
-          const badge = resolveLogBadge(row.aslStatus, files);
-          if (badge === "no-logs") {
-            return (
-              <Text size="xs" c="dimmed" data-testid="no-asl-logs">
-                No Logs
-              </Text>
-            );
-          }
-          const isError = badge === "errors";
-          return (
-            <Badge
-              size="sm"
-              color={isError ? "red" : "teal"}
-              variant="outline"
-              leftSection={<IconBook size={12} />}
-              style={{ cursor: "pointer" }}
-              onClick={() => handleViewLog(row.subjectSession, "asl")}
-              data-testid={isError ? "view-asl-errors" : "view-asl-logs"}
-            >
-              {isError ? "View Errors" : "View Logs"}
-            </Badge>
-          );
-        },
-      },
-      {
-        accessor: "aslReport",
-        title: (
-          <>
-            ASL
-            <br />
-            Report
-          </>
-        ),
-        textAlign: "center",
-        render: (row) => {
-          if (row.aslStatus === "skipped") return null;
-          const hasReport =
-            existingReports.has(`${row.subjectSession}:asl`) ||
-            existingReports.has(`${row.subjectSession}:m0`);
-          if (!hasReport) {
-            return (
-              <Text size="xs" c="dimmed" data-testid="no-asl-report">
-                No Report
-              </Text>
-            );
-          }
-          const isOutdated = row.aslStatus === "outdated";
-          return (
-            <Badge
-              size="sm"
-              color={isOutdated ? "orange" : "blue"}
-              variant="outline"
-              style={{ cursor: "pointer" }}
-              onClick={() => handleViewReport(row.subjectSession, "asl")}
-              data-testid="view-asl-report"
-            >
-              {isOutdated ? "View Outdated Report" : "View Report"}
-            </Badge>
-          );
-        },
+        title: "ASL",
+        render: (row) => renderModuleEvidence(row, "asl"),
       },
       {
         accessor: "verdict",
-        title: "Verdict",
-        width: 360,
+        title: "Reviewer verdict",
         render: (row) => {
           if (row.noInfo) {
             return (
-              <Badge color="gray" data-testid={`no-info-badge-${row.subjectSession}`}>
-                No Info
-              </Badge>
+              <Stack gap={4} align="start">
+                <Badge color="gray" data-testid={`no-info-badge-${row.subjectSession}`}>
+                  No Info
+                </Badge>
+                <Text size="xs" c="dimmed">
+                  Absent after successful QC load; not a verdict.
+                </Text>
+              </Stack>
             );
           }
 
@@ -578,10 +546,10 @@ export default function QcSelectionTable({
           const segValue = effectiveVerdict === "no-info" ? "neutral" : effectiveVerdict;
 
           return (
-            <Group gap="xs" wrap="nowrap">
+            <Box className="manifest-decision" data-testid={`qc-decision-${row.subjectSession}`}>
               <SegmentedControl
                 size="xs"
-                style={{ flexShrink: 0 }}
+                aria-label={`Verdict for ${row.subjectSession}`}
                 data={[
                   { value: "neutral", label: "Neutral" },
                   { value: "pass", label: "Pass" },
@@ -592,30 +560,42 @@ export default function QcSelectionTable({
                 onChange={(v) => handleVerdictChange(row.subjectSession, v)}
                 {...segmentedControlTestIds(`verdict-control-${row.subjectSession}`)}
               />
-              {isPendingFail && (
+              {effectiveVerdict === "fail" && (
                 <Select
                   size="xs"
-                  style={{ flexShrink: 1, minWidth: 120 }}
                   data={Object.entries(FAIL_REASON_LABELS).map(([v, l]) => ({
                     value: v,
                     label: l,
                   }))}
-                  value={reasonValue ?? null}
+                  value={(isPendingFail ? reasonValue : row.reason) ?? null}
                   onChange={(v) => handleReasonChange(row.subjectSession, v)}
-                  placeholder="Reason"
-                  error={!reasonValue ? "Reason required" : undefined}
+                  label="Fail reason"
+                  placeholder="Choose required reason"
+                  error={
+                    isPendingFail && !reasonValue
+                      ? "Reason required · previous accepted verdict unchanged"
+                      : undefined
+                  }
+                  aria-label={`Failure reason for ${row.subjectSession}`}
                   {...comboboxTestIds(`verdict-reason-${row.subjectSession}`)}
                 />
               )}
-              {effectiveVerdict !== "neutral" && !isPendingFail && (
+              {effectiveVerdict !== "neutral" && (
                 <TextInput
-                  key={`${verdictScopeKey}-${row.subjectSession}-${row.notes ?? ""}`}
                   size="xs"
-                  style={{ flexShrink: 1, minWidth: 120 }}
-                  placeholder="Notes (optional)"
-                  defaultValue={row.notes ?? ""}
+                  className="manifest-notes"
+                  label="Notes (optional)"
+                  aria-label={`Notes for ${row.subjectSession}`}
+                  value={notesDrafts?.get(row.subjectSession) ?? row.notes ?? ""}
+                  onChange={(event) =>
+                    updateNotesDraft(row.subjectSession, event.currentTarget.value)
+                  }
                   onBlur={(e) => handleNotesBlur(row.subjectSession, e.currentTarget.value)}
-                  maxLength={500}
+                  error={
+                    Array.from(notesDrafts?.get(row.subjectSession) ?? row.notes ?? "").length > 500
+                      ? "Maximum 500 Unicode characters"
+                      : undefined
+                  }
                   data-testid={`verdict-notes-${row.subjectSession}`}
                 />
               )}
@@ -629,7 +609,7 @@ export default function QcSelectionTable({
                   Stale
                 </Badge>
               )}
-            </Group>
+            </Box>
           );
         },
       },
@@ -639,90 +619,47 @@ export default function QcSelectionTable({
       handleVerdictChange,
       handleReasonChange,
       handleNotesBlur,
-      verdictScopeKey,
       staleVerdicts,
-      processingPhase,
-      structuralLogInfo,
-      aslLogInfo,
-      existingReports,
-      handleViewLog,
-      handleViewReport,
+      renderModuleEvidence,
+      notesDrafts,
+      updateNotesDraft,
+      qcData,
     ],
   );
 
   const handleBulkMarkPass = useCallback(() => {
+    const lease = captureProjectLease();
     for (const row of rows) {
       if (row.structuralStatus === "complete" && row.aslStatus === "complete" && !row.noInfo) {
+        const previousNotesDraft = notesDrafts?.get(row.subjectSession);
+        const hadPendingFail = pendingFails.has(row.subjectSession);
+        const previousPendingFail = pendingFails.get(row.subjectSession);
         useProjectStore
           .getState()
           .setManifestVerdict(row.subjectSession, "pass", {}, scopedReviewerId)
+          .then(() => {
+            if (!isCurrentProjectLease(lease)) return;
+            updatePendingFails((pending) => {
+              if (
+                pending.has(row.subjectSession) === hadPendingFail &&
+                pending.get(row.subjectSession) === previousPendingFail
+              )
+                pending.delete(row.subjectSession);
+            });
+            updateNotesDraft(row.subjectSession, undefined, previousNotesDraft);
+          })
           .catch(() => undefined);
       }
     }
-  }, [rows, scopedReviewerId]);
-
-  const hasNeutral = useMemo(() => {
-    return rows.some((row) => {
-      if (row.noInfo) return false;
-      if (pendingFails.has(row.subjectSession)) return false;
-      return row.displayedVerdict === "neutral";
-    });
-  }, [rows, pendingFails]);
-
-  const hasPendingFails = useMemo(() => {
-    return rows.some(
-      (row) => pendingFails.has(row.subjectSession) && !pendingFails.get(row.subjectSession),
-    );
-  }, [rows, pendingFails]);
-
-  const nextReady = !hasNeutral && !hasPendingFails;
-
-  useEffect(() => {
-    onNextReady?.(nextReady);
-  }, [nextReady, onNextReady]);
-
-  const defaultAddControl = (
-    <Tooltip label="Maximum of 5 reviewers reached" disabled={reviewerCount < MAX_REVIEWERS}>
-      <Box component="span">
-        <Button
-          size="xs"
-          variant="light"
-          leftSection={<IconPlus size={14} />}
-          disabled={reviewerCount >= MAX_REVIEWERS}
-          onClick={addReviewer}
-          data-testid="add-reviewer"
-        >
-          Add Reviewer
-        </Button>
-      </Box>
-    </Tooltip>
-  );
-
-  const effectiveAddControl = addControl !== undefined ? addControl : defaultAddControl;
+  }, [rows, scopedReviewerId, updatePendingFails, updateNotesDraft, notesDrafts, pendingFails]);
 
   return (
     <Stack gap="sm" data-testid="qc-selection-table">
-      <Group justify="space-between" align="center">
-        <Text fw={600} size="sm">
-          QC Verdicts
-        </Text>
-        <Group gap="xs" align="center">
-          {effectiveAddControl}
-          <Button
-            size="xs"
-            variant="light"
-            leftSection={<IconSquareCheck size={14} />}
-            onClick={handleBulkMarkPass}
-            data-testid="bulk-mark-pass"
-          >
-            Mark all complete→Pass
-          </Button>
-        </Group>
-      </Group>
-
-      <Group gap="xs" align="center">
+      <Box className="manifest-review-tools" data-testid="qc-review-tools">
         <SegmentedControl
           size="xs"
+          className="manifest-status-filter"
+          aria-label="Filter QC verdicts"
           value={filter}
           onChange={(val) => {
             setFilter(val as FilterValue);
@@ -731,33 +668,77 @@ export default function QcSelectionTable({
           data={FILTER_OPTIONS.map((opt) => ({
             ...opt,
             label: (
-              <Stack gap={2} align="center" style={{ minWidth: 70, padding: "2px 0" }}>
-                <Text size="xs" style={{ whiteSpace: "nowrap" }}>
-                  {opt.label}
-                </Text>
-                <Badge size="xs" variant="light" data-testid={`qc-filter-count-${opt.value}`}>
-                  {filterCounts[opt.value]}
-                </Badge>
-              </Stack>
+              <Text span size="sm" style={{ whiteSpace: "nowrap" }}>
+                {opt.label} ·{" "}
+                <span data-testid={`qc-filter-count-${opt.value}`}>{filterCounts[opt.value]}</span>
+              </Text>
             ),
           }))}
           {...segmentedControlTestIds("qc-filter")}
         />
-      </Group>
+        <Group gap="xs" align="end" className="manifest-search-tools" data-testid="qc-search-tools">
+          <TextInput
+            size="sm"
+            label="Search subject or group"
+            value={query}
+            className="manifest-search"
+            data-testid="qc-search"
+            onChange={(event) => {
+              setQuery(event.currentTarget.value);
+              setPage(1);
+            }}
+          />
+          <NativeSelect
+            size="sm"
+            label="Visit (GUI Session)"
+            value={visit}
+            data={[
+              { value: "", label: "All visits" },
+              ...Array.from(new Set(rows.map((row) => row.session)))
+                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+                .map((value) => ({ value, label: value })),
+            ]}
+            data-testid="qc-visit-filter"
+            onChange={(event) => {
+              setVisit(event.currentTarget.value);
+              setPage(1);
+            }}
+          />
+          <Button
+            size="sm"
+            variant="default"
+            onClick={handleBulkMarkPass}
+            data-testid="bulk-mark-pass"
+          >
+            Mark all complete→Pass
+          </Button>
+        </Group>
+      </Box>
+      <Text size="xs" c="dimmed" data-testid="qc-bulk-scope">
+        Bulk Pass covers all eligible entries with both modules Complete, across pages and filters;
+        only this reviewer's decisions change.
+      </Text>
 
-      <Box style={{ flexShrink: 0, isolation: "isolate" }}>
+      <Box className="manifest-table-frame" data-testid="qc-table-frame">
         <DataTable
+          classNames={{ root: "manifest-editor", table: "manifest-qc-table" }}
           records={paginatedRows}
           columns={columns}
           idAccessor="subjectSession"
-          striped
           highlightOnHover
           borderRadius="sm"
           withTableBorder
-          page={page}
+          page={currentPage}
           onPageChange={setPage}
           totalRecords={filteredRows.length}
-          recordsPerPage={10}
+          recordsPerPage={pageSize}
+          recordsPerPageOptions={[10, 25, 50]}
+          onRecordsPerPageChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+          recordsPerPageLabel="Entries per page"
+          paginationWithEdges
           paginationSize="sm"
           getPaginationControlProps={(control) => ({
             "data-testid": `qc-verdict-table-page-${control}`,
@@ -765,10 +746,19 @@ export default function QcSelectionTable({
           })}
           getPaginationItemProps={(page) => ({ "data-testid": `qc-verdict-table-page-${page}` })}
           minHeight={240}
+          height="auto"
+          scrollAreaProps={{
+            type: "auto",
+            viewportProps: {
+              tabIndex: 0,
+              role: "region",
+              "aria-label": "QC work list",
+              ...{ "data-testid": "qc-table-scroll" },
+            },
+          }}
           data-testid="qc-verdict-table"
         />
       </Box>
-
       <LogViewerModal {...logModal} runErrorMap={modalRunErrorMap} />
       <ReportViewerModal {...reportModal} />
     </Stack>

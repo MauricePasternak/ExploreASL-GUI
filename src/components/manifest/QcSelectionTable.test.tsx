@@ -1,11 +1,12 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { exists } from "@tauri-apps/plugin-fs";
 
-import QcSelectionTable from "./QcSelectionTable";
+import { useState } from "react";
+import QcSelectionTable, { type QcSelectionDrafts } from "./QcSelectionTable";
 import type { SubjectInfo, SubjectModuleStatus } from "../../schemas/processingSchemas";
 import type { ManifestVerdict } from "../../schemas/project";
 import type { MetadataGroup, SubjectRow } from "../../schemas/importSchemas";
@@ -55,6 +56,8 @@ const subject4: SubjectInfo = {
   hasASL: false,
   aslRuns: [],
 };
+
+const emptyQc = { coverage: null, spatialCov: null, motion: [], motionExclusionPct: null };
 
 const statusComplete: SubjectModuleStatus = {
   subjectSession: "sub-01_01",
@@ -147,13 +150,28 @@ function buildProjectState() {
 // Render helper
 // ---------------------------------------------------------------------------
 
-function renderTable(
-  props: {
-    noInfoSubjects?: Set<string>;
-    onNextReady?: (ready: boolean) => void;
-    reviewerId?: string;
-  } = {},
-) {
+function TableHarness({ reviewerId }: { reviewerId?: string }) {
+  const draftState = useState<QcSelectionDrafts>(() => ({
+    pendingFails: new Map(),
+    notes: new Map(),
+  }));
+  return (
+    <>
+      <QcSelectionTable reviewerId={reviewerId} draftState={draftState} />
+      <output data-testid="pending-qc-fails">
+        {Array.from(draftState[0].pendingFails.values()).reduce(
+          (count, slice) => count + slice.size,
+          0,
+        )}
+      </output>
+      <output data-testid="pending-qc-notes">
+        {Array.from(draftState[0].notes.values()).reduce((count, slice) => count + slice.size, 0)}
+      </output>
+    </>
+  );
+}
+
+function renderTable(props: { reviewerId?: string } = {}) {
   vi.mocked(exists).mockResolvedValue(mockBids2LegacyExists);
   useProcessingStore.setState({
     availableSubjects: mockAvailableSubjects,
@@ -180,11 +198,7 @@ function renderTable(
   });
   return render(
     <MantineProvider env="test">
-      <QcSelectionTable
-        noInfoSubjects={props.noInfoSubjects ?? new Set()}
-        onNextReady={props.onNextReady}
-        reviewerId={props.reviewerId}
-      />
+      <TableHarness reviewerId={props.reviewerId} />
     </MantineProvider>,
   );
 }
@@ -317,7 +331,7 @@ describe("QcSelectionTable", () => {
 
     view.rerender(
       <MantineProvider env="test">
-        <QcSelectionTable reviewerId={reviewer2.id} />
+        <TableHarness reviewerId={reviewer2.id} />
       </MantineProvider>,
     );
 
@@ -332,17 +346,16 @@ describe("QcSelectionTable", () => {
     const view = renderTable({ reviewerId: reviewer1.id });
     await user.click(within(screen.getByTestId("verdict-control-sub-01_01")).getByText("Fail"));
     expect(screen.getByTestId("verdict-reason-sub-01_01")).toBeInTheDocument();
-    await expect(useProjectStore.getState().flushEdits()).rejects.toThrow(
-      "Complete pending Fail verdicts",
-    );
+    expect(screen.getByTestId("pending-qc-fails")).toHaveTextContent("1");
 
     view.rerender(
       <MantineProvider env="test">
-        <QcSelectionTable reviewerId={reviewer2.id} />
+        <TableHarness reviewerId={reviewer2.id} />
       </MantineProvider>,
     );
 
     expect(screen.queryByTestId("verdict-reason-sub-01_01")).not.toBeInTheDocument();
+    expect(screen.getByTestId("pending-qc-fails")).toHaveTextContent("1");
   });
 
   it("uses the active store reviewer when reviewerId is omitted", async () => {
@@ -381,7 +394,8 @@ describe("QcSelectionTable", () => {
       [reviewer2.id]: { "sub-01_01": { status: "fail", reason: "motion", setAt: 1 } },
     };
 
-    renderTable({ reviewerId: reviewer1.id, noInfoSubjects: new Set(["sub-02_01"]) });
+    useManifestStore.setState({ qcLoaded: true, qcData: { "sub-01_01": emptyQc } });
+    renderTable({ reviewerId: reviewer1.id });
     await user.click(screen.getByTestId("bulk-mark-pass"));
 
     expect(useProjectStore.getState().project?.uiState.manifest?.verdicts).toEqual({
@@ -417,6 +431,53 @@ describe("QcSelectionTable", () => {
     });
   });
 
+  it.each(["newer draft", "expired lease"])(
+    "retains notes after an ACK with %s",
+    async (change) => {
+      mockAvailableSubjects = [subject1];
+      mockVerdicts = { "sub-01_01": { status: "pass", setAt: 1 } };
+      renderTable();
+      let acknowledge!: () => void;
+      const submit = vi.spyOn(useProjectStore.getState(), "setManifestVerdict").mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            acknowledge = resolve;
+          }),
+      );
+      const notes = screen.getByTestId("verdict-notes-sub-01_01");
+      fireEvent.change(notes, { target: { value: "submitted" } });
+      fireEvent.blur(notes);
+      if (change === "newer draft") fireEvent.change(notes, { target: { value: "newer" } });
+      else activateProjectLease("project-1", "/test/project");
+      await act(async () => acknowledge());
+      expect(notes).toHaveValue(change === "newer draft" ? "newer" : "submitted");
+      expect(screen.getByTestId("pending-qc-notes")).toHaveTextContent("1");
+      submit.mockRestore();
+    },
+  );
+
+  it("counts notes by Unicode characters and clears only the acknowledged controlled draft", async () => {
+    mockAvailableSubjects = [subject1];
+    mockVerdicts = { "sub-01_01": { status: "pass", setAt: 1 } };
+    renderTable();
+    const submit = vi.spyOn(useProjectStore.getState(), "setManifestVerdict").mockResolvedValue();
+    const notes = screen.getByTestId("verdict-notes-sub-01_01");
+    fireEvent.change(notes, { target: { value: "🧠".repeat(501) } });
+    fireEvent.blur(notes);
+    expect(submit).not.toHaveBeenCalled();
+    expect(screen.getByText("Maximum 500 Unicode characters")).toBeInTheDocument();
+    fireEvent.change(notes, { target: { value: "🧠".repeat(500) } });
+    fireEvent.blur(notes);
+    await waitFor(() => expect(screen.getByTestId("pending-qc-notes")).toHaveTextContent("0"));
+    expect(submit).toHaveBeenCalledWith(
+      "sub-01_01",
+      "pass",
+      { reason: undefined, notes: "🧠".repeat(500) },
+      reviewer1.id,
+    );
+    submit.mockRestore();
+  });
+
   // 12.1 — container and table structure
   it("renders container, table, filter, and bulk button", () => {
     mockAvailableSubjects = [subject1, subject2];
@@ -432,46 +493,24 @@ describe("QcSelectionTable", () => {
     expect(screen.getByTestId("qc-filter")).toBeTruthy();
     expect(screen.getByTestId("bulk-mark-pass")).toBeTruthy();
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(3);
-    expect(screen.getByRole("row", { name: /sub-01/ })).toHaveTextContent("Global Defaults");
-    expect(screen.getByRole("row", { name: /sub-02/ })).toHaveTextContent("Encoding Group");
+    expect(screen.getByRole("row", { name: /01 Session 01/ })).toHaveTextContent("Global Defaults");
+    expect(screen.getByRole("row", { name: /02 Session 01/ })).toHaveTextContent("Encoding Group");
+    expect(within(screen.getByRole("table")).getAllByRole("columnheader")).toHaveLength(5);
+    expect(screen.getByRole("columnheader", { name: "Reviewer verdict" })).toBeInTheDocument();
+    expect(screen.getByTestId("qc-search-tools")).toContainElement(
+      screen.getByTestId("bulk-mark-pass"),
+    );
   });
 
-  // 12.8 — next gate: disabled when neutral rows exist
-  it("reports next not ready when neutral rows exist", async () => {
-    const onNextReady = vi.fn();
+  it("opens QC metrics from the subject cell without changing a verdict", async () => {
+    const user = userEvent.setup();
     mockAvailableSubjects = [subject1];
-    mockSubjectStatuses = [statusComplete];
-    mockMetadataGroups = [group1];
-    mockSubjectRows = [subjectRow1];
+    renderTable();
 
-    renderTable({ onNextReady });
-
-    await screen.findByTestId("qc-verdict-table");
-
-    const calls = onNextReady.mock.calls as [boolean][];
-    const falseCalls = calls.filter((call) => call[0] === false);
-    expect(falseCalls.length).toBeGreaterThanOrEqual(1);
-  });
-
-  // 12.9 — next gate: ready when no neutral and no pending fails
-  it("reports next ready when no neutral rows and no pending fails", async () => {
-    const onNextReady = vi.fn();
-    mockAvailableSubjects = [subject1, subject2];
-    mockSubjectStatuses = [statusComplete, statusIncomplete];
-    mockMetadataGroups = [group1, group2];
-    mockSubjectRows = [subjectRow1, subjectRow2];
-    mockVerdicts = {
-      "sub-01_01": { status: "pass", setAt: 1000 },
-      "sub-02_01": { status: "fail", reason: "motion", setAt: 1000 },
-    };
-
-    renderTable({ onNextReady });
-
-    await screen.findByTestId("qc-verdict-table");
-
-    const calls2 = onNextReady.mock.calls as [boolean][];
-    const trueCalls = calls2.filter((call) => call[0] === true);
-    expect(trueCalls.length).toBeGreaterThanOrEqual(1);
+    await user.click(screen.getByTestId("view-qc-metrics-sub-01_01"));
+    expect(await screen.findByTestId("qc-metrics-sub-01_01")).toHaveTextContent("Coverage");
+    expect(screen.getByTestId("qc-metrics-sub-01_01")).toHaveTextContent("Unavailable");
+    expect(useProjectStore.getState().project?.uiState.manifest.verdicts[reviewer1.id]).toEqual({});
   });
 
   // 12.10 — filter chips show categories
@@ -488,18 +527,18 @@ describe("QcSelectionTable", () => {
     mockVerdicts = {
       "sub-01_01": { status: "pass", setAt: 1000 },
     };
-    const noInfo = new Set<string>(["sub-04_01"]);
-
-    renderTable({ noInfoSubjects: noInfo });
+    useManifestStore.setState({
+      qcLoaded: true,
+      qcData: { "sub-01_01": emptyQc, "sub-02_01": emptyQc, "sub-03_01": emptyQc },
+    });
+    renderTable();
 
     const filter = await screen.findByTestId("qc-filter");
     expect(filter).toBeTruthy();
 
-    expect(within(filter).getByText("All")).toBeTruthy();
-    expect(within(filter).getByText("Neutral")).toBeTruthy();
-    expect(within(filter).getByText("Pass")).toBeTruthy();
-    expect(within(filter).getByText("Fail")).toBeTruthy();
-    expect(within(filter).getByText("No Info")).toBeTruthy();
+    for (const label of ["All", "Neutral", "Pass", "Fail", "No Info", "Stale"]) {
+      expect(within(filter).getByRole("radio", { name: new RegExp(label) })).toBeTruthy();
+    }
   });
 
   // 12.11 — filter counts are accurate
@@ -516,9 +555,11 @@ describe("QcSelectionTable", () => {
     mockVerdicts = {
       "sub-01_01": { status: "pass", setAt: 1000 },
     };
-    const noInfo = new Set<string>(["sub-04_01"]);
-
-    renderTable({ noInfoSubjects: noInfo });
+    useManifestStore.setState({
+      qcLoaded: true,
+      qcData: { "sub-01_01": emptyQc, "sub-02_01": emptyQc, "sub-03_01": emptyQc },
+    });
+    renderTable();
 
     await screen.findByTestId("qc-verdict-table");
 
@@ -626,7 +667,7 @@ describe("QcSelectionTable", () => {
     const table = await screen.findByTestId("qc-verdict-table");
     expect(table).toBeTruthy();
 
-    const cells = await screen.findAllByText("sub-01");
+    const cells = await screen.findAllByText("01");
     expect(cells.length).toBeGreaterThanOrEqual(1);
 
     const control = screen.getByTestId("verdict-control-sub-01_01");
@@ -676,17 +717,6 @@ describe("QcSelectionTable", () => {
         reason: "motion",
         setAt: 1700000000000,
       });
-    });
-
-    it("renders the Add Reviewer button in the header to the left of Mark all complete Pass button", async () => {
-      renderTable();
-      const addReviewerBtn = screen.getByTestId("add-reviewer");
-      const bulkBtn = screen.getByTestId("bulk-mark-pass");
-      expect(addReviewerBtn).toBeInTheDocument();
-      expect(bulkBtn).toBeInTheDocument();
-      expect(
-        addReviewerBtn.compareDocumentPosition(bulkBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
     });
   });
 });

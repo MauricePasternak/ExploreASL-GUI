@@ -1,4 +1,5 @@
 import { Accordion, Box, Button, Code, Group, Stack, Table, Text, Title } from "@mantine/core";
+import { Fragment } from "react";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useManifestStore } from "../../stores/manifestStore";
@@ -27,8 +28,14 @@ import type { MetadataGroup } from "../../schemas/importSchemas";
 import { summarizeAslContext } from "../../lib/bids/sidecar";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import "./Manifest.css";
 
 const ARRAY_PARAM_UNIQUE_THRESHOLD = 5;
+const EXPORT_FORMATS = [
+  { format: "md", label: "Markdown", id: "markdown", filename: "manifest.md" },
+  { format: "html", label: "HTML", id: "html", filename: "manifest.html" },
+  { format: "csv", label: "CSV", id: "csv", filename: "manifest_export.csv" },
+] as const;
 type NestedVerdicts = Record<string, Record<string, ManifestVerdict>>;
 type Reviewer = { id: string; label: string; createdAt: string };
 
@@ -397,6 +404,11 @@ export default function ManifestPreview() {
   const reviewers = project?.uiState?.manifest?.reviewers as Reviewer[] | undefined;
   const rawVerdicts = project?.uiState?.manifest?.verdicts;
   const exportDisabled = !hasVerdictEntries(reviewers, rawVerdicts);
+  const availableSubjects = useProcessingStore((s) => s.availableSubjects);
+  const participantCount = new Set(
+    availableSubjects.map((subject) => subject.subject.replace(/^sub-/, "")),
+  ).size;
+  const runCount = availableSubjects.reduce((total, subject) => total + subject.aslRuns.length, 0);
 
   const sanitisedDataPar = sanitiseDataParForExport(payload.dataPar ?? {});
   const dataParJson = JSON.stringify(sanitisedDataPar, null, 2);
@@ -433,98 +445,46 @@ export default function ManifestPreview() {
   }
 
   return (
-    <Stack data-testid="manifest-preview" gap="lg">
-      <Group justify="flex-end" gap="sm">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            const projectRoot = project?.projectMeta?.rootPath;
-            const defaultPath = projectRoot ? `${projectRoot}/manifest.md` : "manifest.md";
-            const path = await save({
-              defaultPath,
-              filters: [{ name: "Markdown", extensions: ["md"] }],
-            });
-            if (!path) return;
-            await exportToPath(path, "md");
-          }}
-          disabled={exportDisabled}
-          data-testid="export-markdown-btn"
-        >
-          Export Markdown
-        </Button>
-        <PathEntryButton
-          title="Save Markdown manifest"
-          testId="export-markdown-path"
-          defaultPath={
-            project?.projectMeta.rootPath ? `${project.projectMeta.rootPath}/manifest.md` : ""
-          }
-          extensions={["md"]}
-          save
-          disabled={exportDisabled}
-          onSelect={(path) => exportToPath(path, "md")}
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            const projectRoot = project?.projectMeta?.rootPath;
-            const defaultPath = projectRoot ? `${projectRoot}/manifest.html` : "manifest.html";
-            const path = await save({
-              defaultPath,
-              filters: [{ name: "HTML", extensions: ["html"] }],
-            });
-            if (!path) return;
-            await exportToPath(path, "html");
-          }}
-          disabled={exportDisabled}
-          data-testid="export-html-btn"
-        >
-          Export HTML
-        </Button>
-        <PathEntryButton
-          title="Save HTML manifest"
-          testId="export-html-path"
-          defaultPath={
-            project?.projectMeta.rootPath ? `${project.projectMeta.rootPath}/manifest.html` : ""
-          }
-          extensions={["html"]}
-          save
-          disabled={exportDisabled}
-          onSelect={(path) => exportToPath(path, "html")}
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            const projectRoot = project?.projectMeta?.rootPath;
-            const path = await save({
-              defaultPath: projectRoot
-                ? `${projectRoot}/manifest_export.csv`
-                : "manifest_export.csv",
-              filters: [{ name: "CSV", extensions: ["csv"] }],
-            });
-            if (!path) return;
-            await exportToPath(path, "csv");
-          }}
-          disabled={exportDisabled}
-          data-testid="export-csv-btn"
-        >
-          Export CSV
-        </Button>
-        <PathEntryButton
-          title="Save CSV manifest"
-          testId="export-csv-path"
-          defaultPath={
-            project?.projectMeta.rootPath
-              ? `${project.projectMeta.rootPath}/manifest_export.csv`
-              : ""
-          }
-          extensions={["csv"]}
-          save
-          disabled={exportDisabled}
-          onSelect={(path) => exportToPath(path, "csv")}
-        />
+    <Stack data-testid="manifest-preview" className="manifest-preview" gap="lg">
+      <Group justify="space-between" gap="sm" data-testid="manifest-export-toolbar">
+        <Text fw={600} size="sm" data-testid="manifest-export-summary">
+          Preview & Export · {payload.agreement ? 5 : 4} sections
+        </Text>
+        <Group gap="xs" data-testid="manifest-export-actions">
+          {EXPORT_FORMATS.map(({ format, label, id, filename }) => {
+            const defaultPath = project?.projectMeta.rootPath
+              ? `${project.projectMeta.rootPath}/${filename}`
+              : "";
+            return (
+              <Fragment key={format}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const path = await save({
+                      defaultPath: defaultPath || filename,
+                      filters: [{ name: label, extensions: [format] }],
+                    });
+                    if (path) await exportToPath(path, format);
+                  }}
+                  disabled={exportDisabled}
+                  data-testid={`export-${id}-btn`}
+                >
+                  Export {label}
+                </Button>
+                <PathEntryButton
+                  title={`Save ${label} manifest`}
+                  testId={`export-${id}-path`}
+                  defaultPath={defaultPath}
+                  extensions={[format]}
+                  save
+                  disabled={exportDisabled}
+                  onSelect={(path) => exportToPath(path, format)}
+                />
+              </Fragment>
+            );
+          })}
+        </Group>
       </Group>
 
       <Accordion
@@ -542,7 +502,16 @@ export default function ManifestPreview() {
         {/* Section 1: Study Parameters */}
         <Accordion.Item value="study-parameters" data-testid="manifest-section-study-parameters">
           <Accordion.Control data-testid="manifest-study-parameters-toggle">
-            <Title order={3}>Study Parameters</Title>
+            <Stack gap={2}>
+              <Title order={3} size="h5">
+                Study Parameters
+              </Title>
+              <Text component="span" size="xs" c="dimmed" data-testid="manifest-study-summary">
+                {participantCount.toLocaleString()} participants ·{" "}
+                {availableSubjects.length.toLocaleString()} visits · {runCount.toLocaleString()} ASL
+                runs
+              </Text>
+            </Stack>
           </Accordion.Control>
           <Accordion.Panel>
             {payload.metadataGroups.map((g, i) => (
@@ -556,8 +525,8 @@ export default function ManifestPreview() {
                   style={{ tableLayout: "fixed", width: "100%" }}
                 >
                   <colgroup>
-                    <col style={{ width: "33%" }} />
-                    <col style={{ width: "67%" }} />
+                    <col style={{ width: "38%" }} />
+                    <col style={{ width: "62%" }} />
                   </colgroup>
                   <Table.Thead>
                     <Table.Tr>
@@ -596,7 +565,15 @@ export default function ManifestPreview() {
         {/* Section 2: Software Manifest */}
         <Accordion.Item value="software-manifest" data-testid="manifest-section-software-manifest">
           <Accordion.Control data-testid="manifest-software-manifest-toggle">
-            <Title order={3}>Software Manifest</Title>
+            <Stack gap={2}>
+              <Title order={3} size="h5">
+                Software Manifest
+              </Title>
+              <Text component="span" size="xs" c="dimmed" data-testid="manifest-software-summary">
+                3 software entries ·{" "}
+                {hasDataPar ? "available configuration" : "configuration unavailable"}
+              </Text>
+            </Stack>
           </Accordion.Control>
           <Accordion.Panel>
             <Title order={5} mb="xs">
@@ -610,8 +587,8 @@ export default function ManifestPreview() {
               style={{ tableLayout: "fixed", width: "100%" }}
             >
               <colgroup>
-                <col style={{ width: "33%" }} />
-                <col style={{ width: "67%" }} />
+                <col style={{ width: "38%" }} />
+                <col style={{ width: "62%" }} />
               </colgroup>
               <Table.Thead>
                 <Table.Tr>
@@ -659,7 +636,14 @@ export default function ManifestPreview() {
         {/* Section 3: QC Summary */}
         <Accordion.Item value="qc-summary" data-testid="manifest-section-qc-summary">
           <Accordion.Control data-testid="manifest-qc-summary-toggle">
-            <Title order={3}>QC Summary</Title>
+            <Stack gap={2}>
+              <Title order={3} size="h5">
+                QC Summary
+              </Title>
+              <Text component="span" size="xs" c="dimmed" data-testid="manifest-qc-summary">
+                {payload.qcGroups.length} reviewed groups · final verdicts · No Info excluded
+              </Text>
+            </Stack>
           </Accordion.Control>
           <Accordion.Panel>
             <Text size="sm" data-testid="qc-denominator-note">
@@ -676,8 +660,8 @@ export default function ManifestPreview() {
                   style={{ tableLayout: "fixed", width: "100%" }}
                 >
                   <colgroup>
-                    <col style={{ width: "33%" }} />
-                    <col style={{ width: "67%" }} />
+                    <col style={{ width: "38%" }} />
+                    <col style={{ width: payload.agreement ? "42%" : "62%" }} />
                     {payload.agreement && <col style={{ width: "20%" }} />}
                   </colgroup>
                   <Table.Thead>
@@ -742,7 +726,21 @@ export default function ManifestPreview() {
             data-testid="manifest-section-inter-rater-agreement"
           >
             <Accordion.Control data-testid="manifest-inter-rater-agreement-toggle">
-              <Title order={3}>Inter-Rater Agreement</Title>
+              <Stack gap={2}>
+                <Title order={3} size="h5">
+                  Inter-Rater Agreement
+                </Title>
+                <Text
+                  component="span"
+                  size="xs"
+                  c="dimmed"
+                  data-testid="manifest-agreement-summary"
+                >
+                  {payload.agreement.numberOfReviewers} reviewers ·{" "}
+                  {payload.agreement.overall.n.toLocaleString()} rated visits · original ratings
+                  before resolution
+                </Text>
+              </Stack>
             </Accordion.Control>
             <Accordion.Panel>
               <AgreementSummary
@@ -758,7 +756,15 @@ export default function ManifestPreview() {
         {/* Section 4: Pipeline Summary */}
         <Accordion.Item value="pipeline-summary" data-testid="manifest-section-pipeline-summary">
           <Accordion.Control data-testid="manifest-pipeline-summary-toggle">
-            <Title order={3}>Pipeline Summary</Title>
+            <Stack gap={2}>
+              <Title order={3} size="h5">
+                Pipeline Summary
+              </Title>
+              <Text component="span" size="xs" c="dimmed" data-testid="manifest-pipeline-summary">
+                {payload.methodsParagraphs.length} Methods paragraphs ·{" "}
+                {payload.methodsReferences.length} references
+              </Text>
+            </Stack>
           </Accordion.Control>
           <Accordion.Panel>
             <Text mt="sm">{payload.pipelineParagraph}</Text>
@@ -766,20 +772,32 @@ export default function ManifestPreview() {
               <Stack mt="md" gap="sm" data-testid="manifest-methods">
                 <Title order={5}>Methods</Title>
                 <Text data-testid="manifest-methods-disclaimer">{payload.methodsDisclaimer}</Text>
-                {payload.methodsParagraphs.map((paragraph, index) => (
-                  <Text key={index}>{paragraph}</Text>
-                ))}
+                <Box component="details" data-testid="manifest-methods-disclosure">
+                  <Box component="summary" data-testid="manifest-methods-toggle">
+                    Read {payload.methodsParagraphs.length} Methods paragraphs
+                  </Box>
+                  <Stack mt="sm" gap="sm" data-testid="manifest-methods-paragraphs">
+                    {payload.methodsParagraphs.map((paragraph, index) => (
+                      <Text key={index}>{paragraph}</Text>
+                    ))}
+                  </Stack>
+                </Box>
               </Stack>
             )}
             {payload.methodsReferences.length > 0 && (
-              <Stack mt="md" gap="xs" data-testid="manifest-references">
-                <Title order={5}>References</Title>
-                {payload.methodsReferences.map((reference, index) => (
-                  <Text key={index} size="sm">
-                    {reference}
-                  </Text>
-                ))}
-              </Stack>
+              <Box component="details" mt="md" data-testid="manifest-references-disclosure">
+                <Box component="summary" data-testid="manifest-references-toggle">
+                  References · {payload.methodsReferences.length} entries
+                </Box>
+                <Stack mt="md" gap="xs" data-testid="manifest-references">
+                  <Title order={5}>References</Title>
+                  {payload.methodsReferences.map((reference, index) => (
+                    <Text key={index} size="sm">
+                      {reference}
+                    </Text>
+                  ))}
+                </Stack>
+              </Box>
             )}
           </Accordion.Panel>
         </Accordion.Item>

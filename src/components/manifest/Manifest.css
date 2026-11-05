@@ -1,0 +1,281 @@
+.manifest-page {
+  width: 100%;
+  min-width: 0;
+  container: manifest / inline-size;
+}
+
+.manifest-page-capped {
+  max-width: 2160px;
+  margin-inline: auto;
+}
+
+.manifest-page > *,
+.manifest-worklist,
+.manifest-worklist > *,
+.manifest-preview,
+.manifest-preview > *,
+.manifest-preview .mantine-Accordion-panel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.manifest-page [data-testid="manifest-header"] {
+  margin-bottom: 0;
+}
+
+.manifest-worklist {
+  padding: var(--mantine-spacing-lg);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
+}
+
+.manifest-review-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+.manifest-status-filter {
+  align-self: start;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: transparent;
+}
+
+.manifest-status-filter .mantine-SegmentedControl-indicator {
+  background: var(--mantine-color-blue-light);
+  box-shadow: none;
+}
+
+.manifest-status-filter .mantine-SegmentedControl-label {
+  color: var(--mantine-color-blue-7);
+}
+
+.manifest-search-tools {
+  min-width: 0;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.manifest-search-tools .mantine-NativeSelect-root {
+  width: 125px;
+}
+
+.manifest-search {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.manifest-table-frame {
+  flex-shrink: 0;
+  isolation: isolate;
+  min-width: 0;
+}
+
+.manifest-editor .mantine-ScrollArea-viewport {
+  max-height: clamp(
+    280px,
+    calc(
+      100dvh - var(--app-shell-header-offset, 0px) - var(--app-shell-footer-offset, 0px) - 520px
+    ),
+    1200px
+  );
+  scrollbar-gutter: stable;
+}
+
+.manifest-editor .mantine-ScrollArea-viewport:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+}
+
+.manifest-editor thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--mantine-color-body);
+}
+
+.manifest-editor table {
+  font-size: var(--mantine-font-size-sm);
+}
+
+.manifest-editor td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.manifest-editor .mantine-Button-root {
+  height: auto;
+  min-height: 24px;
+  padding-block: 4px;
+}
+
+.manifest-editor .mantine-Button-label {
+  white-space: normal;
+}
+
+.manifest-qc-table {
+  min-width: 950px;
+  table-layout: fixed;
+}
+
+.manifest-editor:has(.manifest-qc-table) .mantine-ScrollArea-viewport {
+  scrollbar-gutter: auto;
+}
+
+.manifest-qc-table th:nth-child(1) {
+  width: 18%;
+}
+.manifest-qc-table th:nth-child(2) {
+  width: 16%;
+}
+.manifest-qc-table th:nth-child(3),
+.manifest-qc-table th:nth-child(4) {
+  width: 14.5%;
+}
+.manifest-qc-table th:nth-child(5) {
+  width: 37%;
+}
+
+.manifest-qc-table th:nth-child(3) {
+  color: var(--mantine-color-blue-7);
+  background: var(--mantine-color-blue-light);
+}
+.manifest-qc-table th:nth-child(4) {
+  color: var(--mantine-color-pink-7);
+  background: var(--mantine-color-pink-light);
+}
+
+.manifest-qc-table .mantine-InputWrapper-label {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.manifest-decision {
+  display: grid;
+  gap: var(--mantine-spacing-xs);
+  align-items: start;
+}
+
+.manifest-decision > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.manifest-decision > .mantine-Badge-root {
+  justify-self: start;
+  grid-column: 1 / -1;
+}
+
+.manifest-resolution-table {
+  min-width: 1150px;
+}
+
+.manifest-preview .mantine-Accordion-item {
+  background: var(--mantine-color-body);
+  border-color: var(--mantine-color-default-border);
+}
+
+.manifest-preview table {
+  table-layout: fixed;
+  width: 100%;
+  font-size: var(--mantine-font-size-sm);
+  border: 0;
+}
+
+.manifest-preview tbody tr {
+  background: transparent;
+}
+
+.manifest-preview :is(td, th) {
+  padding-block: var(--mantine-spacing-xs);
+  border-inline: 0;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.manifest-preview th,
+.manifest-preview td:first-child {
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+}
+
+.manifest-preview [data-testid="agreement-overall-table"] td:first-child {
+  width: 38%;
+}
+
+.manifest-preview .mantine-Code-root {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.manifest-preview summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding-block: var(--mantine-spacing-xs);
+}
+
+.manifest-preview summary:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
+@container manifest (min-width: 1900px) {
+  .manifest-review-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: end;
+  }
+
+  .manifest-qc-table th:nth-child(1) {
+    width: 220px !important;
+  }
+  .manifest-qc-table th:nth-child(2) {
+    width: 300px !important;
+  }
+  .manifest-qc-table th:nth-child(3),
+  .manifest-qc-table th:nth-child(4) {
+    width: 220px !important;
+  }
+  .manifest-qc-table th:nth-child(5) {
+    width: auto;
+  }
+
+  .manifest-decision {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .manifest-decision:has(.mantine-Select-root) {
+    grid-template-columns: 220px 220px minmax(0, 1fr);
+  }
+
+  .manifest-preview > .mantine-Accordion-root {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--mantine-spacing-md);
+    align-items: start;
+  }
+
+  .manifest-preview > .mantine-Accordion-root > .mantine-Accordion-item {
+    margin: 0;
+    min-width: 0;
+  }
+
+  .manifest-preview > .mantine-Accordion-root > .mantine-Accordion-item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 800px) {
+  .manifest-page .mantine-Stepper-steps {
+    flex-wrap: wrap;
+    gap: var(--mantine-spacing-xs);
+  }
+
+  .manifest-page .mantine-Stepper-separator {
+    min-width: 16px;
+    flex: 0 1 24px;
+  }
+}

@@ -1,16 +1,15 @@
 import { comboboxTestIds } from "../common/comboboxTestIds";
 import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   Badge,
   Box,
   Button,
   Group,
-  Popover,
+  NativeSelect,
   SegmentedControl,
   Select,
   Stack,
-  Table,
   Text,
   TextInput,
 } from "@mantine/core";
@@ -18,12 +17,14 @@ import { DataTable, type DataTableColumn } from "mantine-datatable";
 
 import { FAIL_REASON_LABELS } from "../../schemas/manifestSchemas";
 import type { ManifestFailReason, ManifestVerdict, Reviewer } from "../../schemas/project";
-import { aggregateMotionBySubject } from "../../lib/manifestQc";
 import { fetchLogContent, type LogContent } from "../../lib/logViewer";
 import { useManifestStore, type ManifestDisagreement } from "../../stores/manifestStore";
 import { useProjectStore } from "../../stores/projectStore";
 import LogViewerModal from "../processing/LogViewerModal";
 import ReportViewerModal from "../processing/ReportViewerModal";
+import { captureProjectLease, isCurrentProjectLease } from "../../lib/projectLifecycle";
+import QcMetricsPopover from "./QcMetricsPopover";
+import "./Manifest.css";
 
 interface ResolutionRow extends ManifestDisagreement {
   subject: string;
@@ -33,8 +34,14 @@ interface ResolutionRow extends ManifestDisagreement {
 
 type PendingFail = { reason?: ManifestFailReason; notes?: string };
 
+export interface ResolutionDrafts {
+  pendingFails: Record<string, PendingFail>;
+  notes: Record<string, string>;
+}
+
 interface VerdictResolutionProps {
   disagreements: ManifestDisagreement[];
+  draftState: [ResolutionDrafts, Dispatch<SetStateAction<ResolutionDrafts>>];
 }
 
 const EMPTY_RUN_ERROR_MAP: Record<string, boolean> = {};
@@ -49,11 +56,7 @@ function isManifestFailReason(value: string): value is ManifestFailReason {
   return value in FAIL_REASON_LABELS;
 }
 
-function formatMetric(value: number | null | undefined, suffix = "") {
-  return value === null || value === undefined ? "Unavailable" : `${value}${suffix}`;
-}
-
-export default function VerdictResolution({ disagreements }: VerdictResolutionProps) {
+export default function VerdictResolution({ disagreements, draftState }: VerdictResolutionProps) {
   const qcData = useManifestStore((state) => state.qcData);
   const projectRoot = useProjectStore((state) => state.project?.projectMeta.rootPath);
   const reviewers = useProjectStore(
@@ -64,15 +67,40 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
   );
   const setResolvedVerdict = useProjectStore((state) => state.setResolvedVerdict);
 
-  const [pendingFails, setPendingFails] = useState<Record<string, PendingFail>>({});
-  const setDraftError = useProjectStore((state) => state.setDraftError);
-  useEffect(() => {
-    setDraftError(
-      "manifest:resolution",
-      Object.keys(pendingFails).length ? "Complete pending Fail resolutions" : null,
-    );
-    return () => setDraftError("manifest:resolution", null);
-  }, [pendingFails, setDraftError]);
+  const [drafts, setDrafts] = draftState;
+  const pendingFails = drafts.pendingFails;
+  const setPendingFails = useCallback(
+    (update: SetStateAction<Record<string, PendingFail>>) => {
+      setDrafts((previous) => ({
+        ...previous,
+        pendingFails: typeof update === "function" ? update(previous.pendingFails) : update,
+      }));
+    },
+    [setDrafts],
+  );
+  const updateNotesDraft = useCallback(
+    // A supplied third argument is an ACK, including an explicitly submitted undefined.
+    (
+      subjectSession: string,
+      notes: string | undefined,
+      ...acknowledgement: [] | [submittedNotes: string | undefined]
+    ) => {
+      setDrafts((previous) => {
+        if (notes === undefined && !(subjectSession in previous.notes)) return previous;
+        if (acknowledgement.length && previous.notes[subjectSession] !== acknowledgement[0])
+          return previous;
+        const next = { ...previous.notes };
+        if (notes === undefined) delete next[subjectSession];
+        else next[subjectSession] = notes;
+        return { ...previous, notes: next };
+      });
+    },
+    [setDrafts],
+  );
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [reportSubjectSession, setReportSubjectSession] = useState<string | null>(null);
   const [logSubjectSession, setLogSubjectSession] = useState<string | null>(null);
   const [logContent, setLogContent] = useState<LogContent | null>(null);
@@ -92,10 +120,28 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
   const unresolvedCount = disagreements.filter(
     ({ subjectSession }) => !resolvedVerdicts?.[subjectSession],
   ).length;
+  const filteredRows = useMemo(() => {
+    const search = query.trim().toLocaleLowerCase();
+    return rows.filter(
+      (row) =>
+        (!search || row.subjectSession.toLocaleLowerCase().includes(search)) &&
+        (filter === "all" ||
+          (filter === "unresolved"
+            ? !row.resolution ||
+              pendingFails[row.subjectSession] ||
+              row.subjectSession in drafts.notes
+            : row.resolution &&
+              !pendingFails[row.subjectSession] &&
+              !(row.subjectSession in drafts.notes))),
+    );
+  }, [rows, query, filter, pendingFails, drafts.notes]);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredRows.length / pageSize)));
+  const paginatedRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handleStatusChange = useCallback(
     (subjectSession: string, status: string) => {
       if (status === "pass") {
+        updateNotesDraft(subjectSession, undefined);
         const existing =
           useProjectStore.getState().project?.uiState.manifest?.resolvedVerdicts?.[subjectSession];
         setPendingFails((current) => {
@@ -117,39 +163,70 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
         }));
       }
     },
-    [setResolvedVerdict],
+    [setResolvedVerdict, setPendingFails, updateNotesDraft],
   );
 
   const handleReasonChange = useCallback(
     (subjectSession: string, reason: string | null) => {
       if (!reason || !isManifestFailReason(reason)) return;
       const pendingFail = pendingFails[subjectSession];
+      const notes =
+        drafts.notes[subjectSession] ??
+        pendingFail?.notes ??
+        resolvedVerdicts?.[subjectSession]?.notes;
+      setPendingFails((current) => ({
+        ...current,
+        [subjectSession]: { ...current[subjectSession], reason },
+      }));
+      if (Array.from(notes ?? "").length > 500) return;
+      const lease = captureProjectLease();
       setResolvedVerdict(subjectSession, "fail", {
         reason,
-        notes: pendingFail?.notes,
+        notes,
       })
-        .then(() =>
+        .then(() => {
+          if (!isCurrentProjectLease(lease)) return;
           setPendingFails((current) => {
+            if (current[subjectSession]?.reason !== reason) return current;
             const { [subjectSession]: _, ...remaining } = current;
             return remaining;
-          }),
-        )
+          });
+          updateNotesDraft(subjectSession, undefined, notes);
+        })
         .catch(() => undefined);
     },
-    [pendingFails, setResolvedVerdict],
+    [
+      pendingFails,
+      drafts.notes,
+      resolvedVerdicts,
+      setResolvedVerdict,
+      setPendingFails,
+      updateNotesDraft,
+    ],
   );
 
   const handleNotesBlur = useCallback(
     (subjectSession: string, notes: string) => {
+      if (Array.from(notes).length > 500) return;
+      if (pendingFails[subjectSession]) {
+        const reason = pendingFails[subjectSession].reason;
+        if (reason) handleReasonChange(subjectSession, reason);
+        return;
+      }
       const verdict =
         useProjectStore.getState().project?.uiState.manifest?.resolvedVerdicts?.[subjectSession];
       if (!verdict) return;
+      const lease = captureProjectLease();
       setResolvedVerdict(subjectSession, verdict.status, {
         reason: verdict.reason,
         notes: notes || undefined,
-      }).catch(() => undefined);
+      })
+        .then(() => {
+          if (isCurrentProjectLease(lease)) updateNotesDraft(subjectSession, undefined, notes);
+        })
+        .catch(() => undefined);
     },
-    [setResolvedVerdict],
+    [setResolvedVerdict, pendingFails, handleReasonChange, updateNotesDraft],
   );
 
   const handleBulkResolve = useCallback(
@@ -158,6 +235,11 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
         useProjectStore.getState().project?.uiState.manifest?.resolvedVerdicts;
       for (const disagreement of disagreements) {
         if (currentResolved?.[disagreement.subjectSession]) continue;
+        if (
+          pendingFails[disagreement.subjectSession] ||
+          disagreement.subjectSession in drafts.notes
+        )
+          continue;
         const verdict = disagreement.verdictsByReviewer[reviewer.id];
         if (!verdict) continue;
         setResolvedVerdict(disagreement.subjectSession, verdict.status, {
@@ -166,7 +248,7 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
         }).catch(() => undefined);
       }
     },
-    [disagreements, setResolvedVerdict],
+    [disagreements, setResolvedVerdict, pendingFails, drafts.notes],
   );
 
   const handleViewLogs = useCallback(
@@ -227,6 +309,11 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
                   {verdict.reason}
                 </Text>
               )}
+              {verdict?.notes && (
+                <Text size="xs" data-testid={`reviewer-notes-${reviewer.id}-${row.subjectSession}`}>
+                  {verdict.notes}
+                </Text>
+              )}
             </Stack>
           );
         },
@@ -276,11 +363,28 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
                   {...comboboxTestIds(`final-reason-${row.subjectSession}`)}
                 />
               )}
-              {row.resolution && !pendingFail && (
+              {(row.resolution || pendingFail) && (
                 <TextInput
-                  key={`${row.subjectSession}-${row.resolution.status}-${row.resolution.notes ?? ""}`}
                   size="xs"
-                  defaultValue={row.resolution.notes ?? ""}
+                  value={
+                    drafts.notes[row.subjectSession] ??
+                    pendingFail?.notes ??
+                    row.resolution?.notes ??
+                    ""
+                  }
+                  onChange={(event) =>
+                    updateNotesDraft(row.subjectSession, event.currentTarget.value)
+                  }
+                  error={
+                    Array.from(
+                      drafts.notes[row.subjectSession] ??
+                        pendingFail?.notes ??
+                        row.resolution?.notes ??
+                        "",
+                    ).length > 500
+                      ? "Maximum 500 Unicode characters"
+                      : undefined
+                  }
                   placeholder="Notes (optional)"
                   onBlur={(event) => handleNotesBlur(row.subjectSession, event.currentTarget.value)}
                   aria-label={`Resolution notes for ${row.subjectSession}`}
@@ -296,8 +400,6 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
         title: "Actions",
         width: "30%",
         render: (row) => {
-          const metrics = qcData?.[row.subjectSession];
-          const maxMotion = metrics ? aggregateMotionBySubject(metrics.motion) : null;
           return (
             <Group gap={4} wrap="wrap" data-testid={`resolution-actions-${row.subjectSession}`}>
               <Button
@@ -309,40 +411,11 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
               >
                 View Images/Reports
               </Button>
-              <Popover width={240} position="bottom" withArrow shadow="md">
-                <Popover.Target>
-                  <Button
-                    size="compact-xs"
-                    variant="subtle"
-                    aria-label={`View QC metrics for ${row.subjectSession}`}
-                    data-testid={`view-qc-metrics-${row.subjectSession}`}
-                  >
-                    QC Metrics
-                  </Button>
-                </Popover.Target>
-                <Popover.Dropdown data-testid={`resolution-qc-metrics-${row.subjectSession}`}>
-                  <Table withTableBorder={false} verticalSpacing="xs">
-                    <Table.Tbody>
-                      <Table.Tr>
-                        <Table.Td>Coverage</Table.Td>
-                        <Table.Td>{formatMetric(metrics?.coverage, "%")}</Table.Td>
-                      </Table.Tr>
-                      <Table.Tr>
-                        <Table.Td>SpatialCoV</Table.Td>
-                        <Table.Td>{formatMetric(metrics?.spatialCov)}</Table.Td>
-                      </Table.Tr>
-                      <Table.Tr>
-                        <Table.Td>Max Motion</Table.Td>
-                        <Table.Td>{formatMetric(maxMotion, " mm RMS")}</Table.Td>
-                      </Table.Tr>
-                      <Table.Tr>
-                        <Table.Td>Motion Exclusion</Table.Td>
-                        <Table.Td>{formatMetric(metrics?.motionExclusionPct, "%")}</Table.Td>
-                      </Table.Tr>
-                    </Table.Tbody>
-                  </Table>
-                </Popover.Dropdown>
-              </Popover>
+              <QcMetricsPopover
+                subjectSession={row.subjectSession}
+                metrics={qcData?.[row.subjectSession]}
+                dropdownTestId={`resolution-qc-metrics-${row.subjectSession}`}
+              />
               <Button
                 size="compact-xs"
                 variant="subtle"
@@ -365,6 +438,8 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
       pendingFails,
       qcData,
       reviewers,
+      drafts.notes,
+      updateNotesDraft,
     ],
   );
 
@@ -379,7 +454,7 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
   }
 
   return (
-    <Stack gap="sm" data-testid="verdict-resolution">
+    <Stack gap="sm" className="manifest-worklist" data-testid="verdict-resolution">
       <Group justify="space-between" align="center">
         <Text fw={600}>Verdict Resolution</Text>
         <Text
@@ -392,6 +467,10 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
             : `${unresolvedCount} disagreements remaining`}
         </Text>
       </Group>
+      <Text size="sm" c="dimmed" data-testid="resolution-scope-note">
+        Compare original ratings, then choose final verdicts. Initial agreement remains based on
+        original reviewer ratings.
+      </Text>
       <Group gap="xs" data-testid="bulk-resolution-actions">
         {reviewers.map((reviewer) => (
           <Button
@@ -405,15 +484,81 @@ export default function VerdictResolution({ disagreements }: VerdictResolutionPr
           </Button>
         ))}
       </Group>
-      <Box style={{ isolation: "isolate" }}>
+      <Text size="xs" c="dimmed" data-testid="resolution-bulk-scope">
+        Bulk resolution covers every unresolved disagreement, across pages and filters. Accepted
+        resolutions and explicit drafts are not overwritten.
+      </Text>
+      <Text size="xs" c="dimmed" data-testid="resolution-draft-status">
+        {Object.keys(pendingFails).length} pending Fail drafts · {Object.keys(drafts.notes).length}{" "}
+        pending notes across all pages and filters
+      </Text>
+      <Group align="end" gap="xs" data-testid="resolution-tools">
+        <TextInput
+          label="Search subject or visit"
+          size="sm"
+          className="manifest-search"
+          value={query}
+          data-testid="resolution-search"
+          onChange={(event) => {
+            setQuery(event.currentTarget.value);
+            setPage(1);
+          }}
+        />
+        <NativeSelect
+          label="Resolution status"
+          size="sm"
+          value={filter}
+          data={[
+            { value: "all", label: "All disagreements" },
+            { value: "unresolved", label: "Unresolved only" },
+            { value: "resolved", label: "Resolved only" },
+          ]}
+          data-testid="resolution-filter"
+          onChange={(event) => {
+            setFilter(event.currentTarget.value);
+            setPage(1);
+          }}
+        />
+      </Group>
+      <Box className="manifest-table-frame" data-testid="resolution-table-frame">
         <DataTable
-          records={rows}
+          classNames={{ root: "manifest-editor", table: "manifest-resolution-table" }}
+          records={paginatedRows}
           columns={columns}
           idAccessor="subjectSession"
-          striped
           highlightOnHover
           withTableBorder
           minHeight={200}
+          height="auto"
+          page={currentPage}
+          onPageChange={setPage}
+          totalRecords={filteredRows.length}
+          recordsPerPage={pageSize}
+          recordsPerPageOptions={[10, 25, 50]}
+          onRecordsPerPageChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+          recordsPerPageLabel="Entries per page"
+          paginationSize="sm"
+          paginationWithEdges
+          getPaginationControlProps={(control) => ({
+            "data-testid": `resolution-table-page-${control}`,
+            "aria-label": `${control} resolution page`,
+          })}
+          getPaginationItemProps={(value) => ({
+            "data-testid": `resolution-table-page-${value}`,
+            "aria-label": `Resolution page ${value}`,
+          })}
+          scrollAreaProps={{
+            type: "auto",
+            viewportProps: {
+              tabIndex: 0,
+              role: "region",
+              "aria-label": "Reviewer disagreements",
+              ...{ "data-testid": "resolution-table-scroll" },
+            },
+          }}
           data-testid="verdict-resolution-table"
         />
       </Box>
