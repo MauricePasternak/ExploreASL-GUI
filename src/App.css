@@ -22,26 +22,6 @@ details[open] > .tokenizer-config-toggle .tokenizer-config-chevron {
   color-scheme: dark;
 }
 
-/* Subtle, teasing hover transition for cards (<Paper>) */
-.mantine-Paper-root {
-  transition:
-    box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: box-shadow, transform;
-}
-
-:root[data-mantine-color-scheme="light"] .mantine-Paper-root:hover,
-:root[data-mantine-color-scheme="light"] .mantine-Paper-root:focus-within {
-  box-shadow: 0 3px 10px rgba(197, 221, 247, 0.4);
-  transform: translateY(-0.5px);
-}
-
-:root[data-mantine-color-scheme="dark"] .mantine-Paper-root:hover,
-:root[data-mantine-color-scheme="dark"] .mantine-Paper-root:focus-within {
-  box-shadow: 0 3px 10px rgba(240, 214, 219, 0.22);
-  transform: translateY(-0.5px);
-}
-
 :root[data-mantine-color-scheme="light"]
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(
     [type="file"]
@@ -80,50 +60,6 @@ input[type="radio"] {
 input[type="checkbox"]:disabled,
 input[type="radio"]:disabled {
   cursor: not-allowed;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.12);
-    opacity: 1;
-  }
-}
-
-.spin-forward {
-  animation: spin 2s linear infinite;
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-.spin-reverse {
-  animation: spin 2s linear infinite reverse;
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-.pulse-icon {
-  animation: pulse 2s ease-in-out infinite;
-  will-change: transform, opacity;
 }
 
 @keyframes pageFadeIn {
