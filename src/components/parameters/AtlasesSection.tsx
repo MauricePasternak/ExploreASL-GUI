@@ -7,7 +7,6 @@ import {
   Stack,
   Group,
   Text,
-  Paper,
   SimpleGrid,
 } from "@mantine/core";
 import { IconMap, IconCategory } from "@tabler/icons-react";
@@ -71,25 +70,23 @@ export function AtlasesSection({
 
   return (
     <Stack gap="md">
-      <Paper p="md" radius="md" withBorder>
-        <Stack gap="sm">
-          <Group gap="xs">
-            <IconMap size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
-            <Text fw={600} size="sm">
-              Structural & Custom Atlases
-            </Text>
-          </Group>
+      <Stack gap="sm">
+        <Group gap="xs">
+          <IconMap size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+          <Text fw={600} size="sm">
+            Structural & Custom Atlases
+          </Text>
+        </Group>
 
-          <AtlasSelect
-            atlases={atlases}
-            tissueMasking={tissueMasking}
-            tissueThreshold={tissueThreshold}
-            onAtlasesChange={(v) => onFieldChange("Atlases", v)}
-            onTissueMaskingChange={(v) => onFieldChange("TissueMasking", v)}
-            onTissueThresholdChange={(v) => onFieldChange("TissueThreshold", v)}
-          />
-        </Stack>
-      </Paper>
+        <AtlasSelect
+          atlases={atlases}
+          tissueMasking={tissueMasking}
+          tissueThreshold={tissueThreshold}
+          onAtlasesChange={(v) => onFieldChange("Atlases", v)}
+          onTissueMaskingChange={(v) => onFieldChange("TissueMasking", v)}
+          onTissueThresholdChange={(v) => onFieldChange("TissueThreshold", v)}
+        />
+      </Stack>
 
       <AdvancedDivider
         showAdvanced={showAdvanced}
@@ -98,79 +95,77 @@ export function AtlasesSection({
       />
 
       {showAdvanced && (
-        <Paper p="md" radius="md" withBorder>
-          <Stack gap="sm">
-            <Group gap="xs">
-              <IconCategory size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
-              <Text fw={600} size="sm">
-                Tissue Masking & Output Options
+        <Stack gap="sm">
+          <Group gap="xs">
+            <IconCategory size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+            <Text fw={600} size="sm">
+              Tissue Masking & Output Options
+            </Text>
+          </Group>
+
+          <Stack gap="xs">
+            <Group gap="xs" align="center">
+              <Text size="sm" fw={500}>
+                <DataParFieldLabel fieldKey="bMasking" />
               </Text>
+              <Checkbox
+                label={allMasked ? "Deselect all" : "Select all"}
+                checked={allMasked}
+                onChange={toggleAllMasks}
+                size="xs"
+                data-testid="field-bMasking-select-all"
+              />
             </Group>
 
-            <Stack gap="xs">
-              <Group gap="xs" align="center">
-                <Text size="sm" fw={500}>
-                  <DataParFieldLabel fieldKey="bMasking" />
-                </Text>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+              {MASK_LABELS.map((label, i) => (
                 <Checkbox
-                  label={allMasked ? "Deselect all" : "Select all"}
-                  checked={allMasked}
-                  onChange={toggleAllMasks}
-                  size="xs"
-                  data-testid="field-bMasking-select-all"
+                  key={label}
+                  label={label}
+                  checked={bMaskingTuple[i]}
+                  onChange={() => {
+                    const next: [boolean, boolean, boolean, boolean] = [...bMaskingTuple];
+                    next[i] = !next[i];
+                    onFieldChange("bMasking", tupleToBMasking(next));
+                  }}
+                  data-testid={`field-bMasking-${i}`}
                 />
-              </Group>
-
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
-                {MASK_LABELS.map((label, i) => (
-                  <Checkbox
-                    key={label}
-                    label={label}
-                    checked={bMaskingTuple[i]}
-                    onChange={() => {
-                      const next: [boolean, boolean, boolean, boolean] = [...bMaskingTuple];
-                      next[i] = !next[i];
-                      onFieldChange("bMasking", tupleToBMasking(next));
-                    }}
-                    data-testid={`field-bMasking-${i}`}
-                  />
-                ))}
-              </SimpleGrid>
-            </Stack>
-
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="xs">
-              <NumberInput
-                label={<DataParFieldLabel fieldKey="MinimalROIVolume" />}
-                placeholder={FIELD_METADATA.MinimalROIVolume.defaultHint}
-                value={dataPar.MinimalROIVolume}
-                onChange={(v) => onFieldChange("MinimalROIVolume", v === "" ? undefined : v)}
-                suffix=" mL"
-                {...numberInputTestIds("field-MinimalROIVolume")}
-              />
-
-              <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
-                <Switch
-                  id="switch-bWMH"
-                  checked={dataPar.bWMH ?? false}
-                  onChange={(e) => onFieldChange("bWMH", e.currentTarget.checked)}
-                  data-testid="field-bWMH"
-                />
-                <DataParFieldLabel fieldKey="bWMH" htmlFor="switch-bWMH" />
-              </Group>
+              ))}
             </SimpleGrid>
-
-            <TextInput
-              label={<DataParFieldLabel fieldKey="DataTypes" />}
-              placeholder={FIELD_METADATA.DataTypes.defaultHint}
-              value={dataPar.DataTypes?.join(", ") ?? ""}
-              onChange={(e) => {
-                const val = e.currentTarget.value;
-                onFieldChange("DataTypes", val ? val.split(",").map((s) => s.trim()) : []);
-              }}
-              data-testid="field-DataTypes"
-            />
           </Stack>
-        </Paper>
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" mt="xs">
+            <NumberInput
+              label={<DataParFieldLabel fieldKey="MinimalROIVolume" />}
+              placeholder={FIELD_METADATA.MinimalROIVolume.defaultHint}
+              value={dataPar.MinimalROIVolume}
+              onChange={(v) => onFieldChange("MinimalROIVolume", v === "" ? undefined : v)}
+              suffix=" mL"
+              {...numberInputTestIds("field-MinimalROIVolume")}
+            />
+
+            <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
+              <Switch
+                id="switch-bWMH"
+                checked={dataPar.bWMH ?? false}
+                onChange={(e) => onFieldChange("bWMH", e.currentTarget.checked)}
+                data-testid="field-bWMH"
+              />
+              <DataParFieldLabel fieldKey="bWMH" htmlFor="switch-bWMH" />
+            </Group>
+          </SimpleGrid>
+
+          <TextInput
+            label={<DataParFieldLabel fieldKey="DataTypes" />}
+            placeholder={FIELD_METADATA.DataTypes.defaultHint}
+            value={dataPar.DataTypes?.join(", ") ?? ""}
+            onChange={(e) => {
+              const val = e.currentTarget.value;
+              onFieldChange("DataTypes", val ? val.split(",").map((s) => s.trim()) : []);
+            }}
+            data-testid="field-DataTypes"
+          />
+        </Stack>
       )}
     </Stack>
   );

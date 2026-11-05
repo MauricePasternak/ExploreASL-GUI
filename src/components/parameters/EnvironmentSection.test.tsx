@@ -5,27 +5,6 @@ import { renderWithMantine } from "../../test/render";
 import { EnvironmentSection } from "./EnvironmentSection";
 import type { DataParState } from "../../schemas/dataParSchema";
 
-function clickSwitch(text: RegExp) {
-  const textEl = screen.getAllByText(text)[0];
-  const switchRoot = textEl.closest("[data-label-position]");
-  if (switchRoot) {
-    const labelBody = switchRoot.querySelector(".mantine-Switch-body");
-    if (labelBody) {
-      fireEvent.click(labelBody);
-      return;
-    }
-  }
-  const group = textEl.closest(".mantine-Group-root");
-  if (group) {
-    const input = group.querySelector("input[type='checkbox']");
-    if (input) {
-      fireEvent.click(input);
-      return;
-    }
-  }
-  fireEvent.click(textEl);
-}
-
 afterEach(() => cleanup());
 
 const emptyState: DataParState = {};
@@ -47,7 +26,7 @@ describe("EnvironmentSection", () => {
   it("calls onFieldChange when bAutomaticallyDetectFSL toggled", () => {
     const onFieldChange = vi.fn();
     renderWithMantine(<EnvironmentSection dataPar={emptyState} onFieldChange={onFieldChange} />);
-    clickSwitch(/auto-detect fsl/i);
+    fireEvent.click(screen.getByRole("switch", { name: /auto-detect fsl/i }));
     expect(onFieldChange).toHaveBeenCalledWith("bAutomaticallyDetectFSL", expect.any(Boolean));
   });
 });

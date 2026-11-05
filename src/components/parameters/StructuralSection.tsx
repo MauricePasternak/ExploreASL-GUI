@@ -1,5 +1,5 @@
 import { comboboxTestIds } from "../common/comboboxTestIds";
-import { Switch, Select, Stack, Group, Paper, Text, SimpleGrid } from "@mantine/core";
+import { Switch, Select, Stack, Group, Text, SimpleGrid } from "@mantine/core";
 import { IconBrain } from "@tabler/icons-react";
 
 import type { DataParState } from "../../schemas/dataParSchema";
@@ -16,47 +16,43 @@ const FLAG_FIELDS = ["bRunLongReg", "bRunDARTEL", "bSegmentSPM12", "bHammersCAT1
 
 export function StructuralSection({ dataPar, onFieldChange }: StructuralSectionProps) {
   return (
-    <Stack gap="md">
-      <Paper p="md" radius="md" withBorder>
-        <Stack gap="sm">
-          <Group gap="xs">
-            <IconBrain size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
-            <Text fw={600} size="sm">
-              Structural Preprocessing Pipeline
-            </Text>
-          </Group>
+    <Stack gap="sm">
+      <Group gap="xs">
+        <IconBrain size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+        <Text fw={600} size="sm">
+          Structural Preprocessing Pipeline
+        </Text>
+      </Group>
 
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            {FLAG_FIELDS.map((key) => (
-              <FlagToggle
-                key={key}
-                fieldKey={key}
-                value={dataPar[key] as 0 | 1 | undefined}
-                onChange={(v) => onFieldChange(key, v)}
-              />
-            ))}
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+        {FLAG_FIELDS.map((key) => (
+          <FlagToggle
+            key={key}
+            fieldKey={key}
+            value={dataPar[key] as 0 | 1 | undefined}
+            onChange={(v) => onFieldChange(key, v)}
+          />
+        ))}
 
-            <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
-              <Switch
-                id="switch-bFixResolution"
-                checked={dataPar.bFixResolution ?? false}
-                onChange={(e) => onFieldChange("bFixResolution", e.currentTarget.checked)}
-                data-testid="field-bFixResolution"
-              />
-              <DataParFieldLabel fieldKey="bFixResolution" htmlFor="switch-bFixResolution" />
-            </Group>
+        <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
+          <Switch
+            id="switch-bFixResolution"
+            checked={dataPar.bFixResolution ?? false}
+            onChange={(e) => onFieldChange("bFixResolution", e.currentTarget.checked)}
+            data-testid="field-bFixResolution"
+          />
+          <DataParFieldLabel fieldKey="bFixResolution" htmlFor="switch-bFixResolution" />
+        </Group>
 
-            <Select
-              label={<DataParFieldLabel fieldKey="WMHsegmAlg" />}
-              data={["LPA", "LGA"]}
-              value={dataPar.WMHsegmAlg ?? null}
-              onChange={(v) => onFieldChange("WMHsegmAlg", v)}
-              placeholder={FIELD_METADATA.WMHsegmAlg.defaultHint}
-              {...comboboxTestIds("field-WMHsegmAlg")}
-            />
-          </SimpleGrid>
-        </Stack>
-      </Paper>
+        <Select
+          label={<DataParFieldLabel fieldKey="WMHsegmAlg" />}
+          data={["LPA", "LGA"]}
+          value={dataPar.WMHsegmAlg ?? null}
+          onChange={(v) => onFieldChange("WMHsegmAlg", v)}
+          placeholder={FIELD_METADATA.WMHsegmAlg.defaultHint}
+          {...comboboxTestIds("field-WMHsegmAlg")}
+        />
+      </SimpleGrid>
     </Stack>
   );
 }

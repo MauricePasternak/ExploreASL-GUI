@@ -6,27 +6,6 @@ import { renderWithMantine } from "../../test/render";
 import { GeneralSettingsSection } from "./GeneralSettingsSection";
 import type { DataParState } from "../../schemas/dataParSchema";
 
-function clickSwitch(text: RegExp) {
-  const textEl = screen.getAllByText(text)[0];
-  const switchRoot = textEl.closest("[data-label-position]");
-  if (switchRoot) {
-    const labelBody = switchRoot.querySelector(".mantine-Switch-body");
-    if (labelBody) {
-      fireEvent.click(labelBody);
-      return;
-    }
-  }
-  const group = textEl.closest(".mantine-Group-root");
-  if (group) {
-    const input = group.querySelector("input[type='checkbox']");
-    if (input) {
-      fireEvent.click(input);
-      return;
-    }
-  }
-  fireEvent.click(textEl);
-}
-
 afterEach(() => cleanup());
 
 const emptyState: DataParState = {};
@@ -60,7 +39,7 @@ describe("GeneralSettingsSection", () => {
     );
     expect(screen.getAllByText(/processing quality/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
-    clickSwitch(/show advanced/i);
+    fireEvent.click(screen.getByRole("switch", { name: /show advanced/i }));
     expect(screen.getAllByText(/delete temporary/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/skip if no flair/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/skip if no asl/i).length).toBeGreaterThan(0);
@@ -74,8 +53,8 @@ describe("GeneralSettingsSection", () => {
     renderWithMantine(
       <GeneralSettingsSectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />,
     );
-    clickSwitch(/show advanced/i);
-    clickSwitch(/delete temporary/i);
+    fireEvent.click(screen.getByRole("switch", { name: /show advanced/i }));
+    fireEvent.click(screen.getByRole("switch", { name: /delete temporary/i }));
     expect(onFieldChange).toHaveBeenCalledWith("DELETETEMP", expect.any(Number));
   });
 
@@ -89,7 +68,7 @@ describe("GeneralSettingsSection", () => {
         onToggleAdvanced={onToggle}
       />,
     );
-    clickSwitch(/show advanced/i);
+    fireEvent.click(screen.getByRole("switch", { name: /show advanced/i }));
     expect(onToggle).toHaveBeenCalled();
   });
 
@@ -114,7 +93,6 @@ describe("GeneralSettingsSection", () => {
           onFieldChange={onFieldChange}
         />,
       );
-      // Click switch using clickSwitch or directly firing event
       const input = screen.getByTestId("field-enableMetadataGroupingCorrection");
       fireEvent.click(input);
       expect(onFieldChange).toHaveBeenCalledWith("enableMetadataGroupingCorrection", true);

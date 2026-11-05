@@ -6,27 +6,6 @@ import { renderWithMantine } from "../../test/render";
 import { M0Section } from "./M0Section";
 import type { DataParState } from "../../schemas/dataParSchema";
 
-function clickSwitch(text: RegExp) {
-  const textEl = screen.getAllByText(text)[0];
-  const switchRoot = textEl.closest("[data-label-position]");
-  if (switchRoot) {
-    const labelBody = switchRoot.querySelector(".mantine-Switch-body");
-    if (labelBody) {
-      fireEvent.click(labelBody);
-      return;
-    }
-  }
-  const group = textEl.closest(".mantine-Group-root");
-  if (group) {
-    const input = group.querySelector("input[type='checkbox']");
-    if (input) {
-      fireEvent.click(input);
-      return;
-    }
-  }
-  fireEvent.click(textEl);
-}
-
 afterEach(() => cleanup());
 
 const emptyState: DataParState = {};
@@ -99,7 +78,7 @@ describe("M0Section", () => {
     expect(screen.getAllByText(/grey-matter scale factor/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/register m0 to asl/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
-    clickSwitch(/show advanced/i);
+    fireEvent.click(screen.getByRole("switch", { name: /show advanced/i }));
     expect(screen.getAllByText(/conventional m0/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/m0 repetition time/i).length).toBeGreaterThan(0);
   });
@@ -107,7 +86,7 @@ describe("M0Section", () => {
   it("calls onFieldChange when bRegisterM02ASL is toggled", () => {
     const onFieldChange = vi.fn();
     renderWithMantine(<M0SectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />);
-    clickSwitch(/register m0 to asl/i);
+    fireEvent.click(screen.getByRole("switch", { name: /register m0 to asl/i }));
     expect(onFieldChange).toHaveBeenCalledWith("bRegisterM02ASL", expect.any(Number));
   });
 
@@ -121,7 +100,7 @@ describe("M0Section", () => {
         onToggleAdvanced={onToggle}
       />,
     );
-    clickSwitch(/show advanced/i);
+    fireEvent.click(screen.getByRole("switch", { name: /show advanced/i }));
     expect(onToggle).toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { Group, NumberInput, Paper, SimpleGrid, Stack, Text } from "@mantine/core";
+import { Group, NumberInput, SimpleGrid, Stack, Text } from "@mantine/core";
 import { IconMagnet, IconAdjustments, IconBaseline } from "@tabler/icons-react";
 
 import type { DataParState } from "../../schemas/dataParSchema";
@@ -28,79 +28,75 @@ export function M0Section({
 
   return (
     <Stack gap="md">
-      <Paper p="md" radius="md" withBorder>
-        <Stack gap="sm">
-          <Group gap="xs">
-            <IconMagnet size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
-            <Text fw={600} size="sm">
-              M0 Source & Background Suppression
+      <Stack gap="sm">
+        <Group gap="xs">
+          <IconMagnet size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+          <Text fw={600} size="sm">
+            M0 Source & Background Suppression
+          </Text>
+        </Group>
+
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          <Stack gap={4}>
+            <Text size="sm" fw={500}>
+              <DataParFieldLabel fieldKey="M0" />
             </Text>
-          </Group>
-
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            <Stack gap={4}>
-              <Text size="sm" fw={500}>
-                <DataParFieldLabel fieldKey="M0" />
-              </Text>
-              <M0Select
-                value={dataPar.M0}
-                onChange={(v) => onFieldChange("M0", v)}
-                data-testid="field-M0"
-              />
-            </Stack>
-
-            <NumberInput
-              label={<DataParFieldLabel fieldKey="BackgroundSuppressionNumberPulses" />}
-              placeholder={FIELD_METADATA.BackgroundSuppressionNumberPulses.defaultHint}
-              value={dataPar.BackgroundSuppressionNumberPulses}
-              onChange={(v) =>
-                onFieldChange("BackgroundSuppressionNumberPulses", v === "" ? undefined : v)
-              }
-              min={0}
-              {...numberInputTestIds("field-BackgroundSuppressionNumberPulses")}
+            <M0Select
+              value={dataPar.M0}
+              onChange={(v) => onFieldChange("M0", v)}
+              data-testid="field-M0"
             />
+          </Stack>
 
-            {showPulseTime && (
-              <CommaNumberInput
-                label={<DataParFieldLabel fieldKey="BackgroundSuppressionPulseTime" />}
-                placeholder={FIELD_METADATA.BackgroundSuppressionPulseTime.defaultHint}
-                value={dataPar.BackgroundSuppressionPulseTime}
-                onChange={(v) => onFieldChange("BackgroundSuppressionPulseTime", v)}
-                testId="field-BackgroundSuppressionPulseTime"
-              />
-            )}
-          </SimpleGrid>
-        </Stack>
-      </Paper>
+          <NumberInput
+            label={<DataParFieldLabel fieldKey="BackgroundSuppressionNumberPulses" />}
+            placeholder={FIELD_METADATA.BackgroundSuppressionNumberPulses.defaultHint}
+            value={dataPar.BackgroundSuppressionNumberPulses}
+            onChange={(v) =>
+              onFieldChange("BackgroundSuppressionNumberPulses", v === "" ? undefined : v)
+            }
+            min={0}
+            {...numberInputTestIds("field-BackgroundSuppressionNumberPulses")}
+          />
 
-      <Paper p="md" radius="md" withBorder>
-        <Stack gap="sm">
-          <Group gap="xs">
-            <IconBaseline size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
-            <Text fw={600} size="sm">
-              Calibration & Registration
-            </Text>
-          </Group>
-
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            <NumberInput
-              label={<DataParFieldLabel fieldKey="M0_GMScaleFactor" />}
-              placeholder={FIELD_METADATA.M0_GMScaleFactor.defaultHint}
-              value={dataPar.M0_GMScaleFactor}
-              onChange={(v) => onFieldChange("M0_GMScaleFactor", v === "" ? undefined : v)}
-              {...numberInputTestIds("field-M0_GMScaleFactor")}
+          {showPulseTime && (
+            <CommaNumberInput
+              label={<DataParFieldLabel fieldKey="BackgroundSuppressionPulseTime" />}
+              placeholder={FIELD_METADATA.BackgroundSuppressionPulseTime.defaultHint}
+              value={dataPar.BackgroundSuppressionPulseTime}
+              onChange={(v) => onFieldChange("BackgroundSuppressionPulseTime", v)}
+              testId="field-BackgroundSuppressionPulseTime"
             />
+          )}
+        </SimpleGrid>
+      </Stack>
 
-            <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
-              <FlagToggle
-                fieldKey="bRegisterM02ASL"
-                value={dataPar.bRegisterM02ASL}
-                onChange={(v) => onFieldChange("bRegisterM02ASL", v)}
-              />
-            </Group>
-          </SimpleGrid>
-        </Stack>
-      </Paper>
+      <Stack gap="sm">
+        <Group gap="xs">
+          <IconBaseline size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+          <Text fw={600} size="sm">
+            Calibration & Registration
+          </Text>
+        </Group>
+
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          <NumberInput
+            label={<DataParFieldLabel fieldKey="M0_GMScaleFactor" />}
+            placeholder={FIELD_METADATA.M0_GMScaleFactor.defaultHint}
+            value={dataPar.M0_GMScaleFactor}
+            onChange={(v) => onFieldChange("M0_GMScaleFactor", v === "" ? undefined : v)}
+            {...numberInputTestIds("field-M0_GMScaleFactor")}
+          />
+
+          <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
+            <FlagToggle
+              fieldKey="bRegisterM02ASL"
+              value={dataPar.bRegisterM02ASL}
+              onChange={(v) => onFieldChange("bRegisterM02ASL", v)}
+            />
+          </Group>
+        </SimpleGrid>
+      </Stack>
 
       <AdvancedDivider
         showAdvanced={showAdvanced}
@@ -109,32 +105,30 @@ export function M0Section({
       />
 
       {showAdvanced && (
-        <Paper p="md" radius="md" withBorder>
-          <Stack gap="sm">
-            <Group gap="xs">
-              <IconAdjustments size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
-              <Text fw={600} size="sm">
-                Advanced M0 Parameters
-              </Text>
-            </Group>
+        <Stack gap="sm">
+          <Group gap="xs">
+            <IconAdjustments size={18} style={{ color: "var(--mantine-color-grape-6)" }} />
+            <Text fw={600} size="sm">
+              Advanced M0 Parameters
+            </Text>
+          </Group>
 
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              <FlagToggle
-                fieldKey="M0_conventionalProcessing"
-                value={dataPar.M0_conventionalProcessing}
-                onChange={(v) => onFieldChange("M0_conventionalProcessing", v)}
-              />
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <FlagToggle
+              fieldKey="M0_conventionalProcessing"
+              value={dataPar.M0_conventionalProcessing}
+              onChange={(v) => onFieldChange("M0_conventionalProcessing", v)}
+            />
 
-              <CommaNumberInput
-                label={<DataParFieldLabel fieldKey="RepetitionTimePreparationM0" />}
-                placeholder={FIELD_METADATA.RepetitionTimePreparationM0.defaultHint}
-                value={dataPar.RepetitionTimePreparationM0}
-                onChange={(v) => onFieldChange("RepetitionTimePreparationM0", v)}
-                testId="field-RepetitionTimePreparationM0"
-              />
-            </SimpleGrid>
-          </Stack>
-        </Paper>
+            <CommaNumberInput
+              label={<DataParFieldLabel fieldKey="RepetitionTimePreparationM0" />}
+              placeholder={FIELD_METADATA.RepetitionTimePreparationM0.defaultHint}
+              value={dataPar.RepetitionTimePreparationM0}
+              onChange={(v) => onFieldChange("RepetitionTimePreparationM0", v)}
+              testId="field-RepetitionTimePreparationM0"
+            />
+          </SimpleGrid>
+        </Stack>
       )}
     </Stack>
   );

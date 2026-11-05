@@ -88,6 +88,7 @@ export function AtlasSelect({
   return (
     <Stack gap="sm">
       <MultiSelect
+        aria-label="Atlases"
         data={atlasData}
         value={atlases}
         onChange={handleChange}
@@ -106,17 +107,24 @@ export function AtlasSelect({
         {...comboboxTestIds("field-Atlases")}
       />
       {atlases.map((atlas, idx) => (
-        <Group key={atlas} gap="xs" align="center" wrap="nowrap">
+        <Group
+          key={atlas}
+          gap="xs"
+          align="center"
+          className="datapar-atlas-row"
+          data-testid={`atlas-row-${atlas}`}
+        >
           <Text
             size="sm"
-            w={240}
             fw={500}
-            style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}
+            className="datapar-atlas-name"
+            data-testid={`atlas-name-${atlas}`}
           >
             {ATLAS_DISPLAY_LABELS[atlas] ?? atlas}
           </Text>
           <Group gap={4} align="center" wrap="nowrap">
             <Select
+              aria-label={`Tissue masking for ${ATLAS_DISPLAY_LABELS[atlas] ?? atlas}`}
               data={TISSUE_MASKING_OPTIONS}
               value={tissueMasking[idx] ?? (atlas === "DeepWM" ? "WM" : "GM")}
               onChange={(v) => v && updateMasking(idx, v)}
@@ -133,6 +141,7 @@ export function AtlasSelect({
           </Group>
           <Group gap={4} align="center" wrap="nowrap">
             <NumberInput
+              aria-label={`Tissue threshold for ${ATLAS_DISPLAY_LABELS[atlas] ?? atlas}`}
               value={tissueThreshold[idx] ?? 0.7}
               onChange={(v) => updateThreshold(idx, v ?? 0.7)}
               step={0.1}
